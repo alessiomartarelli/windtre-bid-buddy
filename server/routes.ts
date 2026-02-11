@@ -1,11 +1,7 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
+import { type Server } from "http";
 import { storage } from "./storage";
-import { api } from "@shared/routes";
-import { z } from "zod";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
-import { users } from "@shared/schema";
-import { db } from "./db";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -15,99 +11,228 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
-  // Products List
-  app.get(api.products.list.path, async (req, res) => {
-    const products = await storage.getProducts();
-    res.json(products);
-  });
-
-  // Get Product Details
-  app.get(api.products.get.path, async (req, res) => {
-    const id = parseInt(req.params.id);
-    const product = await storage.getProduct(id);
-    
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
-
-    const bids = await storage.getBidsForProduct(id);
-    res.json({ ...product, bids });
-  });
-
-  // Create Product (Protected)
-  app.post(api.products.create.path, async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
+  // Get current user profile with organization
+  app.get("/api/user", isAuthenticated, async (req: any, res) => {
     try {
-      const input = api.products.create.input.parse(req.body);
-      // User is authenticated, so req.user.claims.sub is the user ID
-      const user = req.user as any;
-      const sellerId = user.claims.sub;
+      const userId = req.user.claims.sub;
+      let profile = await storage.getProfile(userId);
       
-      const product = await storage.createProduct({
-        ...input,
-        sellerId,
-        currentPrice: input.startPrice,
-        isActive: true,
-      });
-      
-      res.status(201).json(product);
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({
-          message: err.errors[0].message,
-          field: err.errors[0].path.join('.'),
+      if (!profile) {
+        // Auto-create profile on first login
+        profile = await storage.upsertProfile({
+          id: userId,
+          email: req.user.claims.email,
+          fullName: `${req.user.claims.first_name || ''} ${req.user.claims.last_name || ''}`.trim() || null,
+          profileImageUrl: req.user.claims.profile_image_url,
+          role: "operatore",
         });
       }
-      throw err;
+
+      let organization = null;
+      if (profile.organizationId) {
+        organization = await storage.getOrganization(profile.organizationId);
+      }
+
+      res.json({ ...profile, organization });
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
     }
   });
 
-  // Place Bid (Protected)
-  app.post(api.bids.create.path, async (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const productId = parseInt(req.params.id);
-    const user = req.user as any;
-    const bidderId = user.claims.sub;
-
+  // === PREVENTIVI ===
+  app.get("/api/preventivi", isAuthenticated, async (req: any, res) => {
     try {
-      const { amount } = req.body;
-      
-      // Validation: Check if product exists and is active
-      const product = await storage.getProduct(productId);
-      if (!product || !product.isActive) {
-        return res.status(404).json({ message: "Product not found or inactive" });
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.json([]);
       }
-
-      // Validation: Check if auction ended
-      if (new Date() > new Date(product.endsAt)) {
-        return res.status(400).json({ message: "Auction has ended" });
-      }
-
-      // Validation: Check if bid is higher than current price
-      if (amount <= product.currentPrice) {
-        return res.status(400).json({ message: "Bid must be higher than current price" });
-      }
-
-      const bid = await storage.createBid({
-        amount,
-        productId,
-        bidderId,
-      });
-
-      res.status(201).json(bid);
-    } catch (err) {
-      res.status(500).json({ message: "Internal server error" });
+      const items = await storage.getPreventivi(profile.organizationId);
+      res.json(items);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching preventivi" });
     }
   });
-  
-  // Seed data is skipped here because we need a user to assign products to.
-  // In a real scenario, we might create a system user or wait for first login.
+
+  app.post("/api/preventivi", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ message: "User has no organization" });
+      }
+      const { name, data } = req.body;
+      const preventivo = await storage.createPreventivo({
+        name,
+        data,
+        organizationId: profile.organizationId,
+        createdBy: userId,
+      });
+      res.status(201).json(preventivo);
+    } catch (error) {
+      res.status(500).json({ message: "Error creating preventivo" });
+    }
+  });
+
+  app.put("/api/preventivi/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const { name, data } = req.body;
+      const preventivo = await storage.updatePreventivo(req.params.id, name, data);
+      res.json(preventivo);
+    } catch (error) {
+      res.status(500).json({ message: "Error updating preventivo" });
+    }
+  });
+
+  app.delete("/api/preventivi/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deletePreventivo(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Error deleting preventivo" });
+    }
+  });
+
+  app.get("/api/preventivi/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const preventivo = await storage.getPreventivo(req.params.id);
+      if (!preventivo) {
+        return res.status(404).json({ message: "Not found" });
+      }
+      res.json(preventivo);
+    } catch (error) {
+      res.status(500).json({ message: "Error loading preventivo" });
+    }
+  });
+
+  // === ORGANIZATION CONFIG ===
+  app.get("/api/organization-config", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.json(null);
+      }
+      const config = await storage.getOrgConfig(profile.organizationId);
+      res.json(config || null);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching config" });
+    }
+  });
+
+  app.put("/api/organization-config", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ message: "User has no organization" });
+      }
+      const { config, configVersion } = req.body;
+      const result = await storage.upsertOrgConfig(profile.organizationId, config, configVersion || "2.0");
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Error saving config" });
+    }
+  });
+
+  // === ADMIN: Team Management ===
+  app.get("/api/admin/team", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      if (!profile.organizationId) {
+        return res.json([]);
+      }
+      const members = await storage.getProfilesByOrg(profile.organizationId);
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching team" });
+    }
+  });
+
+  app.put("/api/admin/team/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const { fullName, email } = req.body;
+      const updated = await storage.updateProfile(req.params.id, { fullName, email });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Error updating user" });
+    }
+  });
+
+  app.delete("/api/admin/team/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      await storage.deleteProfile(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Error deleting user" });
+    }
+  });
+
+  // === SUPER ADMIN: Organizations ===
+  app.get("/api/super-admin/organizations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const orgs = await storage.getOrganizations();
+      res.json(orgs);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching organizations" });
+    }
+  });
+
+  app.post("/api/super-admin/organizations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const { name } = req.body;
+      const org = await storage.createOrganization({ name });
+      res.status(201).json(org);
+    } catch (error) {
+      res.status(500).json({ message: "Error creating organization" });
+    }
+  });
+
+  app.get("/api/super-admin/profiles", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      // Get all profiles across all orgs
+      const orgs = await storage.getOrganizations();
+      const allProfiles: any[] = [];
+      for (const org of orgs) {
+        const members = await storage.getProfilesByOrg(org.id);
+        allProfiles.push(...members);
+      }
+      // Also get profiles without org
+      res.json(allProfiles);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching profiles" });
+    }
+  });
 
   return httpServer;
 }

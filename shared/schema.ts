@@ -1,63 +1,93 @@
-import { pgTable, text, serial, integer, boolean, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, varchar, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { relations } from "drizzle-orm";
-import { users } from "./models/auth";
+import { relations, sql } from "drizzle-orm";
 
-// Re-export auth models
-export * from "./models/auth";
+// Session storage table (Replit Auth)
+export const sessions = pgTable(
+  "sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_session_expire").on(table.expire)]
+);
 
-export const products = pgTable("products", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  imageUrl: text("image_url").notNull(),
-  startPrice: integer("start_price").notNull(), // Stored in cents
-  currentPrice: integer("current_price").notNull(), // Stored in cents
-  // Seller ID references the string ID from auth users
-  sellerId: varchar("seller_id").references(() => users.id).notNull(),
-  endsAt: timestamp("ends_at").notNull(),
-  isActive: boolean("is_active").default(true),
+// Organizations
+export const organizations = pgTable("organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const bids = pgTable("bids", {
-  id: serial("id").primaryKey(),
-  amount: integer("amount").notNull(), // Stored in cents
-  // Bidder ID references the string ID from auth users
-  bidderId: varchar("bidder_id").references(() => users.id).notNull(),
-  productId: integer("product_id").references(() => products.id).notNull(),
+// Profiles (linked to Replit Auth users)
+export const profiles = pgTable("profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email"),
+  fullName: varchar("full_name"),
+  role: varchar("role").notNull().default("operatore"),
+  organizationId: varchar("organization_id").references(() => organizations.id),
+  profileImageUrl: varchar("profile_image_url"),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const productsRelations = relations(products, ({ one, many }) => ({
-  seller: one(users, {
-    fields: [products.sellerId],
-    references: [users.id],
-  }),
-  bids: many(bids),
+// Preventivi (quotes)
+export const preventivi = pgTable("preventivi", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  data: jsonb("data").default({}),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  createdBy: varchar("created_by").references(() => profiles.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Organization config
+export const organizationConfig = pgTable("organization_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull().unique(),
+  config: jsonb("config").default({}),
+  configVersion: varchar("config_version").default("1.0"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Relations
+export const organizationsRelations = relations(organizations, ({ many }) => ({
+  profiles: many(profiles),
+  preventivi: many(preventivi),
 }));
 
-export const bidsRelations = relations(bids, ({ one }) => ({
-  bidder: one(users, {
-    fields: [bids.bidderId],
-    references: [users.id],
+export const profilesRelations = relations(profiles, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [profiles.organizationId],
+    references: [organizations.id],
   }),
-  product: one(products, {
-    fields: [bids.productId],
-    references: [products.id],
+  preventivi: many(preventivi),
+}));
+
+export const preventiviRelations = relations(preventivi, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [preventivi.organizationId],
+    references: [organizations.id],
+  }),
+  creator: one(profiles, {
+    fields: [preventivi.createdBy],
+    references: [profiles.id],
   }),
 }));
 
-export const insertProductSchema = createInsertSchema(products).omit({ 
-  id: true, 
-  currentPrice: true, 
-  isActive: true, 
-  createdAt: true 
-});
-export const insertBidSchema = createInsertSchema(bids).omit({ id: true, createdAt: true });
+// Types
+export type Organization = typeof organizations.$inferSelect;
+export type Profile = typeof profiles.$inferSelect;
+export type Preventivo = typeof preventivi.$inferSelect;
+export type OrganizationConfig = typeof organizationConfig.$inferSelect;
 
-export type Product = typeof products.$inferSelect;
-export type Bid = typeof bids.$inferSelect;
-export type InsertProduct = z.infer<typeof insertProductSchema>;
-export type InsertBid = z.infer<typeof insertBidSchema>;
+export type InsertOrganization = typeof organizations.$inferInsert;
+export type InsertProfile = typeof profiles.$inferInsert;
+export type InsertPreventivo = typeof preventivi.$inferInsert;
+
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];

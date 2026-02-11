@@ -1,70 +1,144 @@
 import { db } from "./db";
-import { products, bids, users, type Product, type InsertProduct, type Bid, type InsertBid, type User } from "@shared/schema";
-import { eq, desc, lt, and } from "drizzle-orm";
+import { profiles, organizations, preventivi, organizationConfig, type Profile, type Organization, type Preventivo, type OrganizationConfig, type InsertProfile, type InsertOrganization, type InsertPreventivo } from "@shared/schema";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
-  // Products
-  getProducts(): Promise<Product[]>;
-  getProduct(id: number): Promise<Product | undefined>;
-  createProduct(product: InsertProduct): Promise<Product>;
-  
-  // Bids
-  createBid(bid: InsertBid): Promise<Bid>;
-  getBidsForProduct(productId: number): Promise<(Bid & { bidder: User })[]>;
-  getLatestBid(productId: number): Promise<Bid | undefined>;
-  
-  // Users (Basic lookup)
-  getUser(id: string): Promise<User | undefined>;
+  // Profiles
+  getProfile(id: string): Promise<Profile | undefined>;
+  upsertProfile(profile: InsertProfile): Promise<Profile>;
+  getProfilesByOrg(orgId: string): Promise<Profile[]>;
+  updateProfile(id: string, updates: Partial<InsertProfile>): Promise<Profile>;
+  deleteProfile(id: string): Promise<void>;
+
+  // Organizations
+  getOrganization(id: string): Promise<Organization | undefined>;
+  getOrganizations(): Promise<Organization[]>;
+  createOrganization(org: InsertOrganization): Promise<Organization>;
+  deleteOrganization(id: string): Promise<void>;
+
+  // Preventivi
+  getPreventivi(orgId: string): Promise<Preventivo[]>;
+  getPreventivo(id: string): Promise<Preventivo | undefined>;
+  createPreventivo(prev: InsertPreventivo): Promise<Preventivo>;
+  updatePreventivo(id: string, name: string, data: any): Promise<Preventivo>;
+  deletePreventivo(id: string): Promise<void>;
+
+  // Organization Config
+  getOrgConfig(orgId: string): Promise<OrganizationConfig | undefined>;
+  upsertOrgConfig(orgId: string, config: any, version: string): Promise<OrganizationConfig>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async getProducts(): Promise<Product[]> {
-    return await db.select().from(products).orderBy(desc(products.createdAt));
+  // Profiles
+  async getProfile(id: string): Promise<Profile | undefined> {
+    const [profile] = await db.select().from(profiles).where(eq(profiles.id, id));
+    return profile;
   }
 
-  async getProduct(id: number): Promise<Product | undefined> {
-    const [product] = await db.select().from(products).where(eq(products.id, id));
-    return product;
+  async upsertProfile(profile: InsertProfile): Promise<Profile> {
+    const [result] = await db.insert(profiles)
+      .values(profile)
+      .onConflictDoUpdate({
+        target: profiles.id,
+        set: {
+          email: profile.email,
+          fullName: profile.fullName,
+          profileImageUrl: profile.profileImageUrl,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
   }
 
-  async createProduct(product: InsertProduct): Promise<Product> {
-    const [newProduct] = await db.insert(products).values(product).returning();
-    return newProduct;
+  async getProfilesByOrg(orgId: string): Promise<Profile[]> {
+    return await db.select().from(profiles).where(eq(profiles.organizationId, orgId));
   }
 
-  async createBid(bid: InsertBid): Promise<Bid> {
-    const [newBid] = await db.insert(bids).values(bid).returning();
-    
-    // Update product current price
-    await db.update(products)
-      .set({ currentPrice: bid.amount })
-      .where(eq(products.id, bid.productId));
-      
-    return newBid;
+  async updateProfile(id: string, updates: Partial<InsertProfile>): Promise<Profile> {
+    const [result] = await db.update(profiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(profiles.id, id))
+      .returning();
+    return result;
   }
 
-  async getBidsForProduct(productId: number): Promise<(Bid & { bidder: User })[]> {
-    return await db.query.bids.findMany({
-      where: eq(bids.productId, productId),
-      with: {
-        bidder: true
-      },
-      orderBy: desc(bids.amount)
-    });
+  async deleteProfile(id: string): Promise<void> {
+    await db.delete(profiles).where(eq(profiles.id, id));
   }
 
-  async getLatestBid(productId: number): Promise<Bid | undefined> {
-    const [bid] = await db.select()
-      .from(bids)
-      .where(eq(bids.productId, productId))
-      .orderBy(desc(bids.amount))
-      .limit(1);
-    return bid;
+  // Organizations
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return org;
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+  async getOrganizations(): Promise<Organization[]> {
+    return await db.select().from(organizations).orderBy(desc(organizations.createdAt));
+  }
+
+  async createOrganization(org: InsertOrganization): Promise<Organization> {
+    const [result] = await db.insert(organizations).values(org).returning();
+    return result;
+  }
+
+  async deleteOrganization(id: string): Promise<void> {
+    await db.delete(organizations).where(eq(organizations.id, id));
+  }
+
+  // Preventivi
+  async getPreventivi(orgId: string): Promise<Preventivo[]> {
+    return await db.select().from(preventivi)
+      .where(eq(preventivi.organizationId, orgId))
+      .orderBy(desc(preventivi.updatedAt));
+  }
+
+  async getPreventivo(id: string): Promise<Preventivo | undefined> {
+    const [prev] = await db.select().from(preventivi).where(eq(preventivi.id, id));
+    return prev;
+  }
+
+  async createPreventivo(prev: InsertPreventivo): Promise<Preventivo> {
+    const [result] = await db.insert(preventivi).values(prev).returning();
+    return result;
+  }
+
+  async updatePreventivo(id: string, name: string, data: any): Promise<Preventivo> {
+    const [result] = await db.update(preventivi)
+      .set({ name, data, updatedAt: new Date() })
+      .where(eq(preventivi.id, id))
+      .returning();
+    return result;
+  }
+
+  async deletePreventivo(id: string): Promise<void> {
+    await db.delete(preventivi).where(eq(preventivi.id, id));
+  }
+
+  // Organization Config
+  async getOrgConfig(orgId: string): Promise<OrganizationConfig | undefined> {
+    const [config] = await db.select().from(organizationConfig)
+      .where(eq(organizationConfig.organizationId, orgId));
+    return config;
+  }
+
+  async upsertOrgConfig(orgId: string, config: any, version: string): Promise<OrganizationConfig> {
+    const [result] = await db.insert(organizationConfig)
+      .values({
+        organizationId: orgId,
+        config,
+        configVersion: version,
+      })
+      .onConflictDoUpdate({
+        target: organizationConfig.organizationId,
+        set: {
+          config,
+          configVersion: version,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
   }
 }
 
