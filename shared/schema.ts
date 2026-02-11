@@ -22,10 +22,11 @@ export const organizations = pgTable("organizations", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Profiles (linked to Replit Auth users)
+// Profiles (users)
 export const profiles = pgTable("profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email"),
+  email: varchar("email").unique(),
+  passwordHash: varchar("password_hash"),
   fullName: varchar("full_name"),
   role: varchar("role").notNull().default("operatore"),
   organizationId: varchar("organization_id").references(() => organizations.id),

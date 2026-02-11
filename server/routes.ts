@@ -1,31 +1,153 @@
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import session from "express-session";
+import connectPg from "connect-pg-simple";
+import bcrypt from "bcryptjs";
+import { z } from "zod";
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+const signupSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+  fullName: z.string().min(2),
+  organizationName: z.string().min(2),
+});
+
+function setupSession(app: Express) {
+  const sessionTtl = 7 * 24 * 60 * 60 * 1000;
+  const pgStore = connectPg(session);
+  const sessionStore = new pgStore({
+    conString: process.env.DATABASE_URL,
+    createTableIfMissing: true,
+    ttl: sessionTtl,
+    tableName: "sessions",
+  });
+
+  app.set("trust proxy", 1);
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET!,
+      store: sessionStore,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: sessionTtl,
+      },
+    })
+  );
+}
+
+const isAuthenticated: RequestHandler = (req: any, res, next) => {
+  if (req.session && req.session.userId) {
+    return next();
+  }
+  return res.status(401).json({ message: "Unauthorized" });
+};
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Set up Replit Auth
-  await setupAuth(app);
-  registerAuthRoutes(app);
+  setupSession(app);
+
+  // === AUTH: Signup ===
+  app.post("/api/auth/signup", async (req: any, res) => {
+    try {
+      const validation = signupSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: validation.error.errors[0].message });
+      }
+
+      const { email, password, fullName, organizationName } = validation.data;
+
+      const existing = await storage.getProfileByEmail(email);
+      if (existing) {
+        return res.status(400).json({ error: "User already registered" });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      const org = await storage.createOrganization({ name: organizationName });
+
+      const profile = await storage.upsertProfile({
+        email,
+        passwordHash,
+        fullName,
+        organizationId: org.id,
+        role: "admin",
+      });
+
+      req.session.userId = profile.id;
+
+      const organization = await storage.getOrganization(profile.organizationId!);
+      res.status(201).json({ ...profile, passwordHash: undefined, organization });
+    } catch (error) {
+      console.error("Signup error:", error);
+      res.status(500).json({ error: "Errore durante la registrazione" });
+    }
+  });
+
+  // === AUTH: Login ===
+  app.post("/api/auth/login", async (req: any, res) => {
+    try {
+      const validation = loginSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: validation.error.errors[0].message });
+      }
+
+      const { email, password } = validation.data;
+
+      const profile = await storage.getProfileByEmail(email);
+      if (!profile || !profile.passwordHash) {
+        return res.status(401).json({ error: "Invalid login credentials" });
+      }
+
+      const valid = await bcrypt.compare(password, profile.passwordHash);
+      if (!valid) {
+        return res.status(401).json({ error: "Invalid login credentials" });
+      }
+
+      req.session.userId = profile.id;
+
+      let organization = null;
+      if (profile.organizationId) {
+        organization = await storage.getOrganization(profile.organizationId);
+      }
+
+      res.json({ ...profile, passwordHash: undefined, organization });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ error: "Errore durante il login" });
+    }
+  });
+
+  // === AUTH: Logout ===
+  app.post("/api/auth/logout", (req: any, res) => {
+    req.session.destroy((err: any) => {
+      if (err) {
+        return res.status(500).json({ error: "Errore durante il logout" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ success: true });
+    });
+  });
 
   // Get current user profile with organization
   app.get("/api/user", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      let profile = await storage.getProfile(userId);
-      
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+
       if (!profile) {
-        // Auto-create profile on first login
-        profile = await storage.upsertProfile({
-          id: userId,
-          email: req.user.claims.email,
-          fullName: `${req.user.claims.first_name || ''} ${req.user.claims.last_name || ''}`.trim() || null,
-          profileImageUrl: req.user.claims.profile_image_url,
-          role: "operatore",
-        });
+        return res.status(401).json({ message: "Unauthorized" });
       }
 
       let organization = null;
@@ -33,7 +155,7 @@ export async function registerRoutes(
         organization = await storage.getOrganization(profile.organizationId);
       }
 
-      res.json({ ...profile, organization });
+      res.json({ ...profile, passwordHash: undefined, organization });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -43,7 +165,7 @@ export async function registerRoutes(
   // === PREVENTIVI ===
   app.get("/api/preventivi", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile?.organizationId) {
         return res.json([]);
@@ -57,7 +179,7 @@ export async function registerRoutes(
 
   app.post("/api/preventivi", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile?.organizationId) {
         return res.status(400).json({ message: "User has no organization" });
@@ -109,7 +231,7 @@ export async function registerRoutes(
   // === ORGANIZATION CONFIG ===
   app.get("/api/organization-config", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile?.organizationId) {
         return res.json(null);
@@ -123,7 +245,7 @@ export async function registerRoutes(
 
   app.put("/api/organization-config", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile?.organizationId) {
         return res.status(400).json({ message: "User has no organization" });
@@ -139,7 +261,7 @@ export async function registerRoutes(
   // === ADMIN: Team Management ===
   app.get("/api/admin/team", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ message: "Forbidden" });
@@ -156,7 +278,7 @@ export async function registerRoutes(
 
   app.put("/api/admin/team/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ message: "Forbidden" });
@@ -171,7 +293,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/team/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ message: "Forbidden" });
@@ -186,7 +308,7 @@ export async function registerRoutes(
   // === SUPER ADMIN: Organizations ===
   app.get("/api/super-admin/organizations", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || profile.role !== "super_admin") {
         return res.status(403).json({ message: "Forbidden" });
@@ -200,7 +322,7 @@ export async function registerRoutes(
 
   app.post("/api/super-admin/organizations", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || profile.role !== "super_admin") {
         return res.status(403).json({ message: "Forbidden" });
@@ -215,7 +337,7 @@ export async function registerRoutes(
 
   app.get("/api/super-admin/profiles", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || profile.role !== "super_admin") {
         return res.status(403).json({ message: "Forbidden" });
@@ -237,22 +359,16 @@ export async function registerRoutes(
   // === ADMIN API aliases (matching frontend fetch calls) ===
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      let profile = await storage.getProfile(userId);
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
       if (!profile) {
-        profile = await storage.upsertProfile({
-          id: userId,
-          email: req.user.claims.email,
-          fullName: `${req.user.claims.first_name || ''} ${req.user.claims.last_name || ''}`.trim() || null,
-          profileImageUrl: req.user.claims.profile_image_url,
-          role: "operatore",
-        });
+        return res.status(401).json({ message: "Unauthorized" });
       }
       let organization = null;
       if (profile.organizationId) {
         organization = await storage.getOrganization(profile.organizationId);
       }
-      res.json({ ...profile, organization });
+      res.json({ ...profile, passwordHash: undefined, organization });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user" });
     }
@@ -260,7 +376,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/team-members", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ message: "Forbidden" });
@@ -275,7 +391,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/organizations", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || profile.role !== "super_admin") {
         return res.status(403).json({ message: "Forbidden" });
@@ -289,7 +405,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/profiles", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || profile.role !== "super_admin") {
         return res.status(403).json({ message: "Forbidden" });
@@ -308,7 +424,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/create-user", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ message: "Forbidden" });
@@ -329,7 +445,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/update-user", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ message: "Forbidden" });
@@ -350,7 +466,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/delete-entity", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ message: "Forbidden" });

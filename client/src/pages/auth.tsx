@@ -1,96 +1,277 @@
-import { useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
+import { z } from 'zod';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
+
+const loginSchema = z.object({
+  email: z.string().email('Email non valida'),
+  password: z.string().min(6, 'La password deve avere almeno 6 caratteri'),
+});
+
+const signupSchema = z.object({
+  email: z.string().email('Email non valida'),
+  password: z.string().min(6, 'La password deve avere almeno 6 caratteri'),
+  fullName: z.string().min(2, 'Il nome deve avere almeno 2 caratteri'),
+  organizationName: z.string().min(2, 'Il nome dell\'organizzazione deve avere almeno 2 caratteri'),
+});
 
 export default function Auth() {
-  const { user, loading: isLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const { user, loading: authLoading, signIn, signUp } = useAuth();
+  const { toast } = useToast();
+  
+  const [activeTab, setActiveTab] = useState('login');
+  const [loading, setLoading] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [organizationName, setOrganizationName] = useState('');
 
   useEffect(() => {
-    if (user) {
-      setLocation("/");
+    if (user && !authLoading) {
+      setLocation('/');
     }
-  }, [user, setLocation]);
+  }, [user, authLoading, setLocation]);
 
-  const handleLogin = () => {
-    window.location.href = "/api/login";
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const validation = loginSchema.safeParse({ email: loginEmail, password: loginPassword });
+    if (!validation.success) {
+      toast({
+        title: 'Errore di validazione',
+        description: validation.error.errors[0].message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await signIn(loginEmail, loginPassword);
+    setLoading(false);
+
+    if (error) {
+      let message = 'Errore durante il login';
+      if (error.message.includes('Invalid login credentials')) {
+        message = 'Credenziali non valide';
+      } else if (error.message.includes('Email not confirmed')) {
+        message = 'Email non confermata';
+      }
+      toast({
+        title: 'Errore',
+        description: message,
+        variant: 'destructive',
+      });
+    }
   };
 
-  if (isLoading) {
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const validation = signupSchema.safeParse({
+      email: signupEmail,
+      password: signupPassword,
+      fullName,
+      organizationName,
+    });
+    
+    if (!validation.success) {
+      toast({
+        title: 'Errore di validazione',
+        description: validation.error.errors[0].message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await signUp(signupEmail, signupPassword, fullName, organizationName);
+    setLoading(false);
+
+    if (error) {
+      let message = 'Errore durante la registrazione';
+      if (error.message.includes('User already registered')) {
+        message = 'Utente già registrato con questa email';
+      }
+      toast({
+        title: 'Errore',
+        description: message,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Registrazione completata',
+        description: 'Benvenuto! Stai per essere reindirizzato.',
+      });
+    }
+  };
+
+  if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" data-testid="spinner-loading" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      {/* Left: Branding */}
-      <div className="hidden lg:flex flex-col justify-between bg-[#1D2338] text-white p-12 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&auto=format&fit=crop&q=80')] opacity-10 bg-cover bg-center" />
-        <div className="absolute inset-0 bg-gradient-to-br from-[#1D2338] via-[#1D2338]/90 to-primary/20" />
-        
-        <div className="relative z-10">
-          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center font-display font-bold text-2xl text-white shadow-lg shadow-orange-500/20 mb-6">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+      <Card className="w-full max-w-md" data-testid="card-auth">
+        <CardHeader className="text-center">
+          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center font-display font-bold text-2xl text-white shadow-lg shadow-orange-500/20 mx-auto mb-4">
             W
           </div>
-          <h1 className="font-display font-bold text-5xl mb-4 leading-tight">
-            Welcome to <br/>
-            <span className="text-primary">BidBuddy</span>
-          </h1>
-          <p className="text-gray-300 text-lg max-w-md">
-            The premium auction platform for exclusive tech deals. Join thousands of winners today.
-          </p>
-        </div>
-
-        <div className="relative z-10 text-sm text-gray-400">
-          © 2024 WindTre Bid Buddy. All rights reserved.
-        </div>
-      </div>
-
-      {/* Right: Login Form */}
-      <div className="flex items-center justify-center p-8 bg-gray-50">
-        <Card className="w-full max-w-md border-none shadow-xl bg-white/80 backdrop-blur-md">
-          <CardContent className="p-8">
-            <div className="text-center mb-8">
-              <div className="lg:hidden w-12 h-12 rounded-xl bg-primary flex items-center justify-center font-display font-bold text-2xl text-white shadow-lg shadow-orange-500/20 mx-auto mb-6">
-                W
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Sign in to your account</h2>
-              <p className="text-gray-500">
-                Access your bids, watchlist, and account settings
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <Button 
-                size="lg" 
-                className="w-full h-12 text-base font-semibold bg-[#1D2338] hover:bg-[#1D2338]/90 shadow-lg shadow-blue-900/10"
-                onClick={handleLogin}
-              >
-                Continue with Replit
-              </Button>
-              
-              <div className="relative my-8">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-gray-200" />
+          <CardTitle className="text-2xl" data-testid="text-auth-title">Preventivatore WindTre</CardTitle>
+          <CardDescription>
+            Accedi o registrati per gestire i tuoi preventivi
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-2" data-testid="tabs-auth">
+              <TabsTrigger value="login" data-testid="tab-login">Accedi</TabsTrigger>
+              <TabsTrigger value="signup" data-testid="tab-signup">Registrati</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="login">
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="login-email">Email</Label>
+                  <Input
+                    id="login-email"
+                    type="email"
+                    placeholder="email@esempio.com"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    required
+                    data-testid="input-login-email"
+                  />
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-2 text-gray-400">Trusted by 10k+ users</span>
+                <div className="space-y-2">
+                  <Label htmlFor="login-password">Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="login-password"
+                      type={showLoginPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      required
+                      className="pr-10"
+                      data-testid="input-login-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      data-testid="button-toggle-login-password"
+                    >
+                      {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              <div className="text-center text-xs text-gray-400">
-                By continuing, you agree to our Terms of Service and Privacy Policy.
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                <Button type="submit" className="w-full" disabled={loading} data-testid="button-login">
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Accesso in corso...
+                    </>
+                  ) : (
+                    'Accedi'
+                  )}
+                </Button>
+              </form>
+            </TabsContent>
+            
+            <TabsContent value="signup">
+              <form onSubmit={handleSignup} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signup-fullname">Nome Completo</Label>
+                  <Input
+                    id="signup-fullname"
+                    type="text"
+                    placeholder="Mario Rossi"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                    data-testid="input-signup-fullname"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-organization">Nome Organizzazione</Label>
+                  <Input
+                    id="signup-organization"
+                    type="text"
+                    placeholder="La mia azienda"
+                    value={organizationName}
+                    onChange={(e) => setOrganizationName(e.target.value)}
+                    required
+                    data-testid="input-signup-organization"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email">Email</Label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="email@esempio.com"
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
+                    required
+                    data-testid="input-signup-email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password">Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="signup-password"
+                      type={showSignupPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      required
+                      className="pr-10"
+                      data-testid="input-signup-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignupPassword(!showSignupPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      data-testid="button-toggle-signup-password"
+                    >
+                      {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                <Button type="submit" className="w-full" disabled={loading} data-testid="button-signup">
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Registrazione in corso...
+                    </>
+                  ) : (
+                    'Registrati'
+                  )}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 }

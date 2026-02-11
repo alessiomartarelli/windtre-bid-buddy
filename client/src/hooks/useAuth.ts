@@ -21,6 +21,10 @@ interface User {
   email: string | null;
 }
 
+interface AuthError {
+  message: string;
+}
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -62,21 +66,79 @@ export function useAuth() {
     fetchUser();
   }, [fetchUser]);
 
-  const signIn = async (email: string, password: string) => {
-    // Not used with Replit Auth - redirect to /api/login
-    window.location.href = '/api/login';
-    return { error: null };
+  const signIn = async (email: string, password: string): Promise<{ error: AuthError | null }> => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        return { error: { message: data.error || 'Errore durante il login' } };
+      }
+
+      const data = await response.json();
+      setUser({ id: data.id, email: data.email });
+      setProfile({
+        ...data,
+        full_name: data.fullName,
+        organization_id: data.organizationId,
+      });
+      if (data.organization) {
+        setOrganization(data.organization);
+      }
+      return { error: null };
+    } catch (error) {
+      return { error: { message: 'Errore di connessione' } };
+    }
   };
 
-  const signUp = async (email: string, password: string, fullName: string, organizationName: string) => {
-    // Not used with Replit Auth
-    window.location.href = '/api/login';
-    return { error: null };
+  const signUp = async (email: string, password: string, fullName: string, organizationName: string): Promise<{ error: AuthError | null }> => {
+    try {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password, fullName, organizationName }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        return { error: { message: data.error || 'Errore durante la registrazione' } };
+      }
+
+      const data = await response.json();
+      setUser({ id: data.id, email: data.email });
+      setProfile({
+        ...data,
+        full_name: data.fullName,
+        organization_id: data.organizationId,
+      });
+      if (data.organization) {
+        setOrganization(data.organization);
+      }
+      return { error: null };
+    } catch (error) {
+      return { error: { message: 'Errore di connessione' } };
+    }
   };
 
-  const signOut = async () => {
-    window.location.href = '/api/logout';
-    return { error: null };
+  const signOut = async (): Promise<{ error: AuthError | null }> => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      setUser(null);
+      setProfile(null);
+      setOrganization(null);
+      return { error: null };
+    } catch (error) {
+      return { error: { message: 'Errore durante il logout' } };
+    }
   };
 
   return {

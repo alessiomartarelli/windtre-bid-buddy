@@ -5,6 +5,7 @@ import { eq, desc, and } from "drizzle-orm";
 export interface IStorage {
   // Profiles
   getProfile(id: string): Promise<Profile | undefined>;
+  getProfileByEmail(email: string): Promise<Profile | undefined>;
   upsertProfile(profile: InsertProfile): Promise<Profile>;
   getProfilesByOrg(orgId: string): Promise<Profile[]>;
   updateProfile(id: string, updates: Partial<InsertProfile>): Promise<Profile>;
@@ -35,17 +36,27 @@ export class DatabaseStorage implements IStorage {
     return profile;
   }
 
+  async getProfileByEmail(email: string): Promise<Profile | undefined> {
+    const [profile] = await db.select().from(profiles).where(eq(profiles.email, email));
+    return profile;
+  }
+
   async upsertProfile(profile: InsertProfile): Promise<Profile> {
+    const updateSet: any = {
+      updatedAt: new Date(),
+    };
+    if (profile.email !== undefined) updateSet.email = profile.email;
+    if (profile.fullName !== undefined) updateSet.fullName = profile.fullName;
+    if (profile.profileImageUrl !== undefined) updateSet.profileImageUrl = profile.profileImageUrl;
+    if (profile.passwordHash !== undefined) updateSet.passwordHash = profile.passwordHash;
+    if (profile.role !== undefined) updateSet.role = profile.role;
+    if (profile.organizationId !== undefined) updateSet.organizationId = profile.organizationId;
+
     const [result] = await db.insert(profiles)
       .values(profile)
       .onConflictDoUpdate({
         target: profiles.id,
-        set: {
-          email: profile.email,
-          fullName: profile.fullName,
-          profileImageUrl: profile.profileImageUrl,
-          updatedAt: new Date(),
-        },
+        set: updateSet,
       })
       .returning();
     return result;
