@@ -1,12 +1,12 @@
 import { useEffect } from "react";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
 export default function Auth() {
-  const { user, isLoading } = useAuth();
+  const { user, loading: isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {

@@ -234,5 +234,163 @@ export async function registerRoutes(
     }
   });
 
+  // === ADMIN API aliases (matching frontend fetch calls) ===
+  app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let profile = await storage.getProfile(userId);
+      if (!profile) {
+        profile = await storage.upsertProfile({
+          id: userId,
+          email: req.user.claims.email,
+          fullName: `${req.user.claims.first_name || ''} ${req.user.claims.last_name || ''}`.trim() || null,
+          profileImageUrl: req.user.claims.profile_image_url,
+          role: "operatore",
+        });
+      }
+      let organization = null;
+      if (profile.organizationId) {
+        organization = await storage.getOrganization(profile.organizationId);
+      }
+      res.json({ ...profile, organization });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  app.get("/api/admin/team-members", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      if (!profile.organizationId) return res.json([]);
+      const members = await storage.getProfilesByOrg(profile.organizationId);
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching team members" });
+    }
+  });
+
+  app.get("/api/admin/organizations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const orgs = await storage.getOrganizations();
+      res.json(orgs);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching organizations" });
+    }
+  });
+
+  app.get("/api/admin/profiles", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const orgs = await storage.getOrganizations();
+      const allProfiles: any[] = [];
+      for (const org of orgs) {
+        const members = await storage.getProfilesByOrg(org.id);
+        allProfiles.push(...members);
+      }
+      res.json(allProfiles);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching profiles" });
+    }
+  });
+
+  app.post("/api/admin/create-user", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const { email, full_name, organization_id, role } = req.body;
+      const newProfile = await storage.upsertProfile({
+        id: `user_${Date.now()}`,
+        email,
+        fullName: full_name,
+        organizationId: organization_id || profile.organizationId,
+        role: role || "operatore",
+      });
+      res.json(newProfile);
+    } catch (error) {
+      res.status(500).json({ error: "Error creating user" });
+    }
+  });
+
+  app.post("/api/admin/update-user", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const { user_id, full_name, role } = req.body;
+      if (profile.role === "admin") {
+        const targetProfile = await storage.getProfile(user_id);
+        if (!targetProfile || targetProfile.organizationId !== profile.organizationId) {
+          return res.status(403).json({ message: "Cannot update users outside your organization" });
+        }
+      }
+      const updated = await storage.updateProfile(user_id, { fullName: full_name, role });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Error updating user" });
+    }
+  });
+
+  app.post("/api/admin/delete-entity", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const { entity_type, entity_id } = req.body;
+      if (entity_type === "user" || entity_type === "profile") {
+        if (profile.role === "admin") {
+          const targetProfile = await storage.getProfile(entity_id);
+          if (!targetProfile || targetProfile.organizationId !== profile.organizationId) {
+            return res.status(403).json({ message: "Cannot delete users outside your organization" });
+          }
+        }
+        await storage.deleteProfile(entity_id);
+      } else if (entity_type === "organization") {
+        if (profile.role !== "super_admin") {
+          return res.status(403).json({ message: "Only super admins can delete organizations" });
+        }
+        await storage.deleteOrganization(entity_id);
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Error deleting entity" });
+    }
+  });
+
+  app.post("/api/admin/bisuite-api", isAuthenticated, async (_req: any, res) => {
+    res.status(501).json({ error: "BiSuite API not configured" });
+  });
+
+  app.get("/api/admin/bisuite-credentials", isAuthenticated, async (_req: any, res) => {
+    res.json([]);
+  });
+
+  app.post("/api/admin/bisuite-credentials", isAuthenticated, async (_req: any, res) => {
+    res.status(501).json({ error: "BiSuite credentials not configured" });
+  });
+
+  app.put("/api/admin/bisuite-credentials", isAuthenticated, async (_req: any, res) => {
+    res.status(501).json({ error: "BiSuite credentials not configured" });
+  });
+
   return httpServer;
 }
