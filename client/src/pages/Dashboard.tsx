@@ -463,19 +463,20 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       {/* Header con gradient sottile */}
       <div className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground" data-testid="text-dashboard-title">
                 Dashboard
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground truncate">
                 Gestione preventivi e analytics • {profile?.organization_id ? 'Organizzazione' : 'Personale'}
               </p>
             </div>
-            <Button variant="outline" onClick={() => setLocation('/')} className="gap-2">
+            <Button variant="outline" onClick={() => setLocation('/')} className="gap-2 shrink-0" data-testid="button-back-simulator">
               <ArrowLeft className="h-4 w-4" />
-              Simulatore
+              <span className="hidden sm:inline">Simulatore</span>
+              <span className="sm:hidden">Indietro</span>
             </Button>
           </div>
         </div>

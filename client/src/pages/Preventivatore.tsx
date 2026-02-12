@@ -1032,19 +1032,19 @@ const Preventivatore = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex flex-col">
       {/* Modern Header */}
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="container mx-auto px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Button 
               variant="ghost" 
               size="icon" 
               onClick={() => setLocation('/preventivatore?new=true')}
-              className="hover:bg-primary/10"
               title="Nuova simulazione"
+              data-testid="button-home"
             >
               <Home className="h-5 w-5" />
             </Button>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              Simulatore WindTre
+            <h1 className="text-base sm:text-xl font-bold text-foreground truncate" data-testid="text-header-title">
+              Incentive W3
             </h1>
           </div>
           <UserMenu />
