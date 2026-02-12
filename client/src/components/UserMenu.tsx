@@ -26,6 +26,8 @@ export function UserMenu() {
         description: 'Errore durante il logout',
         variant: 'destructive',
       });
+    } else {
+      window.location.href = '/auth';
     }
   };
 
