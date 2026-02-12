@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,8 @@ import { Label } from "@/components/ui/label";
 // TOTAL_STEPS è dinamico: 14 per gara_operatore_rs (include step selezione modalità), 13 altrimenti
 const getTotalSteps = (tipologiaGara: string) => tipologiaGara === "gara_operatore_rs" ? 14 : 13;
 
+let _preventivatoreInitialized = false;
+
 const Preventivatore = () => {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
@@ -84,6 +86,7 @@ const Preventivatore = () => {
   const [attivatoCBByRS, setAttivatoCBByRS] = useState<Record<string, AttivatoCBDettaglio[]>>({}); // Volumi Partnership aggregati per RS
   const [calendarioOverrides, setCalendarioOverrides] = useState<CalendariMeseOverrides>({});
   const [isLoaded, setIsLoaded] = useState(false);
+  const hasInitialized = useRef(false);
   
   // Save dialog state
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -120,6 +123,8 @@ const Preventivatore = () => {
 
   // Carica preventivo da URL o stato salvato al mount
   useEffect(() => {
+    if (_preventivatoreInitialized) return;
+    _preventivatoreInitialized = true;
     const loadFromUrl = async () => {
       const preventivoId = searchParams.get('id');
       const isNew = searchParams.get('new') === 'true';
@@ -336,7 +341,11 @@ const Preventivatore = () => {
     };
     
     loadFromUrl();
-  }, [searchParams, loadPreventivo, loadState, loadTemplate, loadConfig, loadRemoteConfig, saveConfig, toast, clearState]);
+    return () => {
+      _preventivatoreInitialized = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Salva automaticamente lo stato quando cambia
   useEffect(() => {
@@ -858,7 +867,7 @@ const Preventivatore = () => {
   const totalePremioExtraGaraIva = calcolaTotaleExtraGaraIva(extraGaraIvaResults);
 
   // Numero totale step (dinamico)
-  const TOTAL_STEPS = getTotalSteps(configGara.tipologiaGara);
+  const TOTAL_STEPS = getTotalSteps(configGara.tipologiaGara || "gara_operatore");
   
   // Validazione step corrente
   const isCurrentStepValid = (): boolean => {
@@ -985,9 +994,9 @@ const Preventivatore = () => {
 
     let result;
     if (currentPreventivoId) {
-      result = await updatePreventivo(currentPreventivoId, preventivoName, data as unknown as import('@/integrations/supabase/types').Json);
+      result = await updatePreventivo(currentPreventivoId, preventivoName, data as any);
     } else {
-      result = await createPreventivo(preventivoName, data as unknown as import('@/integrations/supabase/types').Json);
+      result = await createPreventivo(preventivoName, data as any);
     }
 
     setIsSaving(false);
@@ -1112,7 +1121,7 @@ const Preventivatore = () => {
                     <StepSceltaModalitaRS
                       modalita={modalitaInserimentoRS}
                       onModalitaChange={setModalitaInserimentoRS}
-                      numRagioneSociale={[...new Set(puntiVendita.map(p => p.ragioneSociale).filter(Boolean))].length}
+                      numRagioneSociale={Array.from(new Set(puntiVendita.map(p => p.ragioneSociale).filter(Boolean))).length}
                       numPdv={puntiVendita.length}
                     />
                   ) : (
