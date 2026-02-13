@@ -67,6 +67,7 @@ const Preventivatore = () => {
   const [step, setStep] = useState(0);
   const [configGara, setConfigGara] = useState<ConfigGaraBase>({ nomeGara: "", haLetteraUfficiale: false, annoGara: new Date().getFullYear(), meseGara: new Date().getMonth() + 1, tipoPeriodo: "mensile", tipologiaGara: "gara_operatore" });
   const [numeroPdv, setNumeroPdv] = useState<number>(0);
+  const [ragioniSociali, setRagioniSociali] = useState<string[]>([]);
   const [puntiVendita, setPuntiVendita] = useState<PuntoVendita[]>([]);
   const [pistaMobileConfig, setPistaMobileConfig] = useState<PistaMobileConfig>({ sogliePerPos: [], applicaDecurtazione30SeNoFissoO8Piva: true });
   const [pistaFissoConfig, setPistaFissoConfig] = useState<{ sogliePerPos: PistaFissoPosConfig[] }>({ sogliePerPos: [] });
@@ -159,6 +160,7 @@ const Preventivatore = () => {
   const buildCurrentConfig = () => ({
     configGara,
     numeroPdv,
+    ragioniSociali,
     puntiVendita,
     pistaMobileConfig,
     pistaFissoConfig,
@@ -220,6 +222,7 @@ const Preventivatore = () => {
   const applyConfigData = (cfg: any) => {
       if (cfg.configGara) setConfigGara(cfg.configGara);
       if (cfg.numeroPdv !== undefined) setNumeroPdv(cfg.numeroPdv);
+      if (cfg.ragioniSociali) setRagioniSociali(cfg.ragioniSociali);
       if (cfg.puntiVendita) setPuntiVendita(cfg.puntiVendita);
       if (cfg.pistaMobileConfig) setPistaMobileConfig(cfg.pistaMobileConfig);
       if (cfg.pistaFissoConfig) setPistaFissoConfig(cfg.pistaFissoConfig);
@@ -1271,7 +1274,7 @@ const Preventivatore = () => {
             <CardContent className="p-3 sm:p-6 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 260px)', minHeight: '300px' }}>
               <div className="animate-fade-in">
                 {step === 0 && <StepLetteraGara configGara={configGara} setConfigGara={setConfigGara} />}
-                {step === 1 && <StepPuntiVendita numeroPdv={numeroPdv} onNumeroPdvChange={handleNumeroPdvChange} puntiVendita={puntiVendita} updatePdvField={updatePdvField} />}
+                {step === 1 && <StepPuntiVendita numeroPdv={numeroPdv} onNumeroPdvChange={handleNumeroPdvChange} puntiVendita={puntiVendita} updatePdvField={updatePdvField} ragioniSociali={ragioniSociali} onRagioniSocialiChange={setRagioniSociali} />}
                 {step === 2 && <StepCluster puntiVendita={puntiVendita} updatePdvField={updatePdvField} />}
                 {step === 3 && <StepCalendari puntiVendita={puntiVendita} annoGara={configGara.annoGara} meseGara={configGara.meseGara} updatePdvField={updatePdvField} />}
                 {step === 4 && <StepCalendarioMese puntiVendita={puntiVendita} anno={configGara.annoGara} meseGara={configGara.meseGara} calendarioOverrides={calendarioOverrides} onCalendarioOverridesChange={setCalendarioOverrides} />}
