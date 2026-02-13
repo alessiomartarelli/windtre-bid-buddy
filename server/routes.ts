@@ -37,7 +37,7 @@ function setupSession(app: Express) {
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: process.env.FORCE_HTTPS === "true",
         sameSite: "lax",
         maxAge: sessionTtl,
       },
@@ -87,6 +87,13 @@ export async function registerRoutes(
 
       req.session.userId = profile.id;
 
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err: any) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
       const organization = await storage.getOrganization(profile.organizationId!);
       res.status(201).json({ ...profile, passwordHash: undefined, organization });
     } catch (error) {
@@ -121,6 +128,13 @@ export async function registerRoutes(
       if (profile.organizationId) {
         organization = await storage.getOrganization(profile.organizationId);
       }
+
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err: any) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
 
       res.json({ ...profile, passwordHash: undefined, organization });
     } catch (error) {
@@ -498,39 +512,72 @@ export async function registerRoutes(
   app.post("/api/admin/create-user", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.userId;
-      const profile = await storage.getProfile(userId);
-      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+      const adminProfile = await storage.getProfile(userId);
+      if (!adminProfile || !["super_admin", "admin"].includes(adminProfile.role)) {
         return res.status(403).json({ message: "Forbidden" });
       }
-      const { email, full_name, organization_id, role } = req.body;
+      const { email, password, fullName, full_name, organizationId, organization_id, role, organizationName } = req.body;
+      const resolvedFullName = fullName || full_name;
+      const resolvedEmail = email;
+      const resolvedRole = role || "operatore";
+
+      if (!resolvedEmail || !resolvedFullName) {
+        return res.status(400).json({ error: "Email e nome sono obbligatori" });
+      }
+
+      const existing = await storage.getProfileByEmail(resolvedEmail);
+      if (existing) {
+        return res.status(400).json({ error: "Esiste già un utente con questa email" });
+      }
+
+      let resolvedOrgId = organizationId || organization_id || adminProfile.organizationId;
+
+      if (organizationName && adminProfile.role === "super_admin") {
+        const newOrg = await storage.createOrganization({ name: organizationName });
+        resolvedOrgId = newOrg.id;
+      }
+
+      let passwordHash: string | undefined;
+      if (password) {
+        passwordHash = await bcrypt.hash(password, 10);
+      }
+
       const newProfile = await storage.upsertProfile({
         id: `user_${Date.now()}`,
-        email,
-        fullName: full_name,
-        organizationId: organization_id || profile.organizationId,
-        role: role || "operatore",
+        email: resolvedEmail,
+        fullName: resolvedFullName,
+        passwordHash,
+        organizationId: resolvedOrgId,
+        role: resolvedRole,
       });
       res.json(newProfile);
     } catch (error) {
+      console.error("Error creating user:", error);
       res.status(500).json({ error: "Error creating user" });
     }
   });
 
   app.post("/api/admin/update-user", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.session.userId;
-      const profile = await storage.getProfile(userId);
+      const currentUserId = req.session.userId;
+      const profile = await storage.getProfile(currentUserId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ message: "Forbidden" });
       }
-      const { user_id, full_name, role } = req.body;
+      const { user_id, userId: userIdAlt, full_name, fullName, email, role } = req.body;
+      const targetId = user_id || userIdAlt;
+      const resolvedFullName = fullName || full_name;
       if (profile.role === "admin") {
-        const targetProfile = await storage.getProfile(user_id);
+        const targetProfile = await storage.getProfile(targetId);
         if (!targetProfile || targetProfile.organizationId !== profile.organizationId) {
           return res.status(403).json({ message: "Cannot update users outside your organization" });
         }
       }
-      const updated = await storage.updateProfile(user_id, { fullName: full_name, role });
+      const updateData: any = {};
+      if (resolvedFullName) updateData.fullName = resolvedFullName;
+      if (email) updateData.email = email;
+      if (role) updateData.role = role;
+      const updated = await storage.updateProfile(targetId, updateData);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Error updating user" });
@@ -544,20 +591,22 @@ export async function registerRoutes(
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ message: "Forbidden" });
       }
-      const { entity_type, entity_id } = req.body;
-      if (entity_type === "user" || entity_type === "profile") {
+      const { entity_type, entity_id, type, id } = req.body;
+      const resolvedType = entity_type || type;
+      const resolvedId = entity_id || id;
+      if (resolvedType === "user" || resolvedType === "profile") {
         if (profile.role === "admin") {
-          const targetProfile = await storage.getProfile(entity_id);
+          const targetProfile = await storage.getProfile(resolvedId);
           if (!targetProfile || targetProfile.organizationId !== profile.organizationId) {
             return res.status(403).json({ message: "Cannot delete users outside your organization" });
           }
         }
-        await storage.deleteProfile(entity_id);
-      } else if (entity_type === "organization") {
+        await storage.deleteProfile(resolvedId);
+      } else if (resolvedType === "organization") {
         if (profile.role !== "super_admin") {
           return res.status(403).json({ message: "Only super admins can delete organizations" });
         }
-        await storage.deleteOrganization(entity_id);
+        await storage.deleteOrganization(resolvedId);
       }
       res.json({ success: true });
     } catch (error) {
