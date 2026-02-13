@@ -56,6 +56,18 @@ export const organizationConfig = pgTable("organization_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// PDV Configurations (named, per-organization)
+export const pdvConfigurations = pgTable("pdv_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  name: varchar("name").notNull(),
+  config: jsonb("config").default({}),
+  configVersion: varchar("config_version").default("2.0"),
+  createdBy: varchar("created_by").references(() => profiles.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Password reset tokens
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -101,6 +113,8 @@ export type InsertOrganization = typeof organizations.$inferInsert;
 export type InsertProfile = typeof profiles.$inferInsert;
 export type InsertPreventivo = typeof preventivi.$inferInsert;
 
+export type PdvConfiguration = typeof pdvConfigurations.$inferSelect;
+export type InsertPdvConfiguration = typeof pdvConfigurations.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
