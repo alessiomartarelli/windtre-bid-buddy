@@ -44,7 +44,7 @@ import { calcolaExtraGaraIva, calcolaTotaleExtraGaraIva } from "@/lib/calcoloExt
 import StepExtraGaraIva from "@/components/wizard/StepExtraGaraIva";
 import { UserMenu } from "@/components/UserMenu";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Save, ChevronLeft, ChevronRight, RefreshCw, Home, FolderOpen, Trash2, Clock } from "lucide-react";
+import { Loader2, Save, ChevronLeft, ChevronRight, RefreshCw, Home, FolderOpen, Trash2, Clock, FilePlus, ArrowLeft } from "lucide-react";
 import { WizardHeader } from "@/components/wizard/WizardHeader";
 import { WizardSummaryCard } from "@/components/wizard/WizardSummaryCard";
 import { Input } from "@/components/ui/input";
@@ -123,6 +123,7 @@ const Preventivatore = () => {
 
   // PDV Configuration save/load state
   const [saveConfigDialogOpen, setSaveConfigDialogOpen] = useState(false);
+  const [saveMode, setSaveMode] = useState<'overwrite' | 'new' | null>(null);
   const [loadConfigDialogOpen, setLoadConfigDialogOpen] = useState(false);
   const [configName, setConfigName] = useState("");
   const [isSavingConfig, setIsSavingConfig] = useState(false);
@@ -174,12 +175,13 @@ const Preventivatore = () => {
     configVersion: '2.0' as const,
   });
 
-  const handleSaveConfig = async () => {
+  const handleSaveConfig = async (forceNew?: boolean) => {
     if (!configName.trim()) return;
     setIsSavingConfig(true);
     try {
       const config = buildCurrentConfig();
-      if (activeConfigId) {
+      const isUpdate = activeConfigId && !forceNew;
+      if (isUpdate) {
         const res = await fetch(`/api/pdv-configurations/${activeConfigId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -211,6 +213,7 @@ const Preventivatore = () => {
     } finally {
       setIsSavingConfig(false);
       setSaveConfigDialogOpen(false);
+      setSaveMode(null);
     }
   };
 
@@ -1616,59 +1619,100 @@ const Preventivatore = () => {
       </Dialog>
 
       {/* Save Configuration Dialog */}
-      <Dialog open={saveConfigDialogOpen} onOpenChange={setSaveConfigDialogOpen}>
+      <Dialog open={saveConfigDialogOpen} onOpenChange={(open) => {
+        setSaveConfigDialogOpen(open);
+        if (!open) setSaveMode(null);
+      }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{activeConfigId ? "Aggiorna Configurazione" : "Salva Nuova Configurazione"}</DialogTitle>
-            <DialogDescription>
-              {activeConfigId 
-                ? `Stai aggiornando la configurazione "${activeConfigName}". Puoi modificare il nome o salvare con lo stesso.`
-                : "Inserisci un nome per questa configurazione PDV. Potrai caricarla in futuro per nuove simulazioni."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="config-name">Nome configurazione</Label>
-              <Input
-                id="config-name"
-                value={configName}
-                onChange={(e) => setConfigName(e.target.value)}
-                placeholder="Es. Configurazione Gennaio 2025"
-                data-testid="input-config-name"
-              />
-            </div>
-            <div className="p-3 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                Questa configurazione include: {numeroPdv} PDV, soglie mobile/fisso, calendari, partnership, energia, assicurazioni.
-              </p>
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            {activeConfigId && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setActiveConfigId(null);
-                  setActiveConfigName(null);
-                  setConfigName("");
-                }}
-                data-testid="button-save-as-new"
-              >
-                Salva come nuova
-              </Button>
-            )}
-            <Button 
-              onClick={handleSaveConfig} 
-              disabled={isSavingConfig || !configName.trim()}
-              data-testid="button-confirm-save-config"
-            >
-              {isSavingConfig ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</>
-              ) : (
-                <><Save className="mr-2 h-4 w-4" />{activeConfigId ? "Aggiorna" : "Salva"}</>
-              )}
-            </Button>
-          </DialogFooter>
+          {activeConfigId && !saveMode ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Salva Configurazione</DialogTitle>
+                <DialogDescription>
+                  Hai una configurazione attiva: "{activeConfigName}". Cosa vuoi fare?
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3 py-2">
+                <Button
+                  variant="outline"
+                  className="justify-start gap-3 h-auto py-3"
+                  onClick={() => {
+                    setSaveMode('overwrite');
+                    setConfigName(activeConfigName || "");
+                  }}
+                  data-testid="button-overwrite-config"
+                >
+                  <Save className="h-5 w-5 shrink-0" />
+                  <div className="text-left">
+                    <div className="font-medium">Sovrascrivi "{activeConfigName}"</div>
+                    <div className="text-xs text-muted-foreground font-normal">Aggiorna la configurazione esistente</div>
+                  </div>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="justify-start gap-3 h-auto py-3"
+                  onClick={() => {
+                    setSaveMode('new');
+                    setConfigName("");
+                  }}
+                  data-testid="button-create-new-config"
+                >
+                  <FilePlus className="h-5 w-5 shrink-0" />
+                  <div className="text-left">
+                    <div className="font-medium">Crea nuova configurazione</div>
+                    <div className="text-xs text-muted-foreground font-normal">Salva con un nuovo nome</div>
+                  </div>
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>{saveMode === 'overwrite' ? "Sovrascrivi Configurazione" : "Nuova Configurazione"}</DialogTitle>
+                <DialogDescription>
+                  {saveMode === 'overwrite'
+                    ? `Stai aggiornando "${activeConfigName}". Puoi anche modificare il nome.`
+                    : "Inserisci un nome per questa configurazione PDV. Potrai caricarla in futuro."}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="config-name">Nome configurazione</Label>
+                  <Input
+                    id="config-name"
+                    value={configName}
+                    onChange={(e) => setConfigName(e.target.value)}
+                    placeholder="Es. Configurazione Gennaio 2025"
+                    data-testid="input-config-name"
+                  />
+                </div>
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    Questa configurazione include: {numeroPdv} PDV, soglie mobile/fisso, calendari, partnership, energia, assicurazioni.
+                  </p>
+                </div>
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                {activeConfigId && (
+                  <Button variant="ghost" size="sm" onClick={() => setSaveMode(null)} data-testid="button-back-save-choice">
+                    <ArrowLeft className="mr-1 h-4 w-4" />
+                    Indietro
+                  </Button>
+                )}
+                <Button 
+                  onClick={() => handleSaveConfig(saveMode === 'new')}
+                  disabled={isSavingConfig || !configName.trim()}
+                  data-testid="button-confirm-save-config"
+                >
+                  {isSavingConfig ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</>
+                  ) : (
+                    <><Save className="mr-2 h-4 w-4" />{saveMode === 'overwrite' ? "Aggiorna" : "Salva"}</>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
