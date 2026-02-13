@@ -579,98 +579,80 @@ const Preventivatore = () => {
     saveRemoteConfigDebounced(configToSave);
   }, [configGara, numeroPdv, puntiVendita, pistaMobileConfig, pistaFissoConfig, partnershipRewardConfig, calendarioOverrides, energiaConfig, energiaPdvInGara, assicurazioniConfig, assicurazioniPdvInGara, pistaMobileRSConfig, pistaFissoRSConfig, partnershipRewardRSConfig, modalitaInserimentoRS, saveConfig, saveRemoteConfigDebounced, isLoaded]);
 
-  // Aggiorna automaticamente le soglie FISSO quando cambiano i cluster
+  // Aggiorna automaticamente le soglie FISSO quando cambiano cluster, tipo posizione o sconto
   useEffect(() => {
-    if (!isLoaded || pistaFissoConfig.sogliePerPos.length === 0) return;
+    if (!isLoaded) return;
 
-    const needsUpdate = puntiVendita.some((pdv, index) => {
-      const conf = pistaFissoConfig.sogliePerPos[index];
-      if (!conf || !pdv.clusterFisso || !pdv.tipoPosizione) return false;
-      
-      // Aggiorna solo se le soglie sono ancora a zero (non modificate dall'utente)
-      const isDefault = conf.soglia1 === 0 && conf.soglia2 === 0 && conf.soglia3 === 0 && conf.soglia4 === 0;
-      return isDefault;
-    });
+    const applyScontoVal = (v: number, sconto: number) => sconto > 0 ? Math.round(v * (1 - sconto / 100)) : v;
 
-    if (needsUpdate) {
-      setPistaFissoConfig((prev) => {
-        const updated = [...prev.sogliePerPos];
-        puntiVendita.forEach((pdv, index) => {
-          if (!pdv.clusterFisso || !pdv.tipoPosizione) return;
-          
-          const conf = updated[index];
-          if (!conf) return;
-          
-          // Aggiorna solo se le soglie sono ancora a zero
-          const isDefault = conf.soglia1 === 0 && conf.soglia2 === 0 && conf.soglia3 === 0 && conf.soglia4 === 0;
-          if (isDefault) {
-            const clusterNum = mapClusterFissoToNumber(pdv.clusterFisso);
-            const defaults = getDefaultFissoThresholds(pdv.tipoPosizione, clusterNum);
-            const scontoFisso = pdv.scontoSoglieFisso || 0;
-            const applySconto = (v: number) => scontoFisso > 0 ? Math.round(v * (1 - scontoFisso / 100)) : v;
-            updated[index] = {
-              ...conf,
-              posCode: pdv.codicePos || '',
-              soglia1: applySconto(defaults.soglia1),
-              soglia2: applySconto(defaults.soglia2),
-              soglia3: applySconto(defaults.soglia3),
-              soglia4: applySconto(defaults.soglia4),
-              soglia5: applySconto(defaults.soglia5),
-              multiplierSoglia1: conf.multiplierSoglia1 || 2,
-              multiplierSoglia2: conf.multiplierSoglia2 || 3,
-              multiplierSoglia3: conf.multiplierSoglia3 || 4,
-              multiplierSoglia4: conf.multiplierSoglia4 || 5,
-              forecastTargetPunti: applySconto(defaults.soglia4),
-            };
-          }
-        });
-        return { sogliePerPos: updated };
+    setPistaFissoConfig((prev) => {
+      if (prev.sogliePerPos.length === 0) return prev;
+      let changed = false;
+      const updated = prev.sogliePerPos.map((conf, index) => {
+        const pdv = puntiVendita[index];
+        if (!pdv || !pdv.clusterFisso || !pdv.tipoPosizione || !conf) return conf;
+
+        const clusterNum = mapClusterFissoToNumber(pdv.clusterFisso);
+        const defaults = getDefaultFissoThresholds(pdv.tipoPosizione, clusterNum);
+        const sconto = pdv.scontoSoglieFisso || 0;
+
+        const s1 = applyScontoVal(defaults.soglia1, sconto);
+        const s2 = applyScontoVal(defaults.soglia2, sconto);
+        const s3 = applyScontoVal(defaults.soglia3, sconto);
+        const s4 = applyScontoVal(defaults.soglia4, sconto);
+        const s5 = applyScontoVal(defaults.soglia5, sconto);
+
+        if (conf.soglia1 !== s1 || conf.soglia2 !== s2 || conf.soglia3 !== s3 || conf.soglia4 !== s4 || conf.soglia5 !== s5) {
+          changed = true;
+          return {
+            ...conf,
+            posCode: pdv.codicePos || '',
+            soglia1: s1, soglia2: s2, soglia3: s3, soglia4: s4, soglia5: s5,
+            multiplierSoglia1: conf.multiplierSoglia1 || 2,
+            multiplierSoglia2: conf.multiplierSoglia2 || 3,
+            multiplierSoglia3: conf.multiplierSoglia3 || 4,
+            multiplierSoglia4: conf.multiplierSoglia4 || 5,
+            forecastTargetPunti: s4,
+          };
+        }
+        return conf;
       });
-    }
-  }, [puntiVendita, pistaFissoConfig.sogliePerPos, isLoaded]);
+      return changed ? { sogliePerPos: updated } : prev;
+    });
+  }, [puntiVendita.map(p => `${p.tipoPosizione}-${p.clusterFisso}-${p.scontoSoglieFisso || 0}`).join(','), isLoaded]);
 
-  // Aggiorna automaticamente i target Partnership Reward quando cambiano i cluster CB
+  // Aggiorna automaticamente i target Partnership Reward quando cambiano cluster CB, tipo posizione o sconto
   useEffect(() => {
-    if (!isLoaded || partnershipRewardConfig.configPerPos.length === 0) return;
+    if (!isLoaded) return;
 
-    const needsUpdate = puntiVendita.some((pdv, index) => {
-      const conf = partnershipRewardConfig.configPerPos[index];
-      if (!conf || !pdv.clusterCB || !pdv.tipoPosizione) return false;
-      
-      // Aggiorna solo se il target è ancora a zero (non modificato dall'utente)
-      return conf.config.target100 === 0;
-    });
+    setPartnershipRewardConfig((prev) => {
+      if (prev.configPerPos.length === 0) return prev;
+      let changed = false;
+      const updated = prev.configPerPos.map((conf, index) => {
+        const pdv = puntiVendita[index];
+        if (!pdv || !pdv.clusterCB || !pdv.tipoPosizione || !conf) return conf;
 
-    if (needsUpdate) {
-      setPartnershipRewardConfig((prev) => {
-        const updated = [...prev.configPerPos];
-        puntiVendita.forEach((pdv, index) => {
-          if (!pdv.clusterCB || !pdv.tipoPosizione) return;
-          
-          const conf = updated[index];
-          if (!conf) return;
-          
-          // Aggiorna solo se il target è ancora a zero
-          if (conf.config.target100 === 0) {
-            const baseTarget = getDefaultTarget100(pdv.tipoPosizione, pdv.clusterCB);
-            const scontoCB = pdv.scontoSoglieCB || 0;
-            const defaultTarget = scontoCB > 0 ? Math.round(baseTarget * (1 - scontoCB / 100)) : baseTarget;
-            updated[index] = {
-              ...conf,
-              posCode: pdv.codicePos || '',
-              config: {
-                target100: defaultTarget,
-                target80: calculateTarget80(defaultTarget),
-                premio100: 0,
-                premio80: 0,
-              }
-            };
-          }
-        });
-        return { configPerPos: updated };
+        const baseTarget = getDefaultTarget100(pdv.tipoPosizione, pdv.clusterCB);
+        const scontoCB = pdv.scontoSoglieCB || 0;
+        const expectedTarget = scontoCB > 0 ? Math.round(baseTarget * (1 - scontoCB / 100)) : baseTarget;
+
+        if (conf.config.target100 !== expectedTarget) {
+          changed = true;
+          return {
+            ...conf,
+            posCode: pdv.codicePos || '',
+            config: {
+              ...conf.config,
+              target100: expectedTarget,
+              target80: calculateTarget80(expectedTarget),
+            }
+          };
+        }
+        return conf;
       });
-    }
-  }, [puntiVendita, partnershipRewardConfig.configPerPos, isLoaded]);
+      return changed ? { configPerPos: updated } : prev;
+    });
+  }, [puntiVendita.map(p => `${p.tipoPosizione}-${p.clusterCB}-${p.scontoSoglieCB || 0}`).join(','), isLoaded]);
 
   const handleNumeroPdvChange = (value: string) => {
     const n = Number(value) || 0;
