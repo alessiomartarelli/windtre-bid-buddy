@@ -20,8 +20,8 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted p-4">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted p-3 sm:p-4">
+      <div className="max-w-2xl mx-auto space-y-4 sm:space-y-6">
         <Button 
           variant="ghost" 
           onClick={() => setLocation('/')}
@@ -42,7 +42,7 @@ export default function Profile() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label className="text-muted-foreground text-sm">Nome</Label>
                 <p className="font-medium">{profile?.full_name || 'Non specificato'}</p>

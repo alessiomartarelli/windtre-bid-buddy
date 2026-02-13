@@ -278,8 +278,8 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted p-3 sm:p-4">
+      <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
         <Button 
           variant="ghost" 
           onClick={() => setLocation('/')}
@@ -334,11 +334,11 @@ export default function AdminPanel() {
         </Dialog>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Team di {organization?.name}
+                <span className="truncate">Team di {organization?.name}</span>
               </CardTitle>
               <CardDescription>
                 Gestisci gli operatori della tua organizzazione
@@ -346,9 +346,10 @@ export default function AdminPanel() {
             </div>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button>
+                <Button size="sm" className="shrink-0">
                   <Plus className="mr-2 h-4 w-4" />
-                  Aggiungi Operatore
+                  <span className="hidden sm:inline">Aggiungi Operatore</span>
+                  <span className="sm:hidden">Aggiungi</span>
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -421,22 +422,24 @@ export default function AdminPanel() {
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>
             ) : (
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead>Email</TableHead>
+                    <TableHead className="hidden sm:table-cell">Email</TableHead>
                     <TableHead>Ruolo</TableHead>
-                    <TableHead className="w-[100px]">Azioni</TableHead>
+                    <TableHead className="w-[80px]">Azioni</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {teamMembers.map((member) => (
                     <TableRow key={member.id}>
-                      <TableCell className="font-medium">
-                        {member.full_name || '-'}
+                      <TableCell>
+                        <div className="font-medium">{member.full_name || '-'}</div>
+                        <div className="text-xs text-muted-foreground sm:hidden">{member.email}</div>
                       </TableCell>
-                      <TableCell>{member.email}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{member.email}</TableCell>
                       <TableCell>
                         <Badge variant={getRoleBadgeVariant(member.role)}>
                           {getRoleLabel(member.role)}
@@ -496,6 +499,7 @@ export default function AdminPanel() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
             )}
           </CardContent>
         </Card>

@@ -1234,12 +1234,12 @@ const Preventivatore = () => {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 container mx-auto px-4 py-6">
-        <div className="grid lg:grid-cols-[1fr,320px] gap-6">
+      <div className="flex-1 container mx-auto px-2 sm:px-4 py-3 sm:py-6">
+        <div className="grid lg:grid-cols-[1fr,320px] gap-4 sm:gap-6">
           {/* Main Wizard Card */}
           <Card className="shadow-lg border-border/50 overflow-hidden">
             {/* Wizard Header with Progress */}
-            <div className="p-6 border-b bg-gradient-to-r from-card to-muted/20">
+            <div className="p-3 sm:p-6 border-b bg-gradient-to-r from-card to-muted/20">
               <WizardHeader 
                 currentStep={step}
                 totalSteps={TOTAL_STEPS}
@@ -1264,7 +1264,7 @@ const Preventivatore = () => {
             </div>
             
             {/* Step Content */}
-            <CardContent className="p-4 sm:p-6 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)', minHeight: '400px' }}>
+            <CardContent className="p-3 sm:p-6 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 260px)', minHeight: '300px' }}>
               <div className="animate-fade-in">
                 {step === 0 && <StepLetteraGara configGara={configGara} setConfigGara={setConfigGara} />}
                 {step === 1 && <StepPuntiVendita numeroPdv={numeroPdv} onNumeroPdvChange={handleNumeroPdvChange} puntiVendita={puntiVendita} updatePdvField={updatePdvField} />}
@@ -1412,16 +1412,17 @@ const Preventivatore = () => {
             </CardContent>
 
             {/* Navigation Footer */}
-            <CardFooter className="p-4 border-t bg-muted/30 flex justify-between items-center">
+            <CardFooter className="p-2 sm:p-4 border-t bg-muted/30 flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2">
               <div className="flex gap-2">
                 <Button 
                   variant="outline" 
+                  size="sm"
                   onClick={() => setStep(Math.max(step - 1, 0))} 
                   disabled={step === 0}
-                  className="gap-2"
+                  className="gap-1 sm:gap-2"
                 >
                   <ChevronLeft className="h-4 w-4" />
-                  Indietro
+                  <span className="hidden sm:inline">Indietro</span>
                 </Button>
                 {step === 0 && (
                   <Button 
@@ -1479,11 +1480,12 @@ const Preventivatore = () => {
                   </Button>
                 )}
               </div>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap justify-end">
                 {/* Pulsante Salva Configurazione - aggiorna config attiva o salva nel backend */}
                 {step >= 1 && step <= 5 && (
                   <Button 
                     variant="secondary"
+                    size="sm"
                     onClick={async () => {
                       const configToSave = buildCurrentConfig();
                       saveConfig(configToSave);
@@ -1529,7 +1531,9 @@ const Preventivatore = () => {
                     data-testid="button-save-backend"
                   >
                     <Save className="h-4 w-4" />
-                    {activeConfigId ? `Salva "${activeConfigName}"` : "Salva Config"}
+                    <span className="truncate max-w-[120px] sm:max-w-[200px]">
+                      {activeConfigId ? `Salva "${activeConfigName}"` : "Salva Config"}
+                    </span>
                   </Button>
                 )}
                 {currentPreventivoId && (
@@ -1546,15 +1550,17 @@ const Preventivatore = () => {
                   </Button>
                 )}
                 {step === TOTAL_STEPS - 1 ? (
-                  <Button onClick={handleFinish} className="gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90">
+                  <Button size="sm" onClick={handleFinish} className="gap-1 sm:gap-2 bg-gradient-to-r from-primary to-accent">
                     <Save className="h-4 w-4" />
-                    Salva Preventivo
+                    <span className="hidden sm:inline">Salva Preventivo</span>
+                    <span className="sm:hidden">Salva</span>
                   </Button>
                 ) : (
                   <Button 
+                    size="sm"
                     onClick={() => setStep(Math.min(step + 1, TOTAL_STEPS - 1))}
                     disabled={!isCurrentStepValid()}
-                    className="gap-2"
+                    className="gap-1 sm:gap-2"
                   >
                     Avanti
                     <ChevronRight className="h-4 w-4" />
