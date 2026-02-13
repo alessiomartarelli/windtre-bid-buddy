@@ -258,6 +258,79 @@ export async function registerRoutes(
     }
   });
 
+  // === PDV CONFIGURATIONS ===
+  app.get("/api/pdv-configurations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.json([]);
+      }
+      const configs = await storage.getPdvConfigurations(profile.organizationId);
+      res.json(configs);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching PDV configurations" });
+    }
+  });
+
+  app.get("/api/pdv-configurations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const config = await storage.getPdvConfiguration(req.params.id);
+      if (!config) {
+        return res.status(404).json({ message: "Configuration not found" });
+      }
+      res.json(config);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching PDV configuration" });
+    }
+  });
+
+  app.post("/api/pdv-configurations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ message: "User has no organization" });
+      }
+      const { name, config, configVersion } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ message: "Name is required" });
+      }
+      const result = await storage.createPdvConfiguration({
+        organizationId: profile.organizationId,
+        name: name.trim(),
+        config,
+        configVersion: configVersion || "2.0",
+        createdBy: userId,
+      });
+      res.status(201).json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Error creating PDV configuration" });
+    }
+  });
+
+  app.put("/api/pdv-configurations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const { name, config } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ message: "Name is required" });
+      }
+      const result = await storage.updatePdvConfiguration(req.params.id, name.trim(), config);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Error updating PDV configuration" });
+    }
+  });
+
+  app.delete("/api/pdv-configurations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deletePdvConfiguration(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Error deleting PDV configuration" });
+    }
+  });
+
   // === ADMIN: Team Management ===
   app.get("/api/admin/team", isAuthenticated, async (req: any, res) => {
     try {

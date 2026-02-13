@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type InsertProfile, type InsertOrganization, type InsertPreventivo } from "@shared/schema";
+import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo } from "@shared/schema";
 import { eq, desc, and, isNull } from "drizzle-orm";
 
 export interface IStorage {
@@ -27,6 +27,13 @@ export interface IStorage {
   // Organization Config
   getOrgConfig(orgId: string): Promise<OrganizationConfig | undefined>;
   upsertOrgConfig(orgId: string, config: any, version: string): Promise<OrganizationConfig>;
+
+  // PDV Configurations
+  getPdvConfigurations(orgId: string): Promise<PdvConfiguration[]>;
+  getPdvConfiguration(id: string): Promise<PdvConfiguration | undefined>;
+  createPdvConfiguration(config: InsertPdvConfiguration): Promise<PdvConfiguration>;
+  updatePdvConfiguration(id: string, name: string, config: any): Promise<PdvConfiguration>;
+  deletePdvConfiguration(id: string): Promise<void>;
 
   // Password Reset Tokens
   createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
@@ -156,6 +163,36 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return result;
   }
+  // PDV Configurations
+  async getPdvConfigurations(orgId: string): Promise<PdvConfiguration[]> {
+    return await db.select().from(pdvConfigurations)
+      .where(eq(pdvConfigurations.organizationId, orgId))
+      .orderBy(desc(pdvConfigurations.updatedAt));
+  }
+
+  async getPdvConfiguration(id: string): Promise<PdvConfiguration | undefined> {
+    const [result] = await db.select().from(pdvConfigurations)
+      .where(eq(pdvConfigurations.id, id));
+    return result;
+  }
+
+  async createPdvConfiguration(config: InsertPdvConfiguration): Promise<PdvConfiguration> {
+    const [result] = await db.insert(pdvConfigurations).values(config).returning();
+    return result;
+  }
+
+  async updatePdvConfiguration(id: string, name: string, config: any): Promise<PdvConfiguration> {
+    const [result] = await db.update(pdvConfigurations)
+      .set({ name, config, updatedAt: new Date() })
+      .where(eq(pdvConfigurations.id, id))
+      .returning();
+    return result;
+  }
+
+  async deletePdvConfiguration(id: string): Promise<void> {
+    await db.delete(pdvConfigurations).where(eq(pdvConfigurations.id, id));
+  }
+
   // Password Reset Tokens
   async createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken> {
     const [result] = await db.insert(passwordResetTokens)

@@ -43,8 +43,8 @@ import { StepProtectaRS } from "@/components/wizard/StepProtectaRS";
 import { calcolaExtraGaraIva, calcolaTotaleExtraGaraIva } from "@/lib/calcoloExtraGaraIva";
 import StepExtraGaraIva from "@/components/wizard/StepExtraGaraIva";
 import { UserMenu } from "@/components/UserMenu";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Save, ChevronLeft, ChevronRight, RefreshCw, Home } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Loader2, Save, ChevronLeft, ChevronRight, RefreshCw, Home, FolderOpen, Trash2, Clock } from "lucide-react";
 import { WizardHeader } from "@/components/wizard/WizardHeader";
 import { WizardSummaryCard } from "@/components/wizard/WizardSummaryCard";
 import { Input } from "@/components/ui/input";
@@ -120,6 +120,157 @@ const Preventivatore = () => {
   // Protecta state
   const [attivatoProtectaByPos, setAttivatoProtectaByPos] = useState<Record<string, ProtectaAttivatoRiga>>({});
   const [attivatoProtectaByRS, setAttivatoProtectaByRS] = useState<Record<string, ProtectaAttivatoRiga>>({}); // Volumi Protecta aggregati per RS
+
+  // PDV Configuration save/load state
+  const [saveConfigDialogOpen, setSaveConfigDialogOpen] = useState(false);
+  const [loadConfigDialogOpen, setLoadConfigDialogOpen] = useState(false);
+  const [configName, setConfigName] = useState("");
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [savedConfigs, setSavedConfigs] = useState<Array<{ id: string; name: string; updatedAt: string | null; createdAt: string | null }>>([]);
+  const [loadingConfigs, setLoadingConfigs] = useState(false);
+  const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
+  const [activeConfigName, setActiveConfigName] = useState<string | null>(null);
+
+  const [backendConfig, setBackendConfig] = useState<{ config: any; updatedAt: string | null } | null>(null);
+
+  const fetchSavedConfigs = async () => {
+    setLoadingConfigs(true);
+    try {
+      const [configsRes, backendRes] = await Promise.all([
+        fetch('/api/pdv-configurations', { credentials: 'include' }),
+        fetch('/api/organization-config', { credentials: 'include' }),
+      ]);
+      if (configsRes.ok) {
+        const data = await configsRes.json();
+        setSavedConfigs(data);
+      }
+      if (backendRes.ok) {
+        const data = await backendRes.json();
+        setBackendConfig({ config: data.config, updatedAt: data.updatedAt });
+      }
+    } catch (err) {
+      console.error('Error fetching saved configs:', err);
+    } finally {
+      setLoadingConfigs(false);
+    }
+  };
+
+  const buildCurrentConfig = () => ({
+    configGara,
+    numeroPdv,
+    puntiVendita,
+    pistaMobileConfig,
+    pistaFissoConfig,
+    partnershipRewardConfig,
+    calendarioOverrides,
+    energiaConfig,
+    energiaPdvInGara,
+    assicurazioniConfig,
+    assicurazioniPdvInGara,
+    pistaMobileRSConfig,
+    pistaFissoRSConfig,
+    partnershipRewardRSConfig,
+    modalitaInserimentoRS,
+    configVersion: '2.0' as const,
+  });
+
+  const handleSaveConfig = async () => {
+    if (!configName.trim()) return;
+    setIsSavingConfig(true);
+    try {
+      const config = buildCurrentConfig();
+      if (activeConfigId) {
+        const res = await fetch(`/api/pdv-configurations/${activeConfigId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name: configName.trim(), config }),
+        });
+        if (res.ok) {
+          setActiveConfigName(configName.trim());
+          toast({ title: "Configurazione aggiornata", description: `"${configName.trim()}" salvata con successo.` });
+        }
+      } else {
+        const res = await fetch('/api/pdv-configurations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name: configName.trim(), config }),
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          setActiveConfigId(saved.id);
+          setActiveConfigName(configName.trim());
+          toast({ title: "Configurazione salvata", description: `"${configName.trim()}" creata con successo.` });
+        }
+      }
+      saveConfig(config);
+      await saveRemoteConfigNow(config);
+    } catch (err) {
+      toast({ title: "Errore", description: "Impossibile salvare la configurazione.", variant: "destructive" });
+    } finally {
+      setIsSavingConfig(false);
+      setSaveConfigDialogOpen(false);
+    }
+  };
+
+  const applyConfigData = (cfg: any) => {
+      if (cfg.configGara) setConfigGara(cfg.configGara);
+      if (cfg.numeroPdv !== undefined) setNumeroPdv(cfg.numeroPdv);
+      if (cfg.puntiVendita) setPuntiVendita(cfg.puntiVendita);
+      if (cfg.pistaMobileConfig) setPistaMobileConfig(cfg.pistaMobileConfig);
+      if (cfg.pistaFissoConfig) setPistaFissoConfig(cfg.pistaFissoConfig);
+      if (cfg.partnershipRewardConfig) setPartnershipRewardConfig(cfg.partnershipRewardConfig);
+      if (cfg.calendarioOverrides) setCalendarioOverrides(cfg.calendarioOverrides);
+      if (cfg.energiaConfig) setEnergiaConfig(cfg.energiaConfig);
+      if (cfg.energiaPdvInGara) setEnergiaPdvInGara(cfg.energiaPdvInGara);
+      if (cfg.assicurazioniConfig) setAssicurazioniConfig(cfg.assicurazioniConfig);
+      if (cfg.assicurazioniPdvInGara) setAssicurazioniPdvInGara(cfg.assicurazioniPdvInGara);
+      if (cfg.pistaMobileRSConfig) setPistaMobileRSConfig(cfg.pistaMobileRSConfig);
+      if (cfg.pistaFissoRSConfig) setPistaFissoRSConfig(cfg.pistaFissoRSConfig);
+      if (cfg.partnershipRewardRSConfig) setPartnershipRewardRSConfig(cfg.partnershipRewardRSConfig);
+      if (cfg.modalitaInserimentoRS !== undefined) setModalitaInserimentoRS(cfg.modalitaInserimentoRS);
+  };
+
+  const handleLoadBackendConfig = () => {
+    if (!backendConfig?.config) return;
+    applyConfigData(backendConfig.config);
+    setActiveConfigId(null);
+    setActiveConfigName(null);
+    setLoadConfigDialogOpen(false);
+    toast({ title: "Configurazione backend caricata", description: "La configurazione corrente del backend è stata ripristinata." });
+  };
+
+  const handleLoadConfig = async (configId: string) => {
+    try {
+      const res = await fetch(`/api/pdv-configurations/${configId}`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to load');
+      const data = await res.json();
+      applyConfigData(data.config);
+      setActiveConfigId(data.id);
+      setActiveConfigName(data.name);
+      setLoadConfigDialogOpen(false);
+      toast({ title: "Configurazione caricata", description: `"${data.name}" caricata con successo.` });
+    } catch (err) {
+      toast({ title: "Errore", description: "Impossibile caricare la configurazione.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteConfig = async (configId: string, configNameToDelete: string) => {
+    try {
+      const res = await fetch(`/api/pdv-configurations/${configId}`, { method: 'DELETE', credentials: 'include' });
+      if (res.ok) {
+        setSavedConfigs(prev => prev.filter(c => c.id !== configId));
+        if (activeConfigId === configId) {
+          setActiveConfigId(null);
+          setActiveConfigName(null);
+        }
+        toast({ title: "Configurazione eliminata", description: `"${configNameToDelete}" rimossa.` });
+      }
+    } catch (err) {
+      toast({ title: "Errore", description: "Impossibile eliminare la configurazione.", variant: "destructive" });
+    }
+  };
 
   // Carica preventivo da URL o stato salvato al mount
   useEffect(() => {
@@ -1047,7 +1198,38 @@ const Preventivatore = () => {
               Incentive W3
             </h1>
           </div>
-          <UserMenu />
+          <div className="flex items-center gap-2">
+            {activeConfigName && (
+              <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[150px]" data-testid="text-active-config">
+                {activeConfigName}
+              </span>
+            )}
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                fetchSavedConfigs();
+                setLoadConfigDialogOpen(true);
+              }}
+              data-testid="button-load-config"
+            >
+              <FolderOpen className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1">Carica</span>
+            </Button>
+            <Button 
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setConfigName(activeConfigName || "");
+                setSaveConfigDialogOpen(true);
+              }}
+              data-testid="button-save-config"
+            >
+              <Save className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1">Salva</span>
+            </Button>
+            <UserMenu />
+          </div>
         </div>
       </header>
 
@@ -1297,33 +1479,14 @@ const Preventivatore = () => {
                   </Button>
                 )}
               </div>
-              <div className="flex gap-2">
-                {/* Pulsante Salva Configurazione - visibile negli step 1-5 */}
+              <div className="flex gap-2 flex-wrap">
+                {/* Pulsante Salva Configurazione nel backend - visibile negli step 1-5 */}
                 {step >= 1 && step <= 5 && (
                   <Button 
                     variant="secondary"
                     onClick={async () => {
-                      const configToSave = {
-                        configGara,
-                        numeroPdv,
-                        puntiVendita,
-                        pistaMobileConfig,
-                        pistaFissoConfig,
-                        partnershipRewardConfig,
-                        calendarioOverrides,
-                        energiaConfig,
-                        energiaPdvInGara,
-                        assicurazioniConfig,
-                        assicurazioniPdvInGara,
-                        pistaMobileRSConfig,
-                        pistaFissoRSConfig,
-                        partnershipRewardRSConfig,
-                        modalitaInserimentoRS,
-                        configVersion: '2.0' as const,
-                      };
-                      // Salva su localStorage
+                      const configToSave = buildCurrentConfig();
                       saveConfig(configToSave);
-                      // Salva immediatamente sul backend
                       const success = await saveRemoteConfigNow(configToSave);
                       toast({
                         title: success ? "Configurazione salvata" : "Errore salvataggio",
@@ -1334,6 +1497,7 @@ const Preventivatore = () => {
                       });
                     }}
                     className="gap-2"
+                    data-testid="button-save-backend"
                   >
                     <Save className="h-4 w-4" />
                     Salva Config
@@ -1467,6 +1631,146 @@ const Preventivatore = () => {
                 </>
               )}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save Configuration Dialog */}
+      <Dialog open={saveConfigDialogOpen} onOpenChange={setSaveConfigDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{activeConfigId ? "Aggiorna Configurazione" : "Salva Nuova Configurazione"}</DialogTitle>
+            <DialogDescription>
+              {activeConfigId 
+                ? `Stai aggiornando la configurazione "${activeConfigName}". Puoi modificare il nome o salvare con lo stesso.`
+                : "Inserisci un nome per questa configurazione PDV. Potrai caricarla in futuro per nuove simulazioni."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="config-name">Nome configurazione</Label>
+              <Input
+                id="config-name"
+                value={configName}
+                onChange={(e) => setConfigName(e.target.value)}
+                placeholder="Es. Configurazione Gennaio 2025"
+                data-testid="input-config-name"
+              />
+            </div>
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                Questa configurazione include: {numeroPdv} PDV, soglie mobile/fisso, calendari, partnership, energia, assicurazioni.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            {activeConfigId && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setActiveConfigId(null);
+                  setActiveConfigName(null);
+                  setConfigName("");
+                }}
+                data-testid="button-save-as-new"
+              >
+                Salva come nuova
+              </Button>
+            )}
+            <Button 
+              onClick={handleSaveConfig} 
+              disabled={isSavingConfig || !configName.trim()}
+              data-testid="button-confirm-save-config"
+            >
+              {isSavingConfig ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</>
+              ) : (
+                <><Save className="mr-2 h-4 w-4" />{activeConfigId ? "Aggiorna" : "Salva"}</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Load Configuration Dialog */}
+      <Dialog open={loadConfigDialogOpen} onOpenChange={setLoadConfigDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Carica Configurazione</DialogTitle>
+            <DialogDescription>
+              Seleziona una configurazione salvata in precedenza. I dati attuali verranno sostituiti.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {loadingConfigs ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                {backendConfig && (
+                  <Card className={`${!activeConfigId ? 'ring-2 ring-primary' : ''} border-dashed`}>
+                    <CardContent className="p-3 flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm" data-testid="text-config-backend">Configurazione Attuale (Backend)</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {backendConfig.updatedAt ? new Date(backendConfig.updatedAt).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                          {backendConfig.config?.numeroPdv && <span className="ml-2">{backendConfig.config.numeroPdv} PDV</span>}
+                        </p>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={handleLoadBackendConfig}
+                        data-testid="button-load-backend-config"
+                      >
+                        Ripristina
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+                {savedConfigs.length === 0 && !backendConfig ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FolderOpen className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">Nessuna configurazione salvata.</p>
+                    <p className="text-xs mt-1">Usa il pulsante "Salva" nell'header per salvare una configurazione con nome.</p>
+                  </div>
+                ) : (
+                  savedConfigs.map((cfg) => (
+                    <Card key={cfg.id} className={`${cfg.id === activeConfigId ? 'ring-2 ring-primary' : ''}`}>
+                      <CardContent className="p-3 flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm truncate" data-testid={`text-config-name-${cfg.id}`}>{cfg.name}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {cfg.updatedAt ? new Date(cfg.updatedAt).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                            {cfg.id === activeConfigId && <span className="ml-2 text-primary font-medium">(attiva)</span>}
+                          </p>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button 
+                            size="sm" 
+                            onClick={() => handleLoadConfig(cfg.id)}
+                            data-testid={`button-load-config-${cfg.id}`}
+                          >
+                            Carica
+                          </Button>
+                          <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            onClick={() => handleDeleteConfig(cfg.id, cfg.name)}
+                            data-testid={`button-delete-config-${cfg.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
