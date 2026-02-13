@@ -33,6 +33,11 @@ export const StepConfigPiste: React.FC<StepConfigPisteProps> = ({
   updatePartnershipField,
 }) => {
   // Inizializza i valori Mobile in base al cluster
+  const applyScontoSoglia = (value: number, scontoPercent?: number): number => {
+    if (!scontoPercent || scontoPercent <= 0) return value;
+    return Math.round(value * (1 - scontoPercent / 100));
+  };
+
   useEffect(() => {
     puntiVendita.forEach((pdv, index) => {
       const conf = pistaMobileConfig.sogliePerPos[index];
@@ -43,11 +48,18 @@ export const StepConfigPiste: React.FC<StepConfigPisteProps> = ({
           updateMobileField(index, "clusterPista", derivedClusterPista);
         }
         
-        const thresholds = getThresholdsByCluster(
+        const baseThresholds = getThresholdsByCluster(
           pdv.tipoPosizione,
           derivedClusterPista,
           pdv.clusterMobile
         );
+
+        const thresholds = {
+          soglia1: applyScontoSoglia(baseThresholds.soglia1, pdv.scontoSoglieMobile),
+          soglia2: applyScontoSoglia(baseThresholds.soglia2, pdv.scontoSoglieMobile),
+          soglia3: applyScontoSoglia(baseThresholds.soglia3, pdv.scontoSoglieMobile),
+          soglia4: applyScontoSoglia(baseThresholds.soglia4, pdv.scontoSoglieMobile),
+        };
         
         if (
           conf.soglia1 !== thresholds.soglia1 ||
@@ -66,7 +78,7 @@ export const StepConfigPiste: React.FC<StepConfigPisteProps> = ({
         }
       }
     });
-  }, [puntiVendita.map(p => `${p.tipoPosizione}-${p.clusterMobile}`).join(',')]);
+  }, [puntiVendita.map(p => `${p.tipoPosizione}-${p.clusterMobile}-${p.scontoSoglieMobile || 0}`).join(',')]);
 
   if (!puntiVendita.length) {
     return (

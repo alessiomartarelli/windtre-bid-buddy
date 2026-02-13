@@ -606,15 +606,21 @@ const Preventivatore = () => {
           if (isDefault) {
             const clusterNum = mapClusterFissoToNumber(pdv.clusterFisso);
             const defaults = getDefaultFissoThresholds(pdv.tipoPosizione, clusterNum);
+            const scontoFisso = pdv.scontoSoglieFisso || 0;
+            const applySconto = (v: number) => scontoFisso > 0 ? Math.round(v * (1 - scontoFisso / 100)) : v;
             updated[index] = {
               ...conf,
               posCode: pdv.codicePos || '',
-              ...defaults,
+              soglia1: applySconto(defaults.soglia1),
+              soglia2: applySconto(defaults.soglia2),
+              soglia3: applySconto(defaults.soglia3),
+              soglia4: applySconto(defaults.soglia4),
+              soglia5: applySconto(defaults.soglia5),
               multiplierSoglia1: conf.multiplierSoglia1 || 2,
               multiplierSoglia2: conf.multiplierSoglia2 || 3,
               multiplierSoglia3: conf.multiplierSoglia3 || 4,
               multiplierSoglia4: conf.multiplierSoglia4 || 5,
-              forecastTargetPunti: defaults.soglia4,
+              forecastTargetPunti: applySconto(defaults.soglia4),
             };
           }
         });
@@ -646,7 +652,9 @@ const Preventivatore = () => {
           
           // Aggiorna solo se il target è ancora a zero
           if (conf.config.target100 === 0) {
-            const defaultTarget = getDefaultTarget100(pdv.tipoPosizione, pdv.clusterCB);
+            const baseTarget = getDefaultTarget100(pdv.tipoPosizione, pdv.clusterCB);
+            const scontoCB = pdv.scontoSoglieCB || 0;
+            const defaultTarget = scontoCB > 0 ? Math.round(baseTarget * (1 - scontoCB / 100)) : baseTarget;
             updated[index] = {
               ...conf,
               posCode: pdv.codicePos || '',

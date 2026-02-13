@@ -69,6 +69,9 @@ export interface PuntoVendita {
   clusterFisso: ClusterCode | "";
   clusterCB: ClusterCode | "";
   clusterPIva: ClusterPIvaCode | "";
+  scontoSoglieMobile?: number;
+  scontoSoglieFisso?: number;
+  scontoSoglieCB?: number;
   abilitaEnergia: boolean;
   abilitaAssicurazioni: boolean;
   ruoloBusiness?: "none" | "local_promoter" | "local_promoter_plus";
