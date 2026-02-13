@@ -1481,61 +1481,6 @@ const Preventivatore = () => {
                 )}
               </div>
               <div className="flex gap-2 flex-wrap justify-end">
-                {/* Pulsante Salva Configurazione - aggiorna config attiva o salva nel backend */}
-                {step >= 1 && step <= 5 && (
-                  <Button 
-                    variant="secondary"
-                    size="sm"
-                    onClick={async () => {
-                      const configToSave = buildCurrentConfig();
-                      saveConfig(configToSave);
-                      if (activeConfigId) {
-                        try {
-                          const nameToUse = activeConfigName || "Configurazione";
-                          const res = await fetch(`/api/pdv-configurations/${activeConfigId}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include',
-                            body: JSON.stringify({ name: nameToUse, config: configToSave }),
-                          });
-                          if (res.ok) {
-                            const updated = await res.json();
-                            setSavedConfigs(prev => prev.map(c => c.id === activeConfigId ? { ...c, updatedAt: updated.updatedAt || new Date().toISOString() } : c));
-                            await saveRemoteConfigNow(configToSave);
-                            toast({
-                              title: "Configurazione aggiornata",
-                              description: `"${nameToUse}" salvata con successo.`,
-                            });
-                          } else {
-                            throw new Error('Update failed');
-                          }
-                        } catch {
-                          toast({
-                            title: "Errore",
-                            description: "Impossibile aggiornare la configurazione.",
-                            variant: "destructive",
-                          });
-                        }
-                      } else {
-                        const success = await saveRemoteConfigNow(configToSave);
-                        toast({
-                          title: success ? "Configurazione salvata" : "Errore salvataggio",
-                          description: success 
-                            ? "I dati sono stati salvati nel backend." 
-                            : "Salvataggio locale ok, ma errore nel backend. Riprova.",
-                          variant: success ? "default" : "destructive",
-                        });
-                      }
-                    }}
-                    className="gap-2"
-                    data-testid="button-save-backend"
-                  >
-                    <Save className="h-4 w-4" />
-                    <span className="truncate max-w-[120px] sm:max-w-[200px]">
-                      {activeConfigId ? `Salva "${activeConfigName}"` : "Salva Config"}
-                    </span>
-                  </Button>
-                )}
                 {currentPreventivoId && (
                   <Button 
                     variant="outline"
