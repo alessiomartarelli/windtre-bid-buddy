@@ -56,6 +56,16 @@ export const organizationConfig = pgTable("organization_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Password reset tokens
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").notNull(),
+  token: varchar("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   profiles: many(profiles),
@@ -90,5 +100,7 @@ export type OrganizationConfig = typeof organizationConfig.$inferSelect;
 export type InsertOrganization = typeof organizations.$inferInsert;
 export type InsertProfile = typeof profiles.$inferInsert;
 export type InsertPreventivo = typeof preventivi.$inferInsert;
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
