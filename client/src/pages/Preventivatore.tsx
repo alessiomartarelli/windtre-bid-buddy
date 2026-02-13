@@ -1523,6 +1523,7 @@ const Preventivatore = () => {
               premioProtecta={totalePremioProtecta}
               premioExtraGaraIva={totalePremioExtraGaraIva}
               currentStep={step}
+              tipologiaGara={configGara.tipologiaGara}
             />
             
             {/* Quick Info Card */}

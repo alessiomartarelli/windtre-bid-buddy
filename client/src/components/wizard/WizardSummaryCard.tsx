@@ -21,17 +21,27 @@ interface WizardSummaryCardProps {
   premioProtecta: number;
   premioExtraGaraIva: number;
   currentStep?: number;
+  tipologiaGara?: string;
 }
 
-// Map step index to category key
-const STEP_TO_CATEGORY: Record<number, string> = {
-  6: 'mobile',      // Step 6 = Mobile
-  7: 'fisso',       // Step 7 = Fisso
-  8: 'partnership', // Step 8 = CB+
-  9: 'energia',     // Step 9 = Energia
-  10: 'assicurazioni', // Step 10 = Assicurazioni
-  11: 'protecta',   // Step 11 = Protecta
-  12: 'extra',      // Step 12 = Extra IVA
+const STEP_TO_CATEGORY_DEFAULT: Record<number, string> = {
+  6: 'mobile',
+  7: 'fisso',
+  8: 'partnership',
+  9: 'energia',
+  10: 'assicurazioni',
+  11: 'protecta',
+  12: 'extra',
+};
+
+const STEP_TO_CATEGORY_RS: Record<number, string> = {
+  7: 'mobile',
+  8: 'fisso',
+  9: 'partnership',
+  10: 'energia',
+  11: 'assicurazioni',
+  12: 'protecta',
+  13: 'extra',
 };
 
 const CATEGORY_CONFIG = [
@@ -53,6 +63,7 @@ export function WizardSummaryCard({
   premioProtecta,
   premioExtraGaraIva,
   currentStep,
+  tipologiaGara,
 }: WizardSummaryCardProps) {
   const totale = premioMobile + premioFisso + premioPartnership + premioEnergia + 
                  premioAssicurazioni + premioProtecta + premioExtraGaraIva;
@@ -67,8 +78,8 @@ export function WizardSummaryCard({
     premioExtraGaraIva,
   ];
 
-  // Current active category based on step
-  const activeCategory = currentStep !== undefined ? STEP_TO_CATEGORY[currentStep] : undefined;
+  const stepMap = tipologiaGara === "gara_operatore_rs" ? STEP_TO_CATEGORY_RS : STEP_TO_CATEGORY_DEFAULT;
+  const activeCategory = currentStep !== undefined ? stepMap[currentStep] : undefined;
 
   // Calcola percentuali per mini bar
   const maxPremio = Math.max(...premi, 1);
