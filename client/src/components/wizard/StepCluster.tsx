@@ -119,150 +119,141 @@ export const StepCluster: React.FC<StepClusterProps> = ({
 
       {/* Table Card */}
       <Card className="border-border/50 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="font-semibold">Stato</TableHead>
-                <TableHead className="font-semibold">Codice POS</TableHead>
-                <TableHead className="font-semibold">Ragione Sociale</TableHead>
-                <TableHead className="font-semibold">Posizione</TableHead>
-                <TableHead className="font-semibold">
-                  <div className="flex items-center gap-1">
-                    <Smartphone className="w-4 h-4 text-blue-500" />
-                    Mobile
-                  </div>
-                </TableHead>
-                <TableHead className="font-semibold">
-                  <div className="flex items-center gap-1">
-                    <Monitor className="w-4 h-4 text-indigo-500" />
-                    Fisso
-                  </div>
-                </TableHead>
-                <TableHead className="font-semibold">
-                  <div className="flex items-center gap-1">
-                    <Gift className="w-4 h-4 text-purple-500" />
-                    CB
-                  </div>
-                </TableHead>
-                <TableHead className="font-semibold">
-                  <div className="flex items-center gap-1">
-                    <Briefcase className="w-4 h-4 text-orange-500" />
-                    P.IVA
-                  </div>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {puntiVendita.map((pdv, index) => {
-                const complete = isComplete(pdv);
-                return (
-                  <TableRow 
-                    key={pdv.id}
-                    className={`transition-colors ${complete ? 'bg-success/5' : 'hover:bg-muted/50'}`}
-                  >
-                    <TableCell>
-                      {complete ? (
-                        <CheckCircle2 className="w-5 h-5 text-success" />
-                      ) : (
-                        <AlertCircle className="w-5 h-5 text-warning" />
-                      )}
-                    </TableCell>
-                    <TableCell className="font-medium font-mono">
-                      {pdv.codicePos || "—"}
-                    </TableCell>
-                    <TableCell className="max-w-[150px] truncate">
-                      {pdv.ragioneSociale || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
-                        {pdv.tipoPosizione === "centro_commerciale" && "CC"}
-                        {pdv.tipoPosizione === "strada" && "Strada"}
-                        {pdv.tipoPosizione === "altro" && "Altro"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={pdv.clusterMobile || ""}
-                        onValueChange={(value: ClusterCode) =>
-                          updatePdvField(index, "clusterMobile", value)
-                        }
-                      >
-                        <SelectTrigger className="w-[130px] h-9">
-                          <SelectValue placeholder="Seleziona" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {getAvailableClusters(pdv.tipoPosizione).map((c) => (
-                            <SelectItem key={c.value} value={c.value}>
-                              {c.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={pdv.clusterFisso || ""}
-                        onValueChange={(value: ClusterCode) =>
-                          updatePdvField(index, "clusterFisso", value)
-                        }
-                      >
-                        <SelectTrigger className="w-[130px] h-9">
-                          <SelectValue placeholder="Seleziona" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {getAvailableClusters(pdv.tipoPosizione).map((c) => (
-                            <SelectItem key={c.value} value={c.value}>
-                              {c.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={pdv.clusterCB || ""}
-                        onValueChange={(value: ClusterCode) =>
-                          updatePdvField(index, "clusterCB", value)
-                        }
-                      >
-                        <SelectTrigger className="w-[130px] h-9">
-                          <SelectValue placeholder="Seleziona" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {getAvailableClusters(pdv.tipoPosizione).map((c) => (
-                            <SelectItem key={c.value} value={c.value}>
-                              {c.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={pdv.clusterPIva || ""}
-                        onValueChange={(value: ClusterPIvaCode) =>
-                          updatePdvField(index, "clusterPIva", value)
-                        }
-                      >
-                        <SelectTrigger className="w-[170px] h-9">
-                          <SelectValue placeholder="Seleziona" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {CLUSTER_PIVA_OPTIONS.map((c) => (
-                            <SelectItem key={c.value} value={c.value}>
-                              {c.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50">
+              <TableHead className="font-semibold w-10 px-2"></TableHead>
+              <TableHead className="font-semibold px-2">PDV</TableHead>
+              <TableHead className="font-semibold px-2">
+                <div className="flex items-center gap-1">
+                  <Smartphone className="w-3.5 h-3.5 text-blue-500" />
+                  <span className="hidden sm:inline">Mobile</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold px-2">
+                <div className="flex items-center gap-1">
+                  <Monitor className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="hidden sm:inline">Fisso</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold px-2">
+                <div className="flex items-center gap-1">
+                  <Gift className="w-3.5 h-3.5 text-purple-500" />
+                  <span className="hidden sm:inline">CB</span>
+                </div>
+              </TableHead>
+              <TableHead className="font-semibold px-2">
+                <div className="flex items-center gap-1">
+                  <Briefcase className="w-3.5 h-3.5 text-orange-500" />
+                  <span className="hidden sm:inline">P.IVA</span>
+                </div>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {puntiVendita.map((pdv, index) => {
+              const complete = isComplete(pdv);
+              return (
+                <TableRow 
+                  key={pdv.id}
+                  className={`transition-colors ${complete ? 'bg-success/5' : 'hover:bg-muted/50'}`}
+                >
+                  <TableCell className="px-2">
+                    {complete ? (
+                      <CheckCircle2 className="w-4 h-4 text-success" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-warning" />
+                    )}
+                  </TableCell>
+                  <TableCell className="px-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm truncate">{pdv.nome || "—"}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {pdv.codicePos || "—"} · {pdv.tipoPosizione === "centro_commerciale" ? "CC" : pdv.tipoPosizione === "strada" ? "Strada" : "Altro"}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-2">
+                    <Select
+                      value={pdv.clusterMobile || ""}
+                      onValueChange={(value: ClusterCode) =>
+                        updatePdvField(index, "clusterMobile", value)
+                      }
+                    >
+                      <SelectTrigger className="h-9 min-w-[90px]" data-testid={`select-cluster-mobile-${index}`}>
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getAvailableClusters(pdv.tipoPosizione).map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="px-2">
+                    <Select
+                      value={pdv.clusterFisso || ""}
+                      onValueChange={(value: ClusterCode) =>
+                        updatePdvField(index, "clusterFisso", value)
+                      }
+                    >
+                      <SelectTrigger className="h-9 min-w-[90px]" data-testid={`select-cluster-fisso-${index}`}>
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getAvailableClusters(pdv.tipoPosizione).map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="px-2">
+                    <Select
+                      value={pdv.clusterCB || ""}
+                      onValueChange={(value: ClusterCode) =>
+                        updatePdvField(index, "clusterCB", value)
+                      }
+                    >
+                      <SelectTrigger className="h-9 min-w-[90px]" data-testid={`select-cluster-cb-${index}`}>
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getAvailableClusters(pdv.tipoPosizione).map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="px-2">
+                    <Select
+                      value={pdv.clusterPIva || ""}
+                      onValueChange={(value: ClusterPIvaCode) =>
+                        updatePdvField(index, "clusterPIva", value)
+                      }
+                    >
+                      <SelectTrigger className="h-9 min-w-[90px]" data-testid={`select-cluster-piva-${index}`}>
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CLUSTER_PIVA_OPTIONS.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       </Card>
     </div>
   );
