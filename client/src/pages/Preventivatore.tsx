@@ -1224,6 +1224,7 @@ const Preventivatore = () => {
               size="sm"
               onClick={() => {
                 setConfigName(activeConfigName || "");
+                fetchSavedConfigs();
                 setSaveConfigDialogOpen(true);
               }}
               data-testid="button-save-config"
@@ -1685,6 +1686,12 @@ const Preventivatore = () => {
                     placeholder="Es. Configurazione Gennaio 2025"
                     data-testid="input-config-name"
                   />
+                  {configName.trim() && savedConfigs.some(c => 
+                    c.name.toLowerCase() === configName.trim().toLowerCase() && 
+                    (saveMode === 'new' || !activeConfigId ? true : c.id !== activeConfigId)
+                  ) && (
+                    <p className="text-sm text-destructive">Esiste già una configurazione con questo nome.</p>
+                  )}
                 </div>
                 <div className="p-3 bg-muted/50 rounded-lg">
                   <p className="text-sm text-muted-foreground">
@@ -1701,7 +1708,10 @@ const Preventivatore = () => {
                 )}
                 <Button 
                   onClick={() => handleSaveConfig(saveMode === 'new')}
-                  disabled={isSavingConfig || !configName.trim()}
+                  disabled={isSavingConfig || !configName.trim() || savedConfigs.some(c => 
+                    c.name.toLowerCase() === configName.trim().toLowerCase() && 
+                    (saveMode === 'new' || !activeConfigId ? true : c.id !== activeConfigId)
+                  )}
                   data-testid="button-confirm-save-config"
                 >
                   {isSavingConfig ? (
