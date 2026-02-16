@@ -285,7 +285,7 @@ export const StepAttivatoMobileRS: React.FC<StepAttivatoMobileRSProps> = ({
                             <Store className="w-3 h-3" />
                             <span>{pdvList.length} {pdvList.length === 1 ? 'negozio' : 'negozi'}</span>
                             <span className="text-muted-foreground/70">
-                              · {puntiTotaliRS.toFixed(1)} punti
+                              · {puntiTotaliRS.toFixed(2)} punti
                             </span>
                           </div>
                         </div>

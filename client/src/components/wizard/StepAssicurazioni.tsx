@@ -194,7 +194,7 @@ export default function StepAssicurazioni({
                   {result && (
                     <div className="text-right">
                       <div className="text-sm text-muted-foreground">
-                        Punti: {result.puntiTotaliConReload.toFixed(1)}
+                        Punti: {result.puntiTotaliConReload.toFixed(2)}
                       </div>
                       <div className="font-semibold text-primary">
                         {formatCurrency(result.premioTotale)}
@@ -271,7 +271,7 @@ export default function StepAssicurazioni({
                         <div key={idx} className="bg-muted/50 p-2 rounded">
                           <div className="font-medium">{d.prodotto}</div>
                           <div className="text-muted-foreground">
-                            {d.pezzi} pz × {d.punti.toFixed(1)} pt = {formatCurrency(d.premio)}
+                            {d.pezzi} pz × {d.punti.toFixed(2)} pt = {formatCurrency(d.premio)}
                           </div>
                         </div>
                       ))}
