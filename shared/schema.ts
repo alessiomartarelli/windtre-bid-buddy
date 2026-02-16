@@ -68,6 +68,16 @@ export const pdvConfigurations = pgTable("pdv_configurations", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// System config (super admin defaults for calculation parameters)
+export const systemConfig = pgTable("system_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: varchar("key").notNull().unique(),
+  config: jsonb("config").default({}),
+  updatedBy: varchar("updated_by").references(() => profiles.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Password reset tokens
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -116,5 +126,6 @@ export type InsertPreventivo = typeof preventivi.$inferInsert;
 export type PdvConfiguration = typeof pdvConfigurations.$inferSelect;
 export type InsertPdvConfiguration = typeof pdvConfigurations.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type SystemConfig = typeof systemConfig.$inferSelect;
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];

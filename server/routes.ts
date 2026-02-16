@@ -272,6 +272,44 @@ export async function registerRoutes(
     }
   });
 
+  // === SYSTEM CONFIG (super admin calculation defaults) ===
+  app.get("/api/system-config", isAuthenticated, async (req: any, res) => {
+    try {
+      const configs = await storage.getAllSystemConfigs();
+      const result: Record<string, any> = {};
+      for (const c of configs) {
+        result[c.key] = c.config;
+      }
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching system config" });
+    }
+  });
+
+  app.get("/api/system-config/:key", isAuthenticated, async (req: any, res) => {
+    try {
+      const config = await storage.getSystemConfig(req.params.key);
+      res.json(config?.config || null);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching system config" });
+    }
+  });
+
+  app.put("/api/system-config/:key", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Solo il super admin può modificare i parametri di sistema" });
+      }
+      const { config } = req.body;
+      const result = await storage.upsertSystemConfig(req.params.key, config, userId);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Error saving system config" });
+    }
+  });
+
   // === PDV CONFIGURATIONS ===
   app.get("/api/pdv-configurations", isAuthenticated, async (req: any, res) => {
     try {

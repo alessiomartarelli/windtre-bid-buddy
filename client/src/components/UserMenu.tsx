@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { LogOut, User, Building2, Settings, Shield, Users, LayoutDashboard } from 'lucide-react';
+import { LogOut, User, Building2, Settings, Shield, Users, LayoutDashboard, Table2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function UserMenu() {
@@ -87,6 +87,13 @@ export function UserMenu() {
           <DropdownMenuItem onClick={() => setLocation('/admin')}>
             <Users className="mr-2 h-4 w-4" />
             <span>Gestione Team</span>
+          </DropdownMenuItem>
+        )}
+        
+        {['super_admin', 'admin'].includes(profile?.role || '') && (
+          <DropdownMenuItem onClick={() => setLocation('/tabelle-calcolo')} data-testid="menu-tabelle-calcolo">
+            <Table2 className="mr-2 h-4 w-4" />
+            <span>Tabelle di Calcolo</span>
           </DropdownMenuItem>
         )}
         

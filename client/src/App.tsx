@@ -12,6 +12,7 @@ import Preventivatore from "@/pages/Preventivatore";
 import Profile from "@/pages/Profile";
 import AdminPanel from "@/pages/AdminPanel";
 import SuperAdminPanel from "@/pages/SuperAdminPanel";
+import TabelleCalcolo from "@/pages/TabelleCalcolo";
 import Auth from "@/pages/auth";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -53,6 +54,9 @@ function Router() {
       </Route>
       <Route path="/super-admin">
         {() => <ProtectedRoute component={SuperAdminPanel} />}
+      </Route>
+      <Route path="/tabelle-calcolo">
+        {() => <ProtectedRoute component={TabelleCalcolo} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

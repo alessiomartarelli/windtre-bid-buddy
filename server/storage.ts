@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo } from "@shared/schema";
+import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig } from "@shared/schema";
 import { eq, desc, and, isNull } from "drizzle-orm";
 
 export interface IStorage {
@@ -34,6 +34,11 @@ export interface IStorage {
   createPdvConfiguration(config: InsertPdvConfiguration): Promise<PdvConfiguration>;
   updatePdvConfiguration(id: string, name: string, config: any): Promise<PdvConfiguration>;
   deletePdvConfiguration(id: string): Promise<void>;
+
+  // System Config (super admin defaults)
+  getSystemConfig(key: string): Promise<SystemConfig | undefined>;
+  getAllSystemConfigs(): Promise<SystemConfig[]>;
+  upsertSystemConfig(key: string, config: any, updatedBy: string): Promise<SystemConfig>;
 
   // Password Reset Tokens
   createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
@@ -191,6 +196,27 @@ export class DatabaseStorage implements IStorage {
 
   async deletePdvConfiguration(id: string): Promise<void> {
     await db.delete(pdvConfigurations).where(eq(pdvConfigurations.id, id));
+  }
+
+  // System Config
+  async getSystemConfig(key: string): Promise<SystemConfig | undefined> {
+    const [config] = await db.select().from(systemConfig).where(eq(systemConfig.key, key));
+    return config;
+  }
+
+  async getAllSystemConfigs(): Promise<SystemConfig[]> {
+    return await db.select().from(systemConfig);
+  }
+
+  async upsertSystemConfig(key: string, config: any, updatedBy: string): Promise<SystemConfig> {
+    const [result] = await db.insert(systemConfig)
+      .values({ key, config, updatedBy })
+      .onConflictDoUpdate({
+        target: systemConfig.key,
+        set: { config, updatedBy, updatedAt: new Date() },
+      })
+      .returning();
+    return result;
   }
 
   // Password Reset Tokens
