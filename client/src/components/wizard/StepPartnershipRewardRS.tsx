@@ -122,11 +122,27 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
     return sum + righe.reduce((pSum, riga) => pSum + (riga.puntiPartnership * riga.pezzi), 0);
   }, 0);
 
-  const totaleGettoniGlobale = ragioneSocialeList.reduce((sum, rs) => {
+  const aggregatiRS = ragioneSocialeList.map((rs) => {
     const righe = attivatoCBByRS[rs] ?? [];
-    return sum + righe.reduce((pSum, riga) => pSum + (riga.pezzi * (riga.gettoni || 0)), 0);
-  }, 0);
-  const totalePremioTargetGlobale = totalePremioPartnershipPrevisto - totaleGettoniGlobale;
+    const gettoni = righe.reduce((s, r) => s + (r.pezzi * (r.gettoni || 0)), 0);
+    const punti = righe.reduce((s, r) => s + (r.pezzi * (r.puntiPartnership || 0)), 0);
+    const config = partnershipRewardRSConfig.configPerRS.find(c => c.ragioneSociale === rs);
+    const target100 = config?.target100 || 0;
+    const target80 = config?.target80 || 0;
+    const premio100 = config?.premio100 || 0;
+    const premio80 = config?.premio80 || 0;
+    let premioTarget = 0;
+    if (target100 > 0 && punti >= target100) {
+      premioTarget = premio100;
+    } else if (target80 > 0 && punti >= target80) {
+      premioTarget = premio80;
+    }
+    return { gettoni, punti, premioTarget, premioTotale: gettoni + premioTarget };
+  });
+
+  const totaleGettoniGlobale = aggregatiRS.reduce((s, a) => s + a.gettoni, 0);
+  const totalePremioTargetGlobale = aggregatiRS.reduce((s, a) => s + a.premioTarget, 0);
+  const totalePremioCalcolato = totaleGettoniGlobale + totalePremioTargetGlobale;
 
   if (!puntiVendita.length) {
     return (
@@ -145,7 +161,7 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
         icon={Gift}
         title="Partnership Reward per Ragione Sociale"
         subtitle="Customer Base Eventi aggregati per azienda"
-        totalPremio={totalePremioPartnershipPrevisto}
+        totalPremio={totalePremioCalcolato}
         extraInfo={`${totalePezzi} pezzi · ${totalePuntiInseriti.toFixed(2)} punti · Gettoni: ${formatCurrency(totaleGettoniGlobale)} · PR: ${formatCurrency(totalePremioTargetGlobale)} · ${ragioneSocialeList.length} aziende`}
       />
 
