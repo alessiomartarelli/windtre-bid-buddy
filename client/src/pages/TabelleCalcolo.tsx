@@ -15,6 +15,9 @@ import { MobileActivationType, MOBILE_CATEGORY_LABELS, MOBILE_CATEGORIES_CONFIG_
 import { ENERGIA_BASE_PAY, ENERGIA_CATEGORY_LABELS, ENERGIA_W3_CATEGORY_LABELS, PISTA_ENERGIA_SOGLIE_BASE, PISTA_ENERGIA_SOGLIE_DA4, PISTA_ENERGIA_BONUS_PER_CONTRATTO } from '@/types/energia';
 import { ASSICURAZIONI_POINTS, ASSICURAZIONI_PREMIUMS, ASSICURAZIONI_LABELS } from '@/types/assicurazioni';
 import { FISSO_CATEGORIE_DEFAULT } from '@/lib/calcoloPistaFisso';
+import { PROTECTA_GETTONI, PROTECTA_LABELS, ProtectaProduct } from '@/types/protecta';
+import { PUNTI_EXTRA_GARA, SOGLIE_BASE_EXTRA_GARA, PREMI_EXTRA_GARA } from '@/lib/calcoloExtraGaraIva';
+import { ClusterPIvaCode } from '@/types/preventivatore';
 
 interface TabelleCalcoloConfig {
   mobile?: {
@@ -36,6 +39,15 @@ interface TabelleCalcoloConfig {
   assicurazioni?: {
     puntiProdotto?: Record<string, number>;
     premiProdotto?: Record<string, number>;
+  };
+  protecta?: {
+    gettoniProdotto?: Record<string, number>;
+  };
+  extraGara?: {
+    puntiAttivazione?: Record<string, number>;
+    soglieMultipos?: Record<string, Record<string, number>>;
+    soglieMonopos?: Record<string, Record<string, number>>;
+    premiPerSoglia?: Record<string, number[]>;
   };
 }
 
@@ -123,6 +135,33 @@ const ASSICURAZIONI_PRODUCT_KEYS = [
   'sportFamiglia', 'sportIndividuale', 'viaggiVacanze', 'elettrodomestici', 'micioFido',
 ] as const;
 
+const PROTECTA_PRODUCT_KEYS: ProtectaProduct[] = [
+  'casaStart', 'casaStartFinanziato', 'casaPlus', 'casaPlusFinanziato',
+  'negozioProtetti', 'negozioProtettiFinanziato',
+];
+
+const EXTRA_GARA_PUNTI_LABELS: Record<string, string> = {
+  worldStaff: 'World / Staff',
+  fullPlusData60_100: 'Full Plus / Data 60-100',
+  flexSpecialData10: 'Flex / Special / Data 10',
+  fissoPIva: 'Fisso P.IVA (1ª + 2ª Linea)',
+  fritzBox: 'FRITZ!Box',
+  luceGas: 'Luce & Gas (Business)',
+  protezionePro: 'Protezione Pro',
+  negozioProtetti: 'Negozio Protetti',
+};
+
+const EXTRA_GARA_SOGLIE_LABELS: Record<string, string> = {
+  conBP: 'Con Business Promoter',
+  senzaBP: 'Senza Business Promoter',
+};
+
+const CLUSTER_PIVA_LABELS: Record<string, string> = {
+  business_promoter_plus: 'Business Promoter Plus',
+  business_promoter: 'Business Promoter',
+  senza_business_promoter: 'Senza Business Promoter',
+};
+
 function buildHardcodedDefaults(): TabelleCalcoloConfig {
   const puntiAttivazione: Record<string, number> = {};
   MOBILE_CATEGORIES_CONFIG_DEFAULT.forEach(c => {
@@ -147,6 +186,27 @@ function buildHardcodedDefaults(): TabelleCalcoloConfig {
     premiProdotto[k] = (ASSICURAZIONI_PREMIUMS as Record<string, number>)[k] ?? 0;
   });
 
+  const gettoniProdotto: Record<string, number> = {};
+  PROTECTA_PRODUCT_KEYS.forEach(k => {
+    gettoniProdotto[k] = PROTECTA_GETTONI[k];
+  });
+
+  const extraGaraPunti: Record<string, number> = { ...PUNTI_EXTRA_GARA };
+
+  const soglieMultipos: Record<string, Record<string, number>> = {
+    conBP: { ...SOGLIE_BASE_EXTRA_GARA.multipos.conBP },
+    senzaBP: { ...SOGLIE_BASE_EXTRA_GARA.multipos.senzaBP },
+  };
+  const soglieMonopos: Record<string, Record<string, number>> = {
+    conBP: { ...SOGLIE_BASE_EXTRA_GARA.monopos.conBP },
+    senzaBP: { ...SOGLIE_BASE_EXTRA_GARA.monopos.senzaBP },
+  };
+
+  const premiPerSoglia: Record<string, number[]> = {};
+  for (const cluster of Object.keys(PREMI_EXTRA_GARA)) {
+    premiPerSoglia[cluster] = [...PREMI_EXTRA_GARA[cluster as ClusterPIvaCode]];
+  }
+
   return {
     mobile: {
       soglieCluster: { ...MOBILE_SOGLIE_DEFAULTS },
@@ -167,6 +227,15 @@ function buildHardcodedDefaults(): TabelleCalcoloConfig {
     assicurazioni: {
       puntiProdotto,
       premiProdotto,
+    },
+    protecta: {
+      gettoniProdotto,
+    },
+    extraGara: {
+      puntiAttivazione: extraGaraPunti,
+      soglieMultipos,
+      soglieMonopos,
+      premiPerSoglia,
     },
   };
 }
@@ -386,7 +455,7 @@ export default function TabelleCalcolo() {
 
   const computeOverrides = useCallback((): TabelleCalcoloConfig => {
     const overrides: TabelleCalcoloConfig = {};
-    const sections = ['mobile', 'fisso', 'energia', 'assicurazioni'] as const;
+    const sections = ['mobile', 'fisso', 'energia', 'assicurazioni', 'protecta', 'extraGara'] as const;
     for (const section of sections) {
       const currentSection = config[section];
       const defaultSection = systemConfig[section];
@@ -502,6 +571,8 @@ export default function TabelleCalcolo() {
             <TabsTrigger value="fisso" data-testid="tab-fisso">Fisso</TabsTrigger>
             <TabsTrigger value="energia" data-testid="tab-energia">Energia</TabsTrigger>
             <TabsTrigger value="assicurazioni" data-testid="tab-assicurazioni">Assicurazioni</TabsTrigger>
+            <TabsTrigger value="protecta" data-testid="tab-protecta">Protecta</TabsTrigger>
+            <TabsTrigger value="extraGara" data-testid="tab-extra-gara">Extra Gara P.IVA</TabsTrigger>
           </TabsList>
 
           <TabsContent value="mobile" className="space-y-6">
@@ -549,6 +620,29 @@ export default function TabelleCalcolo() {
               resetValue={resetValue}
             />
           </TabsContent>
+
+          <TabsContent value="protecta" className="space-y-6">
+            <ProtectaTab
+              config={config}
+              systemConfig={systemConfig}
+              isOverridden={isOverridden}
+              updateValue={updateValue}
+              resetValue={resetValue}
+            />
+          </TabsContent>
+
+          <TabsContent value="extraGara" className="space-y-6">
+            <ExtraGaraTab
+              config={config}
+              systemConfig={systemConfig}
+              isOverridden={isOverridden}
+              isArrayOverridden={isArrayOverridden}
+              updateValue={updateValue}
+              updateArrayValue={updateArrayValue}
+              resetValue={resetValue}
+              resetArrayValue={resetArrayValue}
+            />
+          </TabsContent>
         </Tabs>
       </div>
     </div>
@@ -576,7 +670,7 @@ interface SimpleTabProps {
 
 function MobileTab({ config, systemConfig, isArrayOverridden, updateArrayValue, resetArrayValue, isOverridden, updateValue, resetValue }: TabProps) {
   const soglieKeys = Object.keys(MOBILE_SOGLIE_DEFAULTS);
-  const soglieLabels = ['1\u00B0 Soglia', '2\u00B0 Soglia', '3\u00B0 Soglia', '4\u00B0 Soglia'];
+  const soglieLabels = ['1° Soglia', '2° Soglia', '3° Soglia', '4° Soglia'];
   const moltiplicatoriKeys = Object.keys(MOLTIPLICATORI_DEFAULTS);
 
   return (
@@ -635,7 +729,7 @@ function MobileTab({ config, systemConfig, isArrayOverridden, updateArrayValue, 
               </tr>
             </thead>
             <tbody>
-              {MOBILE_CATEGORY_LABELS.map(cat => {
+              {MOBILE_CATEGORY_LABELS.filter(cat => cat.value !== MobileActivationType.SIM_CNS && cat.value !== MobileActivationType.SIM_IVA).map(cat => {
                 const path = `mobile.puntiAttivazione.${cat.value}`;
                 const val = getNestedValue(config, path) ?? MOBILE_CATEGORIES_CONFIG_DEFAULT.find(c => c.type === cat.value)?.punti ?? 0;
                 const def = getNestedValue(systemConfig, path) ?? MOBILE_CATEGORIES_CONFIG_DEFAULT.find(c => c.type === cat.value)?.punti ?? 0;
@@ -668,10 +762,10 @@ function MobileTab({ config, systemConfig, isArrayOverridden, updateArrayValue, 
             <thead>
               <tr className="bg-orange-500 text-white">
                 <th className="p-2 text-left font-medium rounded-tl-md">Gruppo</th>
-                <th className="p-2 text-center font-medium">1\u00B0</th>
-                <th className="p-2 text-center font-medium">2\u00B0</th>
-                <th className="p-2 text-center font-medium">3\u00B0</th>
-                <th className="p-2 text-center font-medium rounded-tr-md">4\u00B0</th>
+                <th className="p-2 text-center font-medium">1°</th>
+                <th className="p-2 text-center font-medium">2°</th>
+                <th className="p-2 text-center font-medium">3°</th>
+                <th className="p-2 text-center font-medium rounded-tr-md">4°</th>
               </tr>
             </thead>
             <tbody>
@@ -882,7 +976,7 @@ function EnergiaTab({ config, systemConfig, isOverridden, updateValue, resetValu
               <tr className="bg-orange-500 text-white">
                 <th className="p-2 text-left font-medium rounded-tl-md">Soglia</th>
                 <th className="p-2 text-center font-medium">Per PDV (primi 3)</th>
-                <th className="p-2 text-center font-medium rounded-tr-md">Da 4\u00B0 PDV</th>
+                <th className="p-2 text-center font-medium rounded-tr-md">Da 4° PDV</th>
               </tr>
             </thead>
             <tbody>
@@ -1030,6 +1124,226 @@ function AssicurazioniTab({ config, systemConfig, isOverridden, updateValue, res
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+function ProtectaTab({ config, systemConfig, isOverridden, updateValue, resetValue }: SimpleTabProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Gettoni per Prodotto Protecta</CardTitle>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <table className="w-full text-sm" data-testid="table-protecta-gettoni">
+          <thead>
+            <tr className="bg-orange-500 text-white">
+              <th className="p-2 text-left font-medium rounded-tl-md">Prodotto</th>
+              <th className="p-2 text-center font-medium rounded-tr-md w-32">Gettone €</th>
+            </tr>
+          </thead>
+          <tbody>
+            {PROTECTA_PRODUCT_KEYS.map(key => {
+              const path = `protecta.gettoniProdotto.${key}`;
+              const val = getNestedValue(config, path) ?? PROTECTA_GETTONI[key];
+              const def = getNestedValue(systemConfig, path) ?? PROTECTA_GETTONI[key];
+              return (
+                <tr key={key} className="even:bg-muted/30">
+                  <td className="p-2 font-medium border border-border">{PROTECTA_LABELS[key]}</td>
+                  <EditableCell
+                    value={val}
+                    defaultValue={def}
+                    isOverridden={isOverridden(path)}
+                    onChange={v => updateValue(path, v)}
+                    onReset={() => resetValue(path)}
+                    testId={`input-protecta-gettone-${key}`}
+                  />
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ExtraGaraTab({ config, systemConfig, isOverridden, isArrayOverridden, updateValue, updateArrayValue, resetValue, resetArrayValue }: TabProps) {
+  const puntiKeys = Object.keys(PUNTI_EXTRA_GARA);
+  const soglieKeys = Object.keys(EXTRA_GARA_SOGLIE_LABELS);
+  const clusterKeys = Object.keys(PREMI_EXTRA_GARA);
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Punti per Tipo Attivazione P.IVA</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-extra-gara-punti">
+            <thead>
+              <tr className="bg-orange-500 text-white">
+                <th className="p-2 text-left font-medium rounded-tl-md">Tipo Attivazione</th>
+                <th className="p-2 text-center font-medium rounded-tr-md w-32">Punti</th>
+              </tr>
+            </thead>
+            <tbody>
+              {puntiKeys.map(key => {
+                const path = `extraGara.puntiAttivazione.${key}`;
+                const val = getNestedValue(config, path) ?? PUNTI_EXTRA_GARA[key as keyof typeof PUNTI_EXTRA_GARA];
+                const def = getNestedValue(systemConfig, path) ?? PUNTI_EXTRA_GARA[key as keyof typeof PUNTI_EXTRA_GARA];
+                return (
+                  <tr key={key} className="even:bg-muted/30">
+                    <td className="p-2 font-medium border border-border">{EXTRA_GARA_PUNTI_LABELS[key] || key}</td>
+                    <EditableCell
+                      value={val}
+                      defaultValue={def}
+                      isOverridden={isOverridden(path)}
+                      onChange={v => updateValue(path, v)}
+                      onReset={() => resetValue(path)}
+                      testId={`input-extra-gara-punti-${key}`}
+                      step="0.5"
+                    />
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Soglie Base Multi-POS (per PDV)</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-extra-gara-soglie-multi">
+            <thead>
+              <tr className="bg-orange-500 text-white">
+                <th className="p-2 text-left font-medium rounded-tl-md">Tipo</th>
+                <th className="p-2 text-center font-medium">S1</th>
+                <th className="p-2 text-center font-medium">S2</th>
+                <th className="p-2 text-center font-medium">S3</th>
+                <th className="p-2 text-center font-medium rounded-tr-md">S4</th>
+              </tr>
+            </thead>
+            <tbody>
+              {soglieKeys.map(bpKey => {
+                const soglieRef = bpKey === 'conBP' ? SOGLIE_BASE_EXTRA_GARA.multipos.conBP : SOGLIE_BASE_EXTRA_GARA.multipos.senzaBP;
+                return (
+                  <tr key={bpKey} className="even:bg-muted/30">
+                    <td className="p-2 font-medium border border-border">{EXTRA_GARA_SOGLIE_LABELS[bpKey]}</td>
+                    {(['s1', 's2', 's3', 's4'] as const).map(sk => {
+                      const path = `extraGara.soglieMultipos.${bpKey}.${sk}`;
+                      const val = getNestedValue(config, path) ?? soglieRef[sk];
+                      const def = getNestedValue(systemConfig, path) ?? soglieRef[sk];
+                      return (
+                        <EditableCell
+                          key={sk}
+                          value={val}
+                          defaultValue={def}
+                          isOverridden={isOverridden(path)}
+                          onChange={v => updateValue(path, v)}
+                          onReset={() => resetValue(path)}
+                          testId={`input-extra-gara-multi-${bpKey}-${sk}`}
+                        />
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Soglie Base Mono-POS (per PDV)</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-extra-gara-soglie-mono">
+            <thead>
+              <tr className="bg-orange-500 text-white">
+                <th className="p-2 text-left font-medium rounded-tl-md">Tipo</th>
+                <th className="p-2 text-center font-medium">S1</th>
+                <th className="p-2 text-center font-medium">S2</th>
+                <th className="p-2 text-center font-medium">S3</th>
+                <th className="p-2 text-center font-medium rounded-tr-md">S4</th>
+              </tr>
+            </thead>
+            <tbody>
+              {soglieKeys.map(bpKey => {
+                const soglieRef = bpKey === 'conBP' ? SOGLIE_BASE_EXTRA_GARA.monopos.conBP : SOGLIE_BASE_EXTRA_GARA.monopos.senzaBP;
+                return (
+                  <tr key={bpKey} className="even:bg-muted/30">
+                    <td className="p-2 font-medium border border-border">{EXTRA_GARA_SOGLIE_LABELS[bpKey]}</td>
+                    {(['s1', 's2', 's3', 's4'] as const).map(sk => {
+                      const path = `extraGara.soglieMonopos.${bpKey}.${sk}`;
+                      const val = getNestedValue(config, path) ?? soglieRef[sk];
+                      const def = getNestedValue(systemConfig, path) ?? soglieRef[sk];
+                      return (
+                        <EditableCell
+                          key={sk}
+                          value={val}
+                          defaultValue={def}
+                          isOverridden={isOverridden(path)}
+                          onChange={v => updateValue(path, v)}
+                          onReset={() => resetValue(path)}
+                          testId={`input-extra-gara-mono-${bpKey}-${sk}`}
+                        />
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Premi per Soglia Raggiunta (€/pezzo)</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-extra-gara-premi">
+            <thead>
+              <tr className="bg-orange-500 text-white">
+                <th className="p-2 text-left font-medium rounded-tl-md">Cluster P.IVA</th>
+                <th className="p-2 text-center font-medium">Nessuna</th>
+                <th className="p-2 text-center font-medium">S1</th>
+                <th className="p-2 text-center font-medium">S2</th>
+                <th className="p-2 text-center font-medium">S3</th>
+                <th className="p-2 text-center font-medium rounded-tr-md">S4</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clusterKeys.map(cluster => (
+                <tr key={cluster} className="even:bg-muted/30">
+                  <td className="p-2 font-medium border border-border">{CLUSTER_PIVA_LABELS[cluster] || cluster}</td>
+                  {[0, 1, 2, 3, 4].map(i => {
+                    const path = `extraGara.premiPerSoglia.${cluster}`;
+                    const val = getNestedArrayValue(config, path, i) ?? PREMI_EXTRA_GARA[cluster as ClusterPIvaCode][i];
+                    const def = getNestedArrayValue(systemConfig, path, i) ?? PREMI_EXTRA_GARA[cluster as ClusterPIvaCode][i];
+                    return (
+                      <EditableCell
+                        key={i}
+                        value={val}
+                        defaultValue={def}
+                        isOverridden={isArrayOverridden(path, i)}
+                        onChange={v => updateArrayValue(path, i, v)}
+                        onReset={() => resetArrayValue(path, i)}
+                        testId={`input-extra-gara-premio-${cluster}-${i}`}
+                      />
+                    );
+                  })}
+                </tr>
+              ))}
             </tbody>
           </table>
         </CardContent>
