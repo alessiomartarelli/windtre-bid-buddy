@@ -138,6 +138,11 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
                 value={energiaConfig.targetNoMalus || ""}
                 onChange={(e) => handleConfigChange("targetNoMalus", Number(e.target.value))}
               />
+              {energiaConfig.targetNoMalus > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Effettivo: {(energiaConfig.targetNoMalus || 0) * puntiVendita.length}
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="targetS1">Target S1 - €250 (per PDV)</Label>
@@ -148,6 +153,11 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
                 value={energiaConfig.targetS1 || ""}
                 onChange={(e) => handleConfigChange("targetS1", Number(e.target.value))}
               />
+              {energiaConfig.targetS1 > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Effettivo: {(energiaConfig.targetS1 || 0) * puntiVendita.length}
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="targetS2">Target S2 - €500 (per PDV)</Label>
@@ -158,6 +168,11 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
                 value={energiaConfig.targetS2 || ""}
                 onChange={(e) => handleConfigChange("targetS2", Number(e.target.value))}
               />
+              {energiaConfig.targetS2 > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Effettivo: {(energiaConfig.targetS2 || 0) * puntiVendita.length}
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="targetS3">Target S3 - €1000 (per PDV)</Label>
@@ -168,6 +183,11 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
                 value={energiaConfig.targetS3 || ""}
                 onChange={(e) => handleConfigChange("targetS3", Number(e.target.value))}
               />
+              {energiaConfig.targetS3 > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Effettivo: {(energiaConfig.targetS3 || 0) * puntiVendita.length}
+                </p>
+              )}
             </div>
           </div>
 
