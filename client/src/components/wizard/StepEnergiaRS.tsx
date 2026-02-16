@@ -111,11 +111,12 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Configurazione Target extra L&G</CardTitle>
+          <p className="text-xs text-muted-foreground">Le soglie vengono moltiplicate per il numero di PDV di ciascuna Ragione Sociale</p>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div>
-              <Label htmlFor="pdvInGara">PDV in gara (RS)</Label>
+              <Label htmlFor="pdvInGara">PDV in gara (globale)</Label>
               <Input
                 id="pdvInGara"
                 type="number"
@@ -129,7 +130,7 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
               </p>
             </div>
             <div>
-              <Label htmlFor="targetNoMalus">Target No Malus</Label>
+              <Label htmlFor="targetNoMalus">Target No Malus (per PDV)</Label>
               <Input
                 id="targetNoMalus"
                 type="number"
@@ -139,7 +140,7 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
               />
             </div>
             <div>
-              <Label htmlFor="targetS1">Target S1 (€250)</Label>
+              <Label htmlFor="targetS1">Target S1 - €250 (per PDV)</Label>
               <Input
                 id="targetS1"
                 type="number"
@@ -149,7 +150,7 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
               />
             </div>
             <div>
-              <Label htmlFor="targetS2">Target S2 (€500)</Label>
+              <Label htmlFor="targetS2">Target S2 - €500 (per PDV)</Label>
               <Input
                 id="targetS2"
                 type="number"
@@ -159,7 +160,7 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
               />
             </div>
             <div>
-              <Label htmlFor="targetS3">Target S3 (€1000)</Label>
+              <Label htmlFor="targetS3">Target S3 - €1000 (per PDV)</Label>
               <Input
                 id="targetS3"
                 type="number"
@@ -207,10 +208,30 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
       <div className="space-y-4">
         {ragioneSocialeList.map((rs) => {
           const pdvList = ragioneSocialeGroups[rs];
+          const numPdvRS = pdvList.length;
           const isOpen = openCards[rs] ?? true;
           const righe = attivatoEnergiaByRS[rs] ?? [];
           const totalPezziRS = righe.reduce((sum, r) => sum + r.pezzi, 0);
           const premioBaseRS = righe.reduce((sum, r) => sum + r.pezzi * ENERGIA_BASE_PAY[r.category], 0);
+
+          const effectiveS1 = (energiaConfig.targetS1 || 0) * numPdvRS;
+          const effectiveS2 = (energiaConfig.targetS2 || 0) * numPdvRS;
+          const effectiveS3 = (energiaConfig.targetS3 || 0) * numPdvRS;
+
+          let premioSogliaRS = 0;
+          let sogliaRaggiuntaRS: 0 | 1 | 2 | 3 = 0;
+          if (effectiveS3 > 0 && totalPezziRS >= effectiveS3) {
+            premioSogliaRS = 1000;
+            sogliaRaggiuntaRS = 3;
+          } else if (effectiveS2 > 0 && totalPezziRS >= effectiveS2) {
+            premioSogliaRS = 500;
+            sogliaRaggiuntaRS = 2;
+          } else if (effectiveS1 > 0 && totalPezziRS >= effectiveS1) {
+            premioSogliaRS = 250;
+            sogliaRaggiuntaRS = 1;
+          }
+
+          const premioTotaleRS = premioBaseRS + premioSogliaRS;
 
           return (
             <Collapsible key={rs} open={isOpen} onOpenChange={() => toggleCard(rs)}>
@@ -224,16 +245,29 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
                         </div>
                         <div>
                           <CardTitle className="text-base">{rs}</CardTitle>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                             <Store className="w-3 h-3" />
-                            <span>{pdvList.length} {pdvList.length === 1 ? 'negozio' : 'negozi'}</span>
+                            <span>{numPdvRS} {numPdvRS === 1 ? 'negozio' : 'negozi'}</span>
+                            {(effectiveS1 > 0 || effectiveS2 > 0 || effectiveS3 > 0) && (
+                              <span className="text-muted-foreground/70">
+                                · Soglie: S1={effectiveS1} · S2={effectiveS2} · S3={effectiveS3}
+                              </span>
+                            )}
+                            {sogliaRaggiuntaRS > 0 && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                S{sogliaRaggiuntaRS} +{formatCurrency(premioSogliaRS)}
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
-                        <div className="text-right hidden sm:block">
+                        <div className="text-right hidden sm:block space-y-0.5">
                           <p className="font-semibold text-primary">{totalPezziRS} contratti</p>
-                          <p className="text-xs text-muted-foreground">{formatCurrency(premioBaseRS)}</p>
+                          <p className="text-xs text-muted-foreground">Base: {formatCurrency(premioBaseRS)}</p>
+                          {premioSogliaRS > 0 && (
+                            <p className="text-xs font-medium">Totale: {formatCurrency(premioTotaleRS)}</p>
+                          )}
                         </div>
                         {isOpen ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
                       </div>

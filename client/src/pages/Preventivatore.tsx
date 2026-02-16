@@ -1095,7 +1095,36 @@ const Preventivatore = () => {
     return result;
   }).filter(Boolean) as any[];
 
-  const totalePremioEnergia = energiaResults.reduce((acc, r) => acc + r.premioTotale, 0);
+  // In RS mode, ricalcola premio soglia con target moltiplicati per n° PDV della RS
+  const totalePremioEnergia = (() => {
+    if (modalitaInserimentoRS !== "per_rs") {
+      return energiaResults.reduce((acc: number, r: any) => acc + r.premioTotale, 0);
+    }
+    // Somma premio base da tutti i PDV + premio soglia calcolato per RS
+    const premioBaseGlobale = energiaResults.reduce((acc: number, r: any) => acc + r.premioBase + r.bonusRaggiungimentoSoglia, 0);
+    // Calcola premio soglia per ogni RS con target moltiplicati
+    let premioSogliaGlobale = 0;
+    const rsGroups: Record<string, number> = {};
+    puntiVendita.forEach(pdv => {
+      const rs = pdv.ragioneSociale || "Senza RS";
+      rsGroups[rs] = (rsGroups[rs] || 0) + 1;
+    });
+    Object.entries(rsGroups).forEach(([rs, numPdv]) => {
+      const righe = attivatoEnergiaByRS[rs] ?? [];
+      const totalPezzi = righe.reduce((s, r) => s + r.pezzi, 0);
+      const effectiveS1 = (energiaConfig.targetS1 || 0) * numPdv;
+      const effectiveS2 = (energiaConfig.targetS2 || 0) * numPdv;
+      const effectiveS3 = (energiaConfig.targetS3 || 0) * numPdv;
+      if (effectiveS3 > 0 && totalPezzi >= effectiveS3) {
+        premioSogliaGlobale += 1000;
+      } else if (effectiveS2 > 0 && totalPezzi >= effectiveS2) {
+        premioSogliaGlobale += 500;
+      } else if (effectiveS1 > 0 && totalPezzi >= effectiveS1) {
+        premioSogliaGlobale += 250;
+      }
+    });
+    return premioBaseGlobale + premioSogliaGlobale;
+  })();
 
   // Calcolo risultati Assicurazioni
   const assicurazioniResults = calcoloAssicurazioniPerPos(
