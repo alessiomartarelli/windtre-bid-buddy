@@ -564,86 +564,104 @@ export default function TabelleCalcolo() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
-        <Tabs defaultValue="mobile" className="space-y-4">
-          <TabsList className="bg-muted/50 p-1">
-            <TabsTrigger value="mobile" data-testid="tab-mobile">Mobile</TabsTrigger>
-            <TabsTrigger value="fisso" data-testid="tab-fisso">Fisso</TabsTrigger>
-            <TabsTrigger value="energia" data-testid="tab-energia">Energia</TabsTrigger>
-            <TabsTrigger value="assicurazioni" data-testid="tab-assicurazioni">Assicurazioni</TabsTrigger>
-            <TabsTrigger value="protecta" data-testid="tab-protecta">Protecta</TabsTrigger>
-            <TabsTrigger value="extraGara" data-testid="tab-extra-gara">Extra Gara P.IVA</TabsTrigger>
-          </TabsList>
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-8">
+        <section>
+          <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4" data-testid="text-section-gara-operatore">
+            Tabelle di Calcolo Gara Operatore
+          </h2>
+          <Tabs defaultValue="mobile" className="space-y-4">
+            <TabsList className="bg-muted/50 p-1">
+              <TabsTrigger value="mobile" data-testid="tab-mobile">Mobile</TabsTrigger>
+              <TabsTrigger value="fisso" data-testid="tab-fisso">Fisso</TabsTrigger>
+              <TabsTrigger value="energia" data-testid="tab-energia">Energia</TabsTrigger>
+              <TabsTrigger value="assicurazioni" data-testid="tab-assicurazioni">Assicurazioni</TabsTrigger>
+              <TabsTrigger value="protecta" data-testid="tab-protecta">Protecta</TabsTrigger>
+              <TabsTrigger value="extraGara" data-testid="tab-extra-gara">Extra Gara P.IVA</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="mobile" className="space-y-6">
-            <MobileTab
-              config={config}
-              systemConfig={systemConfig}
-              isOverridden={isOverridden}
-              isArrayOverridden={isArrayOverridden}
-              updateValue={updateValue}
-              updateArrayValue={updateArrayValue}
-              resetValue={resetValue}
-              resetArrayValue={resetArrayValue}
-            />
-          </TabsContent>
+            <TabsContent value="mobile" className="space-y-6">
+              <MobileTab
+                config={config}
+                systemConfig={systemConfig}
+                isOverridden={isOverridden}
+                isArrayOverridden={isArrayOverridden}
+                updateValue={updateValue}
+                updateArrayValue={updateArrayValue}
+                resetValue={resetValue}
+                resetArrayValue={resetArrayValue}
+              />
+            </TabsContent>
 
-          <TabsContent value="fisso" className="space-y-6">
-            <FissoTab
-              config={config}
-              systemConfig={systemConfig}
-              isOverridden={isOverridden}
-              isArrayOverridden={isArrayOverridden}
-              updateValue={updateValue}
-              updateArrayValue={updateArrayValue}
-              resetValue={resetValue}
-              resetArrayValue={resetArrayValue}
-            />
-          </TabsContent>
+            <TabsContent value="fisso" className="space-y-6">
+              <FissoTab
+                config={config}
+                systemConfig={systemConfig}
+                isOverridden={isOverridden}
+                isArrayOverridden={isArrayOverridden}
+                updateValue={updateValue}
+                updateArrayValue={updateArrayValue}
+                resetValue={resetValue}
+                resetArrayValue={resetArrayValue}
+              />
+            </TabsContent>
 
-          <TabsContent value="energia" className="space-y-6">
-            <EnergiaTab
-              config={config}
-              systemConfig={systemConfig}
-              isOverridden={isOverridden}
-              updateValue={updateValue}
-              resetValue={resetValue}
-            />
-          </TabsContent>
+            <TabsContent value="energia" className="space-y-6">
+              <EnergiaTab
+                config={config}
+                systemConfig={systemConfig}
+                isOverridden={isOverridden}
+                updateValue={updateValue}
+                resetValue={resetValue}
+              />
+            </TabsContent>
 
-          <TabsContent value="assicurazioni" className="space-y-6">
-            <AssicurazioniTab
-              config={config}
-              systemConfig={systemConfig}
-              isOverridden={isOverridden}
-              updateValue={updateValue}
-              resetValue={resetValue}
-            />
-          </TabsContent>
+            <TabsContent value="assicurazioni" className="space-y-6">
+              <AssicurazioniTab
+                config={config}
+                systemConfig={systemConfig}
+                isOverridden={isOverridden}
+                updateValue={updateValue}
+                resetValue={resetValue}
+              />
+            </TabsContent>
 
-          <TabsContent value="protecta" className="space-y-6">
-            <ProtectaTab
-              config={config}
-              systemConfig={systemConfig}
-              isOverridden={isOverridden}
-              updateValue={updateValue}
-              resetValue={resetValue}
-            />
-          </TabsContent>
+            <TabsContent value="protecta" className="space-y-6">
+              <ProtectaTab
+                config={config}
+                systemConfig={systemConfig}
+                isOverridden={isOverridden}
+                updateValue={updateValue}
+                resetValue={resetValue}
+              />
+            </TabsContent>
 
-          <TabsContent value="extraGara" className="space-y-6">
-            <ExtraGaraTab
-              config={config}
-              systemConfig={systemConfig}
-              isOverridden={isOverridden}
-              isArrayOverridden={isArrayOverridden}
-              updateValue={updateValue}
-              updateArrayValue={updateArrayValue}
-              resetValue={resetValue}
-              resetArrayValue={resetArrayValue}
-            />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="extraGara" className="space-y-6">
+              <ExtraGaraTab
+                config={config}
+                systemConfig={systemConfig}
+                isOverridden={isOverridden}
+                isArrayOverridden={isArrayOverridden}
+                updateValue={updateValue}
+                updateArrayValue={updateArrayValue}
+                resetValue={resetValue}
+                resetArrayValue={resetArrayValue}
+              />
+            </TabsContent>
+          </Tabs>
+        </section>
+
+        <section>
+          <Card className="border-dashed opacity-60">
+            <CardHeader>
+              <CardTitle className="text-base sm:text-lg font-semibold" data-testid="text-section-gara-addetto">
+                Tabelle di Calcolo Gara Addetto
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground" data-testid="text-coming-soon">Coming soon</p>
+            </CardContent>
+          </Card>
+        </section>
       </div>
     </div>
   );
