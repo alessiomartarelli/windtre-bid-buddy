@@ -212,7 +212,7 @@ export function StepEnergia({
                       <Input
                         type="number"
                         min={0}
-                        value={energiaConfig[configKey] ?? defaultVal}
+                        value={energiaConfig[configKey] || defaultVal}
                         onChange={(e) => handleConfigChange(configKey, Number(e.target.value))}
                         data-testid={`input-pista-soglia-${s.toLowerCase()}`}
                       />

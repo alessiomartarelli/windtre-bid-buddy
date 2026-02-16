@@ -89,11 +89,11 @@ export function calcolaSoglieDefaultPerRS(numPdv: number): PistaEnergiaSoglieSet
 export function getSoglieFromConfig(config: EnergiaConfig, numPdv: number): PistaEnergiaSoglieSet {
   const defaults = calcolaSoglieDefaultPerRS(numPdv);
   return {
-    S1: config.pistaSoglia_S1 ?? defaults.S1,
-    S2: config.pistaSoglia_S2 ?? defaults.S2,
-    S3: config.pistaSoglia_S3 ?? defaults.S3,
-    S4: config.pistaSoglia_S4 ?? defaults.S4,
-    S5: config.pistaSoglia_S5 ?? defaults.S5,
+    S1: config.pistaSoglia_S1 || defaults.S1,
+    S2: config.pistaSoglia_S2 || defaults.S2,
+    S3: config.pistaSoglia_S3 || defaults.S3,
+    S4: config.pistaSoglia_S4 || defaults.S4,
+    S5: config.pistaSoglia_S5 || defaults.S5,
   };
 }
 
