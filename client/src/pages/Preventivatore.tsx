@@ -30,7 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PartnershipRewardPosConfig, getDefaultTarget100, calculateTarget80, calculatePremio80 } from "@/types/partnership-reward";
 import { AttivatoCBDettaglio } from "@/types/partnership-cb-events";
 import { calcolaPartnershipRewardPerPos } from "@/lib/calcoloPartnershipReward";
-import { EnergiaConfig, EnergiaAttivatoRiga, EnergiaPdvInGara } from "@/types/energia";
+import { EnergiaConfig, EnergiaAttivatoRiga, EnergiaPdvInGara, calcolaBonusPistaEnergia as calcolaBonusPistaEnergiaFn } from "@/types/energia";
 import { calcoloEnergiaPerPos } from "@/lib/calcoloEnergia";
 import { AssicurazioniConfig, AssicurazioniAttivatoRiga, AssicurazioniPdvInGara, createEmptyAssicurazioniAttivato, ASSICURAZIONI_POINTS } from "@/types/assicurazioni";
 import { calcoloAssicurazioniPerPos } from "@/lib/calcoloAssicurazioni";
@@ -1082,12 +1082,21 @@ const Preventivatore = () => {
 
   const totalePremioPartnershipPrevisto = partnershipResults.reduce((acc, r) => acc + r.result.premioMaturato, 0);
 
+  // Mappa conteggio PDV per Ragione Sociale (per pista energia)
+  const pdvCountPerRS: Record<string, number> = {};
+  puntiVendita.forEach(pdv => {
+    const rs = pdv.ragioneSociale || "Senza RS";
+    pdvCountPerRS[rs] = (pdvCountPerRS[rs] || 0) + 1;
+  });
+
   // Calcolo risultati Energia
   const energiaResults = puntiVendita.map((pdv) => {
     if (!pdv.codicePos) return null;
     const attivato = effectiveEnergiaData[pdv.id] ?? [];
     const pdvGara = energiaPdvInGara.find((p) => p.pdvId === pdv.id);
     const isNegozioInGara = pdvGara?.isInGara || false;
+    const rsName = pdv.ragioneSociale || "Senza RS";
+    const numPdvRS = pdvCountPerRS[rsName] || 1;
     
     const result = calcoloEnergiaPerPos({
       posCode: pdv.codicePos,
@@ -1095,19 +1104,19 @@ const Preventivatore = () => {
       config: energiaConfig,
       pdvInGaraList: energiaPdvInGara,
       isNegozioInGara,
+      numPdv: numPdvRS,
     });
     return result;
   }).filter(Boolean) as any[];
 
-  // In RS mode, ricalcola premio soglia con target moltiplicati per n° PDV della RS
+  // In RS mode, ricalcola premio soglia + pista energia con target moltiplicati per n° PDV della RS
   const totalePremioEnergia = (() => {
     if (modalitaInserimentoRS !== "per_rs") {
       return energiaResults.reduce((acc: number, r: any) => acc + r.premioTotale, 0);
     }
-    // Somma premio base da tutti i PDV + premio soglia calcolato per RS
     const premioBaseGlobale = energiaResults.reduce((acc: number, r: any) => acc + r.premioBase + r.bonusRaggiungimentoSoglia, 0);
-    // Calcola premio soglia per ogni RS con target moltiplicati
     let premioSogliaGlobale = 0;
+    let bonusPistaGlobale = 0;
     const rsGroups: Record<string, number> = {};
     puntiVendita.forEach(pdv => {
       const rs = pdv.ragioneSociale || "Senza RS";
@@ -1126,8 +1135,10 @@ const Preventivatore = () => {
       } else if (effectiveS1 > 0 && totalPezzi >= effectiveS1) {
         premioSogliaGlobale += 250;
       }
+      const pista = calcolaBonusPistaEnergiaFn(totalPezzi, numPdv);
+      bonusPistaGlobale += pista.bonusTotale;
     });
-    return premioBaseGlobale + premioSogliaGlobale;
+    return premioBaseGlobale + premioSogliaGlobale + bonusPistaGlobale;
   })();
 
   // Calcolo risultati Assicurazioni

@@ -14,6 +14,10 @@ import {
   ENERGIA_CATEGORY_LABELS,
   ENERGIA_W3_CATEGORY_LABELS,
   ENERGIA_BASE_PAY,
+  getPistaEnergiaSoglie,
+  getPistaEnergiaSoglieEffettive,
+  PISTA_ENERGIA_BONUS_PER_CONTRATTO,
+  PistaEnergiaSoglia,
 } from "@/types/energia";
 import { formatCurrency } from "@/utils/format";
 import { Zap } from "lucide-react";
@@ -186,6 +190,54 @@ export function StepEnergia({
         </CardContent>
       </Card>
 
+      {/* Pista Energia - Soglie automatiche */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Pista Energia</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Soglie automatiche in base al numero di PDV. Bonus aggiuntivo per contratto al raggiungimento della soglia.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Fino a 3 PDV (per PDV)</p>
+                <div className="flex flex-wrap gap-2">
+                  {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
+                    <Badge key={s} variant="outline" className="text-xs py-0.5 px-2">
+                      {s === "S5" ? "S Extra" : s}: {getPistaEnergiaSoglie(1)[s]}
+                      {PISTA_ENERGIA_BONUS_PER_CONTRATTO[s] > 0 && ` (+${PISTA_ENERGIA_BONUS_PER_CONTRATTO[s]}€/contr.)`}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Dal 4° PDV in poi (per PDV)</p>
+                <div className="flex flex-wrap gap-2">
+                  {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
+                    <Badge key={s} variant="outline" className="text-xs py-0.5 px-2">
+                      {s}: {getPistaEnergiaSoglie(4)[s]}
+                      {PISTA_ENERGIA_BONUS_PER_CONTRATTO[s] > 0 && ` (+${PISTA_ENERGIA_BONUS_PER_CONTRATTO[s]}€/contr.)`}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {puntiVendita.length > 0 && (
+              <div className="mt-2 p-2 rounded-md bg-muted/50">
+                <p className="text-xs text-muted-foreground">
+                  Con {puntiVendita.length} PDV, soglie effettive: {" "}
+                  {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
+                    <span key={s} className="mr-2">{s === "S5" ? "S Extra" : s}={getPistaEnergiaSoglieEffettive(puntiVendita.length)[s]}</span>
+                  ))}
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Legenda Pay Base */}
       <Card>
         <CardHeader>
@@ -312,6 +364,12 @@ export function StepEnergia({
                         <div>
                           <span className="text-muted-foreground">Premio soglia:</span>{" "}
                           <span className="font-medium text-green-600">{formatCurrency(result.premioSoglia)}</span>
+                        </div>
+                      )}
+                      {result.pistaEnergia?.sogliaRaggiunta && (
+                        <div>
+                          <span className="text-muted-foreground">Pista {result.pistaEnergia.sogliaRaggiunta} (+{result.pistaEnergia.bonusPerContratto}€/c):</span>{" "}
+                          <span className="font-medium text-green-600">{formatCurrency(result.pistaEnergia.bonusTotale)}</span>
                         </div>
                       )}
                     </div>

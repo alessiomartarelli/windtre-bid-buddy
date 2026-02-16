@@ -7,6 +7,7 @@ import {
   ENERGIA_BASE_PAY,
   ENERGIA_BONUS_PER_CONTRATTO,
   ENERGIA_SOGLIA_BONUS_BASE,
+  calcolaBonusPistaEnergia,
 } from "@/types/energia";
 
 interface CalcoloEnergiaParams {
@@ -15,6 +16,7 @@ interface CalcoloEnergiaParams {
   config: EnergiaConfig;
   pdvInGaraList: EnergiaPdvInGara[];
   isNegozioInGara: boolean;
+  numPdv: number;
 }
 
 export function calcoloEnergiaPerPos({
@@ -23,8 +25,8 @@ export function calcoloEnergiaPerPos({
   config,
   pdvInGaraList,
   isNegozioInGara,
+  numPdv,
 }: CalcoloEnergiaParams): EnergiaResult {
-  // Calcola pezzi per categoria
   const pezziPerCategoria: Record<EnergiaCategory, number> = {
     CONSUMER_CON_SDD: 0,
     CONSUMER_NO_SDD: 0,
@@ -42,26 +44,19 @@ export function calcoloEnergiaPerPos({
 
   const totalePezzi = Object.values(pezziPerCategoria).reduce((a, b) => a + b, 0);
 
-  // Calcola premio base
   let premioBase = 0;
   (Object.keys(pezziPerCategoria) as EnergiaCategory[]).forEach((cat) => {
     premioBase += pezziPerCategoria[cat] * ENERGIA_BASE_PAY[cat];
   });
 
-  // Calcola bonus raggiungimento soglia (totale ragione sociale)
-  // La soglia è 55 * numero PDV ragione sociale
   const sogliaBonus = ENERGIA_SOGLIA_BONUS_BASE * config.pdvInGara;
-  
-  // Calcola totale pezzi di tutti i PDV in gara (somma totale ragione sociale)
-  // Per ora usiamo solo il totale del singolo PDV, ma in produzione si dovrebbe sommare tutti
-  const totalePezziRagioneSociale = totalePezzi; // TODO: sommare tutti i PDV della stessa ragione sociale
+  const totalePezziRagioneSociale = totalePezzi;
   
   let bonusRaggiungimentoSoglia = 0;
   if (totalePezziRagioneSociale >= sogliaBonus) {
     bonusRaggiungimentoSoglia = totalePezzi * ENERGIA_BONUS_PER_CONTRATTO;
   }
 
-  // Calcola premio a soglia (solo per negozi in gara)
   let premioSoglia = 0;
   let sogliaRaggiunta: 0 | 1 | 2 | 3 = 0;
   
@@ -78,7 +73,9 @@ export function calcoloEnergiaPerPos({
     }
   }
 
-  const premioTotale = premioBase + bonusRaggiungimentoSoglia + premioSoglia;
+  const pistaEnergia = calcolaBonusPistaEnergia(totalePezzi, numPdv);
+
+  const premioTotale = premioBase + bonusRaggiungimentoSoglia + premioSoglia + pistaEnergia.bonusTotale;
 
   return {
     posCode,
@@ -89,15 +86,16 @@ export function calcoloEnergiaPerPos({
     premioSoglia,
     premioTotale,
     sogliaRaggiunta,
+    pistaEnergia,
   };
 }
 
-// Calcola il totale per tutti i PDV
 export function calcoloEnergiaTotale(results: EnergiaResult[]): {
   totalePezzi: number;
   totalePremioBase: number;
   totaleBonus: number;
   totalePremioSoglia: number;
+  totaleBonusPista: number;
   totalePremio: number;
 } {
   return results.reduce(
@@ -106,6 +104,7 @@ export function calcoloEnergiaTotale(results: EnergiaResult[]): {
       totalePremioBase: acc.totalePremioBase + r.premioBase,
       totaleBonus: acc.totaleBonus + r.bonusRaggiungimentoSoglia,
       totalePremioSoglia: acc.totalePremioSoglia + r.premioSoglia,
+      totaleBonusPista: acc.totaleBonusPista + r.pistaEnergia.bonusTotale,
       totalePremio: acc.totalePremio + r.premioTotale,
     }),
     {
@@ -113,6 +112,7 @@ export function calcoloEnergiaTotale(results: EnergiaResult[]): {
       totalePremioBase: 0,
       totaleBonus: 0,
       totalePremioSoglia: 0,
+      totaleBonusPista: 0,
       totalePremio: 0,
     }
   );

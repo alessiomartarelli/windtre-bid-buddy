@@ -12,6 +12,11 @@ import {
   ENERGIA_CATEGORY_LABELS,
   ENERGIA_W3_CATEGORY_LABELS,
   ENERGIA_BASE_PAY,
+  getPistaEnergiaSoglie,
+  getPistaEnergiaSoglieEffettive,
+  calcolaBonusPistaEnergia,
+  PISTA_ENERGIA_BONUS_PER_CONTRATTO,
+  PistaEnergiaSoglia,
 } from "@/types/energia";
 import { formatCurrency } from "@/utils/format";
 import { Zap, ChevronDown, ChevronUp, Building2, Store } from "lucide-react";
@@ -167,6 +172,44 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
         </CardContent>
       </Card>
 
+      {/* Pista Energia - Soglie automatiche */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Pista Energia</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Soglie automatiche in base al numero di PDV. Bonus aggiuntivo per contratto al raggiungimento della soglia.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Fino a 3 PDV (per PDV)</p>
+                <div className="flex flex-wrap gap-2">
+                  {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
+                    <Badge key={s} variant="outline" className="text-xs py-0.5 px-2">
+                      {s === "S5" ? "S Extra" : s}: {getPistaEnergiaSoglie(1)[s]}
+                      {PISTA_ENERGIA_BONUS_PER_CONTRATTO[s] > 0 && ` (+${PISTA_ENERGIA_BONUS_PER_CONTRATTO[s]}€/contr.)`}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Dal 4° PDV in poi (per PDV)</p>
+                <div className="flex flex-wrap gap-2">
+                  {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
+                    <Badge key={s} variant="outline" className="text-xs py-0.5 px-2">
+                      {s}: {getPistaEnergiaSoglie(4)[s]}
+                      {PISTA_ENERGIA_BONUS_PER_CONTRATTO[s] > 0 && ` (+${PISTA_ENERGIA_BONUS_PER_CONTRATTO[s]}€/contr.)`}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Legenda Pay Base */}
       <Card>
         <CardHeader>
@@ -225,7 +268,9 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
             sogliaRaggiuntaRS = 1;
           }
 
-          const premioTotaleRS = premioBaseRS + premioSogliaRS;
+          const pistaRS = calcolaBonusPistaEnergia(totalPezziRS, numPdvRS);
+          const soglieEffettiveRS = getPistaEnergiaSoglieEffettive(numPdvRS);
+          const premioTotaleRS = premioBaseRS + premioSogliaRS + pistaRS.bonusTotale;
 
           return (
             <Collapsible key={rs} open={isOpen} onOpenChange={() => toggleCard(rs)}>
@@ -244,12 +289,20 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
                             <span>{numPdvRS} {numPdvRS === 1 ? 'negozio' : 'negozi'}</span>
                             {(effectiveS1 > 0 || effectiveS2 > 0 || effectiveS3 > 0) && (
                               <span className="text-muted-foreground/70">
-                                · Soglie: S1={effectiveS1} · S2={effectiveS2} · S3={effectiveS3}
+                                · Extra: S1={effectiveS1} · S2={effectiveS2} · S3={effectiveS3}
                               </span>
                             )}
                             {sogliaRaggiuntaRS > 0 && (
                               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                S{sogliaRaggiuntaRS} +{formatCurrency(premioSogliaRS)}
+                                Extra S{sogliaRaggiuntaRS} +{formatCurrency(premioSogliaRS)}
+                              </Badge>
+                            )}
+                            <span className="text-muted-foreground/70">
+                              · Pista: S1={soglieEffettiveRS.S1} S2={soglieEffettiveRS.S2} S3={soglieEffettiveRS.S3} S4={soglieEffettiveRS.S4} S5={soglieEffettiveRS.S5}
+                            </span>
+                            {pistaRS.sogliaRaggiunta && (
+                              <Badge variant="default" className="text-[10px] px-1.5 py-0">
+                                Pista {pistaRS.sogliaRaggiunta} +{pistaRS.bonusPerContratto}€/c · {formatCurrency(pistaRS.bonusTotale)}
                               </Badge>
                             )}
                           </div>
