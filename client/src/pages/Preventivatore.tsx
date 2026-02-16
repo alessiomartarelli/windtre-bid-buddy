@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ConfigGaraBase, PuntoVendita, PistaMobileConfig, MobileCategoryConfig, AttivatoMobileDettaglio, GaraConfigUpload, MOBILE_CATEGORIES_CONFIG_DEFAULT, PistaMobileRSConfig, PistaFissoRSConfig, PartnershipRewardRSConfig, ModalitaInserimentoRS } from "@/types/preventivatore";
+import { ConfigGaraBase, PuntoVendita, PistaMobileConfig, PistaMobilePosConfig, MobileCategoryConfig, AttivatoMobileDettaglio, GaraConfigUpload, MOBILE_CATEGORIES_CONFIG_DEFAULT, PistaMobileRSConfig, PistaFissoRSConfig, PartnershipRewardRSConfig, ModalitaInserimentoRS } from "@/types/preventivatore";
 import { createEmptyPdv, createDefaultPistaMobileConfig, getDefaultFissoThresholds, mapClusterFissoToNumber, generaPartnershipRSDefault } from "@/utils/preventivatore-helpers";
 import { calcolaPremioPistaMobilePerPos } from "@/utils/calcoli-mobile";
 import { calcolaPremioPistaFissoPerPos, PistaFissoPosConfig, AttivatoFissoRiga } from "@/lib/calcoloPistaFisso";
@@ -886,60 +886,161 @@ const Preventivatore = () => {
   const effectiveAssicurazioniData = getEffectiveAssicurazioniData();
   const effectiveProtectaData = getEffectiveProtectaData();
 
-  const mobileResults = puntiVendita.map((pdv, index) => {
-    const conf = pistaMobileConfig.sogliePerPos[index];
-    if (!conf || !pdv.codicePos) return null;
-    const righe = effectiveMobileData[pdv.id] ?? [];
+  const mobileResults = (() => {
+    if (modalitaInserimentoRS === "per_rs") {
+      const processedRS = new Set<string>();
+      return puntiVendita.map((pdv) => {
+        if (!pdv.codicePos) return null;
+        const rs = pdv.ragioneSociale || "";
+        if (processedRS.has(rs)) return null;
+        processedRS.add(rs);
+        
+        const rsConf = pistaMobileRSConfig.sogliePerRS.find(
+          s => s.ragioneSociale.trim().toLowerCase() === rs.trim().toLowerCase()
+        );
+        if (!rsConf) return null;
+        
+        const conf: PistaMobilePosConfig = {
+          posCode: pdv.codicePos,
+          soglia1: rsConf.soglia1,
+          soglia2: rsConf.soglia2,
+          soglia3: rsConf.soglia3,
+          soglia4: rsConf.soglia4,
+          multiplierSoglia1: 1,
+          multiplierSoglia2: 1.2,
+          multiplierSoglia3: 1.5,
+          multiplierSoglia4: 2,
+          canoneMedio: rsConf.canoneMedio,
+          forecastTargetPunti: rsConf.forecastTargetPunti,
+        };
+        
+        const righe = attivatoMobileByRS[rs] ?? [];
+        const workdayInfoOverride = getWorkdayInfoFromOverrides(
+          configGara.annoGara,
+          configGara.meseGara - 1,
+          pdv.calendar,
+          calendarioOverrides[pdv.id]
+        );
+        
+        const result = calcolaPremioPistaMobilePerPos({
+          configPos: conf,
+          dettaglio: righe,
+          calendar: pdv.calendar,
+          year: configGara.annoGara,
+          month: configGara.meseGara - 1,
+          mobileCategories,
+          workdayInfoOverride,
+        });
+        return { pdv, conf, righe, result };
+      }).filter(Boolean) as any[];
+    }
     
-    // Calcola workdayInfo usando gli override del calendario mese
-    const workdayInfoOverride = getWorkdayInfoFromOverrides(
-      configGara.annoGara,
-      configGara.meseGara - 1,
-      pdv.calendar,
-      calendarioOverrides[pdv.id]
-    );
-    
-    const result = calcolaPremioPistaMobilePerPos({ 
-      configPos: conf, 
-      dettaglio: righe, 
-      calendar: pdv.calendar, 
-      year: configGara.annoGara, 
-      month: configGara.meseGara - 1, 
-      mobileCategories,
-      workdayInfoOverride,
-    });
-    return { pdv, conf, righe, result };
-  }).filter(Boolean) as any[];
+    return puntiVendita.map((pdv, index) => {
+      const conf = pistaMobileConfig.sogliePerPos[index];
+      if (!conf || !pdv.codicePos) return null;
+      const righe = effectiveMobileData[pdv.id] ?? [];
+      
+      const workdayInfoOverride = getWorkdayInfoFromOverrides(
+        configGara.annoGara,
+        configGara.meseGara - 1,
+        pdv.calendar,
+        calendarioOverrides[pdv.id]
+      );
+      
+      const result = calcolaPremioPistaMobilePerPos({ 
+        configPos: conf, 
+        dettaglio: righe, 
+        calendar: pdv.calendar, 
+        year: configGara.annoGara, 
+        month: configGara.meseGara - 1, 
+        mobileCategories,
+        workdayInfoOverride,
+      });
+      return { pdv, conf, righe, result };
+    }).filter(Boolean) as any[];
+  })();
 
   const totalePremioMobile = mobileResults.reduce((acc, r) => acc + r.result.premio + r.result.extraGettoniEuro, 0);
 
   // Calcolo risultati FISSO
-  const fissoResults = puntiVendita.map((pdv, index) => {
-    const conf = pistaFissoConfig.sogliePerPos[index];
-    if (!conf || !pdv.codicePos || !pdv.clusterFisso) return null;
-    const righe = effectiveFissoData[pdv.id] ?? [];
-    const clusterNum = mapClusterFissoToNumber(pdv.clusterFisso);
+  const fissoResults = (() => {
+    if (modalitaInserimentoRS === "per_rs") {
+      const processedRS = new Set<string>();
+      return puntiVendita.map((pdv) => {
+        if (!pdv.codicePos || !pdv.clusterFisso) return null;
+        const rs = pdv.ragioneSociale || "";
+        if (processedRS.has(rs)) return null;
+        processedRS.add(rs);
+        
+        const rsConf = pistaFissoRSConfig.sogliePerRS.find(
+          s => s.ragioneSociale.trim().toLowerCase() === rs.trim().toLowerCase()
+        );
+        if (!rsConf) return null;
+        
+        const conf: PistaFissoPosConfig = {
+          posCode: pdv.codicePos,
+          soglia1: rsConf.soglia1,
+          soglia2: rsConf.soglia2,
+          soglia3: rsConf.soglia3,
+          soglia4: rsConf.soglia4,
+          soglia5: rsConf.soglia5 ?? 0,
+          multiplierSoglia1: 2,
+          multiplierSoglia2: 3,
+          multiplierSoglia3: 3.5,
+          multiplierSoglia4: 4,
+          multiplierSoglia5: 5,
+          forecastTargetPunti: rsConf.forecastTargetPunti,
+        };
+        
+        const righe = attivatoFissoByRS[rs] ?? [];
+        const clusterNum = mapClusterFissoToNumber(pdv.clusterFisso);
+        const workdayInfoOverride = getWorkdayInfoFromOverrides(
+          configGara.annoGara,
+          configGara.meseGara - 1,
+          pdv.calendar,
+          calendarioOverrides[pdv.id]
+        );
+        
+        const result = calcolaPremioPistaFissoPerPos({
+          annoGara: configGara.annoGara,
+          meseGara: configGara.meseGara,
+          calendar: pdv.calendar,
+          clusterFisso: clusterNum,
+          posCode: pdv.codicePos,
+          pistaConfig: conf,
+          attivato: righe,
+          workdayInfoOverride,
+        });
+        return { pdv, conf, righe, result };
+      }).filter(Boolean) as any[];
+    }
     
-    // Calcola workdayInfo usando gli override del calendario mese
-    const workdayInfoOverride = getWorkdayInfoFromOverrides(
-      configGara.annoGara,
-      configGara.meseGara - 1,
-      pdv.calendar,
-      calendarioOverrides[pdv.id]
-    );
-    
-    const result = calcolaPremioPistaFissoPerPos({
-      annoGara: configGara.annoGara,
-      meseGara: configGara.meseGara,
-      calendar: pdv.calendar,
-      clusterFisso: clusterNum,
-      posCode: pdv.codicePos,
-      pistaConfig: conf,
-      attivato: righe,
-      workdayInfoOverride,
-    });
-    return { pdv, conf, righe, result };
-  }).filter(Boolean) as any[];
+    return puntiVendita.map((pdv, index) => {
+      const conf = pistaFissoConfig.sogliePerPos[index];
+      if (!conf || !pdv.codicePos || !pdv.clusterFisso) return null;
+      const righe = effectiveFissoData[pdv.id] ?? [];
+      const clusterNum = mapClusterFissoToNumber(pdv.clusterFisso);
+      
+      const workdayInfoOverride = getWorkdayInfoFromOverrides(
+        configGara.annoGara,
+        configGara.meseGara - 1,
+        pdv.calendar,
+        calendarioOverrides[pdv.id]
+      );
+      
+      const result = calcolaPremioPistaFissoPerPos({
+        annoGara: configGara.annoGara,
+        meseGara: configGara.meseGara,
+        calendar: pdv.calendar,
+        clusterFisso: clusterNum,
+        posCode: pdv.codicePos,
+        pistaConfig: conf,
+        attivato: righe,
+        workdayInfoOverride,
+      });
+      return { pdv, conf, righe, result };
+    }).filter(Boolean) as any[];
+  })();
 
   const totalePremioFisso = fissoResults.reduce((acc, r) => acc + r.result.premio, 0);
 
