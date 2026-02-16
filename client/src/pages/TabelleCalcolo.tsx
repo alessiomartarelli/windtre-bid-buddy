@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ArrowLeft, Loader2, Save, RotateCcw, X } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, RotateCcw, X, Users, UserCheck, Lock, ChevronRight } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { MobileActivationType, MOBILE_CATEGORY_LABELS, MOBILE_CATEGORIES_CONFIG_DEFAULT } from '@/types/preventivatore';
 import { ENERGIA_BASE_PAY, ENERGIA_CATEGORY_LABELS, ENERGIA_W3_CATEGORY_LABELS, PISTA_ENERGIA_SOGLIE_BASE, PISTA_ENERGIA_SOGLIE_DA4, PISTA_ENERGIA_BONUS_PER_CONTRATTO } from '@/types/energia';
 import { ASSICURAZIONI_POINTS, ASSICURAZIONI_PREMIUMS, ASSICURAZIONI_LABELS } from '@/types/assicurazioni';
@@ -334,6 +335,7 @@ export default function TabelleCalcolo() {
   const { user, profile, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
+  const [activeSection, setActiveSection] = useState<'selection' | 'gara_operatore'>('selection');
   const hardcoded = useMemo(() => buildHardcodedDefaults(), []);
   const [config, setConfig] = useState<TabelleCalcoloConfig>(hardcoded);
   const [initialized, setInitialized] = useState(false);
@@ -538,37 +540,83 @@ export default function TabelleCalcolo() {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
-              <Button variant="ghost" size="icon" onClick={() => setLocation('/')} data-testid="button-back">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => activeSection === 'selection' ? setLocation('/') : setActiveSection('selection')}
+                data-testid="button-back"
+              >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <h1 className="text-lg sm:text-xl font-bold text-foreground truncate" data-testid="text-page-title">
-                Tabelle di Calcolo
+                {activeSection === 'selection' ? 'Tabelle di Calcolo' : 'Tabelle di Calcolo Gara Operatore'}
               </h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleResetAll} data-testid="button-reset-all">
-                <RotateCcw className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Ripristina Defaults</span>
-                <span className="sm:hidden">Reset</span>
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving} size="sm" data-testid="button-save">
-                {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-                <span className="hidden sm:inline">
-                  {isSuperAdmin ? 'Salva come Default di Sistema' : 'Salva Override Organizzazione'}
-                </span>
-                <span className="sm:hidden">Salva</span>
-              </Button>
+              {activeSection === 'gara_operatore' && (
+                <>
+                  <Button variant="outline" size="sm" onClick={handleResetAll} data-testid="button-reset-all">
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    <span className="hidden sm:inline">Ripristina Defaults</span>
+                    <span className="sm:hidden">Reset</span>
+                  </Button>
+                  <Button onClick={handleSave} disabled={isSaving} size="sm" data-testid="button-save">
+                    {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                    <span className="hidden sm:inline">
+                      {isSuperAdmin ? 'Salva come Default di Sistema' : 'Salva Override Organizzazione'}
+                    </span>
+                    <span className="sm:hidden">Salva</span>
+                  </Button>
+                </>
+              )}
               <UserMenu />
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-8">
-        <section>
-          <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4" data-testid="text-section-gara-operatore">
-            Tabelle di Calcolo Gara Operatore
-          </h2>
+      {activeSection === 'selection' ? (
+        <div className="max-w-3xl mx-auto px-3 sm:px-6 py-8 sm:py-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            <Card
+              className="cursor-pointer transition-shadow hover-elevate"
+              onClick={() => setActiveSection('gara_operatore')}
+              data-testid="card-gara-operatore"
+            >
+              <CardContent className="p-6 sm:p-8 flex flex-col items-center text-center gap-4">
+                <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Users className="h-7 w-7 text-primary" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base sm:text-lg font-semibold text-foreground">Gara Operatore</h3>
+                  <p className="text-sm text-muted-foreground">Configura le tabelle di calcolo per le gare operatore</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </CardContent>
+            </Card>
+
+            <Card
+              className="opacity-50 cursor-not-allowed"
+              data-testid="card-gara-addetto"
+            >
+              <CardContent className="p-6 sm:p-8 flex flex-col items-center text-center gap-4">
+                <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center">
+                  <UserCheck className="h-7 w-7 text-muted-foreground" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base sm:text-lg font-semibold text-foreground">Gara Addetto</h3>
+                  <p className="text-sm text-muted-foreground">Configura le tabelle di calcolo per le gare addetto</p>
+                </div>
+                <Badge variant="secondary" className="no-default-active-elevate">
+                  <Lock className="h-3 w-3 mr-1" />
+                  Coming soon
+                </Badge>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ) : (
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
           <Tabs defaultValue="mobile" className="space-y-4">
             <TabsList className="bg-muted/50 p-1">
               <TabsTrigger value="mobile" data-testid="tab-mobile">Mobile</TabsTrigger>
@@ -648,21 +696,8 @@ export default function TabelleCalcolo() {
               />
             </TabsContent>
           </Tabs>
-        </section>
-
-        <section>
-          <Card className="border-dashed opacity-60">
-            <CardHeader>
-              <CardTitle className="text-base sm:text-lg font-semibold" data-testid="text-section-gara-addetto">
-                Tabelle di Calcolo Gara Addetto
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground" data-testid="text-coming-soon">Coming soon</p>
-            </CardContent>
-          </Card>
-        </section>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
