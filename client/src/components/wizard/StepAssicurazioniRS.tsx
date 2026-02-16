@@ -106,50 +106,45 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Target Assicurazioni RS</CardTitle>
+          <p className="text-xs text-muted-foreground">Le soglie vengono moltiplicate per il numero di PDV di ciascuna Ragione Sociale</p>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="pdvInGara">PDV in Gara</Label>
+              <Label>PDV in Gara</Label>
               <Input
-                id="pdvInGara"
                 type="number"
-                min={0}
-                value={config.pdvInGara}
-                onChange={(e) => handleConfigChange("pdvInGara", Number(e.target.value))}
+                value={puntiVendita.length}
+                readOnly
+                className="bg-muted"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="targetNoMalus">Target No Malus (punti)</Label>
+              <Label>No Malus ({config.targetNoMalus || 0} × {puntiVendita.length})</Label>
               <Input
-                id="targetNoMalus"
                 type="number"
-                min={0}
-                value={config.targetNoMalus}
-                onChange={(e) => handleConfigChange("targetNoMalus", Number(e.target.value))}
+                value={(config.targetNoMalus || 0) * puntiVendita.length}
+                readOnly
+                className="bg-muted"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="targetS1">Target S1 (punti)</Label>
+              <Label>S1 €500 ({config.targetS1 || 0} × {puntiVendita.length})</Label>
               <Input
-                id="targetS1"
                 type="number"
-                min={0}
-                value={config.targetS1}
-                onChange={(e) => handleConfigChange("targetS1", Number(e.target.value))}
+                value={(config.targetS1 || 0) * puntiVendita.length}
+                readOnly
+                className="bg-muted"
               />
-              <p className="text-xs text-muted-foreground">Bonus: €500 per PDV</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="targetS2">Target S2 (punti)</Label>
+              <Label>S2 €750 ({config.targetS2 || 0} × {puntiVendita.length})</Label>
               <Input
-                id="targetS2"
                 type="number"
-                min={0}
-                value={config.targetS2}
-                onChange={(e) => handleConfigChange("targetS2", Number(e.target.value))}
+                value={(config.targetS2 || 0) * puntiVendita.length}
+                readOnly
+                className="bg-muted"
               />
-              <p className="text-xs text-muted-foreground">Bonus: €750 per PDV</p>
             </div>
           </div>
         </CardContent>

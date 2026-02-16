@@ -716,21 +716,23 @@ const Preventivatore = () => {
       return updated;
     });
     
-    // Imposta pdvInGara e target di default = numero di punti vendita
     setAssicurazioniConfig((prev) => {
+      const numPdv = puntiVendita.length;
+      if (modalitaInserimentoRS === "per_rs") {
+        return { ...prev, pdvInGara: numPdv };
+      }
       if (prev.pdvInGara === 0) {
-        const numPdv = puntiVendita.length;
         return { 
           ...prev, 
           pdvInGara: numPdv,
-          targetNoMalus: 15 * numPdv,
-          targetS1: 20 * numPdv,
-          targetS2: 25 * numPdv,
+          targetNoMalus: 15,
+          targetS1: 20,
+          targetS2: 25,
         };
       }
       return prev;
     });
-  }, [puntiVendita]);
+  }, [puntiVendita, modalitaInserimentoRS]);
 
   const updatePdvField = <K extends keyof PuntoVendita>(index: number, field: K, value: PuntoVendita[K]) => {
     setPuntiVendita((prev) => { const updated = [...prev]; updated[index] = { ...updated[index], [field]: value }; return updated; });
