@@ -102,6 +102,21 @@ const Preventivatore = () => {
     targetS1: 0,
     targetS2: 0,
     targetS3: 0,
+    pistaFinoA3_S1: 10,
+    pistaFinoA3_S2: 25,
+    pistaFinoA3_S3: 40,
+    pistaFinoA3_S4: 55,
+    pistaFinoA3_S5: 100,
+    pistaDa4_S1: 9,
+    pistaDa4_S2: 23,
+    pistaDa4_S3: 35,
+    pistaDa4_S4: 50,
+    pistaDa4_S5: 90,
+    pistaBonus_S1: 0,
+    pistaBonus_S2: 5,
+    pistaBonus_S3: 15,
+    pistaBonus_S4: 30,
+    pistaBonus_S5: 45,
   });
   const [energiaPdvInGara, setEnergiaPdvInGara] = useState<EnergiaPdvInGara[]>([]);
   const [attivatoEnergiaByPos, setAttivatoEnergiaByPos] = useState<Record<string, EnergiaAttivatoRiga[]>>({});
@@ -1135,7 +1150,7 @@ const Preventivatore = () => {
       } else if (effectiveS1 > 0 && totalPezzi >= effectiveS1) {
         premioSogliaGlobale += 250;
       }
-      const pista = calcolaBonusPistaEnergiaFn(totalPezzi, numPdv);
+      const pista = calcolaBonusPistaEnergiaFn(totalPezzi, numPdv, energiaConfig);
       bonusPistaGlobale += pista.bonusTotale;
     });
     return premioBaseGlobale + premioSogliaGlobale + bonusPistaGlobale;

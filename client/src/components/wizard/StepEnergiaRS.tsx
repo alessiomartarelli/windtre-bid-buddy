@@ -12,10 +12,8 @@ import {
   ENERGIA_CATEGORY_LABELS,
   ENERGIA_W3_CATEGORY_LABELS,
   ENERGIA_BASE_PAY,
-  getPistaEnergiaSoglie,
   getPistaEnergiaSoglieEffettive,
   calcolaBonusPistaEnergia,
-  PISTA_ENERGIA_BONUS_PER_CONTRATTO,
   PistaEnergiaSoglia,
 } from "@/types/energia";
 import { formatCurrency } from "@/utils/format";
@@ -172,38 +170,68 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
         </CardContent>
       </Card>
 
-      {/* Pista Energia - Soglie automatiche */}
+      {/* Pista Energia - Soglie editabili */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Pista Energia</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Soglie automatiche in base al numero di PDV. Bonus aggiuntivo per contratto al raggiungimento della soglia.
+            Soglie per PDV e bonus per contratto al raggiungimento della soglia.
           </p>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">Fino a 3 PDV (per PDV)</p>
-                <div className="flex flex-wrap gap-2">
-                  {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
-                    <Badge key={s} variant="outline" className="text-xs py-0.5 px-2">
-                      {s === "S5" ? "S Extra" : s}: {getPistaEnergiaSoglie(1)[s]}
-                      {PISTA_ENERGIA_BONUS_PER_CONTRATTO[s] > 0 && ` (+${PISTA_ENERGIA_BONUS_PER_CONTRATTO[s]}€/contr.)`}
-                    </Badge>
-                  ))}
-                </div>
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie fino a 3 PDV (per PDV)</p>
+              <div className="grid grid-cols-5 gap-3">
+                {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
+                  <div key={s}>
+                    <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
+                    <Input
+                      data-testid={`input-pista-fino3-${s.toLowerCase()}`}
+                      type="number"
+                      min={0}
+                      value={energiaConfig[`pistaFinoA3_${s}` as keyof EnergiaConfig] as number || ""}
+                      onChange={(e) => handleConfigChange(`pistaFinoA3_${s}` as keyof EnergiaConfig, Number(e.target.value))}
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
               </div>
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">Dal 4° PDV in poi (per PDV)</p>
-                <div className="flex flex-wrap gap-2">
-                  {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
-                    <Badge key={s} variant="outline" className="text-xs py-0.5 px-2">
-                      {s}: {getPistaEnergiaSoglie(4)[s]}
-                      {PISTA_ENERGIA_BONUS_PER_CONTRATTO[s] > 0 && ` (+${PISTA_ENERGIA_BONUS_PER_CONTRATTO[s]}€/contr.)`}
-                    </Badge>
-                  ))}
-                </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie dal 4° PDV in poi (per PDV)</p>
+              <div className="grid grid-cols-5 gap-3">
+                {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
+                  <div key={s}>
+                    <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
+                    <Input
+                      data-testid={`input-pista-da4-${s.toLowerCase()}`}
+                      type="number"
+                      min={0}
+                      value={energiaConfig[`pistaDa4_${s}` as keyof EnergiaConfig] as number || ""}
+                      onChange={(e) => handleConfigChange(`pistaDa4_${s}` as keyof EnergiaConfig, Number(e.target.value))}
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Bonus €/contratto per soglia raggiunta</p>
+              <div className="grid grid-cols-5 gap-3">
+                {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
+                  <div key={s}>
+                    <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
+                    <Input
+                      data-testid={`input-pista-bonus-${s.toLowerCase()}`}
+                      type="number"
+                      min={0}
+                      value={energiaConfig[`pistaBonus_${s}` as keyof EnergiaConfig] as number || ""}
+                      onChange={(e) => handleConfigChange(`pistaBonus_${s}` as keyof EnergiaConfig, Number(e.target.value))}
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -268,8 +296,8 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
             sogliaRaggiuntaRS = 1;
           }
 
-          const pistaRS = calcolaBonusPistaEnergia(totalPezziRS, numPdvRS);
-          const soglieEffettiveRS = getPistaEnergiaSoglieEffettive(numPdvRS);
+          const pistaRS = calcolaBonusPistaEnergia(totalPezziRS, numPdvRS, energiaConfig);
+          const soglieEffettiveRS = getPistaEnergiaSoglieEffettive(numPdvRS, energiaConfig);
           const premioTotaleRS = premioBaseRS + premioSogliaRS + pistaRS.bonusTotale;
 
           return (

@@ -7,7 +7,7 @@ import {
   ENERGIA_BASE_PAY,
   ENERGIA_BONUS_PER_CONTRATTO,
   ENERGIA_SOGLIA_BONUS_BASE,
-  calcolaBonusPistaEnergia,
+  calcolaBonusPistaEnergia as calcolaBonusPistaEnergiaFn,
 } from "@/types/energia";
 
 interface CalcoloEnergiaParams {
@@ -73,7 +73,7 @@ export function calcoloEnergiaPerPos({
     }
   }
 
-  const pistaEnergia = calcolaBonusPistaEnergia(totalePezzi, numPdv);
+  const pistaEnergia = calcolaBonusPistaEnergiaFn(totalePezzi, numPdv, config);
 
   const premioTotale = premioBase + bonusRaggiungimentoSoglia + premioSoglia + pistaEnergia.bonusTotale;
 

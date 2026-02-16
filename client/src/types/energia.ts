@@ -50,7 +50,7 @@ export interface PistaEnergiaSoglieSet {
   S5: number;
 }
 
-export const PISTA_ENERGIA_SOGLIE_FINO_A_3: PistaEnergiaSoglieSet = {
+export const PISTA_ENERGIA_SOGLIE_FINO_A_3_DEFAULT: PistaEnergiaSoglieSet = {
   S1: 10,
   S2: 25,
   S3: 40,
@@ -58,7 +58,7 @@ export const PISTA_ENERGIA_SOGLIE_FINO_A_3: PistaEnergiaSoglieSet = {
   S5: 100,
 };
 
-export const PISTA_ENERGIA_SOGLIE_DA_4_IN_POI: PistaEnergiaSoglieSet = {
+export const PISTA_ENERGIA_SOGLIE_DA_4_IN_POI_DEFAULT: PistaEnergiaSoglieSet = {
   S1: 9,
   S2: 23,
   S3: 35,
@@ -66,7 +66,7 @@ export const PISTA_ENERGIA_SOGLIE_DA_4_IN_POI: PistaEnergiaSoglieSet = {
   S5: 90,
 };
 
-export const PISTA_ENERGIA_BONUS_PER_CONTRATTO: Record<PistaEnergiaSoglia, number> = {
+export const PISTA_ENERGIA_BONUS_PER_CONTRATTO_DEFAULT: Record<PistaEnergiaSoglia, number> = {
   S1: 0,
   S2: 5,
   S3: 15,
@@ -74,12 +74,24 @@ export const PISTA_ENERGIA_BONUS_PER_CONTRATTO: Record<PistaEnergiaSoglia, numbe
   S5: 45,
 };
 
-export function getPistaEnergiaSoglie(numPdv: number): PistaEnergiaSoglieSet {
-  return numPdv <= 3 ? PISTA_ENERGIA_SOGLIE_FINO_A_3 : PISTA_ENERGIA_SOGLIE_DA_4_IN_POI;
+export function getPistaEnergiaSoglie(numPdv: number, config: EnergiaConfig): PistaEnergiaSoglieSet {
+  return numPdv <= 3
+    ? { S1: config.pistaFinoA3_S1, S2: config.pistaFinoA3_S2, S3: config.pistaFinoA3_S3, S4: config.pistaFinoA3_S4, S5: config.pistaFinoA3_S5 }
+    : { S1: config.pistaDa4_S1, S2: config.pistaDa4_S2, S3: config.pistaDa4_S3, S4: config.pistaDa4_S4, S5: config.pistaDa4_S5 };
 }
 
-export function getPistaEnergiaSoglieEffettive(numPdv: number): PistaEnergiaSoglieSet {
-  const base = getPistaEnergiaSoglie(numPdv);
+export function getPistaEnergiaBonusPerContratto(config: EnergiaConfig): Record<PistaEnergiaSoglia, number> {
+  return {
+    S1: config.pistaBonus_S1,
+    S2: config.pistaBonus_S2,
+    S3: config.pistaBonus_S3,
+    S4: config.pistaBonus_S4,
+    S5: config.pistaBonus_S5,
+  };
+}
+
+export function getPistaEnergiaSoglieEffettive(numPdv: number, config: EnergiaConfig): PistaEnergiaSoglieSet {
+  const base = getPistaEnergiaSoglie(numPdv, config);
   return {
     S1: base.S1 * numPdv,
     S2: base.S2 * numPdv,
@@ -89,8 +101,8 @@ export function getPistaEnergiaSoglieEffettive(numPdv: number): PistaEnergiaSogl
   };
 }
 
-export function determinaPistaEnergiaSoglia(totalePezzi: number, numPdv: number): PistaEnergiaSoglia | null {
-  const soglie = getPistaEnergiaSoglieEffettive(numPdv);
+export function determinaPistaEnergiaSoglia(totalePezzi: number, numPdv: number, config: EnergiaConfig): PistaEnergiaSoglia | null {
+  const soglie = getPistaEnergiaSoglieEffettive(numPdv, config);
   if (totalePezzi >= soglie.S5) return "S5";
   if (totalePezzi >= soglie.S4) return "S4";
   if (totalePezzi >= soglie.S3) return "S3";
@@ -99,10 +111,11 @@ export function determinaPistaEnergiaSoglia(totalePezzi: number, numPdv: number)
   return null;
 }
 
-export function calcolaBonusPistaEnergia(totalePezzi: number, numPdv: number): { sogliaRaggiunta: PistaEnergiaSoglia | null; bonusPerContratto: number; bonusTotale: number } {
-  const soglia = determinaPistaEnergiaSoglia(totalePezzi, numPdv);
+export function calcolaBonusPistaEnergia(totalePezzi: number, numPdv: number, config: EnergiaConfig): { sogliaRaggiunta: PistaEnergiaSoglia | null; bonusPerContratto: number; bonusTotale: number } {
+  const soglia = determinaPistaEnergiaSoglia(totalePezzi, numPdv, config);
   if (!soglia) return { sogliaRaggiunta: null, bonusPerContratto: 0, bonusTotale: 0 };
-  const bonusPerContratto = PISTA_ENERGIA_BONUS_PER_CONTRATTO[soglia];
+  const bonusMap = getPistaEnergiaBonusPerContratto(config);
+  const bonusPerContratto = bonusMap[soglia];
   return { sogliaRaggiunta: soglia, bonusPerContratto, bonusTotale: bonusPerContratto * totalePezzi };
 }
 
@@ -112,6 +125,21 @@ export interface EnergiaConfig {
   targetS1: number;
   targetS2: number;
   targetS3: number;
+  pistaFinoA3_S1: number;
+  pistaFinoA3_S2: number;
+  pistaFinoA3_S3: number;
+  pistaFinoA3_S4: number;
+  pistaFinoA3_S5: number;
+  pistaDa4_S1: number;
+  pistaDa4_S2: number;
+  pistaDa4_S3: number;
+  pistaDa4_S4: number;
+  pistaDa4_S5: number;
+  pistaBonus_S1: number;
+  pistaBonus_S2: number;
+  pistaBonus_S3: number;
+  pistaBonus_S4: number;
+  pistaBonus_S5: number;
 }
 
 export interface EnergiaPdvInGara {
