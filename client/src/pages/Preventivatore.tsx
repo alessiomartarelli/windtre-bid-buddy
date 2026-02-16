@@ -25,6 +25,7 @@ import { StepEnergiaRS } from "@/components/wizard/StepEnergiaRS";
 import { StepSceltaModalitaRS } from "@/components/wizard/StepSceltaModalitaRS";
 import { usePreventivatoreStorage } from "@/hooks/use-preventivatore-storage";
 import { useOrganizationConfig } from "@/hooks/useOrganizationConfig";
+import { useTabelleCalcoloConfig } from "@/hooks/useTabelleCalcoloConfig";
 import { usePreventivi } from "@/hooks/usePreventivi";
 import { useToast } from "@/hooks/use-toast";
 import { PartnershipRewardPosConfig, getDefaultTarget100, calculateTarget80, calculatePremio80 } from "@/types/partnership-reward";
@@ -63,6 +64,7 @@ const Preventivatore = () => {
   const { loadRemoteConfig, saveRemoteConfigDebounced, saveRemoteConfigNow } = useOrganizationConfig();
   const { createPreventivo, updatePreventivo, loadPreventivo } = usePreventivi();
   const { toast } = useToast();
+  const { config: tabelleCalcoloConfig } = useTabelleCalcoloConfig();
   
   const [step, setStep] = useState(0);
   const [configGara, setConfigGara] = useState<ConfigGaraBase>({ nomeGara: "", haLetteraUfficiale: false, annoGara: new Date().getFullYear(), meseGara: new Date().getMonth() + 1, tipoPeriodo: "mensile", tipologiaGara: "gara_operatore" });
@@ -1022,6 +1024,7 @@ const Preventivatore = () => {
           pistaConfig: conf,
           attivato: righe,
           workdayInfoOverride,
+          gettoniContrattualiOverride: tabelleCalcoloConfig?.fisso?.gettoniContrattuali,
         });
         return { pdv, conf, righe, result };
       }).filter(Boolean) as any[];
@@ -1049,6 +1052,7 @@ const Preventivatore = () => {
         pistaConfig: conf,
         attivato: righe,
         workdayInfoOverride,
+        gettoniContrattualiOverride: tabelleCalcoloConfig?.fisso?.gettoniContrattuali,
       });
       return { pdv, conf, righe, result };
     }).filter(Boolean) as any[];
@@ -1105,6 +1109,7 @@ const Preventivatore = () => {
       pdvInGaraList: energiaPdvInGara,
       isNegozioInGara,
       numPdv: numPdvRS,
+      compensiBaseOverride: tabelleCalcoloConfig?.energia?.compensiBase,
     });
     return result;
   }).filter(Boolean) as any[];
@@ -1146,7 +1151,9 @@ const Preventivatore = () => {
     puntiVendita,
     assicurazioniConfig,
     assicurazioniPdvInGara,
-    effectiveAssicurazioniData
+    effectiveAssicurazioniData,
+    tabelleCalcoloConfig?.assicurazioni?.puntiProdotto,
+    tabelleCalcoloConfig?.assicurazioni?.premiProdotto,
   );
 
   // In RS mode, ricalcola bonus soglia con target moltiplicati per n° PDV della RS
@@ -1190,7 +1197,11 @@ const Preventivatore = () => {
   })();
 
   // Calcolo risultati Protecta
-  const protectaResults = calcolaProtecta(effectiveProtectaData, puntiVendita);
+  const protectaResults = calcolaProtecta(
+    effectiveProtectaData,
+    puntiVendita,
+    tabelleCalcoloConfig?.protecta?.gettoniProdotto,
+  );
   const totalePremioProtecta = calcolaTotaleProtecta(protectaResults);
 
   // Calcolo risultati Extra IVA (usa gli stessi dati effettivi già calcolati sopra)
@@ -1201,6 +1212,12 @@ const Preventivatore = () => {
     attivatoEnergiaByPos: effectiveEnergiaData,
     attivatoAssicurazioniByPos: effectiveAssicurazioniData,
     attivatoProtectaByPos: effectiveProtectaData,
+    configOverrides: tabelleCalcoloConfig?.extraGara ? {
+      puntiAttivazione: tabelleCalcoloConfig.extraGara.puntiAttivazione,
+      soglieMultipos: tabelleCalcoloConfig.extraGara.soglieMultipos,
+      soglieMonopos: tabelleCalcoloConfig.extraGara.soglieMonopos,
+      premiPerSoglia: tabelleCalcoloConfig.extraGara.premiPerSoglia,
+    } : undefined,
   });
   const totalePremioExtraGaraIva = calcolaTotaleExtraGaraIva(extraGaraIvaResults);
 

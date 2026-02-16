@@ -360,9 +360,10 @@ export function calcolaPremioPistaFissoPerPos(params: {
   posCode: string;
   pistaConfig: PistaFissoPosConfig;
   attivato: AttivatoFissoRiga[];
-  categorieConfig?: FissoCategoriaConfig[]; // se non passi niente usa default
+  categorieConfig?: FissoCategoriaConfig[];
   today?: Date;
-  workdayInfoOverride?: WorkdayInfo; // Usa questo se fornito (da calendario mese con override)
+  workdayInfoOverride?: WorkdayInfo;
+  gettoniContrattualiOverride?: Record<string, number>;
 }): CalcoloFissoPerPosResult {
   const {
     annoGara,
@@ -375,7 +376,12 @@ export function calcolaPremioPistaFissoPerPos(params: {
     categorieConfig = FISSO_CATEGORIE_DEFAULT,
     today = new Date(),
     workdayInfoOverride,
+    gettoniContrattualiOverride,
   } = params;
+
+  const effectiveGettoni = gettoniContrattualiOverride
+    ? { ...GETTONE_CONTRATTUALE_FISSO, ...gettoniContrattualiOverride } as Record<FissoCategoriaType, number>
+    : GETTONE_CONTRATTUALE_FISSO;
 
   const monthIndex = meseGara - 1;
   const categorieMap = new Map<FissoCategoriaType, FissoCategoriaConfig>();
@@ -403,8 +409,7 @@ export function calcolaPremioPistaFissoPerPos(params: {
     if (!cat) continue;
     puntiTotali += r.pezzi * cat.puntiPerPezzo;
     
-    // Aggiungi gettone contrattuale
-    const gettone = GETTONE_CONTRATTUALE_FISSO[r.categoria] ?? 0;
+    const gettone = effectiveGettoni[r.categoria] ?? 0;
     gettoneContrattuale += r.pezzi * gettone;
   }
 

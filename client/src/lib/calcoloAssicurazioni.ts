@@ -14,7 +14,9 @@ export function calcoloAssicurazioniPerPos(
   puntiVendita: PuntoVendita[],
   config: AssicurazioniConfig,
   pdvInGara: AssicurazioniPdvInGara[],
-  attivatoByPos: Record<string, AssicurazioniAttivatoRiga>
+  attivatoByPos: Record<string, AssicurazioniAttivatoRiga>,
+  puntiOverride?: Record<string, number>,
+  premiOverride?: Record<string, number>,
 ): AssicurazioniResult[] {
   const results: AssicurazioniResult[] = [];
   const pdvCodificatiInGara = pdvInGara.filter(p => p.inGara).length;
@@ -43,11 +45,14 @@ export function calcoloAssicurazioniPerPos(
       'micioFido',
     ];
 
+    const effectivePoints = puntiOverride ? { ...ASSICURAZIONI_POINTS, ...puntiOverride } : ASSICURAZIONI_POINTS;
+    const effectivePremiums = premiOverride ? { ...ASSICURAZIONI_PREMIUMS, ...premiOverride } : ASSICURAZIONI_PREMIUMS;
+
     for (const prodotto of prodottiStandard) {
       const pezzi = attivato[prodotto];
       if (pezzi > 0) {
-        const punti = pezzi * ASSICURAZIONI_POINTS[prodotto];
-        const premio = pezzi * ASSICURAZIONI_PREMIUMS[prodotto];
+        const punti = pezzi * (effectivePoints[prodotto] ?? 0);
+        const premio = pezzi * (effectivePremiums[prodotto] ?? 0);
         puntiTotali += punti;
         premioBase += premio;
         dettaglioProdotti.push({

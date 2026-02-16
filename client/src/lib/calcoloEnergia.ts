@@ -17,6 +17,8 @@ interface CalcoloEnergiaParams {
   pdvInGaraList: EnergiaPdvInGara[];
   isNegozioInGara: boolean;
   numPdv: number;
+  compensiBaseOverride?: Record<string, number>;
+  bonusPerContrattoOverride?: number;
 }
 
 export function calcoloEnergiaPerPos({
@@ -26,6 +28,8 @@ export function calcoloEnergiaPerPos({
   pdvInGaraList,
   isNegozioInGara,
   numPdv,
+  compensiBaseOverride,
+  bonusPerContrattoOverride,
 }: CalcoloEnergiaParams): EnergiaResult {
   const pezziPerCategoria: Record<EnergiaCategory, number> = {
     CONSUMER_CON_SDD: 0,
@@ -44,9 +48,14 @@ export function calcoloEnergiaPerPos({
 
   const totalePezzi = Object.values(pezziPerCategoria).reduce((a, b) => a + b, 0);
 
+  const basePay = compensiBaseOverride
+    ? { ...ENERGIA_BASE_PAY, ...compensiBaseOverride } as Record<EnergiaCategory, number>
+    : ENERGIA_BASE_PAY;
+  const bonusContratto = bonusPerContrattoOverride ?? ENERGIA_BONUS_PER_CONTRATTO;
+
   let premioBase = 0;
   (Object.keys(pezziPerCategoria) as EnergiaCategory[]).forEach((cat) => {
-    premioBase += pezziPerCategoria[cat] * ENERGIA_BASE_PAY[cat];
+    premioBase += pezziPerCategoria[cat] * basePay[cat];
   });
 
   const sogliaBonus = ENERGIA_SOGLIA_BONUS_BASE * config.pdvInGara;
@@ -54,7 +63,7 @@ export function calcoloEnergiaPerPos({
   
   let bonusRaggiungimentoSoglia = 0;
   if (totalePezziRagioneSociale >= sogliaBonus) {
-    bonusRaggiungimentoSoglia = totalePezzi * ENERGIA_BONUS_PER_CONTRATTO;
+    bonusRaggiungimentoSoglia = totalePezzi * bonusContratto;
   }
 
   let premioSoglia = 0;

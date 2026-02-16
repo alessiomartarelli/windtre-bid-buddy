@@ -36,6 +36,13 @@ export const PREMI_EXTRA_GARA: Record<ClusterPIvaCode, number[]> = {
   senza_business_promoter: [0, 10, 15, 25, 25], // S4 = S3
 };
 
+interface ExtraGaraConfigOverrides {
+  puntiAttivazione?: Record<string, number>;
+  soglieMultipos?: Record<string, Record<string, number>>;
+  soglieMonopos?: Record<string, Record<string, number>>;
+  premiPerSoglia?: Record<string, number[]>;
+}
+
 interface CalcolaExtraGaraIvaParams {
   puntiVendita: PuntoVendita[];
   attivatoMobileByPos: Record<string, AttivatoMobileDettaglio[]>;
@@ -43,6 +50,7 @@ interface CalcolaExtraGaraIvaParams {
   attivatoEnergiaByPos: Record<string, EnergiaAttivatoRiga[]>;
   attivatoAssicurazioniByPos: Record<string, AssicurazioniAttivatoRiga>;
   attivatoProtectaByPos: Record<string, ProtectaAttivatoRiga>;
+  configOverrides?: ExtraGaraConfigOverrides;
 }
 
 // Estrae i pezzi da Mobile per le categorie Extra Gara
@@ -117,24 +125,33 @@ const haBusinessPromoter = (clusterPIva: ClusterPIvaCode | ""): boolean => {
   return clusterPIva === "business_promoter_plus" || clusterPIva === "business_promoter";
 };
 
-// Calcola le soglie per una Ragione Sociale
 const calcolaSoglieRS = (
   pdvList: PuntoVendita[],
-  isMultipos: boolean
+  isMultipos: boolean,
+  soglieOverride?: ExtraGaraConfigOverrides,
 ): { s1: number; s2: number; s3: number; s4: number } => {
-  const baseType = isMultipos ? "multipos" : "monopos";
-  
   let s1 = 0, s2 = 0, s3 = 0, s4 = 0;
   
   for (const pdv of pdvList) {
     const hasBP = haBusinessPromoter(pdv.clusterPIva || "");
     const baseKey = hasBP ? "conBP" : "senzaBP";
-    const base = SOGLIE_BASE_EXTRA_GARA[baseType][baseKey];
+    
+    let base: { s1: number; s2: number; s3: number; s4: number };
+    if (isMultipos) {
+      const overrideSoglie = soglieOverride?.soglieMultipos?.[baseKey];
+      base = overrideSoglie
+        ? { s1: overrideSoglie.s1, s2: overrideSoglie.s2, s3: overrideSoglie.s3, s4: overrideSoglie.s4 }
+        : SOGLIE_BASE_EXTRA_GARA.multipos[baseKey];
+    } else {
+      const overrideSoglie = soglieOverride?.soglieMonopos?.[baseKey];
+      base = overrideSoglie
+        ? { s1: overrideSoglie.s1, s2: overrideSoglie.s2, s3: overrideSoglie.s3, s4: overrideSoglie.s4 }
+        : SOGLIE_BASE_EXTRA_GARA.monopos[baseKey];
+    }
     
     s1 += base.s1;
     s2 += base.s2;
     s3 += base.s3;
-    // Per S4: PDV senza BP contribuisce con la sua S3 massima
     s4 += hasBP ? base.s4 : base.s3;
   }
   
@@ -163,7 +180,15 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
     attivatoEnergiaByPos,
     attivatoAssicurazioniByPos,
     attivatoProtectaByPos,
+    configOverrides,
   } = params;
+
+  const effectivePunti = configOverrides?.puntiAttivazione
+    ? { ...PUNTI_EXTRA_GARA, ...configOverrides.puntiAttivazione }
+    : PUNTI_EXTRA_GARA;
+  const effectivePremi = configOverrides?.premiPerSoglia
+    ? { ...PREMI_EXTRA_GARA, ...configOverrides.premiPerSoglia } as Record<ClusterPIvaCode, number[]>
+    : PREMI_EXTRA_GARA;
 
   // Raggruppa PDV per ragioneSociale
   const pdvPerRS: Record<string, PuntoVendita[]> = {};
@@ -177,7 +202,7 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
 
   for (const [ragioneSociale, pdvList] of Object.entries(pdvPerRS)) {
     const isMultipos = pdvList.length > 1;
-    const soglie = calcolaSoglieRS(pdvList, isMultipos);
+    const soglie = calcolaSoglieRS(pdvList, isMultipos, configOverrides);
     
     // Verifica se almeno un PDV ha Business Promoter
     const hasBPInRS = pdvList.some(pdv => haBusinessPromoter(pdv.clusterPIva || ""));
@@ -201,15 +226,14 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
       const protezionePro = estraiPezziProtezionePro(assicurazioniAttivato);
       const negozioProtetti = estraiPezziNegozioProtetti(protectaAttivato);
 
-      // Calcola punti
-      const puntiWorldStaff = worldStaff * PUNTI_EXTRA_GARA.worldStaff;
-      const puntiFullPlus = fullPlus * PUNTI_EXTRA_GARA.fullPlusData60_100;
-      const puntiFlexSpecial = flexSpecial * PUNTI_EXTRA_GARA.flexSpecialData10;
-      const puntiFissoPIva = fissoPIva * PUNTI_EXTRA_GARA.fissoPIva;
-      const puntiFritzBox = fritzBox * PUNTI_EXTRA_GARA.fritzBox;
-      const puntiLuceGas = luceGas * PUNTI_EXTRA_GARA.luceGas;
-      const puntiProtezionePro = protezionePro * PUNTI_EXTRA_GARA.protezionePro;
-      const puntiNegozioProtetti = negozioProtetti * PUNTI_EXTRA_GARA.negozioProtetti;
+      const puntiWorldStaff = worldStaff * effectivePunti.worldStaff;
+      const puntiFullPlus = fullPlus * effectivePunti.fullPlusData60_100;
+      const puntiFlexSpecial = flexSpecial * effectivePunti.flexSpecialData10;
+      const puntiFissoPIva = fissoPIva * effectivePunti.fissoPIva;
+      const puntiFritzBox = fritzBox * effectivePunti.fritzBox;
+      const puntiLuceGas = luceGas * effectivePunti.luceGas;
+      const puntiProtezionePro = protezionePro * effectivePunti.protezionePro;
+      const puntiNegozioProtetti = negozioProtetti * effectivePunti.negozioProtetti;
 
       const puntiTotali = 
         puntiWorldStaff + puntiFullPlus + puntiFlexSpecial + 
@@ -260,13 +284,13 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
     let premioTotaleRS = 0;
     for (const pdvResult of pdvResults) {
       const clusterPIva = pdvResult.clusterPIva as ClusterPIvaCode;
-      if (!clusterPIva || !PREMI_EXTRA_GARA[clusterPIva]) {
+      if (!clusterPIva || !effectivePremi[clusterPIva]) {
         pdvResult.premioUnitario = 0;
         pdvResult.premioTotale = 0;
         continue;
       }
       
-      const premioUnitario = PREMI_EXTRA_GARA[clusterPIva][sogliaRaggiunta];
+      const premioUnitario = effectivePremi[clusterPIva][sogliaRaggiunta];
       const premioTotale = pdvResult.pezziTotali * premioUnitario;
       
       pdvResult.premioUnitario = premioUnitario;

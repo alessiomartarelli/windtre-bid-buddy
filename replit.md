@@ -62,14 +62,22 @@ Preferred communication style: Simple, everyday language.
 ### Business Logic Architecture
 The calculation engines are the core of the application, located in `client/src/lib/`:
 - `calcoliMobile.ts` - Mobile line point/premium calculations with threshold tiers
-- `calcoloPistaFisso.ts` - Fixed-line calculations with 5-tier thresholds
+- `calcoloPistaFisso.ts` - Fixed-line calculations with 5-tier thresholds (accepts `gettoniContrattualiOverride`)
 - `calcoloPartnershipReward.ts` - Partnership reward with target-based bonuses
-- `calcoloEnergia.ts` - Energy contract commissions with per-category rates
-- `calcoloAssicurazioni.ts` - Insurance product point/premium calculations
-- `calcoloProtecta.ts` - Protecta insurance product calculations
-- `calcoloExtraGaraIva.ts` - Extra competition P.IVA calculations with multi/mono-POS thresholds
+- `calcoloEnergia.ts` - Energy contract commissions with per-category rates (accepts `compensiBaseOverride`, `bonusPerContrattoOverride`)
+- `calcoloAssicurazioni.ts` - Insurance product point/premium calculations (accepts `puntiOverride`, `premiOverride`)
+- `calcoloProtecta.ts` - Protecta insurance product calculations (accepts `gettoniOverride`)
+- `calcoloExtraGaraIva.ts` - Extra competition P.IVA calculations with multi/mono-POS thresholds (accepts `configOverrides` with puntiAttivazione, soglie, premi)
 
 Each engine takes per-PDV configurations and activated volumes, returning structured results with breakdowns by product, threshold reached, and total premiums.
+
+### Centralized Configuration (Tabelle Calcolo)
+- **Page**: `client/src/pages/TabelleCalcolo.tsx` - Admin UI with 6 tabs for configuring calculation parameters
+- **Hook**: `client/src/hooks/useTabelleCalcoloConfig.ts` - Merges system defaults + org overrides into `TabelleCalcoloValues`
+- **Config Hierarchy**: Hardcoded defaults -> System config (key="tabelle_calcolo" in system_config table) -> Org overrides (in organization_config.tabelleCalcolo)
+- **Integration**: Preventivatore loads config via `useTabelleCalcoloConfig` hook and passes overrides to all calculation engine calls
+- **Configurable Values**: Unit prices/points/gettoni per product line; thresholds and aggregate logic remain automatic
+- **RS Calculations**: Remain unchanged - only per-PDV calculations use configurable values
 
 ## External Dependencies
 
