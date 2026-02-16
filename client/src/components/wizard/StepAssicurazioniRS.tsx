@@ -201,16 +201,6 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
                       
                       {/* Viaggio Mondo */}
                       <div className="space-y-1">
-                        <Label className="text-xs">Viaggio Mondo (pezzi)</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={attivato.viaggioMondo}
-                          onChange={(e) => handleAttivatoChange(rs, 'viaggioMondo', Number(e.target.value))}
-                          className="h-8"
-                        />
-                      </div>
-                      <div className="space-y-1">
                         <Label className="text-xs">Viaggio Mondo (€ premio)</Label>
                         <Input
                           type="number"
