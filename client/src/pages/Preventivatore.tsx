@@ -32,7 +32,7 @@ import { AttivatoCBDettaglio } from "@/types/partnership-cb-events";
 import { calcolaPartnershipRewardPerPos } from "@/lib/calcoloPartnershipReward";
 import { EnergiaConfig, EnergiaAttivatoRiga, EnergiaPdvInGara } from "@/types/energia";
 import { calcoloEnergiaPerPos } from "@/lib/calcoloEnergia";
-import { AssicurazioniConfig, AssicurazioniAttivatoRiga, AssicurazioniPdvInGara, createEmptyAssicurazioniAttivato } from "@/types/assicurazioni";
+import { AssicurazioniConfig, AssicurazioniAttivatoRiga, AssicurazioniPdvInGara, createEmptyAssicurazioniAttivato, ASSICURAZIONI_POINTS } from "@/types/assicurazioni";
 import { calcoloAssicurazioniPerPos } from "@/lib/calcoloAssicurazioni";
 import StepAssicurazioni from "@/components/wizard/StepAssicurazioni";
 import { StepAssicurazioniRS } from "@/components/wizard/StepAssicurazioniRS";
@@ -1138,7 +1138,45 @@ const Preventivatore = () => {
     effectiveAssicurazioniData
   );
 
-  const totalePremioAssicurazioni = assicurazioniResults.reduce((acc, r) => acc + r.premioTotale, 0);
+  // In RS mode, ricalcola bonus soglia con target moltiplicati per n° PDV della RS
+  const totalePremioAssicurazioni = (() => {
+    if (modalitaInserimentoRS !== "per_rs") {
+      return assicurazioniResults.reduce((acc: number, r: any) => acc + r.premioTotale, 0);
+    }
+    const premioBaseGlobale = assicurazioniResults.reduce((acc: number, r: any) => acc + r.premioBase, 0);
+    let bonusSogliaGlobale = 0;
+    const rsGroups: Record<string, number> = {};
+    puntiVendita.forEach(pdv => {
+      const rs = pdv.ragioneSociale || "Senza RS";
+      rsGroups[rs] = (rsGroups[rs] || 0) + 1;
+    });
+    Object.entries(rsGroups).forEach(([rs, numPdv]) => {
+      const attivato = attivatoAssicurazioniByRS[rs] ?? createEmptyAssicurazioniAttivato();
+      const prodottiStandard: (keyof typeof ASSICURAZIONI_POINTS)[] = [
+        'protezionePro', 'casaFamigliaFull', 'casaFamigliaPlus', 'casaFamigliaStart',
+        'sportFamiglia', 'sportIndividuale', 'viaggiVacanze', 'elettrodomestici', 'micioFido',
+      ];
+      let puntiBase = 0;
+      for (const prodotto of prodottiStandard) {
+        puntiBase += (attivato[prodotto] || 0) * ASSICURAZIONI_POINTS[prodotto];
+      }
+      if (attivato.viaggioMondoPremio > 0) {
+        puntiBase += (attivato.viaggioMondoPremio / 100) * 1.5;
+      }
+      const effectiveS1 = (assicurazioniConfig.targetS1 || 0) * numPdv;
+      const effectiveS2 = (assicurazioniConfig.targetS2 || 0) * numPdv;
+      // Reload Forever: solo dopo S1, max 15%
+      let puntiConReload = puntiBase;
+      if (puntiBase >= effectiveS1 && attivato.reloadForever > 0) {
+        const puntiReloadRaw = Math.floor(attivato.reloadForever / 5);
+        const maxReload = Math.floor(puntiBase * 0.15 / 0.85);
+        puntiConReload = puntiBase + Math.min(puntiReloadRaw, maxReload);
+      }
+      if (puntiBase >= effectiveS1) bonusSogliaGlobale += 500;
+      if (puntiConReload >= effectiveS2) bonusSogliaGlobale += 750;
+    });
+    return premioBaseGlobale + bonusSogliaGlobale;
+  })();
 
   // Calcolo risultati Protecta
   const protectaResults = calcolaProtecta(effectiveProtectaData, puntiVendita);

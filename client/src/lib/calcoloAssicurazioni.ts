@@ -77,29 +77,35 @@ export function calcoloAssicurazioniPerPos(
     let bonusSoglia1 = 0;
     let bonusSoglia2 = 0;
     let puntiTotaliConReload = puntiTotali;
+    let puntiReloadEffettivi = 0;
 
     if (isInGara) {
-      // Se supera soglia 1 (targetNoMalus), aggiungi punti Reload Forever
-      if (puntiTotali >= config.targetNoMalus && attivato.reloadForever > 0) {
-        const puntiReload = Math.floor(attivato.reloadForever / 5);
-        puntiTotaliConReload = puntiTotali + puntiReload;
+      // Reload Forever: 1 punto ogni 5 eventi, ma solo dopo aver superato S1 (targetS1)
+      // Cap: max 15% dei punti totali cumulati (assicurazioni + RF)
+      if (puntiTotali >= config.targetS1 && attivato.reloadForever > 0) {
+        const puntiReloadRaw = Math.floor(attivato.reloadForever / 5);
+        // Cap 15%: puntiRF / (puntiAssicurativi + puntiRF) <= 0.15
+        // → puntiRF <= puntiAssicurativi * 0.15 / 0.85
+        const maxReload = Math.floor(puntiTotali * 0.15 / 0.85);
+        puntiReloadEffettivi = Math.min(puntiReloadRaw, maxReload);
+        puntiTotaliConReload = puntiTotali + puntiReloadEffettivi;
         
-        if (puntiReload > 0) {
+        if (puntiReloadEffettivi > 0) {
           dettaglioProdotti.push({
             prodotto: ASSICURAZIONI_LABELS.reloadForever,
             pezzi: attivato.reloadForever,
-            punti: puntiReload,
+            punti: puntiReloadEffettivi,
             premio: 0,
           });
         }
       }
 
-      // Target S1: €500 per PDV codificato
-      if (puntiTotaliConReload >= config.targetS1) {
+      // Target S1: €500 per PDV codificato (basato su punti assicurativi base, senza RF)
+      if (puntiTotali >= config.targetS1) {
         bonusSoglia1 = 500;
       }
 
-      // Target S2: €750 per PDV
+      // Target S2: €750 per PDV (basato su punti totali con RF)
       if (puntiTotaliConReload >= config.targetS2) {
         bonusSoglia2 = 750;
       }

@@ -9,6 +9,7 @@ import {
   AssicurazioniConfig,
   AssicurazioniAttivatoRiga,
   ASSICURAZIONI_LABELS,
+  ASSICURAZIONI_POINTS,
   createEmptyAssicurazioniAttivato,
 } from "@/types/assicurazioni";
 import { formatCurrency } from "@/utils/format";
@@ -154,8 +155,30 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
       <div className="space-y-4">
         {ragioneSocialeList.map((rs) => {
           const pdvList = ragioneSocialeGroups[rs];
+          const numPdvRS = pdvList.length;
           const isOpen = openCards[rs] ?? true;
           const attivato = attivatoByRS[rs] || createEmptyAssicurazioniAttivato();
+
+          // Calcola punti base per questa RS
+          let puntiBaseRS = 0;
+          for (const prodotto of PRODOTTI_STANDARD) {
+            puntiBaseRS += (attivato[prodotto] || 0) * ASSICURAZIONI_POINTS[prodotto];
+          }
+          if (attivato.viaggioMondoPremio > 0) {
+            puntiBaseRS += (attivato.viaggioMondoPremio / 100) * 1.5;
+          }
+          const effectiveS1 = (config.targetS1 || 0) * numPdvRS;
+          const effectiveS2 = (config.targetS2 || 0) * numPdvRS;
+          // RF: solo dopo S1, max 15%
+          let puntiReloadEff = 0;
+          if (puntiBaseRS >= effectiveS1 && attivato.reloadForever > 0) {
+            const raw = Math.floor(attivato.reloadForever / 5);
+            const max15 = Math.floor(puntiBaseRS * 0.15 / 0.85);
+            puntiReloadEff = Math.min(raw, max15);
+          }
+          const puntiTotRS = puntiBaseRS + puntiReloadEff;
+          const sogliaRaggiunta = puntiTotRS >= effectiveS2 ? "S2" : puntiBaseRS >= effectiveS1 ? "S1" : "nessuna";
+          const premioSogliaRS = (puntiBaseRS >= effectiveS1 ? 500 : 0) + (puntiTotRS >= effectiveS2 ? 750 : 0);
 
           return (
             <Collapsible key={rs} open={isOpen} onOpenChange={() => toggleCard(rs)}>
@@ -169,9 +192,14 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
                         </div>
                         <div>
                           <CardTitle className="text-base">{rs}</CardTitle>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Store className="w-3 h-3" />
-                            <span>{pdvList.length} {pdvList.length === 1 ? 'negozio' : 'negozi'}</span>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span><Store className="w-3 h-3 inline" /> {numPdvRS} {numPdvRS === 1 ? 'negozio' : 'negozi'}</span>
+                            <span>· {puntiBaseRS.toFixed(1)} punti</span>
+                            {puntiReloadEff > 0 && <span>+ {puntiReloadEff} RF</span>}
+                            <span>· S1: {effectiveS1} · S2: {effectiveS2}</span>
+                            {sogliaRaggiunta !== "nessuna" && (
+                              <Badge variant="default" className="text-[10px] px-1.5 py-0">{sogliaRaggiunta} · {formatCurrency(premioSogliaRS)}</Badge>
+                            )}
                           </div>
                         </div>
                       </div>
