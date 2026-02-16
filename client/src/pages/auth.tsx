@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Eye, EyeOff, Smartphone, Wifi, Zap, Shield, TrendingUp, Users, BarChart3, Award } from 'lucide-react';
 
 const loginSchema = z.object({
@@ -14,12 +13,6 @@ const loginSchema = z.object({
   password: z.string().min(6, 'La password deve avere almeno 6 caratteri'),
 });
 
-const signupSchema = z.object({
-  email: z.string().email('Email non valida'),
-  password: z.string().min(6, 'La password deve avere almeno 6 caratteri'),
-  fullName: z.string().min(2, 'Il nome deve avere almeno 2 caratteri'),
-  organizationName: z.string().min(2, "Il nome dell'organizzazione deve avere almeno 2 caratteri"),
-});
 
 const featureCards = [
   {
@@ -77,18 +70,11 @@ export default function Auth() {
   const { user, loading: authLoading, signIn, signUp } = useAuth();
   const { toast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
   const [loading, setLoading] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [showSignupPassword, setShowSignupPassword] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-
-  const [signupEmail, setSignupEmail] = useState('');
-  const [signupPassword, setSignupPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [organizationName, setOrganizationName] = useState('');
 
   useEffect(() => {
     if (user && !authLoading) {
@@ -124,47 +110,6 @@ export default function Auth() {
         title: 'Errore',
         description: message,
         variant: 'destructive',
-      });
-    }
-  };
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const validation = signupSchema.safeParse({
-      email: signupEmail,
-      password: signupPassword,
-      fullName,
-      organizationName,
-    });
-
-    if (!validation.success) {
-      toast({
-        title: 'Errore di validazione',
-        description: validation.error.errors[0].message,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await signUp(signupEmail, signupPassword, fullName, organizationName);
-    setLoading(false);
-
-    if (error) {
-      let message = 'Errore durante la registrazione';
-      if (error.message.includes('User already registered')) {
-        message = 'Utente già registrato con questa email';
-      }
-      toast({
-        title: 'Errore',
-        description: message,
-        variant: 'destructive',
-      });
-    } else {
-      toast({
-        title: 'Registrazione completata',
-        description: 'Benvenuto! Stai per essere reindirizzato.',
       });
     }
   };
@@ -240,179 +185,66 @@ export default function Auth() {
             </h1>
           </div>
 
-          {/* Tab switcher */}
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'login' | 'signup')} className="mb-8" data-testid="tabs-auth">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login" data-testid="tab-login">Accedi</TabsTrigger>
-              <TabsTrigger value="signup" data-testid="tab-signup">Registrati</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {activeTab === 'login' ? (
-            <div>
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold" data-testid="text-auth-title">Bentornato</h2>
-                <p className="text-muted-foreground text-sm mt-1">
-                  Accedi al tuo account per continuare
-                </p>
-              </div>
-
-              <form onSubmit={handleLogin} className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email" className="text-sm font-medium">Email</Label>
-                  <Input
-                    id="login-email"
-                    type="email"
-                    placeholder="nome@azienda.it"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    required
-                    data-testid="input-login-email"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="login-password" className="text-sm font-medium">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="login-password"
-                      type={showLoginPassword ? 'text' : 'password'}
-                      placeholder="Inserisci la password"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      required
-                      className="pr-10"
-                      data-testid="input-login-password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowLoginPassword(!showLoginPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                      data-testid="button-toggle-login-password"
-                    >
-                      {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-                <Button type="submit" className="w-full" disabled={loading} data-testid="button-login">
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Accesso in corso...
-                    </>
-                  ) : (
-                    'Accedi'
-                  )}
-                </Button>
-              </form>
-
-              <p className="text-center text-sm text-muted-foreground mt-6">
-                Non hai un account?{' '}
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('signup')}
-                  className="text-primary font-medium"
-                  data-testid="link-go-to-signup"
-                >
-                  Registrati
-                </button>
+          <div>
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold" data-testid="text-auth-title">Bentornato</h2>
+              <p className="text-muted-foreground text-sm mt-1">
+                Accedi al tuo account per continuare
               </p>
             </div>
-          ) : (
-            <div>
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold" data-testid="text-auth-title">Crea Account</h2>
-                <p className="text-muted-foreground text-sm mt-1">
-                  Registra la tua organizzazione per iniziare
-                </p>
+
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="login-email" className="text-sm font-medium">Email</Label>
+                <Input
+                  id="login-email"
+                  type="email"
+                  placeholder="nome@azienda.it"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  required
+                  data-testid="input-login-email"
+                />
               </div>
-
-              <form onSubmit={handleSignup} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-fullname" className="text-sm font-medium">Nome Completo</Label>
-                    <Input
-                      id="signup-fullname"
-                      type="text"
-                      placeholder="Mario Rossi"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      required
-                      data-testid="input-signup-fullname"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-organization" className="text-sm font-medium">Organizzazione</Label>
-                    <Input
-                      id="signup-organization"
-                      type="text"
-                      placeholder="Nome azienda"
-                      value={organizationName}
-                      onChange={(e) => setOrganizationName(e.target.value)}
-                      required
-                      data-testid="input-signup-organization"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email" className="text-sm font-medium">Email</Label>
+              <div className="space-y-2">
+                <Label htmlFor="login-password" className="text-sm font-medium">Password</Label>
+                <div className="relative">
                   <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="nome@azienda.it"
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
+                    id="login-password"
+                    type={showLoginPassword ? 'text' : 'password'}
+                    placeholder="Inserisci la password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
                     required
-                    data-testid="input-signup-email"
+                    className="pr-10"
+                    data-testid="input-login-password"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(!showLoginPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    data-testid="button-toggle-login-password"
+                  >
+                    {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password" className="text-sm font-medium">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="signup-password"
-                      type={showSignupPassword ? 'text' : 'password'}
-                      placeholder="Minimo 6 caratteri"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      required
-                      className="pr-10"
-                      data-testid="input-signup-password"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowSignupPassword(!showSignupPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                      data-testid="button-toggle-signup-password"
-                    >
-                      {showSignupPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-                <Button type="submit" className="w-full" disabled={loading} data-testid="button-signup">
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Registrazione in corso...
-                    </>
-                  ) : (
-                    'Registrati'
-                  )}
-                </Button>
-              </form>
+              </div>
+              <Button type="submit" className="w-full" disabled={loading} data-testid="button-login">
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Accesso in corso...
+                  </>
+                ) : (
+                  'Accedi'
+                )}
+              </Button>
+            </form>
 
-              <p className="text-center text-sm text-muted-foreground mt-6">
-                Hai già un account?{' '}
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('login')}
-                  className="text-primary font-medium"
-                  data-testid="link-go-to-login"
-                >
-                  Accedi
-                </button>
-              </p>
-            </div>
-          )}
+            <p className="text-center text-sm text-muted-foreground mt-6">
+              Per ottenere un account, contatta l'amministratore della tua organizzazione.
+            </p>
+          </div>
         </div>
       </div>
     </div>
