@@ -1304,9 +1304,9 @@ const Preventivatore = () => {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            {activeConfigName && (
-              <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[150px]" data-testid="text-active-config">
-                {activeConfigName}
+            {(configGara.nomeGara || activeConfigName) && (
+              <span className="hidden sm:inline text-sm font-medium text-muted-foreground truncate max-w-[250px]" data-testid="text-active-config" title={configGara.nomeGara || activeConfigName || ""}>
+                {configGara.nomeGara || activeConfigName}
               </span>
             )}
             <Button 
