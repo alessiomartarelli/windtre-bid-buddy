@@ -18,7 +18,9 @@ export function serveStatic(app: Express) {
     const indexPath = path.resolve(distPath, "index.html");
     let html = fs.readFileSync(indexPath, "utf-8");
     if (BASE_PATH) {
-      html = html.replace("<head>", `<head><base href="${BASE_PATH}/">`);
+      html = html.replaceAll('src="/assets/', `src="${BASE_PATH}/assets/`);
+      html = html.replaceAll('href="/assets/', `href="${BASE_PATH}/assets/`);
+      html = html.replaceAll('href="/favicon', `href="${BASE_PATH}/favicon`);
     }
     res.status(200).set({ "Content-Type": "text/html" }).end(html);
   });
