@@ -73,7 +73,7 @@ export function calcoloEnergiaPerPos({
     }
   }
 
-  const pistaEnergia = calcolaBonusPistaEnergiaFn(totalePezzi, numPdv, config);
+  const pistaEnergia = calcolaBonusPistaEnergiaFn(totalePezzi, config);
 
   const premioTotale = premioBase + bonusRaggiungimentoSoglia + premioSoglia + pistaEnergia.bonusTotale;
 

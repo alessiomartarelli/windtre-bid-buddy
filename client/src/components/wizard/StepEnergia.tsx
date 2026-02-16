@@ -14,7 +14,7 @@ import {
   ENERGIA_CATEGORY_LABELS,
   ENERGIA_W3_CATEGORY_LABELS,
   ENERGIA_BASE_PAY,
-  getPistaEnergiaSoglieEffettive,
+  PISTA_ENERGIA_BONUS_PER_CONTRATTO,
   PistaEnergiaSoglia,
 } from "@/types/energia";
 import { formatCurrency } from "@/utils/format";
@@ -193,23 +193,23 @@ export function StepEnergia({
         <CardHeader>
           <CardTitle className="text-lg">Pista Energia</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Soglie per PDV e bonus per contratto al raggiungimento della soglia.
+            Soglie per RS (somma totale contratti). Bonus per contratto calcolato automaticamente.
           </p>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie fino a 3 PDV (per PDV)</p>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie per RS (totale contratti)</p>
               <div className="grid grid-cols-5 gap-3">
                 {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
                   <div key={s}>
                     <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
                     <Input
-                      data-testid={`input-pista-fino3-${s.toLowerCase()}`}
+                      data-testid={`input-pista-soglia-${s.toLowerCase()}`}
                       type="number"
                       min={0}
-                      value={energiaConfig[`pistaFinoA3_${s}` as keyof EnergiaConfig] as number || ""}
-                      onChange={(e) => handleConfigChange(`pistaFinoA3_${s}` as keyof EnergiaConfig, Number(e.target.value))}
+                      value={energiaConfig[`pistaSoglia_${s}` as keyof EnergiaConfig] as number || ""}
+                      onChange={(e) => handleConfigChange(`pistaSoglia_${s}` as keyof EnergiaConfig, Number(e.target.value))}
                       placeholder="0"
                     />
                   </div>
@@ -217,51 +217,18 @@ export function StepEnergia({
               </div>
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie dal 4° PDV in poi (per PDV)</p>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Bonus €/contratto (automatico)</p>
               <div className="grid grid-cols-5 gap-3">
                 {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
-                  <div key={s}>
+                  <div key={s} className="text-center">
                     <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
-                    <Input
-                      data-testid={`input-pista-da4-${s.toLowerCase()}`}
-                      type="number"
-                      min={0}
-                      value={energiaConfig[`pistaDa4_${s}` as keyof EnergiaConfig] as number || ""}
-                      onChange={(e) => handleConfigChange(`pistaDa4_${s}` as keyof EnergiaConfig, Number(e.target.value))}
-                      placeholder="0"
-                    />
+                    <div className="h-9 flex items-center justify-center text-sm font-medium text-muted-foreground bg-muted/50 rounded-md" data-testid={`text-pista-bonus-${s.toLowerCase()}`}>
+                      {formatCurrency(PISTA_ENERGIA_BONUS_PER_CONTRATTO[s])}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Bonus €/contratto per soglia raggiunta</p>
-              <div className="grid grid-cols-5 gap-3">
-                {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
-                  <div key={s}>
-                    <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
-                    <Input
-                      data-testid={`input-pista-bonus-${s.toLowerCase()}`}
-                      type="number"
-                      min={0}
-                      value={energiaConfig[`pistaBonus_${s}` as keyof EnergiaConfig] as number || ""}
-                      onChange={(e) => handleConfigChange(`pistaBonus_${s}` as keyof EnergiaConfig, Number(e.target.value))}
-                      placeholder="0"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-            {puntiVendita.length > 0 && (
-              <div className="mt-2 p-2 rounded-md bg-muted/50">
-                <p className="text-xs text-muted-foreground">
-                  Con {puntiVendita.length} PDV, soglie effettive: {" "}
-                  {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
-                    <span key={s} className="mr-2">{s === "S5" ? "S Extra" : s}={getPistaEnergiaSoglieEffettive(puntiVendita.length, energiaConfig)[s]}</span>
-                  ))}
-                </p>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>
