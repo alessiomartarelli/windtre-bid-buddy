@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
+import { apiUrl } from "@/lib/basePath";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -87,7 +88,7 @@ export default function AdminPanel() {
     setLoading(true);
     
     try {
-      const res = await fetch('/api/admin/team-members', { credentials: 'include' });
+      const res = await fetch(apiUrl('/api/admin/team-members'), { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setTeamMembers(data);
@@ -114,7 +115,7 @@ export default function AdminPanel() {
 
     setLoading(true);
     
-    const res = await fetch('/api/admin/create-user', {
+    const res = await fetch(apiUrl('/api/admin/create-user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -152,7 +153,7 @@ export default function AdminPanel() {
   const handleDeleteUser = async (userId: string) => {
     setDeletingId(userId);
     
-    const res = await fetch('/api/admin/delete-entity', {
+    const res = await fetch(apiUrl('/api/admin/delete-entity'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -201,7 +202,7 @@ export default function AdminPanel() {
 
     setLoading(true);
     
-    const res = await fetch('/api/admin/update-user', {
+    const res = await fetch(apiUrl('/api/admin/update-user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

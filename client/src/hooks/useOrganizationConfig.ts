@@ -1,6 +1,7 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { PreventivatoreConfig } from './use-preventivatore-storage';
+import { apiUrl } from "@/lib/basePath";
 
 const DEBOUNCE_MS = 2500;
 
@@ -29,7 +30,7 @@ export function useOrganizationConfig() {
     }
 
     try {
-      const response = await fetch('/api/organization-config', { credentials: 'include' });
+      const response = await fetch(apiUrl('/api/organization-config'), { credentials: 'include' });
       if (!response.ok) {
         if (response.status === 404) return null;
         throw new Error('Failed to load config');
@@ -59,7 +60,7 @@ export function useOrganizationConfig() {
       if (configJson === lastSavedConfig.current) return;
 
       try {
-        await fetch('/api/organization-config', {
+        await fetch(apiUrl('/api/organization-config'), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -82,7 +83,7 @@ export function useOrganizationConfig() {
     }
 
     try {
-      const response = await fetch('/api/organization-config', {
+      const response = await fetch(apiUrl('/api/organization-config'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

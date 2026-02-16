@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from './useAuth';
+import { apiUrl } from "@/lib/basePath";
 
 export interface Preventivo {
   id: string;
@@ -28,7 +29,7 @@ export function usePreventivi() {
     setError(null);
     
     try {
-      const response = await fetch('/api/preventivi', { credentials: 'include' });
+      const response = await fetch(apiUrl('/api/preventivi'), { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch');
       const data = await response.json();
       setPreventivi(data.map((p: any) => ({
@@ -50,7 +51,7 @@ export function usePreventivi() {
     if (!user) return { error: 'Utente non autenticato' };
 
     try {
-      const response = await fetch('/api/preventivi', {
+      const response = await fetch(apiUrl('/api/preventivi'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -76,7 +77,7 @@ export function usePreventivi() {
     if (!user) return { error: 'Utente non autenticato' };
 
     try {
-      const response = await fetch(`/api/preventivi/${id}`, {
+      const response = await fetch(apiUrl(`/api/preventivi/${id}`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -102,7 +103,7 @@ export function usePreventivi() {
     if (!user) return { error: 'Utente non autenticato' };
 
     try {
-      const response = await fetch(`/api/preventivi/${id}`, {
+      const response = await fetch(apiUrl(`/api/preventivi/${id}`), {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -118,7 +119,7 @@ export function usePreventivi() {
     if (!user) return { error: 'Utente non autenticato' };
 
     try {
-      const response = await fetch(`/api/preventivi/${id}`, { credentials: 'include' });
+      const response = await fetch(apiUrl(`/api/preventivi/${id}`), { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to load');
       const data = await response.json();
       return { data: { ...data, organization_id: data.organizationId, created_by: data.createdBy, created_at: data.createdAt, updated_at: data.updatedAt } };

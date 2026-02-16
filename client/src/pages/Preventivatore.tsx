@@ -25,6 +25,7 @@ import { StepEnergiaRS } from "@/components/wizard/StepEnergiaRS";
 import { StepSceltaModalitaRS } from "@/components/wizard/StepSceltaModalitaRS";
 import { usePreventivatoreStorage } from "@/hooks/use-preventivatore-storage";
 import { useOrganizationConfig } from "@/hooks/useOrganizationConfig";
+import { apiUrl } from "@/lib/basePath";
 import { useTabelleCalcoloConfig } from "@/hooks/useTabelleCalcoloConfig";
 import { usePreventivi } from "@/hooks/usePreventivi";
 import { useToast } from "@/hooks/use-toast";
@@ -141,8 +142,8 @@ const Preventivatore = () => {
     setLoadingConfigs(true);
     try {
       const [configsRes, backendRes] = await Promise.all([
-        fetch('/api/pdv-configurations', { credentials: 'include' }),
-        fetch('/api/organization-config', { credentials: 'include' }),
+        fetch(apiUrl('/api/pdv-configurations'), { credentials: 'include' }),
+        fetch(apiUrl('/api/organization-config'), { credentials: 'include' }),
       ]);
       if (configsRes.ok) {
         const data = await configsRes.json();
@@ -186,7 +187,7 @@ const Preventivatore = () => {
       const config = buildCurrentConfig();
       const isUpdate = activeConfigId && !forceNew;
       if (isUpdate) {
-        const res = await fetch(`/api/pdv-configurations/${activeConfigId}`, {
+        const res = await fetch(apiUrl(`/api/pdv-configurations/${activeConfigId}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -197,7 +198,7 @@ const Preventivatore = () => {
           toast({ title: "Configurazione aggiornata", description: `"${configName.trim()}" salvata con successo.` });
         }
       } else {
-        const res = await fetch('/api/pdv-configurations', {
+        const res = await fetch(apiUrl('/api/pdv-configurations'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -251,7 +252,7 @@ const Preventivatore = () => {
 
   const handleLoadConfig = async (configId: string) => {
     try {
-      const res = await fetch(`/api/pdv-configurations/${configId}`, { credentials: 'include' });
+      const res = await fetch(apiUrl(`/api/pdv-configurations/${configId}`), { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       applyConfigData(data.config);
@@ -266,7 +267,7 @@ const Preventivatore = () => {
 
   const handleDeleteConfig = async (configId: string, configNameToDelete: string) => {
     try {
-      const res = await fetch(`/api/pdv-configurations/${configId}`, { method: 'DELETE', credentials: 'include' });
+      const res = await fetch(apiUrl(`/api/pdv-configurations/${configId}`), { method: 'DELETE', credentials: 'include' });
       if (res.ok) {
         setSavedConfigs(prev => prev.filter(c => c.id !== configId));
         if (activeConfigId === configId) {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
+import { apiUrl } from "@/lib/basePath";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -87,8 +88,8 @@ export default function SuperAdminPanel() {
     
     try {
       const [orgsRes, profilesRes] = await Promise.all([
-        fetch('/api/admin/organizations', { credentials: 'include' }),
-        fetch('/api/admin/profiles', { credentials: 'include' }),
+        fetch(apiUrl('/api/admin/organizations'), { credentials: 'include' }),
+        fetch(apiUrl('/api/admin/profiles'), { credentials: 'include' }),
       ]);
 
       if (orgsRes.ok) {
@@ -121,7 +122,7 @@ export default function SuperAdminPanel() {
 
     setLoading(true);
     
-    const res = await fetch('/api/admin/create-user', {
+    const res = await fetch(apiUrl('/api/admin/create-user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -160,7 +161,7 @@ export default function SuperAdminPanel() {
   const handleDeleteUser = async (userId: string) => {
     setDeletingId(userId);
     
-    const res = await fetch('/api/admin/delete-entity', {
+    const res = await fetch(apiUrl('/api/admin/delete-entity'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -188,7 +189,7 @@ export default function SuperAdminPanel() {
   const handleDeleteOrganization = async (orgId: string) => {
     setDeletingId(orgId);
     
-    const res = await fetch('/api/admin/delete-entity', {
+    const res = await fetch(apiUrl('/api/admin/delete-entity'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

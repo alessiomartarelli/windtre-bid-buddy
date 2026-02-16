@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { apiUrl } from "@/lib/basePath";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -65,7 +66,7 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
     setTestResult(null);
 
     try {
-      const res = await fetch('/api/admin/bisuite-api', {
+      const res = await fetch(apiUrl('/api/admin/bisuite-api'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -150,7 +151,7 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
     setTestResult(null);
 
     try {
-      const res = await fetch('/api/admin/bisuite-api', {
+      const res = await fetch(apiUrl('/api/admin/bisuite-api'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { apiUrl } from "@/lib/basePath";
 
 interface Profile {
   id: string;
@@ -33,7 +34,7 @@ export function useAuth() {
 
   const fetchUser = useCallback(async () => {
     try {
-      const response = await fetch('/api/user', { credentials: 'include' });
+      const response = await fetch(apiUrl('/api/user'), { credentials: 'include' });
       if (response.status === 401) {
         setUser(null);
         setProfile(null);
@@ -68,7 +69,7 @@ export function useAuth() {
 
   const signIn = async (email: string, password: string): Promise<{ error: AuthError | null }> => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -98,7 +99,7 @@ export function useAuth() {
 
   const signUp = async (email: string, password: string, fullName: string, organizationName: string): Promise<{ error: AuthError | null }> => {
     try {
-      const response = await fetch('/api/auth/signup', {
+      const response = await fetch(apiUrl('/api/auth/signup'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -128,7 +129,7 @@ export function useAuth() {
 
   const signOut = async (): Promise<{ error: AuthError | null }> => {
     try {
-      await fetch('/api/auth/logout', {
+      await fetch(apiUrl('/api/auth/logout'), {
         method: 'POST',
         credentials: 'include',
       });

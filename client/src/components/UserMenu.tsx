@@ -1,5 +1,6 @@
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
+import { BASE_PATH } from '@/lib/basePath';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -27,7 +28,7 @@ export function UserMenu() {
         variant: 'destructive',
       });
     } else {
-      window.location.href = '/auth';
+      window.location.href = `${BASE_PATH}/auth`;
     }
   };
 

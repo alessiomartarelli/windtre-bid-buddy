@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { apiUrl as buildApiUrl } from "@/lib/basePath";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,7 +61,7 @@ export const BiSuiteConnectionForm = ({ organizations, onCredentialsSaved }: BiS
   const loadCredentials = async (orgId: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/admin/bisuite-credentials?org_id=${orgId}`, { credentials: 'include' });
+      const res = await fetch(buildApiUrl(`/api/admin/bisuite-credentials?org_id=${orgId}`), { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to load credentials');
       const data = await res.json();
 
@@ -148,7 +149,7 @@ export const BiSuiteConnectionForm = ({ organizations, onCredentialsSaved }: BiS
         client_secret: credentials.clientSecret,
       };
       if (hasExistingCredentials) {
-        const res = await fetch('/api/admin/bisuite-credentials', {
+        const res = await fetch(buildApiUrl('/api/admin/bisuite-credentials'), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -156,7 +157,7 @@ export const BiSuiteConnectionForm = ({ organizations, onCredentialsSaved }: BiS
         });
         if (!res.ok) throw new Error('Failed to update credentials');
       } else {
-        const res = await fetch('/api/admin/bisuite-credentials', {
+        const res = await fetch(buildApiUrl('/api/admin/bisuite-credentials'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',

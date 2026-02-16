@@ -79,6 +79,32 @@ Each engine takes per-PDV configurations and activated volumes, returning struct
 - **Configurable Values**: Unit prices/points/gettoni per product line; thresholds and aggregate logic remain automatic
 - **RS Calculations**: Remain unchanged - only per-PDV calculations use configurable values
 
+## Production Deployment (VPS Multi-App Architecture)
+
+### Architecture
+- **VPS**: 85.215.124.207, multi-app setup with Nginx reverse proxy
+- **Port**: 3001 (set via `PORT=3001` env var)
+- **Base Path**: `/incentivew3` - all routes, API calls, and static assets are served under this prefix in production
+- **Nginx**: Routes `/incentivew3` to `localhost:3001`, config example in `nginx-incentivew3.conf`
+
+### How It Works
+- `client/src/lib/basePath.ts`: Exports `BASE_PATH` (empty in dev, `/incentivew3` in production) and `apiUrl()` helper
+- All client-side `fetch()` calls use `apiUrl('/api/...')` to prefix the base path automatically
+- `server/index.ts`: In production, creates a sub-app mounted at `/incentivew3`; in dev, everything runs at root `/`
+- `server/static.ts`: In production, injects `<base href="/incentivew3/">` into the HTML for correct asset resolution
+- `wouter` Router uses `BASE_PATH` as its `base` prop for correct client-side routing
+- **Development on Replit**: Runs on port 5000 with no base path - completely unaffected
+
+### Deploy Commands (on VPS)
+```bash
+npm run build
+PORT=3001 npm run start
+```
+
+### Session Configuration
+- `FORCE_HTTPS=true` env var enables secure cookies in production
+- `SESSION_SECRET` must be set for session encryption
+
 ## External Dependencies
 
 - **PostgreSQL**: Primary database, connected via `DATABASE_URL` environment variable
