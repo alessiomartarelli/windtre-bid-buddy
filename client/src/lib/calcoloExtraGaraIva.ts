@@ -11,7 +11,7 @@ export const PUNTI_EXTRA_GARA = {
   fullPlusData60_100: 1,     // ALTRE_SIM_IVA (Full Plus, Data 60-100)
   flexSpecialData10: 0.5,    // PROFESSIONAL_FLEX + PROFESSIONAL_SPECIAL + PROFESSIONAL_DATA_10
   fissoPIva: 1,              // Fisso P.IVA 1ª + 2ª Linea
-  fritzBox: 1.5,             // FRITZ!Box
+  fritzBox: 0.5,             // FRITZ!Box
   luceGas: 1,                // Tutte le categorie Energia
   protezionePro: 5,          // Protezione Pro da Assicurazioni
   negozioProtetti: 5,        // Negozio Protetti da Protecta
