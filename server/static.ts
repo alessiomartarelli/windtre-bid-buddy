@@ -12,16 +12,14 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, { index: false }));
 
   app.use("/{*path}", (_req, res) => {
+    const indexPath = path.resolve(distPath, "index.html");
+    let html = fs.readFileSync(indexPath, "utf-8");
     if (BASE_PATH) {
-      const indexPath = path.resolve(distPath, "index.html");
-      let html = fs.readFileSync(indexPath, "utf-8");
       html = html.replace("<head>", `<head><base href="${BASE_PATH}/">`);
-      res.status(200).set({ "Content-Type": "text/html" }).end(html);
-    } else {
-      res.sendFile(path.resolve(distPath, "index.html"));
     }
+    res.status(200).set({ "Content-Type": "text/html" }).end(html);
   });
 }
