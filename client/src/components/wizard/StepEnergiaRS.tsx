@@ -13,7 +13,8 @@ import {
   ENERGIA_W3_CATEGORY_LABELS,
   ENERGIA_BASE_PAY,
   calcolaBonusPistaEnergia,
-  calcolaSogliePerRS,
+  calcolaSoglieDefaultPerRS,
+  getSoglieFromConfig,
   PISTA_ENERGIA_BONUS_PER_CONTRATTO,
   PistaEnergiaSoglia,
 } from "@/types/energia";
@@ -127,78 +128,82 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
                 readOnly
                 className="bg-muted"
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Soglia bonus: {55 * puntiVendita.length} contratti
-              </p>
             </div>
             <div>
-              <Label>No Malus ({energiaConfig.targetNoMalus || 0} × {puntiVendita.length})</Label>
+              <Label>No Malus (per PDV)</Label>
               <Input
                 type="number"
-                value={(energiaConfig.targetNoMalus || 0) * puntiVendita.length}
-                readOnly
-                className="bg-muted"
+                min={0}
+                value={energiaConfig.targetNoMalus || ""}
+                onChange={(e) => handleConfigChange("targetNoMalus", Number(e.target.value))}
+                data-testid="input-target-no-malus"
               />
             </div>
             <div>
-              <Label>S1 €250 ({energiaConfig.targetS1 || 0} × {puntiVendita.length})</Label>
+              <Label>S1 €250 (per PDV)</Label>
               <Input
                 type="number"
-                value={(energiaConfig.targetS1 || 0) * puntiVendita.length}
-                readOnly
-                className="bg-muted"
+                min={0}
+                value={energiaConfig.targetS1 || ""}
+                onChange={(e) => handleConfigChange("targetS1", Number(e.target.value))}
+                data-testid="input-target-s1"
               />
             </div>
             <div>
-              <Label>S2 €500 ({energiaConfig.targetS2 || 0} × {puntiVendita.length})</Label>
+              <Label>S2 €500 (per PDV)</Label>
               <Input
                 type="number"
-                value={(energiaConfig.targetS2 || 0) * puntiVendita.length}
-                readOnly
-                className="bg-muted"
+                min={0}
+                value={energiaConfig.targetS2 || ""}
+                onChange={(e) => handleConfigChange("targetS2", Number(e.target.value))}
+                data-testid="input-target-s2"
               />
             </div>
             <div>
-              <Label>S3 €1000 ({energiaConfig.targetS3 || 0} × {puntiVendita.length})</Label>
+              <Label>S3 €1000 (per PDV)</Label>
               <Input
                 type="number"
-                value={(energiaConfig.targetS3 || 0) * puntiVendita.length}
-                readOnly
-                className="bg-muted"
+                min={0}
+                value={energiaConfig.targetS3 || ""}
+                onChange={(e) => handleConfigChange("targetS3", Number(e.target.value))}
+                data-testid="input-target-s3"
               />
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Pista Energia - Soglie automatiche */}
+      {/* Pista Energia - Soglie editabili */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Pista Energia</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Soglie calcolate per RS in base al numero di PDV. Bonus per contratto al raggiungimento della soglia.
+            Soglie per RS (default calcolate in base al numero di PDV). Bonus per contratto al raggiungimento della soglia.
           </p>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {(() => {
-              const soglie = calcolaSogliePerRS(puntiVendita.length);
-              return (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Soglie Pista Energia ({puntiVendita.length} PDV totali)</p>
-                  <div className="grid grid-cols-5 gap-3">
-                    {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
-                      <div key={s} className="text-center">
-                        <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
-                        <div className="h-9 flex items-center justify-center text-sm font-medium text-muted-foreground bg-muted/50 rounded-md" data-testid={`text-pista-soglia-${s.toLowerCase()}`}>
-                          {soglie[s]}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie Pista Energia</p>
+              <div className="grid grid-cols-5 gap-3">
+                {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => {
+                  const configKey = `pistaSoglia_${s}` as keyof EnergiaConfig;
+                  const defaultVal = calcolaSoglieDefaultPerRS(puntiVendita.length)[s];
+                  return (
+                    <div key={s} className="text-center">
+                      <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={energiaConfig[configKey] ?? defaultVal}
+                        onChange={(e) => handleConfigChange(configKey, Number(e.target.value))}
+                        data-testid={`input-pista-soglia-${s.toLowerCase()}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">Bonus €/contratto per soglia raggiunta</p>
               <div className="grid grid-cols-5 gap-3">
@@ -274,8 +279,8 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
             sogliaRaggiuntaRS = 1;
           }
 
-          const pistaRS = calcolaBonusPistaEnergia(totalPezziRS, numPdvRS);
-          const soglieEffettiveRS = calcolaSogliePerRS(numPdvRS);
+          const pistaRS = calcolaBonusPistaEnergia(totalPezziRS, energiaConfig, numPdvRS);
+          const soglieEffettiveRS = getSoglieFromConfig(energiaConfig, numPdvRS);
           const premioTotaleRS = premioBaseRS + premioSogliaRS + pistaRS.bonusTotale;
 
           return (

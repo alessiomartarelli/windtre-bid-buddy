@@ -74,7 +74,7 @@ export const PISTA_ENERGIA_BONUS_PER_CONTRATTO: Record<PistaEnergiaSoglia, numbe
   S5: 45,
 };
 
-export function calcolaSogliePerRS(numPdv: number): PistaEnergiaSoglieSet {
+export function calcolaSoglieDefaultPerRS(numPdv: number): PistaEnergiaSoglieSet {
   const base = Math.min(numPdv, 3);
   const extra = Math.max(numPdv - 3, 0);
   return {
@@ -86,8 +86,19 @@ export function calcolaSogliePerRS(numPdv: number): PistaEnergiaSoglieSet {
   };
 }
 
-export function determinaPistaEnergiaSoglia(totalePezzi: number, numPdv: number): PistaEnergiaSoglia | null {
-  const soglie = calcolaSogliePerRS(numPdv);
+export function getSoglieFromConfig(config: EnergiaConfig, numPdv: number): PistaEnergiaSoglieSet {
+  const defaults = calcolaSoglieDefaultPerRS(numPdv);
+  return {
+    S1: config.pistaSoglia_S1 ?? defaults.S1,
+    S2: config.pistaSoglia_S2 ?? defaults.S2,
+    S3: config.pistaSoglia_S3 ?? defaults.S3,
+    S4: config.pistaSoglia_S4 ?? defaults.S4,
+    S5: config.pistaSoglia_S5 ?? defaults.S5,
+  };
+}
+
+export function determinaPistaEnergiaSoglia(totalePezzi: number, config: EnergiaConfig, numPdv: number): PistaEnergiaSoglia | null {
+  const soglie = getSoglieFromConfig(config, numPdv);
   if (totalePezzi >= soglie.S5) return "S5";
   if (totalePezzi >= soglie.S4) return "S4";
   if (totalePezzi >= soglie.S3) return "S3";
@@ -96,8 +107,8 @@ export function determinaPistaEnergiaSoglia(totalePezzi: number, numPdv: number)
   return null;
 }
 
-export function calcolaBonusPistaEnergia(totalePezzi: number, numPdv: number): { sogliaRaggiunta: PistaEnergiaSoglia | null; bonusPerContratto: number; bonusTotale: number } {
-  const soglia = determinaPistaEnergiaSoglia(totalePezzi, numPdv);
+export function calcolaBonusPistaEnergia(totalePezzi: number, config: EnergiaConfig, numPdv: number): { sogliaRaggiunta: PistaEnergiaSoglia | null; bonusPerContratto: number; bonusTotale: number } {
+  const soglia = determinaPistaEnergiaSoglia(totalePezzi, config, numPdv);
   if (!soglia) return { sogliaRaggiunta: null, bonusPerContratto: 0, bonusTotale: 0 };
   const bonusPerContratto = PISTA_ENERGIA_BONUS_PER_CONTRATTO[soglia];
   return { sogliaRaggiunta: soglia, bonusPerContratto, bonusTotale: bonusPerContratto * totalePezzi };
@@ -109,6 +120,11 @@ export interface EnergiaConfig {
   targetS1: number;
   targetS2: number;
   targetS3: number;
+  pistaSoglia_S1?: number;
+  pistaSoglia_S2?: number;
+  pistaSoglia_S3?: number;
+  pistaSoglia_S4?: number;
+  pistaSoglia_S5?: number;
 }
 
 export interface EnergiaPdvInGara {

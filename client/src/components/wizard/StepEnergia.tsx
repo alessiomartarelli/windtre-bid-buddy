@@ -14,7 +14,8 @@ import {
   ENERGIA_CATEGORY_LABELS,
   ENERGIA_W3_CATEGORY_LABELS,
   ENERGIA_BASE_PAY,
-  calcolaSogliePerRS,
+  calcolaSoglieDefaultPerRS,
+  getSoglieFromConfig,
   PISTA_ENERGIA_BONUS_PER_CONTRATTO,
   PistaEnergiaSoglia,
 } from "@/types/energia";
@@ -189,34 +190,37 @@ export function StepEnergia({
         </CardContent>
       </Card>
 
-      {/* Pista Energia - Soglie automatiche */}
+      {/* Pista Energia - Soglie editabili */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Pista Energia</CardTitle>
           <p className="text-xs text-muted-foreground">
-            Soglie calcolate per RS in base al numero di PDV. Bonus per contratto al raggiungimento della soglia.
+            Soglie per RS (default calcolate in base al numero di PDV). Bonus per contratto al raggiungimento della soglia.
           </p>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {(() => {
-              const soglie = calcolaSogliePerRS(puntiVendita.length);
-              return (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Soglie Pista Energia ({puntiVendita.length} PDV)</p>
-                  <div className="grid grid-cols-5 gap-3">
-                    {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
-                      <div key={s} className="text-center">
-                        <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
-                        <div className="h-9 flex items-center justify-center text-sm font-medium text-muted-foreground bg-muted/50 rounded-md" data-testid={`text-pista-soglia-${s.toLowerCase()}`}>
-                          {soglie[s]}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie Pista Energia</p>
+              <div className="grid grid-cols-5 gap-3">
+                {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => {
+                  const configKey = `pistaSoglia_${s}` as keyof EnergiaConfig;
+                  const defaultVal = calcolaSoglieDefaultPerRS(puntiVendita.length)[s];
+                  return (
+                    <div key={s} className="text-center">
+                      <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={energiaConfig[configKey] ?? defaultVal}
+                        onChange={(e) => handleConfigChange(configKey, Number(e.target.value))}
+                        data-testid={`input-pista-soglia-${s.toLowerCase()}`}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">Bonus €/contratto per soglia raggiunta</p>
               <div className="grid grid-cols-5 gap-3">

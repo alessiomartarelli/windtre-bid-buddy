@@ -1135,7 +1135,7 @@ const Preventivatore = () => {
       } else if (effectiveS1 > 0 && totalPezzi >= effectiveS1) {
         premioSogliaGlobale += 250;
       }
-      const pista = calcolaBonusPistaEnergiaFn(totalPezzi, numPdv);
+      const pista = calcolaBonusPistaEnergiaFn(totalPezzi, energiaConfig, numPdv);
       bonusPistaGlobale += pista.bonusTotale;
     });
     return premioBaseGlobale + premioSogliaGlobale + bonusPistaGlobale;
