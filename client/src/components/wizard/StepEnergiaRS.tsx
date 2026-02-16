@@ -121,12 +121,12 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
                 id="pdvInGara"
                 type="number"
                 min={0}
-                value={energiaConfig.pdvInGara || ""}
-                onChange={(e) => handleConfigChange("pdvInGara", Number(e.target.value))}
-                placeholder="N° PDV"
+                value={puntiVendita.length}
+                readOnly
+                className="bg-muted"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Soglia bonus: {55 * (energiaConfig.pdvInGara || 0)} contratti
+                Soglia bonus: {55 * puntiVendita.length} contratti
               </p>
             </div>
             <div>

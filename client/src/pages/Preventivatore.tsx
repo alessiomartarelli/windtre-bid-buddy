@@ -680,22 +680,24 @@ const Preventivatore = () => {
       return updated;
     });
     
-    // Imposta pdvInGara e target di default = numero di punti vendita
     setEnergiaConfig((prev) => {
+      const numPdv = puntiVendita.length;
+      if (modalitaInserimentoRS === "per_rs") {
+        return { ...prev, pdvInGara: numPdv };
+      }
       if (prev.pdvInGara === 0) {
-        const numPdv = puntiVendita.length;
         return { 
           ...prev, 
           pdvInGara: numPdv,
-          targetNoMalus: 10 * numPdv,
-          targetS1: 15 * numPdv,
-          targetS2: 25 * numPdv,
-          targetS3: 40 * numPdv,
+          targetNoMalus: 10,
+          targetS1: 15,
+          targetS2: 25,
+          targetS3: 40,
         };
       }
       return prev;
     });
-  }, [puntiVendita]);
+  }, [puntiVendita, modalitaInserimentoRS]);
 
   // Sincronizza assicurazioniPdvInGara quando cambiano i puntiVendita
   useEffect(() => {
