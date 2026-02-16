@@ -116,11 +116,9 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div>
-              <Label htmlFor="pdvInGara">PDV in gara (globale)</Label>
+              <Label>PDV in gara</Label>
               <Input
-                id="pdvInGara"
                 type="number"
-                min={0}
                 value={puntiVendita.length}
                 readOnly
                 className="bg-muted"
@@ -130,91 +128,42 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
               </p>
             </div>
             <div>
-              <Label htmlFor="targetNoMalus">Target No Malus (per PDV)</Label>
+              <Label>No Malus ({energiaConfig.targetNoMalus || 0} × {puntiVendita.length})</Label>
               <Input
-                id="targetNoMalus"
                 type="number"
-                min={0}
-                value={energiaConfig.targetNoMalus || ""}
-                onChange={(e) => handleConfigChange("targetNoMalus", Number(e.target.value))}
+                value={(energiaConfig.targetNoMalus || 0) * puntiVendita.length}
+                readOnly
+                className="bg-muted"
               />
-              {energiaConfig.targetNoMalus > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Effettivo: {(energiaConfig.targetNoMalus || 0) * puntiVendita.length}
-                </p>
-              )}
             </div>
             <div>
-              <Label htmlFor="targetS1">Target S1 - €250 (per PDV)</Label>
+              <Label>S1 €250 ({energiaConfig.targetS1 || 0} × {puntiVendita.length})</Label>
               <Input
-                id="targetS1"
                 type="number"
-                min={0}
-                value={energiaConfig.targetS1 || ""}
-                onChange={(e) => handleConfigChange("targetS1", Number(e.target.value))}
+                value={(energiaConfig.targetS1 || 0) * puntiVendita.length}
+                readOnly
+                className="bg-muted"
               />
-              {energiaConfig.targetS1 > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Effettivo: {(energiaConfig.targetS1 || 0) * puntiVendita.length}
-                </p>
-              )}
             </div>
             <div>
-              <Label htmlFor="targetS2">Target S2 - €500 (per PDV)</Label>
+              <Label>S2 €500 ({energiaConfig.targetS2 || 0} × {puntiVendita.length})</Label>
               <Input
-                id="targetS2"
                 type="number"
-                min={0}
-                value={energiaConfig.targetS2 || ""}
-                onChange={(e) => handleConfigChange("targetS2", Number(e.target.value))}
+                value={(energiaConfig.targetS2 || 0) * puntiVendita.length}
+                readOnly
+                className="bg-muted"
               />
-              {energiaConfig.targetS2 > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Effettivo: {(energiaConfig.targetS2 || 0) * puntiVendita.length}
-                </p>
-              )}
             </div>
             <div>
-              <Label htmlFor="targetS3">Target S3 - €1000 (per PDV)</Label>
+              <Label>S3 €1000 ({energiaConfig.targetS3 || 0} × {puntiVendita.length})</Label>
               <Input
-                id="targetS3"
                 type="number"
-                min={0}
-                value={energiaConfig.targetS3 || ""}
-                onChange={(e) => handleConfigChange("targetS3", Number(e.target.value))}
+                value={(energiaConfig.targetS3 || 0) * puntiVendita.length}
+                readOnly
+                className="bg-muted"
               />
-              {energiaConfig.targetS3 > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Effettivo: {(energiaConfig.targetS3 || 0) * puntiVendita.length}
-                </p>
-              )}
             </div>
           </div>
-
-          {/* Riepilogo soglie effettive per RS */}
-          {(energiaConfig.targetS1 || energiaConfig.targetS2 || energiaConfig.targetS3) && (
-            <div className="mt-4 pt-4 border-t">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie effettive per Ragione Sociale (target × n° PDV)</p>
-              <div className="space-y-1">
-                {ragioneSocialeList.map(rs => {
-                  const numPdv = ragioneSocialeGroups[rs]?.length || 0;
-                  const effS1 = (energiaConfig.targetS1 || 0) * numPdv;
-                  const effS2 = (energiaConfig.targetS2 || 0) * numPdv;
-                  const effS3 = (energiaConfig.targetS3 || 0) * numPdv;
-                  const effNoMalus = (energiaConfig.targetNoMalus || 0) * numPdv;
-                  return (
-                    <div key={rs} className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-medium min-w-[120px]">{rs} ({numPdv} PDV):</span>
-                      <Badge variant="outline" className="text-xs">No Malus: {effNoMalus}</Badge>
-                      {effS1 > 0 && <Badge variant="outline" className="text-xs">S1: {effS1}</Badge>}
-                      {effS2 > 0 && <Badge variant="outline" className="text-xs">S2: {effS2}</Badge>}
-                      {effS3 > 0 && <Badge variant="outline" className="text-xs">S3: {effS3}</Badge>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 
