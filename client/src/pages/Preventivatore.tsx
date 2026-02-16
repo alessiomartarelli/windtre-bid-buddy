@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfigGaraBase, PuntoVendita, PistaMobileConfig, PistaMobilePosConfig, MobileCategoryConfig, AttivatoMobileDettaglio, GaraConfigUpload, MOBILE_CATEGORIES_CONFIG_DEFAULT, PistaMobileRSConfig, PistaFissoRSConfig, PartnershipRewardRSConfig, ModalitaInserimentoRS } from "@/types/preventivatore";
-import { createEmptyPdv, createDefaultPistaMobileConfig, getDefaultFissoThresholds, mapClusterFissoToNumber, generaPartnershipRSDefault } from "@/utils/preventivatore-helpers";
+import { createEmptyPdv, createDefaultPistaMobileConfig, getDefaultFissoThresholds, mapClusterFissoToNumber, generaPartnershipRSDefault, getDefaultSoglieMobileRS, getDefaultSoglieFissoRS, raggruppaPdvPerRS } from "@/utils/preventivatore-helpers";
 import { calcolaPremioPistaMobilePerPos } from "@/utils/calcoli-mobile";
 import { calcolaPremioPistaFissoPerPos, PistaFissoPosConfig, AttivatoFissoRiga } from "@/lib/calcoloPistaFisso";
 import { getWorkdayInfoFromOverrides } from "@/utils/calendario";
@@ -886,6 +886,8 @@ const Preventivatore = () => {
   const effectiveAssicurazioniData = getEffectiveAssicurazioniData();
   const effectiveProtectaData = getEffectiveProtectaData();
 
+  const computedRSMap = useMemo(() => raggruppaPdvPerRS(puntiVendita), [puntiVendita]);
+
   const mobileResults = (() => {
     if (modalitaInserimentoRS === "per_rs") {
       const processedRS = new Set<string>();
@@ -900,18 +902,21 @@ const Preventivatore = () => {
         );
         if (!rsConf) return null;
         
+        const pdvListForRS = computedRSMap.get(rs) || [];
+        const computedSoglie = getDefaultSoglieMobileRS(pdvListForRS);
+        
         const conf: PistaMobilePosConfig = {
           posCode: pdv.codicePos,
-          soglia1: rsConf.soglia1,
-          soglia2: rsConf.soglia2,
-          soglia3: rsConf.soglia3,
-          soglia4: rsConf.soglia4,
+          soglia1: computedSoglie.soglia1,
+          soglia2: computedSoglie.soglia2,
+          soglia3: computedSoglie.soglia3,
+          soglia4: computedSoglie.soglia4,
           multiplierSoglia1: 1,
           multiplierSoglia2: 1.2,
           multiplierSoglia3: 1.5,
           multiplierSoglia4: 2,
           canoneMedio: rsConf.canoneMedio,
-          forecastTargetPunti: rsConf.forecastTargetPunti,
+          forecastTargetPunti: computedSoglie.forecastTargetPunti,
         };
         
         const righe = attivatoMobileByRS[rs] ?? [];
@@ -977,19 +982,22 @@ const Preventivatore = () => {
         );
         if (!rsConf) return null;
         
+        const pdvListForFissoRS = computedRSMap.get(rs) || [];
+        const computedFissoSoglie = getDefaultSoglieFissoRS(pdvListForFissoRS);
+        
         const conf: PistaFissoPosConfig = {
           posCode: pdv.codicePos,
-          soglia1: rsConf.soglia1,
-          soglia2: rsConf.soglia2,
-          soglia3: rsConf.soglia3,
-          soglia4: rsConf.soglia4,
-          soglia5: rsConf.soglia5 ?? 0,
+          soglia1: computedFissoSoglie.soglia1,
+          soglia2: computedFissoSoglie.soglia2,
+          soglia3: computedFissoSoglie.soglia3,
+          soglia4: computedFissoSoglie.soglia4,
+          soglia5: computedFissoSoglie.soglia5 ?? 0,
           multiplierSoglia1: 2,
           multiplierSoglia2: 3,
           multiplierSoglia3: 3.5,
           multiplierSoglia4: 4,
           multiplierSoglia5: 5,
-          forecastTargetPunti: rsConf.forecastTargetPunti,
+          forecastTargetPunti: computedFissoSoglie.forecastTargetPunti,
         };
         
         const righe = attivatoFissoByRS[rs] ?? [];

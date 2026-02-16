@@ -152,6 +152,11 @@ export const raggruppaPdvPerRS = (puntiVendita: PuntoVendita[]): Map<string, Pun
  * Calcola le soglie Mobile aggregate di default per una Ragione Sociale
  * sommando le soglie di tutti i PDV della RS
  */
+const applyScontoSoglia = (value: number, scontoPercent?: number): number => {
+  if (!scontoPercent || scontoPercent <= 0) return value;
+  return Math.round(value * (1 - scontoPercent / 100));
+};
+
 export const getDefaultSoglieMobileRS = (
   pdvList: PuntoVendita[]
 ): Omit<SoglieMobileRS, 'ragioneSociale'> => {
@@ -161,10 +166,10 @@ export const getDefaultSoglieMobileRS = (
     if (!pdv.clusterMobile) continue;
     const clusterPista = mapClusterMobileToClusterPista(pdv.clusterMobile as ClusterCode);
     const thresholds = getThresholdsByCluster(pdv.tipoPosizione, clusterPista, pdv.clusterMobile);
-    totale.soglia1 += thresholds.soglia1;
-    totale.soglia2 += thresholds.soglia2;
-    totale.soglia3 += thresholds.soglia3;
-    totale.soglia4 += thresholds.soglia4;
+    totale.soglia1 += applyScontoSoglia(thresholds.soglia1, pdv.scontoSoglieMobile);
+    totale.soglia2 += applyScontoSoglia(thresholds.soglia2, pdv.scontoSoglieMobile);
+    totale.soglia3 += applyScontoSoglia(thresholds.soglia3, pdv.scontoSoglieMobile);
+    totale.soglia4 += applyScontoSoglia(thresholds.soglia4, pdv.scontoSoglieMobile);
   }
   
   return { 
@@ -187,11 +192,11 @@ export const getDefaultSoglieFissoRS = (
     if (!pdv.clusterFisso) continue;
     const clusterNum = mapClusterFissoToNumber(pdv.clusterFisso as ClusterCode);
     const thresholds = getDefaultFissoThresholds(pdv.tipoPosizione, clusterNum);
-    totale.soglia1 += thresholds.soglia1;
-    totale.soglia2 += thresholds.soglia2;
-    totale.soglia3 += thresholds.soglia3;
-    totale.soglia4 += thresholds.soglia4;
-    totale.soglia5 += thresholds.soglia5;
+    totale.soglia1 += applyScontoSoglia(thresholds.soglia1, pdv.scontoSoglieFisso);
+    totale.soglia2 += applyScontoSoglia(thresholds.soglia2, pdv.scontoSoglieFisso);
+    totale.soglia3 += applyScontoSoglia(thresholds.soglia3, pdv.scontoSoglieFisso);
+    totale.soglia4 += applyScontoSoglia(thresholds.soglia4, pdv.scontoSoglieFisso);
+    totale.soglia5 += applyScontoSoglia(thresholds.soglia5, pdv.scontoSoglieFisso);
   }
   
   return { 

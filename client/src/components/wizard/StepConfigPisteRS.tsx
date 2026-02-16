@@ -141,6 +141,50 @@ export const StepConfigPisteRS: React.FC<StepConfigPisteRSProps> = ({
     }
   }, [ragioniSociali, rsMap, puntiVendita, partnershipRewardConfig, pistaMobileRSConfig.sogliePerRS, pistaFissoRSConfig.sogliePerRS, partnershipRewardRSConfig.configPerRS, setPistaMobileRSConfig, setPistaFissoRSConfig, setPartnershipRewardRSConfig]);
 
+  const scontiKey = useMemo(() => 
+    puntiVendita.map(p => `${p.id}:${p.scontoSoglieMobile||0}:${p.scontoSoglieFisso||0}:${p.scontoSoglieCB||0}:${p.clusterMobile||''}:${p.clusterFisso||''}`).join('|'),
+    [puntiVendita]
+  );
+
+  useEffect(() => {
+    if (puntiVendita.length === 0) return;
+    if (!isInitialized.current) return;
+
+    const newMobile = generaSoglieMobileRSDefault(puntiVendita);
+    setPistaMobileRSConfig((prev) => ({
+      ...prev,
+      sogliePerRS: prev.sogliePerRS.map(existing => {
+        const updated = newMobile.find(n => n.ragioneSociale === existing.ragioneSociale);
+        if (!updated) return existing;
+        return {
+          ...existing,
+          soglia1: updated.soglia1,
+          soglia2: updated.soglia2,
+          soglia3: updated.soglia3,
+          soglia4: updated.soglia4,
+          forecastTargetPunti: updated.forecastTargetPunti,
+        };
+      }),
+    }));
+
+    const newFisso = generaSoglieFissoRSDefault(puntiVendita);
+    setPistaFissoRSConfig((prev) => ({
+      sogliePerRS: prev.sogliePerRS.map(existing => {
+        const updated = newFisso.find(n => n.ragioneSociale === existing.ragioneSociale);
+        if (!updated) return existing;
+        return {
+          ...existing,
+          soglia1: updated.soglia1,
+          soglia2: updated.soglia2,
+          soglia3: updated.soglia3,
+          soglia4: updated.soglia4,
+          soglia5: updated.soglia5,
+          forecastTargetPunti: updated.forecastTargetPunti,
+        };
+      }),
+    }));
+  }, [scontiKey]);
+
   const updateMobileRSField = (
     ragioneSociale: string,
     field: keyof Omit<SoglieMobileRS, "ragioneSociale">,
