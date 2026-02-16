@@ -15,8 +15,6 @@ import {
   calcolaBonusPistaEnergia,
   calcolaSogliePerRS,
   PISTA_ENERGIA_BONUS_PER_CONTRATTO,
-  PISTA_ENERGIA_SOGLIE_BASE,
-  PISTA_ENERGIA_SOGLIE_DA4,
   PistaEnergiaSoglia,
 } from "@/types/energia";
 import { formatCurrency } from "@/utils/format";
@@ -183,32 +181,24 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie base per PDV (fino a 3 PDV)</p>
-              <div className="grid grid-cols-5 gap-3">
-                {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
-                  <div key={s} className="text-center">
-                    <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
-                    <div className="h-9 flex items-center justify-center text-sm font-medium text-muted-foreground bg-muted/50 rounded-md" data-testid={`text-pista-base-${s.toLowerCase()}`}>
-                      {PISTA_ENERGIA_SOGLIE_BASE[s]}
-                    </div>
+            {(() => {
+              const soglie = calcolaSogliePerRS(puntiVendita.length);
+              return (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Soglie Pista Energia ({puntiVendita.length} PDV totali)</p>
+                  <div className="grid grid-cols-5 gap-3">
+                    {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
+                      <div key={s} className="text-center">
+                        <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
+                        <div className="h-9 flex items-center justify-center text-sm font-medium text-muted-foreground bg-muted/50 rounded-md" data-testid={`text-pista-soglia-${s.toLowerCase()}`}>
+                          {soglie[s]}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie per PDV aggiuntivo (dal 4° in poi)</p>
-              <div className="grid grid-cols-5 gap-3">
-                {(["S1", "S2", "S3", "S4", "S5"] as PistaEnergiaSoglia[]).map((s) => (
-                  <div key={s} className="text-center">
-                    <Label className="text-xs">{s === "S5" ? "S Extra" : s}</Label>
-                    <div className="h-9 flex items-center justify-center text-sm font-medium text-muted-foreground bg-muted/50 rounded-md" data-testid={`text-pista-da4-${s.toLowerCase()}`}>
-                      {PISTA_ENERGIA_SOGLIE_DA4[s]}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              );
+            })()}
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">Bonus €/contratto per soglia raggiunta</p>
               <div className="grid grid-cols-5 gap-3">
