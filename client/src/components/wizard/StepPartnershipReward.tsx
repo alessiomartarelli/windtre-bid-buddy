@@ -103,6 +103,7 @@ export const StepPartnershipReward = ({
   const totalePezzi = partnershipResults.reduce((sum, r) => sum + (r.result.totalePezzi || 0), 0);
   const totalePunti = partnershipResults.reduce((sum, r) => sum + (r.result.punti || 0), 0);
   const totalePremio = partnershipResults.reduce((sum, r) => sum + (r.result.premioMaturato || 0), 0);
+  const totalePremioTarget = totalePremio - totaleGettoni;
   
   // Calcola i punti inseriti direttamente dagli input
   const totalePuntiInseriti = Object.values(attivatoCBByPos).reduce((sum, eventi) => {
@@ -121,7 +122,7 @@ export const StepPartnershipReward = ({
         title="Partnership Reward"
         subtitle="Customer Base Eventi e Remunerazione Flat"
         totalPremio={totalePremio}
-        extraInfo={`${totalePezzi} pezzi · ${totalePuntiInseriti.toFixed(2)} punti inseriti · Gettoni: ${formatCurrency(totaleGettoni)}`}
+        extraInfo={`${totalePezzi} pezzi · ${totalePuntiInseriti.toFixed(2)} punti · Gettoni: ${formatCurrency(totaleGettoni)} · PR: ${formatCurrency(totalePremioTarget)}`}
       />
 
       {puntiVendita.map((pdv, pdvIndex) => {

@@ -122,6 +122,12 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
     return sum + righe.reduce((pSum, riga) => pSum + (riga.puntiPartnership * riga.pezzi), 0);
   }, 0);
 
+  const totaleGettoniGlobale = ragioneSocialeList.reduce((sum, rs) => {
+    const righe = attivatoCBByRS[rs] ?? [];
+    return sum + righe.reduce((pSum, riga) => pSum + (riga.pezzi * (riga.gettoni || 0)), 0);
+  }, 0);
+  const totalePremioTargetGlobale = totalePremioPartnershipPrevisto - totaleGettoniGlobale;
+
   if (!puntiVendita.length) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -140,7 +146,7 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
         title="Partnership Reward per Ragione Sociale"
         subtitle="Customer Base Eventi aggregati per azienda"
         totalPremio={totalePremioPartnershipPrevisto}
-        extraInfo={`${totalePezzi} pezzi · ${totalePuntiInseriti.toFixed(2)} punti inseriti · ${ragioneSocialeList.length} aziende`}
+        extraInfo={`${totalePezzi} pezzi · ${totalePuntiInseriti.toFixed(2)} punti · Gettoni: ${formatCurrency(totaleGettoniGlobale)} · PR: ${formatCurrency(totalePremioTargetGlobale)} · ${ragioneSocialeList.length} aziende`}
       />
 
       <div className="space-y-4">
@@ -149,6 +155,26 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
           const isOpen = openCards[rs] ?? true;
           const config = partnershipRewardRSConfig.configPerRS.find(c => c.ragioneSociale === rs);
           const totalPezziRS = (attivatoCBByRS[rs] ?? []).reduce((sum, r) => sum + r.pezzi, 0);
+
+          const righeRS = attivatoCBByRS[rs] ?? [];
+          const totaleGettoniRS = righeRS.reduce((sum, r) => sum + (r.pezzi * (r.gettoni || 0)), 0);
+          const totalePuntiRS = righeRS.reduce((sum, r) => sum + (r.pezzi * (r.puntiPartnership || 0)), 0);
+
+          const target100 = config?.target100 || 0;
+          const target80 = config?.target80 || 0;
+          const premio100 = config?.premio100 || 0;
+          const premio80 = config?.premio80 || 0;
+          const percentualeTarget = target100 > 0 ? (totalePuntiRS / target100) * 100 : 0;
+          let premioTargetRS = 0;
+          let targetRaggiuntoRS: string = 'Nessuno';
+          if (target100 > 0 && totalePuntiRS >= target100) {
+            targetRaggiuntoRS = '100%';
+            premioTargetRS = premio100;
+          } else if (target80 > 0 && totalePuntiRS >= target80) {
+            targetRaggiuntoRS = '80%';
+            premioTargetRS = premio80;
+          }
+          const premioTotaleRS = premioTargetRS + totaleGettoniRS;
 
           return (
             <Collapsible key={rs} open={isOpen} onOpenChange={() => toggleCard(rs)}>
@@ -167,15 +193,28 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
                             <span>{pdvList.length} {pdvList.length === 1 ? 'negozio' : 'negozi'}</span>
                             {config && (
                               <span className="text-muted-foreground/70">
-                                · Target 100%: {config.target100}
+                                · Target: {totalePuntiRS.toFixed(2)}/{config.target100} ({percentualeTarget.toFixed(1)}%)
                               </span>
+                            )}
+                            {totalPezziRS > 0 && targetRaggiuntoRS !== 'Nessuno' && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{targetRaggiuntoRS}</Badge>
                             )}
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
-                        <div className="text-right hidden sm:block">
+                        <div className="text-right hidden sm:block space-y-0.5">
                           <p className="font-semibold text-primary">{totalPezziRS} pezzi</p>
+                          {totalPezziRS > 0 && (
+                            <>
+                              <p className="text-xs text-muted-foreground">
+                                Gettoni: {formatCurrency(totaleGettoniRS)} · PR: {formatCurrency(premioTargetRS)}
+                              </p>
+                              <p className="text-xs font-medium">
+                                Totale: {formatCurrency(premioTotaleRS)}
+                              </p>
+                            </>
+                          )}
                         </div>
                         {isOpen ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
                       </div>
