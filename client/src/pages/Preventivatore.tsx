@@ -102,11 +102,6 @@ const Preventivatore = () => {
     targetS1: 0,
     targetS2: 0,
     targetS3: 0,
-    pistaSoglia_S1: 10,
-    pistaSoglia_S2: 25,
-    pistaSoglia_S3: 40,
-    pistaSoglia_S4: 55,
-    pistaSoglia_S5: 100,
   });
   const [energiaPdvInGara, setEnergiaPdvInGara] = useState<EnergiaPdvInGara[]>([]);
   const [attivatoEnergiaByPos, setAttivatoEnergiaByPos] = useState<Record<string, EnergiaAttivatoRiga[]>>({});
@@ -1140,7 +1135,7 @@ const Preventivatore = () => {
       } else if (effectiveS1 > 0 && totalPezzi >= effectiveS1) {
         premioSogliaGlobale += 250;
       }
-      const pista = calcolaBonusPistaEnergiaFn(totalPezzi, energiaConfig);
+      const pista = calcolaBonusPistaEnergiaFn(totalPezzi, numPdv);
       bonusPistaGlobale += pista.bonusTotale;
     });
     return premioBaseGlobale + premioSogliaGlobale + bonusPistaGlobale;
