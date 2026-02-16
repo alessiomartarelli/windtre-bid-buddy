@@ -170,6 +170,31 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
               />
             </div>
           </div>
+
+          {/* Riepilogo soglie effettive per RS */}
+          {(energiaConfig.targetS1 || energiaConfig.targetS2 || energiaConfig.targetS3) && (
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-xs font-medium text-muted-foreground mb-2">Soglie effettive per Ragione Sociale (target × n° PDV)</p>
+              <div className="space-y-1">
+                {ragioneSocialeList.map(rs => {
+                  const numPdv = ragioneSocialeGroups[rs]?.length || 0;
+                  const effS1 = (energiaConfig.targetS1 || 0) * numPdv;
+                  const effS2 = (energiaConfig.targetS2 || 0) * numPdv;
+                  const effS3 = (energiaConfig.targetS3 || 0) * numPdv;
+                  const effNoMalus = (energiaConfig.targetNoMalus || 0) * numPdv;
+                  return (
+                    <div key={rs} className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-medium min-w-[120px]">{rs} ({numPdv} PDV):</span>
+                      <Badge variant="outline" className="text-xs">No Malus: {effNoMalus}</Badge>
+                      {effS1 > 0 && <Badge variant="outline" className="text-xs">S1: {effS1}</Badge>}
+                      {effS2 > 0 && <Badge variant="outline" className="text-xs">S2: {effS2}</Badge>}
+                      {effS3 > 0 && <Badge variant="outline" className="text-xs">S3: {effS3}</Badge>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
