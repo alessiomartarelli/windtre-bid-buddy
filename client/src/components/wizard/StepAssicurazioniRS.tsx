@@ -10,6 +10,7 @@ import {
   AssicurazioniAttivatoRiga,
   ASSICURAZIONI_LABELS,
   ASSICURAZIONI_POINTS,
+  ASSICURAZIONI_PREMIUMS,
   createEmptyAssicurazioniAttivato,
 } from "@/types/assicurazioni";
 import { formatCurrency } from "@/utils/format";
@@ -159,17 +160,19 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
           const isOpen = openCards[rs] ?? true;
           const attivato = attivatoByRS[rs] || createEmptyAssicurazioniAttivato();
 
-          // Calcola punti base per questa RS
           let puntiBaseRS = 0;
+          let gettoniRS = 0;
           for (const prodotto of PRODOTTI_STANDARD) {
-            puntiBaseRS += (attivato[prodotto] || 0) * ASSICURAZIONI_POINTS[prodotto];
+            const pezzi = attivato[prodotto] || 0;
+            puntiBaseRS += pezzi * ASSICURAZIONI_POINTS[prodotto];
+            gettoniRS += pezzi * (ASSICURAZIONI_PREMIUMS[prodotto] ?? 0);
           }
           if (attivato.viaggioMondoPremio > 0) {
             puntiBaseRS += (attivato.viaggioMondoPremio / 100) * 1.5;
+            gettoniRS += Math.min(attivato.viaggioMondoPremio * 0.125, 201) * (attivato.viaggioMondo || 1);
           }
           const effectiveS1 = (config.targetS1 || 0) * numPdvRS;
           const effectiveS2 = (config.targetS2 || 0) * numPdvRS;
-          // RF: solo dopo S1, max 15%
           let puntiReloadEff = 0;
           if (puntiBaseRS >= effectiveS1 && attivato.reloadForever > 0) {
             const raw = Math.floor(attivato.reloadForever / 5);
@@ -178,7 +181,8 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
           }
           const puntiTotRS = puntiBaseRS + puntiReloadEff;
           const sogliaRaggiunta = puntiTotRS >= effectiveS2 ? "S2" : puntiBaseRS >= effectiveS1 ? "S1" : "nessuna";
-          const premioSogliaRS = (puntiBaseRS >= effectiveS1 ? 500 : 0) + (puntiTotRS >= effectiveS2 ? 750 : 0);
+          const premioSogliaRS = (puntiBaseRS >= effectiveS1 ? 500 * numPdvRS : 0) + (puntiTotRS >= effectiveS2 ? 750 * numPdvRS : 0);
+          const premioTotaleRS = gettoniRS + premioSogliaRS;
 
           return (
             <Collapsible key={rs} open={isOpen} onOpenChange={() => toggleCard(rs)}>
@@ -197,8 +201,12 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
                             <span>· {puntiBaseRS.toFixed(1)} punti</span>
                             {puntiReloadEff > 0 && <span>+ {puntiReloadEff} RF</span>}
                             <span>· S1: {effectiveS1} · S2: {effectiveS2}</span>
+                            {gettoniRS > 0 && <span>· Gettoni: {formatCurrency(gettoniRS)}</span>}
                             {sogliaRaggiunta !== "nessuna" && (
-                              <Badge variant="default" className="text-[10px] px-1.5 py-0">{sogliaRaggiunta} · {formatCurrency(premioSogliaRS)}</Badge>
+                              <Badge variant="default" className="text-[10px] px-1.5 py-0">{sogliaRaggiunta} · Target: {formatCurrency(premioSogliaRS)}</Badge>
+                            )}
+                            {(gettoniRS > 0 || premioSogliaRS > 0) && (
+                              <span className="font-semibold text-primary">Tot: {formatCurrency(premioTotaleRS)}</span>
                             )}
                           </div>
                         </div>
