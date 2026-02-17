@@ -42,7 +42,7 @@ import { ProtectaAttivatoRiga, createEmptyProtectaAttivato } from "@/types/prote
 import { calcolaProtecta, calcolaTotaleProtecta } from "@/lib/calcoloProtecta";
 import StepProtecta from "@/components/wizard/StepProtecta";
 import { StepProtectaRS } from "@/components/wizard/StepProtectaRS";
-import { calcolaExtraGaraIva, calcolaTotaleExtraGaraIva } from "@/lib/calcoloExtraGaraIva";
+import { calcolaExtraGaraIva, calcolaTotaleExtraGaraIva, ExtraGaraSogliePerRS } from "@/lib/calcoloExtraGaraIva";
 import StepExtraGaraIva from "@/components/wizard/StepExtraGaraIva";
 import { UserMenu } from "@/components/UserMenu";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -124,6 +124,9 @@ const Preventivatore = () => {
   // Protecta state
   const [attivatoProtectaByPos, setAttivatoProtectaByPos] = useState<Record<string, ProtectaAttivatoRiga>>({});
   const [attivatoProtectaByRS, setAttivatoProtectaByRS] = useState<Record<string, ProtectaAttivatoRiga>>({}); // Volumi Protecta aggregati per RS
+
+  // Extra Gara IVA - override soglie per RS
+  const [extraGaraSoglieOverride, setExtraGaraSoglieOverride] = useState<ExtraGaraSogliePerRS>({});
 
   // PDV Configuration save/load state
   const [saveConfigDialogOpen, setSaveConfigDialogOpen] = useState(false);
@@ -239,6 +242,7 @@ const Preventivatore = () => {
       if (cfg.pistaFissoRSConfig) setPistaFissoRSConfig(cfg.pistaFissoRSConfig);
       if (cfg.partnershipRewardRSConfig) setPartnershipRewardRSConfig(cfg.partnershipRewardRSConfig);
       if (cfg.modalitaInserimentoRS !== undefined) setModalitaInserimentoRS(cfg.modalitaInserimentoRS);
+      if (cfg.extraGaraSoglieOverride) setExtraGaraSoglieOverride(cfg.extraGaraSoglieOverride);
   };
 
   const handleLoadBackendConfig = () => {
@@ -382,6 +386,7 @@ const Preventivatore = () => {
           setAttivatoEnergiaByRS(data.attivatoEnergiaByRS || {});
           setAttivatoAssicurazioniByRS(data.attivatoAssicurazioniByRS || {});
           setAttivatoProtectaByRS(data.attivatoProtectaByRS || {});
+          if (data.extraGaraSoglieOverride) setExtraGaraSoglieOverride(data.extraGaraSoglieOverride);
           
           toast({
             title: "Preventivo caricato",
@@ -546,9 +551,10 @@ const Preventivatore = () => {
       attivatoEnergiaByRS,
       attivatoAssicurazioniByRS,
       attivatoProtectaByRS,
+      extraGaraSoglieOverride: Object.keys(extraGaraSoglieOverride).length > 0 ? extraGaraSoglieOverride : undefined,
       configVersion: '2.0',
     } as any);
-  }, [step, configGara, numeroPdv, puntiVendita, pistaMobileConfig, pistaFissoConfig, partnershipRewardConfig, mobileCategories, attivatoMobileByPos, attivatoFissoByPos, attivatoCBByPos, calendarioOverrides, energiaConfig, energiaPdvInGara, attivatoEnergiaByPos, assicurazioniConfig, assicurazioniPdvInGara, attivatoAssicurazioniByPos, attivatoProtectaByPos, modalitaInserimentoRS, attivatoMobileByRS, attivatoFissoByRS, attivatoCBByRS, attivatoEnergiaByRS, attivatoAssicurazioniByRS, attivatoProtectaByRS, saveState, loadConfig, isLoaded]);
+  }, [step, configGara, numeroPdv, puntiVendita, pistaMobileConfig, pistaFissoConfig, partnershipRewardConfig, mobileCategories, attivatoMobileByPos, attivatoFissoByPos, attivatoCBByPos, calendarioOverrides, energiaConfig, energiaPdvInGara, attivatoEnergiaByPos, assicurazioniConfig, assicurazioniPdvInGara, attivatoAssicurazioniByPos, attivatoProtectaByPos, modalitaInserimentoRS, attivatoMobileByRS, attivatoFissoByRS, attivatoCBByRS, attivatoEnergiaByRS, attivatoAssicurazioniByRS, attivatoProtectaByRS, extraGaraSoglieOverride, saveState, loadConfig, isLoaded]);
 
   // Salva automaticamente la configurazione (PDV, cluster, calendari, soglie) su localStorage + backend
   useEffect(() => {
@@ -572,6 +578,7 @@ const Preventivatore = () => {
       pistaFissoRSConfig,
       partnershipRewardRSConfig,
       modalitaInserimentoRS,
+      extraGaraSoglieOverride: Object.keys(extraGaraSoglieOverride).length > 0 ? extraGaraSoglieOverride : undefined,
       configVersion: '2.0' as const,
     };
 
@@ -580,7 +587,7 @@ const Preventivatore = () => {
     
     // Salva su backend con debounce (ogni ~2.5s)
     saveRemoteConfigDebounced(configToSave);
-  }, [configGara, numeroPdv, puntiVendita, pistaMobileConfig, pistaFissoConfig, partnershipRewardConfig, calendarioOverrides, energiaConfig, energiaPdvInGara, assicurazioniConfig, assicurazioniPdvInGara, pistaMobileRSConfig, pistaFissoRSConfig, partnershipRewardRSConfig, modalitaInserimentoRS, saveConfig, saveRemoteConfigDebounced, isLoaded]);
+  }, [configGara, numeroPdv, puntiVendita, pistaMobileConfig, pistaFissoConfig, partnershipRewardConfig, calendarioOverrides, energiaConfig, energiaPdvInGara, assicurazioniConfig, assicurazioniPdvInGara, pistaMobileRSConfig, pistaFissoRSConfig, partnershipRewardRSConfig, modalitaInserimentoRS, extraGaraSoglieOverride, saveConfig, saveRemoteConfigDebounced, isLoaded]);
 
   // Aggiorna automaticamente le soglie FISSO quando cambiano cluster, tipo posizione o sconto
   useEffect(() => {
@@ -1219,6 +1226,7 @@ const Preventivatore = () => {
       soglieMonopos: tabelleCalcoloConfig.extraGara.soglieMonopos,
       premiPerSoglia: tabelleCalcoloConfig.extraGara.premiPerSoglia,
     } : undefined,
+    soglieOverridePerRS: Object.keys(extraGaraSoglieOverride).length > 0 ? extraGaraSoglieOverride : undefined,
   });
   const totalePremioExtraGaraIva = calcolaTotaleExtraGaraIva(extraGaraIvaResults);
 
@@ -1602,7 +1610,7 @@ const Preventivatore = () => {
                         <StepProtecta puntiVendita={puntiVendita} attivatoByPos={attivatoProtectaByPos} setAttivatoByPos={setAttivatoProtectaByPos} results={protectaResults} totalePremio={totalePremioProtecta} />
                       )
                     )}
-                    {step === 13 && <StepExtraGaraIva results={extraGaraIvaResults} totalePremio={totalePremioExtraGaraIva} modalitaInserimentoRS={modalitaInserimentoRS} />}
+                    {step === 13 && <StepExtraGaraIva results={extraGaraIvaResults} totalePremio={totalePremioExtraGaraIva} modalitaInserimentoRS={modalitaInserimentoRS} puntiVendita={puntiVendita} soglieOverride={extraGaraSoglieOverride} onSoglieOverrideChange={setExtraGaraSoglieOverride} tabelleCalcoloConfig={tabelleCalcoloConfig} />}
                   </>
                 ) : (
                   <>
@@ -1611,7 +1619,7 @@ const Preventivatore = () => {
                     {step === 9 && <StepEnergia puntiVendita={puntiVendita} energiaConfig={energiaConfig} setEnergiaConfig={setEnergiaConfig} energiaPdvInGara={energiaPdvInGara} setEnergiaPdvInGara={setEnergiaPdvInGara} attivatoEnergiaByPos={attivatoEnergiaByPos} setAttivatoEnergiaByPos={setAttivatoEnergiaByPos} energiaResults={energiaResults} totalePremioEnergia={totalePremioEnergia} />}
                     {step === 10 && <StepAssicurazioni config={assicurazioniConfig} onConfigChange={setAssicurazioniConfig} pdvInGara={assicurazioniPdvInGara} onPdvInGaraChange={setAssicurazioniPdvInGara} puntiVendita={puntiVendita} attivatoByPos={attivatoAssicurazioniByPos} onAttivatoChange={(posId, attivato) => setAttivatoAssicurazioniByPos(prev => ({ ...prev, [posId]: attivato }))} results={assicurazioniResults} totalePremio={totalePremioAssicurazioni} />}
                     {step === 11 && <StepProtecta puntiVendita={puntiVendita} attivatoByPos={attivatoProtectaByPos} setAttivatoByPos={setAttivatoProtectaByPos} results={protectaResults} totalePremio={totalePremioProtecta} />}
-                    {step === 12 && <StepExtraGaraIva results={extraGaraIvaResults} totalePremio={totalePremioExtraGaraIva} modalitaInserimentoRS={modalitaInserimentoRS} />}
+                    {step === 12 && <StepExtraGaraIva results={extraGaraIvaResults} totalePremio={totalePremioExtraGaraIva} modalitaInserimentoRS={modalitaInserimentoRS} puntiVendita={puntiVendita} soglieOverride={extraGaraSoglieOverride} onSoglieOverrideChange={setExtraGaraSoglieOverride} tabelleCalcoloConfig={tabelleCalcoloConfig} />}
                   </>
                 )}
               </div>
@@ -1652,6 +1660,7 @@ const Preventivatore = () => {
                         pistaFissoRSConfig,
                         partnershipRewardRSConfig,
                         modalitaInserimentoRS,
+                        extraGaraSoglieOverride: Object.keys(extraGaraSoglieOverride).length > 0 ? extraGaraSoglieOverride : undefined,
                         configVersion: '2.0',
                       });
                       

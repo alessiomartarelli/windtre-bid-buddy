@@ -36,11 +36,15 @@ export const PREMI_EXTRA_GARA: Record<ClusterPIvaCode, number[]> = {
   senza_business_promoter: [0, 10, 15, 25, 25], // S4 = S3
 };
 
-interface ExtraGaraConfigOverrides {
+export interface ExtraGaraConfigOverrides {
   puntiAttivazione?: Record<string, number>;
   soglieMultipos?: Record<string, Record<string, number>>;
   soglieMonopos?: Record<string, Record<string, number>>;
   premiPerSoglia?: Record<string, number[]>;
+}
+
+export interface ExtraGaraSogliePerRS {
+  [ragioneSociale: string]: { s1: number; s2: number; s3: number; s4: number };
 }
 
 interface CalcolaExtraGaraIvaParams {
@@ -51,6 +55,7 @@ interface CalcolaExtraGaraIvaParams {
   attivatoAssicurazioniByPos: Record<string, AssicurazioniAttivatoRiga>;
   attivatoProtectaByPos: Record<string, ProtectaAttivatoRiga>;
   configOverrides?: ExtraGaraConfigOverrides;
+  soglieOverridePerRS?: ExtraGaraSogliePerRS;
 }
 
 // Estrae i pezzi da Mobile per le categorie Extra Gara
@@ -125,7 +130,7 @@ const haBusinessPromoter = (clusterPIva: ClusterPIvaCode | ""): boolean => {
   return clusterPIva === "business_promoter_plus" || clusterPIva === "business_promoter";
 };
 
-const calcolaSoglieRS = (
+export const calcolaSoglieRS = (
   pdvList: PuntoVendita[],
   isMultipos: boolean,
   soglieOverride?: ExtraGaraConfigOverrides,
@@ -181,6 +186,7 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
     attivatoAssicurazioniByPos,
     attivatoProtectaByPos,
     configOverrides,
+    soglieOverridePerRS,
   } = params;
 
   const effectivePunti = configOverrides?.puntiAttivazione
@@ -202,7 +208,8 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
 
   for (const [ragioneSociale, pdvList] of Object.entries(pdvPerRS)) {
     const isMultipos = pdvList.length > 1;
-    const soglie = calcolaSoglieRS(pdvList, isMultipos, configOverrides);
+    const soglieCalcolate = calcolaSoglieRS(pdvList, isMultipos, configOverrides);
+    const soglie = soglieOverridePerRS?.[ragioneSociale] || soglieCalcolate;
     
     // Verifica se almeno un PDV ha Business Promoter
     const hasBPInRS = pdvList.some(pdv => haBusinessPromoter(pdv.clusterPIva || ""));
