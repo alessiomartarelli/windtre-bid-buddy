@@ -685,10 +685,7 @@ const Preventivatore = () => {
     
     setEnergiaConfig((prev) => {
       const numPdv = puntiVendita.length;
-      if (modalitaInserimentoRS === "per_rs") {
-        return { ...prev, pdvInGara: numPdv };
-      }
-      if (prev.pdvInGara === 0) {
+      if (prev.pdvInGara === 0 || (modalitaInserimentoRS === "per_rs" && prev.targetNoMalus === 0 && prev.targetS1 === 0)) {
         return { 
           ...prev, 
           pdvInGara: numPdv,
@@ -697,6 +694,9 @@ const Preventivatore = () => {
           targetS2: 25,
           targetS3: 40,
         };
+      }
+      if (modalitaInserimentoRS === "per_rs") {
+        return { ...prev, pdvInGara: numPdv };
       }
       return prev;
     });
@@ -721,10 +721,7 @@ const Preventivatore = () => {
     
     setAssicurazioniConfig((prev) => {
       const numPdv = puntiVendita.length;
-      if (modalitaInserimentoRS === "per_rs") {
-        return { ...prev, pdvInGara: numPdv };
-      }
-      if (prev.pdvInGara === 0) {
+      if (prev.pdvInGara === 0 || (modalitaInserimentoRS === "per_rs" && prev.targetNoMalus === 0 && prev.targetS1 === 0)) {
         return { 
           ...prev, 
           pdvInGara: numPdv,
@@ -732,6 +729,9 @@ const Preventivatore = () => {
           targetS1: 20,
           targetS2: 25,
         };
+      }
+      if (modalitaInserimentoRS === "per_rs") {
+        return { ...prev, pdvInGara: numPdv };
       }
       return prev;
     });
