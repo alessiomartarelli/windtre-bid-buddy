@@ -78,7 +78,7 @@ export const StepSceltaModalitaRS: React.FC<StepSceltaModalitaRSProps> = ({
                   <strong>Più veloce</strong> se hai già i totali per ogni ragione sociale.
                 </p>
                 <p className="text-xs text-muted-foreground/70 italic">
-                  Esempio: "TIM SpA" → 150 SIM, 80 Fisso, etc.
+                  Esempio: "CMS S.R.L" → 150 SIM, 80 Fisso, etc.
                 </p>
               </div>
             </CardContent>
@@ -123,7 +123,7 @@ export const StepSceltaModalitaRS: React.FC<StepSceltaModalitaRSProps> = ({
                   <strong>Più preciso</strong>, utile per analisi dettagliata.
                 </p>
                 <p className="text-xs text-muted-foreground/70 italic">
-                  Esempio: "TIM Roma Centro" → 50 SIM, 25 Fisso
+                  Esempio: "Fiumicino" → 50 SIM, 25 Fisso
                 </p>
               </div>
             </CardContent>
