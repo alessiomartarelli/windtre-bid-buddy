@@ -43,6 +43,7 @@ import { calcolaProtecta, calcolaTotaleProtecta } from "@/lib/calcoloProtecta";
 import StepProtecta from "@/components/wizard/StepProtecta";
 import { StepProtectaRS } from "@/components/wizard/StepProtectaRS";
 import { calcolaExtraGaraIva, calcolaTotaleExtraGaraIva, ExtraGaraSogliePerRS } from "@/lib/calcoloExtraGaraIva";
+import { formatCurrency } from "@/utils/format";
 import StepExtraGaraIva from "@/components/wizard/StepExtraGaraIva";
 import { UserMenu } from "@/components/UserMenu";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -1240,6 +1241,98 @@ const Preventivatore = () => {
   });
   const totalePremioExtraGaraIva = calcolaTotaleExtraGaraIva(extraGaraIvaResults);
 
+  const premiPerRS = useMemo(() => {
+    if (modalitaInserimentoRS !== "per_rs") return undefined;
+    const rsNames = Array.from(new Set(puntiVendita.map(p => p.ragioneSociale || "Senza RS")));
+    if (rsNames.length <= 1) return undefined;
+
+    return rsNames.map(rs => {
+      const mobileRS = mobileResults
+        .filter((r: any) => (r.pdv.ragioneSociale || "Senza RS") === rs)
+        .reduce((s: number, r: any) => s + r.result.premio + r.result.extraGettoniEuro, 0);
+
+      const fissoRS = fissoResults
+        .filter((r: any) => (r.pdv.ragioneSociale || "Senza RS") === rs)
+        .reduce((s: number, r: any) => s + r.result.premio, 0);
+
+      const partnershipRS = partnershipResults
+        .filter((r: any) => (r.pdv.ragioneSociale || "Senza RS") === rs)
+        .reduce((s: number, r: any) => s + r.result.premioMaturato, 0);
+
+      const numPdv = puntiVendita.filter(p => (p.ragioneSociale || "Senza RS") === rs).length;
+      const righeEnergia = attivatoEnergiaByRS[rs] ?? [];
+      const totalPezziEnergia = righeEnergia.reduce((s, r) => s + r.pezzi, 0);
+      const energiaBase = energiaResults
+        .filter((_: any, i: number) => (puntiVendita[i]?.ragioneSociale || "Senza RS") === rs)
+        .reduce((s: number, r: any) => s + (r?.premioBase || 0) + (r?.bonusRaggiungimentoSoglia || 0), 0);
+      let energiaSoglia = 0;
+      const eS1 = (energiaConfig.targetS1 || 0) * numPdv;
+      const eS2 = (energiaConfig.targetS2 || 0) * numPdv;
+      const eS3 = (energiaConfig.targetS3 || 0) * numPdv;
+      if (eS3 > 0 && totalPezziEnergia >= eS3) energiaSoglia = 1000;
+      else if (eS2 > 0 && totalPezziEnergia >= eS2) energiaSoglia = 500;
+      else if (eS1 > 0 && totalPezziEnergia >= eS1) energiaSoglia = 250;
+      const energiaPista = calcolaBonusPistaEnergiaFn(totalPezziEnergia, energiaConfig, numPdv);
+      const energiaRS = energiaBase + energiaSoglia + energiaPista.bonusTotale;
+
+      const attAss = attivatoAssicurazioniByRS[rs] ?? createEmptyAssicurazioniAttivato();
+      const effectivePremiums = tabelleCalcoloConfig?.assicurazioni?.premiProdotto
+        ? { ...ASSICURAZIONI_PREMIUMS, ...tabelleCalcoloConfig.assicurazioni.premiProdotto }
+        : ASSICURAZIONI_PREMIUMS;
+      const effectivePoints = tabelleCalcoloConfig?.assicurazioni?.puntiProdotto
+        ? { ...ASSICURAZIONI_POINTS, ...tabelleCalcoloConfig.assicurazioni.puntiProdotto }
+        : ASSICURAZIONI_POINTS;
+      const prodottiStd: (keyof typeof ASSICURAZIONI_POINTS)[] = [
+        'protezionePro', 'casaFamigliaFull', 'casaFamigliaPlus', 'casaFamigliaStart',
+        'sportFamiglia', 'sportIndividuale', 'viaggiVacanze', 'elettrodomestici', 'micioFido',
+      ];
+      let assicPunti = 0, assicGettoni = 0;
+      for (const p of prodottiStd) {
+        const pz = attAss[p] || 0;
+        assicPunti += pz * (effectivePoints[p] ?? 0);
+        assicGettoni += pz * (effectivePremiums[p] ?? 0);
+      }
+      if (attAss.viaggioMondoPremio > 0) {
+        assicPunti += (attAss.viaggioMondoPremio / 100) * 1.5;
+        assicGettoni += Math.min(attAss.viaggioMondoPremio * 0.125, 201) * (attAss.viaggioMondo || 1);
+      }
+      const aS1 = (assicurazioniConfig.targetS1 || 0) * numPdv;
+      const aS2 = (assicurazioniConfig.targetS2 || 0) * numPdv;
+      let assicBonus = 0;
+      let puntiConReload = assicPunti;
+      if (assicPunti >= aS1 && attAss.reloadForever > 0) {
+        const raw = Math.floor(attAss.reloadForever / 5);
+        const max15 = Math.floor(assicPunti * 0.15 / 0.85);
+        puntiConReload = assicPunti + Math.min(raw, max15);
+      }
+      if (assicPunti >= aS1) assicBonus += 500 * numPdv;
+      if (puntiConReload >= aS2) assicBonus += 750 * numPdv;
+      const assicRS = assicGettoni + assicBonus;
+
+      const protectaRS = protectaResults
+        .filter((r: any, i: number) => (puntiVendita[i]?.ragioneSociale || "Senza RS") === rs)
+        .reduce((s: number, r: any) => s + r.premioTotale, 0);
+
+      const extraRS = extraGaraIvaResults
+        .filter((r: any) => r.ragioneSociale === rs)
+        .reduce((s: number, r: any) => s + r.premioTotaleRS, 0);
+
+      return {
+        ragioneSociale: rs,
+        mobile: mobileRS,
+        fisso: fissoRS,
+        partnership: partnershipRS,
+        energia: energiaRS,
+        assicurazioni: assicRS,
+        protecta: protectaRS,
+        extra: extraRS,
+        totale: mobileRS + fissoRS + partnershipRS + energiaRS + assicRS + protectaRS + extraRS,
+      };
+    });
+  }, [modalitaInserimentoRS, puntiVendita, mobileResults, fissoResults, partnershipResults, 
+      energiaResults, attivatoEnergiaByRS, energiaConfig, attivatoAssicurazioniByRS, 
+      assicurazioniConfig, tabelleCalcoloConfig, protectaResults, extraGaraIvaResults]);
+
   // Numero totale step (dinamico)
   const TOTAL_STEPS = getTotalSteps(configGara.tipologiaGara || "gara_operatore");
   
@@ -1752,6 +1845,7 @@ const Preventivatore = () => {
               premioExtraGaraIva={totalePremioExtraGaraIva}
               currentStep={step}
               tipologiaGara={configGara.tipologiaGara}
+              premiPerRS={premiPerRS}
             />
             
             {/* Quick Info Card */}
@@ -1803,26 +1897,37 @@ const Preventivatore = () => {
               <p className="text-sm font-medium">Riepilogo premi:</p>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <span className="text-muted-foreground">Mobile:</span>
-                <span className="font-medium">{new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(totalePremioMobile)}</span>
+                <span className="font-medium">{formatCurrency(totalePremioMobile)}</span>
                 <span className="text-muted-foreground">Fisso:</span>
-                <span className="font-medium">{new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(totalePremioFisso)}</span>
+                <span className="font-medium">{formatCurrency(totalePremioFisso)}</span>
                 <span className="text-muted-foreground">CB+ Partnership Reward:</span>
-                <span className="font-medium">{new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(totalePremioPartnershipPrevisto)}</span>
+                <span className="font-medium">{formatCurrency(totalePremioPartnershipPrevisto)}</span>
                 <span className="text-muted-foreground">Energia:</span>
-                <span className="font-medium">{new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(totalePremioEnergia)}</span>
+                <span className="font-medium">{formatCurrency(totalePremioEnergia)}</span>
                 <span className="text-muted-foreground">Assicurazioni:</span>
-                <span className="font-medium">{new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(totalePremioAssicurazioni)}</span>
+                <span className="font-medium">{formatCurrency(totalePremioAssicurazioni)}</span>
                 <span className="text-muted-foreground">Protecta:</span>
-                <span className="font-medium">{new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(totalePremioProtecta)}</span>
+                <span className="font-medium">{formatCurrency(totalePremioProtecta)}</span>
                 <span className="text-muted-foreground">Extra Gara P.IVA:</span>
-                <span className="font-medium">{new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(totalePremioExtraGaraIva)}</span>
+                <span className="font-medium">{formatCurrency(totalePremioExtraGaraIva)}</span>
                 <span className="text-muted-foreground font-semibold border-t pt-2">Totale:</span>
                 <span className="font-bold text-primary border-t pt-2">
-                  {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(
+                  {formatCurrency(
                     totalePremioMobile + totalePremioFisso + totalePremioPartnershipPrevisto + totalePremioEnergia + totalePremioAssicurazioni + totalePremioProtecta + totalePremioExtraGaraIva
                   )}
                 </span>
               </div>
+              {premiPerRS && premiPerRS.length > 1 && (
+                <div className="mt-3 pt-3 border-t space-y-2" data-testid="save-dialog-rs-breakdown">
+                  <p className="text-sm font-medium">Dettaglio per Ragione Sociale:</p>
+                  {premiPerRS.map(rs => (
+                    <div key={rs.ragioneSociale} className="flex items-center justify-between text-sm" data-testid={`save-rs-row-${rs.ragioneSociale}`}>
+                      <span className="text-muted-foreground truncate" data-testid={`save-rs-name-${rs.ragioneSociale}`}>{rs.ragioneSociale}</span>
+                      <span className="font-semibold text-primary ml-2" data-testid={`save-rs-total-${rs.ragioneSociale}`}>{formatCurrency(rs.totale)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <Button onClick={handleSavePreventivo} className="w-full" disabled={isSaving}>
               {isSaving ? (
