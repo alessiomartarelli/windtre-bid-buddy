@@ -15,7 +15,8 @@ import {
   createEmptyProtectaAttivato,
 } from "@/types/protecta";
 import { formatCurrency } from "@/utils/format";
-import { Lock, ChevronDown, ChevronUp, Building2, Store, Home, Zap } from "lucide-react";
+import { Lock, ChevronDown, ChevronUp, Building2, Store, Home, Zap, Clock } from "lucide-react";
+import { CalendarioMeseOverride, getWorkdayInfoFromOverrides } from "@/utils/calendario";
 import { StepContentHeader } from "./StepContentHeader";
 
 interface StepProtectaRSProps {
@@ -23,6 +24,9 @@ interface StepProtectaRSProps {
   attivatoByRS: Record<string, ProtectaAttivatoRiga>;
   setAttivatoByRS: React.Dispatch<React.SetStateAction<Record<string, ProtectaAttivatoRiga>>>;
   totalePremio: number;
+  anno: number;
+  monthIndex: number;
+  calendarioOverrides: Record<string, CalendarioMeseOverride>;
 }
 
 export const StepProtectaRS: React.FC<StepProtectaRSProps> = ({
@@ -30,6 +34,9 @@ export const StepProtectaRS: React.FC<StepProtectaRSProps> = ({
   attivatoByRS,
   setAttivatoByRS,
   totalePremio,
+  anno,
+  monthIndex,
+  calendarioOverrides,
 }) => {
   const [openCards, setOpenCards] = React.useState<Record<string, boolean>>({});
 
@@ -98,6 +105,13 @@ export const StepProtectaRS: React.FC<StepProtectaRSProps> = ({
             (sum, key) => sum + attivato[key] * PROTECTA_GETTONI[key],
             0
           );
+
+          const avgWorkingDaysRS = pdvList.reduce((sum, pdv) => {
+            const wi = getWorkdayInfoFromOverrides(anno, monthIndex, pdv.calendar, calendarioOverrides[pdv.id]);
+            return sum + wi.totalWorkingDays;
+          }, 0) / (pdvList.length || 1);
+          const totalPezziRS = (Object.keys(PROTECTA_GETTONI) as ProtectaProduct[]).reduce((s, k) => s + attivato[k], 0);
+          const runRatePezziRS = avgWorkingDaysRS > 0 ? totalPezziRS / avgWorkingDaysRS : 0;
 
           return (
             <Collapsible key={rs} open={isOpen} onOpenChange={() => toggleCard(rs)}>
@@ -188,6 +202,16 @@ export const StepProtectaRS: React.FC<StepProtectaRSProps> = ({
                             />
                           </div>
                         ))}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-secondary/10 rounded-lg border border-secondary/30" data-testid={`run-rate-protecta-rs-${rs}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className="w-4 h-4 text-secondary-foreground" />
+                        <p className="font-semibold text-sm text-secondary-foreground">Run Rate</p>
+                      </div>
+                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                        <span>Pezzi/gg: <span className="font-medium text-foreground">{runRatePezziRS.toFixed(2)}</span></span>
+                        <span>Media gg lav: <span className="font-medium text-foreground">{avgWorkingDaysRS.toFixed(1)}</span></span>
                       </div>
                     </div>
                   </CardContent>

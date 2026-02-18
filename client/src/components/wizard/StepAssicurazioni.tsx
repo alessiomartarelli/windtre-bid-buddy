@@ -15,8 +15,9 @@ import {
 } from "@/types/assicurazioni";
 import { PuntoVendita } from "@/types/preventivatore";
 import { formatCurrency } from "@/utils/format";
-import { Shield } from "lucide-react";
+import { Shield, Clock } from "lucide-react";
 import { StepContentHeader } from "./StepContentHeader";
+import { CalendarioMeseOverride, getWorkdayInfoFromOverrides } from "@/utils/calendario";
 
 interface StepAssicurazioniProps {
   config: AssicurazioniConfig;
@@ -28,6 +29,9 @@ interface StepAssicurazioniProps {
   onAttivatoChange: (posId: string, attivato: AssicurazioniAttivatoRiga) => void;
   results: AssicurazioniResult[];
   totalePremio: number;
+  anno?: number;
+  monthIndex?: number;
+  calendarioOverrides?: Record<string, CalendarioMeseOverride>;
 }
 
 const PRODOTTI_STANDARD: (keyof Omit<AssicurazioniAttivatoRiga, 'viaggioMondo' | 'viaggioMondoPremio' | 'reloadForever'>)[] = [
@@ -52,6 +56,9 @@ export default function StepAssicurazioni({
   onAttivatoChange,
   results,
   totalePremio,
+  anno,
+  monthIndex,
+  calendarioOverrides,
 }: StepAssicurazioniProps) {
   const handleConfigChange = (field: keyof AssicurazioniConfig, value: number) => {
     onConfigChange({ ...config, [field]: value });
@@ -182,6 +189,12 @@ export default function StepAssicurazioni({
           const result = results.find((r) => r.pdvId === pdv.codicePos);
           const pdvInfo = pdvInGara.find(p => p.pdvId === pdv.codicePos);
           const isInGara = pdvInfo?.inGara ?? false;
+          const wi = (anno !== undefined && monthIndex !== undefined)
+            ? getWorkdayInfoFromOverrides(anno, monthIndex, pdv.calendar, calendarioOverrides?.[pdv.id])
+            : null;
+          const totalWorkingDays = wi?.totalWorkingDays || 0;
+          const totalPezziPDV = Object.values(attivato).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
+          const runRatePezzi = totalWorkingDays > 0 ? totalPezziPDV / totalWorkingDays : 0;
 
           return (
             <Card key={pdv.codicePos} className={isInGara ? "border-primary/50" : ""}>
@@ -251,7 +264,16 @@ export default function StepAssicurazioni({
                   </div>
                 </div>
 
-                {/* Dettaglio risultati */}
+                {totalWorkingDays > 0 && (
+                  <div className="p-2 bg-secondary/10 rounded-lg border border-secondary/30 mt-2" data-testid={`run-rate-assicurazioni-pdv-${pdv.id}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className="w-3 h-3 text-secondary-foreground" />
+                      <span className="font-medium text-xs text-secondary-foreground">Run Rate</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">Pezzi/gg: <span className="font-medium text-foreground">{runRatePezzi.toFixed(2)}</span> · Giorni: {totalWorkingDays}</span>
+                  </div>
+                )}
+
                 {result && result.dettaglioProdotti.length > 0 && (
                   <div className="mt-4 pt-3 border-t">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">

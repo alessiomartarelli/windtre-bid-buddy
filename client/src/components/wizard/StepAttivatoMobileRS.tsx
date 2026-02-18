@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PuntoVendita, PistaMobileRSConfig, AttivatoMobileDettaglio, MobileActivationType, MOBILE_CATEGORY_LABELS, SoglieMobileRS, MobileCategoryConfig, MOBILE_CATEGORIES_CONFIG_DEFAULT } from "@/types/preventivatore";
 import { formatCurrency } from "@/utils/format";
-import { Smartphone, ChevronDown, ChevronUp, Building2, Store } from "lucide-react";
+import { Smartphone, ChevronDown, ChevronUp, Building2, Store, Clock } from "lucide-react";
+import { CalendarioMeseOverride, getWorkdayInfoFromOverrides } from "@/utils/calendario";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { StepContentHeader } from "./StepContentHeader";
 
@@ -14,6 +15,7 @@ interface StepAttivatoMobileRSProps {
   pistaMobileRSConfig: PistaMobileRSConfig;
   anno: number;
   monthIndex: number;
+  calendarioOverrides: Record<string, CalendarioMeseOverride>;
   attivatoMobileByRS: Record<string, AttivatoMobileDettaglio[]>;
   setAttivatoMobileByRS: React.Dispatch<React.SetStateAction<Record<string, AttivatoMobileDettaglio[]>>>;
   totalePremioMobilePrevisto: number;
@@ -22,6 +24,9 @@ interface StepAttivatoMobileRSProps {
 export const StepAttivatoMobileRS: React.FC<StepAttivatoMobileRSProps> = ({
   puntiVendita,
   pistaMobileRSConfig,
+  anno,
+  monthIndex,
+  calendarioOverrides,
   attivatoMobileByRS,
   setAttivatoMobileByRS,
   totalePremioMobilePrevisto,
@@ -268,7 +273,14 @@ export const StepAttivatoMobileRS: React.FC<StepAttivatoMobileRSProps> = ({
           const totalPezziRS = (attivatoMobileByRS[rs] ?? []).reduce((sum, r) => sum + r.pezzi, 0);
           const puntiTotaliRS = calcolaPuntiTotaliRS(rs);
           const sogliaRaggiunta = determinaSogliaRaggiuntaRS(rs);
-          
+
+          const avgWorkingDaysRS = pdvList.reduce((sum, pdv) => {
+            const wi = getWorkdayInfoFromOverrides(anno, monthIndex, pdv.calendar, calendarioOverrides[pdv.id]);
+            return sum + wi.totalWorkingDays;
+          }, 0) / (pdvList.length || 1);
+          const runRatePuntiRS = avgWorkingDaysRS > 0 ? puntiTotaliRS / avgWorkingDaysRS : 0;
+          const runRateAttivazioniRS = avgWorkingDaysRS > 0 ? totalPezziRS / avgWorkingDaysRS : 0;
+
           return (
             <Collapsible key={rs} open={isOpen} onOpenChange={() => toggleCard(rs)}>
               <Card className="border-border/50 shadow-sm overflow-hidden transition-all hover:shadow-md">
@@ -458,6 +470,18 @@ export const StepAttivatoMobileRS: React.FC<StepAttivatoMobileRSProps> = ({
                         </p>
                       </div>
                     )}
+
+                    <div data-testid={`run-rate-mobile-rs-${rs}`} className="p-3 bg-secondary/10 rounded-lg border border-secondary/30">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className="w-4 h-4 text-secondary-foreground" />
+                        <p className="font-semibold text-sm text-secondary-foreground">Run Rate</p>
+                      </div>
+                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                        <span>Punti/gg: <span className="font-medium text-foreground">{runRatePuntiRS.toFixed(2)}</span></span>
+                        <span>Attivazioni/gg: <span className="font-medium text-foreground">{runRateAttivazioniRS.toFixed(2)}</span></span>
+                        <span>Media gg lav: <span className="font-medium text-foreground">{avgWorkingDaysRS.toFixed(1)}</span></span>
+                      </div>
+                    </div>
                   </CardContent>
                 </CollapsibleContent>
               </Card>

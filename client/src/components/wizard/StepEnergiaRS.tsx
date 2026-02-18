@@ -19,7 +19,8 @@ import {
   PistaEnergiaSoglia,
 } from "@/types/energia";
 import { formatCurrency } from "@/utils/format";
-import { Zap, ChevronDown, ChevronUp, Building2, Store } from "lucide-react";
+import { Zap, ChevronDown, ChevronUp, Building2, Store, Clock } from "lucide-react";
+import { CalendarioMeseOverride, getWorkdayInfoFromOverrides } from "@/utils/calendario";
 import { StepContentHeader } from "./StepContentHeader";
 
 interface StepEnergiaRSProps {
@@ -29,6 +30,9 @@ interface StepEnergiaRSProps {
   attivatoEnergiaByRS: Record<string, EnergiaAttivatoRiga[]>;
   setAttivatoEnergiaByRS: React.Dispatch<React.SetStateAction<Record<string, EnergiaAttivatoRiga[]>>>;
   totalePremioEnergia: number;
+  anno: number;
+  monthIndex: number;
+  calendarioOverrides: Record<string, CalendarioMeseOverride>;
 }
 
 export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
@@ -38,6 +42,9 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
   attivatoEnergiaByRS,
   setAttivatoEnergiaByRS,
   totalePremioEnergia,
+  anno,
+  monthIndex,
+  calendarioOverrides,
 }) => {
   const [openCards, setOpenCards] = React.useState<Record<string, boolean>>({});
 
@@ -283,6 +290,12 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
           const soglieEffettiveRS = getSoglieFromConfig(energiaConfig, numPdvRS);
           const premioTotaleRS = premioBaseRS + premioSogliaRS + pistaRS.bonusTotale;
 
+          const avgWorkingDaysRS = pdvList.reduce((sum, pdv) => {
+            const wi = getWorkdayInfoFromOverrides(anno, monthIndex, pdv.calendar, calendarioOverrides[pdv.id]);
+            return sum + wi.totalWorkingDays;
+          }, 0) / (pdvList.length || 1);
+          const runRateContrattiRS = avgWorkingDaysRS > 0 ? totalPezziRS / avgWorkingDaysRS : 0;
+
           return (
             <Collapsible key={rs} open={isOpen} onOpenChange={() => toggleCard(rs)}>
               <Card className="border-border/50 shadow-sm overflow-hidden transition-all hover:shadow-md">
@@ -374,6 +387,16 @@ export const StepEnergiaRS: React.FC<StepEnergiaRSProps> = ({
                             </p>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-secondary/10 rounded-lg border border-secondary/30" data-testid={`run-rate-energia-rs-${rs}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className="w-4 h-4 text-secondary-foreground" />
+                        <p className="font-semibold text-sm text-secondary-foreground">Run Rate</p>
+                      </div>
+                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                        <span>Contratti/gg: <span className="font-medium text-foreground">{runRateContrattiRS.toFixed(2)}</span></span>
+                        <span>Media gg lav: <span className="font-medium text-foreground">{avgWorkingDaysRS.toFixed(1)}</span></span>
                       </div>
                     </div>
                   </CardContent>

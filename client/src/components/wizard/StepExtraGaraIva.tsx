@@ -8,7 +8,8 @@ import { ExtraGaraIvaRsResult } from "@/types/extra-gara-iva";
 import { PuntoVendita, CLUSTER_PIVA_OPTIONS } from "@/types/preventivatore";
 import { ExtraGaraSogliePerRS, calcolaSoglieRS, ExtraGaraConfigOverrides } from "@/lib/calcoloExtraGaraIva";
 import { TabelleCalcoloValues } from "@/hooks/useTabelleCalcoloConfig";
-import { Zap, Receipt, Pencil, RotateCcw } from "lucide-react";
+import { CalendarioMeseOverride, getWorkdayInfoFromOverrides } from "@/utils/calendario";
+import { Zap, Receipt, Pencil, RotateCcw, Clock } from "lucide-react";
 import { StepContentHeader } from "./StepContentHeader";
 
 interface StepExtraGaraIvaProps {
@@ -19,6 +20,9 @@ interface StepExtraGaraIvaProps {
   soglieOverride?: ExtraGaraSogliePerRS;
   onSoglieOverrideChange?: (override: ExtraGaraSogliePerRS) => void;
   tabelleCalcoloConfig?: TabelleCalcoloValues | null;
+  anno?: number;
+  monthIndex?: number;
+  calendarioOverrides?: Record<string, CalendarioMeseOverride>;
 }
 
 const formatCurrency = (value: number) =>
@@ -40,6 +44,9 @@ const StepExtraGaraIva: React.FC<StepExtraGaraIvaProps> = ({
   soglieOverride,
   onSoglieOverrideChange,
   tabelleCalcoloConfig,
+  anno,
+  monthIndex,
+  calendarioOverrides,
 }) => {
   const isRSMode = modalitaInserimentoRS === "per_rs";
   const [editingRS, setEditingRS] = useState<string | null>(null);
@@ -54,6 +61,25 @@ const StepExtraGaraIva: React.FC<StepExtraGaraIvaProps> = ({
       premiPerSoglia: tabelleCalcoloConfig.extraGara.premiPerSoglia,
     };
   }, [tabelleCalcoloConfig]);
+
+  const avgWorkingDaysPerRS = useMemo(() => {
+    if (!puntiVendita || anno === undefined || monthIndex === undefined) return {};
+    const pdvPerRS: Record<string, PuntoVendita[]> = {};
+    for (const pdv of puntiVendita) {
+      const rs = pdv.ragioneSociale || "Senza RS";
+      if (!pdvPerRS[rs]) pdvPerRS[rs] = [];
+      pdvPerRS[rs].push(pdv);
+    }
+    const result: Record<string, number> = {};
+    for (const [rs, pdvList] of Object.entries(pdvPerRS)) {
+      const totalDays = pdvList.reduce((sum, pdv) => {
+        const wi = getWorkdayInfoFromOverrides(anno, monthIndex, pdv.calendar, calendarioOverrides?.[pdv.id]);
+        return sum + wi.totalWorkingDays;
+      }, 0);
+      result[rs] = totalDays / (pdvList.length || 1);
+    }
+    return result;
+  }, [puntiVendita, anno, monthIndex, calendarioOverrides]);
 
   const defaultSogliePerRS = useMemo(() => {
     if (!puntiVendita) return {};
@@ -321,6 +347,25 @@ const StepExtraGaraIva: React.FC<StepExtraGaraIvaProps> = ({
                     <Progress value={progressToNext} className="h-2" />
                   </div>
                 )}
+
+                {(() => {
+                  const avgDays = avgWorkingDaysPerRS[rs.ragioneSociale] || 0;
+                  const runRatePuntiRS = avgDays > 0 ? rs.puntiTotaliRS / avgDays : 0;
+                  const runRatePezziRS = avgDays > 0 ? rs.pezziTotaliRS / avgDays : 0;
+                  return avgDays > 0 ? (
+                    <div className="p-3 bg-secondary/10 rounded-lg border border-secondary/30" data-testid={`run-rate-extra-gara-rs-${rs.ragioneSociale}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className="w-4 h-4 text-secondary-foreground" />
+                        <p className="font-semibold text-sm text-secondary-foreground">Run Rate</p>
+                      </div>
+                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                        <span>Punti/gg: <span className="font-medium text-foreground">{runRatePuntiRS.toFixed(2)}</span></span>
+                        <span>Attivazioni/gg: <span className="font-medium text-foreground">{runRatePezziRS.toFixed(2)}</span></span>
+                        <span>Media gg lav: <span className="font-medium text-foreground">{avgDays.toFixed(1)}</span></span>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
 
                 {!isRSMode && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3">

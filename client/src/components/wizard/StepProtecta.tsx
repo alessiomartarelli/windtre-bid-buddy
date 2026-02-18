@@ -15,8 +15,9 @@ import {
   createEmptyProtectaAttivato,
 } from '@/types/protecta';
 import { formatCurrency } from '@/utils/format';
-import { Lock, Home, Store, Zap } from 'lucide-react';
+import { Lock, Home, Store, Zap, Clock } from 'lucide-react';
 import { StepContentHeader } from './StepContentHeader';
+import { CalendarioMeseOverride, getWorkdayInfoFromOverrides } from '@/utils/calendario';
 
 interface StepProtectaProps {
   puntiVendita: PuntoVendita[];
@@ -24,6 +25,9 @@ interface StepProtectaProps {
   setAttivatoByPos: React.Dispatch<React.SetStateAction<Record<string, ProtectaAttivatoRiga>>>;
   results: ProtectaResult[];
   totalePremio: number;
+  anno?: number;
+  monthIndex?: number;
+  calendarioOverrides?: Record<string, CalendarioMeseOverride>;
 }
 
 const StepProtecta: React.FC<StepProtectaProps> = ({
@@ -32,6 +36,9 @@ const StepProtecta: React.FC<StepProtectaProps> = ({
   setAttivatoByPos,
   results,
   totalePremio,
+  anno,
+  monthIndex,
+  calendarioOverrides,
 }) => {
   const handleChange = (posCode: string, field: ProtectaProduct, value: number) => {
     setAttivatoByPos(prev => ({
@@ -60,6 +67,12 @@ const StepProtecta: React.FC<StepProtectaProps> = ({
         {puntiVendita.map((pdv) => {
           const attivato = attivatoByPos[pdv.codicePos] || createEmptyProtectaAttivato();
           const result = getResultForPos(pdv.codicePos);
+          const wi = (anno !== undefined && monthIndex !== undefined)
+            ? getWorkdayInfoFromOverrides(anno, monthIndex, pdv.calendar, calendarioOverrides?.[pdv.id])
+            : null;
+          const totalWorkingDays = wi?.totalWorkingDays || 0;
+          const totalPezziPDV = (Object.keys(PROTECTA_GETTONI) as ProtectaProduct[]).reduce((s, k) => s + attivato[k], 0);
+          const runRatePezzi = totalWorkingDays > 0 ? totalPezziPDV / totalWorkingDays : 0;
 
           return (
             <Card key={pdv.codicePos}>
@@ -141,6 +154,16 @@ const StepProtecta: React.FC<StepProtectaProps> = ({
                 </div>
 
                 {/* Dettaglio prodotti attivati */}
+                {totalWorkingDays > 0 && (
+                  <div className="p-2 bg-secondary/10 rounded-lg border border-secondary/30 mt-2" data-testid={`run-rate-protecta-pdv-${pdv.id}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className="w-3 h-3 text-secondary-foreground" />
+                      <span className="font-medium text-xs text-secondary-foreground">Run Rate</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">Pezzi/gg: <span className="font-medium text-foreground">{runRatePezzi.toFixed(2)}</span> · Giorni: {totalWorkingDays}</span>
+                  </div>
+                )}
+
                 {result && result.dettaglioProdotti.length > 0 && (
                   <div className="pt-2 border-t">
                     <p className="text-xs text-muted-foreground">

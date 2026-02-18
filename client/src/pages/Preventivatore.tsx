@@ -1637,6 +1637,7 @@ const Preventivatore = () => {
                           pistaMobileRSConfig={pistaMobileRSConfig}
                           anno={configGara.annoGara} 
                           monthIndex={configGara.meseGara - 1} 
+                          calendarioOverrides={calendarioOverrides}
                           attivatoMobileByRS={attivatoMobileByRS} 
                           setAttivatoMobileByRS={setAttivatoMobileByRS} 
                           totalePremioMobilePrevisto={totalePremioMobile} 
@@ -1652,6 +1653,7 @@ const Preventivatore = () => {
                           pistaFissoRSConfig={pistaFissoRSConfig}
                           anno={configGara.annoGara} 
                           monthIndex={configGara.meseGara - 1} 
+                          calendarioOverrides={calendarioOverrides}
                           attivatoFissoByRS={attivatoFissoByRS} 
                           setAttivatoFissoByRS={setAttivatoFissoByRS} 
                           totalePremioFissoPrevisto={totalePremioFisso} 
@@ -1665,6 +1667,9 @@ const Preventivatore = () => {
                         <StepPartnershipRewardRS 
                           puntiVendita={puntiVendita} 
                           partnershipRewardRSConfig={partnershipRewardRSConfig}
+                          anno={configGara.annoGara}
+                          monthIndex={configGara.meseGara - 1}
+                          calendarioOverrides={calendarioOverrides}
                           attivatoCBByRS={attivatoCBByRS} 
                           setAttivatoCBByRS={setAttivatoCBByRS} 
                           totalePremioPartnershipPrevisto={totalePremioPartnershipPrevisto} 
@@ -1681,7 +1686,10 @@ const Preventivatore = () => {
                           setEnergiaConfig={setEnergiaConfig}
                           attivatoEnergiaByRS={attivatoEnergiaByRS} 
                           setAttivatoEnergiaByRS={setAttivatoEnergiaByRS} 
-                          totalePremioEnergia={totalePremioEnergia} 
+                          totalePremioEnergia={totalePremioEnergia}
+                          anno={configGara.annoGara}
+                          monthIndex={configGara.meseGara - 1}
+                          calendarioOverrides={calendarioOverrides}
                         />
                       ) : (
                         <StepEnergia puntiVendita={puntiVendita} energiaConfig={energiaConfig} setEnergiaConfig={setEnergiaConfig} energiaPdvInGara={energiaPdvInGara} setEnergiaPdvInGara={setEnergiaPdvInGara} attivatoEnergiaByPos={attivatoEnergiaByPos} setAttivatoEnergiaByPos={setAttivatoEnergiaByPos} energiaResults={energiaResults} totalePremioEnergia={totalePremioEnergia} />
@@ -1695,7 +1703,10 @@ const Preventivatore = () => {
                           onConfigChange={setAssicurazioniConfig}
                           attivatoByRS={attivatoAssicurazioniByRS} 
                           setAttivatoByRS={setAttivatoAssicurazioniByRS} 
-                          totalePremio={totalePremioAssicurazioni} 
+                          totalePremio={totalePremioAssicurazioni}
+                          anno={configGara.annoGara}
+                          monthIndex={configGara.meseGara - 1}
+                          calendarioOverrides={calendarioOverrides}
                         />
                       ) : (
                         <StepAssicurazioni config={assicurazioniConfig} onConfigChange={setAssicurazioniConfig} pdvInGara={assicurazioniPdvInGara} onPdvInGaraChange={setAssicurazioniPdvInGara} puntiVendita={puntiVendita} attivatoByPos={attivatoAssicurazioniByPos} onAttivatoChange={(posId, attivato) => setAttivatoAssicurazioniByPos(prev => ({ ...prev, [posId]: attivato }))} results={assicurazioniResults} totalePremio={totalePremioAssicurazioni} />
@@ -1707,22 +1718,25 @@ const Preventivatore = () => {
                           puntiVendita={puntiVendita} 
                           attivatoByRS={attivatoProtectaByRS} 
                           setAttivatoByRS={setAttivatoProtectaByRS} 
-                          totalePremio={totalePremioProtecta} 
+                          totalePremio={totalePremioProtecta}
+                          anno={configGara.annoGara}
+                          monthIndex={configGara.meseGara - 1}
+                          calendarioOverrides={calendarioOverrides}
                         />
                       ) : (
                         <StepProtecta puntiVendita={puntiVendita} attivatoByPos={attivatoProtectaByPos} setAttivatoByPos={setAttivatoProtectaByPos} results={protectaResults} totalePremio={totalePremioProtecta} />
                       )
                     )}
-                    {step === 13 && <StepExtraGaraIva results={extraGaraIvaResults} totalePremio={totalePremioExtraGaraIva} modalitaInserimentoRS={modalitaInserimentoRS} puntiVendita={puntiVendita} soglieOverride={extraGaraSoglieOverride} onSoglieOverrideChange={setExtraGaraSoglieOverride} tabelleCalcoloConfig={tabelleCalcoloConfig} />}
+                    {step === 13 && <StepExtraGaraIva results={extraGaraIvaResults} totalePremio={totalePremioExtraGaraIva} modalitaInserimentoRS={modalitaInserimentoRS} puntiVendita={puntiVendita} soglieOverride={extraGaraSoglieOverride} onSoglieOverrideChange={setExtraGaraSoglieOverride} tabelleCalcoloConfig={tabelleCalcoloConfig} anno={configGara.annoGara} monthIndex={configGara.meseGara - 1} calendarioOverrides={calendarioOverrides} />}
                   </>
                 ) : (
                   <>
                     {step === 7 && <StepAttivatoFisso puntiVendita={puntiVendita} pistaFissoConfig={pistaFissoConfig} anno={configGara.annoGara} monthIndex={configGara.meseGara - 1} attivatoFissoByPos={attivatoFissoByPos} setAttivatoFissoByPos={setAttivatoFissoByPos} fissoResults={fissoResults} totalePremioFissoPrevisto={totalePremioFisso} />}
                     {step === 8 && <StepPartnershipReward puntiVendita={puntiVendita} partnershipRewardConfig={partnershipRewardConfig} attivatoCBByPos={attivatoCBByPos} setAttivatoCBByPos={setAttivatoCBByPos} partnershipResults={partnershipResults} totalePremioPartnershipPrevisto={totalePremioPartnershipPrevisto} anno={configGara.annoGara} monthIndex={configGara.meseGara - 1} />}
-                    {step === 9 && <StepEnergia puntiVendita={puntiVendita} energiaConfig={energiaConfig} setEnergiaConfig={setEnergiaConfig} energiaPdvInGara={energiaPdvInGara} setEnergiaPdvInGara={setEnergiaPdvInGara} attivatoEnergiaByPos={attivatoEnergiaByPos} setAttivatoEnergiaByPos={setAttivatoEnergiaByPos} energiaResults={energiaResults} totalePremioEnergia={totalePremioEnergia} />}
-                    {step === 10 && <StepAssicurazioni config={assicurazioniConfig} onConfigChange={setAssicurazioniConfig} pdvInGara={assicurazioniPdvInGara} onPdvInGaraChange={setAssicurazioniPdvInGara} puntiVendita={puntiVendita} attivatoByPos={attivatoAssicurazioniByPos} onAttivatoChange={(posId, attivato) => setAttivatoAssicurazioniByPos(prev => ({ ...prev, [posId]: attivato }))} results={assicurazioniResults} totalePremio={totalePremioAssicurazioni} />}
-                    {step === 11 && <StepProtecta puntiVendita={puntiVendita} attivatoByPos={attivatoProtectaByPos} setAttivatoByPos={setAttivatoProtectaByPos} results={protectaResults} totalePremio={totalePremioProtecta} />}
-                    {step === 12 && <StepExtraGaraIva results={extraGaraIvaResults} totalePremio={totalePremioExtraGaraIva} modalitaInserimentoRS={modalitaInserimentoRS} puntiVendita={puntiVendita} soglieOverride={extraGaraSoglieOverride} onSoglieOverrideChange={setExtraGaraSoglieOverride} tabelleCalcoloConfig={tabelleCalcoloConfig} />}
+                    {step === 9 && <StepEnergia puntiVendita={puntiVendita} energiaConfig={energiaConfig} setEnergiaConfig={setEnergiaConfig} energiaPdvInGara={energiaPdvInGara} setEnergiaPdvInGara={setEnergiaPdvInGara} attivatoEnergiaByPos={attivatoEnergiaByPos} setAttivatoEnergiaByPos={setAttivatoEnergiaByPos} energiaResults={energiaResults} totalePremioEnergia={totalePremioEnergia} anno={configGara.annoGara} monthIndex={configGara.meseGara - 1} calendarioOverrides={calendarioOverrides} />}
+                    {step === 10 && <StepAssicurazioni config={assicurazioniConfig} onConfigChange={setAssicurazioniConfig} pdvInGara={assicurazioniPdvInGara} onPdvInGaraChange={setAssicurazioniPdvInGara} puntiVendita={puntiVendita} attivatoByPos={attivatoAssicurazioniByPos} onAttivatoChange={(posId, attivato) => setAttivatoAssicurazioniByPos(prev => ({ ...prev, [posId]: attivato }))} results={assicurazioniResults} totalePremio={totalePremioAssicurazioni} anno={configGara.annoGara} monthIndex={configGara.meseGara - 1} calendarioOverrides={calendarioOverrides} />}
+                    {step === 11 && <StepProtecta puntiVendita={puntiVendita} attivatoByPos={attivatoProtectaByPos} setAttivatoByPos={setAttivatoProtectaByPos} results={protectaResults} totalePremio={totalePremioProtecta} anno={configGara.annoGara} monthIndex={configGara.meseGara - 1} calendarioOverrides={calendarioOverrides} />}
+                    {step === 12 && <StepExtraGaraIva results={extraGaraIvaResults} totalePremio={totalePremioExtraGaraIva} modalitaInserimentoRS={modalitaInserimentoRS} puntiVendita={puntiVendita} soglieOverride={extraGaraSoglieOverride} onSoglieOverrideChange={setExtraGaraSoglieOverride} tabelleCalcoloConfig={tabelleCalcoloConfig} anno={configGara.annoGara} monthIndex={configGara.meseGara - 1} calendarioOverrides={calendarioOverrides} />}
                   </>
                 )}
               </div>

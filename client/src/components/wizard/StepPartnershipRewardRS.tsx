@@ -13,12 +13,16 @@ import {
   TELEFONO_INCLUSO_OPTIONS,
 } from "@/types/partnership-cb-events";
 import { formatCurrency } from "@/utils/format";
-import { Gift, ChevronDown, ChevronUp, Building2, Store } from "lucide-react";
+import { Gift, ChevronDown, ChevronUp, Building2, Store, Clock } from "lucide-react";
+import { CalendarioMeseOverride, getWorkdayInfoFromOverrides } from "@/utils/calendario";
 import { StepContentHeader } from "./StepContentHeader";
 
 interface StepPartnershipRewardRSProps {
   puntiVendita: PuntoVendita[];
   partnershipRewardRSConfig: PartnershipRewardRSConfig;
+  anno: number;
+  monthIndex: number;
+  calendarioOverrides: Record<string, CalendarioMeseOverride>;
   attivatoCBByRS: Record<string, AttivatoCBDettaglio[]>;
   setAttivatoCBByRS: React.Dispatch<React.SetStateAction<Record<string, AttivatoCBDettaglio[]>>>;
   totalePremioPartnershipPrevisto: number;
@@ -27,6 +31,9 @@ interface StepPartnershipRewardRSProps {
 export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = ({
   puntiVendita,
   partnershipRewardRSConfig,
+  anno,
+  monthIndex,
+  calendarioOverrides,
   attivatoCBByRS,
   setAttivatoCBByRS,
   totalePremioPartnershipPrevisto,
@@ -175,6 +182,13 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
           const righeRS = attivatoCBByRS[rs] ?? [];
           const totaleGettoniRS = righeRS.reduce((sum, r) => sum + (r.pezzi * (r.gettoni || 0)), 0);
           const totalePuntiRS = righeRS.reduce((sum, r) => sum + (r.pezzi * (r.puntiPartnership || 0)), 0);
+
+          const avgWorkingDaysRS = pdvList.reduce((sum, pdv) => {
+            const wi = getWorkdayInfoFromOverrides(anno, monthIndex, pdv.calendar, calendarioOverrides[pdv.id]);
+            return sum + wi.totalWorkingDays;
+          }, 0) / (pdvList.length || 1);
+          const runRatePuntiRS = avgWorkingDaysRS > 0 ? totalePuntiRS / avgWorkingDaysRS : 0;
+          const runRatePezziRS = avgWorkingDaysRS > 0 ? totalPezziRS / avgWorkingDaysRS : 0;
 
           const target100 = config?.target100 || 0;
           const target80 = config?.target80 || 0;
@@ -395,6 +409,18 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
                             </div>
                           </div>
                         ))}
+                      </div>
+                    </div>
+
+                    <div data-testid={`run-rate-partnership-rs-${rs}`} className="p-3 bg-secondary/10 rounded-lg border border-secondary/30">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className="w-4 h-4 text-secondary-foreground" />
+                        <p className="font-semibold text-sm text-secondary-foreground">Run Rate</p>
+                      </div>
+                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                        <span>Punti/gg: <span className="font-medium text-foreground">{runRatePuntiRS.toFixed(2)}</span></span>
+                        <span>Pezzi/gg: <span className="font-medium text-foreground">{runRatePezziRS.toFixed(2)}</span></span>
+                        <span>Media gg lav: <span className="font-medium text-foreground">{avgWorkingDaysRS.toFixed(1)}</span></span>
                       </div>
                     </div>
                   </CardContent>

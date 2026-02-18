@@ -14,7 +14,8 @@ import {
   createEmptyAssicurazioniAttivato,
 } from "@/types/assicurazioni";
 import { formatCurrency } from "@/utils/format";
-import { Shield, ChevronDown, ChevronUp, Building2, Store } from "lucide-react";
+import { Shield, ChevronDown, ChevronUp, Building2, Store, Clock } from "lucide-react";
+import { CalendarioMeseOverride, getWorkdayInfoFromOverrides } from "@/utils/calendario";
 import { StepContentHeader } from "./StepContentHeader";
 
 interface StepAssicurazioniRSProps {
@@ -24,6 +25,9 @@ interface StepAssicurazioniRSProps {
   attivatoByRS: Record<string, AssicurazioniAttivatoRiga>;
   setAttivatoByRS: React.Dispatch<React.SetStateAction<Record<string, AssicurazioniAttivatoRiga>>>;
   totalePremio: number;
+  anno: number;
+  monthIndex: number;
+  calendarioOverrides: Record<string, CalendarioMeseOverride>;
 }
 
 const PRODOTTI_STANDARD: (keyof Omit<AssicurazioniAttivatoRiga, 'viaggioMondo' | 'viaggioMondoPremio' | 'reloadForever'>)[] = [
@@ -45,6 +49,9 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
   attivatoByRS,
   setAttivatoByRS,
   totalePremio,
+  anno,
+  monthIndex,
+  calendarioOverrides,
 }) => {
   const [openCards, setOpenCards] = React.useState<Record<string, boolean>>({});
 
@@ -184,6 +191,14 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
           const premioSogliaRS = (puntiBaseRS >= effectiveS1 ? 500 * numPdvRS : 0) + (puntiTotRS >= effectiveS2 ? 750 * numPdvRS : 0);
           const premioTotaleRS = gettoniRS + premioSogliaRS;
 
+          const avgWorkingDaysRS = pdvList.reduce((sum, pdv) => {
+            const wi = getWorkdayInfoFromOverrides(anno, monthIndex, pdv.calendar, calendarioOverrides[pdv.id]);
+            return sum + wi.totalWorkingDays;
+          }, 0) / (pdvList.length || 1);
+          const totalPezziRS_sum = Object.values(attivato).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
+          const runRatePezziRS = avgWorkingDaysRS > 0 ? totalPezziRS_sum / avgWorkingDaysRS : 0;
+          const runRatePuntiRS = avgWorkingDaysRS > 0 ? puntiBaseRS / avgWorkingDaysRS : 0;
+
           return (
             <Collapsible key={rs} open={isOpen} onOpenChange={() => toggleCard(rs)}>
               <Card className="border-border/50 shadow-sm overflow-hidden transition-all hover:shadow-md">
@@ -258,6 +273,17 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
                           className="h-8"
                         />
                         <p className="text-[10px] text-muted-foreground">1 punto ogni 5 eventi</p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-secondary/10 rounded-lg border border-secondary/30" data-testid={`run-rate-assicurazioni-rs-${rs}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className="w-4 h-4 text-secondary-foreground" />
+                        <p className="font-semibold text-sm text-secondary-foreground">Run Rate</p>
+                      </div>
+                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                        <span>Pezzi/gg: <span className="font-medium text-foreground">{runRatePezziRS.toFixed(2)}</span></span>
+                        <span>Punti/gg: <span className="font-medium text-foreground">{runRatePuntiRS.toFixed(2)}</span></span>
+                        <span>Media gg lav: <span className="font-medium text-foreground">{avgWorkingDaysRS.toFixed(1)}</span></span>
                       </div>
                     </div>
                   </CardContent>

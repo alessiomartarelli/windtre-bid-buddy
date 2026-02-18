@@ -20,8 +20,9 @@ import {
   PistaEnergiaSoglia,
 } from "@/types/energia";
 import { formatCurrency } from "@/utils/format";
-import { Zap } from "lucide-react";
+import { Zap, Clock } from "lucide-react";
 import { StepContentHeader } from "./StepContentHeader";
+import { CalendarioMeseOverride, getWorkdayInfoFromOverrides } from "@/utils/calendario";
 
 interface StepEnergiaProps {
   puntiVendita: PuntoVendita[];
@@ -33,6 +34,9 @@ interface StepEnergiaProps {
   setAttivatoEnergiaByPos: React.Dispatch<React.SetStateAction<Record<string, EnergiaAttivatoRiga[]>>>;
   energiaResults: EnergiaResult[];
   totalePremioEnergia: number;
+  anno?: number;
+  monthIndex?: number;
+  calendarioOverrides?: Record<string, CalendarioMeseOverride>;
 }
 
 export function StepEnergia({
@@ -45,6 +49,9 @@ export function StepEnergia({
   setAttivatoEnergiaByPos,
   energiaResults,
   totalePremioEnergia,
+  anno,
+  monthIndex,
+  calendarioOverrides,
 }: StepEnergiaProps) {
   
   const handleConfigChange = (field: keyof EnergiaConfig, value: number) => {
@@ -278,6 +285,13 @@ export function StepEnergia({
           const result = getResultForPdv(pdv.id);
           const pdvGara = energiaPdvInGara.find((p) => p.pdvId === pdv.id);
           const isInGara = pdvGara?.isInGara || false;
+          const wi = (anno !== undefined && monthIndex !== undefined)
+            ? getWorkdayInfoFromOverrides(anno, monthIndex, pdv.calendar, calendarioOverrides?.[pdv.id])
+            : null;
+          const totalWorkingDays = wi?.totalWorkingDays || 0;
+          const righe = attivatoEnergiaByPos[pdv.id] || [];
+          const totalContrattiPDV = righe.reduce((sum, r) => sum + r.pezzi, 0);
+          const runRateContratti = totalWorkingDays > 0 ? totalContrattiPDV / totalWorkingDays : 0;
 
           return (
             <Card key={pdv.id}>
@@ -341,6 +355,16 @@ export function StepEnergia({
                     </div>
                   </div>
                 </div>
+
+                {totalWorkingDays > 0 && (
+                  <div className="p-2 bg-secondary/10 rounded-lg border border-secondary/30 mt-2" data-testid={`run-rate-energia-pdv-${pdv.id}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className="w-3 h-3 text-secondary-foreground" />
+                      <span className="font-medium text-xs text-secondary-foreground">Run Rate</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">Contratti/gg: <span className="font-medium text-foreground">{runRateContratti.toFixed(2)}</span> · Giorni: {totalWorkingDays}</span>
+                  </div>
+                )}
                 
                 {result && (
                   <>

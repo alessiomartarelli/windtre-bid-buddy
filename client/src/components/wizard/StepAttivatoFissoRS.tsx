@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { PuntoVendita, PistaFissoRSConfig, SoglieFissoRS } from "@/types/preventivatore";
 import { formatCurrency } from "@/utils/format";
-import { Monitor, ChevronDown, ChevronUp, Building2, Store } from "lucide-react";
+import { Monitor, ChevronDown, ChevronUp, Building2, Store, Clock } from "lucide-react";
+import { CalendarioMeseOverride, getWorkdayInfoFromOverrides } from "@/utils/calendario";
 import {
   AttivatoFissoRiga,
   FissoCategoriaType,
@@ -19,6 +20,7 @@ interface StepAttivatoFissoRSProps {
   pistaFissoRSConfig: PistaFissoRSConfig;
   anno: number;
   monthIndex: number;
+  calendarioOverrides: Record<string, CalendarioMeseOverride>;
   attivatoFissoByRS: Record<string, AttivatoFissoRiga[]>;
   setAttivatoFissoByRS: React.Dispatch<React.SetStateAction<Record<string, AttivatoFissoRiga[]>>>;
   totalePremioFissoPrevisto: number;
@@ -27,6 +29,9 @@ interface StepAttivatoFissoRSProps {
 export const StepAttivatoFissoRS: React.FC<StepAttivatoFissoRSProps> = ({
   puntiVendita,
   pistaFissoRSConfig,
+  anno,
+  monthIndex,
+  calendarioOverrides,
   attivatoFissoByRS,
   setAttivatoFissoByRS,
   totalePremioFissoPrevisto,
@@ -165,6 +170,13 @@ export const StepAttivatoFissoRS: React.FC<StepAttivatoFissoRSProps> = ({
           const puntiTotaliRS = calcolaPuntiTotaliRS(rs);
           const sogliaRaggiunta = determinaSogliaRaggiuntaRS(rs);
 
+          const avgWorkingDaysRS = pdvList.reduce((sum, pdv) => {
+            const wi = getWorkdayInfoFromOverrides(anno, monthIndex, pdv.calendar, calendarioOverrides[pdv.id]);
+            return sum + wi.totalWorkingDays;
+          }, 0) / (pdvList.length || 1);
+          const runRatePezziRS = avgWorkingDaysRS > 0 ? totalPezziRS / avgWorkingDaysRS : 0;
+          const runRatePuntiRS = avgWorkingDaysRS > 0 ? puntiTotaliRS / avgWorkingDaysRS : 0;
+
           return (
             <Collapsible key={rs} open={isOpen} onOpenChange={() => toggleCard(rs)}>
               <Card className="border-border/50 shadow-sm overflow-hidden transition-all hover:shadow-md">
@@ -234,6 +246,18 @@ export const StepAttivatoFissoRS: React.FC<StepAttivatoFissoRSProps> = ({
                       <div className="flex justify-between items-center text-sm">
                         <span className="text-muted-foreground">Totale pezzi RS</span>
                         <span className="font-semibold">{totalPezziRS}</span>
+                      </div>
+                    </div>
+
+                    <div data-testid={`run-rate-fisso-rs-${rs}`} className="p-3 bg-secondary/10 rounded-lg border border-secondary/30">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className="w-4 h-4 text-secondary-foreground" />
+                        <p className="font-semibold text-sm text-secondary-foreground">Run Rate</p>
+                      </div>
+                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                        <span>Pezzi/gg: <span className="font-medium text-foreground">{runRatePezziRS.toFixed(2)}</span></span>
+                        <span>Punti/gg: <span className="font-medium text-foreground">{runRatePuntiRS.toFixed(2)}</span></span>
+                        <span>Media gg lav: <span className="font-medium text-foreground">{avgWorkingDaysRS.toFixed(1)}</span></span>
                       </div>
                     </div>
                   </CardContent>
