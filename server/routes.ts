@@ -45,8 +45,13 @@ function setupSession(app: Express) {
   );
 }
 
-const isAuthenticated: RequestHandler = (req: any, res, next) => {
+const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   if (req.session && req.session.userId) {
+    const profile = await storage.getProfile(req.session.userId);
+    if (profile && profile.isActive === false) {
+      req.session.destroy(() => {});
+      return res.status(403).json({ message: "Account disattivato. Contatta il tuo amministratore." });
+    }
     return next();
   }
   return res.status(401).json({ message: "Unauthorized" });
@@ -120,6 +125,10 @@ export async function registerRoutes(
       const valid = await bcrypt.compare(password, profile.passwordHash);
       if (!valid) {
         return res.status(401).json({ error: "Invalid login credentials" });
+      }
+
+      if (profile.isActive === false) {
+        return res.status(403).json({ error: "Account disattivato. Contatta il tuo amministratore." });
       }
 
       req.session.userId = profile.id;
@@ -610,11 +619,14 @@ export async function registerRoutes(
         if (!targetProfile || targetProfile.organizationId !== profile.organizationId) {
           return res.status(403).json({ message: "Cannot update users outside your organization" });
         }
+        if (targetProfile.role !== "operatore" && targetId !== currentUserId) {
+          return res.status(403).json({ message: "Un admin può modificare solo gli operatori" });
+        }
       }
       const updateData: any = {};
       if (resolvedFullName) updateData.fullName = resolvedFullName;
       if (email) updateData.email = email;
-      if (role) updateData.role = role;
+      if (role && profile.role === "super_admin") updateData.role = role;
       const updated = await storage.updateProfile(targetId, updateData);
       res.json(updated);
     } catch (error) {
@@ -649,6 +661,96 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Error deleting entity" });
+    }
+  });
+
+  // === ADMIN: Change user password ===
+  app.post("/api/admin/change-password", isAuthenticated, async (req: any, res) => {
+    try {
+      const currentUserId = req.session.userId;
+      const adminProfile = await storage.getProfile(currentUserId);
+      if (!adminProfile || !["super_admin", "admin"].includes(adminProfile.role)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { userId: targetUserId, newPassword } = req.body;
+      if (!targetUserId || !newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: "Password deve avere almeno 6 caratteri" });
+      }
+      if (adminProfile.role === "admin") {
+        const targetProfile = await storage.getProfile(targetUserId);
+        if (!targetProfile || targetProfile.organizationId !== adminProfile.organizationId) {
+          return res.status(403).json({ error: "Non puoi modificare utenti di altre organizzazioni" });
+        }
+        if (targetProfile.role !== "operatore") {
+          return res.status(403).json({ error: "Un admin può cambiare la password solo degli operatori" });
+        }
+      }
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await storage.updateProfile(targetUserId, { passwordHash });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error changing password:", error);
+      res.status(500).json({ error: "Errore nel cambio password" });
+    }
+  });
+
+  // === USER: Change own password ===
+  app.post("/api/auth/change-password", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !profile.passwordHash) {
+        return res.status(400).json({ error: "Profilo non trovato" });
+      }
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: "Password attuale e nuova sono obbligatorie" });
+      }
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "La nuova password deve avere almeno 6 caratteri" });
+      }
+      const valid = await bcrypt.compare(currentPassword, profile.passwordHash);
+      if (!valid) {
+        return res.status(401).json({ error: "Password attuale non corretta" });
+      }
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await storage.updateProfile(userId, { passwordHash });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error changing own password:", error);
+      res.status(500).json({ error: "Errore nel cambio password" });
+    }
+  });
+
+  // === ADMIN: Toggle user active status ===
+  app.post("/api/admin/toggle-active", isAuthenticated, async (req: any, res) => {
+    try {
+      const currentUserId = req.session.userId;
+      const adminProfile = await storage.getProfile(currentUserId);
+      if (!adminProfile || !["super_admin", "admin"].includes(adminProfile.role)) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { userId: targetUserId, isActive } = req.body;
+      if (!targetUserId || typeof isActive !== "boolean") {
+        return res.status(400).json({ error: "Parametri non validi" });
+      }
+      if (targetUserId === currentUserId) {
+        return res.status(400).json({ error: "Non puoi disattivare te stesso" });
+      }
+      if (adminProfile.role === "admin") {
+        const targetProfile = await storage.getProfile(targetUserId);
+        if (!targetProfile || targetProfile.organizationId !== adminProfile.organizationId) {
+          return res.status(403).json({ error: "Non puoi modificare utenti di altre organizzazioni" });
+        }
+        if (targetProfile.role !== "operatore") {
+          return res.status(403).json({ error: "Un admin può disattivare solo gli operatori" });
+        }
+      }
+      const updated = await storage.updateProfile(targetUserId, { isActive });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error toggling user active:", error);
+      res.status(500).json({ error: "Errore nell'aggiornamento dello stato utente" });
     }
   });
 

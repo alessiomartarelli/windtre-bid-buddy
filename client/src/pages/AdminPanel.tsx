@@ -8,8 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, Plus, Users, Trash2, Pencil, Eye, EyeOff } from 'lucide-react';
+import { Loader2, ArrowLeft, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, UserX, UserCheck } from 'lucide-react';
 import { z } from 'zod';
 import {
   Dialog,
@@ -42,12 +43,16 @@ const updateUserSchema = z.object({
   email: z.string().email('Email non valida'),
 });
 
-interface Profile {
+interface TeamMember {
   id: string;
   full_name: string | null;
+  fullName?: string | null;
   email: string | null;
   role: string;
   organization_id: string | null;
+  organizationId?: string | null;
+  is_active?: boolean;
+  isActive?: boolean;
 }
 
 export default function AdminPanel() {
@@ -55,22 +60,25 @@ export default function AdminPanel() {
   const { profile, organization, loading: authLoading } = useAuth();
   const { toast } = useToast();
   
-  const [teamMembers, setTeamMembers] = useState<Profile[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingUser, setEditingUser] = useState<Profile | null>(null);
+  const [editingUser, setEditingUser] = useState<TeamMember | null>(null);
+  const [passwordUser, setPasswordUser] = useState<TeamMember | null>(null);
   
-  // Form state for create
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   
-  // Form state for edit
   const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
+
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   useEffect(() => {
     if (profile && !['super_admin', 'admin'].includes(profile.role)) {
@@ -86,7 +94,6 @@ export default function AdminPanel() {
 
   const fetchTeamMembers = async () => {
     setLoading(true);
-    
     try {
       const res = await fetch(apiUrl('/api/admin/team-members'), { credentials: 'include' });
       if (res.ok) {
@@ -96,55 +103,33 @@ export default function AdminPanel() {
     } catch (err) {
       console.error('Error fetching team members:', err);
     }
-    
     setLoading(false);
   };
 
+  const getMemberName = (m: TeamMember) => m.full_name || m.fullName || '-';
+  const getMemberActive = (m: TeamMember) => m.is_active !== undefined ? m.is_active : (m.isActive !== undefined ? m.isActive : true);
+
   const handleCreateOperatore = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     const validation = createOperatoreSchema.safeParse({ email, password, fullName });
     if (!validation.success) {
-      toast({
-        title: 'Errore di validazione',
-        description: validation.error.errors[0].message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Errore di validazione', description: validation.error.errors[0].message, variant: 'destructive' });
       return;
     }
-
     setLoading(true);
-    
     const res = await fetch(apiUrl('/api/admin/create-user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({
-        email,
-        password,
-        fullName,
-        role: 'operatore',
-        organizationId: profile?.organization_id,
-      }),
+      body: JSON.stringify({ email, password, fullName, role: 'operatore', organizationId: profile?.organization_id }),
     });
     const data = await res.json();
-
     setLoading(false);
-
     if (!res.ok || data?.error) {
-      toast({
-        title: 'Errore',
-        description: data?.error || 'Errore nella creazione dell\'operatore',
-        variant: 'destructive',
-      });
+      toast({ title: 'Errore', description: data?.error || 'Errore nella creazione dell\'operatore', variant: 'destructive' });
     } else {
-      toast({
-        title: 'Operatore creato',
-        description: `Operatore ${email} creato con successo`,
-      });
-      setEmail('');
-      setPassword('');
-      setFullName('');
+      toast({ title: 'Operatore creato', description: `Operatore ${email} creato con successo` });
+      setEmail(''); setPassword(''); setFullName('');
       setDialogOpen(false);
       fetchTeamMembers();
     }
@@ -152,7 +137,6 @@ export default function AdminPanel() {
 
   const handleDeleteUser = async (userId: string) => {
     setDeletingId(userId);
-    
     const res = await fetch(apiUrl('/api/admin/delete-entity'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -160,80 +144,100 @@ export default function AdminPanel() {
       body: JSON.stringify({ type: 'user', id: userId }),
     });
     const data = await res.json();
-
     setDeletingId(null);
-
     if (!res.ok || data?.error) {
-      toast({
-        title: 'Errore',
-        description: data?.error || 'Errore nell\'eliminazione dell\'utente',
-        variant: 'destructive',
-      });
+      toast({ title: 'Errore', description: data?.error || 'Errore nell\'eliminazione dell\'utente', variant: 'destructive' });
     } else {
-      toast({
-        title: 'Utente eliminato',
-        description: 'L\'operatore è stato eliminato con successo',
-      });
+      toast({ title: 'Utente eliminato', description: 'L\'operatore e stato eliminato con successo' });
       fetchTeamMembers();
     }
   };
 
-  const openEditDialog = (user: Profile) => {
+  const openEditDialog = (user: TeamMember) => {
     setEditingUser(user);
-    setEditFullName(user.full_name || '');
+    setEditFullName(getMemberName(user));
     setEditEmail(user.email || '');
     setEditDialogOpen(true);
   };
 
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!editingUser) return;
-
     const validation = updateUserSchema.safeParse({ fullName: editFullName, email: editEmail });
     if (!validation.success) {
-      toast({
-        title: 'Errore di validazione',
-        description: validation.error.errors[0].message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Errore di validazione', description: validation.error.errors[0].message, variant: 'destructive' });
       return;
     }
-
     setLoading(true);
-    
     const res = await fetch(apiUrl('/api/admin/update-user'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({
-        userId: editingUser.id,
-        fullName: editFullName,
-        email: editEmail,
-      }),
+      body: JSON.stringify({ userId: editingUser.id, fullName: editFullName, email: editEmail }),
     });
     const data = await res.json();
-
     setLoading(false);
-
     if (!res.ok || data?.error) {
-      toast({
-        title: 'Errore',
-        description: data?.error || 'Errore nell\'aggiornamento dell\'utente',
-        variant: 'destructive',
-      });
+      toast({ title: 'Errore', description: data?.error || 'Errore nell\'aggiornamento dell\'utente', variant: 'destructive' });
     } else {
-      toast({
-        title: 'Utente aggiornato',
-        description: 'Le modifiche sono state salvate',
-      });
-      setEditDialogOpen(false);
-      setEditingUser(null);
+      toast({ title: 'Utente aggiornato', description: 'Le modifiche sono state salvate' });
+      setEditDialogOpen(false); setEditingUser(null);
       fetchTeamMembers();
     }
   };
 
-  const getRoleBadgeVariant = (role: string) => {
+  const openPasswordDialog = (user: TeamMember) => {
+    setPasswordUser(user);
+    setNewPassword('');
+    setShowNewPassword(false);
+    setPasswordDialogOpen(true);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordUser) return;
+    if (newPassword.length < 6) {
+      toast({ title: 'Errore', description: 'La password deve avere almeno 6 caratteri', variant: 'destructive' });
+      return;
+    }
+    setLoading(true);
+    const res = await fetch(apiUrl('/api/admin/change-password'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ userId: passwordUser.id, newPassword }),
+    });
+    const data = await res.json();
+    setLoading(false);
+    if (!res.ok || data?.error) {
+      toast({ title: 'Errore', description: data?.error || 'Errore nel cambio password', variant: 'destructive' });
+    } else {
+      toast({ title: 'Password aggiornata', description: `Password di ${getMemberName(passwordUser)} aggiornata con successo` });
+      setPasswordDialogOpen(false); setPasswordUser(null); setNewPassword('');
+    }
+  };
+
+  const handleToggleActive = async (user: TeamMember) => {
+    const currentActive = getMemberActive(user);
+    const res = await fetch(apiUrl('/api/admin/toggle-active'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ userId: user.id, isActive: !currentActive }),
+    });
+    const data = await res.json();
+    if (!res.ok || data?.error) {
+      toast({ title: 'Errore', description: data?.error || 'Errore nell\'aggiornamento dello stato', variant: 'destructive' });
+    } else {
+      toast({
+        title: !currentActive ? 'Utente attivato' : 'Utente disattivato',
+        description: `${getMemberName(user)} e stato ${!currentActive ? 'attivato' : 'disattivato'}`,
+      });
+      fetchTeamMembers();
+    }
+  };
+
+  const getRoleBadgeVariant = (role: string): "destructive" | "default" | "secondary" => {
     switch (role) {
       case 'super_admin': return 'destructive';
       case 'admin': return 'default';
@@ -250,19 +254,32 @@ export default function AdminPanel() {
     }
   };
 
-  const canDeleteUser = (user: Profile) => {
+  const canDeleteUser = (user: TeamMember) => {
     if (user.id === profile?.id) return false;
     if (profile?.role === 'super_admin') return true;
     if (profile?.role === 'admin' && user.role === 'operatore') return true;
     return false;
   };
 
-  const canEditUser = (user: Profile) => {
+  const canEditUser = (user: TeamMember) => {
     if (profile?.role === 'super_admin') return true;
     if (profile?.role === 'admin') {
       if (user.id === profile?.id) return true;
       if (user.role === 'operatore') return true;
     }
+    return false;
+  };
+
+  const canChangePassword = (user: TeamMember) => {
+    if (profile?.role === 'super_admin') return true;
+    if (profile?.role === 'admin' && user.role === 'operatore') return true;
+    return false;
+  };
+
+  const canToggleActive = (user: TeamMember) => {
+    if (user.id === profile?.id) return false;
+    if (profile?.role === 'super_admin') return true;
+    if (profile?.role === 'admin' && user.role === 'operatore') return true;
     return false;
   };
 
@@ -280,16 +297,16 @@ export default function AdminPanel() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted p-3 sm:p-4">
-      <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6">
+      <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
         <Button 
           variant="ghost" 
           onClick={() => setLocation('/')}
+          data-testid="button-back"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Torna al simulatore
         </Button>
 
-        {/* Edit Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -303,6 +320,7 @@ export default function AdminPanel() {
                 <Label htmlFor="edit-name">Nome</Label>
                 <Input
                   id="edit-name"
+                  data-testid="input-edit-name"
                   placeholder="Nome Cognome"
                   value={editFullName}
                   onChange={(e) => setEditFullName(e.target.value)}
@@ -313,6 +331,7 @@ export default function AdminPanel() {
                 <Label htmlFor="edit-email">Email</Label>
                 <Input
                   id="edit-email"
+                  data-testid="input-edit-email"
                   type="email"
                   placeholder="email@esempio.com"
                   value={editEmail}
@@ -320,15 +339,51 @@ export default function AdminPanel() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full" disabled={loading} data-testid="button-save-edit">
                 {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Salvataggio...
-                  </>
-                ) : (
-                  'Salva modifiche'
-                )}
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</>
+                ) : 'Salva modifiche'}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cambia Password</DialogTitle>
+              <DialogDescription>
+                Imposta una nuova password per {passwordUser ? getMemberName(passwordUser) : ''}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">Nuova Password</Label>
+                <div className="relative">
+                  <Input
+                    id="new-password"
+                    data-testid="input-new-password"
+                    type={showNewPassword ? 'text' : 'password'}
+                    placeholder="Minimo 6 caratteri"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={loading} data-testid="button-save-password">
+                {loading ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</>
+                ) : 'Imposta nuova password'}
               </Button>
             </form>
           </DialogContent>
@@ -347,7 +402,7 @@ export default function AdminPanel() {
             </div>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button size="sm" className="shrink-0">
+                <Button size="sm" className="shrink-0" data-testid="button-add-user">
                   <Plus className="mr-2 h-4 w-4" />
                   <span className="hidden sm:inline">Aggiungi Operatore</span>
                   <span className="sm:hidden">Aggiungi</span>
@@ -365,6 +420,7 @@ export default function AdminPanel() {
                     <Label htmlFor="op-name">Nome</Label>
                     <Input
                       id="op-name"
+                      data-testid="input-create-name"
                       placeholder="Nome Cognome"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
@@ -375,6 +431,7 @@ export default function AdminPanel() {
                     <Label htmlFor="op-email">Email</Label>
                     <Input
                       id="op-email"
+                      data-testid="input-create-email"
                       type="email"
                       placeholder="operatore@email.com"
                       value={email}
@@ -387,8 +444,9 @@ export default function AdminPanel() {
                     <div className="relative">
                       <Input
                         id="op-password"
+                        data-testid="input-create-password"
                         type={showPassword ? 'text' : 'password'}
-                        placeholder="••••••••"
+                        placeholder="Minimo 6 caratteri"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
@@ -403,15 +461,10 @@ export default function AdminPanel() {
                       </button>
                     </div>
                   </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
+                  <Button type="submit" className="w-full" disabled={loading} data-testid="button-create-user">
                     {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creazione...
-                      </>
-                    ) : (
-                      'Crea Operatore'
-                    )}
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creazione...</>
+                    ) : 'Crea Operatore'}
                   </Button>
                 </form>
               </DialogContent>
@@ -430,74 +483,108 @@ export default function AdminPanel() {
                     <TableHead>Nome</TableHead>
                     <TableHead className="hidden sm:table-cell">Email</TableHead>
                     <TableHead>Ruolo</TableHead>
-                    <TableHead className="w-[80px]">Azioni</TableHead>
+                    <TableHead>Stato</TableHead>
+                    <TableHead className="w-[140px]">Azioni</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {teamMembers.map((member) => (
-                    <TableRow key={member.id}>
-                      <TableCell>
-                        <div className="font-medium">{member.full_name || '-'}</div>
-                        <div className="text-xs text-muted-foreground sm:hidden">{member.email}</div>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell">{member.email}</TableCell>
-                      <TableCell>
-                        <Badge variant={getRoleBadgeVariant(member.role)}>
-                          {getRoleLabel(member.role)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          {canEditUser(member) && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => openEditDialog(member)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
+                  {teamMembers.map((member) => {
+                    const isActive = getMemberActive(member);
+                    return (
+                      <TableRow key={member.id} className={!isActive ? 'opacity-60' : ''} data-testid={`row-user-${member.id}`}>
+                        <TableCell>
+                          <div className="font-medium">{getMemberName(member)}</div>
+                          <div className="text-xs text-muted-foreground sm:hidden">{member.email}</div>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">{member.email}</TableCell>
+                        <TableCell>
+                          <Badge variant={getRoleBadgeVariant(member.role)}>
+                            {getRoleLabel(member.role)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {canToggleActive(member) ? (
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={isActive}
+                                onCheckedChange={() => handleToggleActive(member)}
+                                data-testid={`switch-active-${member.id}`}
+                              />
+                              <span className="text-xs text-muted-foreground hidden sm:inline">
+                                {isActive ? 'Attivo' : 'Disattivato'}
+                              </span>
+                            </div>
+                          ) : (
+                            <Badge variant={isActive ? 'default' : 'secondary'}>
+                              {isActive ? 'Attivo' : 'Disattivato'}
+                            </Badge>
                           )}
-                          {canDeleteUser(member) && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  className="h-8 w-8 text-destructive hover:text-destructive"
-                                  disabled={deletingId === member.id}
-                                >
-                                  {deletingId === member.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Elimina utente</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Sei sicuro di voler eliminare <strong>{member.full_name || member.email}</strong>?
-                                    L'azione è irreversibile.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Annulla</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDeleteUser(member.id)}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {canEditUser(member) && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => openEditDialog(member)}
+                                data-testid={`button-edit-${member.id}`}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canChangePassword(member) && (
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => openPasswordDialog(member)}
+                                data-testid={`button-password-${member.id}`}
+                              >
+                                <KeyRound className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canDeleteUser(member) && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon"
+                                    className="text-destructive"
+                                    disabled={deletingId === member.id}
+                                    data-testid={`button-delete-${member.id}`}
                                   >
-                                    Elimina
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                                    {deletingId === member.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Elimina utente</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Sei sicuro di voler eliminare <strong>{getMemberName(member)}</strong>?
+                                      L'azione e irreversibile.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Annulla</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleDeleteUser(member.id)}
+                                      className="bg-destructive text-destructive-foreground"
+                                      data-testid={`button-confirm-delete-${member.id}`}
+                                    >
+                                      Elimina
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
               </div>
