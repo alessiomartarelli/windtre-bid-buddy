@@ -636,6 +636,28 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/update-organization", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Non autorizzato" });
+      }
+      const { organizationId, name } = req.body;
+      if (!organizationId || !name || !name.trim()) {
+        return res.status(400).json({ error: "Nome organizzazione obbligatorio" });
+      }
+      if (profile.role === "admin" && profile.organizationId !== organizationId) {
+        return res.status(403).json({ error: "Non puoi modificare altre organizzazioni" });
+      }
+      const updated = await storage.updateOrganization(organizationId, { name: name.trim() });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating organization:", error);
+      res.status(500).json({ error: "Errore nell'aggiornamento dell'organizzazione" });
+    }
+  });
+
   app.post("/api/admin/delete-entity", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.userId;

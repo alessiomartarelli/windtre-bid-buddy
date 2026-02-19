@@ -15,6 +15,7 @@ export interface IStorage {
   getOrganization(id: string): Promise<Organization | undefined>;
   getOrganizations(): Promise<Organization[]>;
   createOrganization(org: InsertOrganization): Promise<Organization>;
+  updateOrganization(id: string, updates: Partial<InsertOrganization>): Promise<Organization>;
   deleteOrganization(id: string): Promise<void>;
 
   // Preventivi
@@ -107,6 +108,14 @@ export class DatabaseStorage implements IStorage {
 
   async createOrganization(org: InsertOrganization): Promise<Organization> {
     const [result] = await db.insert(organizations).values(org).returning();
+    return result;
+  }
+
+  async updateOrganization(id: string, updates: Partial<InsertOrganization>): Promise<Organization> {
+    const [result] = await db.update(organizations)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(organizations.id, id))
+      .returning();
     return result;
   }
 

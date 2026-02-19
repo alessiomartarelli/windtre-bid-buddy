@@ -82,6 +82,9 @@ export default function AdminPanel() {
 
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
+  
+  const [orgNameDialogOpen, setOrgNameDialogOpen] = useState(false);
+  const [orgNameValue, setOrgNameValue] = useState('');
   const [currentPasswordSelf, setCurrentPasswordSelf] = useState('');
   const [showCurrentPasswordSelf, setShowCurrentPasswordSelf] = useState(false);
 
@@ -239,6 +242,27 @@ export default function AdminPanel() {
     } else {
       toast({ title: 'Password aggiornata', description: isSelfPasswordChange ? 'La tua password e stata aggiornata' : `Password di ${getMemberName(passwordUser)} aggiornata con successo` });
       setPasswordDialogOpen(false); setPasswordUser(null); setNewPassword(''); setCurrentPasswordSelf('');
+    }
+  };
+
+  const handleRenameOrg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!organization || !orgNameValue.trim()) return;
+    setLoading(true);
+    const res = await fetch(apiUrl('/api/admin/update-organization'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ organizationId: organization.id, name: orgNameValue.trim() }),
+    });
+    const data = await res.json();
+    setLoading(false);
+    if (!res.ok || data?.error) {
+      toast({ title: 'Errore', description: data?.error || 'Errore nel cambio nome', variant: 'destructive' });
+    } else {
+      toast({ title: 'Nome aggiornato', description: 'Il nome dell\'organizzazione e stato aggiornato' });
+      setOrgNameDialogOpen(false);
+      window.location.reload();
     }
   };
 
@@ -452,12 +476,49 @@ export default function AdminPanel() {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={orgNameDialogOpen} onOpenChange={setOrgNameDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Rinomina Organizzazione</DialogTitle>
+              <DialogDescription>Modifica il nome della tua organizzazione</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleRenameOrg} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="org-name">Nome Organizzazione</Label>
+                <Input
+                  id="org-name"
+                  data-testid="input-org-name"
+                  value={orgNameValue}
+                  onChange={(e) => setOrgNameValue(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading || !orgNameValue.trim()} data-testid="button-save-org-name">
+                {loading ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</>
+                ) : 'Salva'}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         <Card>
           <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
                 <span className="truncate">Team di {organization?.name}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  data-testid="button-rename-org"
+                  onClick={() => {
+                    setOrgNameValue(organization?.name || '');
+                    setOrgNameDialogOpen(true);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
               </CardTitle>
               <CardDescription>
                 Gestisci gli utenti della tua organizzazione
