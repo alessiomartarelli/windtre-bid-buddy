@@ -623,7 +623,12 @@ export async function registerRoutes(
       const updateData: any = {};
       if (resolvedFullName) updateData.fullName = resolvedFullName;
       if (email) updateData.email = email;
-      if (role && profile.role === "super_admin") updateData.role = role;
+      if (role && ["super_admin", "admin"].includes(profile.role)) {
+        if (profile.role === "admin" && role === "super_admin") {
+          return res.status(403).json({ error: "Non puoi assegnare il ruolo super_admin" });
+        }
+        updateData.role = role;
+      }
       const updated = await storage.updateProfile(targetId, updateData);
       res.json(updated);
     } catch (error) {

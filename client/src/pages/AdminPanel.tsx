@@ -78,6 +78,7 @@ export default function AdminPanel() {
   
   const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
+  const [editRole, setEditRole] = useState<'operatore' | 'admin'>('operatore');
 
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -161,6 +162,7 @@ export default function AdminPanel() {
     setEditingUser(user);
     setEditFullName(getMemberName(user));
     setEditEmail(user.email || '');
+    setEditRole((user.role === 'admin' ? 'admin' : 'operatore') as 'operatore' | 'admin');
     setEditDialogOpen(true);
   };
 
@@ -177,7 +179,7 @@ export default function AdminPanel() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ userId: editingUser.id, fullName: editFullName, email: editEmail }),
+      body: JSON.stringify({ userId: editingUser.id, fullName: editFullName, email: editEmail, role: editRole }),
     });
     const data = await res.json();
     setLoading(false);
@@ -360,6 +362,20 @@ export default function AdminPanel() {
                   required
                 />
               </div>
+              {editingUser && editingUser.role !== 'super_admin' && (
+                <div className="space-y-2">
+                  <Label htmlFor="edit-role">Ruolo</Label>
+                  <Select value={editRole} onValueChange={(v) => setEditRole(v as 'operatore' | 'admin')}>
+                    <SelectTrigger data-testid="select-edit-role">
+                      <SelectValue placeholder="Seleziona ruolo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="operatore">Operatore</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Button type="submit" className="w-full" disabled={loading} data-testid="button-save-edit">
                 {loading ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</>
