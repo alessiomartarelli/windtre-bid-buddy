@@ -79,6 +79,8 @@ export default function AdminPanel() {
 
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [currentPasswordSelf, setCurrentPasswordSelf] = useState('');
+  const [showCurrentPasswordSelf, setShowCurrentPasswordSelf] = useState(false);
 
   useEffect(() => {
     if (profile && !['super_admin', 'admin'].includes(profile.role)) {
@@ -190,8 +192,12 @@ export default function AdminPanel() {
     setPasswordUser(user);
     setNewPassword('');
     setShowNewPassword(false);
+    setCurrentPasswordSelf('');
+    setShowCurrentPasswordSelf(false);
     setPasswordDialogOpen(true);
   };
+
+  const isSelfPasswordChange = passwordUser?.id === profile?.id;
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,19 +207,34 @@ export default function AdminPanel() {
       return;
     }
     setLoading(true);
-    const res = await fetch(apiUrl('/api/admin/change-password'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ userId: passwordUser.id, newPassword }),
-    });
+    let res;
+    if (isSelfPasswordChange) {
+      if (!currentPasswordSelf) {
+        toast({ title: 'Errore', description: 'Inserisci la password attuale', variant: 'destructive' });
+        setLoading(false);
+        return;
+      }
+      res = await fetch(apiUrl('/api/auth/change-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ currentPassword: currentPasswordSelf, newPassword }),
+      });
+    } else {
+      res = await fetch(apiUrl('/api/admin/change-password'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ userId: passwordUser.id, newPassword }),
+      });
+    }
     const data = await res.json();
     setLoading(false);
     if (!res.ok || data?.error) {
       toast({ title: 'Errore', description: data?.error || 'Errore nel cambio password', variant: 'destructive' });
     } else {
-      toast({ title: 'Password aggiornata', description: `Password di ${getMemberName(passwordUser)} aggiornata con successo` });
-      setPasswordDialogOpen(false); setPasswordUser(null); setNewPassword('');
+      toast({ title: 'Password aggiornata', description: isSelfPasswordChange ? 'La tua password e stata aggiornata' : `Password di ${getMemberName(passwordUser)} aggiornata con successo` });
+      setPasswordDialogOpen(false); setPasswordUser(null); setNewPassword(''); setCurrentPasswordSelf('');
     }
   };
 
@@ -271,6 +292,7 @@ export default function AdminPanel() {
   };
 
   const canChangePassword = (user: TeamMember) => {
+    if (user.id === profile?.id) return true;
     if (profile?.role === 'super_admin') return true;
     if (profile?.role === 'admin' && user.role === 'operatore') return true;
     return false;
@@ -351,12 +373,38 @@ export default function AdminPanel() {
         <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Cambia Password</DialogTitle>
+              <DialogTitle>{isSelfPasswordChange ? 'Cambia la tua Password' : 'Cambia Password'}</DialogTitle>
               <DialogDescription>
-                Imposta una nuova password per {passwordUser ? getMemberName(passwordUser) : ''}
+                {isSelfPasswordChange
+                  ? 'Inserisci la password attuale e la nuova password'
+                  : `Imposta una nuova password per ${passwordUser ? getMemberName(passwordUser) : ''}`}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleChangePassword} className="space-y-4">
+              {isSelfPasswordChange && (
+                <div className="space-y-2">
+                  <Label htmlFor="current-password-self">Password attuale</Label>
+                  <div className="relative">
+                    <Input
+                      id="current-password-self"
+                      data-testid="input-current-password-self"
+                      type={showCurrentPasswordSelf ? 'text' : 'password'}
+                      placeholder="Inserisci la password attuale"
+                      value={currentPasswordSelf}
+                      onChange={(e) => setCurrentPasswordSelf(e.target.value)}
+                      required
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPasswordSelf(!showCurrentPasswordSelf)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showCurrentPasswordSelf ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="new-password">Nuova Password</Label>
                 <div className="relative">
