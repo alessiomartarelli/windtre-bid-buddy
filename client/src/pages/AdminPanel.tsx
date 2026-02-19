@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ArrowLeft, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, UserX, UserCheck } from 'lucide-react';
 import { z } from 'zod';
@@ -72,6 +73,7 @@ export default function AdminPanel() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [createRole, setCreateRole] = useState<'operatore' | 'admin'>('operatore');
   const [showPassword, setShowPassword] = useState(false);
   
   const [editFullName, setEditFullName] = useState('');
@@ -123,15 +125,15 @@ export default function AdminPanel() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ email, password, fullName, role: 'operatore', organizationId: profile?.organization_id }),
+      body: JSON.stringify({ email, password, fullName, role: createRole, organizationId: profile?.organization_id }),
     });
     const data = await res.json();
     setLoading(false);
     if (!res.ok || data?.error) {
-      toast({ title: 'Errore', description: data?.error || 'Errore nella creazione dell\'operatore', variant: 'destructive' });
+      toast({ title: 'Errore', description: data?.error || 'Errore nella creazione dell\'utente', variant: 'destructive' });
     } else {
-      toast({ title: 'Operatore creato', description: `Operatore ${email} creato con successo` });
-      setEmail(''); setPassword(''); setFullName('');
+      toast({ title: 'Utente creato', description: `${createRole === 'admin' ? 'Admin' : 'Operatore'} ${email} creato con successo` });
+      setEmail(''); setPassword(''); setFullName(''); setCreateRole('operatore');
       setDialogOpen(false);
       fetchTeamMembers();
     }
@@ -278,30 +280,27 @@ export default function AdminPanel() {
   const canDeleteUser = (user: TeamMember) => {
     if (user.id === profile?.id) return false;
     if (profile?.role === 'super_admin') return true;
-    if (profile?.role === 'admin' && user.role === 'operatore') return true;
+    if (profile?.role === 'admin') return true;
     return false;
   };
 
   const canEditUser = (user: TeamMember) => {
     if (profile?.role === 'super_admin') return true;
-    if (profile?.role === 'admin') {
-      if (user.id === profile?.id) return true;
-      if (user.role === 'operatore') return true;
-    }
+    if (profile?.role === 'admin') return true;
     return false;
   };
 
   const canChangePassword = (user: TeamMember) => {
     if (user.id === profile?.id) return true;
     if (profile?.role === 'super_admin') return true;
-    if (profile?.role === 'admin' && user.role === 'operatore') return true;
+    if (profile?.role === 'admin') return true;
     return false;
   };
 
   const canToggleActive = (user: TeamMember) => {
     if (user.id === profile?.id) return false;
     if (profile?.role === 'super_admin') return true;
-    if (profile?.role === 'admin' && user.role === 'operatore') return true;
+    if (profile?.role === 'admin') return true;
     return false;
   };
 
@@ -445,22 +444,22 @@ export default function AdminPanel() {
                 <span className="truncate">Team di {organization?.name}</span>
               </CardTitle>
               <CardDescription>
-                Gestisci gli operatori della tua organizzazione
+                Gestisci gli utenti della tua organizzazione
               </CardDescription>
             </div>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" className="shrink-0" data-testid="button-add-user">
                   <Plus className="mr-2 h-4 w-4" />
-                  <span className="hidden sm:inline">Aggiungi Operatore</span>
+                  <span className="hidden sm:inline">Aggiungi Utente</span>
                   <span className="sm:hidden">Aggiungi</span>
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Nuovo Operatore</DialogTitle>
+                  <DialogTitle>Nuovo Utente</DialogTitle>
                   <DialogDescription>
-                    Aggiungi un nuovo operatore al team di {organization?.name}
+                    Aggiungi un nuovo utente al team di {organization?.name}
                   </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleCreateOperatore} className="space-y-4">
@@ -481,11 +480,23 @@ export default function AdminPanel() {
                       id="op-email"
                       data-testid="input-create-email"
                       type="email"
-                      placeholder="operatore@email.com"
+                      placeholder="utente@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="op-role">Ruolo</Label>
+                    <Select value={createRole} onValueChange={(v) => setCreateRole(v as 'operatore' | 'admin')}>
+                      <SelectTrigger data-testid="select-create-role">
+                        <SelectValue placeholder="Seleziona ruolo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="operatore">Operatore</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="op-password">Password</Label>
@@ -512,7 +523,7 @@ export default function AdminPanel() {
                   <Button type="submit" className="w-full" disabled={loading} data-testid="button-create-user">
                     {loading ? (
                       <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creazione...</>
-                    ) : 'Crea Operatore'}
+                    ) : 'Crea Utente'}
                   </Button>
                 </form>
               </DialogContent>

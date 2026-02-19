@@ -619,9 +619,6 @@ export async function registerRoutes(
         if (!targetProfile || targetProfile.organizationId !== profile.organizationId) {
           return res.status(403).json({ message: "Cannot update users outside your organization" });
         }
-        if (targetProfile.role !== "operatore" && targetId !== currentUserId) {
-          return res.status(403).json({ message: "Un admin può modificare solo gli operatori" });
-        }
       }
       const updateData: any = {};
       if (resolvedFullName) updateData.fullName = resolvedFullName;
@@ -681,9 +678,6 @@ export async function registerRoutes(
         if (!targetProfile || targetProfile.organizationId !== adminProfile.organizationId) {
           return res.status(403).json({ error: "Non puoi modificare utenti di altre organizzazioni" });
         }
-        if (targetProfile.role !== "operatore") {
-          return res.status(403).json({ error: "Un admin può cambiare la password solo degli operatori" });
-        }
       }
       const passwordHash = await bcrypt.hash(newPassword, 10);
       await storage.updateProfile(targetUserId, { passwordHash });
@@ -741,9 +735,6 @@ export async function registerRoutes(
         const targetProfile = await storage.getProfile(targetUserId);
         if (!targetProfile || targetProfile.organizationId !== adminProfile.organizationId) {
           return res.status(403).json({ error: "Non puoi modificare utenti di altre organizzazioni" });
-        }
-        if (targetProfile.role !== "operatore") {
-          return res.status(403).json({ error: "Un admin può disattivare solo gli operatori" });
         }
       }
       const updated = await storage.updateProfile(targetUserId, { isActive });
