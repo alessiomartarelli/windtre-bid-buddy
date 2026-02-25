@@ -440,7 +440,7 @@ export function RsDrillDown({ preventivo, forceExpandAll = false }: RsDrillDownP
   if (rsDetails.length === 0) return null;
 
   return (
-    <Card>
+    <Card className="print:break-before-page">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Building2 className="h-5 w-5 text-primary" />

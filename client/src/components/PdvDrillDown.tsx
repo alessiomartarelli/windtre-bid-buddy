@@ -466,7 +466,7 @@ export function PdvDrillDown({ preventivo, forceExpandAll = false }: PdvDrillDow
   if (pdvDetails.length === 0) return null;
 
   return (
-    <Card>
+    <Card className="print:break-before-page">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Store className="h-5 w-5 text-primary" />

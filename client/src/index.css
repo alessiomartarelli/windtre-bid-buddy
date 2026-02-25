@@ -105,3 +105,112 @@
 .glass-panel {
   @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
 }
+
+/* ── Print / PDF export ─────────────────────────────────────── */
+@media print {
+  /* Nascondi tutto tranne il contenuto analytics */
+  body.printing-analytics > *:not(#root) {
+    display: none !important;
+  }
+  body.printing-analytics #root > *:not(.dashboard-print-wrapper) {
+    display: none !important;
+  }
+
+  /* Mostra solo il print-target, nascondendo header e tabs */
+  body.printing-analytics .print-target {
+    display: block !important;
+  }
+
+  /* Rimuovi header sticky e navigazione */
+  body.printing-analytics .border-b.sticky {
+    display: none !important;
+  }
+
+  /* Margini pagina */
+  @page {
+    margin: 15mm 12mm;
+    size: A4;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+
+  /* Evita tagli a metà nei grafici */
+  .bg-muted\/30.rounded-lg,
+  [class*="bg-muted"] .recharts-wrapper,
+  .recharts-responsive-container {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Evita tagli nei container grafici (usati nel drill-down) */
+  .space-y-4 > div:has(.recharts-responsive-container),
+  .grid:has(.recharts-responsive-container) {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Tieni insieme header + grafico di ogni sezione */
+  .bg-muted\/30 {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Accordion item: cerca di tenerlo insieme, ma permetti break se troppo lungo */
+  [data-radix-collection-item] {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Tabella: no break nelle righe */
+  tr, thead, tfoot {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Card: evita break interno */
+  .rounded-lg.border {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Grid dei grafici: tienila intera */
+  .grid.grid-cols-1.lg\:grid-cols-2 {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Accordion items del drill-down */
+  .space-y-2 > [data-state] {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Forza nuova pagina prima del drill-down per non iniziarlo a metà */
+  .space-y-4.pb-2 {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Radix Accordion: rimuovi overflow hidden che blocca i page-break */
+  [data-radix-accordion-content],
+  [data-state="open"] {
+    overflow: visible !important;
+  }
+
+  /* I grafici Recharts non devono essere tagliati */
+  .recharts-wrapper,
+  .recharts-surface {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* I dettagli di ogni pista (riga espansa) non devono essere tagliati */
+  tr + tr > td > div {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
