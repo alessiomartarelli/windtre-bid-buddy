@@ -463,7 +463,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       {/* Header con gradient sottile */}
-      <div className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+      <div className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10 print:hidden">
         <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="min-w-0">
@@ -485,7 +485,7 @@ export default function Dashboard() {
 
       <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 space-y-4 sm:space-y-6">
         <Tabs defaultValue="preventivi" className="space-y-6">
-          <TabsList className="bg-muted/50 p-1">
+          <TabsList className="bg-muted/50 p-1 print:hidden">
             <TabsTrigger value="preventivi" className="flex items-center gap-2 data-[state=active]:bg-background">
               <FileText className="h-4 w-4" />
               Preventivi
@@ -506,7 +506,14 @@ export default function Dashboard() {
 
           <TabsContent value="analytics" className="space-y-6">
             <div ref={analyticsRef} className="space-y-6">
-            <Card className="border-dashed">
+            {/* Titolo visibile solo in stampa */}
+            {selectedPreventivo && (
+              <div className="hidden print:block mb-4">
+                <h2 className="text-xl font-bold">{selectedPreventivo.name}</h2>
+                <p className="text-sm text-muted-foreground">Report Analytics — Incentive W3</p>
+              </div>
+            )}
+            <Card className="border-dashed print:hidden">
               <CardContent className="pt-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
