@@ -5,6 +5,7 @@ import { usePreventivi, Preventivo } from '@/hooks/usePreventivi';
 import { PreventiviList } from '@/components/PreventiviList';
 import { PdvDataTable } from '@/components/PdvDataTable';
 import { PdvDrillDown } from '@/components/PdvDrillDown';
+import { RsDrillDown } from '@/components/RsDrillDown';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -841,10 +842,23 @@ export default function Dashboard() {
                   </Card>
                 </div>
 
-                {/* Drill-Down per PDV */}
-                {selectedPreventivo && (
-                  <PdvDrillDown preventivo={selectedPreventivo} forceExpandAll={exporting} />
-                )}
+                {/* Drill-Down per PDV o per RS */}
+                {selectedPreventivo && (() => {
+                  const d = selectedPreventivo.data as Record<string, unknown>;
+                  const tipologiaGara = (d?.configGara as Record<string, unknown>)?.tipologiaGara as string | undefined;
+                  const modalitaRS = d?.modalitaInserimentoRS as string | undefined;
+
+                  if (tipologiaGara === 'gara_operatore_rs') {
+                    if (modalitaRS === 'per_rs') {
+                      return <RsDrillDown preventivo={selectedPreventivo} forceExpandAll={exporting} />;
+                    }
+                    if (modalitaRS === 'per_pdv') {
+                      return <PdvDrillDown preventivo={selectedPreventivo} forceExpandAll={exporting} />;
+                    }
+                    return null;
+                  }
+                  return <PdvDrillDown preventivo={selectedPreventivo} forceExpandAll={exporting} />;
+                })()}
 
                 {/* PDV Data Table & Charts */}
                 {selectedPreventivo && (

@@ -112,3 +112,10 @@ PORT=3001 npm run start
 - **BiSuite Sales API**: External sales data API at `http://85.94.215.97/api/v1/sales/full`, configured per-organization with `clientId` and `clientSecret`
 - **Google Fonts CDN**: Outfit, Inter, DM Sans, Fira Code, Geist Mono, Architects Daughter fonts
 - **npm packages of note**: `recharts` (charts), `jspdf` + `jspdf-autotable` (PDF export), `xlsx` (Excel export), `framer-motion` (animations), `date-fns` (date formatting with Italian locale), `zod` (validation)
+
+## Dashboard - Drill-Down Logica
+
+Il componente drill-down nella Dashboard varia in base al tipo di preventivo:
+- **gara_operatore** standard → `PdvDrillDown` (accordion per PDV)
+- **gara_operatore_rs** con `modalitaInserimentoRS = "per_pdv"` → `PdvDrillDown` (dati inseriti per PDV, breakdown disponibile)
+- **gara_operatore_rs** con `modalitaInserimentoRS = "per_rs"` → `RsDrillDown` (accordion per Ragione Sociale; legge `attivatoMobileByRS`, `attivatoFissoByRS`, ecc.)
