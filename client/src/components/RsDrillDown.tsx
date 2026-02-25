@@ -38,7 +38,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Energia: 'hsl(145, 65%, 45%)',
   Assicurazioni: 'hsl(45, 100%, 50%)',
   Protecta: 'hsl(330, 70%, 50%)',
-  'Extra Gara': 'hsl(180, 60%, 45%)',
+  'Extra Gara IVA': 'hsl(180, 60%, 45%)',
 };
 
 const PISTA_ICONS: Record<string, React.ReactNode> = {
@@ -192,6 +192,24 @@ const MOBILE_SIM_TYPES = [
   'PROFESSIONAL_STAFF', 'PROFESSIONAL_WORLD', 'ALTRE_SIM_IVA',
 ];
 const FISSO_PEZZI_CATEGORIE = ['FISSO_FTTC', 'FISSO_FTTH', 'FISSO_FWA_OUT', 'FISSO_FWA_IND_2P'];
+
+const EXTRA_GARA_MOBILE_TYPES = [
+  'PROFESSIONAL_STAFF', 'PROFESSIONAL_WORLD', 'ALTRE_SIM_IVA',
+  'PROFESSIONAL_FLEX', 'PROFESSIONAL_SPECIAL', 'PROFESSIONAL_DATA_10',
+];
+const EXTRA_GARA_MOBILE_LABELS: Record<string, string> = {
+  PROFESSIONAL_STAFF: 'Professional Staff',
+  PROFESSIONAL_WORLD: 'Professional World',
+  ALTRE_SIM_IVA: 'Altre SIM IVA',
+  PROFESSIONAL_FLEX: 'Professional Flex',
+  PROFESSIONAL_SPECIAL: 'Professional Special',
+  PROFESSIONAL_DATA_10: 'Professional Data 10',
+};
+const EXTRA_GARA_ENERGIA_TYPES = ['BUSINESS_CON_SDD', 'BUSINESS_NO_SDD'];
+const EXTRA_GARA_ENERGIA_LABELS: Record<string, string> = {
+  BUSINESS_CON_SDD: 'Business con SDD',
+  BUSINESS_NO_SDD: 'Business no SDD',
+};
 
 /* ── main component ──────────────────────────────────────────── */
 export function RsDrillDown({ preventivo, forceExpandAll = false }: RsDrillDownProps) {
@@ -416,18 +434,62 @@ export function RsDrillDown({ preventivo, forceExpandAll = false }: RsDrillDownP
         details: protDetails,
       });
 
-      /* ── Extra Gara ── */
+      /* ── Extra Gara IVA ── */
       const extraRs = risultatoExtraGaraIva?.perRs?.find(
         (r) => (r.ragioneSociale || '').trim().toLowerCase() === rsName.trim().toLowerCase()
       );
+
+      // Volumi: somma delle categorie IVA contribuenti
+      const mobileRawForExtra = attivatoMobileByRS?.[rsName] || [];
+      const fissoRawForExtra = attivatoFissoByRS?.[rsName] || [];
+      const energiaRawForExtra = attivatoEnergiaByRS?.[rsName] || [];
+      const assicRawForExtra = attivatoAssicurazioniByRS?.[rsName];
+      const protRawForExtra = attivatoProtectaByRS?.[rsName];
+
+      const volumiExtraMobile = mobileRawForExtra
+        .filter(r => EXTRA_GARA_MOBILE_TYPES.includes(r.type || ''))
+        .reduce((sum, r) => sum + (r.pezzi || 0), 0);
+      const volumiExtraFisso1 = fissoRawForExtra
+        .filter(r => r.categoria === 'FISSO_PIVA_1A_LINEA')
+        .reduce((sum, r) => sum + (r.pezzi || 0), 0);
+      const volumiExtraFisso2 = fissoRawForExtra
+        .filter(r => r.categoria === 'FISSO_PIVA_2A_LINEA')
+        .reduce((sum, r) => sum + (r.pezzi || 0), 0);
+      const volumiExtraEnergia = energiaRawForExtra
+        .filter(r => EXTRA_GARA_ENERGIA_TYPES.includes(r.category || ''))
+        .reduce((sum, r) => sum + (r.pezzi || 0), 0);
+      const volumiExtraAssic = typeof assicRawForExtra?.protezionePro === 'number'
+        ? assicRawForExtra.protezionePro : 0;
+      const volumiExtraProtecta =
+        (typeof protRawForExtra?.negozioProtetti === 'number' ? protRawForExtra.negozioProtetti : 0) +
+        (typeof protRawForExtra?.negozioProtettiFinanziato === 'number' ? protRawForExtra.negozioProtettiFinanziato : 0);
+
+      const volumiExtraGara = volumiExtraMobile + volumiExtraFisso1 + volumiExtraFisso2 +
+        volumiExtraEnergia + volumiExtraAssic + volumiExtraProtecta;
+
+      // Dettagli: una riga per ogni tipo/categoria con pezzi > 0
+      const extraGaraDetails: DetailItem[] = [];
+      for (const type of EXTRA_GARA_MOBILE_TYPES) {
+        const pezzi = mobileRawForExtra.filter(r => r.type === type).reduce((s, r) => s + (r.pezzi || 0), 0);
+        if (pezzi > 0) extraGaraDetails.push({ label: EXTRA_GARA_MOBILE_LABELS[type] || type, pezzi });
+      }
+      if (volumiExtraFisso1 > 0) extraGaraDetails.push({ label: 'Fisso P.IVA 1ª Linea', pezzi: volumiExtraFisso1 });
+      if (volumiExtraFisso2 > 0) extraGaraDetails.push({ label: 'Fisso P.IVA 2ª Linea', pezzi: volumiExtraFisso2 });
+      for (const cat of EXTRA_GARA_ENERGIA_TYPES) {
+        const pezzi = energiaRawForExtra.filter(r => r.category === cat).reduce((s, r) => s + (r.pezzi || 0), 0);
+        if (pezzi > 0) extraGaraDetails.push({ label: EXTRA_GARA_ENERGIA_LABELS[cat] || cat, pezzi });
+      }
+      if (volumiExtraAssic > 0) extraGaraDetails.push({ label: 'Protezione Pro', pezzi: volumiExtraAssic });
+      if (volumiExtraProtecta > 0) extraGaraDetails.push({ label: 'Negozio Protetti', pezzi: volumiExtraProtecta });
+
       piste.push({
-        pista: 'Extra Gara',
-        volumi: 0,
+        pista: 'Extra Gara IVA',
+        volumi: volumiExtraGara,
         premio: extraRs?.premioTotale || 0,
         punti: 0,
         soglia: extraRs?.sogliaRaggiunta,
-        color: CATEGORY_COLORS['Extra Gara'],
-        details: [],
+        color: CATEGORY_COLORS['Extra Gara IVA'],
+        details: extraGaraDetails,
       });
 
       const premioTotale = piste.reduce((sum, p) => sum + p.premio, 0);

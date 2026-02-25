@@ -38,7 +38,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Energia: 'hsl(145, 65%, 45%)',
   Assicurazioni: 'hsl(45, 100%, 50%)',
   Protecta: 'hsl(330, 70%, 50%)',
-  'Extra Gara': 'hsl(180, 60%, 45%)',
+  'Extra Gara IVA': 'hsl(180, 60%, 45%)',
 };
 
 const PISTA_ICONS: Record<string, React.ReactNode> = {
@@ -447,11 +447,11 @@ export function PdvDrillDown({ preventivo, forceExpandAll = false }: PdvDrillDow
 
         /* ── Extra Gara P.IVA ── */
         piste.push({
-          pista: 'Extra Gara',
+          pista: 'Extra Gara IVA',
           volumi: 0,
           premio: isSinglePdv ? (risultatoExtraGaraIva?.totalePremio || 0) : 0,
           punti: 0,
-          color: CATEGORY_COLORS['Extra Gara'],
+          color: CATEGORY_COLORS['Extra Gara IVA'],
           details: [],
         });
 
