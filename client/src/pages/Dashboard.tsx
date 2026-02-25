@@ -860,10 +860,14 @@ export default function Dashboard() {
                   return <PdvDrillDown preventivo={selectedPreventivo} forceExpandAll={exporting} />;
                 })()}
 
-                {/* PDV Data Table & Charts */}
-                {selectedPreventivo && (
-                  <PdvDataTable preventivo={selectedPreventivo} />
-                )}
+                {/* PDV Data Table & Charts - solo per gara standard o RS con modalità per_pdv */}
+                {selectedPreventivo && (() => {
+                  const d = selectedPreventivo.data as Record<string, unknown>;
+                  const tipologiaGara = (d?.configGara as Record<string, unknown>)?.tipologiaGara as string | undefined;
+                  const modalitaRS = d?.modalitaInserimentoRS as string | undefined;
+                  if (tipologiaGara === 'gara_operatore_rs' && modalitaRS === 'per_rs') return null;
+                  return <PdvDataTable preventivo={selectedPreventivo} />;
+                })()}
               </>
             ) : (
               <div className="flex items-center justify-center h-[300px]">
