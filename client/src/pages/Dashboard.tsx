@@ -758,6 +758,8 @@ export default function Dashboard() {
               </>
             ) : singlePreventivoData ? (
               <>
+                {/* Blocco sommario: Premio Totale + Premi per Categoria + Distribuzione Premi — mantenuto insieme in stampa */}
+                <div className="space-y-6 print:break-inside-avoid">
                 {/* Single Preventivo - KPI Cards */}
                 <div>
                   <KpiCard
@@ -769,7 +771,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Single Preventivo - Detail Cards */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 print:grid-cols-2 gap-6">
                   {/* Premi per Categoria - Card con layout migliorato */}
                   <Card>
                     <CardHeader>
@@ -848,6 +850,7 @@ export default function Dashboard() {
                     </CardContent>
                   </Card>
                 </div>
+                </div>{/* /print:break-inside-avoid wrapper */}
 
                 {/* Drill-Down per PDV o per RS */}
                 {selectedPreventivo && (() => {
