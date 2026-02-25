@@ -440,7 +440,7 @@ export function RsDrillDown({ preventivo, forceExpandAll = false }: RsDrillDownP
   if (rsDetails.length === 0) return null;
 
   return (
-    <Card>
+    <Card className="print:break-before-page">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Building2 className="h-5 w-5 text-primary" />
@@ -570,7 +570,7 @@ function RsDetailContent({ rs, forceExpandAll = false }: { rs: RsDetail; forceEx
       </div>
 
       {/* Detail Table — inizia su pagina nuova in stampa */}
-      <div className="rounded-lg border overflow-hidden print:break-before-page print:overflow-visible">
+      <div className="rounded-lg border overflow-hidden print:break-before-page">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50">
