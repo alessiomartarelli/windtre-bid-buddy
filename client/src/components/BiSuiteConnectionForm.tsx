@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const DEFAULT_BISUITE_API_URL = "https://db.bisuite.app";
+const DEFAULT_BISUITE_API_URL = "https://db1.bisuite.app";
 
 interface BiSuiteCredentials {
   apiUrl: string;
@@ -224,7 +224,7 @@ export const BiSuiteConnectionForm = ({ organizations, onCredentialsSaved }: BiS
             <Input
               id="apiUrl"
               type="url"
-              placeholder="https://db.bisuite.app"
+              placeholder="https://db1.bisuite.app"
               value={apiUrl}
               onChange={(e) => setApiUrl(e.target.value)}
             />

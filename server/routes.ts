@@ -791,7 +791,7 @@ export async function registerRoutes(
       const u = new URL(apiUrlStr);
       return `${u.protocol}//${u.host}`;
     } catch {
-      return "https://db.bisuite.app";
+      return "https://db1.bisuite.app";
     }
   }
 
@@ -804,15 +804,14 @@ export async function registerRoutes(
   }
 
   async function getBisuiteToken(tokenUrl: string, clientId: string, clientSecret: string): Promise<string> {
-    const params = new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: clientId,
-      client_secret: clientSecret,
-    });
     const resp = await fetch(tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "client_credentials",
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
     });
     if (!resp.ok) {
       const body = await resp.text();
@@ -953,7 +952,7 @@ export async function registerRoutes(
         if (!creds || !creds.client_id || !creds.client_secret) {
           return res.status(400).json({ error: "Credenziali BiSuite non configurate per questa organizzazione" });
         }
-        apiUrlStr = creds.api_url || "https://db.bisuite.app";
+        apiUrlStr = creds.api_url || "https://db1.bisuite.app";
         cId = creds.client_id;
         cSecret = creds.client_secret;
       } else {
@@ -969,8 +968,8 @@ export async function registerRoutes(
 
       if (action === "fetch_sales") {
         const salesUrl = new URL(deriveSalesEndpoint(apiUrlStr));
-        if (start_date) salesUrl.searchParams.set("start_date", start_date);
-        if (end_date) salesUrl.searchParams.set("end_date", end_date);
+        if (start_date) salesUrl.searchParams.set("from_date", start_date);
+        if (end_date) salesUrl.searchParams.set("to_date", end_date);
 
         const salesResp = await fetch(salesUrl.toString(), {
           method: "GET",

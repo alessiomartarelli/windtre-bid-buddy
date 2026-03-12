@@ -1,0 +1,69 @@
+Ho raccolto tutto. Ecco il quadro completo.
+
+URL e Path corretti — Base URL: https://db1.bisuite.app
+Autenticazione OAuth2
+Endpoint    Metodo    Descrizione
+/api/v1/oauth/token    POST    Ottenere/rinnovare token
+/authorize    GET    Avvio flusso Authorization Code
+/register    POST    Registrazione dinamica client
+/.well-known/oauth-authorization-server    GET    Discovery OAuth metadata
+/.well-known/oauth-protected-resource    GET    Discovery risorsa protetta
+Dati (tutti GET, richiedono Bearer token)
+Endpoint    Scope richiesto
+/api/v1/organizations    organizations:read
+/api/v1/clients / /api/v1/clients/:id    clients:read
+/api/v1/sales / /api/v1/sales/:id    sales:read
+/api/v1/sales/full / /api/v1/sales/:id/full    sales:read
+/api/v1/articles    articles:read
+/api/v1/payments    payments:read
+/api/v1/employees    employees:read
+/api/v1/business-entities    business_entities:read
+/api/v1/activities    activities:read
+/api/v1/categories    categories:read
+/api/v1/typologies    typologies:read
+/api/v1/closures / /api/v1/closures/:id / /api/v1/closures/stats    closures:read
+/api/v1/insurance-offers    insurance:read
+/api/v1/energy-offers    energy:read
+/api/v1/landline-contracts    landline:read
+MCP (AI - Claude/ChatGPT)
+Endpoint    Metodo    Descrizione
+/api/v1/mcp    POST/GET/DELETE    Server MCP Streamable HTTP
+/mcp    alias    Redirect a /api/v1/mcp
+Scrittura Chiusure (Laravel - rotta separata)
+Endpoint    Metodo    Descrizione
+/api/chiusure    POST    Crea chiusure (formato BiSuite)
+/api/chiusure/batch    POST    Batch chiusure
+Guida rapida per sviluppatori
+1. Ottenere un token:
+
+curl -X POST https://db1.bisuite.app/api/v1/oauth/token \
+-H "Content-Type: application/json" \
+-d '{
+    "grant_type": "client_credentials",
+    "client_id": "IL_TUO_CLIENT_ID",
+    "client_secret": "IL_TUO_CLIENT_SECRET"
+}'
+Risposta: {"access_token": "...", "refresh_token": "...", "expires_in": 3600, ...}
+
+2. Usare il token nelle chiamate:
+
+curl https://db1.bisuite.app/api/v1/sales?from_date=2026-01-01&limit=10 \
+-H "Authorization: Bearer IL_TUO_ACCESS_TOKEN"
+3. Rinnovare il token:
+
+curl -X POST https://db1.bisuite.app/api/v1/oauth/token \
+-H "Content-Type: application/json" \
+-d '{
+    "grant_type": "refresh_token",
+    "refresh_token": "IL_TUO_REFRESH_TOKEN"
+}'
+4. Health check: GET https://db1.bisuite.app/api/v1/health (pubblico, nessun token richiesto)
+
+5. Dashboard admin: https://db1.bisuite.app/dash
+
+Ora, riguardo all'aggiornamento della documentazione: ho trovato molti riferimenti obsoleti a db.bisuite.app (senza il "1") sparsi nel codice, specialmente in:
+
+OAuthClients.tsx — istruzioni MCP con URL vecchi
+ApiDocs.tsx — un riferimento vecchio nella sezione dominio
+deploy-chiusure.sh e DEPLOY_CHIUSURE_FISCALI.md — script e docs di deploy
+server/routes.ts — fallback host nel discovery OAuth
