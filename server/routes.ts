@@ -1042,7 +1042,7 @@ export async function registerRoutes(
   app.post("/api/admin/bisuite-import", isAuthenticated, async (req: any, res) => {
     try {
       const profile = req.user;
-      if (!profile || profile.role !== "super_admin") {
+      if (!profile || (profile.role !== "super_admin" && profile.role !== "admin")) {
         return res.status(403).json({ error: "Accesso non autorizzato" });
       }
 
