@@ -1041,8 +1041,9 @@ export async function registerRoutes(
 
   app.post("/api/admin/bisuite-import", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = req.user;
-      if (!profile || (profile.role !== "super_admin" && profile.role !== "admin")) {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ error: "Accesso non autorizzato" });
       }
 
@@ -1111,7 +1112,8 @@ export async function registerRoutes(
 
   app.get("/api/bisuite-sales", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = req.user;
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
       if (!profile?.organizationId) {
         return res.status(403).json({ error: "Accesso non autorizzato" });
       }
@@ -1135,7 +1137,8 @@ export async function registerRoutes(
 
   app.get("/api/bisuite-sales/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = req.user;
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
       if (!profile) return res.status(403).json({ error: "Accesso non autorizzato" });
 
       const sale = await storage.getBisuiteSale(req.params.id);
