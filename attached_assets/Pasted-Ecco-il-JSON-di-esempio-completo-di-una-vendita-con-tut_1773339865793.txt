@@ -1,0 +1,173 @@
+Ecco il JSON di esempio completo di una vendita con tutti i campi, basato sulla struttura effettiva del codice (endpoint /api/v1/sales/complete/:id):
+
+{
+  "id": 123456,
+  "codiceEsterno": 789,
+  "stato": "CONFERMATO",
+  "flgScontrino": "S",
+  "numeroScontrino": "0001-0042",
+  "matricolaFiscale": "OLRT12345678",
+  "codiceLotteria": "ABC12345678",
+  "dataScontrino": "2026-03-10T10:30:00.000Z",
+  "dataVendita": "2026-03-10T10:25:00.000Z",
+  "dataInizio": "2026-03-10T10:00:00.000Z",
+  "dataFine": "2026-03-10T10:30:00.000Z",
+  "totale": "149.99",
+  "totaleImponibile": "122.94",
+  "createdAt": "2026-03-10T10:30:00.000Z",
+  "updatedAt": "2026-03-10T10:30:00.000Z",
+  "organizzazione": {
+    "id": 1,
+    "codiceEsterno": 100,
+    "link": "https://esempio.bisuite.app",
+    "subdir": "esempio_org"
+  },
+  "ragioneSociale": {
+    "id": 10,
+    "codiceEsterno": 200,
+    "azienda": "Esempio S.r.l.",
+    "partitaIva": "IT01234567890",
+    "codiceFiscale": "01234567890",
+    "email": "info@esempio.it",
+    "tel": "0212345678"
+  },
+  "cliente": {
+    "id": 5001,
+    "codiceEsterno": 300,
+    "clienteTipo": "PRIVATO",
+    "nominativo": "Mario Rossi",
+    "nome": "Mario",
+    "cognome": "Rossi",
+    "email": "mario.rossi@email.it",
+    "codiceFiscale": "RSSMRA80A01H501Z",
+    "piva": null,
+    "tel1": "3331234567",
+    "tel2": null,
+    "tel3": null,
+    "tel4": null,
+    "codiceClienteWind": "W12345",
+    "codiceClienteVodafone": "V67890",
+    "codiceClienteTim": "T11111",
+    "codiceClienteFastweb": null,
+    "codiceClienteSky": null
+  },
+  "addetto": {
+    "id": 42,
+    "codiceEsterno": 400,
+    "ruolo": "VENDITORE",
+    "nominativo": "Luca Bianchi",
+    "nome": "Luca",
+    "cognome": "Bianchi",
+    "email": "luca.bianchi@negozio.it",
+    "numeroCentralino": "INT-042",
+    "attivita": [
+      {
+        "id": 7,
+        "codiceEsterno": 500,
+        "nominativo": "Negozio Centro Milano",
+        "codiceOperatoreWind": "WND-001",
+        "codiceOperatoreVodafone": "VOD-001",
+        "codiceOperatoreTim": "TIM-001",
+        "codiceOperatoreFastweb": "FST-001",
+        "codiceOperatoreSky": "SKY-001",
+        "codiceOperatoreEnel": "ENL-001",
+        "codiceOperatore7": null,
+        "codiceOperatore8": null,
+        "codiceOperatore9": null,
+        "codiceOperatore10": null,
+        "email": "milano.centro@negozio.it",
+        "tel": "0298765432",
+        "indirizzo": "Via Roma",
+        "civico": "15",
+        "cap": "20121",
+        "citta": "Milano",
+        "provincia": "MI",
+        "ragioneSocialeId": 10,
+        "createdAt": "2025-01-15T08:00:00.000Z",
+        "updatedAt": "2026-02-20T14:00:00.000Z"
+      }
+    ]
+  },
+  "pagamento": {
+    "id": 98765,
+    "contanti": "50.00",
+    "pagamentiElettronici": "99.99",
+    "bonifici": "0.00",
+    "assegni": "0.00",
+    "buoni": "0.00",
+    "coupon": "0.00",
+    "altriPagamenti": "0.00",
+    "nonScontrinato": "0.00",
+    "nonScontrinatoPos": "0.00",
+    "nonRiscosso": "0.00",
+    "importoContoOperatoreContanti": "0.00",
+    "importoContoOperatorePos": "0.00"
+  },
+  "articoli": [
+    {
+      "id": 550001,
+      "tipo": "P",
+      "codice": "SMART-001",
+      "codiceEan": "8012345678901",
+      "codiceUnivoco": "UNIQ-SMART-001-XYZ",
+      "voceScontrino": "SMARTPHONE",
+      "descrizione": "Smartphone Galaxy S25",
+      "marca": "Samsung",
+      "modello": "Galaxy S25",
+      "brandId": "SAMSUNG",
+      "costoAcquisto": "320.00",
+      "aliquotaAcquisto": "22.00",
+      "createdAt": "2026-03-10T10:30:00.000Z",
+      "updatedAt": "2026-03-10T10:30:00.000Z",
+      "categoria": {
+        "id": 3,
+        "nome": "TELEFONIA"
+      },
+      "tipologia": {
+        "id": 12,
+        "nome": "SMARTPHONE"
+      },
+      "dettaglio": {
+        "id": 880001,
+        "tipologiaVendita": "NO PROMO",
+        "canone": "0.00",
+        "prezzo": "149.99",
+        "aliquotaPrezzo": "22.00",
+        "natura": null,
+        "importoImponibile": "122.94",
+        "sconto": "0.00",
+        "scontoIvaEsclusa": "0.00",
+        "importoAnticipo": "0.00",
+        "importoFinanziato": "0.00",
+        "importoCredito": "0.00",
+        "importoNdc": "0.00",
+        "importoScontrino": "149.99",
+        "scontrino": 1,
+        "venditaInfo1": "RSSMRA80A01H501Z",
+        "venditaInfo2": null,
+        "venditaInfo3": "8939123456789012345",
+        "venditaInfo4": null,
+        "venditaInfo5": null,
+        "domandeRisposte": [
+          {
+            "id": 1001,
+            "domandaId": 5,
+            "domandaTesto": "Il cliente ha accettato la privacy policy?",
+            "risposta": "SI",
+            "createdAt": "2026-03-10T10:30:00.000Z",
+            "updatedAt": "2026-03-10T10:30:00.000Z"
+          }
+        ]
+      }
+    }
+  ]
+}
+Questo è il JSON completo che viene restituito dall'endpoint "complete" delle vendite. Contiene:
+
+Campi diretti della vendita — id, stato, scontrino, date, totali
+Organizzazione — dati dell'organizzazione (derivati dalla catena FK attivita → ragione_sociale → organizzazione)
+Ragione sociale — azienda, P.IVA, CF, contatti
+Cliente — anagrafica completa con codici operatore
+Addetto — venditore con le sue attività associate (punti vendita)
+Pagamento — tutti i metodi di pagamento (contanti, POS, bonifici, assegni, buoni, coupon, ecc.)
+Articoli — con categoria, tipologia, dettaglio economico (prezzo, sconto, IVA, importi vari), campi info aggiuntivi (venditaInfo1-5), e domande/risposte associate
