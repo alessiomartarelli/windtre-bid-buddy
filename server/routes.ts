@@ -968,8 +968,8 @@ export async function registerRoutes(
 
       if (action === "fetch_sales") {
         const salesUrl = new URL(deriveSalesEndpoint(apiUrlStr));
-        if (start_date) salesUrl.searchParams.set("from_date", start_date);
-        if (end_date) salesUrl.searchParams.set("to_date", end_date);
+        if (start_date) salesUrl.searchParams.set("from", start_date);
+        if (end_date) salesUrl.searchParams.set("to", end_date);
 
         const salesResp = await fetch(salesUrl.toString(), {
           method: "GET",
