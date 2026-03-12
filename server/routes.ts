@@ -993,11 +993,12 @@ export async function registerRoutes(
       }
 
       return res.status(400).json({ error: `Azione non supportata: ${action}` });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("BiSuite API proxy error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
       res.status(500).json({
         error: "Errore nella comunicazione con BiSuite",
-        details: error.message || String(error),
+        details: msg,
       });
     }
   });

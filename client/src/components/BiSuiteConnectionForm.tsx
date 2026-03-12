@@ -124,10 +124,11 @@ export const BiSuiteConnectionForm = ({ organizations, onCredentialsSaved }: BiS
         title: "Connessione riuscita",
         description: "Autenticazione OAuth2 con BiSuite completata con successo",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Impossibile connettersi all'API BiSuite";
       toast({
         title: "Errore di connessione",
-        description: error.message || "Impossibile connettersi all'API BiSuite",
+        description: msg,
         variant: "destructive",
       });
     } finally {
@@ -187,11 +188,12 @@ export const BiSuiteConnectionForm = ({ organizations, onCredentialsSaved }: BiS
       });
 
       onCredentialsSaved?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving credentials:', error);
+      const msg = error instanceof Error ? error.message : "Impossibile salvare le credenziali";
       toast({
         title: "Errore",
-        description: error.message || "Impossibile salvare le credenziali",
+        description: msg,
         variant: "destructive",
       });
     } finally {
