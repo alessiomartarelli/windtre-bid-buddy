@@ -14,8 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// URL API di default
-const DEFAULT_BISUITE_API_URL = "http://85.94.215.97/api/v1/sales/full";
+const DEFAULT_BISUITE_API_URL = "http://85.94.215.97";
 
 interface BiSuiteCredentials {
   apiUrl: string;
@@ -223,7 +222,7 @@ export const BiSuiteConnectionForm = ({ organizations, onCredentialsSaved }: BiS
             <Input
               id="apiUrl"
               type="url"
-              placeholder="http://85.94.215.97/api/v1/sales/full"
+              placeholder="http://85.94.215.97"
               value={apiUrl}
               onChange={(e) => setApiUrl(e.target.value)}
             />

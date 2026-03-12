@@ -784,13 +784,23 @@ export async function registerRoutes(
     }
   }
 
-  function deriveTokenEndpoint(apiUrlStr: string): string {
+  const BISUITE_SALES_PATH = "/api/v1/sales/full";
+
+  function deriveBaseUrl(apiUrlStr: string): string {
     try {
       const u = new URL(apiUrlStr);
-      return `${u.protocol}//${u.host}/oauth/token`;
+      return `${u.protocol}//${u.host}`;
     } catch {
-      return "http://85.94.215.97/oauth/token";
+      return "http://85.94.215.97";
     }
+  }
+
+  function deriveSalesEndpoint(apiUrlStr: string): string {
+    return `${deriveBaseUrl(apiUrlStr)}${BISUITE_SALES_PATH}`;
+  }
+
+  function deriveTokenEndpoint(apiUrlStr: string): string {
+    return `${deriveBaseUrl(apiUrlStr)}/oauth/token`;
   }
 
   async function getBisuiteToken(tokenUrl: string, clientId: string, clientSecret: string): Promise<string> {
@@ -943,7 +953,7 @@ export async function registerRoutes(
         if (!creds || !creds.client_id || !creds.client_secret) {
           return res.status(400).json({ error: "Credenziali BiSuite non configurate per questa organizzazione" });
         }
-        apiUrlStr = creds.api_url || "http://85.94.215.97/api/v1/sales/full";
+        apiUrlStr = creds.api_url || "http://85.94.215.97";
         cId = creds.client_id;
         cSecret = creds.client_secret;
       } else {
@@ -958,7 +968,7 @@ export async function registerRoutes(
       }
 
       if (action === "fetch_sales") {
-        const salesUrl = new URL(apiUrlStr);
+        const salesUrl = new URL(deriveSalesEndpoint(apiUrlStr));
         if (start_date) salesUrl.searchParams.set("start_date", start_date);
         if (end_date) salesUrl.searchParams.set("end_date", end_date);
 
