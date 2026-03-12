@@ -1060,7 +1060,8 @@ export async function registerRoutes(
       }
 
       const apiUrlStr = creds.api_url || "https://db1.bisuite.app";
-      const token = await getBisuiteToken(apiUrlStr, creds.client_id, creds.client_secret);
+      const tokenUrl = deriveTokenEndpoint(apiUrlStr);
+      const token = await getBisuiteToken(tokenUrl, creds.client_id, creds.client_secret);
 
       const salesUrl = new URL(deriveSalesEndpoint(apiUrlStr));
       if (start_date) salesUrl.searchParams.set("from", start_date);
