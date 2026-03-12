@@ -1,4 +1,4 @@
-import { pgTable, text, serial, varchar, timestamp, jsonb, index, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, varchar, timestamp, jsonb, index, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations, sql } from "drizzle-orm";
@@ -79,6 +79,30 @@ export const systemConfig = pgTable("system_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// BiSuite Sales (imported from external BiSuite API)
+export const bisuiteSales = pgTable("bisuite_sales", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  bisuiteId: integer("bisuite_id").notNull(),
+  dataVendita: timestamp("data_vendita"),
+  codicePos: varchar("codice_pos"),
+  nomeNegozio: varchar("nome_negozio"),
+  ragioneSociale: varchar("ragione_sociale"),
+  nomeAddetto: varchar("nome_addetto"),
+  nomeCliente: varchar("nome_cliente"),
+  totale: varchar("totale"),
+  stato: varchar("stato"),
+  categorieArticoli: text("categorie_articoli"),
+  rawData: jsonb("raw_data").notNull(),
+  fetchedAt: timestamp("fetched_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_bisuite_sales_org").on(table.organizationId),
+  index("IDX_bisuite_sales_date").on(table.dataVendita),
+  index("IDX_bisuite_sales_pos").on(table.codicePos),
+  index("IDX_bisuite_sales_bisuite_id").on(table.bisuiteId),
+]);
+
 // Password reset tokens
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -128,5 +152,7 @@ export type PdvConfiguration = typeof pdvConfigurations.$inferSelect;
 export type InsertPdvConfiguration = typeof pdvConfigurations.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type SystemConfig = typeof systemConfig.$inferSelect;
+export type BisuiteSale = typeof bisuiteSales.$inferSelect;
+export type InsertBisuiteSale = typeof bisuiteSales.$inferInsert;
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];

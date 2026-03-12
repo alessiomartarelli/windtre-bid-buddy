@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig } from "@shared/schema";
-import { eq, desc, and, isNull } from "drizzle-orm";
+import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale } from "@shared/schema";
+import { eq, desc, and, isNull, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Profiles
@@ -40,6 +40,12 @@ export interface IStorage {
   getSystemConfig(key: string): Promise<SystemConfig | undefined>;
   getAllSystemConfigs(): Promise<SystemConfig[]>;
   upsertSystemConfig(key: string, config: any, updatedBy: string): Promise<SystemConfig>;
+
+  // BiSuite Sales
+  upsertBisuiteSales(sales: InsertBisuiteSale[]): Promise<number>;
+  getBisuiteSales(orgId: string, from?: Date, to?: Date): Promise<BisuiteSale[]>;
+  getBisuiteSale(id: string): Promise<BisuiteSale | undefined>;
+  deleteBisuiteSalesByOrg(orgId: string): Promise<void>;
 
   // Password Reset Tokens
   createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
@@ -226,6 +232,37 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return result;
+  }
+
+  // BiSuite Sales
+  async upsertBisuiteSales(sales: InsertBisuiteSale[]): Promise<number> {
+    if (sales.length === 0) return 0;
+    let inserted = 0;
+    for (const sale of sales) {
+      await db.insert(bisuiteSales)
+        .values(sale)
+        .onConflictDoNothing();
+      inserted++;
+    }
+    return inserted;
+  }
+
+  async getBisuiteSales(orgId: string, from?: Date, to?: Date): Promise<BisuiteSale[]> {
+    const conditions = [eq(bisuiteSales.organizationId, orgId)];
+    if (from) conditions.push(gte(bisuiteSales.dataVendita, from));
+    if (to) conditions.push(lte(bisuiteSales.dataVendita, to));
+    return await db.select().from(bisuiteSales)
+      .where(and(...conditions))
+      .orderBy(desc(bisuiteSales.dataVendita));
+  }
+
+  async getBisuiteSale(id: string): Promise<BisuiteSale | undefined> {
+    const [result] = await db.select().from(bisuiteSales).where(eq(bisuiteSales.id, id));
+    return result;
+  }
+
+  async deleteBisuiteSalesByOrg(orgId: string): Promise<void> {
+    await db.delete(bisuiteSales).where(eq(bisuiteSales.organizationId, orgId));
   }
 
   // Password Reset Tokens

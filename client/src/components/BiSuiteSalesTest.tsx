@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Download, Loader2, ShoppingCart, AlertCircle, CheckCircle } from "lucide-react";
+import { CalendarIcon, Download, Loader2, ShoppingCart, AlertCircle, CheckCircle, Database } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, subDays } from "date-fns";
 import { it } from "date-fns/locale";
@@ -46,6 +46,7 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
   const [startDate, setStartDate] = useState<Date>(subDays(new Date(), 30));
   const [endDate, setEndDate] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [salesData, setSalesData] = useState<SalesData[] | null>(null);
   const [rawResponse, setRawResponse] = useState<unknown>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -192,6 +193,57 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
     }
   };
 
+  const handleImportSales = async () => {
+    if (!selectedOrgId) {
+      toast({
+        title: "Organizzazione richiesta",
+        description: "Seleziona un'organizzazione prima di importare",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const res = await fetch(apiUrl('/api/admin/bisuite-import'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          organization_id: selectedOrgId,
+          start_date: format(startDate, 'yyyy-MM-dd'),
+          end_date: format(endDate, 'yyyy-MM-dd'),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Errore nell\'importazione');
+      }
+      const data = await res.json();
+      toast({
+        title: "Importazione completata",
+        description: data.message || `${data.count} vendite importate`,
+      });
+      setTestResult({
+        success: true,
+        message: data.message || `${data.count} vendite importate nel database`,
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      toast({
+        title: "Errore importazione",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      setTestResult({
+        success: false,
+        message: errorMessage,
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const getSalesColumns = (): string[] => {
     if (!salesData || salesData.length === 0) return [];
     const firstItem = salesData[0];
@@ -314,11 +366,21 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
             </Button>
             <Button
               onClick={handleFetchSales}
-              disabled={isLoading || !selectedOrgId}
+              disabled={isLoading || isImporting || !selectedOrgId}
               className="flex-1"
             >
               {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
               Recupera Vendite
+            </Button>
+            <Button
+              onClick={handleImportSales}
+              disabled={isLoading || isImporting || !selectedOrgId}
+              className="flex-1"
+              variant="default"
+              data-testid="button-import-sales"
+            >
+              {isImporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
+              Importa nel DB
             </Button>
           </div>
 

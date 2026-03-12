@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { LogOut, User, Building2, Settings, Shield, Users, LayoutDashboard, Table2 } from 'lucide-react';
+import { LogOut, User, Building2, Settings, Shield, Users, LayoutDashboard, Table2, ShoppingCart } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function UserMenu() {
@@ -101,6 +101,11 @@ export function UserMenu() {
         <DropdownMenuItem onClick={() => setLocation('/dashboard')}>
           <LayoutDashboard className="mr-2 h-4 w-4" />
           <span>Dashboard</span>
+        </DropdownMenuItem>
+        
+        <DropdownMenuItem onClick={() => setLocation('/vendite-bisuite')} data-testid="menu-vendite-bisuite">
+          <ShoppingCart className="mr-2 h-4 w-4" />
+          <span>Vendite BiSuite</span>
         </DropdownMenuItem>
         
         <DropdownMenuItem onClick={() => setLocation('/profile')}>

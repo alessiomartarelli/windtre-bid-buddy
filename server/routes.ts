@@ -1002,5 +1002,156 @@ export async function registerRoutes(
     }
   });
 
+  // ── BiSuite Sales Import & Read endpoints ─────────────────────
+  function extractSaleFields(sale: any, organizationId: string) {
+    const bisuiteId = sale.id || sale.codiceEsterno || 0;
+    const dataVenditaStr = sale.dataVendita || sale.createdAt;
+    const dataVendita = dataVenditaStr ? new Date(dataVenditaStr) : null;
+    const attivita = sale.addetto?.attivita;
+    const codicePos = Array.isArray(attivita) && attivita.length > 0
+      ? (attivita[0].codiceOperatoreWind || '') : '';
+    const nomeNegozio = Array.isArray(attivita) && attivita.length > 0
+      ? (attivita[0].nominativo || '') : '';
+    const ragioneSociale = sale.ragioneSociale?.azienda || '';
+    const nomeAddetto = sale.addetto?.nominativo || '';
+    const nomeCliente = sale.cliente?.nominativo || '';
+    const totale = sale.totale || '0';
+    const stato = sale.stato || '';
+    const categorie = (sale.articoli || [])
+      .map((a: any) => a.categoria?.nome || '')
+      .filter((c: string) => c)
+      .filter((c: string, i: number, arr: string[]) => arr.indexOf(c) === i)
+      .join(', ');
+
+    return {
+      organizationId,
+      bisuiteId: typeof bisuiteId === 'number' ? bisuiteId : parseInt(bisuiteId) || 0,
+      dataVendita,
+      codicePos,
+      nomeNegozio,
+      ragioneSociale,
+      nomeAddetto,
+      nomeCliente,
+      totale: String(totale),
+      stato,
+      categorieArticoli: categorie,
+      rawData: sale,
+    };
+  }
+
+  app.post("/api/admin/bisuite-import", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = req.user;
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const { organization_id, start_date, end_date } = req.body;
+      if (!organization_id) {
+        return res.status(400).json({ error: "organization_id richiesto" });
+      }
+
+      const orgConfig = await storage.getOrgConfig(organization_id);
+      const config = orgConfig?.config as Record<string, any> | undefined;
+      const creds = config?.bisuiteCredentials;
+      if (!creds?.client_id || !creds?.client_secret) {
+        return res.status(400).json({ error: "Credenziali BiSuite non configurate" });
+      }
+
+      const apiUrlStr = creds.api_url || "https://db1.bisuite.app";
+      const token = await getBisuiteToken(apiUrlStr, creds.client_id, creds.client_secret);
+
+      const salesUrl = new URL(deriveSalesEndpoint(apiUrlStr));
+      if (start_date) salesUrl.searchParams.set("from", start_date);
+      if (end_date) salesUrl.searchParams.set("to", end_date);
+
+      const salesResp = await fetch(salesUrl.toString(), {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (!salesResp.ok) {
+        const errorBody = await salesResp.text();
+        return res.status(salesResp.status).json({ error: `BiSuite API error (${salesResp.status})`, details: errorBody });
+      }
+
+      const salesData = await salesResp.json();
+
+      let sales: any[] = [];
+      if (Array.isArray(salesData)) {
+        sales = salesData;
+      } else if (salesData?.data && Array.isArray(salesData.data)) {
+        sales = salesData.data;
+      } else if (salesData?.vendite && Array.isArray(salesData.vendite)) {
+        sales = salesData.vendite;
+      } else if (salesData?.sales && Array.isArray(salesData.sales)) {
+        sales = salesData.sales;
+      }
+
+      const records = sales.map((sale: any) => extractSaleFields(sale, organization_id));
+
+      await storage.deleteBisuiteSalesByOrg(organization_id);
+      const inserted = await storage.upsertBisuiteSales(records);
+
+      res.json({
+        success: true,
+        message: `Importate ${inserted} vendite nel database`,
+        count: inserted,
+        totalFromApi: sales.length,
+      });
+    } catch (error: unknown) {
+      console.error("BiSuite import error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore durante l'importazione", details: msg });
+    }
+  });
+
+  app.get("/api/bisuite-sales", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = req.user;
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const orgId = (req.query.organization_id as string) || profile.organizationId;
+      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+        return res.status(403).json({ error: "Non puoi accedere ai dati di un'altra organizzazione" });
+      }
+
+      const from = req.query.from ? new Date(req.query.from as string) : undefined;
+      const to = req.query.to ? new Date(req.query.to as string) : undefined;
+
+      const sales = await storage.getBisuiteSales(orgId, from, to);
+      res.json({ sales, count: sales.length });
+    } catch (error: unknown) {
+      console.error("BiSuite sales read error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore nel recupero vendite", details: msg });
+    }
+  });
+
+  app.get("/api/bisuite-sales/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = req.user;
+      if (!profile) return res.status(403).json({ error: "Accesso non autorizzato" });
+
+      const sale = await storage.getBisuiteSale(req.params.id);
+      if (!sale) return res.status(404).json({ error: "Vendita non trovata" });
+
+      if (profile.role !== "super_admin" && sale.organizationId !== profile.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      res.json(sale);
+    } catch (error: unknown) {
+      console.error("BiSuite sale detail error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore nel recupero dettaglio", details: msg });
+    }
+  });
+
   return httpServer;
 }
