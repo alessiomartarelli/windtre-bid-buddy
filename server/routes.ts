@@ -773,7 +773,7 @@ export async function registerRoutes(
   });
 
   // ── BiSuite API: helpers ──────────────────────────────────────────
-  const BISUITE_ALLOWED_HOSTS = ["db.bisuite.app", "85.94.215.97"];
+  const BISUITE_ALLOWED_HOSTS = ["db.bisuite.app", "db1.bisuite.app", "85.94.215.97"];
 
   function validateBisuiteUrl(urlStr: string): boolean {
     try {
@@ -791,7 +791,7 @@ export async function registerRoutes(
       const u = new URL(apiUrlStr);
       return `${u.protocol}//${u.host}`;
     } catch {
-      return "http://85.94.215.97";
+      return "https://db.bisuite.app";
     }
   }
 
@@ -800,7 +800,7 @@ export async function registerRoutes(
   }
 
   function deriveTokenEndpoint(apiUrlStr: string): string {
-    return `${deriveBaseUrl(apiUrlStr)}/oauth/token`;
+    return `${deriveBaseUrl(apiUrlStr)}/api/v1/oauth/token`;
   }
 
   async function getBisuiteToken(tokenUrl: string, clientId: string, clientSecret: string): Promise<string> {
@@ -953,7 +953,7 @@ export async function registerRoutes(
         if (!creds || !creds.client_id || !creds.client_secret) {
           return res.status(400).json({ error: "Credenziali BiSuite non configurate per questa organizzazione" });
         }
-        apiUrlStr = creds.api_url || "http://85.94.215.97";
+        apiUrlStr = creds.api_url || "https://db.bisuite.app";
         cId = creds.client_id;
         cSecret = creds.client_secret;
       } else {
