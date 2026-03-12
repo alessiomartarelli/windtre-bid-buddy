@@ -152,36 +152,98 @@ function ruleId(): string {
 
 export function getDefaultMappingRules(): BiSuiteMappingRule[] {
   return [
-    { id: ruleId(), pista: 'mobile', targetCategory: 'TIED', targetLabel: 'Tied', conditions: { categoriaBiSuite: 'TELEFONIA', tipologiaBiSuite: 'SIM', clienteTipo: 'PRIVATO', domandaTesto: 'Tipologia Offerta', rispostaContiene: 'TIED' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'mobile', targetCategory: 'UNTIED', targetLabel: 'Untied', conditions: { categoriaBiSuite: 'TELEFONIA', tipologiaBiSuite: 'SIM', clienteTipo: 'PRIVATO', domandaTesto: 'Tipologia Offerta', rispostaContiene: 'UNTIED' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'TELEFONIA', tipologiaBiSuite: 'MNP' }, priority: 15, enabled: true },
-    { id: ruleId(), pista: 'mobile', targetCategory: 'WINBACK', targetLabel: 'WinBack', conditions: { categoriaBiSuite: 'TELEFONIA', tipologiaBiSuite: 'WINBACK' }, priority: 15, enabled: true },
-    { id: ruleId(), pista: 'mobile', targetCategory: 'PROFESSIONAL_STAFF', targetLabel: 'Professional Staff', conditions: { categoriaBiSuite: 'TELEFONIA', tipologiaBiSuite: 'PROFESSIONAL STAFF', clienteTipo: 'PIVA' }, priority: 20, enabled: true },
-    { id: ruleId(), pista: 'mobile', targetCategory: 'PROFESSIONAL_WORLD', targetLabel: 'Professional World', conditions: { categoriaBiSuite: 'TELEFONIA', tipologiaBiSuite: 'PROFESSIONAL WORLD', clienteTipo: 'PIVA' }, priority: 20, enabled: true },
-    { id: ruleId(), pista: 'mobile', targetCategory: 'PROFESSIONAL_FLEX', targetLabel: 'Professional Flex', conditions: { categoriaBiSuite: 'TELEFONIA', tipologiaBiSuite: 'PROFESSIONAL FLEX', clienteTipo: 'PIVA' }, priority: 20, enabled: true },
-    { id: ruleId(), pista: 'mobile', targetCategory: 'SIM_CNS', targetLabel: 'SIM Consumer', conditions: { categoriaBiSuite: 'TELEFONIA', tipologiaBiSuite: 'SIM', clienteTipo: 'PRIVATO' }, priority: 5, enabled: true },
-    { id: ruleId(), pista: 'mobile', targetCategory: 'SIM_IVA', targetLabel: 'SIM IVA', conditions: { categoriaBiSuite: 'TELEFONIA', tipologiaBiSuite: 'SIM', clienteTipo: 'PIVA' }, priority: 5, enabled: true },
+    // ═══════════════ MOBILE ═══════════════
+    // MIA TIED → tutte le tipologie → TIED
+    { id: ruleId(), pista: 'mobile', targetCategory: 'TIED', targetLabel: 'Tied', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'MIA EASYPAY STANDARD' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'mobile', targetCategory: 'TIED', targetLabel: 'Tied', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'MIA EASYPAY CYC' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'mobile', targetCategory: 'TIED', targetLabel: 'Tied', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'COUPON CARING TIED' }, priority: 10, enabled: true },
 
-    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_FTTC', targetLabel: 'Fisso FTTC', conditions: { categoriaBiSuite: 'FISSO', tipologiaBiSuite: 'FTTC' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_FTTH', targetLabel: 'Fisso FTTH', conditions: { categoriaBiSuite: 'FISSO', tipologiaBiSuite: 'FTTH' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_FWA_OUT', targetLabel: 'FWA OUT', conditions: { categoriaBiSuite: 'FISSO', tipologiaBiSuite: 'FWA OUTDOOR' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_FWA_IND_2P', targetLabel: 'FWA IND 2P', conditions: { categoriaBiSuite: 'FISSO', tipologiaBiSuite: 'FWA INDOOR' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_PIVA_1A_LINEA', targetLabel: 'Fisso P.IVA 1ª Linea', conditions: { categoriaBiSuite: 'FISSO', clienteTipo: 'PIVA' }, priority: 5, enabled: true },
-    { id: ruleId(), pista: 'fisso', targetCategory: 'CONVERGENZA', targetLabel: 'Convergenza', conditions: { categoriaBiSuite: 'FISSO', tipologiaBiSuite: 'CONVERGENZA' }, priority: 10, enabled: true },
+    // MIA UNTIED → UNTIED
+    { id: ruleId(), pista: 'mobile', targetCategory: 'UNTIED', targetLabel: 'Untied', conditions: { categoriaBiSuite: 'MIA UNTIED' }, priority: 10, enabled: true },
 
-    { id: ruleId(), pista: 'energia', targetCategory: 'CONSUMER_CON_SDD', targetLabel: 'Consumer con SDD', conditions: { categoriaBiSuite: 'ENERGIA', clienteTipo: 'PRIVATO', domandaTesto: 'SDD', rispostaContiene: 'SI' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'energia', targetCategory: 'CONSUMER_NO_SDD', targetLabel: 'Consumer no SDD', conditions: { categoriaBiSuite: 'ENERGIA', clienteTipo: 'PRIVATO' }, priority: 5, enabled: true },
-    { id: ruleId(), pista: 'energia', targetCategory: 'BUSINESS_CON_SDD', targetLabel: 'Business con SDD', conditions: { categoriaBiSuite: 'ENERGIA', clienteTipo: 'PIVA', domandaTesto: 'SDD', rispostaContiene: 'SI' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'energia', targetCategory: 'BUSINESS_NO_SDD', targetLabel: 'Business no SDD', conditions: { categoriaBiSuite: 'ENERGIA', clienteTipo: 'PIVA' }, priority: 5, enabled: true },
+    // TIED CF con MNP=SI → MNP (priorità alta)
+    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'TIED CF', domandaTesto: 'MNP', rispostaContiene: 'SI' }, priority: 25, enabled: true },
+    // TIED CF con MNP DA OPERATORI VIRTUALI=SI → MNP_MVNO
+    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP_MVNO', targetLabel: 'MNP da MVNO', conditions: { categoriaBiSuite: 'TIED CF', domandaTesto: 'MNP DA OPERATORI VIRTUALI', rispostaContiene: 'SI' }, priority: 20, enabled: true },
+    // TIED CF con GA CONVERGENTE FISSO=SI → Convergente
+    { id: ruleId(), pista: 'mobile', targetCategory: 'CONVERGENTE_SUPERFIBRA_MULTISERVICE', targetLabel: 'Convergente Superfibra / Multiservice', conditions: { categoriaBiSuite: 'TIED CF', domandaTesto: 'GA CONVERGENTE FISSO', rispostaContiene: 'SI' }, priority: 15, enabled: true },
+    // TIED CF / VOCE EASYPAY (catch-all) → TIED
+    { id: ruleId(), pista: 'mobile', targetCategory: 'TIED', targetLabel: 'Tied', conditions: { categoriaBiSuite: 'TIED CF', tipologiaBiSuite: 'VOCE EASYPAY' }, priority: 5, enabled: true },
+    // TIED CF / DATI EASYPAY → TIED
+    { id: ruleId(), pista: 'mobile', targetCategory: 'TIED', targetLabel: 'Tied', conditions: { categoriaBiSuite: 'TIED CF', tipologiaBiSuite: 'DATI EASYPAY' }, priority: 5, enabled: true },
 
-    { id: ruleId(), pista: 'assicurazioni', targetCategory: 'protezionePro', targetLabel: 'Protezione Pro', conditions: { categoriaBiSuite: 'ASSICURAZIONI', tipologiaBiSuite: 'PROTEZIONE PRO' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'assicurazioni', targetCategory: 'casaFamigliaFull', targetLabel: 'Casa Famiglia Full', conditions: { categoriaBiSuite: 'ASSICURAZIONI', tipologiaBiSuite: 'CASA FAMIGLIA FULL' }, priority: 10, enabled: true },
+    // TIED IVA con MNP=SI → MNP
+    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'TIED IVA', domandaTesto: 'MNP', rispostaContiene: 'SI' }, priority: 25, enabled: true },
+    // TIED IVA con MNP DA OPERATORI VIRTUALI=SI → MNP_MVNO
+    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP_MVNO', targetLabel: 'MNP da MVNO', conditions: { categoriaBiSuite: 'TIED IVA', domandaTesto: 'MNP DA OPERATORI VIRTUALI', rispostaContiene: 'SI' }, priority: 20, enabled: true },
+    // TIED IVA / VOCE IVA → SIM_IVA
+    { id: ruleId(), pista: 'mobile', targetCategory: 'SIM_IVA', targetLabel: 'SIM IVA', conditions: { categoriaBiSuite: 'TIED IVA', tipologiaBiSuite: 'VOCE IVA' }, priority: 10, enabled: true },
+    // TIED IVA / DATI IVA → SIM_IVA
+    { id: ruleId(), pista: 'mobile', targetCategory: 'SIM_IVA', targetLabel: 'SIM IVA', conditions: { categoriaBiSuite: 'TIED IVA', tipologiaBiSuite: 'DATI IVA' }, priority: 10, enabled: true },
 
-    { id: ruleId(), pista: 'protecta', targetCategory: 'negozioProtetti', targetLabel: 'Negozio Protetti', conditions: { categoriaBiSuite: 'PROTECTA', tipologiaBiSuite: 'NEGOZIO PROTETTI' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'protecta', targetCategory: 'casaStart', targetLabel: 'Casa Start', conditions: { categoriaBiSuite: 'PROTECTA', tipologiaBiSuite: 'CASA START' }, priority: 10, enabled: true },
+    // UNTIED con MNP=SI → MNP
+    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'UNTIED', domandaTesto: 'MNP', rispostaContiene: 'SI' }, priority: 25, enabled: true },
+    // UNTIED con MNP DA OPERATORI VIRTUALI=SI → MNP_MVNO
+    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP_MVNO', targetLabel: 'MNP da MVNO', conditions: { categoriaBiSuite: 'UNTIED', domandaTesto: 'MNP DA OPERATORI VIRTUALI', rispostaContiene: 'SI' }, priority: 20, enabled: true },
+    // UNTIED / RICARICABILE VOCE (catch-all) → UNTIED
+    { id: ruleId(), pista: 'mobile', targetCategory: 'UNTIED', targetLabel: 'Untied', conditions: { categoriaBiSuite: 'UNTIED', tipologiaBiSuite: 'RICARICABILE VOCE' }, priority: 5, enabled: true },
+    // UNTIED / RICARICABILE DATI → UNTIED
+    { id: ruleId(), pista: 'mobile', targetCategory: 'UNTIED', targetLabel: 'Untied', conditions: { categoriaBiSuite: 'UNTIED', tipologiaBiSuite: 'RICARICABILE DATI' }, priority: 5, enabled: true },
 
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'CUSTOMER BASE', tipologiaBiSuite: 'CAMBIO OFFERTA UNTIED' }, priority: 10, enabled: true },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'CUSTOMER BASE', tipologiaBiSuite: 'CAMBIO OFFERTA RIVINCOLI' }, priority: 10, enabled: true },
+    // ALTRE GA
+    { id: ruleId(), pista: 'mobile', targetCategory: 'TOURIST_FULL', targetLabel: 'Tourist Full', conditions: { categoriaBiSuite: 'ALTRE GA', tipologiaBiSuite: 'GA TURISTICHE' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'mobile', targetCategory: 'UNTIED', targetLabel: 'Untied', conditions: { categoriaBiSuite: 'ALTRE GA', tipologiaBiSuite: 'ALTRE GA NON TURISTICHE' }, priority: 5, enabled: true },
+
+    // ═══════════════ FISSO ═══════════════
+    // ADSL/FIBRA/FWA CF con CONVERGENTE MOBILE=SI → Convergenza (priorità alta)
+    { id: ruleId(), pista: 'fisso', targetCategory: 'CONVERGENZA', targetLabel: 'Convergenza', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', domandaTesto: 'CONVERGENTE MOBILE', rispostaContiene: 'SI' }, priority: 20, enabled: true },
+    // ADSL/FIBRA/FWA CF / FIBRA FTTH CF
+    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_FTTH', targetLabel: 'Fisso FTTH', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', tipologiaBiSuite: 'FIBRA FTTH CF' }, priority: 10, enabled: true },
+    // ADSL/FIBRA/FWA CF / FIBRA FTTC CF
+    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_FTTC', targetLabel: 'Fisso FTTC', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', tipologiaBiSuite: 'FIBRA FTTC CF' }, priority: 10, enabled: true },
+    // ADSL/FIBRA/FWA CF / FWA CF con fwa outdoor=SI → FWA OUT
+    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_FWA_OUT', targetLabel: 'FWA OUT', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', tipologiaBiSuite: 'FWA CF', domandaTesto: 'fwa outdoor', rispostaContiene: 'SI' }, priority: 15, enabled: true },
+    // ADSL/FIBRA/FWA CF / FWA CF (catch-all indoor)
+    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_FWA_IND_2P', targetLabel: 'FWA IND 2P', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', tipologiaBiSuite: 'FWA CF' }, priority: 10, enabled: true },
+    // ADSL/FIBRA/FWA CF / VOUCHER / BOLLETTINO POSTALE
+    { id: ruleId(), pista: 'fisso', targetCategory: 'BOLLETTINO_POSTALE', targetLabel: 'Bollettino Postale', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', tipologiaBiSuite: 'VOUCHER / BOLLETTINO POSTALE' }, priority: 10, enabled: true },
+
+    // ADSL/FIBRA/FWA IVA → fisso P.IVA
+    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_PIVA_1A_LINEA', targetLabel: 'Fisso P.IVA 1ª Linea', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', tipologiaBiSuite: 'FIBRA FTTH IVA' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_PIVA_1A_LINEA', targetLabel: 'Fisso P.IVA 1ª Linea', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', tipologiaBiSuite: 'FIBRA FTTC IVA' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'FISSO_PIVA_1A_LINEA', targetLabel: 'Fisso P.IVA 1ª Linea', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', tipologiaBiSuite: 'FWA IVA' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'BOLLETTINO_POSTALE', targetLabel: 'Bollettino Postale', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', tipologiaBiSuite: 'VOUCHER / BOLLETTINO POSTALE' }, priority: 10, enabled: true },
+
+    // FISSO VOCE / VOCE+ → Chiamate Illimitate
+    { id: ruleId(), pista: 'fisso', targetCategory: 'CHIAMATE_ILLIMITATE', targetLabel: 'Chiamate Illimitate', conditions: { categoriaBiSuite: 'FISSO VOCE', tipologiaBiSuite: 'VOCE+' }, priority: 10, enabled: true },
+
+    // ═══════════════ ENERGIA ═══════════════
+    // ENERGIA W3 + EX W3 ENERGIA BY ACEA=SI + FISICA → Consumer ex W3
+    { id: ruleId(), pista: 'energia', targetCategory: 'CONSUMER_NO_SDD_W3', targetLabel: 'Consumer no SDD (ex W3)', conditions: { categoriaBiSuite: 'ENERGIA W3', clienteTipo: 'FISICA', domandaTesto: 'EX W3 ENERGIA BY ACEA', rispostaContiene: 'SI' }, priority: 15, enabled: true },
+    // ENERGIA W3 + EX W3 ENERGIA BY ACEA=SI + PROFESSIONISTA/GIURIDICA → Business ex W3
+    { id: ruleId(), pista: 'energia', targetCategory: 'BUSINESS_NO_SDD_W3', targetLabel: 'Business no SDD (ex W3)', conditions: { categoriaBiSuite: 'ENERGIA W3', clienteTipo: 'PROFESSIONISTA', domandaTesto: 'EX W3 ENERGIA BY ACEA', rispostaContiene: 'SI' }, priority: 15, enabled: true },
+    { id: ruleId(), pista: 'energia', targetCategory: 'BUSINESS_NO_SDD_W3', targetLabel: 'Business no SDD (ex W3)', conditions: { categoriaBiSuite: 'ENERGIA W3', clienteTipo: 'GIURIDICA', domandaTesto: 'EX W3 ENERGIA BY ACEA', rispostaContiene: 'SI' }, priority: 15, enabled: true },
+    // ENERGIA W3 + FISICA (catch-all) → Consumer no SDD
+    { id: ruleId(), pista: 'energia', targetCategory: 'CONSUMER_NO_SDD', targetLabel: 'Consumer no SDD', conditions: { categoriaBiSuite: 'ENERGIA W3', clienteTipo: 'FISICA' }, priority: 5, enabled: true },
+    // ENERGIA W3 + PROFESSIONISTA → Business no SDD
+    { id: ruleId(), pista: 'energia', targetCategory: 'BUSINESS_NO_SDD', targetLabel: 'Business no SDD', conditions: { categoriaBiSuite: 'ENERGIA W3', clienteTipo: 'PROFESSIONISTA' }, priority: 5, enabled: true },
+    // ENERGIA W3 + GIURIDICA → Business no SDD
+    { id: ruleId(), pista: 'energia', targetCategory: 'BUSINESS_NO_SDD', targetLabel: 'Business no SDD', conditions: { categoriaBiSuite: 'ENERGIA W3', clienteTipo: 'GIURIDICA' }, priority: 5, enabled: true },
+
+    // ═══════════════ ASSICURAZIONI ═══════════════
+    { id: ruleId(), pista: 'assicurazioni', targetCategory: 'casaFamigliaStart', targetLabel: 'Casa Famiglia Start', conditions: { categoriaBiSuite: 'ASSICURAZIONI', tipologiaBiSuite: 'ASSICURAZIONI CASA' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'assicurazioni', targetCategory: 'viaggiVacanze', targetLabel: 'Viaggi Vacanze', conditions: { categoriaBiSuite: 'ASSICURAZIONI', tipologiaBiSuite: 'ASSICURAZIONI MOBILITY' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'assicurazioni', targetCategory: 'sportFamiglia', targetLabel: 'Sport Famiglia', conditions: { categoriaBiSuite: 'ASSICURAZIONI', tipologiaBiSuite: 'ASSICURAZIONI SPORT' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'assicurazioni', targetCategory: 'micioFido', targetLabel: 'Micio Fido', conditions: { categoriaBiSuite: 'ASSICURAZIONI', tipologiaBiSuite: 'ASSICURAZIONI PET' }, priority: 10, enabled: true },
+
+    // ═══════════════ PARTNERSHIP / CUSTOMER BASE ═══════════════
+    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'ALTRI EVENTI CB', tipologiaBiSuite: 'ALTRI CAMBI OFFERTA CB' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'partnership', targetCategory: 'telefono_incluso_var', targetLabel: 'Telefono Incluso', conditions: { categoriaBiSuite: 'ALTRI EVENTI CB', tipologiaBiSuite: 'SOLO TELEFONO INCLUSO IN CB' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta (Migrazioni)', conditions: { categoriaBiSuite: 'ALTRI EVENTI CB', tipologiaBiSuite: 'MIGRAZIONI' }, priority: 5, enabled: true },
+    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLO VOCE' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLI IVA' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLO DATI' }, priority: 10, enabled: true },
+    { id: ruleId(), pista: 'partnership', targetCategory: 'opzione_piu_sicuri_pro', targetLabel: 'WindTre Security Pro', conditions: { categoriaBiSuite: 'WINDTRE SECURITY PRO CB' }, priority: 10, enabled: true },
   ];
 }
 

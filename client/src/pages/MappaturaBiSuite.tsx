@@ -486,9 +486,10 @@ function RuleEditDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="_any_">Qualsiasi</SelectItem>
-                <SelectItem value="PRIVATO">PRIVATO</SelectItem>
-                <SelectItem value="PIVA">P.IVA</SelectItem>
-                <SelectItem value="AZIENDA">AZIENDA</SelectItem>
+                <SelectItem value="FISICA">FISICA (Persona Fisica)</SelectItem>
+                <SelectItem value="PROFESSIONISTA">PROFESSIONISTA</SelectItem>
+                <SelectItem value="GIURIDICA">GIURIDICA (Azienda)</SelectItem>
+                <SelectItem value="ESTERO">ESTERO</SelectItem>
               </SelectContent>
             </Select>
           </div>
