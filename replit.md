@@ -55,6 +55,7 @@ Preferred communication style: Simple, everyday language.
 
 ### External Integrations
 - **BiSuite API**: Integration for fetching sales data from an external system (endpoint at `http://85.94.215.97/api/v1/sales/full`), configured per-organization with OAuth2 client credentials stored in `organization_config.config.bisuiteCredentials` JSONB field. Backend proxy routes handle OAuth2 token acquisition and API calls (`/api/admin/bisuite-credentials` GET/POST/PUT, `/api/admin/bisuite-api` POST with actions `test_connection` and `fetch_sales`)
+- **BiSuite Mapping**: Configurable rules engine for mapping BiSuite sale articles to gara categories. Types/engine in `shared/bisuiteMapping.ts`, API endpoints GET/PUT `/api/admin/bisuite-mapping`, UI at `/mappatura-bisuite` (`client/src/pages/MappaturaBiSuite.tsx`). Stored in `organization_config.config.bisuiteMapping` as `BiSuiteMappingConfig { rules, version }`. Rules match on `categoriaBiSuite`, `tipologiaBiSuite`, `clienteTipo`, and Q&A conditions; priority-based first-match wins.
 - **PDF Generation**: `jsPDF` with `jspdf-autotable` for exporting quotes
 - **Excel Export**: `xlsx` library for spreadsheet generation
 - **Google Fonts**: Outfit (display) and Inter (body) font families

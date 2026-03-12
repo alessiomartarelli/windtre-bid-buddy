@@ -1,0 +1,539 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
+import { apiUrl } from '@/lib/basePath';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
+import { UserMenu } from '@/components/UserMenu';
+import {
+  ArrowLeft,
+  Plus,
+  Save,
+  Trash2,
+  RotateCcw,
+  Loader2,
+  MapPin,
+  Smartphone,
+  Wifi,
+  Zap,
+  Shield,
+  Award,
+  Users,
+  GripVertical,
+  Pencil,
+} from 'lucide-react';
+import { useLocation } from 'wouter';
+import type {
+  BiSuiteMappingRule,
+  BiSuiteMappingConfig,
+  GaraPista,
+  BiSuiteMappingCondition,
+} from '@shared/bisuiteMapping';
+import {
+  PISTA_TARGETS,
+  PISTA_LABELS,
+  getDefaultMappingRules,
+} from '@shared/bisuiteMapping';
+
+const PISTA_ICONS: Record<GaraPista, React.ReactNode> = {
+  mobile: <Smartphone className="h-4 w-4" />,
+  fisso: <Wifi className="h-4 w-4" />,
+  energia: <Zap className="h-4 w-4" />,
+  assicurazioni: <Shield className="h-4 w-4" />,
+  protecta: <Award className="h-4 w-4" />,
+  partnership: <Users className="h-4 w-4" />,
+};
+
+const ALL_PISTE: GaraPista[] = ['mobile', 'fisso', 'energia', 'assicurazioni', 'protecta', 'partnership'];
+
+function generateRuleId(): string {
+  return `rule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createEmptyRule(pista: GaraPista): BiSuiteMappingRule {
+  const targets = PISTA_TARGETS[pista];
+  return {
+    id: generateRuleId(),
+    pista,
+    targetCategory: targets[0]?.value || '',
+    targetLabel: targets[0]?.label || '',
+    conditions: {},
+    priority: 10,
+    enabled: true,
+  };
+}
+
+export default function MappaturaBiSuite() {
+  const [, setLocation] = useLocation();
+  const { profile } = useAuth();
+  const { toast } = useToast();
+
+  const [rules, setRules] = useState<BiSuiteMappingRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [activePista, setActivePista] = useState<GaraPista>('mobile');
+  const [editingRule, setEditingRule] = useState<BiSuiteMappingRule | null>(null);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+
+  const loadMapping = useCallback(async () => {
+    try {
+      setLoading(true);
+      const orgId = profile?.organizationId;
+      const url = orgId
+        ? apiUrl(`/api/admin/bisuite-mapping?org_id=${orgId}`)
+        : apiUrl('/api/admin/bisuite-mapping');
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) throw new Error('Errore nel caricamento');
+      const data = await res.json();
+      if (data && data.rules) {
+        setRules(data.rules);
+      } else {
+        setRules(getDefaultMappingRules());
+        setHasChanges(true);
+      }
+    } catch (err) {
+      console.error('Error loading mapping:', err);
+      setRules(getDefaultMappingRules());
+      setHasChanges(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [profile?.organizationId]);
+
+  useEffect(() => {
+    if (profile) loadMapping();
+  }, [profile, loadMapping]);
+
+  const saveMapping = async () => {
+    try {
+      setSaving(true);
+      const mapping: BiSuiteMappingConfig = { rules, version: '1.0' };
+      const res = await fetch(apiUrl('/api/admin/bisuite-mapping'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          organization_id: profile?.organizationId,
+          mapping,
+        }),
+      });
+      if (!res.ok) throw new Error('Errore nel salvataggio');
+      setHasChanges(false);
+      toast({ title: 'Mappatura salvata', description: 'Le regole di mappatura sono state salvate.' });
+    } catch (err) {
+      toast({ title: 'Errore', description: 'Impossibile salvare la mappatura.', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetToDefaults = () => {
+    setRules(getDefaultMappingRules());
+    setHasChanges(true);
+    setShowResetDialog(false);
+    toast({ title: 'Regole ripristinate', description: 'Le regole di default sono state caricate.' });
+  };
+
+  const addRule = (pista: GaraPista) => {
+    const newRule = createEmptyRule(pista);
+    setRules((prev) => [...prev, newRule]);
+    setHasChanges(true);
+    setEditingRule(newRule);
+  };
+
+  const deleteRule = (ruleId: string) => {
+    setRules((prev) => prev.filter((r) => r.id !== ruleId));
+    setHasChanges(true);
+  };
+
+  const toggleRule = (ruleId: string) => {
+    setRules((prev) =>
+      prev.map((r) => (r.id === ruleId ? { ...r, enabled: !r.enabled } : r))
+    );
+    setHasChanges(true);
+  };
+
+  const updateRule = (updated: BiSuiteMappingRule) => {
+    setRules((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    setHasChanges(true);
+  };
+
+  const pistaRules = rules.filter((r) => r.pista === activePista);
+
+  if (!['super_admin', 'admin'].includes(profile?.role || '')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-muted-foreground">Accesso non autorizzato</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => setLocation('/')} data-testid="btn-back">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <MapPin className="h-5 w-5 text-primary" />
+            <h1 className="text-lg font-semibold">Mappatura BiSuite</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            {hasChanges && (
+              <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
+                Modifiche non salvate
+              </Badge>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResetDialog(true)}
+              data-testid="btn-reset-defaults"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Ripristina Default
+            </Button>
+            <Button
+              size="sm"
+              onClick={saveMapping}
+              disabled={saving || !hasChanges}
+              data-testid="btn-save-mapping"
+            >
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              Salva
+            </Button>
+            <UserMenu />
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Regole di Mappatura</CardTitle>
+            <CardDescription>
+              Configura come le vendite BiSuite vengono classificate nelle categorie della gara.
+              Ogni regola definisce condizioni (categoria, tipologia, tipo cliente) e la categoria gara di destinazione.
+              Le regole con priorità più alta vengono valutate per prime.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <Tabs value={activePista} onValueChange={(v) => setActivePista(v as GaraPista)}>
+            <TabsList className="grid w-full grid-cols-6 mb-6">
+              {ALL_PISTE.map((pista) => {
+                const count = rules.filter((r) => r.pista === pista).length;
+                return (
+                  <TabsTrigger key={pista} value={pista} className="gap-1.5 text-xs sm:text-sm" data-testid={`tab-${pista}`}>
+                    {PISTA_ICONS[pista]}
+                    <span className="hidden sm:inline">{PISTA_LABELS[pista]}</span>
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+                      {count}
+                    </Badge>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+
+            {ALL_PISTE.map((pista) => (
+              <TabsContent key={pista} value={pista}>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      {rules.filter((r) => r.pista === pista).length} regole per {PISTA_LABELS[pista]}
+                    </h3>
+                    <Button size="sm" onClick={() => addRule(pista)} data-testid={`btn-add-rule-${pista}`}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Aggiungi Regola
+                    </Button>
+                  </div>
+
+                  {rules.filter((r) => r.pista === pista).length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8 text-center text-muted-foreground">
+                        Nessuna regola configurata per {PISTA_LABELS[pista]}.
+                        Clicca "Aggiungi Regola" per iniziare.
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    rules
+                      .filter((r) => r.pista === pista)
+                      .sort((a, b) => b.priority - a.priority)
+                      .map((rule) => (
+                        <RuleCard
+                          key={rule.id}
+                          rule={rule}
+                          onEdit={() => setEditingRule(rule)}
+                          onDelete={() => deleteRule(rule.id)}
+                          onToggle={() => toggleRule(rule.id)}
+                        />
+                      ))
+                  )}
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
+        )}
+      </main>
+
+      {editingRule && (
+        <RuleEditDialog
+          rule={editingRule}
+          onSave={(updated) => {
+            updateRule(updated);
+            setEditingRule(null);
+          }}
+          onCancel={() => setEditingRule(null)}
+        />
+      )}
+
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ripristinare le regole di default?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Tutte le regole attuali verranno sostituite con le regole di default.
+            Questa azione non può essere annullata finché non salvi.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowResetDialog(false)}>Annulla</Button>
+            <Button variant="destructive" onClick={resetToDefaults} data-testid="btn-confirm-reset">Ripristina</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function RuleCard({
+  rule,
+  onEdit,
+  onDelete,
+  onToggle,
+}: {
+  rule: BiSuiteMappingRule;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggle: () => void;
+}) {
+  const cond = rule.conditions;
+  const conditionParts: string[] = [];
+  if (cond.categoriaBiSuite) conditionParts.push(`Cat: ${cond.categoriaBiSuite}`);
+  if (cond.tipologiaBiSuite) conditionParts.push(`Tip: ${cond.tipologiaBiSuite}`);
+  if (cond.clienteTipo) conditionParts.push(`Cliente: ${cond.clienteTipo}`);
+  if (cond.domandaTesto) conditionParts.push(`D: "${cond.domandaTesto}" → "${cond.rispostaContiene || ''}"`);
+
+  return (
+    <Card className={`transition-opacity ${!rule.enabled ? 'opacity-50' : ''}`} data-testid={`rule-card-${rule.id}`}>
+      <CardContent className="py-3 px-4">
+        <div className="flex items-center gap-3">
+          <GripVertical className="h-4 w-4 text-muted-foreground/40 flex-shrink-0" />
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <Badge variant="default" className="text-xs">
+                → {rule.targetLabel}
+              </Badge>
+              <Badge variant="outline" className="text-[10px]">
+                P: {rule.priority}
+              </Badge>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {conditionParts.length > 0 ? (
+                conditionParts.map((part, i) => (
+                  <Badge key={i} variant="secondary" className="text-[11px] font-normal">
+                    {part}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground italic">Nessuna condizione (cattura tutto)</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Switch
+              checked={rule.enabled}
+              onCheckedChange={onToggle}
+              data-testid={`switch-rule-${rule.id}`}
+            />
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit} data-testid={`btn-edit-rule-${rule.id}`}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={onDelete} data-testid={`btn-delete-rule-${rule.id}`}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RuleEditDialog({
+  rule,
+  onSave,
+  onCancel,
+}: {
+  rule: BiSuiteMappingRule;
+  onSave: (rule: BiSuiteMappingRule) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState<BiSuiteMappingRule>({ ...rule, conditions: { ...rule.conditions } });
+
+  const targets = PISTA_TARGETS[draft.pista] || [];
+
+  const updateCondition = (key: keyof BiSuiteMappingCondition, value: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      conditions: { ...prev.conditions, [key]: value || undefined },
+    }));
+  };
+
+  const setTarget = (value: string) => {
+    const target = targets.find((t) => t.value === value);
+    setDraft((prev) => ({
+      ...prev,
+      targetCategory: value,
+      targetLabel: target?.label || value,
+    }));
+  };
+
+  return (
+    <Dialog open onOpenChange={() => onCancel()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Modifica Regola — {PISTA_LABELS[draft.pista]}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div>
+            <Label>Categoria Gara di Destinazione</Label>
+            <Select value={draft.targetCategory} onValueChange={setTarget}>
+              <SelectTrigger data-testid="select-target-category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {targets.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Separator />
+          <h4 className="text-sm font-medium">Condizioni di Corrispondenza</h4>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Categoria BiSuite</Label>
+              <Input
+                placeholder="es. TELEFONIA"
+                value={draft.conditions.categoriaBiSuite || ''}
+                onChange={(e) => updateCondition('categoriaBiSuite', e.target.value)}
+                data-testid="input-categoria-bisuite"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Tipologia BiSuite</Label>
+              <Input
+                placeholder="es. SIM"
+                value={draft.conditions.tipologiaBiSuite || ''}
+                onChange={(e) => updateCondition('tipologiaBiSuite', e.target.value)}
+                data-testid="input-tipologia-bisuite"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs">Tipo Cliente</Label>
+            <Select
+              value={draft.conditions.clienteTipo || '_any_'}
+              onValueChange={(v) => updateCondition('clienteTipo', v === '_any_' ? '' : v)}
+            >
+              <SelectTrigger data-testid="select-cliente-tipo">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_any_">Qualsiasi</SelectItem>
+                <SelectItem value="PRIVATO">PRIVATO</SelectItem>
+                <SelectItem value="PIVA">P.IVA</SelectItem>
+                <SelectItem value="AZIENDA">AZIENDA</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Separator />
+          <h4 className="text-sm font-medium">Condizione su Domande/Risposte (opzionale)</h4>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Testo Domanda (contiene)</Label>
+              <Input
+                placeholder="es. Tipologia Offerta"
+                value={draft.conditions.domandaTesto || ''}
+                onChange={(e) => updateCondition('domandaTesto', e.target.value)}
+                data-testid="input-domanda-testo"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Risposta (contiene)</Label>
+              <Input
+                placeholder="es. TIED"
+                value={draft.conditions.rispostaContiene || ''}
+                onChange={(e) => updateCondition('rispostaContiene', e.target.value)}
+                data-testid="input-risposta-contiene"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs">Priorità (più alto = valutato prima)</Label>
+            <Input
+              type="number"
+              value={draft.priority}
+              onChange={(e) => setDraft((prev) => ({ ...prev, priority: parseInt(e.target.value) || 0 }))}
+              className="w-24"
+              data-testid="input-priority"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>Annulla</Button>
+          <Button onClick={() => onSave(draft)} data-testid="btn-save-rule">Salva Regola</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

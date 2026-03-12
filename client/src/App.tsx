@@ -16,6 +16,7 @@ import SuperAdminPanel from "@/pages/SuperAdminPanel";
 import TabelleCalcolo from "@/pages/TabelleCalcolo";
 import Auth from "@/pages/auth";
 import VenditeBiSuite from "@/pages/VenditeBiSuite";
+import MappaturaBiSuite from "@/pages/MappaturaBiSuite";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -62,6 +63,9 @@ function Router() {
       </Route>
       <Route path="/vendite-bisuite">
         {() => <ProtectedRoute component={VenditeBiSuite} />}
+      </Route>
+      <Route path="/mappatura-bisuite">
+        {() => <ProtectedRoute component={MappaturaBiSuite} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

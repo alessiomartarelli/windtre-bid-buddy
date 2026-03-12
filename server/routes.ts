@@ -1136,6 +1136,59 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/bisuite-mapping", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      let orgId = req.query.org_id as string || profile.organizationId;
+      if (!orgId) return res.status(400).json({ error: "org_id è obbligatorio" });
+      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const orgConfig = await storage.getOrgConfig(orgId);
+      const cfg = orgConfig?.config as Record<string, unknown> | undefined;
+      const mapping = cfg?.bisuiteMapping || null;
+      res.json(mapping);
+    } catch (error) {
+      console.error("Error loading BiSuite mapping:", error);
+      res.status(500).json({ error: "Errore nel caricamento della mappatura" });
+    }
+  });
+
+  app.put("/api/admin/bisuite-mapping", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const { organization_id, mapping } = req.body;
+      const orgId = organization_id || profile.organizationId;
+      if (!orgId) return res.status(400).json({ error: "organization_id è obbligatorio" });
+      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+      if (!mapping || !Array.isArray(mapping.rules)) {
+        return res.status(400).json({ error: "mapping con rules è obbligatorio" });
+      }
+
+      const orgConfig = await storage.getOrgConfig(orgId);
+      const existingConfig = (orgConfig?.config as Record<string, unknown>) || {};
+      const updatedConfig = { ...existingConfig, bisuiteMapping: mapping };
+      const configVersion = (orgConfig as any)?.configVersion || "2.0";
+
+      await storage.upsertOrgConfig(orgId, updatedConfig, configVersion);
+      res.json({ success: true, mapping });
+    } catch (error) {
+      console.error("Error saving BiSuite mapping:", error);
+      res.status(500).json({ error: "Errore nel salvataggio della mappatura" });
+    }
+  });
+
   app.get("/api/bisuite-sales/:id", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.userId;
