@@ -66,8 +66,10 @@ export const BiSuiteConnectionForm = ({ organizations, onCredentialsSaved }: BiS
       const data = await res.json();
 
       if (data) {
+        const loadedApiUrl = data.api_url || DEFAULT_BISUITE_API_URL;
+        setApiUrl(loadedApiUrl);
         setCredentials({
-          apiUrl: data.api_url || apiUrl,
+          apiUrl: loadedApiUrl,
           clientId: data.client_id,
           clientSecret: data.client_secret,
         });
@@ -104,16 +106,29 @@ export const BiSuiteConnectionForm = ({ organizations, onCredentialsSaved }: BiS
 
     setIsTesting(true);
     try {
-      // TODO: Implement actual OAuth test via edge function
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      toast({
-        title: "Test completato",
-        description: "La funzionalità di test OAuth verrà implementata con l'edge function",
+      const res = await fetch(buildApiUrl('/api/admin/bisuite-api'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          action: 'test_connection',
+          api_url: apiUrl,
+          client_id: credentials.clientId,
+          client_secret: credentials.clientSecret,
+        }),
       });
-    } catch (error) {
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.details || data.error || 'Test fallito');
+      }
+      toast({
+        title: "Connessione riuscita",
+        description: "Autenticazione OAuth2 con BiSuite completata con successo",
+      });
+    } catch (error: any) {
       toast({
         title: "Errore di connessione",
-        description: "Impossibile connettersi all'API BiSuite",
+        description: error.message || "Impossibile connettersi all'API BiSuite",
         variant: "destructive",
       });
     } finally {

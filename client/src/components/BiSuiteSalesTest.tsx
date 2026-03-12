@@ -156,7 +156,7 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          action: 'test',
+          action: 'test_connection',
           organization_id: selectedOrgId,
         }),
       });

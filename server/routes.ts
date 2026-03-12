@@ -772,20 +772,224 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/bisuite-api", isAuthenticated, async (_req: any, res) => {
-    res.status(501).json({ error: "BiSuite API not configured" });
+  // ── BiSuite API: helpers ──────────────────────────────────────────
+  const BISUITE_ALLOWED_HOSTS = ["db.bisuite.app", "85.94.215.97"];
+
+  function validateBisuiteUrl(urlStr: string): boolean {
+    try {
+      const u = new URL(urlStr);
+      return BISUITE_ALLOWED_HOSTS.includes(u.hostname);
+    } catch {
+      return false;
+    }
+  }
+
+  function deriveTokenEndpoint(apiUrlStr: string): string {
+    try {
+      const u = new URL(apiUrlStr);
+      return `${u.protocol}//${u.host}/oauth/token`;
+    } catch {
+      return "http://85.94.215.97/oauth/token";
+    }
+  }
+
+  async function getBisuiteToken(tokenUrl: string, clientId: string, clientSecret: string): Promise<string> {
+    const params = new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+    const resp = await fetch(tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new Error(`OAuth token request failed (${resp.status}): ${body}`);
+    }
+    const data = (await resp.json()) as { access_token?: string };
+    if (!data.access_token) throw new Error("No access_token in OAuth response");
+    return data.access_token;
+  }
+
+  // ── GET credentials ─────────────────────────────────────────────
+  app.get("/api/admin/bisuite-credentials", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ error: "Solo il super admin può accedere alle credenziali BiSuite" });
+      }
+
+      const orgId = req.query.org_id as string;
+      if (!orgId) return res.status(400).json({ error: "org_id è obbligatorio" });
+
+      const orgConfig = await storage.getOrgConfig(orgId);
+      const cfg = orgConfig?.config as Record<string, unknown> | undefined;
+      const creds = cfg?.bisuiteCredentials as Record<string, string> | undefined;
+
+      if (!creds) return res.json(null);
+
+      res.json({
+        api_url: creds.api_url || "",
+        client_id: creds.client_id || "",
+        client_secret: creds.client_secret || "",
+      });
+    } catch (error) {
+      console.error("Error loading BiSuite credentials:", error);
+      res.status(500).json({ error: "Errore nel caricamento delle credenziali" });
+    }
   });
 
-  app.get("/api/admin/bisuite-credentials", isAuthenticated, async (_req: any, res) => {
-    res.json([]);
+  // ── POST credentials (create) ──────────────────────────────────
+  app.post("/api/admin/bisuite-credentials", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ error: "Solo il super admin può gestire le credenziali BiSuite" });
+      }
+
+      const { organization_id, api_url, client_id, client_secret } = req.body;
+      if (!organization_id || !client_id || !client_secret) {
+        return res.status(400).json({ error: "organization_id, client_id e client_secret sono obbligatori" });
+      }
+      if (api_url && !validateBisuiteUrl(api_url)) {
+        return res.status(400).json({ error: "URL API non consentito. Utilizzare un host BiSuite valido." });
+      }
+
+      const orgConfig = await storage.getOrgConfig(organization_id);
+      const existingConfig = (orgConfig?.config as Record<string, unknown>) || {};
+
+      const updatedConfig = {
+        ...existingConfig,
+        bisuiteCredentials: { api_url: api_url || "", client_id, client_secret },
+      };
+
+      await storage.upsertOrgConfig(
+        organization_id,
+        updatedConfig,
+        orgConfig?.configVersion || "2.0",
+      );
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving BiSuite credentials:", error);
+      res.status(500).json({ error: "Errore nel salvataggio delle credenziali" });
+    }
   });
 
-  app.post("/api/admin/bisuite-credentials", isAuthenticated, async (_req: any, res) => {
-    res.status(501).json({ error: "BiSuite credentials not configured" });
+  // ── PUT credentials (update) ────────────────────────────────────
+  app.put("/api/admin/bisuite-credentials", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ error: "Solo il super admin può gestire le credenziali BiSuite" });
+      }
+
+      const { organization_id, api_url, client_id, client_secret } = req.body;
+      if (!organization_id || !client_id || !client_secret) {
+        return res.status(400).json({ error: "organization_id, client_id e client_secret sono obbligatori" });
+      }
+      if (api_url && !validateBisuiteUrl(api_url)) {
+        return res.status(400).json({ error: "URL API non consentito. Utilizzare un host BiSuite valido." });
+      }
+
+      const orgConfig = await storage.getOrgConfig(organization_id);
+      const existingConfig = (orgConfig?.config as Record<string, unknown>) || {};
+
+      const updatedConfig = {
+        ...existingConfig,
+        bisuiteCredentials: { api_url: api_url || "", client_id, client_secret },
+      };
+
+      await storage.upsertOrgConfig(
+        organization_id,
+        updatedConfig,
+        orgConfig?.configVersion || "2.0",
+      );
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating BiSuite credentials:", error);
+      res.status(500).json({ error: "Errore nell'aggiornamento delle credenziali" });
+    }
   });
 
-  app.put("/api/admin/bisuite-credentials", isAuthenticated, async (_req: any, res) => {
-    res.status(501).json({ error: "BiSuite credentials not configured" });
+  // ── POST bisuite-api (proxy) ────────────────────────────────────
+  app.post("/api/admin/bisuite-api", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ error: "Solo il super admin può utilizzare l'API BiSuite" });
+      }
+
+      const { action, organization_id, start_date, end_date, api_url, client_id, client_secret } = req.body;
+
+      let apiUrlStr: string;
+      let cId: string;
+      let cSecret: string;
+
+      if (action === "test_connection" && api_url && client_id && client_secret) {
+        if (!validateBisuiteUrl(api_url)) {
+          return res.status(400).json({ error: "URL API non consentito. Utilizzare un host BiSuite valido." });
+        }
+        apiUrlStr = api_url;
+        cId = client_id;
+        cSecret = client_secret;
+      } else if (organization_id) {
+        const orgConfig = await storage.getOrgConfig(organization_id);
+        const cfg = orgConfig?.config as Record<string, unknown> | undefined;
+        const creds = cfg?.bisuiteCredentials as Record<string, string> | undefined;
+        if (!creds || !creds.client_id || !creds.client_secret) {
+          return res.status(400).json({ error: "Credenziali BiSuite non configurate per questa organizzazione" });
+        }
+        apiUrlStr = creds.api_url || "http://85.94.215.97/api/v1/sales/full";
+        cId = creds.client_id;
+        cSecret = creds.client_secret;
+      } else {
+        return res.status(400).json({ error: "organization_id o credenziali dirette sono obbligatorie" });
+      }
+
+      const tokenUrl = deriveTokenEndpoint(apiUrlStr);
+      const accessToken = await getBisuiteToken(tokenUrl, cId, cSecret);
+
+      if (action === "test_connection") {
+        return res.json({ success: true, message: "Connessione OAuth2 riuscita" });
+      }
+
+      if (action === "fetch_sales") {
+        const salesUrl = new URL(apiUrlStr);
+        if (start_date) salesUrl.searchParams.set("start_date", start_date);
+        if (end_date) salesUrl.searchParams.set("end_date", end_date);
+
+        const salesResp = await fetch(salesUrl.toString(), {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/json",
+          },
+        });
+
+        if (!salesResp.ok) {
+          const errBody = await salesResp.text();
+          return res.status(salesResp.status).json({
+            error: `BiSuite API error (${salesResp.status})`,
+            details: errBody,
+          });
+        }
+
+        const salesData = await salesResp.json();
+        return res.json(salesData);
+      }
+
+      return res.status(400).json({ error: `Azione non supportata: ${action}` });
+    } catch (error: any) {
+      console.error("BiSuite API proxy error:", error);
+      res.status(500).json({
+        error: "Errore nella comunicazione con BiSuite",
+        details: error.message || String(error),
+      });
+    }
   });
 
   return httpServer;

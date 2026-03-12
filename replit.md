@@ -54,7 +54,7 @@ Preferred communication style: Simple, everyday language.
 - **Storage Layer**: `server/storage.ts` implements `IStorage` interface with `DatabaseStorage` class
 
 ### External Integrations
-- **BiSuite API**: Integration for fetching sales data from an external system (endpoint at `http://85.94.215.97/api/v1/sales/full`), configured per-organization with client credentials
+- **BiSuite API**: Integration for fetching sales data from an external system (endpoint at `http://85.94.215.97/api/v1/sales/full`), configured per-organization with OAuth2 client credentials stored in `organization_config.config.bisuiteCredentials` JSONB field. Backend proxy routes handle OAuth2 token acquisition and API calls (`/api/admin/bisuite-credentials` GET/POST/PUT, `/api/admin/bisuite-api` POST with actions `test_connection` and `fetch_sales`)
 - **PDF Generation**: `jsPDF` with `jspdf-autotable` for exporting quotes
 - **Excel Export**: `xlsx` library for spreadsheet generation
 - **Google Fonts**: Outfit (display) and Inter (body) font families
