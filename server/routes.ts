@@ -1210,5 +1210,137 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/bisuite-mapped-sales", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const orgId = req.query.organization_id || profile.organizationId;
+      if (!orgId) return res.status(400).json({ error: "Organizzazione non specificata" });
+
+      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+
+      const from = new Date(year, month - 1, 1);
+      const to = new Date(year, month, 0, 23, 59, 59);
+
+      const sales = await storage.getBisuiteSales(orgId, from, to);
+
+      const orgConfig = await storage.getOrgConfig(orgId);
+      const mappingConfig = (orgConfig?.config as any)?.bisuiteMapping;
+      const { getDefaultMappingRules } = await import("../shared/bisuiteMapping");
+      const rules = mappingConfig?.rules || getDefaultMappingRules();
+
+      const { mapBiSuiteSale } = await import("../shared/bisuiteMapping");
+
+      type AggregatedItem = {
+        pista: string;
+        targetCategory: string;
+        targetLabel: string;
+        pezzi: number;
+      };
+
+      const byPdv: Record<string, {
+        codicePos: string;
+        nomeNegozio: string;
+        ragioneSociale: string;
+        items: AggregatedItem[];
+        unmapped: number;
+        totalArticoli: number;
+      }> = {};
+
+      let totalMapped = 0;
+      let totalUnmapped = 0;
+      let totalArticoli = 0;
+
+      for (const sale of sales) {
+        const raw = sale.rawData as any;
+        if (!raw) continue;
+
+        const codicePos = sale.codicePos || "UNKNOWN";
+        if (!byPdv[codicePos]) {
+          byPdv[codicePos] = {
+            codicePos,
+            nomeNegozio: sale.nomeNegozio || codicePos,
+            ragioneSociale: sale.ragioneSociale || "",
+            items: [],
+            unmapped: 0,
+            totalArticoli: 0,
+          };
+        }
+
+        const articoli = raw.articoli || [];
+        const saleForMapping = {
+          cliente: raw.cliente,
+          articoli: articoli,
+        };
+
+        const mapped = mapBiSuiteSale(saleForMapping, rules);
+        totalArticoli += articoli.length;
+        byPdv[codicePos].totalArticoli += articoli.length;
+
+        const unmappedCount = articoli.length - mapped.length;
+        totalUnmapped += unmappedCount;
+        byPdv[codicePos].unmapped += unmappedCount;
+
+        for (const m of mapped) {
+          totalMapped++;
+          const existing = byPdv[codicePos].items.find(
+            (i) => i.pista === m.pista && i.targetCategory === m.targetCategory
+          );
+          if (existing) {
+            existing.pezzi++;
+          } else {
+            byPdv[codicePos].items.push({
+              pista: m.pista,
+              targetCategory: m.targetCategory,
+              targetLabel: m.targetLabel,
+              pezzi: 1,
+            });
+          }
+        }
+      }
+
+      const pdvList = Object.values(byPdv);
+
+      const totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number }>> = {};
+      for (const pdv of pdvList) {
+        for (const item of pdv.items) {
+          if (!totaliPerPista[item.pista]) totaliPerPista[item.pista] = {};
+          if (!totaliPerPista[item.pista][item.targetCategory]) {
+            totaliPerPista[item.pista][item.targetCategory] = {
+              targetCategory: item.targetCategory,
+              targetLabel: item.targetLabel,
+              pezzi: 0,
+            };
+          }
+          totaliPerPista[item.pista][item.targetCategory].pezzi += item.pezzi;
+        }
+      }
+
+      res.json({
+        month,
+        year,
+        totalSales: sales.length,
+        totalArticoli,
+        totalMapped,
+        totalUnmapped,
+        pdvList,
+        totaliPerPista,
+      });
+    } catch (error: unknown) {
+      console.error("BiSuite mapped sales error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore nell'aggregazione vendite mappate", details: msg });
+    }
+  });
+
   return httpServer;
 }

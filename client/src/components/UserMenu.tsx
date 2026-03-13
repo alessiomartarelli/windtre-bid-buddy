@@ -103,6 +103,13 @@ export function UserMenu() {
           <span>Dashboard</span>
         </DropdownMenuItem>
         
+        {['super_admin', 'admin'].includes(profile?.role || '') && (
+          <DropdownMenuItem onClick={() => setLocation('/dashboard-gara-reale')} data-testid="menu-dashboard-gara-reale">
+            <LayoutDashboard className="mr-2 h-4 w-4" />
+            <span>Dashboard Gara Reale</span>
+          </DropdownMenuItem>
+        )}
+        
         <DropdownMenuItem onClick={() => setLocation('/vendite-bisuite')} data-testid="menu-vendite-bisuite">
           <ShoppingCart className="mr-2 h-4 w-4" />
           <span>Vendite BiSuite</span>
