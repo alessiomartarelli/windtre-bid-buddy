@@ -30,8 +30,19 @@ import {
   Loader2,
 } from "lucide-react";
 import { apiUrl } from "@/lib/basePath";
-import { getWorkdayInfoForMonth, type WorkdayInfo } from "@/lib/calcoloPistaFisso";
-import type { StoreCalendar } from "@/types/preventivatore";
+import {
+  getWorkdayInfoForMonth,
+  type WorkdayInfo,
+  FISSO_CATEGORIE_DEFAULT,
+  type FissoCategoriaType,
+} from "@/lib/calcoloPistaFisso";
+import {
+  type StoreCalendar,
+  type Weekday,
+  MOBILE_CATEGORIES_CONFIG_DEFAULT,
+  type MobileActivationType,
+} from "@/types/preventivatore";
+import { ENERGIA_BASE_PAY, type EnergiaCategory } from "@/types/energia";
 
 interface AggregatedItem {
   pista: string;
@@ -87,9 +98,106 @@ const PISTA_CONFIG = {
 } as const;
 
 const DEFAULT_CALENDAR: StoreCalendar = {
-  weeklySchedule: { workingDays: [1, 2, 3, 4, 5, 6] as any },
+  weeklySchedule: { workingDays: [1, 2, 3, 4, 5, 6] as Weekday[] },
   specialDays: [],
 };
+
+const FISSO_CONFIG_MAP = new Map(
+  FISSO_CATEGORIE_DEFAULT.map((c) => [c.type, c])
+);
+
+const MOBILE_CONFIG_MAP = new Map(
+  MOBILE_CATEGORIES_CONFIG_DEFAULT.map((c) => [c.type as string, c])
+);
+
+const MOBILE_GETTONE: Partial<Record<string, number>> = {
+  TIED: 5, UNTIED: 1,
+};
+
+interface PistaCalcResult {
+  premioStimato: number;
+  puntiTotali: number;
+  sogliaRaggiunta: string;
+  sogliaLabel: string;
+}
+
+function calcolaPremioMobile(categories: Array<{ category: string; pezzi: number }>): PistaCalcResult {
+  let punti = 0;
+  let extraGettoni = 0;
+  let gettoniContrattuali = 0;
+  for (const cat of categories) {
+    const config = MOBILE_CONFIG_MAP.get(cat.category);
+    punti += cat.pezzi * (config?.punti ?? 0);
+    extraGettoni += cat.pezzi * (config?.extraGettoneEuro ?? 0);
+    gettoniContrattuali += cat.pezzi * (MOBILE_GETTONE[cat.category] ?? 0);
+  }
+  let sogliaLabel = "Nessuna";
+  if (punti >= 165) sogliaLabel = "S4";
+  else if (punti >= 135) sogliaLabel = "S3";
+  else if (punti >= 105) sogliaLabel = "S2";
+  else if (punti >= 70) sogliaLabel = "S1";
+
+  return { premioStimato: gettoniContrattuali + extraGettoni, puntiTotali: punti, sogliaRaggiunta: sogliaLabel, sogliaLabel };
+}
+
+function calcolaPremioFisso(categories: Array<{ category: string; pezzi: number }>): PistaCalcResult {
+  let punti = 0;
+  let premio = 0;
+  for (const cat of categories) {
+    const config = FISSO_CONFIG_MAP.get(cat.category as FissoCategoriaType);
+    if (!config) continue;
+    punti += cat.pezzi * config.puntiPerPezzo;
+    premio += cat.pezzi * config.euroPerPezzo;
+  }
+  let sogliaLabel = "Nessuna";
+  if (punti >= 80) sogliaLabel = "S5";
+  else if (punti >= 67) sogliaLabel = "S4";
+  else if (punti >= 57) sogliaLabel = "S3";
+  else if (punti >= 46) sogliaLabel = "S2";
+  else if (punti >= 28) sogliaLabel = "S1";
+
+  return { premioStimato: premio, puntiTotali: punti, sogliaRaggiunta: sogliaLabel, sogliaLabel };
+}
+
+function calcolaPremioEnergia(categories: Array<{ category: string; pezzi: number }>): PistaCalcResult {
+  let premio = 0;
+  let totalePezzi = 0;
+  for (const cat of categories) {
+    const basePay = ENERGIA_BASE_PAY[cat.category as EnergiaCategory] ?? 0;
+    premio += cat.pezzi * basePay;
+    totalePezzi += cat.pezzi;
+  }
+  let sogliaLabel = "Nessuna";
+  if (totalePezzi >= 100) sogliaLabel = "S5";
+  else if (totalePezzi >= 55) sogliaLabel = "S4";
+  else if (totalePezzi >= 40) sogliaLabel = "S3";
+  else if (totalePezzi >= 25) sogliaLabel = "S2";
+  else if (totalePezzi >= 10) sogliaLabel = "S1";
+
+  return { premioStimato: premio, puntiTotali: totalePezzi, sogliaRaggiunta: sogliaLabel, sogliaLabel };
+}
+
+function calcolaPremioGenerico(categories: Array<{ category: string; pezzi: number }>): PistaCalcResult {
+  const totalePezzi = categories.reduce((s, c) => s + c.pezzi, 0);
+  return { premioStimato: 0, puntiTotali: totalePezzi, sogliaRaggiunta: "N/A", sogliaLabel: "N/A" };
+}
+
+function calcolaPremioPerPista(pista: string, categories: Array<{ category: string; pezzi: number }>): PistaCalcResult {
+  switch (pista) {
+    case "mobile": return calcolaPremioMobile(categories);
+    case "fisso": return calcolaPremioFisso(categories);
+    case "energia": return calcolaPremioEnergia(categories);
+    default: return calcolaPremioGenerico(categories);
+  }
+}
+
+function getSogliaColor(soglia: string): string {
+  if (soglia === "Nessuna" || soglia === "N/A") return "text-red-600 bg-red-50 border-red-200";
+  if (soglia === "S1") return "text-amber-600 bg-amber-50 border-amber-200";
+  if (soglia === "S2") return "text-yellow-600 bg-yellow-50 border-yellow-200";
+  if (soglia === "S3") return "text-lime-600 bg-lime-50 border-lime-200";
+  return "text-green-600 bg-green-50 border-green-200";
+}
 
 function getMonthOptions() {
   const now = new Date();
@@ -166,6 +274,8 @@ export default function DashboardGaraReale() {
       label: string;
       totalePezzi: number;
       proiezionePezzi: number;
+      calc: PistaCalcResult;
+      calcProiezione: PistaCalcResult;
       categories: Array<{ category: string; label: string; pezzi: number; proiezione: number }>;
       pdvBreakdown: Array<{
         codicePos: string;
@@ -182,11 +292,14 @@ export default function DashboardGaraReale() {
     for (const pista of pisteOrder) {
       const pistaData = mappedData.totaliPerPista[pista];
       if (!pistaData) {
+        const emptyCalc = calcolaPremioPerPista(pista, []);
         stats.push({
           pista,
           label: PISTA_CONFIG[pista].label,
           totalePezzi: 0,
           proiezionePezzi: 0,
+          calc: emptyCalc,
+          calcProiezione: emptyCalc,
           categories: [],
           pdvBreakdown: [],
         });
@@ -229,11 +342,18 @@ export default function DashboardGaraReale() {
         .filter((p) => p.pezzi > 0)
         .sort((a, b) => b.pezzi - a.pezzi);
 
+      const catForCalc = categories.map((c) => ({ category: c.category, pezzi: c.pezzi }));
+      const catForProiezione = categories.map((c) => ({ category: c.category, pezzi: c.proiezione }));
+      const calc = calcolaPremioPerPista(pista, catForCalc);
+      const calcProiezione = calcolaPremioPerPista(pista, catForProiezione);
+
       stats.push({
         pista,
         label: PISTA_CONFIG[pista].label,
         totalePezzi,
         proiezionePezzi,
+        calc,
+        calcProiezione,
         categories,
         pdvBreakdown,
       });
@@ -393,6 +513,38 @@ export default function DashboardGaraReale() {
                         <span className="text-3xl font-bold" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
                         <span className="text-sm text-gray-500">pezzi attuali</span>
                       </div>
+
+                      {pista.totalePezzi > 0 && (pista.pista === "mobile" || pista.pista === "fisso" || pista.pista === "energia") && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="rounded-lg border p-2 text-center">
+                            <div className="text-xs text-gray-500 mb-0.5">Soglia Attuale</div>
+                            <Badge className={`text-xs ${getSogliaColor(pista.calc.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>
+                              {pista.calc.sogliaLabel}
+                            </Badge>
+                            {pista.calc.puntiTotali > 0 && (
+                              <div className="text-xs text-gray-400 mt-0.5">{pista.calc.puntiTotali.toFixed(1)} pt</div>
+                            )}
+                          </div>
+                          <div className="rounded-lg border p-2 text-center">
+                            <div className="text-xs text-gray-500 mb-0.5">Proiezione Soglia</div>
+                            <Badge className={`text-xs ${getSogliaColor(pista.calcProiezione.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>
+                              {pista.calcProiezione.sogliaLabel}
+                            </Badge>
+                            {pista.calcProiezione.puntiTotali > 0 && (
+                              <div className="text-xs text-gray-400 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(1)} pt</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {pista.totalePezzi > 0 && pista.calc.premioStimato > 0 && (
+                        <div className="flex items-center justify-between text-sm bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">
+                          <span className="text-gray-600 dark:text-gray-300">Premio stimato</span>
+                          <span className="font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-${pista.pista}`}>
+                            {formatEuro(pista.calc.premioStimato)}
+                          </span>
+                        </div>
+                      )}
 
                       {pista.totalePezzi === 0 ? (
                         <p className="text-sm text-gray-400 italic">Nessuna attivazione mappata</p>
