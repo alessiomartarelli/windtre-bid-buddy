@@ -371,8 +371,9 @@ function calcAssicurazioniForAllPdv(
       micioFido: 0, viaggioMondo: 0, viaggioMondoPremio: 0, reloadForever: 0,
     };
     for (const item of items) {
-      if (item.targetCategory in riga) {
-        (riga as any)[item.targetCategory] = item.pezzi;
+      const key = item.targetCategory as keyof AssicurazioniAttivatoRiga;
+      if (key in riga) {
+        riga[key] = item.pezzi;
       }
     }
     attivatoByPos[pdv.codicePos] = riga;
@@ -425,8 +426,9 @@ function calcProtectaForAllPdv(
     if (items.length === 0) continue;
     const riga = createEmptyProtectaAttivato();
     for (const item of items) {
-      if (item.targetCategory in riga) {
-        (riga as any)[item.targetCategory] = item.pezzi;
+      const key = item.targetCategory as keyof ProtectaAttivatoRiga;
+      if (key in riga) {
+        riga[key] = item.pezzi;
       }
     }
     attivatoByPos[pdv.codicePos] = riga;
