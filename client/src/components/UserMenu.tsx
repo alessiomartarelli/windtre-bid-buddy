@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { LogOut, User, Building2, Settings, Shield, Users, LayoutDashboard, Table2, ShoppingCart, MapPin } from 'lucide-react';
+import { LogOut, User, Building2, Settings, Shield, Users, LayoutDashboard, Table2, ShoppingCart, MapPin, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function UserMenu() {
@@ -53,6 +53,8 @@ export function UserMenu() {
     }
   };
 
+  const isAdminOrSuper = ['super_admin', 'admin'].includes(profile?.role || '');
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -84,36 +86,38 @@ export function UserMenu() {
           </DropdownMenuItem>
         )}
         
-        {['super_admin', 'admin'].includes(profile?.role || '') && (
+        {isAdminOrSuper && (
           <DropdownMenuItem onClick={() => setLocation('/admin')}>
             <Users className="mr-2 h-4 w-4" />
             <span>Gestione Team</span>
           </DropdownMenuItem>
         )}
         
-        {['super_admin', 'admin'].includes(profile?.role || '') && (
+        {isAdminOrSuper && (
           <DropdownMenuItem onClick={() => setLocation('/tabelle-calcolo')} data-testid="menu-tabelle-calcolo">
             <Table2 className="mr-2 h-4 w-4" />
             <span>Tabelle di Calcolo</span>
           </DropdownMenuItem>
         )}
         
-        <DropdownMenuItem onClick={() => setLocation('/dashboard')}>
-          <LayoutDashboard className="mr-2 h-4 w-4" />
-          <span>Dashboard</span>
-        </DropdownMenuItem>
-        
-        {['super_admin', 'admin'].includes(profile?.role || '') && (
+        {isAdminOrSuper && (
           <DropdownMenuItem onClick={() => setLocation('/dashboard-gara-reale')} data-testid="menu-dashboard-gara-reale">
             <LayoutDashboard className="mr-2 h-4 w-4" />
-            <span>Dashboard Gara Reale</span>
+            <span>Dashboard</span>
           </DropdownMenuItem>
         )}
         
-        <DropdownMenuItem onClick={() => setLocation('/vendite-bisuite')} data-testid="menu-vendite-bisuite">
-          <ShoppingCart className="mr-2 h-4 w-4" />
-          <span>Vendite BiSuite</span>
+        <DropdownMenuItem onClick={() => setLocation('/preventivatore')} data-testid="menu-simulatore">
+          <FileText className="mr-2 h-4 w-4" />
+          <span>Simulatore Lettera di Gara</span>
         </DropdownMenuItem>
+        
+        {isAdminOrSuper && (
+          <DropdownMenuItem onClick={() => setLocation('/vendite-bisuite')} data-testid="menu-vendite-bisuite">
+            <ShoppingCart className="mr-2 h-4 w-4" />
+            <span>Vendite BiSuite</span>
+          </DropdownMenuItem>
+        )}
         
         {profile?.role === 'super_admin' && (
           <DropdownMenuItem onClick={() => setLocation('/mappatura-bisuite')} data-testid="menu-mappatura-bisuite">
