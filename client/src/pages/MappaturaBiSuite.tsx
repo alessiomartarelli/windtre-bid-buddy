@@ -348,6 +348,7 @@ function RuleCard({
   const conditionParts: string[] = [];
   if (cond.categoriaBiSuite) conditionParts.push(`Cat: ${cond.categoriaBiSuite}`);
   if (cond.tipologiaBiSuite) conditionParts.push(`Tip: ${cond.tipologiaBiSuite}`);
+  if (cond.descrizioneBiSuite) conditionParts.push(`Desc: "${cond.descrizioneBiSuite}"`);
   if (cond.clienteTipo) conditionParts.push(`Cliente: ${cond.clienteTipo}`);
   if (cond.domandaTesto) conditionParts.push(`D: "${cond.domandaTesto}" → "${cond.rispostaContiene || ''}"`);
 
@@ -458,7 +459,7 @@ function RuleEditDialog({
             <div>
               <Label className="text-xs">Categoria BiSuite</Label>
               <Input
-                placeholder="es. TELEFONIA"
+                placeholder="es. MIA TIED"
                 value={draft.conditions.categoriaBiSuite || ''}
                 onChange={(e) => updateCondition('categoriaBiSuite', e.target.value)}
                 data-testid="input-categoria-bisuite"
@@ -467,12 +468,22 @@ function RuleEditDialog({
             <div>
               <Label className="text-xs">Tipologia BiSuite</Label>
               <Input
-                placeholder="es. SIM"
+                placeholder="es. MIA EASYPAY STANDARD"
                 value={draft.conditions.tipologiaBiSuite || ''}
                 onChange={(e) => updateCondition('tipologiaBiSuite', e.target.value)}
                 data-testid="input-tipologia-bisuite"
               />
             </div>
+          </div>
+
+          <div>
+            <Label className="text-xs">Descrizione (contiene)</Label>
+            <Input
+              placeholder="es. LUCE - BOLLETTINO POSTALE"
+              value={draft.conditions.descrizioneBiSuite || ''}
+              onChange={(e) => updateCondition('descrizioneBiSuite', e.target.value)}
+              data-testid="input-descrizione-bisuite"
+            />
           </div>
 
           <div>

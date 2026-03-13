@@ -3,6 +3,7 @@ export type GaraPista = 'mobile' | 'fisso' | 'energia' | 'assicurazioni' | 'prot
 export interface BiSuiteMappingCondition {
   categoriaBiSuite?: string;
   tipologiaBiSuite?: string;
+  descrizioneBiSuite?: string;
   clienteTipo?: string;
   domandaTesto?: string;
   rispostaContiene?: string;
@@ -250,6 +251,7 @@ export function getDefaultMappingRules(): BiSuiteMappingRule[] {
 export interface BiSuiteArticolo {
   categoria?: { nome?: string };
   tipologia?: { nome?: string };
+  descrizione?: string;
   tipo?: string;
   dettaglio?: {
     domandeRisposte?: Array<{
@@ -287,6 +289,12 @@ function matchesCondition(
   if (condition.tipologiaBiSuite) {
     const condTip = condition.tipologiaBiSuite.toUpperCase().trim();
     if (!tipNome.includes(condTip) && condTip !== tipNome) return false;
+  }
+
+  if (condition.descrizioneBiSuite) {
+    const descNome = (articolo.descrizione || '').toUpperCase().trim();
+    const condDesc = condition.descrizioneBiSuite.toUpperCase().trim();
+    if (!descNome.includes(condDesc)) return false;
   }
 
   if (condition.clienteTipo) {
