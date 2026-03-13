@@ -58,10 +58,10 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
   const navItems: Array<{ path: string; label: string; icon: typeof Shield; show: boolean }> = [
     { path: '/super-admin', label: 'Super Admin', icon: Shield, show: isSuperAdmin },
     { path: '/admin', label: 'Gestione Team', icon: Users, show: isAdminOrSuper },
-    { path: '/dashboard-gara-reale', label: 'Dashboard', icon: LayoutDashboard, show: isAdminOrSuper },
+    { path: '/dashboard-gara-reale', label: 'Dashboard', icon: LayoutDashboard, show: true },
     { path: '/preventivatore', label: 'Simulatore', icon: FileText, show: true },
     { path: '/tabelle-calcolo', label: 'Tabelle Calcolo', icon: Table2, show: isAdminOrSuper },
-    { path: '/vendite-bisuite', label: 'Vendite BiSuite', icon: ShoppingCart, show: isAdminOrSuper },
+    { path: '/vendite-bisuite', label: 'Vendite BiSuite', icon: ShoppingCart, show: true },
     { path: '/mappatura-bisuite', label: 'Mappatura', icon: MapPin, show: isSuperAdmin },
   ];
 

@@ -1198,7 +1198,7 @@ export async function registerRoutes(
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
-      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+      if (!profile) {
         return res.status(403).json({ error: "Accesso non autorizzato" });
       }
 
