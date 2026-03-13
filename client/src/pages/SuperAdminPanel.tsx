@@ -44,15 +44,18 @@ const createAdminSchema = z.object({
 interface Organization {
   id: string;
   name: string;
-  created_at: string;
+  created_at?: string;
+  createdAt?: string;
 }
 
 interface Profile {
   id: string;
-  full_name: string | null;
+  full_name?: string | null;
+  fullName?: string | null;
   email: string | null;
   role: string;
-  organization_id: string | null;
+  organization_id?: string | null;
+  organizationId?: string | null;
 }
 
 export default function SuperAdminPanel() {
@@ -216,11 +219,11 @@ export default function SuperAdminPanel() {
   };
 
   const getUserCountForOrg = (orgId: string) => {
-    return allProfiles.filter(p => p.organization_id === orgId).length;
+    return allProfiles.filter((p: any) => (p.organizationId || p.organization_id) === orgId).length;
   };
 
   const isMyOrganization = (orgId: string) => {
-    return profile?.organization_id === orgId;
+    return profile?.organizationId === orgId;
   };
 
   const getRoleBadgeVariant = (role: string) => {
@@ -373,7 +376,7 @@ export default function SuperAdminPanel() {
                         </TableCell>
                         <TableCell>{getUserCountForOrg(org.id)}</TableCell>
                         <TableCell>
-                          {new Date(org.created_at).toLocaleDateString('it-IT')}
+                          {new Date(org.createdAt || org.created_at).toLocaleDateString('it-IT')}
                         </TableCell>
                         <TableCell>
                           {!isMyOrganization(org.id) && (
@@ -452,7 +455,7 @@ export default function SuperAdminPanel() {
                       <TableRow key={p.id}>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{p.full_name || '-'}</p>
+                            <p className="font-medium">{p.fullName || p.full_name || '-'}</p>
                             <p className="text-xs text-muted-foreground">{p.email}</p>
                           </div>
                         </TableCell>
@@ -462,7 +465,7 @@ export default function SuperAdminPanel() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm">
-                          {getOrgName(p.organization_id)}
+                          {getOrgName(p.organizationId || p.organization_id)}
                         </TableCell>
                         <TableCell>
                           {p.role !== 'super_admin' && (
@@ -485,7 +488,7 @@ export default function SuperAdminPanel() {
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Elimina utente</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Sei sicuro di voler eliminare <strong>{p.full_name || p.email}</strong>?
+                                    Sei sicuro di voler eliminare <strong>{p.fullName || p.full_name || p.email}</strong>?
                                     L'azione è irreversibile.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
