@@ -32,17 +32,34 @@ import {
 import { apiUrl } from "@/lib/basePath";
 import {
   getWorkdayInfoForMonth,
+  calcolaPremioPistaFissoPerPos,
   type WorkdayInfo,
-  FISSO_CATEGORIE_DEFAULT,
   type FissoCategoriaType,
+  type PistaFissoPosConfig,
+  type AttivatoFissoRiga,
 } from "@/lib/calcoloPistaFisso";
+import {
+  calcolaPremioPistaMobilePerPos,
+} from "@/utils/calcoli-mobile";
+import {
+  calcoloEnergiaPerPos,
+} from "@/lib/calcoloEnergia";
 import {
   type StoreCalendar,
   type Weekday,
   MOBILE_CATEGORIES_CONFIG_DEFAULT,
-  type MobileActivationType,
+  type MobileCategoryConfig,
+  type PistaMobilePosConfig,
+  type AttivatoMobileDettaglio,
+  MobileActivationType,
 } from "@/types/preventivatore";
-import { ENERGIA_BASE_PAY, type EnergiaCategory } from "@/types/energia";
+import {
+  type EnergiaCategory,
+  type EnergiaConfig,
+  type EnergiaAttivatoRiga,
+  type EnergiaPdvInGara,
+  ENERGIA_BASE_PAY,
+} from "@/types/energia";
 
 interface AggregatedItem {
   pista: string;
@@ -71,19 +88,31 @@ interface MappedSalesResponse {
   totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number }>>;
 }
 
+interface OrgConfigPdv {
+  id: string;
+  codicePos: string;
+  nome: string;
+  ragioneSociale: string;
+  calendar: StoreCalendar;
+  clusterMobile?: string;
+  clusterFisso?: string;
+  abilitaEnergia?: boolean;
+  abilitaAssicurazioni?: boolean;
+}
+
 interface OrgConfigResponse {
   config: {
-    puntiVendita?: Array<{
-      id: string;
-      codicePos: string;
-      nome: string;
-      ragioneSociale: string;
-      calendar: StoreCalendar;
-      clusterMobile?: string;
-      clusterFisso?: string;
-      abilitaEnergia?: boolean;
-      abilitaAssicurazioni?: boolean;
-    }>;
+    puntiVendita?: OrgConfigPdv[];
+    pistaFissoConfig?: {
+      sogliePerPos: PistaFissoPosConfig[];
+    };
+    pistaMobileConfig?: {
+      sogliePerPos: PistaMobilePosConfig[];
+    };
+    energiaConfig?: EnergiaConfig;
+    energiaPdvInGara?: Array<{ pdvId: string; isInGara: boolean; codicePos: string }>;
+    mobileCategories?: MobileCategoryConfig[];
+    configGara?: { annoGara: number; meseGara: number };
   };
   configVersion: number;
 }
@@ -102,93 +131,147 @@ const DEFAULT_CALENDAR: StoreCalendar = {
   specialDays: [],
 };
 
-const FISSO_CONFIG_MAP = new Map(
-  FISSO_CATEGORIE_DEFAULT.map((c) => [c.type, c])
-);
-
-const MOBILE_CONFIG_MAP = new Map(
-  MOBILE_CATEGORIES_CONFIG_DEFAULT.map((c) => [c.type as string, c])
-);
-
-const MOBILE_GETTONE: Partial<Record<string, number>> = {
-  TIED: 5, UNTIED: 1,
-};
-
 interface PistaCalcResult {
   premioStimato: number;
   puntiTotali: number;
-  sogliaRaggiunta: string;
+  sogliaRaggiunta: number;
   sogliaLabel: string;
+  forecastTarget?: number;
+  forecastGap?: number;
 }
 
-function calcolaPremioMobile(categories: Array<{ category: string; pezzi: number }>): PistaCalcResult {
-  let punti = 0;
-  let extraGettoni = 0;
-  let gettoniContrattuali = 0;
-  for (const cat of categories) {
-    const config = MOBILE_CONFIG_MAP.get(cat.category);
-    punti += cat.pezzi * (config?.punti ?? 0);
-    extraGettoni += cat.pezzi * (config?.extraGettoneEuro ?? 0);
-    gettoniContrattuali += cat.pezzi * (MOBILE_GETTONE[cat.category] ?? 0);
-  }
-  let sogliaLabel = "Nessuna";
-  if (punti >= 165) sogliaLabel = "S4";
-  else if (punti >= 135) sogliaLabel = "S3";
-  else if (punti >= 105) sogliaLabel = "S2";
-  else if (punti >= 70) sogliaLabel = "S1";
+const EMPTY_CALC: PistaCalcResult = {
+  premioStimato: 0, puntiTotali: 0, sogliaRaggiunta: 0, sogliaLabel: "Nessuna",
+};
 
-  return { premioStimato: gettoniContrattuali + extraGettoni, puntiTotali: punti, sogliaRaggiunta: sogliaLabel, sogliaLabel };
+function sogliaToLabel(soglia: number, maxSoglia: number = 5): string {
+  if (soglia <= 0) return "Nessuna";
+  return `S${soglia}`;
 }
 
-function calcolaPremioFisso(categories: Array<{ category: string; pezzi: number }>): PistaCalcResult {
-  let punti = 0;
-  let premio = 0;
-  for (const cat of categories) {
-    const config = FISSO_CONFIG_MAP.get(cat.category as FissoCategoriaType);
-    if (!config) continue;
-    punti += cat.pezzi * config.puntiPerPezzo;
-    premio += cat.pezzi * config.euroPerPezzo;
-  }
-  let sogliaLabel = "Nessuna";
-  if (punti >= 80) sogliaLabel = "S5";
-  else if (punti >= 67) sogliaLabel = "S4";
-  else if (punti >= 57) sogliaLabel = "S3";
-  else if (punti >= 46) sogliaLabel = "S2";
-  else if (punti >= 28) sogliaLabel = "S1";
-
-  return { premioStimato: premio, puntiTotali: punti, sogliaRaggiunta: sogliaLabel, sogliaLabel };
+function clusterToNumber(cluster?: string): 1 | 2 | 3 {
+  if (!cluster) return 1;
+  if (cluster.includes("3") || cluster === "CC3") return 3;
+  if (cluster.includes("2") || cluster === "CC2") return 2;
+  return 1;
 }
 
-function calcolaPremioEnergia(categories: Array<{ category: string; pezzi: number }>): PistaCalcResult {
-  let premio = 0;
-  let totalePezzi = 0;
-  for (const cat of categories) {
-    const basePay = ENERGIA_BASE_PAY[cat.category as EnergiaCategory] ?? 0;
-    premio += cat.pezzi * basePay;
-    totalePezzi += cat.pezzi;
-  }
-  let sogliaLabel = "Nessuna";
-  if (totalePezzi >= 100) sogliaLabel = "S5";
-  else if (totalePezzi >= 55) sogliaLabel = "S4";
-  else if (totalePezzi >= 40) sogliaLabel = "S3";
-  else if (totalePezzi >= 25) sogliaLabel = "S2";
-  else if (totalePezzi >= 10) sogliaLabel = "S1";
+function calcMobilePerPdv(
+  pdvItems: AggregatedItem[],
+  mobileConfig: PistaMobilePosConfig | undefined,
+  calendar: StoreCalendar,
+  year: number,
+  month: number,
+  mobileCategories: MobileCategoryConfig[],
+  workdayInfo: WorkdayInfo,
+): PistaCalcResult {
+  if (!mobileConfig || pdvItems.length === 0) return EMPTY_CALC;
 
-  return { premioStimato: premio, puntiTotali: totalePezzi, sogliaRaggiunta: sogliaLabel, sogliaLabel };
+  const mobileEnumValues = new Set(Object.values(MobileActivationType) as string[]);
+  const validItems = pdvItems.filter((item) => mobileEnumValues.has(item.targetCategory));
+  const dettaglio: AttivatoMobileDettaglio[] = validItems.map((item, idx) => ({
+    id: `bisuite-${idx}`,
+    type: item.targetCategory as MobileActivationType,
+    pezzi: item.pezzi,
+  }));
+
+  const result = calcolaPremioPistaMobilePerPos({
+    configPos: mobileConfig,
+    dettaglio,
+    calendar,
+    year,
+    month: month - 1,
+    mobileCategories,
+    workdayInfoOverride: workdayInfo,
+  });
+
+  return {
+    premioStimato: result.premio,
+    puntiTotali: result.punti,
+    sogliaRaggiunta: result.soglia,
+    sogliaLabel: sogliaToLabel(result.soglia, 4),
+    forecastTarget: result.forecastTargetPunti,
+    forecastGap: result.forecastGapPunti,
+  };
 }
 
-function calcolaPremioGenerico(categories: Array<{ category: string; pezzi: number }>): PistaCalcResult {
-  const totalePezzi = categories.reduce((s, c) => s + c.pezzi, 0);
-  return { premioStimato: 0, puntiTotali: totalePezzi, sogliaRaggiunta: "N/A", sogliaLabel: "N/A" };
+function calcFissoPerPdv(
+  pdvItems: AggregatedItem[],
+  fissoConfig: PistaFissoPosConfig | undefined,
+  calendar: StoreCalendar,
+  clusterFisso: 1 | 2 | 3,
+  posCode: string,
+  year: number,
+  month: number,
+  workdayInfo: WorkdayInfo,
+): PistaCalcResult {
+  if (!fissoConfig || pdvItems.length === 0) return EMPTY_CALC;
+
+  const VALID_FISSO_TYPES: Set<string> = new Set([
+    "FISSO_FTTC","FISSO_FTTH","FISSO_FWA_OUT","FISSO_FWA_IND_2P","FRITZ_BOX",
+    "NETFLIX_CON_ADV","NETFLIX_SENZA_ADV","CONVERGENZA","LINEA_ATTIVA",
+    "FISSO_PIVA_1A_LINEA","FISSO_PIVA_2A_LINEA","CHIAMATE_ILLIMITATE",
+    "BOLLETTINO_POSTALE","PIU_SICURI_CASA_UFFICIO","ASSICURAZIONI_PLUS_FULL","MIGRAZIONI_FTTH_FWA",
+  ]);
+  const validFissoItems = pdvItems.filter((item) => VALID_FISSO_TYPES.has(item.targetCategory));
+  const attivato: AttivatoFissoRiga[] = validFissoItems.map((item) => ({
+    categoria: item.targetCategory as FissoCategoriaType,
+    pezzi: item.pezzi,
+  }));
+
+  const result = calcolaPremioPistaFissoPerPos({
+    annoGara: year,
+    meseGara: month,
+    calendar,
+    clusterFisso,
+    posCode,
+    pistaConfig: fissoConfig,
+    attivato,
+    workdayInfoOverride: workdayInfo,
+  });
+
+  return {
+    premioStimato: result.premio,
+    puntiTotali: result.punti,
+    sogliaRaggiunta: result.soglia,
+    sogliaLabel: sogliaToLabel(result.soglia, 5),
+  };
 }
 
-function calcolaPremioPerPista(pista: string, categories: Array<{ category: string; pezzi: number }>): PistaCalcResult {
-  switch (pista) {
-    case "mobile": return calcolaPremioMobile(categories);
-    case "fisso": return calcolaPremioFisso(categories);
-    case "energia": return calcolaPremioEnergia(categories);
-    default: return calcolaPremioGenerico(categories);
-  }
+function calcEnergiaPerPdv(
+  pdvItems: AggregatedItem[],
+  energiaConfig: EnergiaConfig | undefined,
+  posCode: string,
+  isInGara: boolean,
+  numPdv: number,
+): PistaCalcResult {
+  if (!energiaConfig || pdvItems.length === 0) return EMPTY_CALC;
+
+  const VALID_ENERGIA_TYPES = new Set(Object.keys(ENERGIA_BASE_PAY));
+  const validEnergiaItems = pdvItems.filter((item) => VALID_ENERGIA_TYPES.has(item.targetCategory));
+  const attivato: EnergiaAttivatoRiga[] = validEnergiaItems.map((item, idx) => ({
+    id: `bisuite-${idx}`,
+    category: item.targetCategory as EnergiaCategory,
+    pezzi: item.pezzi,
+  }));
+
+  const pdvInGaraList: EnergiaPdvInGara[] = [{ pdvId: posCode, codicePos: posCode, nome: posCode, isInGara }];
+
+  const result = calcoloEnergiaPerPos({
+    posCode,
+    attivato,
+    config: energiaConfig,
+    pdvInGaraList,
+    isNegozioInGara: isInGara,
+    numPdv,
+  });
+
+  return {
+    premioStimato: result.premioTotale,
+    puntiTotali: result.totalePezzi,
+    sogliaRaggiunta: result.sogliaRaggiunta,
+    sogliaLabel: sogliaToLabel(result.sogliaRaggiunta, 3),
+  };
 }
 
 function getSogliaColor(soglia: string): string {
@@ -269,6 +352,15 @@ export default function DashboardGaraReale() {
   const pistaStats = useMemo(() => {
     if (!mappedData) return [];
 
+    const cfg = orgConfig?.config;
+    const puntiVendita = cfg?.puntiVendita || [];
+    const mobileConfigs = cfg?.pistaMobileConfig?.sogliePerPos || [];
+    const fissoConfigs = cfg?.pistaFissoConfig?.sogliePerPos || [];
+    const energiaConfig = cfg?.energiaConfig;
+    const energiaPdvInGara = cfg?.energiaPdvInGara || [];
+    const mobileCategories = cfg?.mobileCategories || MOBILE_CATEGORIES_CONFIG_DEFAULT;
+    const numPdvInGaraEnergia = energiaPdvInGara.filter((e) => e.isInGara).length || puntiVendita.length || 1;
+
     const stats: Array<{
       pista: string;
       label: string;
@@ -283,6 +375,7 @@ export default function DashboardGaraReale() {
         ragioneSociale: string;
         pezzi: number;
         proiezione: number;
+        pdvCalc: PistaCalcResult;
         categories: Array<{ category: string; label: string; pezzi: number }>;
       }>;
     }> = [];
@@ -292,14 +385,13 @@ export default function DashboardGaraReale() {
     for (const pista of pisteOrder) {
       const pistaData = mappedData.totaliPerPista[pista];
       if (!pistaData) {
-        const emptyCalc = calcolaPremioPerPista(pista, []);
         stats.push({
           pista,
           label: PISTA_CONFIG[pista].label,
           totalePezzi: 0,
           proiezionePezzi: 0,
-          calc: emptyCalc,
-          calcProiezione: emptyCalc,
+          calc: EMPTY_CALC,
+          calcProiezione: EMPTY_CALC,
           categories: [],
           pdvBreakdown: [],
         });
@@ -323,6 +415,9 @@ export default function DashboardGaraReale() {
         ? Math.round((totalePezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
         : totalePezzi;
 
+      let aggregateCalc: PistaCalcResult = EMPTY_CALC;
+      let aggregateCalcProiezione: PistaCalcResult = EMPTY_CALC;
+
       const pdvBreakdown = mappedData.pdvList
         .map((pdv) => {
           const pdvItems = pdv.items.filter((i) => i.pista === pista);
@@ -330,37 +425,121 @@ export default function DashboardGaraReale() {
           const pdvProiezione = workdayInfo.elapsedWorkingDays > 0
             ? Math.round((pdvPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
             : pdvPezzi;
+
+          const pdvConfig = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
+          const pdvCalendar = pdvConfig?.calendar || DEFAULT_CALENDAR;
+          const pdvWorkday = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCalendar, new Date());
+
+          let pdvCalc = EMPTY_CALC;
+          if (pista === "mobile") {
+            const mConfig = mobileConfigs.find((c) => c.posCode === pdv.codicePos) || mobileConfigs[0];
+            pdvCalc = calcMobilePerPdv(pdvItems, mConfig, pdvCalendar, selYear, selMonth, mobileCategories, pdvWorkday);
+          } else if (pista === "fisso") {
+            const fConfig = fissoConfigs.find((c) => c.posCode === pdv.codicePos) || fissoConfigs[0];
+            const cluster = clusterToNumber(pdvConfig?.clusterFisso);
+            pdvCalc = calcFissoPerPdv(pdvItems, fConfig, pdvCalendar, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday);
+          } else if (pista === "energia") {
+            const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
+            pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia);
+          }
+
           return {
             codicePos: pdv.codicePos,
             nomeNegozio: pdv.nomeNegozio,
             ragioneSociale: pdv.ragioneSociale,
             pezzi: pdvPezzi,
             proiezione: pdvProiezione,
+            pdvCalc,
             categories: pdvItems.map((i) => ({ category: i.targetCategory, label: i.targetLabel, pezzi: i.pezzi })),
           };
         })
         .filter((p) => p.pezzi > 0)
         .sort((a, b) => b.pezzi - a.pezzi);
 
-      const catForCalc = categories.map((c) => ({ category: c.category, pezzi: c.pezzi }));
-      const catForProiezione = categories.map((c) => ({ category: c.category, pezzi: c.proiezione }));
-      const calc = calcolaPremioPerPista(pista, catForCalc);
-      const calcProiezione = calcolaPremioPerPista(pista, catForProiezione);
+      if (pdvBreakdown.length > 0 && (pista === "mobile" || pista === "fisso" || pista === "energia")) {
+        let totalPremio = 0;
+        let totalPunti = 0;
+        let bestSoglia = 0;
+        let totalTarget = 0;
+        let totalGap = 0;
+        let hasTarget = false;
+        for (const pdv of pdvBreakdown) {
+          totalPremio += pdv.pdvCalc.premioStimato;
+          totalPunti += pdv.pdvCalc.puntiTotali;
+          if (pdv.pdvCalc.sogliaRaggiunta > bestSoglia) bestSoglia = pdv.pdvCalc.sogliaRaggiunta;
+          if (pdv.pdvCalc.forecastTarget) {
+            hasTarget = true;
+            totalTarget += pdv.pdvCalc.forecastTarget;
+            totalGap += pdv.pdvCalc.forecastGap ?? 0;
+          }
+        }
+        aggregateCalc = {
+          premioStimato: totalPremio,
+          puntiTotali: totalPunti,
+          sogliaRaggiunta: bestSoglia,
+          sogliaLabel: sogliaToLabel(bestSoglia, pista === "fisso" ? 5 : pista === "mobile" ? 4 : 3),
+          forecastTarget: hasTarget ? totalTarget : undefined,
+          forecastGap: hasTarget ? totalGap : undefined,
+        };
+
+        const projItems = pdvBreakdown.map((pdv) => {
+          const pdvConfig2 = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
+          const pdvCal = pdvConfig2?.calendar || DEFAULT_CALENDAR;
+          const pdvWd = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCal, new Date());
+          const projectedItems: AggregatedItem[] = pdv.categories.map((c) => {
+            const projPezzi = pdvWd.elapsedWorkingDays > 0
+              ? Math.round((c.pezzi / pdvWd.elapsedWorkingDays) * pdvWd.totalWorkingDays)
+              : c.pezzi;
+            return { pista, targetCategory: c.category, targetLabel: c.label, pezzi: projPezzi };
+          });
+          return { ...pdv, items: projectedItems };
+        });
+
+        let totalPremioProj = 0;
+        let totalPuntiProj = 0;
+        let bestSogliaProj = 0;
+        for (const pdv of projItems) {
+          const pdvConfig3 = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
+          const pdvCalendar3 = pdvConfig3?.calendar || DEFAULT_CALENDAR;
+          const pdvWorkday3 = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCalendar3, new Date());
+          let projCalc = EMPTY_CALC;
+          if (pista === "mobile") {
+            const mConfig = mobileConfigs.find((c) => c.posCode === pdv.codicePos) || mobileConfigs[0];
+            projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, mobileCategories, pdvWorkday3);
+          } else if (pista === "fisso") {
+            const fConfig = fissoConfigs.find((c) => c.posCode === pdv.codicePos) || fissoConfigs[0];
+            const cluster = clusterToNumber(pdvConfig3?.clusterFisso);
+            projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3);
+          } else if (pista === "energia") {
+            const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
+            projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia);
+          }
+          totalPremioProj += projCalc.premioStimato;
+          totalPuntiProj += projCalc.puntiTotali;
+          if (projCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = projCalc.sogliaRaggiunta;
+        }
+        aggregateCalcProiezione = {
+          premioStimato: totalPremioProj,
+          puntiTotali: totalPuntiProj,
+          sogliaRaggiunta: bestSogliaProj,
+          sogliaLabel: sogliaToLabel(bestSogliaProj, pista === "fisso" ? 5 : pista === "mobile" ? 4 : 3),
+        };
+      }
 
       stats.push({
         pista,
         label: PISTA_CONFIG[pista].label,
         totalePezzi,
         proiezionePezzi,
-        calc,
-        calcProiezione,
+        calc: aggregateCalc,
+        calcProiezione: aggregateCalcProiezione,
         categories,
         pdvBreakdown,
       });
     }
 
     return stats;
-  }, [mappedData, workdayInfo]);
+  }, [mappedData, workdayInfo, orgConfig, selMonth, selYear]);
 
   const isLoading = loadingMapped || loadingConfig;
 
