@@ -5,6 +5,7 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -1139,19 +1140,12 @@ export async function registerRoutes(
   app.get("/api/admin/bisuite-mapping", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
-      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+      if (!profile || profile.role !== "super_admin") {
         return res.status(403).json({ error: "Accesso non autorizzato" });
       }
 
-      let orgId = req.query.org_id as string || profile.organizationId;
-      if (!orgId) return res.status(400).json({ error: "org_id è obbligatorio" });
-      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
-        return res.status(403).json({ error: "Accesso non autorizzato" });
-      }
-
-      const orgConfig = await storage.getOrgConfig(orgId);
-      const cfg = orgConfig?.config as Record<string, unknown> | undefined;
-      const mapping = cfg?.bisuiteMapping || null;
+      const sysConfig = await storage.getSystemConfig("bisuite_mapping");
+      const mapping = sysConfig?.config || null;
       res.json(mapping);
     } catch (error) {
       console.error("Error loading BiSuite mapping:", error);
@@ -1162,26 +1156,16 @@ export async function registerRoutes(
   app.put("/api/admin/bisuite-mapping", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
-      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+      if (!profile || profile.role !== "super_admin") {
         return res.status(403).json({ error: "Accesso non autorizzato" });
       }
 
-      const { organization_id, mapping } = req.body;
-      const orgId = organization_id || profile.organizationId;
-      if (!orgId) return res.status(400).json({ error: "organization_id è obbligatorio" });
-      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
-        return res.status(403).json({ error: "Accesso non autorizzato" });
-      }
+      const { mapping } = req.body;
       if (!mapping || !Array.isArray(mapping.rules)) {
         return res.status(400).json({ error: "mapping con rules è obbligatorio" });
       }
 
-      const orgConfig = await storage.getOrgConfig(orgId);
-      const existingConfig = (orgConfig?.config as Record<string, unknown>) || {};
-      const updatedConfig = { ...existingConfig, bisuiteMapping: mapping };
-      const configVersion = (orgConfig as any)?.configVersion || "2.0";
-
-      await storage.upsertOrgConfig(orgId, updatedConfig, configVersion);
+      await storage.upsertSystemConfig("bisuite_mapping", mapping, profile.id);
       res.json({ success: true, mapping });
     } catch (error) {
       console.error("Error saving BiSuite mapping:", error);
@@ -1233,8 +1217,8 @@ export async function registerRoutes(
 
       const sales = await storage.getBisuiteSales(orgId, from, to);
 
-      const orgConfig = await storage.getOrgConfig(orgId);
-      const mappingConfig = (orgConfig?.config as any)?.bisuiteMapping;
+      const sysMapping = await storage.getSystemConfig("bisuite_mapping");
+      const mappingConfig = sysMapping?.config as { rules?: BiSuiteMappingRule[] } | null;
       const { getDefaultMappingRules } = await import("../shared/bisuiteMapping");
       const rules = mappingConfig?.rules || getDefaultMappingRules();
 

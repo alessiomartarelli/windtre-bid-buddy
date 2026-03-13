@@ -115,7 +115,7 @@ export function UserMenu() {
           <span>Vendite BiSuite</span>
         </DropdownMenuItem>
         
-        {['super_admin', 'admin'].includes(profile?.role || '') && (
+        {profile?.role === 'super_admin' && (
           <DropdownMenuItem onClick={() => setLocation('/mappatura-bisuite')} data-testid="menu-mappatura-bisuite">
             <MapPin className="mr-2 h-4 w-4" />
             <span>Mappatura BiSuite</span>

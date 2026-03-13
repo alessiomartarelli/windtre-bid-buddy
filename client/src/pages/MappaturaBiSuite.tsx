@@ -99,11 +99,7 @@ export default function MappaturaBiSuite() {
   const loadMapping = useCallback(async () => {
     try {
       setLoading(true);
-      const orgId = profile?.organizationId;
-      const url = orgId
-        ? apiUrl(`/api/admin/bisuite-mapping?org_id=${orgId}`)
-        : apiUrl('/api/admin/bisuite-mapping');
-      const res = await fetch(url, { credentials: 'include' });
+      const res = await fetch(apiUrl('/api/admin/bisuite-mapping'), { credentials: 'include' });
       if (!res.ok) throw new Error('Errore nel caricamento');
       const data = await res.json();
       if (data && data.rules) {
@@ -119,7 +115,7 @@ export default function MappaturaBiSuite() {
     } finally {
       setLoading(false);
     }
-  }, [profile?.organizationId]);
+  }, []);
 
   useEffect(() => {
     if (profile) loadMapping();
@@ -133,10 +129,7 @@ export default function MappaturaBiSuite() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          organization_id: profile?.organizationId,
-          mapping,
-        }),
+        body: JSON.stringify({ mapping }),
       });
       if (!res.ok) throw new Error('Errore nel salvataggio');
       setHasChanges(false);
