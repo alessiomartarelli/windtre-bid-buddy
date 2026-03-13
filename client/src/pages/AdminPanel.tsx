@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, UserX, UserCheck } from 'lucide-react';
+import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, UserX, UserCheck } from 'lucide-react';
+import { AppNavbar } from '@/components/AppNavbar';
 import { z } from 'zod';
 import {
   Dialog,
@@ -343,16 +344,9 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted p-3 sm:p-4">
-      <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
-        <Button 
-          variant="ghost" 
-          onClick={() => setLocation('/')}
-          data-testid="button-back"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Torna al simulatore
-        </Button>
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted">
+      <AppNavbar title="Incentive W3" />
+      <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6 p-3 sm:p-4">
 
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent>

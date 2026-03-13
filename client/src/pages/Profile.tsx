@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, Building2, User, Lock, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Building2, User, Lock, Eye, EyeOff } from 'lucide-react';
+import { AppNavbar } from '@/components/AppNavbar';
 
 export default function Profile() {
   const [, setLocation] = useLocation();
@@ -62,16 +63,8 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted p-3 sm:p-4">
-      <div className="max-w-2xl mx-auto space-y-4 sm:space-y-6">
-        <Button 
-          variant="ghost" 
-          onClick={() => setLocation('/')}
-          className="mb-4"
-          data-testid="button-back"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Torna al preventivatore
-        </Button>
+      <AppNavbar title="Incentive W3" />
+      <div className="max-w-2xl mx-auto space-y-4 sm:space-y-6 p-4">
 
         <Card>
           <CardHeader>

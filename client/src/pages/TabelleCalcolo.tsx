@@ -4,7 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { UserMenu } from '@/components/UserMenu';
+import { AppNavbar } from '@/components/AppNavbar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -536,44 +536,28 @@ export default function TabelleCalcolo() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted">
-      <div className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3 min-w-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => activeSection === 'selection' ? setLocation('/') : setActiveSection('selection')}
-                data-testid="button-back"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <h1 className="text-lg sm:text-xl font-bold text-foreground truncate" data-testid="text-page-title">
-                {activeSection === 'selection' ? 'Tabelle di Calcolo' : 'Tabelle di Calcolo Gara Operatore'}
-              </h1>
-            </div>
-            <div className="flex items-center gap-2">
-              {activeSection === 'gara_operatore' && (
-                <>
-                  <Button variant="outline" size="sm" onClick={handleResetAll} data-testid="button-reset-all">
-                    <RotateCcw className="h-4 w-4 mr-1" />
-                    <span className="hidden sm:inline">Ripristina Defaults</span>
-                    <span className="sm:hidden">Reset</span>
-                  </Button>
-                  <Button onClick={handleSave} disabled={isSaving} size="sm" data-testid="button-save">
-                    {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-                    <span className="hidden sm:inline">
-                      {isSuperAdmin ? 'Salva come Default di Sistema' : 'Salva Override Organizzazione'}
-                    </span>
-                    <span className="sm:hidden">Salva</span>
-                  </Button>
-                </>
-              )}
-              <UserMenu />
-            </div>
-          </div>
-        </div>
-      </div>
+      <AppNavbar title="Incentive W3">
+        {activeSection === 'gara_operatore' && (
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setActiveSection('selection')} data-testid="button-back-section">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Indietro</span>
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleResetAll} data-testid="button-reset-all">
+              <RotateCcw className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Ripristina Defaults</span>
+              <span className="sm:hidden">Reset</span>
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving} size="sm" data-testid="button-save">
+              {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+              <span className="hidden sm:inline">
+                {isSuperAdmin ? 'Salva come Default di Sistema' : 'Salva Override Organizzazione'}
+              </span>
+              <span className="sm:hidden">Salva</span>
+            </Button>
+          </>
+        )}
+      </AppNavbar>
 
       {activeSection === 'selection' ? (
         <div className="max-w-3xl mx-auto px-3 sm:px-6 py-8 sm:py-12">

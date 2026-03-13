@@ -24,7 +24,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { UserMenu } from '@/components/UserMenu';
+import { AppNavbar } from '@/components/AppNavbar';
 import {
   ArrowLeft,
   Plus,
@@ -184,43 +184,31 @@ export default function MappaturaBiSuite() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setLocation('/')} data-testid="btn-back">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <MapPin className="h-5 w-5 text-primary" />
-            <h1 className="text-lg font-semibold">Mappatura BiSuite</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {hasChanges && (
-              <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
-                Modifiche non salvate
-              </Badge>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowResetDialog(true)}
-              data-testid="btn-reset-defaults"
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Ripristina Default
-            </Button>
-            <Button
-              size="sm"
-              onClick={saveMapping}
-              disabled={saving || !hasChanges}
-              data-testid="btn-save-mapping"
-            >
-              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-              Salva
-            </Button>
-            <UserMenu />
-          </div>
-        </div>
-      </header>
+      <AppNavbar title="Incentive W3">
+        {hasChanges && (
+          <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
+            Modifiche non salvate
+          </Badge>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowResetDialog(true)}
+          data-testid="btn-reset-defaults"
+        >
+          <RotateCcw className="h-4 w-4 mr-2" />
+          Ripristina Default
+        </Button>
+        <Button
+          size="sm"
+          onClick={saveMapping}
+          disabled={saving || !hasChanges}
+          data-testid="btn-save-mapping"
+        >
+          {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          Salva
+        </Button>
+      </AppNavbar>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Card className="mb-6">

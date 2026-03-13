@@ -14,7 +14,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  ArrowLeft,
   TrendingUp,
   Target,
   Award,
@@ -30,6 +29,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { apiUrl } from "@/lib/basePath";
+import { AppNavbar } from "@/components/AppNavbar";
 import {
   getWorkdayInfoForMonth,
   calcolaPremioPistaFissoPerPos,
@@ -754,34 +754,22 @@ export default function DashboardGaraReale() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900" data-testid="dashboard-gara-reale">
+      <AppNavbar title="Incentive W3">
+        <Select value={selectedPeriod} onValueChange={setSelectedPeriod} data-testid="select-period">
+          <SelectTrigger className="w-[200px]" data-testid="select-period-trigger">
+            <Calendar className="h-4 w-4 mr-2" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {monthOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value} data-testid={`select-period-${opt.value}`}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </AppNavbar>
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => setLocation("/")} data-testid="button-back">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100" data-testid="text-page-title">Dashboard Gara Reale</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Vendite reali da BiSuite con proiezione a fine mese</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod} data-testid="select-period">
-              <SelectTrigger className="w-[200px]" data-testid="select-period-trigger">
-                <Calendar className="h-4 w-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value} data-testid={`select-period-${opt.value}`}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20" data-testid="loading-state">

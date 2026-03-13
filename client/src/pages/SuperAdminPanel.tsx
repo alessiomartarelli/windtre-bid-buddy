@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ArrowLeft, Plus, Users, Building2, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Users, Building2, Trash2 } from 'lucide-react';
+import { AppNavbar } from '@/components/AppNavbar';
 import { BiSuiteConnectionForm } from '@/components/BiSuiteConnectionForm';
 import { BiSuiteSalesTest } from '@/components/BiSuiteSalesTest';
 import { z } from 'zod';
@@ -258,17 +259,10 @@ export default function SuperAdminPanel() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted p-4">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <Button 
-            variant="ghost" 
-            onClick={() => setLocation('/')}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Torna al simulatore
-          </Button>
-          
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted">
+      <AppNavbar title="Incentive W3" />
+      <div className="max-w-6xl mx-auto space-y-6 p-4">
+        <div className="flex items-center justify-end">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>

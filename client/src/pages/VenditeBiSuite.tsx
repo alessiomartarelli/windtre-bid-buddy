@@ -53,7 +53,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { UserMenu } from "@/components/UserMenu";
+import { AppNavbar } from "@/components/AppNavbar";
 
 interface BisuiteSale {
   id: string;
@@ -211,30 +211,7 @@ export default function VenditeBiSuite() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setLocation("/preventivatore")}
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <ShoppingCart className="h-6 w-6 text-primary" />
-            <div>
-              <h1 className="text-lg font-bold" data-testid="text-page-title">
-                Vendite BiSuite
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                Dati importati da BiSuite
-              </p>
-            </div>
-          </div>
-          <UserMenu />
-        </div>
-      </header>
+      <AppNavbar title="Incentive W3" />
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         <div className="flex flex-wrap gap-4 items-end">

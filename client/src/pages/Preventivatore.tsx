@@ -45,7 +45,7 @@ import { StepProtectaRS } from "@/components/wizard/StepProtectaRS";
 import { calcolaExtraGaraIva, calcolaTotaleExtraGaraIva, ExtraGaraSogliePerRS } from "@/lib/calcoloExtraGaraIva";
 import { formatCurrency } from "@/utils/format";
 import StepExtraGaraIva from "@/components/wizard/StepExtraGaraIva";
-import { UserMenu } from "@/components/UserMenu";
+import { AppNavbar } from "@/components/AppNavbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, Save, ChevronLeft, ChevronRight, RefreshCw, Home, FolderOpen, Trash2, Clock, FilePlus, ArrowLeft } from "lucide-react";
 import { WizardHeader } from "@/components/wizard/WizardHeader";
@@ -1497,58 +1497,38 @@ const Preventivatore = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex flex-col">
-      {/* Modern Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setLocation('/preventivatore?new=true')}
-              title="Nuova simulazione"
-              data-testid="button-home"
-            >
-              <Home className="h-5 w-5" />
-            </Button>
-            <h1 className="text-base sm:text-xl font-bold text-foreground truncate" data-testid="text-header-title">
-              Incentive W3
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            {(configGara.nomeGara || activeConfigName) && (
-              <span className="hidden sm:inline text-sm font-medium text-muted-foreground truncate max-w-[250px]" data-testid="text-active-config" title={configGara.nomeGara || activeConfigName || ""}>
-                {configGara.nomeGara || activeConfigName}
-              </span>
-            )}
-            <Button 
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                fetchSavedConfigs();
-                setLoadConfigDialogOpen(true);
-              }}
-              data-testid="button-load-config"
-            >
-              <FolderOpen className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">Carica</span>
-            </Button>
-            <Button 
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setConfigName(activeConfigName || "");
-                fetchSavedConfigs();
-                setSaveConfigDialogOpen(true);
-              }}
-              data-testid="button-save-config"
-            >
-              <Save className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">Salva</span>
-            </Button>
-            <UserMenu />
-          </div>
-        </div>
-      </header>
+      <AppNavbar title="Incentive W3">
+        {(configGara.nomeGara || activeConfigName) && (
+          <span className="hidden sm:inline text-sm font-medium text-muted-foreground truncate max-w-[250px]" data-testid="text-active-config" title={configGara.nomeGara || activeConfigName || ""}>
+            {configGara.nomeGara || activeConfigName}
+          </span>
+        )}
+        <Button 
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            fetchSavedConfigs();
+            setLoadConfigDialogOpen(true);
+          }}
+          data-testid="button-load-config"
+        >
+          <FolderOpen className="h-4 w-4" />
+          <span className="hidden sm:inline ml-1">Carica</span>
+        </Button>
+        <Button 
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            setConfigName(activeConfigName || "");
+            fetchSavedConfigs();
+            setSaveConfigDialogOpen(true);
+          }}
+          data-testid="button-save-config"
+        >
+          <Save className="h-4 w-4" />
+          <span className="hidden sm:inline ml-1">Salva</span>
+        </Button>
+      </AppNavbar>
 
       {/* Main Content */}
       <div className="flex-1 container mx-auto px-2 sm:px-4 py-3 sm:py-6">
