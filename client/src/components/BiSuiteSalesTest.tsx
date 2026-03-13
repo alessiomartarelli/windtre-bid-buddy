@@ -385,7 +385,7 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
           </div>
 
           {/* Test result */}
-          {testResult && (
+          {testResult != null ? (
             <div className={cn(
               "flex items-center gap-2 p-3 rounded-lg",
               testResult.success ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"
@@ -397,7 +397,7 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
               )}
               <span className="text-sm font-medium">{testResult.message}</span>
             </div>
-          )}
+          ) : null}
 
           {/* Summary */}
           {salesData && salesData.length > 0 && (
@@ -477,7 +477,7 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
           )}
 
           {/* Raw response (collapsible for debugging) */}
-          {rawResponse && (
+          {rawResponse != null && (
             <details className="text-xs">
               <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                 Mostra risposta raw (debug)

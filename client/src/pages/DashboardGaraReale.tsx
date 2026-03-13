@@ -45,6 +45,15 @@ import {
   calcoloEnergiaPerPos,
 } from "@/lib/calcoloEnergia";
 import {
+  calcolaPartnershipRewardPerPos,
+} from "@/lib/calcoloPartnershipReward";
+import {
+  calcoloAssicurazioniPerPos,
+} from "@/lib/calcoloAssicurazioni";
+import {
+  calcolaProtecta,
+} from "@/lib/calcoloProtecta";
+import {
   type StoreCalendar,
   type Weekday,
   MOBILE_CATEGORIES_CONFIG_DEFAULT,
@@ -52,6 +61,7 @@ import {
   type PistaMobilePosConfig,
   type AttivatoMobileDettaglio,
   MobileActivationType,
+  type PuntoVendita,
 } from "@/types/preventivatore";
 import {
   type EnergiaCategory,
@@ -60,6 +70,24 @@ import {
   type EnergiaPdvInGara,
   ENERGIA_BASE_PAY,
 } from "@/types/energia";
+import {
+  type CBEventType,
+  type AttivatoCBDettaglio,
+  CB_EVENTS_CONFIG,
+} from "@/types/partnership-cb-events";
+import {
+  type PartnershipRewardPosConfig,
+} from "@/types/partnership-reward";
+import {
+  type AssicurazioniAttivatoRiga,
+  type AssicurazioniConfig,
+  type AssicurazioniPdvInGara,
+} from "@/types/assicurazioni";
+import {
+  type ProtectaAttivatoRiga,
+  type ProtectaProduct,
+  createEmptyProtectaAttivato,
+} from "@/types/protecta";
 
 interface AggregatedItem {
   pista: string;
@@ -113,6 +141,11 @@ interface OrgConfigResponse {
     energiaPdvInGara?: Array<{ pdvId: string; isInGara: boolean; codicePos: string }>;
     mobileCategories?: MobileCategoryConfig[];
     configGara?: { annoGara: number; meseGara: number };
+    partnershipRewardConfig?: {
+      configPerPos: Array<{ posCode: string; config: { target80: number; target100: number; premio80: number; premio100: number } }>;
+    };
+    assicurazioniConfig?: AssicurazioniConfig;
+    assicurazioniPdvInGara?: AssicurazioniPdvInGara[];
   };
   configVersion: number;
 }
@@ -274,6 +307,160 @@ function calcEnergiaPerPdv(
   };
 }
 
+const CB_EVENT_LOOKUP = new Map(CB_EVENTS_CONFIG.map((c) => [c.type, c]));
+const VALID_CB_TYPES = new Set(CB_EVENTS_CONFIG.map((c) => c.type as string));
+
+function calcPartnershipPerPdv(
+  pdvItems: AggregatedItem[],
+  partnershipConfig: PartnershipRewardPosConfig | undefined,
+  giorniLavorativi: number,
+  posCode: string,
+): PistaCalcResult {
+  if (!partnershipConfig || pdvItems.length === 0) return EMPTY_CALC;
+
+  const validItems = pdvItems.filter((item) => VALID_CB_TYPES.has(item.targetCategory));
+  const attivato: AttivatoCBDettaglio[] = validItems.map((item) => {
+    const eventConf = CB_EVENT_LOOKUP.get(item.targetCategory as CBEventType);
+    return {
+      eventType: item.targetCategory as CBEventType,
+      pezzi: item.pezzi,
+      gettoni: eventConf?.gettoni ?? 0,
+      puntiPartnership: 1,
+    };
+  });
+
+  const result = calcolaPartnershipRewardPerPos({
+    posCode,
+    config: partnershipConfig,
+    attivato,
+    giorniLavorativi,
+  });
+
+  const targetNum = result.targetRaggiunto === "100%" ? 2 : result.targetRaggiunto === "80%" ? 1 : 0;
+  return {
+    premioStimato: result.premioMaturato,
+    puntiTotali: result.punti,
+    sogliaRaggiunta: targetNum,
+    sogliaLabel: result.targetRaggiunto === "nessuno" ? "Nessuna" : result.targetRaggiunto,
+    forecastTarget: partnershipConfig.config.target100,
+    forecastGap: result.punti - partnershipConfig.config.target100,
+  };
+}
+
+function calcAssicurazioniForAllPdv(
+  mappedData: MappedSalesResponse,
+  puntiVendita: OrgConfigPdv[],
+  assicConfig: AssicurazioniConfig | undefined,
+  pdvInGara: AssicurazioniPdvInGara[],
+): Map<string, PistaCalcResult> {
+  const resultMap = new Map<string, PistaCalcResult>();
+  if (!assicConfig || puntiVendita.length === 0) return resultMap;
+
+  const ASSIC_PRODUCT_KEYS: Set<string> = new Set([
+    "protezionePro","casaFamigliaFull","casaFamigliaPlus","casaFamigliaStart",
+    "sportFamiglia","sportIndividuale","viaggiVacanze","elettrodomestici","micioFido",
+  ]);
+
+  const attivatoByPos: Record<string, AssicurazioniAttivatoRiga> = {};
+  for (const pdv of mappedData.pdvList) {
+    const items = pdv.items.filter((i) => i.pista === "assicurazioni" && ASSIC_PRODUCT_KEYS.has(i.targetCategory));
+    if (items.length === 0) continue;
+    const riga: AssicurazioniAttivatoRiga = {
+      protezionePro: 0, casaFamigliaFull: 0, casaFamigliaPlus: 0, casaFamigliaStart: 0,
+      sportFamiglia: 0, sportIndividuale: 0, viaggiVacanze: 0, elettrodomestici: 0,
+      micioFido: 0, viaggioMondo: 0, viaggioMondoPremio: 0, reloadForever: 0,
+    };
+    for (const item of items) {
+      if (item.targetCategory in riga) {
+        (riga as any)[item.targetCategory] = item.pezzi;
+      }
+    }
+    attivatoByPos[pdv.codicePos] = riga;
+  }
+
+  const pdvs = puntiVendita.map((p) => ({
+    id: p.id,
+    codicePos: p.codicePos,
+    nome: p.nome,
+    ragioneSociale: p.ragioneSociale,
+    calendar: p.calendar,
+    tipoPosizione: "strada" as PuntoVendita["tipoPosizione"],
+    canale: "franchising" as PuntoVendita["canale"],
+    clusterMobile: (p.clusterMobile || "") as PuntoVendita["clusterMobile"],
+    clusterFisso: (p.clusterFisso || "") as PuntoVendita["clusterFisso"],
+    clusterCB: "" as PuntoVendita["clusterCB"],
+    clusterPIva: "" as PuntoVendita["clusterPIva"],
+    ruoloBusiness: "none" as PuntoVendita["ruoloBusiness"],
+    abilitaEnergia: p.abilitaEnergia ?? false,
+    abilitaAssicurazioni: p.abilitaAssicurazioni ?? false,
+  })) as PuntoVendita[];
+
+  const results = calcoloAssicurazioniPerPos(pdvs, assicConfig, pdvInGara, attivatoByPos);
+  for (const r of results) {
+    const sogliaNum = r.bonusSoglia2 > 0 ? 2 : r.bonusSoglia1 > 0 ? 1 : 0;
+    resultMap.set(r.pdvId, {
+      premioStimato: r.premioTotale,
+      puntiTotali: r.puntiTotali,
+      sogliaRaggiunta: sogliaNum,
+      sogliaLabel: sogliaNum === 0 ? "Nessuna" : `S${sogliaNum}`,
+    });
+  }
+  return resultMap;
+}
+
+function calcProtectaForAllPdv(
+  mappedData: MappedSalesResponse,
+  puntiVendita: OrgConfigPdv[],
+): Map<string, PistaCalcResult> {
+  const resultMap = new Map<string, PistaCalcResult>();
+  if (puntiVendita.length === 0) return resultMap;
+
+  const PROTECTA_KEYS: Set<string> = new Set([
+    "casaStart","casaStartFinanziato","casaPlus","casaPlusFinanziato","negozioProtetti","negozioProtettiFinanziato",
+  ]);
+
+  const attivatoByPos: Record<string, ProtectaAttivatoRiga> = {};
+  for (const pdv of mappedData.pdvList) {
+    const items = pdv.items.filter((i) => i.pista === "protecta" && PROTECTA_KEYS.has(i.targetCategory));
+    if (items.length === 0) continue;
+    const riga = createEmptyProtectaAttivato();
+    for (const item of items) {
+      if (item.targetCategory in riga) {
+        (riga as any)[item.targetCategory] = item.pezzi;
+      }
+    }
+    attivatoByPos[pdv.codicePos] = riga;
+  }
+
+  const pdvs = puntiVendita.map((p) => ({
+    id: p.id,
+    codicePos: p.codicePos,
+    nome: p.nome,
+    ragioneSociale: p.ragioneSociale,
+    calendar: p.calendar,
+    tipoPosizione: "strada" as PuntoVendita["tipoPosizione"],
+    canale: "franchising" as PuntoVendita["canale"],
+    clusterMobile: (p.clusterMobile || "") as PuntoVendita["clusterMobile"],
+    clusterFisso: (p.clusterFisso || "") as PuntoVendita["clusterFisso"],
+    clusterCB: "" as PuntoVendita["clusterCB"],
+    clusterPIva: "" as PuntoVendita["clusterPIva"],
+    ruoloBusiness: "none" as PuntoVendita["ruoloBusiness"],
+    abilitaEnergia: p.abilitaEnergia ?? false,
+    abilitaAssicurazioni: p.abilitaAssicurazioni ?? false,
+  })) as PuntoVendita[];
+
+  const results = calcolaProtecta(attivatoByPos, pdvs);
+  for (const r of results) {
+    resultMap.set(r.pdvId, {
+      premioStimato: r.premioTotale,
+      puntiTotali: r.pezziTotali,
+      sogliaRaggiunta: 0,
+      sogliaLabel: "N/A",
+    });
+  }
+  return resultMap;
+}
+
 function getSogliaColor(soglia: string): string {
   if (soglia === "Nessuna" || soglia === "N/A") return "text-red-600 bg-red-50 border-red-200";
   if (soglia === "S1") return "text-amber-600 bg-amber-50 border-amber-200";
@@ -360,6 +547,12 @@ export default function DashboardGaraReale() {
     const energiaPdvInGara = cfg?.energiaPdvInGara || [];
     const mobileCategories = cfg?.mobileCategories || MOBILE_CATEGORIES_CONFIG_DEFAULT;
     const numPdvInGaraEnergia = energiaPdvInGara.filter((e) => e.isInGara).length || puntiVendita.length || 1;
+    const partnershipConfigs = cfg?.partnershipRewardConfig?.configPerPos || [];
+    const assicConfig = cfg?.assicurazioniConfig;
+    const assicPdvInGara = cfg?.assicurazioniPdvInGara || [];
+
+    const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara);
+    const protectaCalcMap = calcProtectaForAllPdv(mappedData, puntiVendita);
 
     const stats: Array<{
       pista: string;
@@ -441,6 +634,14 @@ export default function DashboardGaraReale() {
           } else if (pista === "energia") {
             const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
             pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia);
+          } else if (pista === "partnership") {
+            const pCfg = partnershipConfigs.find((c) => c.posCode === pdv.codicePos);
+            const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
+            pdvCalc = calcPartnershipPerPdv(pdvItems, prConfig, pdvWorkday.elapsedWorkingDays, pdv.codicePos);
+          } else if (pista === "assicurazioni") {
+            pdvCalc = assicCalcMap.get(pdv.codicePos) || EMPTY_CALC;
+          } else if (pista === "protecta") {
+            pdvCalc = protectaCalcMap.get(pdv.codicePos) || EMPTY_CALC;
           }
 
           return {
@@ -456,7 +657,7 @@ export default function DashboardGaraReale() {
         .filter((p) => p.pezzi > 0)
         .sort((a, b) => b.pezzi - a.pezzi);
 
-      if (pdvBreakdown.length > 0 && (pista === "mobile" || pista === "fisso" || pista === "energia")) {
+      if (pdvBreakdown.length > 0) {
         let totalPremio = 0;
         let totalPunti = 0;
         let bestSoglia = 0;
@@ -477,7 +678,7 @@ export default function DashboardGaraReale() {
           premioStimato: totalPremio,
           puntiTotali: totalPunti,
           sogliaRaggiunta: bestSoglia,
-          sogliaLabel: sogliaToLabel(bestSoglia, pista === "fisso" ? 5 : pista === "mobile" ? 4 : 3),
+          sogliaLabel: sogliaToLabel(bestSoglia),
           forecastTarget: hasTarget ? totalTarget : undefined,
           forecastGap: hasTarget ? totalGap : undefined,
         };
@@ -513,6 +714,12 @@ export default function DashboardGaraReale() {
           } else if (pista === "energia") {
             const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
             projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia);
+          } else if (pista === "partnership") {
+            const pCfg = partnershipConfigs.find((c) => c.posCode === pdv.codicePos);
+            const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
+            projCalc = calcPartnershipPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos);
+          } else if (pista === "assicurazioni" || pista === "protecta") {
+            projCalc = pdv.pdvCalc;
           }
           totalPremioProj += projCalc.premioStimato;
           totalPuntiProj += projCalc.puntiTotali;
@@ -522,7 +729,7 @@ export default function DashboardGaraReale() {
           premioStimato: totalPremioProj,
           puntiTotali: totalPuntiProj,
           sogliaRaggiunta: bestSogliaProj,
-          sogliaLabel: sogliaToLabel(bestSogliaProj, pista === "fisso" ? 5 : pista === "mobile" ? 4 : 3),
+          sogliaLabel: sogliaToLabel(bestSogliaProj),
         };
       }
 
@@ -693,7 +900,7 @@ export default function DashboardGaraReale() {
                         <span className="text-sm text-gray-500">pezzi attuali</span>
                       </div>
 
-                      {pista.totalePezzi > 0 && (pista.pista === "mobile" || pista.pista === "fisso" || pista.pista === "energia") && (
+                      {pista.totalePezzi > 0 && pista.calc.sogliaLabel !== "N/A" && (
                         <div className="grid grid-cols-2 gap-2">
                           <div className="rounded-lg border p-2 text-center">
                             <div className="text-xs text-gray-500 mb-0.5">Soglia Attuale</div>
@@ -712,6 +919,25 @@ export default function DashboardGaraReale() {
                             {pista.calcProiezione.puntiTotali > 0 && (
                               <div className="text-xs text-gray-400 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(1)} pt</div>
                             )}
+                          </div>
+                        </div>
+                      )}
+
+                      {pista.totalePezzi > 0 && pista.calc.forecastTarget != null && pista.calc.forecastTarget > 0 && (
+                        <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                            <span className="font-medium">{pista.calc.forecastTarget.toFixed(0)} pt</span>
+                          </div>
+                          <Progress
+                            value={Math.min((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100, 100)}
+                            className="h-1.5"
+                          />
+                          <div className="flex items-center justify-between text-xs">
+                            <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                              {(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(1)} pt
+                            </span>
+                            <span className="text-gray-400">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
                           </div>
                         </div>
                       )}
