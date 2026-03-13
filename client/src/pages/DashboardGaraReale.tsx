@@ -1008,6 +1008,14 @@ export default function DashboardGaraReale() {
                         byPista[item.pista].items.push(item);
                       }
 
+                      const pdvCalcByPista: Record<string, PistaCalcResult> = {};
+                      for (const stat of pistaStats) {
+                        const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
+                        if (match) pdvCalcByPista[stat.pista] = match.pdvCalc;
+                      }
+
+                      const totalPremio = Object.values(pdvCalcByPista).reduce((s, c) => s + c.premioStimato, 0);
+
                       return (
                         <AccordionItem key={pdv.codicePos} value={pdv.codicePos} className="border rounded-lg px-4" data-testid={`pdv-accordion-${pdv.codicePos}`}>
                           <AccordionTrigger className="hover:no-underline py-3">
@@ -1020,6 +1028,11 @@ export default function DashboardGaraReale() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-4 text-sm">
+                                {totalPremio > 0 && (
+                                  <Badge variant="outline" className="text-green-700 border-green-300 text-xs" data-testid={`badge-pdv-premio-${pdv.codicePos}`}>
+                                    {formatEuro(totalPremio)}
+                                  </Badge>
+                                )}
                                 <div className="text-right">
                                   <div className="font-bold">{totalPezzi} pezzi</div>
                                   <div className="text-xs text-gray-400">Proiezione: {proiezione}</div>
@@ -1037,12 +1050,26 @@ export default function DashboardGaraReale() {
                               {Object.entries(byPista).sort(([, a], [, b]) => b.pezzi - a.pezzi).map(([pistaKey, pistaData]) => {
                                 const conf = PISTA_CONFIG[pistaKey as keyof typeof PISTA_CONFIG];
                                 if (!conf) return null;
+                                const calc = pdvCalcByPista[pistaKey];
                                 return (
                                   <div key={pistaKey} className={`rounded-lg border p-3 ${conf.lightColor}`}>
                                     <div className="font-medium text-sm mb-2 flex items-center justify-between">
                                       <span>{conf.label}</span>
                                       <span className="font-bold">{pistaData.pezzi}</span>
                                     </div>
+                                    {calc && calc.sogliaLabel !== "N/A" && (
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <Badge className={`text-[10px] ${getSogliaColor(calc.sogliaLabel)}`} variant="outline">
+                                          {calc.sogliaLabel}
+                                        </Badge>
+                                        {calc.puntiTotali > 0 && (
+                                          <span className="text-[10px] text-gray-500">{calc.puntiTotali.toFixed(1)} pt</span>
+                                        )}
+                                        {calc.premioStimato > 0 && (
+                                          <span className="text-[10px] font-medium text-green-700">{formatEuro(calc.premioStimato)}</span>
+                                        )}
+                                      </div>
+                                    )}
                                     <div className="space-y-1">
                                       {pistaData.items.sort((a, b) => b.pezzi - a.pezzi).map((item) => (
                                         <div key={item.targetCategory} className="flex justify-between text-xs">
@@ -1071,7 +1098,7 @@ export default function DashboardGaraReale() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <RsBreakdown pdvList={mappedData.pdvList} workdayInfo={workdayInfo} />
+                <RsBreakdown pdvList={mappedData.pdvList} workdayInfo={workdayInfo} pistaStats={pistaStats} />
               </CardContent>
             </Card>
           </>
@@ -1081,7 +1108,7 @@ export default function DashboardGaraReale() {
   );
 }
 
-function RsBreakdown({ pdvList, workdayInfo }: { pdvList: PdvData[]; workdayInfo: WorkdayInfo }) {
+function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[]; workdayInfo: WorkdayInfo; pistaStats: Array<{ pista: string; pdvBreakdown: Array<{ codicePos: string; pdvCalc: PistaCalcResult }> }> }) {
   const rsByName = useMemo(() => {
     const grouped: Record<string, { ragioneSociale: string; pdvs: PdvData[]; totalPezzi: number }> = {};
     for (const pdv of pdvList) {
@@ -1114,6 +1141,14 @@ function RsBreakdown({ pdvList, workdayInfo }: { pdvList: PdvData[]; workdayInfo
           byPista[item.pista] = (byPista[item.pista] || 0) + item.pezzi;
         }
 
+        let rsPremioTotale = 0;
+        for (const pdv of rs.pdvs) {
+          for (const stat of pistaStats) {
+            const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
+            if (match) rsPremioTotale += match.pdvCalc.premioStimato;
+          }
+        }
+
         return (
           <AccordionItem key={rs.ragioneSociale} value={rs.ragioneSociale} className="border rounded-lg px-4" data-testid={`rs-accordion-${rs.ragioneSociale}`}>
             <AccordionTrigger className="hover:no-underline py-3">
@@ -1122,9 +1157,16 @@ function RsBreakdown({ pdvList, workdayInfo }: { pdvList: PdvData[]; workdayInfo
                   <div className="font-medium text-sm">{rs.ragioneSociale}</div>
                   <div className="text-xs text-gray-500">{rs.pdvs.length} PDV</div>
                 </div>
-                <div className="text-right">
-                  <div className="font-bold text-sm">{rs.totalPezzi} pezzi</div>
-                  <div className="text-xs text-gray-400">Proiezione: {proiezione}</div>
+                <div className="flex items-center gap-3">
+                  {rsPremioTotale > 0 && (
+                    <Badge variant="outline" className="text-green-700 border-green-300 text-xs">
+                      {formatEuro(rsPremioTotale)}
+                    </Badge>
+                  )}
+                  <div className="text-right">
+                    <div className="font-bold text-sm">{rs.totalPezzi} pezzi</div>
+                    <div className="text-xs text-gray-400">Proiezione: {proiezione}</div>
+                  </div>
                 </div>
               </div>
             </AccordionTrigger>
@@ -1144,13 +1186,36 @@ function RsBreakdown({ pdvList, workdayInfo }: { pdvList: PdvData[]; workdayInfo
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {rs.pdvs.map((pdv) => {
                     const pdvPezzi = pdv.items.reduce((s, i) => s + i.pezzi, 0);
+                    let pdvPremio = 0;
+                    const pdvSoglie: string[] = [];
+                    for (const stat of pistaStats) {
+                      const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
+                      if (match) {
+                        pdvPremio += match.pdvCalc.premioStimato;
+                        if (match.pdvCalc.sogliaLabel !== "N/A" && match.pdvCalc.sogliaLabel !== "Nessuna") {
+                          pdvSoglie.push(`${PISTA_CONFIG[stat.pista as keyof typeof PISTA_CONFIG]?.label || stat.pista}: ${match.pdvCalc.sogliaLabel}`);
+                        }
+                      }
+                    }
                     return (
                       <div key={pdv.codicePos} className="border rounded p-2 text-sm">
                         <div className="flex justify-between">
                           <span className="font-medium">{pdv.nomeNegozio}</span>
-                          <span className="font-bold">{pdvPezzi}</span>
+                          <div className="flex items-center gap-2">
+                            {pdvPremio > 0 && (
+                              <span className="text-xs font-medium text-green-700">{formatEuro(pdvPremio)}</span>
+                            )}
+                            <span className="font-bold">{pdvPezzi}</span>
+                          </div>
                         </div>
                         <div className="text-xs text-gray-400">{pdv.codicePos}</div>
+                        {pdvSoglie.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {pdvSoglie.map((s) => (
+                              <Badge key={s} variant="outline" className="text-[10px] py-0">{s}</Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
