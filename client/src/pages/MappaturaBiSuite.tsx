@@ -349,6 +349,7 @@ function RuleCard({
   if (cond.categoriaBiSuite) conditionParts.push(`Cat: ${cond.categoriaBiSuite}`);
   if (cond.tipologiaBiSuite) conditionParts.push(`Tip: ${cond.tipologiaBiSuite}`);
   if (cond.descrizioneBiSuite) conditionParts.push(`Desc: "${cond.descrizioneBiSuite}"`);
+  if (cond.descrizioneEscludi) conditionParts.push(`Escludi: "${cond.descrizioneEscludi}"`);
   if (cond.clienteTipo) conditionParts.push(`Cliente: ${cond.clienteTipo}`);
   if (cond.domandaTesto) conditionParts.push(`D: "${cond.domandaTesto}" → "${cond.rispostaContiene || ''}"`);
 
@@ -476,14 +477,25 @@ function RuleEditDialog({
             </div>
           </div>
 
-          <div>
-            <Label className="text-xs">Descrizione (contiene)</Label>
-            <Input
-              placeholder="es. LUCE - BOLLETTINO POSTALE"
-              value={draft.conditions.descrizioneBiSuite || ''}
-              onChange={(e) => updateCondition('descrizioneBiSuite', e.target.value)}
-              data-testid="input-descrizione-bisuite"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Descrizione (contiene)</Label>
+              <Input
+                placeholder="es. LUCE - BOLLETTINO POSTALE"
+                value={draft.conditions.descrizioneBiSuite || ''}
+                onChange={(e) => updateCondition('descrizioneBiSuite', e.target.value)}
+                data-testid="input-descrizione-bisuite"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Descrizione (escludi, separare con virgola)</Label>
+              <Input
+                placeholder="es. MIGRAZIONE,ACEA"
+                value={draft.conditions.descrizioneEscludi || ''}
+                onChange={(e) => updateCondition('descrizioneEscludi', e.target.value)}
+                data-testid="input-descrizione-escludi"
+              />
+            </div>
           </div>
 
           <div>

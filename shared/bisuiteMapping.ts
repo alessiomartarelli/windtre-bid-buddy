@@ -4,6 +4,7 @@ export interface BiSuiteMappingCondition {
   categoriaBiSuite?: string;
   tipologiaBiSuite?: string;
   descrizioneBiSuite?: string;
+  descrizioneEscludi?: string;
   clienteTipo?: string;
   domandaTesto?: string;
   rispostaContiene?: string;
@@ -295,6 +296,14 @@ function matchesCondition(
     const descNome = (articolo.descrizione || '').toUpperCase().trim();
     const condDesc = condition.descrizioneBiSuite.toUpperCase().trim();
     if (!descNome.includes(condDesc)) return false;
+  }
+
+  if (condition.descrizioneEscludi) {
+    const descNome = (articolo.descrizione || '').toUpperCase().trim();
+    const esclusioni = condition.descrizioneEscludi.split(',').map(s => s.toUpperCase().trim()).filter(Boolean);
+    for (const escl of esclusioni) {
+      if (descNome.includes(escl)) return false;
+    }
   }
 
   if (condition.clienteTipo) {
