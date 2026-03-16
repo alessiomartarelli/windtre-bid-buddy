@@ -115,6 +115,8 @@ export interface SaleClassification {
   primaryPista: PistaCanvass | null;
 }
 
+const _warnedCategories = new Set<string>();
+
 export function classifySaleArticles(rawData: any): SaleClassification {
   const articoli = rawData?.articoli || [];
   const articles: ClassifiedArticle[] = [];
@@ -147,6 +149,10 @@ export function classifySaleArticles(rawData: any): SaleClassification {
         amountByPista[classification.pista] = (amountByPista[classification.pista] || 0) + prezzo;
       }
     } else if (catNome) {
+      if (typeof window !== 'undefined' && !_warnedCategories.has(catNome)) {
+        _warnedCategories.add(catNome);
+        console.warn(`[BiSuite Classification] Unknown category "${catNome}" — defaulting to "prodotti"`);
+      }
       articles.push({
         categoriaNome: catNome,
         tipologiaNome: tipNome,
