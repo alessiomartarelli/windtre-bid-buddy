@@ -1112,6 +1112,92 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/bisuite-credentials-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+      const orgConfig = await storage.getOrgConfig(profile.organizationId);
+      const cfg = orgConfig?.config as Record<string, any> | undefined;
+      const creds = cfg?.bisuiteCredentials;
+      const configured = !!(creds?.client_id && creds?.client_secret);
+      res.json({ configured });
+    } catch (error: unknown) {
+      console.error("BiSuite credentials status error:", error);
+      res.status(500).json({ error: "Errore nel controllo credenziali" });
+    }
+  });
+
+  app.post("/api/bisuite-fetch", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const orgId = profile.organizationId;
+      const { start_date, end_date } = req.body;
+
+      const orgConfig = await storage.getOrgConfig(orgId);
+      const cfg = orgConfig?.config as Record<string, any> | undefined;
+      const creds = cfg?.bisuiteCredentials;
+      if (!creds?.client_id || !creds?.client_secret) {
+        return res.status(400).json({ error: "Credenziali BiSuite non configurate per la tua organizzazione. Contatta il super admin." });
+      }
+
+      const apiUrlStr = creds.api_url || "https://db1.bisuite.app";
+      const tokenUrl = deriveTokenEndpoint(apiUrlStr);
+      const token = await getBisuiteToken(tokenUrl, creds.client_id, creds.client_secret);
+
+      const salesUrl = new URL(deriveSalesEndpoint(apiUrlStr));
+      if (start_date) salesUrl.searchParams.set("from", start_date);
+      if (end_date) salesUrl.searchParams.set("to", end_date);
+
+      const salesResp = await fetch(salesUrl.toString(), {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (!salesResp.ok) {
+        const errorBody = await salesResp.text();
+        return res.status(salesResp.status).json({ error: `Errore API BiSuite (${salesResp.status})`, details: errorBody });
+      }
+
+      const salesData = await salesResp.json();
+
+      let sales: any[] = [];
+      if (Array.isArray(salesData)) {
+        sales = salesData;
+      } else if (salesData?.data && Array.isArray(salesData.data)) {
+        sales = salesData.data;
+      } else if (salesData?.vendite && Array.isArray(salesData.vendite)) {
+        sales = salesData.vendite;
+      } else if (salesData?.sales && Array.isArray(salesData.sales)) {
+        sales = salesData.sales;
+      }
+
+      const records = sales.map((sale: any) => extractSaleFields(sale, orgId));
+
+      await storage.deleteBisuiteSalesByOrg(orgId);
+      const inserted = await storage.upsertBisuiteSales(records);
+
+      res.json({
+        success: true,
+        message: `Importate ${inserted} vendite`,
+        count: inserted,
+        totalFromApi: sales.length,
+      });
+    } catch (error: unknown) {
+      console.error("BiSuite fetch error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore durante l'importazione", details: msg });
+    }
+  });
+
   app.get("/api/bisuite-sales", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.userId;

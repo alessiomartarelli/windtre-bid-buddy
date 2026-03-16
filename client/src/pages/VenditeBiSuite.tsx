@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { apiUrl } from "@/lib/basePath";
 import { useLocation } from "wouter";
@@ -57,6 +57,9 @@ import {
   Zap,
   Tag,
   Wrench,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -135,6 +138,41 @@ export default function VenditeBiSuite() {
   const [filterPista, setFilterPista] = useState<string>("all");
 
   const orgId = profile?.organizationId || "";
+  const queryClient = useQueryClient();
+  const [fetchResult, setFetchResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const { data: credStatus } = useQuery<{ configured: boolean }>({
+    queryKey: ["/api/bisuite-credentials-status"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/bisuite-credentials-status"), { credentials: "include" });
+      if (!res.ok) return { configured: false };
+      return res.json();
+    },
+    enabled: !!orgId,
+  });
+
+  const fetchMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(apiUrl("/api/bisuite-fetch"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ start_date: fromDate, end_date: toDate }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Errore durante l'importazione");
+      return data;
+    },
+    onSuccess: (data) => {
+      setFetchResult({ success: true, message: data.message || `Importate ${data.count} vendite` });
+      queryClient.invalidateQueries({ queryKey: ["/api/bisuite-sales"] });
+      setTimeout(() => setFetchResult(null), 5000);
+    },
+    onError: (error: Error) => {
+      setFetchResult({ success: false, message: error.message });
+      setTimeout(() => setFetchResult(null), 8000);
+    },
+  });
 
   const { data, isLoading } = useQuery<{ sales: BisuiteSale[]; count: number }>({
     queryKey: ["/api/bisuite-sales", orgId, fromDate, toDate],
@@ -305,6 +343,13 @@ export default function VenditeBiSuite() {
       <AppNavbar title="Incentive W3" />
 
       <main className="container mx-auto px-4 py-6 space-y-6">
+        {fetchResult && (
+          <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${fetchResult.success ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+            {fetchResult.success ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
+            {fetchResult.message}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-4 items-end">
           <div className="space-y-1">
             <Label className="text-xs">Da</Label>
@@ -326,6 +371,27 @@ export default function VenditeBiSuite() {
               data-testid="input-to-date"
             />
           </div>
+          {credStatus?.configured ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchMutation.mutate()}
+              disabled={fetchMutation.isPending}
+              data-testid="button-fetch-bisuite"
+            >
+              {fetchMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1.5" />
+              )}
+              {fetchMutation.isPending ? "Importazione..." : "Aggiorna Vendite"}
+            </Button>
+          ) : credStatus && !credStatus.configured ? (
+            <div className="flex items-center gap-1.5 text-xs text-amber-600">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <span>Credenziali BiSuite non configurate</span>
+            </div>
+          ) : null}
           <div className="space-y-1 flex-1 min-w-[200px]">
             <Label className="text-xs">Cerca</Label>
             <div className="relative">
