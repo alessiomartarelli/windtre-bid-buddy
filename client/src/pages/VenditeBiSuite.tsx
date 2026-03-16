@@ -479,9 +479,6 @@ export default function VenditeBiSuite() {
                     </Badge>
                   </div>
                   <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.prodotti)}</p>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    {Object.keys(globalCounts.prodottiByCategory).length} categorie vendute
-                  </p>
                   <div className="space-y-1">
                     {Object.entries(globalCounts.prodottiByCategory)
                       .sort(([, a], [, b]) => b - a)
@@ -506,9 +503,6 @@ export default function VenditeBiSuite() {
                     </Badge>
                   </div>
                   <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.servizi)}</p>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    {Object.keys(globalCounts.serviziByLabel).length} etichette
-                  </p>
                   <div className="space-y-1">
                     {Object.entries(globalCounts.serviziByLabel)
                       .sort(([, a], [, b]) => b - a)
