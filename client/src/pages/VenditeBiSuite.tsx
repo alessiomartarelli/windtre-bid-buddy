@@ -168,8 +168,8 @@ export default function VenditeBiSuite() {
     const byPista: Partial<Record<PistaCanvass, number>> = {};
     const amtByPista: Partial<Record<PistaCanvass, number>> = {};
     let totalArticles = 0;
-    const prodottiCategories = new Set<string>();
-    const serviziLabels = new Set<string>();
+    const prodottiByCategory: Record<string, number> = {};
+    const serviziByLabel: Record<string, number> = {};
 
     saleClassifications.forEach((sc) => {
       byType.canvass += sc.countByType.canvass;
@@ -182,10 +182,11 @@ export default function VenditeBiSuite() {
 
       for (const art of sc.articles) {
         if (art.type === 'prodotti' && art.categoriaNome) {
-          prodottiCategories.add(art.categoriaNome.toUpperCase());
+          const key = art.categoriaNome.toUpperCase();
+          prodottiByCategory[key] = (prodottiByCategory[key] || 0) + 1;
         }
         if (art.type === 'servizi' && art.descrizione) {
-          serviziLabels.add(art.descrizione);
+          serviziByLabel[art.descrizione] = (serviziByLabel[art.descrizione] || 0) + 1;
         }
       }
 
@@ -197,7 +198,7 @@ export default function VenditeBiSuite() {
       }
     });
 
-    return { byType, amtByType, byPista, amtByPista, totalArticles, prodottiCategoryCount: prodottiCategories.size, serviziLabelCount: serviziLabels.size };
+    return { byType, amtByType, byPista, amtByPista, totalArticles, prodottiByCategory, serviziByLabel };
   }, [saleClassifications]);
 
   const pdvSummaries = useMemo(() => {
@@ -478,9 +479,19 @@ export default function VenditeBiSuite() {
                     </Badge>
                   </div>
                   <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.prodotti)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {globalCounts.prodottiCategoryCount} categorie vendute
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {Object.keys(globalCounts.prodottiByCategory).length} categorie vendute
                   </p>
+                  <div className="space-y-1">
+                    {Object.entries(globalCounts.prodottiByCategory)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([cat, count]) => (
+                        <div key={cat} className="flex items-center justify-between text-xs">
+                          <span className="truncate mr-2 text-muted-foreground">{cat}</span>
+                          <Badge variant="outline" className="text-[10px] shrink-0">{count}</Badge>
+                        </div>
+                      ))}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="border-l-4 border-l-cyan-500">
@@ -495,9 +506,19 @@ export default function VenditeBiSuite() {
                     </Badge>
                   </div>
                   <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.servizi)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {globalCounts.serviziLabelCount} etichette
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {Object.keys(globalCounts.serviziByLabel).length} etichette
                   </p>
+                  <div className="space-y-1">
+                    {Object.entries(globalCounts.serviziByLabel)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([label, count]) => (
+                        <div key={label} className="flex items-center justify-between text-xs">
+                          <span className="truncate mr-2 text-muted-foreground">{label}</span>
+                          <Badge variant="outline" className="text-[10px] shrink-0">{count}</Badge>
+                        </div>
+                      ))}
+                  </div>
                 </CardContent>
               </Card>
             </div>
