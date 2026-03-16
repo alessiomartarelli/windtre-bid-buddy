@@ -97,7 +97,9 @@ interface PdvSummary {
   totaleVendite: number;
   totaleImporto: number;
   countByType: Record<ArticleType, number>;
+  amountByType: Record<ArticleType, number>;
   countByPista: Partial<Record<PistaCanvass, number>>;
+  amountByPista: Partial<Record<PistaCanvass, number>>;
   vendite: BisuiteSale[];
 }
 
@@ -162,21 +164,29 @@ export default function VenditeBiSuite() {
 
   const globalCounts = useMemo(() => {
     const byType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
+    const amtByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
     const byPista: Partial<Record<PistaCanvass, number>> = {};
+    const amtByPista: Partial<Record<PistaCanvass, number>> = {};
     let totalArticles = 0;
 
     saleClassifications.forEach((sc) => {
       byType.canvass += sc.countByType.canvass;
       byType.prodotti += sc.countByType.prodotti;
       byType.servizi += sc.countByType.servizi;
+      amtByType.canvass += sc.amountByType.canvass;
+      amtByType.prodotti += sc.amountByType.prodotti;
+      amtByType.servizi += sc.amountByType.servizi;
       totalArticles += sc.articles.length;
 
       for (const [p, c] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
         byPista[p] = (byPista[p] || 0) + c;
       }
+      for (const [p, a] of Object.entries(sc.amountByPista) as [PistaCanvass, number][]) {
+        amtByPista[p] = (amtByPista[p] || 0) + a;
+      }
     });
 
-    return { byType, byPista, totalArticles };
+    return { byType, amtByType, byPista, amtByPista, totalArticles };
   }, [saleClassifications]);
 
   const pdvSummaries = useMemo(() => {
@@ -191,7 +201,9 @@ export default function VenditeBiSuite() {
           totaleVendite: 0,
           totaleImporto: 0,
           countByType: { canvass: 0, prodotti: 0, servizi: 0 },
+          amountByType: { canvass: 0, prodotti: 0, servizi: 0 },
           countByPista: {},
+          amountByPista: {},
           vendite: [],
         };
       }
@@ -204,8 +216,14 @@ export default function VenditeBiSuite() {
         map[code].countByType.canvass += sc.countByType.canvass;
         map[code].countByType.prodotti += sc.countByType.prodotti;
         map[code].countByType.servizi += sc.countByType.servizi;
+        map[code].amountByType.canvass += sc.amountByType.canvass;
+        map[code].amountByType.prodotti += sc.amountByType.prodotti;
+        map[code].amountByType.servizi += sc.amountByType.servizi;
         for (const [p, c] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
           map[code].countByPista[p] = (map[code].countByPista[p] || 0) + c;
+        }
+        for (const [p, a] of Object.entries(sc.amountByPista) as [PistaCanvass, number][]) {
+          map[code].amountByPista[p] = (map[code].amountByPista[p] || 0) + a;
         }
       }
     });
@@ -407,7 +425,7 @@ export default function VenditeBiSuite() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="border-l-4 border-l-orange-500">
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <Tag className="h-4 w-4 text-orange-600" />
                       <span className="font-semibold text-sm">Canvass</span>
@@ -416,6 +434,7 @@ export default function VenditeBiSuite() {
                       {globalCounts.byType.canvass}
                     </Badge>
                   </div>
+                  <p className="text-xs text-green-600 font-medium mb-3">{formatCurrency(globalCounts.amtByType.canvass)}</p>
                   <div className="space-y-1.5">
                     {(Object.entries(globalCounts.byPista) as [PistaCanvass, number][])
                       .sort(([, a], [, b]) => b - a)
@@ -425,9 +444,12 @@ export default function VenditeBiSuite() {
                             {PISTA_ICONS[pista]}
                             <span>{PISTA_CANVASS_LABELS[pista]}</span>
                           </div>
-                          <Badge variant="outline" className={PISTA_CANVASS_COLORS[pista] + " text-[10px]"}>
-                            {count}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-muted-foreground">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span>
+                            <Badge variant="outline" className={PISTA_CANVASS_COLORS[pista] + " text-[10px]"}>
+                              {count}
+                            </Badge>
+                          </div>
                         </div>
                       ))}
                   </div>
@@ -435,7 +457,7 @@ export default function VenditeBiSuite() {
               </Card>
               <Card className="border-l-4 border-l-slate-400">
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <Package className="h-4 w-4 text-slate-600" />
                       <span className="font-semibold text-sm">Prodotti</span>
@@ -444,14 +466,15 @@ export default function VenditeBiSuite() {
                       {globalCounts.byType.prodotti}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.prodotti)}</p>
+                  <p className="text-xs text-muted-foreground">
                     Telefonia, modem, accessori, SIM, ricariche, ecc.
                   </p>
                 </CardContent>
               </Card>
               <Card className="border-l-4 border-l-cyan-500">
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <Wrench className="h-4 w-4 text-cyan-600" />
                       <span className="font-semibold text-sm">Servizi</span>
@@ -460,7 +483,8 @@ export default function VenditeBiSuite() {
                       {globalCounts.byType.servizi}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.servizi)}</p>
+                  <p className="text-xs text-muted-foreground">
                     Assistenza, spedizioni
                   </p>
                 </CardContent>
@@ -532,16 +556,19 @@ export default function VenditeBiSuite() {
                                     >
                                       {PISTA_ICONS[pista]}
                                       {PISTA_CANVASS_LABELS[pista]}: {count}
+                                      <span className="text-[10px] opacity-75">({formatCurrency(pdv.amountByPista[pista] || 0)})</span>
                                     </Badge>
                                   ))}
                                 {pdv.countByType.prodotti > 0 && (
                                   <Badge className={TYPE_COLORS.prodotti + " text-xs"}>
                                     Prodotti: {pdv.countByType.prodotti}
+                                    <span className="text-[10px] opacity-75 ml-1">({formatCurrency(pdv.amountByType.prodotti)})</span>
                                   </Badge>
                                 )}
                                 {pdv.countByType.servizi > 0 && (
                                   <Badge className={TYPE_COLORS.servizi + " text-xs"}>
                                     Servizi: {pdv.countByType.servizi}
+                                    <span className="text-[10px] opacity-75 ml-1">({formatCurrency(pdv.amountByType.servizi)})</span>
                                   </Badge>
                                 )}
                               </div>

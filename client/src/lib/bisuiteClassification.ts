@@ -69,7 +69,7 @@ export function classifyCategory(categoryName: string): CategoryClassification |
 export const PISTA_CANVASS_LABELS: Record<PistaCanvass, string> = {
   mobile: 'Mobile',
   fisso: 'Fisso',
-  cb: 'Customer Base',
+  cb: 'CB',
   assicurazioni: 'Assicurazioni',
   protecta: 'Protecta',
   energia: 'Energia',
@@ -102,12 +102,15 @@ export interface ClassifiedArticle {
   descrizione: string;
   type: ArticleType;
   pista?: PistaCanvass;
+  prezzo: number;
 }
 
 export interface SaleClassification {
   articles: ClassifiedArticle[];
   countByType: Record<ArticleType, number>;
+  amountByType: Record<ArticleType, number>;
   countByPista: Partial<Record<PistaCanvass, number>>;
+  amountByPista: Partial<Record<PistaCanvass, number>>;
   hasCanvass: boolean;
   primaryPista: PistaCanvass | null;
 }
@@ -116,12 +119,15 @@ export function classifySaleArticles(rawData: any): SaleClassification {
   const articoli = rawData?.articoli || [];
   const articles: ClassifiedArticle[] = [];
   const countByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
+  const amountByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
   const countByPista: Partial<Record<PistaCanvass, number>> = {};
+  const amountByPista: Partial<Record<PistaCanvass, number>> = {};
 
   for (const art of articoli) {
     const catNome = (art.categoria?.nome || '').trim();
     const tipNome = (art.tipologia?.nome || '').trim();
     const desc = (art.descrizione || '').trim();
+    const prezzo = parseFloat(art.dettaglio?.prezzo || '0') || 0;
     const classification = classifyCategory(catNome);
 
     if (classification) {
@@ -131,11 +137,14 @@ export function classifySaleArticles(rawData: any): SaleClassification {
         descrizione: desc,
         type: classification.type,
         pista: classification.pista,
+        prezzo,
       };
       articles.push(classified);
       countByType[classification.type]++;
+      amountByType[classification.type] += prezzo;
       if (classification.pista) {
         countByPista[classification.pista] = (countByPista[classification.pista] || 0) + 1;
+        amountByPista[classification.pista] = (amountByPista[classification.pista] || 0) + prezzo;
       }
     } else if (catNome) {
       articles.push({
@@ -143,8 +152,10 @@ export function classifySaleArticles(rawData: any): SaleClassification {
         tipologiaNome: tipNome,
         descrizione: desc,
         type: 'prodotti',
+        prezzo,
       });
       countByType.prodotti++;
+      amountByType.prodotti += prezzo;
     }
   }
 
@@ -156,7 +167,9 @@ export function classifySaleArticles(rawData: any): SaleClassification {
   return {
     articles,
     countByType,
+    amountByType,
     countByPista,
+    amountByPista,
     hasCanvass: countByType.canvass > 0,
     primaryPista,
   };
