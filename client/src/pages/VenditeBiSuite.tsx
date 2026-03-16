@@ -168,6 +168,8 @@ export default function VenditeBiSuite() {
     const byPista: Partial<Record<PistaCanvass, number>> = {};
     const amtByPista: Partial<Record<PistaCanvass, number>> = {};
     let totalArticles = 0;
+    const prodottiCategories = new Set<string>();
+    const serviziLabels = new Set<string>();
 
     saleClassifications.forEach((sc) => {
       byType.canvass += sc.countByType.canvass;
@@ -178,6 +180,15 @@ export default function VenditeBiSuite() {
       amtByType.servizi += sc.amountByType.servizi;
       totalArticles += sc.articles.length;
 
+      for (const art of sc.articles) {
+        if (art.type === 'prodotti' && art.categoriaNome) {
+          prodottiCategories.add(art.categoriaNome.toUpperCase());
+        }
+        if (art.type === 'servizi' && art.descrizione) {
+          serviziLabels.add(art.descrizione);
+        }
+      }
+
       for (const [p, c] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
         byPista[p] = (byPista[p] || 0) + c;
       }
@@ -186,7 +197,7 @@ export default function VenditeBiSuite() {
       }
     });
 
-    return { byType, amtByType, byPista, amtByPista, totalArticles };
+    return { byType, amtByType, byPista, amtByPista, totalArticles, prodottiCategoryCount: prodottiCategories.size, serviziLabelCount: serviziLabels.size };
   }, [saleClassifications]);
 
   const pdvSummaries = useMemo(() => {
@@ -468,7 +479,7 @@ export default function VenditeBiSuite() {
                   </div>
                   <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.prodotti)}</p>
                   <p className="text-xs text-muted-foreground">
-                    Telefonia, modem, accessori, SIM, ricariche, ecc.
+                    {globalCounts.prodottiCategoryCount} categorie vendute
                   </p>
                 </CardContent>
               </Card>
@@ -485,7 +496,7 @@ export default function VenditeBiSuite() {
                   </div>
                   <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.servizi)}</p>
                   <p className="text-xs text-muted-foreground">
-                    Assistenza, spedizioni
+                    {globalCounts.serviziLabelCount} etichette
                   </p>
                 </CardContent>
               </Card>
