@@ -39,7 +39,6 @@ import {
 import {
   ShoppingCart,
   Store,
-  ArrowLeft,
   Search,
   Filter,
   Package,
@@ -50,10 +49,29 @@ import {
   TrendingUp,
   Loader2,
   BarChart3,
+  Smartphone,
+  Wifi,
+  Users,
+  Shield,
+  Lock,
+  Zap,
+  Tag,
+  Wrench,
 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { AppNavbar } from "@/components/AppNavbar";
+import {
+  type ArticleType,
+  type PistaCanvass,
+  type SaleClassification,
+  classifySaleArticles,
+  classifyCategory,
+  PISTA_CANVASS_LABELS,
+  PISTA_CANVASS_COLORS,
+  TYPE_LABELS,
+  TYPE_COLORS,
+} from "@/lib/bisuiteClassification";
 
 interface BisuiteSale {
   id: string;
@@ -78,9 +96,19 @@ interface PdvSummary {
   ragioneSociale: string;
   totaleVendite: number;
   totaleImporto: number;
-  categorie: Record<string, number>;
+  countByType: Record<ArticleType, number>;
+  countByPista: Partial<Record<PistaCanvass, number>>;
   vendite: BisuiteSale[];
 }
+
+const PISTA_ICONS: Record<PistaCanvass, React.ReactNode> = {
+  mobile: <Smartphone className="h-3.5 w-3.5" />,
+  fisso: <Wifi className="h-3.5 w-3.5" />,
+  cb: <Users className="h-3.5 w-3.5" />,
+  assicurazioni: <Shield className="h-3.5 w-3.5" />,
+  protecta: <Lock className="h-3.5 w-3.5" />,
+  energia: <Zap className="h-3.5 w-3.5" />,
+};
 
 function getDefaultDates() {
   const now = new Date();
@@ -101,7 +129,8 @@ export default function VenditeBiSuite() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPdv, setSelectedPdv] = useState<string | null>(null);
   const [selectedSale, setSelectedSale] = useState<BisuiteSale | null>(null);
-  const [filterCategoria, setFilterCategoria] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterPista, setFilterPista] = useState<string>("all");
 
   const orgId = profile?.organizationId || "";
 
@@ -123,15 +152,32 @@ export default function VenditeBiSuite() {
 
   const sales = data?.sales || [];
 
-  const allCategories = useMemo(() => {
-    const cats = new Set<string>();
+  const saleClassifications = useMemo(() => {
+    const map = new Map<string, SaleClassification>();
     sales.forEach((s) => {
-      if (s.categorieArticoli) {
-        s.categorieArticoli.split(", ").forEach((c) => cats.add(c));
+      map.set(s.id, classifySaleArticles(s.rawData));
+    });
+    return map;
+  }, [sales]);
+
+  const globalCounts = useMemo(() => {
+    const byType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
+    const byPista: Partial<Record<PistaCanvass, number>> = {};
+    let totalArticles = 0;
+
+    saleClassifications.forEach((sc) => {
+      byType.canvass += sc.countByType.canvass;
+      byType.prodotti += sc.countByType.prodotti;
+      byType.servizi += sc.countByType.servizi;
+      totalArticles += sc.articles.length;
+
+      for (const [p, c] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
+        byPista[p] = (byPista[p] || 0) + c;
       }
     });
-    return Array.from(cats).sort();
-  }, [sales]);
+
+    return { byType, byPista, totalArticles };
+  }, [saleClassifications]);
 
   const pdvSummaries = useMemo(() => {
     const map: Record<string, PdvSummary> = {};
@@ -144,7 +190,8 @@ export default function VenditeBiSuite() {
           ragioneSociale: sale.ragioneSociale || "",
           totaleVendite: 0,
           totaleImporto: 0,
-          categorie: {},
+          countByType: { canvass: 0, prodotti: 0, servizi: 0 },
+          countByPista: {},
           vendite: [],
         };
       }
@@ -152,24 +199,38 @@ export default function VenditeBiSuite() {
       map[code].totaleImporto += parseFloat(sale.totale || "0") || 0;
       map[code].vendite.push(sale);
 
-      if (sale.categorieArticoli) {
-        sale.categorieArticoli.split(", ").forEach((cat) => {
-          map[code].categorie[cat] = (map[code].categorie[cat] || 0) + 1;
-        });
+      const sc = saleClassifications.get(sale.id);
+      if (sc) {
+        map[code].countByType.canvass += sc.countByType.canvass;
+        map[code].countByType.prodotti += sc.countByType.prodotti;
+        map[code].countByType.servizi += sc.countByType.servizi;
+        for (const [p, c] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
+          map[code].countByPista[p] = (map[code].countByPista[p] || 0) + c;
+        }
       }
     });
     return Object.values(map).sort((a, b) => b.totaleVendite - a.totaleVendite);
-  }, [sales]);
+  }, [sales, saleClassifications]);
 
   const filteredSales = useMemo(() => {
     let filtered = selectedPdv
       ? sales.filter((s) => (s.codicePos || "N/D") === selectedPdv)
       : sales;
 
-    if (filterCategoria !== "all") {
-      filtered = filtered.filter(
-        (s) => s.categorieArticoli?.includes(filterCategoria)
-      );
+    if (filterType !== "all") {
+      filtered = filtered.filter((s) => {
+        const sc = saleClassifications.get(s.id);
+        if (!sc) return false;
+        return sc.countByType[filterType as ArticleType] > 0;
+      });
+    }
+
+    if (filterPista !== "all") {
+      filtered = filtered.filter((s) => {
+        const sc = saleClassifications.get(s.id);
+        if (!sc) return false;
+        return (sc.countByPista[filterPista as PistaCanvass] || 0) > 0;
+      });
     }
 
     if (searchTerm) {
@@ -186,7 +247,7 @@ export default function VenditeBiSuite() {
     }
 
     return filtered;
-  }, [sales, selectedPdv, filterCategoria, searchTerm]);
+  }, [sales, selectedPdv, filterType, filterPista, searchTerm, saleClassifications]);
 
   const totaleImporto = sales.reduce(
     (sum, s) => sum + (parseFloat(s.totale || "0") || 0),
@@ -248,22 +309,38 @@ export default function VenditeBiSuite() {
               />
             </div>
           </div>
-          <div className="space-y-1 min-w-[180px]">
-            <Label className="text-xs">Categoria</Label>
-            <Select value={filterCategoria} onValueChange={setFilterCategoria}>
-              <SelectTrigger data-testid="select-categoria">
-                <SelectValue placeholder="Tutte" />
+          <div className="space-y-1 min-w-[160px]">
+            <Label className="text-xs">Tipo</Label>
+            <Select value={filterType} onValueChange={(v) => { setFilterType(v); if (v !== 'canvass') setFilterPista('all'); }}>
+              <SelectTrigger data-testid="select-tipo">
+                <SelectValue placeholder="Tutti" />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
-                <SelectItem value="all">Tutte le categorie</SelectItem>
-                {allCategories.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
-                  </SelectItem>
-                ))}
+                <SelectItem value="all">Tutti i tipi</SelectItem>
+                <SelectItem value="canvass">Canvass</SelectItem>
+                <SelectItem value="prodotti">Prodotti</SelectItem>
+                <SelectItem value="servizi">Servizi</SelectItem>
               </SelectContent>
             </Select>
           </div>
+          {(filterType === "canvass" || filterType === "all") && (
+            <div className="space-y-1 min-w-[180px]">
+              <Label className="text-xs">Pista</Label>
+              <Select value={filterPista} onValueChange={setFilterPista}>
+                <SelectTrigger data-testid="select-pista">
+                  <SelectValue placeholder="Tutte" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  <SelectItem value="all">Tutte le piste</SelectItem>
+                  {(Object.keys(PISTA_CANVASS_LABELS) as PistaCanvass[]).map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {PISTA_CANVASS_LABELS[p]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {selectedPdv && (
             <Button
               variant="outline"
@@ -327,6 +404,69 @@ export default function VenditeBiSuite() {
               </Card>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="border-l-4 border-l-orange-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Tag className="h-4 w-4 text-orange-600" />
+                      <span className="font-semibold text-sm">Canvass</span>
+                    </div>
+                    <Badge className={TYPE_COLORS.canvass + " text-sm font-bold"}>
+                      {globalCounts.byType.canvass}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1.5">
+                    {(Object.entries(globalCounts.byPista) as [PistaCanvass, number][])
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([pista, count]) => (
+                        <div key={pista} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5">
+                            {PISTA_ICONS[pista]}
+                            <span>{PISTA_CANVASS_LABELS[pista]}</span>
+                          </div>
+                          <Badge variant="outline" className={PISTA_CANVASS_COLORS[pista] + " text-[10px]"}>
+                            {count}
+                          </Badge>
+                        </div>
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-l-4 border-l-slate-400">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-4 w-4 text-slate-600" />
+                      <span className="font-semibold text-sm">Prodotti</span>
+                    </div>
+                    <Badge className={TYPE_COLORS.prodotti + " text-sm font-bold"}>
+                      {globalCounts.byType.prodotti}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Telefonia, modem, accessori, SIM, ricariche, ecc.
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-l-4 border-l-cyan-500">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Wrench className="h-4 w-4 text-cyan-600" />
+                      <span className="font-semibold text-sm">Servizi</span>
+                    </div>
+                    <Badge className={TYPE_COLORS.servizi + " text-sm font-bold"}>
+                      {globalCounts.byType.servizi}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Assistenza, spedizioni
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
             {!selectedPdv && (
               <Card>
                 <CardHeader>
@@ -382,17 +522,28 @@ export default function VenditeBiSuite() {
                           <AccordionContent>
                             <div className="space-y-3 pb-2">
                               <div className="flex flex-wrap gap-2">
-                                {Object.entries(pdv.categorie)
+                                {(Object.entries(pdv.countByPista) as [PistaCanvass, number][])
+                                  .filter(([, c]) => c > 0)
                                   .sort(([, a], [, b]) => b - a)
-                                  .map(([cat, count]) => (
+                                  .map(([pista, count]) => (
                                     <Badge
-                                      key={cat}
-                                      variant="secondary"
-                                      className="text-xs"
+                                      key={pista}
+                                      className={PISTA_CANVASS_COLORS[pista] + " text-xs gap-1"}
                                     >
-                                      {cat}: {count}
+                                      {PISTA_ICONS[pista]}
+                                      {PISTA_CANVASS_LABELS[pista]}: {count}
                                     </Badge>
                                   ))}
+                                {pdv.countByType.prodotti > 0 && (
+                                  <Badge className={TYPE_COLORS.prodotti + " text-xs"}>
+                                    Prodotti: {pdv.countByType.prodotti}
+                                  </Badge>
+                                )}
+                                {pdv.countByType.servizi > 0 && (
+                                  <Badge className={TYPE_COLORS.servizi + " text-xs"}>
+                                    Servizi: {pdv.countByType.servizi}
+                                  </Badge>
+                                )}
                               </div>
                               <Button
                                 variant="outline"
@@ -439,75 +590,65 @@ export default function VenditeBiSuite() {
                           <TableHead>Negozio</TableHead>
                           <TableHead>Addetto</TableHead>
                           <TableHead>Cliente</TableHead>
-                          <TableHead>Categorie</TableHead>
+                          <TableHead>Pista / Tipo</TableHead>
                           <TableHead>Stato</TableHead>
                           <TableHead className="text-right">Importo</TableHead>
                           <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredSales.map((sale) => (
-                          <TableRow
-                            key={sale.id}
-                            className="cursor-pointer hover:bg-muted/50"
-                            onClick={() => setSelectedSale(sale)}
-                            data-testid={`row-sale-${sale.bisuiteId}`}
-                          >
-                            <TableCell className="text-xs whitespace-nowrap">
-                              {formatDate(sale.dataVendita)}
-                            </TableCell>
-                            <TableCell>
-                              <div className="text-sm font-medium">
-                                {sale.nomeNegozio || "-"}
-                              </div>
-                              <div className="text-xs text-muted-foreground font-mono">
-                                {sale.codicePos || "-"}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {sale.nomeAddetto || "-"}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {sale.nomeCliente || "-"}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-wrap gap-1">
-                                {(sale.categorieArticoli || "")
-                                  .split(", ")
-                                  .filter(Boolean)
-                                  .map((cat) => (
-                                    <Badge
-                                      key={cat}
-                                      variant="secondary"
-                                      className="text-[10px] px-1.5 py-0"
-                                    >
-                                      {cat}
-                                    </Badge>
-                                  ))}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  sale.stato === "FINALIZZATA IN CASSA"
-                                    ? "default"
-                                    : "outline"
-                                }
-                                className="text-[10px]"
-                              >
-                                {sale.stato || "-"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {formatCurrency(
-                                parseFloat(sale.totale || "0") || 0
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {filteredSales.map((sale) => {
+                          const sc = saleClassifications.get(sale.id);
+                          return (
+                            <TableRow
+                              key={sale.id}
+                              className="cursor-pointer hover:bg-muted/50"
+                              onClick={() => setSelectedSale(sale)}
+                              data-testid={`row-sale-${sale.bisuiteId}`}
+                            >
+                              <TableCell className="text-xs whitespace-nowrap">
+                                {formatDate(sale.dataVendita)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm font-medium">
+                                  {sale.nomeNegozio || "-"}
+                                </div>
+                                <div className="text-xs text-muted-foreground font-mono">
+                                  {sale.codicePos || "-"}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {sale.nomeAddetto || "-"}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {sale.nomeCliente || "-"}
+                              </TableCell>
+                              <TableCell>
+                                <SalePistaBadges classification={sc} />
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    sale.stato === "FINALIZZATA IN CASSA"
+                                      ? "default"
+                                      : "outline"
+                                  }
+                                  className="text-[10px]"
+                                >
+                                  {sale.stato || "-"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {formatCurrency(
+                                  parseFloat(sale.totale || "0") || 0
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </ScrollArea>
@@ -520,17 +661,53 @@ export default function VenditeBiSuite() {
 
       <SaleDetailDialog
         sale={selectedSale}
+        classification={selectedSale ? saleClassifications.get(selectedSale.id) : undefined}
         onClose={() => setSelectedSale(null)}
       />
     </div>
   );
 }
 
+function SalePistaBadges({ classification }: { classification?: SaleClassification }) {
+  if (!classification) return <span className="text-xs text-muted-foreground">-</span>;
+
+  const pistaBadges = (Object.entries(classification.countByPista) as [PistaCanvass, number][])
+    .filter(([, c]) => c > 0)
+    .sort(([, a], [, b]) => b - a);
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {pistaBadges.map(([pista, count]) => (
+        <Badge
+          key={pista}
+          className={PISTA_CANVASS_COLORS[pista] + " text-[10px] px-1.5 py-0 gap-0.5"}
+        >
+          {PISTA_ICONS[pista]}
+          {PISTA_CANVASS_LABELS[pista]}
+          {count > 1 && <span className="ml-0.5 font-bold">x{count}</span>}
+        </Badge>
+      ))}
+      {classification.countByType.prodotti > 0 && (
+        <Badge className={TYPE_COLORS.prodotti + " text-[10px] px-1.5 py-0"}>
+          Prod. {classification.countByType.prodotti > 1 ? `x${classification.countByType.prodotti}` : ""}
+        </Badge>
+      )}
+      {classification.countByType.servizi > 0 && (
+        <Badge className={TYPE_COLORS.servizi + " text-[10px] px-1.5 py-0"}>
+          Serv. {classification.countByType.servizi > 1 ? `x${classification.countByType.servizi}` : ""}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
 function SaleDetailDialog({
   sale,
+  classification,
   onClose,
 }: {
   sale: BisuiteSale | null;
+  classification?: SaleClassification;
   onClose: () => void;
 }) {
   if (!sale) return null;
@@ -539,7 +716,6 @@ function SaleDetailDialog({
   const articoli = raw.articoli || [];
   const pagamento = raw.pagamento || {};
   const cliente = raw.cliente || {};
-  const addetto = raw.addetto || {};
 
   const formatCurrency = (val: string | number) => {
     const num = typeof val === "string" ? parseFloat(val) : val;
@@ -599,6 +775,12 @@ function SaleDetailDialog({
             />
           </div>
 
+          {classification && (
+            <div className="flex flex-wrap gap-2">
+              <SalePistaBadges classification={classification} />
+            </div>
+          )}
+
           {cliente.nominativo && (
             <Card>
               <CardHeader className="py-3 px-4">
@@ -651,41 +833,66 @@ function SaleDetailDialog({
                       <TableHead>Descrizione</TableHead>
                       <TableHead>Categoria</TableHead>
                       <TableHead>Tipologia</TableHead>
+                      <TableHead>Pista</TableHead>
                       <TableHead className="text-right">Canone</TableHead>
                       <TableHead className="text-right">Prezzo</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {articoli.map((art: any, idx: number) => (
-                      <TableRow key={idx}>
-                        <TableCell className="text-sm font-medium">
-                          {art.descrizione || art.codice || "-"}
-                          {art.marca && (
-                            <span className="text-xs text-muted-foreground ml-1">
-                              ({art.marca})
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="text-xs">
-                            {art.categoria?.nome || "-"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {art.tipologia?.nome || "-"}
-                        </TableCell>
-                        <TableCell className="text-right text-sm">
-                          {art.dettaglio?.canone &&
-                          art.dettaglio.canone !== "0" &&
-                          art.dettaglio.canone !== "0.00"
-                            ? `${formatCurrency(art.dettaglio.canone)}/mese`
-                            : "-"}
-                        </TableCell>
-                        <TableCell className="text-right text-sm font-medium">
-                          {formatCurrency(art.dettaglio?.prezzo || "0")}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {articoli.map((art: any, idx: number) => {
+                      const catNome = (art.categoria?.nome || '').trim();
+                      const cls = classifyCategory(catNome);
+                      return (
+                        <TableRow key={idx}>
+                          <TableCell className="text-sm font-medium">
+                            {art.descrizione || art.codice || "-"}
+                            {art.marca && (
+                              <span className="text-xs text-muted-foreground ml-1">
+                                ({art.marca})
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {cls ? (
+                              <Badge className={cls.pista ? PISTA_CANVASS_COLORS[cls.pista] : TYPE_COLORS[cls.type] + " text-xs"}>
+                                {art.categoria?.nome || "-"}
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs">
+                                {art.categoria?.nome || "-"}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {art.tipologia?.nome || "-"}
+                          </TableCell>
+                          <TableCell>
+                            {cls?.pista ? (
+                              <Badge className={PISTA_CANVASS_COLORS[cls.pista] + " text-[10px] gap-0.5"}>
+                                {PISTA_ICONS[cls.pista]}
+                                {PISTA_CANVASS_LABELS[cls.pista]}
+                              </Badge>
+                            ) : cls ? (
+                              <Badge className={TYPE_COLORS[cls.type] + " text-[10px]"}>
+                                {TYPE_LABELS[cls.type]}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {art.dettaglio?.canone &&
+                            art.dettaglio.canone !== "0" &&
+                            art.dettaglio.canone !== "0.00"
+                              ? `${formatCurrency(art.dettaglio.canone)}/mese`
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-medium">
+                            {formatCurrency(art.dettaglio?.prezzo || "0")}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
 
