@@ -518,7 +518,7 @@ export default function ConfigurazioneGara() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[2024, 2025, 2026, 2027].map(y => (
+                {Array.from({ length: 6 }, (_, i) => now.getFullYear() - 2 + i).map(y => (
                   <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                 ))}
               </SelectContent>
