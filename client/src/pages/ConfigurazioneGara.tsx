@@ -57,14 +57,16 @@ function createEmptyGaraPdv(codicePos: string, nome: string, ragioneSociale: str
 }
 
 function initMobileConfigForPdv(pdv: GaraConfigPdv) {
+  const defaultMultipliers = { multiplierSoglia1: 1, multiplierSoglia2: 1.2, multiplierSoglia3: 1.5, multiplierSoglia4: 2 };
   if (!pdv.clusterMobile) {
-    return { posCode: pdv.codicePos, soglia1: 70, soglia2: 105, soglia3: 135, soglia4: 165, canoneMedio: 10, forecastTargetPunti: 100, clusterPista: 1 };
+    return { posCode: pdv.codicePos, soglia1: 70, soglia2: 105, soglia3: 135, soglia4: 165, ...defaultMultipliers, canoneMedio: 10, forecastTargetPunti: 100, clusterPista: 1 as const };
   }
   const clusterPista = mapClusterMobileToClusterPista(pdv.clusterMobile as ClusterCode);
   const thresholds = getThresholdsByCluster(pdv.tipoPosizione || 'altro', clusterPista, pdv.clusterMobile);
   return {
     posCode: pdv.codicePos,
     ...thresholds,
+    ...defaultMultipliers,
     canoneMedio: 10,
     forecastTargetPunti: thresholds.soglia4,
     clusterPista,
@@ -72,14 +74,16 @@ function initMobileConfigForPdv(pdv: GaraConfigPdv) {
 }
 
 function initFissoConfigForPdv(pdv: GaraConfigPdv) {
+  const defaultFissoMultipliers = { multiplierSoglia1: 2, multiplierSoglia2: 3, multiplierSoglia3: 3.5, multiplierSoglia4: 4, multiplierSoglia5: 5 };
   if (!pdv.clusterFisso) {
-    return { posCode: pdv.codicePos, soglia1: 28, soglia2: 46, soglia3: 57, soglia4: 67, soglia5: 80, forecastTargetPunti: 80 };
+    return { posCode: pdv.codicePos, soglia1: 28, soglia2: 46, soglia3: 57, soglia4: 67, soglia5: 80, ...defaultFissoMultipliers, forecastTargetPunti: 80 };
   }
   const clusterNum = mapClusterFissoToNumber(pdv.clusterFisso as ClusterCode);
   const thresholds = getDefaultFissoThresholds(pdv.tipoPosizione || 'altro', clusterNum);
   return {
     posCode: pdv.codicePos,
     ...thresholds,
+    ...defaultFissoMultipliers,
     forecastTargetPunti: thresholds.soglia5,
   };
 }

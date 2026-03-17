@@ -598,20 +598,47 @@ export default function DashboardGaraReale() {
       if (isRSPerRS) {
         const rsConfig = mobileRSConfigs.find(c => c.ragioneSociale === ragioneSociale);
         if (rsConfig) {
-          return { posCode: codicePos, soglia1: rsConfig.soglia1, soglia2: rsConfig.soglia2, soglia3: rsConfig.soglia3, soglia4: rsConfig.soglia4, canoneMedio: rsConfig.canoneMedio, forecastTargetPunti: rsConfig.forecastTargetPunti, clusterPista: rsConfig.clusterPista } as PistaMobilePosConfig;
+          return {
+            posCode: codicePos,
+            soglia1: rsConfig.soglia1, soglia2: rsConfig.soglia2, soglia3: rsConfig.soglia3, soglia4: rsConfig.soglia4,
+            multiplierSoglia1: (rsConfig as Record<string, unknown>).multiplierSoglia1 as number || 1,
+            multiplierSoglia2: (rsConfig as Record<string, unknown>).multiplierSoglia2 as number || 1.2,
+            multiplierSoglia3: (rsConfig as Record<string, unknown>).multiplierSoglia3 as number || 1.5,
+            multiplierSoglia4: (rsConfig as Record<string, unknown>).multiplierSoglia4 as number || 2,
+            canoneMedio: rsConfig.canoneMedio,
+            forecastTargetPunti: rsConfig.forecastTargetPunti,
+            clusterPista: rsConfig.clusterPista as 1 | 2 | 3 | undefined,
+          };
         }
       }
-      return mobileConfigs.find(c => c.posCode === codicePos) || mobileConfigs[0];
+      const found = mobileConfigs.find(c => c.posCode === codicePos) || mobileConfigs[0];
+      if (found && !found.multiplierSoglia1) {
+        return { ...found, multiplierSoglia1: 1, multiplierSoglia2: 1.2, multiplierSoglia3: 1.5, multiplierSoglia4: 2 };
+      }
+      return found;
     };
 
     const getFissoConfigForPdv = (codicePos: string, ragioneSociale: string): PistaFissoPosConfig | undefined => {
       if (isRSPerRS) {
         const rsConfig = fissoRSConfigs.find(c => c.ragioneSociale === ragioneSociale);
         if (rsConfig) {
-          return { posCode: codicePos, soglia1: rsConfig.soglia1, soglia2: rsConfig.soglia2, soglia3: rsConfig.soglia3, soglia4: rsConfig.soglia4, soglia5: rsConfig.soglia5, forecastTargetPunti: rsConfig.forecastTargetPunti } as PistaFissoPosConfig;
+          return {
+            posCode: codicePos,
+            soglia1: rsConfig.soglia1, soglia2: rsConfig.soglia2, soglia3: rsConfig.soglia3, soglia4: rsConfig.soglia4, soglia5: rsConfig.soglia5,
+            multiplierSoglia1: (rsConfig as Record<string, unknown>).multiplierSoglia1 as number || 2,
+            multiplierSoglia2: (rsConfig as Record<string, unknown>).multiplierSoglia2 as number || 3,
+            multiplierSoglia3: (rsConfig as Record<string, unknown>).multiplierSoglia3 as number || 3.5,
+            multiplierSoglia4: (rsConfig as Record<string, unknown>).multiplierSoglia4 as number || 4,
+            multiplierSoglia5: (rsConfig as Record<string, unknown>).multiplierSoglia5 as number || 5,
+            forecastTargetPunti: rsConfig.forecastTargetPunti,
+          };
         }
       }
-      return fissoConfigs.find(c => c.posCode === codicePos) || fissoConfigs[0];
+      const found = fissoConfigs.find(c => c.posCode === codicePos) || fissoConfigs[0];
+      if (found && !(found as Record<string, unknown>).multiplierSoglia1) {
+        return { ...found, multiplierSoglia1: 2, multiplierSoglia2: 3, multiplierSoglia3: 3.5, multiplierSoglia4: 4, multiplierSoglia5: 5 };
+      }
+      return found;
     };
 
     const getPartnershipConfigForPdv = (codicePos: string, ragioneSociale: string) => {
