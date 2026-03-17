@@ -120,6 +120,7 @@ export interface EnergiaConfig {
   targetS1: number;
   targetS2: number;
   targetS3: number;
+  premio?: number;
   pistaSoglia_S1?: number;
   pistaSoglia_S2?: number;
   pistaSoglia_S3?: number;

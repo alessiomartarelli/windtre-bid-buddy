@@ -878,6 +878,23 @@ export default function DashboardGaraReale() {
               totalGap += pdv.pdvCalc.forecastGap ?? 0;
             }
           }
+
+          if (pista === "energia" && energiaConfig) {
+            let aggSoglia = 0;
+            const premioVal = energiaConfig.premio ?? 1000;
+            if (totalPunti >= energiaConfig.targetS3) { aggSoglia = 3; totalPremio = premioVal; }
+            else if (totalPunti >= energiaConfig.targetS2) { aggSoglia = 2; totalPremio = premioVal; }
+            else if (totalPunti >= energiaConfig.targetS1) { aggSoglia = 1; totalPremio = premioVal; }
+            bestSoglia = aggSoglia;
+          }
+          if (pista === "assicurazioni" && assicConfig) {
+            let aggSoglia = 0;
+            const premioVal = assicConfig.premio ?? 750;
+            if (totalPunti >= assicConfig.targetS2) { aggSoglia = 2; totalPremio = premioVal; }
+            else if (totalPunti >= assicConfig.targetS1) { aggSoglia = 1; totalPremio = premioVal; }
+            bestSoglia = aggSoglia;
+          }
+
           aggregateCalc = {
             premioStimato: totalPremio,
             puntiTotali: totalPunti,
@@ -930,6 +947,25 @@ export default function DashboardGaraReale() {
             totalPuntiProj += projCalc.puntiTotali;
             if (projCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = projCalc.sogliaRaggiunta;
           }
+
+          if (pista === "energia" && energiaConfig) {
+            let aggSogliaProj = 0;
+            const premioVal = energiaConfig.premio ?? 1000;
+            totalPremioProj = 0;
+            if (totalPuntiProj >= energiaConfig.targetS3) { aggSogliaProj = 3; totalPremioProj = premioVal; }
+            else if (totalPuntiProj >= energiaConfig.targetS2) { aggSogliaProj = 2; totalPremioProj = premioVal; }
+            else if (totalPuntiProj >= energiaConfig.targetS1) { aggSogliaProj = 1; totalPremioProj = premioVal; }
+            bestSogliaProj = aggSogliaProj;
+          }
+          if (pista === "assicurazioni" && assicConfig) {
+            let aggSogliaProj = 0;
+            const premioVal = assicConfig.premio ?? 750;
+            totalPremioProj = 0;
+            if (totalPuntiProj >= assicConfig.targetS2) { aggSogliaProj = 2; totalPremioProj = premioVal; }
+            else if (totalPuntiProj >= assicConfig.targetS1) { aggSogliaProj = 1; totalPremioProj = premioVal; }
+            bestSogliaProj = aggSogliaProj;
+          }
+
           aggregateCalcProiezione = {
             premioStimato: totalPremioProj,
             puntiTotali: totalPuntiProj,
