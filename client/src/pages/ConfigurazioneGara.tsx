@@ -421,8 +421,8 @@ export default function ConfigurazioneGara() {
         pTarget += pc.config.target100; pPremio += pc.config.premio100;
       }
 
-      mobileRS.push({ ragioneSociale, soglia1: mS1, soglia2: mS2, soglia3: mS3, soglia4: mS4, forecastTargetPunti: mS4 });
-      fissoRS.push({ ragioneSociale, soglia1: fS1, soglia2: fS2, soglia3: fS3, soglia4: fS4, soglia5: fS5, forecastTargetPunti: fS5 });
+      mobileRS.push({ ragioneSociale, soglia1: mS1, soglia2: mS2, soglia3: mS3, soglia4: mS4, multiplierSoglia1: 1, multiplierSoglia2: 1.2, multiplierSoglia3: 1.5, multiplierSoglia4: 2, forecastTargetPunti: mS4 });
+      fissoRS.push({ ragioneSociale, soglia1: fS1, soglia2: fS2, soglia3: fS3, soglia4: fS4, soglia5: fS5, multiplierSoglia1: 2, multiplierSoglia2: 3, multiplierSoglia3: 3.5, multiplierSoglia4: 4, multiplierSoglia5: 5, forecastTargetPunti: fS5 });
       partnershipRS.push({ ragioneSociale, target100: pTarget, target80: calculateTarget80(pTarget), premio100: pPremio, premio80: calculatePremio80(pPremio) });
     });
 
@@ -891,7 +891,7 @@ export default function ConfigurazioneGara() {
                               <div className="h-5 w-1 bg-blue-500 rounded-full" />
                               <h4 className="font-semibold text-xs">Pista Mobile</h4>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                               {(['soglia1', 'soglia2', 'soglia3', 'soglia4'] as const).map(f => (
                                 <div key={f} className="space-y-0.5">
                                   <Label className="text-[10px]">{f.replace('soglia', 'S')}</Label>
@@ -901,6 +901,17 @@ export default function ConfigurazioneGara() {
                               <div className="space-y-0.5">
                                 <Label className="text-[10px]">Forecast</Label>
                                 <Input type="number" className="h-7 text-xs" value={mc.forecastTargetPunti ?? ''} onChange={e => updateMobilePos(index, 'forecastTargetPunti', Number(e.target.value) || 0)} data-testid={`input-mobile-forecast-${index}`} />
+                              </div>
+                            </div>
+                            <div className="mt-2">
+                              <Label className="text-[10px] text-muted-foreground mb-1 block">Moltiplicatori canone</Label>
+                              <div className="grid grid-cols-4 gap-2">
+                                {(['multiplierSoglia1', 'multiplierSoglia2', 'multiplierSoglia3', 'multiplierSoglia4'] as const).map((f, i) => (
+                                  <div key={f} className="space-y-0.5">
+                                    <Label className="text-[10px]">x S{i + 1}</Label>
+                                    <Input type="number" step="0.1" className="h-7 text-xs" value={mc[f] ?? ''} onChange={e => updateMobilePos(index, f, Number(e.target.value) || 0)} data-testid={`input-mobile-${f}-${index}`} />
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           </div>
@@ -922,6 +933,17 @@ export default function ConfigurazioneGara() {
                               <div className="space-y-0.5">
                                 <Label className="text-[10px]">Forecast</Label>
                                 <Input type="number" className="h-7 text-xs" value={fc.forecastTargetPunti ?? ''} onChange={e => updateFissoPos(index, 'forecastTargetPunti', Number(e.target.value) || 0)} data-testid={`input-fisso-forecast-${index}`} />
+                              </div>
+                            </div>
+                            <div className="mt-2">
+                              <Label className="text-[10px] text-muted-foreground mb-1 block">Moltiplicatori €/pezzo</Label>
+                              <div className="grid grid-cols-5 gap-2">
+                                {(['multiplierSoglia1', 'multiplierSoglia2', 'multiplierSoglia3', 'multiplierSoglia4', 'multiplierSoglia5'] as const).map((f, i) => (
+                                  <div key={f} className="space-y-0.5">
+                                    <Label className="text-[10px]">x S{i + 1}</Label>
+                                    <Input type="number" step="0.1" className="h-7 text-xs" value={fc[f] ?? ''} onChange={e => updateFissoPos(index, f, Number(e.target.value) || 0)} data-testid={`input-fisso-${f}-${index}`} />
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           </div>
@@ -980,7 +1002,7 @@ export default function ConfigurazioneGara() {
                               <div className="h-5 w-1 bg-blue-500 rounded-full" />
                               <h4 className="font-semibold text-xs">Pista Mobile</h4>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                               {(['soglia1', 'soglia2', 'soglia3', 'soglia4'] as const).map(f => (
                                 <div key={f} className="space-y-0.5">
                                   <Label className="text-[10px]">{f.replace('soglia', 'S')}</Label>
@@ -990,6 +1012,17 @@ export default function ConfigurazioneGara() {
                               <div className="space-y-0.5">
                                 <Label className="text-[10px]">Forecast</Label>
                                 <Input type="number" className="h-7 text-xs" value={mc.forecastTargetPunti ?? ''} onChange={e => updateMobileRS(mcIdx, 'forecastTargetPunti', Number(e.target.value) || 0)} data-testid={`input-mobile-rs-forecast-${rs}`} />
+                              </div>
+                            </div>
+                            <div className="mt-2">
+                              <Label className="text-[10px] text-muted-foreground mb-1 block">Moltiplicatori canone</Label>
+                              <div className="grid grid-cols-4 gap-2">
+                                {(['multiplierSoglia1', 'multiplierSoglia2', 'multiplierSoglia3', 'multiplierSoglia4'] as const).map((f, i) => (
+                                  <div key={f} className="space-y-0.5">
+                                    <Label className="text-[10px]">x S{i + 1}</Label>
+                                    <Input type="number" step="0.1" className="h-7 text-xs" value={mc[f] ?? ''} onChange={e => updateMobileRS(mcIdx, f, Number(e.target.value) || 0)} data-testid={`input-mobile-rs-${f}-${rs}`} />
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           </div>
@@ -1011,6 +1044,17 @@ export default function ConfigurazioneGara() {
                               <div className="space-y-0.5">
                                 <Label className="text-[10px]">Forecast</Label>
                                 <Input type="number" className="h-7 text-xs" value={fc.forecastTargetPunti ?? ''} onChange={e => updateFissoRS(fcIdx, 'forecastTargetPunti', Number(e.target.value) || 0)} data-testid={`input-fisso-rs-forecast-${rs}`} />
+                              </div>
+                            </div>
+                            <div className="mt-2">
+                              <Label className="text-[10px] text-muted-foreground mb-1 block">Moltiplicatori €/pezzo</Label>
+                              <div className="grid grid-cols-5 gap-2">
+                                {(['multiplierSoglia1', 'multiplierSoglia2', 'multiplierSoglia3', 'multiplierSoglia4', 'multiplierSoglia5'] as const).map((f, i) => (
+                                  <div key={f} className="space-y-0.5">
+                                    <Label className="text-[10px]">x S{i + 1}</Label>
+                                    <Input type="number" step="0.1" className="h-7 text-xs" value={fc[f] ?? ''} onChange={e => updateFissoRS(fcIdx, f, Number(e.target.value) || 0)} data-testid={`input-fisso-rs-${f}-${rs}`} />
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           </div>
@@ -1067,21 +1111,21 @@ export default function ConfigurazioneGara() {
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.pdvInGara} onChange={e => { setEnergiaConfig(prev => ({ ...prev, pdvInGara: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-pdv-in-gara" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Target No Malus</Label>
+                      <Label className="text-xs">Contratti no malus</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.targetNoMalus} onChange={e => { setEnergiaConfig(prev => ({ ...prev, targetNoMalus: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-target-no-malus" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Target S1</Label>
+                      <Label className="text-xs">Contr. premio 250€</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.targetS1} onChange={e => { setEnergiaConfig(prev => ({ ...prev, targetS1: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-target-s1" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Target S2</Label>
+                      <Label className="text-xs">Contr. premio 500€</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.targetS2} onChange={e => { setEnergiaConfig(prev => ({ ...prev, targetS2: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-target-s2" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-xs">Target S3</Label>
+                      <Label className="text-xs">Contr. premio 1000€</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.targetS3} onChange={e => { setEnergiaConfig(prev => ({ ...prev, targetS3: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-target-s3" />
                     </div>
                   </div>
@@ -1119,15 +1163,15 @@ export default function ConfigurazioneGara() {
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.pdvInGara} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, pdvInGara: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-pdv-in-gara" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Target No Malus</Label>
+                      <Label className="text-xs">Punti no malus</Label>
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.targetNoMalus} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, targetNoMalus: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-target-no-malus" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Target S1</Label>
+                      <Label className="text-xs">Punti premio 500€</Label>
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.targetS1} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, targetS1: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-target-s1" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Target S2</Label>
+                      <Label className="text-xs">Punti premio 750€</Label>
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.targetS2} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, targetS2: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-target-s2" />
                     </div>
                   </div>

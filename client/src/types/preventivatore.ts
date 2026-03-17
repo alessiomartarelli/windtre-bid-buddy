@@ -365,6 +365,10 @@ export interface SoglieMobileRS {
   soglia3: number;
   soglia4: number;
   canoneMedio?: number;
+  multiplierSoglia1?: number;
+  multiplierSoglia2?: number;
+  multiplierSoglia3?: number;
+  multiplierSoglia4?: number;
   forecastTargetPunti?: number;
 }
 
@@ -376,6 +380,11 @@ export interface SoglieFissoRS {
   soglia3: number;
   soglia4: number;
   soglia5?: number;
+  multiplierSoglia1?: number;
+  multiplierSoglia2?: number;
+  multiplierSoglia3?: number;
+  multiplierSoglia4?: number;
+  multiplierSoglia5?: number;
   forecastTargetPunti?: number;
 }
 
