@@ -1004,15 +1004,48 @@ export async function registerRoutes(
   });
 
   // ── BiSuite Sales Import & Read endpoints ─────────────────────
-  function extractSaleFields(sale: any, organizationId: string) {
+  type MatricolaMap = Map<string, { codiceOperatoreWind: string; nominativo: string }>;
+
+  function buildMatricolaMap(sales: any[]): MatricolaMap {
+    const map: MatricolaMap = new Map();
+    for (const sale of sales) {
+      const matricola = sale.matricolaFiscale;
+      if (!matricola) continue;
+      const attivita = sale.addetto?.attivita;
+      if (!Array.isArray(attivita) || attivita.length !== 1) continue;
+      const att = attivita[0];
+      if (att.codiceOperatoreWind || att.nominativo) {
+        map.set(matricola, {
+          codiceOperatoreWind: att.codiceOperatoreWind || '',
+          nominativo: att.nominativo || '',
+        });
+      }
+    }
+    return map;
+  }
+
+  function extractSaleFields(sale: any, organizationId: string, matricolaMap?: MatricolaMap) {
     const bisuiteId = sale.id || sale.codiceEsterno || 0;
     const dataVenditaStr = sale.dataVendita || sale.createdAt;
     const dataVendita = dataVenditaStr ? new Date(dataVenditaStr) : null;
+
+    let codicePos = '';
+    let nomeNegozio = '';
+    const matricola = sale.matricolaFiscale;
     const attivita = sale.addetto?.attivita;
-    const codicePos = Array.isArray(attivita) && attivita.length > 0
-      ? (attivita[0].codiceOperatoreWind || '') : '';
-    const nomeNegozio = Array.isArray(attivita) && attivita.length > 0
-      ? (attivita[0].nominativo || '') : '';
+
+    if (matricolaMap && matricola && matricolaMap.has(matricola)) {
+      const mapped = matricolaMap.get(matricola)!;
+      codicePos = mapped.codiceOperatoreWind;
+      nomeNegozio = mapped.nominativo;
+    } else if (Array.isArray(attivita) && attivita.length === 1) {
+      codicePos = attivita[0].codiceOperatoreWind || '';
+      nomeNegozio = attivita[0].nominativo || '';
+    } else if (Array.isArray(attivita) && attivita.length > 0) {
+      codicePos = attivita[0].codiceOperatoreWind || '';
+      nomeNegozio = attivita[0].nominativo || '';
+    }
+
     const ragioneSociale = sale.ragioneSociale?.azienda || '';
     const nomeAddetto = sale.addetto?.nominativo || '';
     const nomeCliente = sale.cliente?.nominativo || '';
@@ -1094,7 +1127,8 @@ export async function registerRoutes(
         sales = salesData.sales;
       }
 
-      const records = sales.map((sale: any) => extractSaleFields(sale, organization_id));
+      const matricolaMap = buildMatricolaMap(sales);
+      const records = sales.map((sale: any) => extractSaleFields(sale, organization_id, matricolaMap));
 
       await storage.deleteBisuiteSalesByOrg(organization_id);
       const inserted = await storage.upsertBisuiteSales(records);
@@ -1180,7 +1214,8 @@ export async function registerRoutes(
         sales = salesData.sales;
       }
 
-      const records = sales.map((sale: any) => extractSaleFields(sale, orgId));
+      const matricolaMap = buildMatricolaMap(sales);
+      const records = sales.map((sale: any) => extractSaleFields(sale, orgId, matricolaMap));
 
       await storage.deleteBisuiteSalesByOrg(orgId);
       const inserted = await storage.upsertBisuiteSales(records);
