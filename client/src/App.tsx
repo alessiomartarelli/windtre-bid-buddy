@@ -18,6 +18,7 @@ import Auth from "@/pages/auth";
 import VenditeBiSuite from "@/pages/VenditeBiSuite";
 import MappaturaBiSuite from "@/pages/MappaturaBiSuite";
 import DashboardGaraReale from "@/pages/DashboardGaraReale";
+import ConfigurazioneGara from "@/pages/ConfigurazioneGara";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -70,6 +71,9 @@ function Router() {
       </Route>
       <Route path="/dashboard-gara-reale">
         {() => <ProtectedRoute component={DashboardGaraReale} />}
+      </Route>
+      <Route path="/configurazione-gara">
+        {() => <ProtectedRoute component={ConfigurazioneGara} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

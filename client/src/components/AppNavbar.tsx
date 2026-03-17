@@ -13,7 +13,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield, Users,
-  LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu,
+  LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -59,6 +59,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
     { path: '/super-admin', label: 'Super Admin', icon: Shield, show: isSuperAdmin },
     { path: '/admin', label: 'Gestione Team', icon: Users, show: isAdminOrSuper },
     { path: '/dashboard-gara-reale', label: 'Dashboard', icon: LayoutDashboard, show: true },
+    { path: '/configurazione-gara', label: 'Config Gara', icon: Trophy, show: isAdminOrSuper },
     { path: '/preventivatore', label: 'Simulatore', icon: FileText, show: true },
     { path: '/tabelle-calcolo', label: 'Tabelle Calcolo', icon: Table2, show: isAdminOrSuper },
     { path: '/vendite-bisuite', label: 'Vendite BiSuite', icon: ShoppingCart, show: true },
