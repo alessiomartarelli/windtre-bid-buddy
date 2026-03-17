@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale } from "@shared/schema";
+import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig } from "@shared/schema";
 import { eq, desc, and, isNull, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -46,6 +46,11 @@ export interface IStorage {
   getBisuiteSales(orgId: string, from?: Date, to?: Date): Promise<BisuiteSale[]>;
   getBisuiteSale(id: string): Promise<BisuiteSale | undefined>;
   deleteBisuiteSalesByOrg(orgId: string): Promise<void>;
+
+  // Gara Config
+  getGaraConfig(orgId: string, month: number, year: number): Promise<GaraConfig | undefined>;
+  upsertGaraConfig(orgId: string, month: number, year: number, config: any): Promise<GaraConfig>;
+  listGaraConfigHistory(orgId: string): Promise<{ month: number; year: number; updatedAt: Date | null }[]>;
 
   // Password Reset Tokens
   createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
@@ -263,6 +268,43 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBisuiteSalesByOrg(orgId: string): Promise<void> {
     await db.delete(bisuiteSales).where(eq(bisuiteSales.organizationId, orgId));
+  }
+
+  // Gara Config
+  async getGaraConfig(orgId: string, month: number, year: number): Promise<GaraConfig | undefined> {
+    const [result] = await db.select().from(garaConfig)
+      .where(and(
+        eq(garaConfig.organizationId, orgId),
+        eq(garaConfig.month, month),
+        eq(garaConfig.year, year),
+      ));
+    return result;
+  }
+
+  async upsertGaraConfig(orgId: string, month: number, year: number, config: any): Promise<GaraConfig> {
+    const existing = await this.getGaraConfig(orgId, month, year);
+    if (existing) {
+      const [result] = await db.update(garaConfig)
+        .set({ config, updatedAt: new Date() })
+        .where(eq(garaConfig.id, existing.id))
+        .returning();
+      return result;
+    }
+    const [result] = await db.insert(garaConfig)
+      .values({ organizationId: orgId, month, year, config })
+      .returning();
+    return result;
+  }
+
+  async listGaraConfigHistory(orgId: string): Promise<{ month: number; year: number; updatedAt: Date | null }[]> {
+    const results = await db.select({
+      month: garaConfig.month,
+      year: garaConfig.year,
+      updatedAt: garaConfig.updatedAt,
+    }).from(garaConfig)
+      .where(eq(garaConfig.organizationId, orgId))
+      .orderBy(desc(garaConfig.year), desc(garaConfig.month));
+    return results;
   }
 
   // Password Reset Tokens

@@ -50,6 +50,7 @@ Preferred communication style: Simple, everyday language.
   - `profiles` - User profiles linked to Replit Auth and organizations
   - `preventivi` - Saved quotes with JSONB `data` column storing all calculation state
   - `organization_config` - Per-org configuration (PDV setup, thresholds, calendars) stored as JSONB
+  - `gara_config` - Per-org, per-month competition (gara) configuration with JSONB config; indexed on (org, month, year). API: GET/PUT `/api/gara-config`, GET `/api/gara-config/history`, POST `/api/gara-config/import-from-simulator`, GET `/api/gara-config/pdv-from-sales`
 - **Migrations**: `drizzle-kit push` for schema sync (no migration files workflow)
 - **Storage Layer**: `server/storage.ts` implements `IStorage` interface with `DatabaseStorage` class
 

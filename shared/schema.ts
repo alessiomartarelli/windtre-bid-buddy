@@ -103,6 +103,19 @@ export const bisuiteSales = pgTable("bisuite_sales", {
   index("IDX_bisuite_sales_bisuite_id").on(table.bisuiteId),
 ]);
 
+// Gara Config (per-organization, per-month competition configuration)
+export const garaConfig = pgTable("gara_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  config: jsonb("config").default({}),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("IDX_gara_config_org_month_year").on(table.organizationId, table.month, table.year),
+]);
+
 // Password reset tokens
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -154,5 +167,8 @@ export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type SystemConfig = typeof systemConfig.$inferSelect;
 export type BisuiteSale = typeof bisuiteSales.$inferSelect;
 export type InsertBisuiteSale = typeof bisuiteSales.$inferInsert;
+
+export type GaraConfig = typeof garaConfig.$inferSelect;
+export type InsertGaraConfig = typeof garaConfig.$inferInsert;
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];

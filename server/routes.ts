@@ -393,6 +393,155 @@ export async function registerRoutes(
     }
   });
 
+  // === GARA CONFIG (per-org, per-month competition configuration) ===
+  app.get("/api/gara-config", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.json(null);
+      }
+      const month = parseInt(req.query.month as string);
+      const year = parseInt(req.query.year as string);
+      if (isNaN(month) || isNaN(year) || month < 1 || month > 12) {
+        return res.status(400).json({ message: "Parametri month/year non validi" });
+      }
+      const config = await storage.getGaraConfig(profile.organizationId, month, year);
+      res.json(config || null);
+    } catch (error) {
+      console.error("Error fetching gara config:", error);
+      res.status(500).json({ message: "Errore nel recupero della configurazione gara" });
+    }
+  });
+
+  app.put("/api/gara-config", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ message: "Utente senza organizzazione" });
+      }
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Solo admin può modificare la configurazione gara" });
+      }
+      const { month, year, config } = req.body;
+      if (!month || !year || month < 1 || month > 12) {
+        return res.status(400).json({ message: "Parametri month/year non validi" });
+      }
+      const result = await storage.upsertGaraConfig(profile.organizationId, month, year, config);
+      res.json(result);
+    } catch (error) {
+      console.error("Error saving gara config:", error);
+      res.status(500).json({ message: "Errore nel salvataggio della configurazione gara" });
+    }
+  });
+
+  app.get("/api/gara-config/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.json([]);
+      }
+      const history = await storage.listGaraConfigHistory(profile.organizationId);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching gara config history:", error);
+      res.status(500).json({ message: "Errore nel recupero dello storico configurazione gara" });
+    }
+  });
+
+  app.post("/api/gara-config/import-from-simulator", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.status(400).json({ message: "Utente senza organizzazione" });
+      }
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Solo admin può importare configurazioni" });
+      }
+      const { month, year, pdvConfigurationId } = req.body;
+      if (!month || !year || month < 1 || month > 12) {
+        return res.status(400).json({ message: "Parametri month/year non validi" });
+      }
+      if (!pdvConfigurationId) {
+        return res.status(400).json({ message: "ID configurazione PDV richiesto" });
+      }
+      const pdvConfig = await storage.getPdvConfiguration(pdvConfigurationId);
+      if (!pdvConfig) {
+        return res.status(404).json({ message: "Configurazione PDV non trovata" });
+      }
+      const simulatorConfig = pdvConfig.config as any;
+      const pdvList = simulatorConfig?.puntiVendita || simulatorConfig?.pdvList || [];
+      const garaConfigData = {
+        pdvList: pdvList.map((pdv: any) => ({
+          id: pdv.id || pdv.codicePos,
+          codicePos: pdv.codicePos,
+          nome: pdv.nome || pdv.nomeNegozio || "",
+          ragioneSociale: pdv.ragioneSociale || "",
+          tipoPosizione: pdv.tipoPosizione || "altro",
+          canale: pdv.canale || "franchising",
+          clusterMobile: pdv.clusterMobile || "",
+          clusterFisso: pdv.clusterFisso || "",
+          clusterCB: pdv.clusterCB || "",
+          clusterPIva: pdv.clusterPIva || "",
+          abilitaEnergia: pdv.abilitaEnergia ?? false,
+          abilitaAssicurazioni: pdv.abilitaAssicurazioni ?? false,
+          calendar: pdv.calendar || { weeklySchedule: { workingDays: [1, 2, 3, 4, 5, 6] } },
+        })),
+        importedFrom: {
+          type: "simulator",
+          pdvConfigurationId,
+          pdvConfigurationName: pdvConfig.name,
+          importedAt: new Date().toISOString(),
+        },
+      };
+      const result = await storage.upsertGaraConfig(profile.organizationId, month, year, garaConfigData);
+      res.json(result);
+    } catch (error) {
+      console.error("Error importing gara config from simulator:", error);
+      res.status(500).json({ message: "Errore nell'importazione dalla configurazione simulatore" });
+    }
+  });
+
+  app.get("/api/gara-config/pdv-from-sales", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.json([]);
+      }
+      const month = parseInt(req.query.month as string);
+      const year = parseInt(req.query.year as string);
+      if (isNaN(month) || isNaN(year) || month < 1 || month > 12) {
+        return res.status(400).json({ message: "Parametri month/year non validi" });
+      }
+      const from = new Date(year, month - 1, 1);
+      const to = new Date(year, month, 0, 23, 59, 59);
+      const sales = await storage.getBisuiteSales(profile.organizationId, from, to);
+      const pdvMap = new Map<string, { codicePos: string; nomeNegozio: string; ragioneSociale: string; salesCount: number }>();
+      for (const sale of sales) {
+        const codicePos = sale.codicePos || "";
+        if (!codicePos) continue;
+        if (!pdvMap.has(codicePos)) {
+          pdvMap.set(codicePos, {
+            codicePos,
+            nomeNegozio: sale.nomeNegozio || "",
+            ragioneSociale: sale.ragioneSociale || "",
+            salesCount: 0,
+          });
+        }
+        pdvMap.get(codicePos)!.salesCount++;
+      }
+      const pdvList = Array.from(pdvMap.values()).sort((a, b) => a.codicePos.localeCompare(b.codicePos));
+      res.json(pdvList);
+    } catch (error) {
+      console.error("Error fetching PDVs from sales:", error);
+      res.status(500).json({ message: "Errore nel recupero PDV dalle vendite" });
+    }
+  });
+
   // === ADMIN: Team Management ===
   app.get("/api/admin/team", isAuthenticated, async (req: any, res) => {
     try {
