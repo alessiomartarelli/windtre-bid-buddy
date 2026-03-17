@@ -410,14 +410,18 @@ export async function registerRoutes(
 
   app.get("/api/gara-config", isAuthenticated, async (req: any, res) => {
     try {
-      const profile = await requireAdminRole(req, res);
-      if (!profile) return;
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !profile.organizationId) {
+        return res.status(403).json({ message: "Profilo o organizzazione non trovata" });
+      }
       const month = parseInt(req.query.month as string);
       const year = parseInt(req.query.year as string);
       if (isNaN(month) || isNaN(year) || month < 1 || month > 12) {
         return res.status(400).json({ message: "Parametri month/year non validi" });
       }
-      const config = await storage.getGaraConfig(profile.organizationId!, month, year);
+      const orgId = (profile as any).organizationId || (profile as any).organization_id;
+      const config = await storage.getGaraConfig(orgId, month, year);
       res.json(config || null);
     } catch (error) {
       console.error("Error fetching gara config:", error);
@@ -504,6 +508,13 @@ export async function registerRoutes(
 
       let extraConfigFields: Record<string, unknown> = {};
 
+      const calcConfigKeys = [
+        "pistaMobile", "pistaFisso", "calendarioGara",
+        "pistaMobileConfig", "pistaFissoConfig", "energiaConfig",
+        "energiaPdvInGara", "mobileCategories",
+        "partnershipRewardConfig", "assicurazioniConfig", "assicurazioniPdvInGara",
+      ];
+
       if (importSource === "organization_config") {
         const orgConfig = await storage.getOrgConfig(profile.organizationId!);
         if (!orgConfig) {
@@ -511,9 +522,9 @@ export async function registerRoutes(
         }
         const configData = orgConfig.config as Record<string, unknown> | null;
         pdvList = (configData?.puntiVendita || configData?.pdvList || []) as SimulatorPdvEntry[];
-        if (configData?.pistaMobile) extraConfigFields.pistaMobile = configData.pistaMobile;
-        if (configData?.pistaFisso) extraConfigFields.pistaFisso = configData.pistaFisso;
-        if (configData?.calendarioGara) extraConfigFields.calendarioGara = configData.calendarioGara;
+        for (const key of calcConfigKeys) {
+          if (configData?.[key]) extraConfigFields[key] = configData[key];
+        }
         importedFromMeta = {
           type: "organization_config",
           organizationConfigId: orgConfig.id,
@@ -532,9 +543,9 @@ export async function registerRoutes(
         }
         const configData = pdvConfig.config as Record<string, unknown> | null;
         pdvList = (configData?.puntiVendita || configData?.pdvList || []) as SimulatorPdvEntry[];
-        if (configData?.pistaMobile) extraConfigFields.pistaMobile = configData.pistaMobile;
-        if (configData?.pistaFisso) extraConfigFields.pistaFisso = configData.pistaFisso;
-        if (configData?.calendarioGara) extraConfigFields.calendarioGara = configData.calendarioGara;
+        for (const key of calcConfigKeys) {
+          if (configData?.[key]) extraConfigFields[key] = configData[key];
+        }
         importedFromMeta = {
           type: "pdv_configuration",
           pdvConfigurationId,

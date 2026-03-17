@@ -536,19 +536,21 @@ export default function DashboardGaraReale() {
     },
   });
 
-  const { data: orgConfig } = useQuery<OrgConfigResponse>({
-    queryKey: ["/api/organization-config"],
-    queryFn: async () => {
-      const res = await fetch(apiUrl("/api/organization-config"), { credentials: "include" });
-      if (!res.ok) throw new Error("Errore config");
-      return res.json();
-    },
-    enabled: !!garaConfig,
-  });
-
   const garaConfigMissing = !loadingConfig && !garaConfig;
 
   const garaPdvList: GaraConfigPdv[] = garaConfig?.config?.pdvList || [];
+
+  const garaCalcConfig = useMemo(() => {
+    const cfg = garaConfig?.config as Record<string, unknown> | null;
+    return {
+      pistaMobileConfig: cfg?.pistaMobileConfig as OrgConfigResponse["config"]["pistaMobileConfig"] | undefined,
+      pistaFissoConfig: cfg?.pistaFissoConfig as OrgConfigResponse["config"]["pistaFissoConfig"] | undefined,
+      energiaConfig: cfg?.energiaConfig as EnergiaConfig | undefined,
+      mobileCategories: cfg?.mobileCategories as MobileCategoryConfig[] | undefined,
+      partnershipRewardConfig: cfg?.partnershipRewardConfig as OrgConfigResponse["config"]["partnershipRewardConfig"] | undefined,
+      assicurazioniConfig: cfg?.assicurazioniConfig as AssicurazioniConfig | undefined,
+    };
+  }, [garaConfig]);
 
   const puntiVenditaFromGara: OrgConfigPdv[] = useMemo(() => {
     return garaPdvList.map((p) => ({
@@ -572,16 +574,15 @@ export default function DashboardGaraReale() {
   const pistaStats = useMemo(() => {
     if (!mappedData || garaConfigMissing) return [];
 
-    const cfg = orgConfig?.config;
     const puntiVendita = puntiVenditaFromGara;
-    const mobileConfigs = cfg?.pistaMobileConfig?.sogliePerPos || [];
-    const fissoConfigs = cfg?.pistaFissoConfig?.sogliePerPos || [];
-    const energiaConfig = cfg?.energiaConfig;
+    const mobileConfigs = garaCalcConfig.pistaMobileConfig?.sogliePerPos || [];
+    const fissoConfigs = garaCalcConfig.pistaFissoConfig?.sogliePerPos || [];
+    const energiaConfig = garaCalcConfig.energiaConfig;
     const energiaPdvInGara = puntiVendita.filter(p => p.abilitaEnergia).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, isInGara: true }));
-    const mobileCategories = cfg?.mobileCategories || MOBILE_CATEGORIES_CONFIG_DEFAULT;
+    const mobileCategories = garaCalcConfig.mobileCategories || MOBILE_CATEGORIES_CONFIG_DEFAULT;
     const numPdvInGaraEnergia = energiaPdvInGara.length || puntiVendita.length || 1;
-    const partnershipConfigs = cfg?.partnershipRewardConfig?.configPerPos || [];
-    const assicConfig = cfg?.assicurazioniConfig;
+    const partnershipConfigs = garaCalcConfig.partnershipRewardConfig?.configPerPos || [];
+    const assicConfig = garaCalcConfig.assicurazioniConfig;
     const assicPdvInGara = puntiVendita.filter(p => p.abilitaAssicurazioni).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, nome: p.nome, isInGara: true }));
 
     const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara);
@@ -779,7 +780,7 @@ export default function DashboardGaraReale() {
     }
 
     return stats;
-  }, [mappedData, workdayInfo, orgConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear]);
+  }, [mappedData, workdayInfo, garaCalcConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear]);
 
   const isLoading = loadingMapped || loadingConfig;
 
