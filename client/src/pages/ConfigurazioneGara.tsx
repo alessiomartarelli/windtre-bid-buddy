@@ -211,6 +211,98 @@ function PdvCard({
             </div>
           </div>
 
+          <div>
+            <Label className="text-xs flex items-center gap-1 mb-2">
+              <CalendarDays className="h-3.5 w-3.5" />
+              Giorni speciali
+            </Label>
+            <div className="space-y-2">
+              {(pdv.calendar.specialDays || []).map((sd, sdIdx) => (
+                <div key={sdIdx} className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={sd.date}
+                    onChange={e => {
+                      const updated = [...(pdv.calendar.specialDays || [])];
+                      updated[sdIdx] = { ...updated[sdIdx], date: e.target.value };
+                      onUpdate(index, {
+                        ...pdv,
+                        calendar: { ...pdv.calendar, specialDays: updated },
+                      });
+                    }}
+                    className="h-7 text-xs w-[140px]"
+                    data-testid={`input-special-date-${sdIdx}-pdv-${index}`}
+                  />
+                  <Select
+                    value={sd.isOpen ? 'open' : 'closed'}
+                    onValueChange={v => {
+                      const updated = [...(pdv.calendar.specialDays || [])];
+                      updated[sdIdx] = { ...updated[sdIdx], isOpen: v === 'open' };
+                      onUpdate(index, {
+                        ...pdv,
+                        calendar: { ...pdv.calendar, specialDays: updated },
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-[100px]" data-testid={`select-special-type-${sdIdx}-pdv-${index}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">Aperto</SelectItem>
+                      <SelectItem value="closed">Chiuso</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={sd.note || ''}
+                    onChange={e => {
+                      const updated = [...(pdv.calendar.specialDays || [])];
+                      updated[sdIdx] = { ...updated[sdIdx], note: e.target.value };
+                      onUpdate(index, {
+                        ...pdv,
+                        calendar: { ...pdv.calendar, specialDays: updated },
+                      });
+                    }}
+                    placeholder="Nota"
+                    className="h-7 text-xs flex-1"
+                    data-testid={`input-special-note-${sdIdx}-pdv-${index}`}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-destructive"
+                    onClick={() => {
+                      const updated = (pdv.calendar.specialDays || []).filter((_, i) => i !== sdIdx);
+                      onUpdate(index, {
+                        ...pdv,
+                        calendar: { ...pdv.calendar, specialDays: updated },
+                      });
+                    }}
+                    data-testid={`button-remove-special-${sdIdx}-pdv-${index}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const newDay = { date: '', isOpen: false, note: '' };
+                  const updated = [...(pdv.calendar.specialDays || []), newDay];
+                  onUpdate(index, {
+                    ...pdv,
+                    calendar: { ...pdv.calendar, specialDays: updated },
+                  });
+                }}
+                data-testid={`button-add-special-day-pdv-${index}`}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Aggiungi giorno speciale
+              </Button>
+            </div>
+          </div>
+
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Checkbox
