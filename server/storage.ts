@@ -49,7 +49,11 @@ export interface IStorage {
 
   // Gara Config
   getGaraConfig(orgId: string, month: number, year: number): Promise<GaraConfig | undefined>;
-  upsertGaraConfig(orgId: string, month: number, year: number, config: Record<string, unknown>): Promise<GaraConfig>;
+  getGaraConfigById(id: string): Promise<GaraConfig | undefined>;
+  createGaraConfig(orgId: string, month: number, year: number, name: string, config: Record<string, unknown>): Promise<GaraConfig>;
+  updateGaraConfig(id: string, config: Record<string, unknown>, name?: string): Promise<GaraConfig>;
+  deleteGaraConfig(id: string): Promise<void>;
+  listGaraConfigs(orgId: string, month: number, year: number): Promise<{ id: string; name: string | null; month: number; year: number; updatedAt: Date | null; createdAt: Date | null }[]>;
   listGaraConfigHistory(orgId: string): Promise<{ month: number; year: number; updatedAt: Date | null }[]>;
 
   // Password Reset Tokens
@@ -277,19 +281,54 @@ export class DatabaseStorage implements IStorage {
         eq(garaConfig.organizationId, orgId),
         eq(garaConfig.month, month),
         eq(garaConfig.year, year),
-      ));
+      ))
+      .orderBy(desc(garaConfig.updatedAt))
+      .limit(1);
     return result;
   }
 
-  async upsertGaraConfig(orgId: string, month: number, year: number, config: Record<string, unknown>): Promise<GaraConfig> {
+  async getGaraConfigById(id: string): Promise<GaraConfig | undefined> {
+    const [result] = await db.select().from(garaConfig)
+      .where(eq(garaConfig.id, id));
+    return result;
+  }
+
+  async createGaraConfig(orgId: string, month: number, year: number, name: string, config: Record<string, unknown>): Promise<GaraConfig> {
     const [result] = await db.insert(garaConfig)
-      .values({ organizationId: orgId, month, year, config })
-      .onConflictDoUpdate({
-        target: [garaConfig.organizationId, garaConfig.month, garaConfig.year],
-        set: { config, updatedAt: new Date() },
-      })
+      .values({ organizationId: orgId, month, year, name, config })
       .returning();
     return result;
+  }
+
+  async updateGaraConfig(id: string, config: Record<string, unknown>, name?: string): Promise<GaraConfig> {
+    const updates: Record<string, unknown> = { config, updatedAt: new Date() };
+    if (name !== undefined) updates.name = name;
+    const [result] = await db.update(garaConfig)
+      .set(updates)
+      .where(eq(garaConfig.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteGaraConfig(id: string): Promise<void> {
+    await db.delete(garaConfig).where(eq(garaConfig.id, id));
+  }
+
+  async listGaraConfigs(orgId: string, month: number, year: number): Promise<{ id: string; name: string | null; month: number; year: number; updatedAt: Date | null; createdAt: Date | null }[]> {
+    return db.select({
+      id: garaConfig.id,
+      name: garaConfig.name,
+      month: garaConfig.month,
+      year: garaConfig.year,
+      updatedAt: garaConfig.updatedAt,
+      createdAt: garaConfig.createdAt,
+    }).from(garaConfig)
+      .where(and(
+        eq(garaConfig.organizationId, orgId),
+        eq(garaConfig.month, month),
+        eq(garaConfig.year, year),
+      ))
+      .orderBy(desc(garaConfig.updatedAt));
   }
 
   async listGaraConfigHistory(orgId: string): Promise<{ month: number; year: number; updatedAt: Date | null }[]> {

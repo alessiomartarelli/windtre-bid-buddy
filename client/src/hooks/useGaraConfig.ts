@@ -142,9 +142,19 @@ export interface GaraConfigRecord {
   organizationId: string;
   month: number;
   year: number;
+  name: string | null;
   config: GaraConfigData;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface GaraConfigListItem {
+  id: string;
+  name: string | null;
+  month: number;
+  year: number;
+  updatedAt: string | null;
+  createdAt: string | null;
 }
 
 export interface GaraConfigHistoryEntry {
@@ -164,16 +174,20 @@ export function useGaraConfig() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [config, setConfig] = useState<GaraConfigRecord | null>(null);
+  const [configList, setConfigList] = useState<GaraConfigListItem[]>([]);
   const [history, setHistory] = useState<GaraConfigHistoryEntry[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
-  const fetchConfig = useCallback(async (month: number, year: number) => {
+  const fetchConfig = useCallback(async (month: number, year: number, id?: string) => {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setLoading(true);
     try {
-      const res = await fetch(apiUrl(`/api/gara-config?month=${month}&year=${year}`), {
+      const url = id
+        ? apiUrl(`/api/gara-config?id=${id}`)
+        : apiUrl(`/api/gara-config?month=${month}&year=${year}`);
+      const res = await fetch(url, {
         credentials: 'include',
         signal: controller.signal,
       });
@@ -193,14 +207,30 @@ export function useGaraConfig() {
     }
   }, []);
 
-  const saveConfig = useCallback(async (month: number, year: number, configData: GaraConfigData) => {
+  const fetchConfigList = useCallback(async (month: number, year: number) => {
+    try {
+      const res = await fetch(apiUrl(`/api/gara-config/list?month=${month}&year=${year}`), {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to fetch config list');
+      const data = await res.json();
+      setConfigList(data);
+      return data as GaraConfigListItem[];
+    } catch (err) {
+      console.error('[GaraConfig] Error fetching list:', err);
+      setConfigList([]);
+      return [];
+    }
+  }, []);
+
+  const saveConfig = useCallback(async (month: number, year: number, configData: GaraConfigData, name: string, existingId?: string) => {
     setSaving(true);
     try {
       const res = await fetch(apiUrl('/api/gara-config'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ month, year, config: configData }),
+        body: JSON.stringify({ month, year, config: configData, name, id: existingId }),
       });
       if (!res.ok) throw new Error('Failed to save config');
       const data = await res.json();
@@ -211,6 +241,20 @@ export function useGaraConfig() {
       return null;
     } finally {
       setSaving(false);
+    }
+  }, []);
+
+  const deleteConfig = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/gara-config/${id}`), {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Failed to delete config');
+      return true;
+    } catch (err) {
+      console.error('[GaraConfig] Error deleting:', err);
+      return false;
     }
   }, []);
 
@@ -274,11 +318,14 @@ export function useGaraConfig() {
 
   return {
     config,
+    configList,
     loading,
     saving,
     history,
     fetchConfig,
+    fetchConfigList,
     saveConfig,
+    deleteConfig,
     fetchHistory,
     fetchPdvFromSales,
     importFromSimulator,

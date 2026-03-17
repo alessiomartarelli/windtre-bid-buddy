@@ -109,11 +109,12 @@ export const garaConfig = pgTable("gara_config", {
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
   month: integer("month").notNull(),
   year: integer("year").notNull(),
+  name: varchar("name").default(''),
   config: jsonb("config").default({}),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  uniqueIndex("UQ_gara_config_org_month_year").on(table.organizationId, table.month, table.year),
+  index("IDX_gara_config_org_month_year").on(table.organizationId, table.month, table.year),
 ]);
 
 // Password reset tokens

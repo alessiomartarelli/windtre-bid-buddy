@@ -28,10 +28,11 @@ import {
   Store,
   Loader2,
   Trophy,
+  Settings,
 } from "lucide-react";
 import { apiUrl } from "@/lib/basePath";
 import { AppNavbar } from "@/components/AppNavbar";
-import { type GaraConfigRecord, type GaraConfigPdv } from "@/hooks/useGaraConfig";
+import { type GaraConfigRecord, type GaraConfigPdv, type GaraConfigListItem } from "@/hooks/useGaraConfig";
 import {
   getWorkdayInfoForMonth,
   calcolaPremioPistaFissoPerPos,
@@ -513,6 +514,7 @@ export default function DashboardGaraReale() {
   const [, setLocation] = useLocation();
   const now = new Date();
   const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
+  const [selectedConfigId, setSelectedConfigId] = useState<string>("");
 
   const [selMonth, selYear] = useMemo(() => {
     const parts = selectedPeriod.split("-");
@@ -520,6 +522,17 @@ export default function DashboardGaraReale() {
   }, [selectedPeriod]);
 
   const monthOptions = useMemo(() => getMonthOptions(), []);
+
+  const { data: configList } = useQuery<GaraConfigListItem[]>({
+    queryKey: ["/api/gara-config/list", selMonth, selYear],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/gara-config/list?month=${selMonth}&year=${selYear}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore lista config");
+      return res.json();
+    },
+  });
+
+  const effectiveConfigId = selectedConfigId || (configList && configList.length > 0 ? configList[0].id : "");
 
   const { data: mappedData, isLoading: loadingMapped } = useQuery<MappedSalesResponse>({
     queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear],
@@ -531,13 +544,18 @@ export default function DashboardGaraReale() {
   });
 
   const { data: garaConfig, isLoading: loadingConfig } = useQuery<GaraConfigRecord | null>({
-    queryKey: ["/api/gara-config", selMonth, selYear],
+    queryKey: ["/api/gara-config", selMonth, selYear, effectiveConfigId],
     queryFn: async () => {
-      const res = await fetch(apiUrl(`/api/gara-config?month=${selMonth}&year=${selYear}`), { credentials: "include" });
+      if (!effectiveConfigId) {
+        const res = await fetch(apiUrl(`/api/gara-config?month=${selMonth}&year=${selYear}`), { credentials: "include" });
+        if (!res.ok) throw new Error("Errore config gara");
+        return await res.json() as GaraConfigRecord | null;
+      }
+      const res = await fetch(apiUrl(`/api/gara-config?id=${effectiveConfigId}`), { credentials: "include" });
       if (!res.ok) throw new Error("Errore config gara");
-      const data = await res.json();
-      return data as GaraConfigRecord | null;
+      return await res.json() as GaraConfigRecord | null;
     },
+    enabled: !!configList,
   });
 
   const garaConfigMissing = !loadingConfig && !garaConfig;
@@ -545,7 +563,7 @@ export default function DashboardGaraReale() {
   const garaPdvList: GaraConfigPdv[] = garaConfig?.config?.pdvList || [];
 
   const garaCalcConfig = useMemo(() => {
-    const cfg = garaConfig?.config as Record<string, unknown> | null;
+    const cfg = garaConfig?.config as unknown as Record<string, unknown> | null;
     return {
       pistaMobileConfig: (cfg?.pistaMobileConfig || cfg?.pistaMobile) as OrgConfigResponse["config"]["pistaMobileConfig"] | undefined,
       pistaFissoConfig: (cfg?.pistaFissoConfig || cfg?.pistaFisso) as OrgConfigResponse["config"]["pistaFissoConfig"] | undefined,
@@ -749,10 +767,12 @@ export default function DashboardGaraReale() {
             pdvCalc = protectaCalcMap.get(pdv.codicePos) || EMPTY_CALC;
           }
 
+          const configuredRS = pdvConfig?.ragioneSociale || pdv.ragioneSociale;
+
           return {
             codicePos: pdv.codicePos,
             nomeNegozio: pdv.nomeNegozio,
-            ragioneSociale: pdv.ragioneSociale,
+            ragioneSociale: configuredRS,
             pezzi: pdvPezzi,
             proiezione: pdvProiezione,
             pdvCalc,
@@ -995,7 +1015,7 @@ export default function DashboardGaraReale() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900" data-testid="dashboard-gara-reale">
       <AppNavbar title="Incentive W3">
-        <Select value={selectedPeriod} onValueChange={setSelectedPeriod} data-testid="select-period">
+        <Select value={selectedPeriod} onValueChange={(v) => { setSelectedPeriod(v); setSelectedConfigId(""); }} data-testid="select-period">
           <SelectTrigger className="w-[200px]" data-testid="select-period-trigger">
             <Calendar className="h-4 w-4 mr-2" />
             <SelectValue />
@@ -1008,6 +1028,21 @@ export default function DashboardGaraReale() {
             ))}
           </SelectContent>
         </Select>
+        {configList && configList.length > 0 && (
+          <Select value={effectiveConfigId} onValueChange={setSelectedConfigId} data-testid="select-config">
+            <SelectTrigger className="w-[220px]" data-testid="select-config-trigger">
+              <Settings className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Configurazione" />
+            </SelectTrigger>
+            <SelectContent>
+              {configList.map((c) => (
+                <SelectItem key={c.id} value={c.id} data-testid={`select-config-${c.id}`}>
+                  {c.name || 'Senza nome'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </AppNavbar>
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
 

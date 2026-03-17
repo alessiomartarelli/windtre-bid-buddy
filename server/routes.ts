@@ -415,6 +415,14 @@ export async function registerRoutes(
       if (!profile || !profile.organizationId) {
         return res.status(403).json({ message: "Profilo o organizzazione non trovata" });
       }
+      const configId = req.query.id as string | undefined;
+      if (configId) {
+        const config = await storage.getGaraConfigById(configId);
+        if (!config || config.organizationId !== profile.organizationId) {
+          return res.status(404).json({ message: "Configurazione non trovata" });
+        }
+        return res.json(config);
+      }
       const month = parseInt(req.query.month as string);
       const year = parseInt(req.query.year as string);
       if (isNaN(month) || isNaN(year) || month < 1 || month > 12) {
@@ -429,21 +437,66 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/gara-config/list", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !profile.organizationId) {
+        return res.status(403).json({ message: "Profilo o organizzazione non trovata" });
+      }
+      const month = parseInt(req.query.month as string);
+      const year = parseInt(req.query.year as string);
+      if (isNaN(month) || isNaN(year) || month < 1 || month > 12) {
+        return res.status(400).json({ message: "Parametri month/year non validi" });
+      }
+      const configs = await storage.listGaraConfigs(profile.organizationId!, month, year);
+      res.json(configs);
+    } catch (error) {
+      console.error("Error listing gara configs:", error);
+      res.status(500).json({ message: "Errore nel recupero delle configurazioni gara" });
+    }
+  });
+
   app.put("/api/gara-config", isAuthenticated, async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
-      const month = parseInt(req.query.month as string) || req.body.month;
-      const year = parseInt(req.query.year as string) || req.body.year;
-      const { config } = req.body;
+      const { month, year, config, name, id } = req.body;
       if (!month || !year || month < 1 || month > 12) {
         return res.status(400).json({ message: "Parametri month/year non validi" });
       }
-      const result = await storage.upsertGaraConfig(profile.organizationId!, month, year, config);
+      const configName = name || 'Configurazione';
+      let result;
+      if (id) {
+        const existing = await storage.getGaraConfigById(id);
+        if (!existing || existing.organizationId !== profile.organizationId) {
+          return res.status(404).json({ message: "Configurazione non trovata" });
+        }
+        result = await storage.updateGaraConfig(id, config, configName);
+      } else {
+        result = await storage.createGaraConfig(profile.organizationId!, month, year, configName, config);
+      }
       res.json(result);
     } catch (error) {
       console.error("Error saving gara config:", error);
       res.status(500).json({ message: "Errore nel salvataggio della configurazione gara" });
+    }
+  });
+
+  app.delete("/api/gara-config/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const configId = req.params.id;
+      const existing = await storage.getGaraConfigById(configId);
+      if (!existing || existing.organizationId !== profile.organizationId) {
+        return res.status(404).json({ message: "Configurazione non trovata" });
+      }
+      await storage.deleteGaraConfig(configId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting gara config:", error);
+      res.status(500).json({ message: "Errore nell'eliminazione della configurazione gara" });
     }
   });
 
@@ -561,7 +614,8 @@ export async function registerRoutes(
         ...extraConfigFields,
         importedFrom: importedFromMeta,
       };
-      const result = await storage.upsertGaraConfig(profile.organizationId!, month, year, garaConfigData);
+      const importName = `Importato da ${importSource === 'organization_config' ? 'Config Org' : 'Simulatore'} - ${new Date().toLocaleDateString('it-IT')}`;
+      const result = await storage.createGaraConfig(profile.organizationId!, month, year, importName, garaConfigData);
       res.json(result);
     } catch (error) {
       console.error("Error importing gara config from simulator:", error);

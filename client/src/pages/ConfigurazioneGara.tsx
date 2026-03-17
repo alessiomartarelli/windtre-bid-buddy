@@ -350,6 +350,10 @@ export default function ConfigurazioneGara() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [addPdvDialogOpen, setAddPdvDialogOpen] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [configName, setConfigName] = useState('');
+  const [saveAsNew, setSaveAsNew] = useState(false);
+  const [configListDialogOpen, setConfigListDialogOpen] = useState(false);
   const [newPdvCode, setNewPdvCode] = useState('');
   const [newPdvName, setNewPdvName] = useState('');
   const [newPdvRS, setNewPdvRS] = useState('');
@@ -379,8 +383,9 @@ export default function ConfigurazioneGara() {
   const { toast } = useToast();
   const {
     config: garaConfigRecord,
+    configList,
     loading, saving, history,
-    fetchConfig, saveConfig, fetchHistory, fetchPdvFromSales, importFromSimulator,
+    fetchConfig, fetchConfigList, saveConfig, deleteConfig, fetchHistory, fetchPdvFromSales, importFromSimulator,
   } = useGaraConfig();
 
   const isAdminOrSuper = ['super_admin', 'admin'].includes(profile?.role || '');
@@ -445,10 +450,50 @@ export default function ConfigurazioneGara() {
     setAssicurazioniConfig(prev => ({ ...prev, pdvInGara: pdvAssicurazioni, targetNoMalus: 15 * pdvAssicurazioni, targetS1: 20 * pdvAssicurazioni, targetS2: 25 * pdvAssicurazioni, premio: prev.premio ?? 750 }));
   }, [initializeRSConfigsFromPdvList]);
 
+  const loadConfigById = useCallback(async (id: string, month: number, year: number) => {
+    setInitialLoaded(false);
+    const result = await fetchConfig(month, year, id);
+    if (result?.config) {
+      const cfg = result.config as unknown as GaraConfigData;
+      const pdvs = cfg.pdvList || [];
+      setPdvList(pdvs);
+      setConfigName(result.name || '');
+      if (cfg.tipologiaGara) setTipologiaGara(cfg.tipologiaGara);
+      else setTipologiaGara('gara_operatore');
+      if (cfg.modalitaInserimentoRS) setModalitaRS(cfg.modalitaInserimentoRS as 'per_pdv' | 'per_rs');
+      else setModalitaRS('per_pdv');
+      if (cfg.pistaMobileConfig?.sogliePerPos?.length) {
+        setMobileConfig(cfg.pistaMobileConfig.sogliePerPos);
+      } else {
+        setMobileConfig(pdvs.map(p => initMobileConfigForPdv(p)));
+      }
+      if (cfg.pistaFissoConfig?.sogliePerPos?.length) {
+        setFissoConfig(cfg.pistaFissoConfig.sogliePerPos);
+      } else {
+        setFissoConfig(pdvs.map(p => initFissoConfigForPdv(p)));
+      }
+      if (cfg.partnershipRewardConfig?.configPerPos?.length) {
+        setPartnershipConfig(cfg.partnershipRewardConfig.configPerPos);
+      } else {
+        setPartnershipConfig(pdvs.map(p => initPartnershipConfigForPdv(p)));
+      }
+      initializeRSConfigsFromPdvList(pdvs);
+      if (cfg.pistaMobileRSConfig?.sogliePerRS?.length) setMobileRSConfig(cfg.pistaMobileRSConfig.sogliePerRS);
+      if (cfg.pistaFissoRSConfig?.sogliePerRS?.length) setFissoRSConfig(cfg.pistaFissoRSConfig.sogliePerRS);
+      if (cfg.partnershipRewardRSConfig?.configPerRS?.length) setPartnershipRSConfig(cfg.partnershipRewardRSConfig.configPerRS);
+      if (cfg.energiaConfig) setEnergiaConfig(cfg.energiaConfig);
+      if (cfg.assicurazioniConfig) setAssicurazioniConfig(cfg.assicurazioniConfig);
+    }
+    setIsDirty(false);
+    setInitialLoaded(true);
+  }, [fetchConfig, initializeRSConfigsFromPdvList]);
+
   const loadMonthConfig = useCallback(async (month: number, year: number) => {
     setInitialLoaded(false);
+    fetchConfigList(month, year);
     const result = await fetchConfig(month, year);
     if (result?.config) {
+      setConfigName(result.name || '');
       const cfg = result.config as unknown as GaraConfigData;
       const pdvs = cfg.pdvList || [];
       setPdvList(pdvs);
@@ -498,6 +543,7 @@ export default function ConfigurazioneGara() {
         setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 15 * pdvA, targetS1: 20 * pdvA, targetS2: 25 * pdvA, premio: 750 });
       }
     } else {
+      setConfigName('');
       setTipologiaGara('gara_operatore');
       setModalitaRS('per_pdv');
       setMobileRSConfig([]);
@@ -528,7 +574,24 @@ export default function ConfigurazioneGara() {
     fetchHistory();
   }, [selectedMonth, selectedYear, loadMonthConfig, fetchHistory]);
 
-  const handleSave = async () => {
+  const handleSaveClick = () => {
+    if (garaConfigRecord?.id && !saveAsNew) {
+      setConfigName(garaConfigRecord.name || configName || 'Configurazione');
+    } else if (!configName) {
+      setConfigName('');
+    }
+    setSaveAsNew(false);
+    setSaveDialogOpen(true);
+  };
+
+  const handleSaveAsNewClick = () => {
+    setConfigName('');
+    setSaveAsNew(true);
+    setSaveDialogOpen(true);
+  };
+
+  const handleSaveConfirm = async () => {
+    const nameToUse = configName.trim() || 'Configurazione';
     const configData: GaraConfigData = {
       pdvList,
       tipologiaGara,
@@ -545,13 +608,31 @@ export default function ConfigurazioneGara() {
         importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
       } : {}),
     };
-    const result = await saveConfig(selectedMonth, selectedYear, configData);
+    const existingId = (!saveAsNew && garaConfigRecord?.id) ? garaConfigRecord.id : undefined;
+    const result = await saveConfig(selectedMonth, selectedYear, configData, nameToUse, existingId);
     if (result) {
       setIsDirty(false);
+      setConfigName(nameToUse);
+      setSaveDialogOpen(false);
       fetchHistory();
-      toast({ title: 'Salvato', description: 'Configurazione gara salvata con successo.' });
+      fetchConfigList(selectedMonth, selectedYear);
+      toast({ title: 'Salvato', description: `Configurazione "${nameToUse}" salvata con successo.` });
     } else {
       toast({ title: 'Errore', description: 'Impossibile salvare la configurazione.', variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteConfig = async (id: string) => {
+    const success = await deleteConfig(id);
+    if (success) {
+      fetchConfigList(selectedMonth, selectedYear);
+      fetchHistory();
+      if (garaConfigRecord?.id === id) {
+        loadMonthConfig(selectedMonth, selectedYear);
+      }
+      toast({ title: 'Eliminata', description: 'Configurazione eliminata.' });
+    } else {
+      toast({ title: 'Errore', description: 'Impossibile eliminare la configurazione.', variant: 'destructive' });
     }
   };
 
@@ -745,10 +826,13 @@ export default function ConfigurazioneGara() {
                 ))}
               </SelectContent>
             </Select>
-            {garaConfigRecord && <Badge variant="secondary" className="text-xs">Salvato</Badge>}
+            {garaConfigRecord && <Badge variant="secondary" className="text-xs">{garaConfigRecord.name || 'Salvato'}</Badge>}
             {isDirty && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Modifiche non salvate</Badge>}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={() => { setConfigListDialogOpen(true); fetchConfigList(selectedMonth, selectedYear); }} data-testid="button-config-list">
+              <Settings className="h-4 w-4 mr-1" />Configurazioni ({configList.length})
+            </Button>
             <Button variant="outline" size="sm" onClick={() => { setHistoryDialogOpen(true); fetchHistory(); }} data-testid="button-history">
               <History className="h-4 w-4 mr-1" />Storico
             </Button>
@@ -758,9 +842,14 @@ export default function ConfigurazioneGara() {
             <Button variant="outline" size="sm" onClick={() => setAddPdvDialogOpen(true)} data-testid="button-add-pdv">
               <Plus className="h-4 w-4 mr-1" />PDV
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving || !isDirty} data-testid="button-save">
+            {garaConfigRecord?.id && (
+              <Button variant="outline" size="sm" onClick={handleSaveAsNewClick} disabled={saving} data-testid="button-save-as-new">
+                <Plus className="h-4 w-4 mr-1" />Salva come nuova
+              </Button>
+            )}
+            <Button size="sm" onClick={handleSaveClick} disabled={saving} data-testid="button-save">
               {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-              Salva
+              {garaConfigRecord?.id ? 'Salva' : 'Salva nuova'}
             </Button>
           </div>
         </div>
@@ -1278,6 +1367,72 @@ export default function ConfigurazioneGara() {
                 <Plus className="h-4 w-4 mr-1" />Aggiungi
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>{saveAsNew || !garaConfigRecord?.id ? 'Salva nuova configurazione' : 'Salva configurazione'}</DialogTitle>
+              <DialogDescription>Inserisci un nome per la configurazione.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className="text-sm">Nome configurazione *</Label>
+                <Input
+                  value={configName}
+                  onChange={e => setConfigName(e.target.value)}
+                  placeholder="es. Base, Ottimista, Conservativa"
+                  data-testid="input-config-name"
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter' && configName.trim()) handleSaveConfirm(); }}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSaveDialogOpen(false)} data-testid="button-cancel-save">Annulla</Button>
+              <Button onClick={handleSaveConfirm} disabled={saving || !configName.trim()} data-testid="button-confirm-save">
+                {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                Salva
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={configListDialogOpen} onOpenChange={setConfigListDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Configurazioni salvate — {MONTHS.find(m => m.value === selectedMonth)?.label} {selectedYear}</DialogTitle>
+              <DialogDescription>Seleziona una configurazione da caricare o elimina quelle non necessarie.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {configList.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Nessuna configurazione salvata per questo mese.</p>
+              ) : (
+                configList.map(c => (
+                  <div key={c.id} className="flex items-center gap-2">
+                    <Button
+                      variant={garaConfigRecord?.id === c.id ? 'secondary' : 'ghost'}
+                      className="flex-1 justify-between h-auto py-2"
+                      onClick={() => { loadConfigById(c.id, selectedMonth, selectedYear); setConfigListDialogOpen(false); }}
+                      data-testid={`button-config-${c.id}`}
+                    >
+                      <span className="font-medium">{c.name || 'Senza nome'}</span>
+                      {c.updatedAt && <span className="text-xs text-muted-foreground">{new Date(c.updatedAt).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteConfig(c.id)}
+                      data-testid={`button-delete-config-${c.id}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </div>
