@@ -118,6 +118,7 @@ export interface GaraConfigData {
     targetS1: number;
     targetS2: number;
     targetS3: number;
+    premio?: number;
     pistaSoglia_S1?: number;
     pistaSoglia_S2?: number;
     pistaSoglia_S3?: number;
@@ -129,6 +130,7 @@ export interface GaraConfigData {
     targetNoMalus: number;
     targetS1: number;
     targetS2: number;
+    premio?: number;
   };
   pistaMobile?: Record<string, unknown>;
   pistaFisso?: Record<string, unknown>;

@@ -369,10 +369,10 @@ export default function ConfigurazioneGara() {
   const [partnershipRSConfig, setPartnershipRSConfig] = useState<PartnershipRSConf[]>([]);
 
   const [energiaConfig, setEnergiaConfig] = useState<NonNullable<GaraConfigData['energiaConfig']>>({
-    pdvInGara: 0, targetNoMalus: 3, targetS1: 5, targetS2: 8, targetS3: 12,
+    pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premio: 1000,
   });
   const [assicurazioniConfig, setAssicurazioniConfig] = useState<NonNullable<GaraConfigData['assicurazioniConfig']>>({
-    pdvInGara: 0, targetNoMalus: 3, targetS1: 8, targetS2: 15,
+    pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premio: 750,
   });
 
   const { profile } = useAuth();
@@ -441,8 +441,8 @@ export default function ConfigurazioneGara() {
     const pdvEnergia = pdvs.filter(p => p.abilitaEnergia).length;
     const pdvAssicurazioni = pdvs.filter(p => p.abilitaAssicurazioni).length;
     const soglieEnergia = calcolaSoglieEnergiaDefault(pdvEnergia);
-    setEnergiaConfig(prev => ({ ...prev, pdvInGara: pdvEnergia, pistaSoglia_S1: soglieEnergia.S1, pistaSoglia_S2: soglieEnergia.S2, pistaSoglia_S3: soglieEnergia.S3, pistaSoglia_S4: soglieEnergia.S4, pistaSoglia_S5: soglieEnergia.S5 }));
-    setAssicurazioniConfig(prev => ({ ...prev, pdvInGara: pdvAssicurazioni }));
+    setEnergiaConfig(prev => ({ ...prev, pdvInGara: pdvEnergia, targetNoMalus: 10 * pdvEnergia, targetS1: 15 * pdvEnergia, targetS2: 25 * pdvEnergia, targetS3: 40 * pdvEnergia, premio: prev.premio ?? 1000, pistaSoglia_S1: soglieEnergia.S1, pistaSoglia_S2: soglieEnergia.S2, pistaSoglia_S3: soglieEnergia.S3, pistaSoglia_S4: soglieEnergia.S4, pistaSoglia_S5: soglieEnergia.S5 }));
+    setAssicurazioniConfig(prev => ({ ...prev, pdvInGara: pdvAssicurazioni, targetNoMalus: 15 * pdvAssicurazioni, targetS1: 20 * pdvAssicurazioni, targetS2: 25 * pdvAssicurazioni, premio: prev.premio ?? 750 }));
   }, [initializeRSConfigsFromPdvList]);
 
   const loadMonthConfig = useCallback(async (month: number, year: number) => {
@@ -489,13 +489,13 @@ export default function ConfigurazioneGara() {
       } else {
         const pdvE = pdvs.filter(p => p.abilitaEnergia).length;
         const se = calcolaSoglieEnergiaDefault(pdvE);
-        setEnergiaConfig({ pdvInGara: pdvE, targetNoMalus: 3, targetS1: 5, targetS2: 8, targetS3: 12, pistaSoglia_S1: se.S1, pistaSoglia_S2: se.S2, pistaSoglia_S3: se.S3, pistaSoglia_S4: se.S4, pistaSoglia_S5: se.S5 });
+        setEnergiaConfig({ pdvInGara: pdvE, targetNoMalus: 10 * pdvE, targetS1: 15 * pdvE, targetS2: 25 * pdvE, targetS3: 40 * pdvE, premio: 1000, pistaSoglia_S1: se.S1, pistaSoglia_S2: se.S2, pistaSoglia_S3: se.S3, pistaSoglia_S4: se.S4, pistaSoglia_S5: se.S5 });
       }
       if (cfg.assicurazioniConfig) {
         setAssicurazioniConfig(cfg.assicurazioniConfig);
       } else {
         const pdvA = pdvs.filter(p => p.abilitaAssicurazioni).length;
-        setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 3, targetS1: 8, targetS2: 15 });
+        setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 15 * pdvA, targetS1: 20 * pdvA, targetS2: 25 * pdvA, premio: 750 });
       }
     } else {
       setTipologiaGara('gara_operatore');
@@ -503,8 +503,8 @@ export default function ConfigurazioneGara() {
       setMobileRSConfig([]);
       setFissoRSConfig([]);
       setPartnershipRSConfig([]);
-      setEnergiaConfig({ pdvInGara: 0, targetNoMalus: 3, targetS1: 5, targetS2: 8, targetS3: 12 });
-      setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 3, targetS1: 8, targetS2: 15 });
+      setEnergiaConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premio: 1000 });
+      setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premio: 750 });
 
       const salesPdvs = await fetchPdvFromSales(month, year);
       if (salesPdvs.length > 0) {
@@ -642,13 +642,13 @@ export default function ConfigurazioneGara() {
       } else {
         const pdvE = pdvs.filter(p => p.abilitaEnergia).length;
         const se = calcolaSoglieEnergiaDefault(pdvE);
-        setEnergiaConfig({ pdvInGara: pdvE, targetNoMalus: 3, targetS1: 5, targetS2: 8, targetS3: 12, pistaSoglia_S1: se.S1, pistaSoglia_S2: se.S2, pistaSoglia_S3: se.S3, pistaSoglia_S4: se.S4, pistaSoglia_S5: se.S5 });
+        setEnergiaConfig({ pdvInGara: pdvE, targetNoMalus: 10 * pdvE, targetS1: 15 * pdvE, targetS2: 25 * pdvE, targetS3: 40 * pdvE, premio: 1000, pistaSoglia_S1: se.S1, pistaSoglia_S2: se.S2, pistaSoglia_S3: se.S3, pistaSoglia_S4: se.S4, pistaSoglia_S5: se.S5 });
       }
       if (cfg.assicurazioniConfig) {
         setAssicurazioniConfig(cfg.assicurazioniConfig);
       } else {
         const pdvA = pdvs.filter(p => p.abilitaAssicurazioni).length;
-        setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 3, targetS1: 8, targetS2: 15 });
+        setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 15 * pdvA, targetS1: 20 * pdvA, targetS2: 25 * pdvA, premio: 750 });
       }
 
       setIsDirty(false);
@@ -1128,6 +1128,10 @@ export default function ConfigurazioneGara() {
                       <Label className="text-xs">Contr. premio 1000€</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.targetS3} onChange={e => { setEnergiaConfig(prev => ({ ...prev, targetS3: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-target-s3" />
                     </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Premio €</Label>
+                      <Input type="number" className="h-8 text-sm" value={energiaConfig.premio ?? 1000} onChange={e => { setEnergiaConfig(prev => ({ ...prev, premio: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-premio" />
+                    </div>
                   </div>
 
                   <Separator />
@@ -1173,6 +1177,10 @@ export default function ConfigurazioneGara() {
                     <div className="space-y-1">
                       <Label className="text-xs">Punti premio 750€</Label>
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.targetS2} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, targetS2: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-target-s2" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Premio €</Label>
+                      <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.premio ?? 750} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, premio: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-premio" />
                     </div>
                   </div>
                 </CardContent>
