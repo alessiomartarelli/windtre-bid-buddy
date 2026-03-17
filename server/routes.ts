@@ -429,7 +429,9 @@ export async function registerRoutes(
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
-      const { month, year, config } = req.body;
+      const month = parseInt(req.query.month as string) || req.body.month;
+      const year = parseInt(req.query.year as string) || req.body.year;
+      const { config } = req.body;
       if (!month || !year || month < 1 || month > 12) {
         return res.status(400).json({ message: "Parametri month/year non validi" });
       }
@@ -500,6 +502,8 @@ export async function registerRoutes(
       let pdvList: SimulatorPdvEntry[] = [];
       let importedFromMeta: Record<string, unknown> = {};
 
+      let extraConfigFields: Record<string, unknown> = {};
+
       if (importSource === "organization_config") {
         const orgConfig = await storage.getOrgConfig(profile.organizationId!);
         if (!orgConfig) {
@@ -507,6 +511,9 @@ export async function registerRoutes(
         }
         const configData = orgConfig.config as Record<string, unknown> | null;
         pdvList = (configData?.puntiVendita || configData?.pdvList || []) as SimulatorPdvEntry[];
+        if (configData?.pistaMobile) extraConfigFields.pistaMobile = configData.pistaMobile;
+        if (configData?.pistaFisso) extraConfigFields.pistaFisso = configData.pistaFisso;
+        if (configData?.calendarioGara) extraConfigFields.calendarioGara = configData.calendarioGara;
         importedFromMeta = {
           type: "organization_config",
           organizationConfigId: orgConfig.id,
@@ -525,6 +532,9 @@ export async function registerRoutes(
         }
         const configData = pdvConfig.config as Record<string, unknown> | null;
         pdvList = (configData?.puntiVendita || configData?.pdvList || []) as SimulatorPdvEntry[];
+        if (configData?.pistaMobile) extraConfigFields.pistaMobile = configData.pistaMobile;
+        if (configData?.pistaFisso) extraConfigFields.pistaFisso = configData.pistaFisso;
+        if (configData?.calendarioGara) extraConfigFields.calendarioGara = configData.calendarioGara;
         importedFromMeta = {
           type: "pdv_configuration",
           pdvConfigurationId,
@@ -533,8 +543,9 @@ export async function registerRoutes(
         };
       }
 
-      const garaConfigData = {
+      const garaConfigData: Record<string, unknown> = {
         pdvList: mapPdvListForGara(pdvList),
+        ...extraConfigFields,
         importedFrom: importedFromMeta,
       };
       const result = await storage.upsertGaraConfig(profile.organizationId!, month, year, garaConfigData);
