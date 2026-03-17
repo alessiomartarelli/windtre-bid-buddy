@@ -29,6 +29,91 @@ export interface GaraConfigData {
     organizationConfigId?: string;
     importedAt: string;
   };
+  tipologiaGara?: 'gara_operatore' | 'gara_operatore_rs';
+  modalitaInserimentoRS?: 'per_pdv' | 'per_rs' | null;
+  pistaMobileConfig?: {
+    sogliePerPos: Array<{
+      posCode: string;
+      soglia1: number;
+      soglia2: number;
+      soglia3: number;
+      soglia4: number;
+      canoneMedio: number;
+      forecastTargetPunti: number;
+      clusterPista?: number;
+    }>;
+  };
+  pistaFissoConfig?: {
+    sogliePerPos: Array<{
+      posCode: string;
+      soglia1: number;
+      soglia2: number;
+      soglia3: number;
+      soglia4: number;
+      soglia5: number;
+      forecastTargetPunti: number;
+    }>;
+  };
+  partnershipRewardConfig?: {
+    configPerPos: Array<{
+      posCode: string;
+      config: {
+        target100: number;
+        target80: number;
+        premio100: number;
+        premio80: number;
+      };
+    }>;
+  };
+  pistaMobileRSConfig?: {
+    sogliePerRS: Array<{
+      ragioneSociale: string;
+      soglia1: number;
+      soglia2: number;
+      soglia3: number;
+      soglia4: number;
+      canoneMedio: number;
+      forecastTargetPunti: number;
+    }>;
+  };
+  pistaFissoRSConfig?: {
+    sogliePerRS: Array<{
+      ragioneSociale: string;
+      soglia1: number;
+      soglia2: number;
+      soglia3: number;
+      soglia4: number;
+      soglia5: number;
+      forecastTargetPunti: number;
+    }>;
+  };
+  partnershipRewardRSConfig?: {
+    configPerRS: Array<{
+      ragioneSociale: string;
+      target100: number;
+      target80: number;
+      premio100: number;
+      premio80: number;
+    }>;
+  };
+  energiaConfig?: {
+    pdvInGara: number;
+    targetNoMalus: number;
+    targetS1: number;
+    targetS2: number;
+    targetS3: number;
+    pistaSoglia_S1?: number;
+    pistaSoglia_S2?: number;
+    pistaSoglia_S3?: number;
+    pistaSoglia_S4?: number;
+    pistaSoglia_S5?: number;
+  };
+  assicurazioniConfig?: {
+    pdvInGara: number;
+    targetNoMalus: number;
+    targetS1: number;
+    targetS2: number;
+  };
   pistaMobile?: Record<string, unknown>;
   pistaFisso?: Record<string, unknown>;
   calendarioGara?: Record<string, unknown>;

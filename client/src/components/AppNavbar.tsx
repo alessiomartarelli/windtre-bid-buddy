@@ -69,7 +69,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
   ];
 
   const simulatoreItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
-    { path: '/preventivatore', label: 'Preventivatore', icon: FileText },
+    { path: '/preventivatore', label: 'Simulatore', icon: FileText },
     { path: '/dashboard', label: 'Dashboard Sim.', icon: LayoutDashboard },
     ...(isAdminOrSuper ? [{ path: '/tabelle-calcolo', label: 'Tabelle Calcolo', icon: Table2 }] : []),
   ];
