@@ -732,80 +732,179 @@ export default function DashboardGaraReale() {
         .sort((a, b) => b.pezzi - a.pezzi);
 
       if (pdvBreakdown.length > 0) {
-        let totalPremio = 0;
-        let totalPunti = 0;
-        let bestSoglia = 0;
-        let totalTarget = 0;
-        let totalGap = 0;
-        let hasTarget = false;
-        for (const pdv of pdvBreakdown) {
-          totalPremio += pdv.pdvCalc.premioStimato;
-          totalPunti += pdv.pdvCalc.puntiTotali;
-          if (pdv.pdvCalc.sogliaRaggiunta > bestSoglia) bestSoglia = pdv.pdvCalc.sogliaRaggiunta;
-          if (pdv.pdvCalc.forecastTarget) {
-            hasTarget = true;
-            totalTarget += pdv.pdvCalc.forecastTarget;
-            totalGap += pdv.pdvCalc.forecastGap ?? 0;
-          }
-        }
-        aggregateCalc = {
-          premioStimato: totalPremio,
-          puntiTotali: totalPunti,
-          sogliaRaggiunta: bestSoglia,
-          sogliaLabel: sogliaToLabel(bestSoglia),
-          forecastTarget: hasTarget ? totalTarget : undefined,
-          forecastGap: hasTarget ? totalGap : undefined,
-        };
+        const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership");
 
-        const projItems = pdvBreakdown.map((pdv) => {
-          const pdvConfig2 = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
-          const pdvCal = pdvConfig2?.calendar || DEFAULT_CALENDAR;
-          const pdvWd = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCal, new Date());
-          const projectedItems: AggregatedItem[] = pdv.categories.map((c) => {
-            const projPezzi = pdvWd.elapsedWorkingDays > 0
-              ? Math.round((c.pezzi / pdvWd.elapsedWorkingDays) * pdvWd.totalWorkingDays)
-              : c.pezzi;
-            return { pista, targetCategory: c.category, targetLabel: c.label, pezzi: projPezzi };
+        if (useRSAggregation) {
+          const rsGroupMap = new Map<string, typeof pdvBreakdown>();
+          for (const pdv of pdvBreakdown) {
+            const rs = pdv.ragioneSociale || 'Senza RS';
+            if (!rsGroupMap.has(rs)) rsGroupMap.set(rs, []);
+            rsGroupMap.get(rs)!.push(pdv);
+          }
+
+          let totalPremio = 0;
+          let totalPunti = 0;
+          let bestSoglia = 0;
+          let totalPremioProj = 0;
+          let totalPuntiProj = 0;
+          let bestSogliaProj = 0;
+
+          rsGroupMap.forEach((rsPdvs, rs) => {
+            const rsItems: AggregatedItem[] = [];
+            for (const pdv of rsPdvs) {
+              const pdvItems2 = pdv.categories.map(c => ({ pista, targetCategory: c.category, targetLabel: c.label, pezzi: c.pezzi }));
+              rsItems.push(...pdvItems2);
+            }
+            const mergedItems = new Map<string, AggregatedItem>();
+            for (const item of rsItems) {
+              const key = item.targetCategory;
+              if (mergedItems.has(key)) {
+                mergedItems.get(key)!.pezzi += item.pezzi;
+              } else {
+                mergedItems.set(key, { ...item });
+              }
+            }
+            const aggregatedRSItems = Array.from(mergedItems.values());
+
+            const firstPdvConfig = puntiVendita.find(p => p.codicePos === rsPdvs[0].codicePos);
+            const rsCalendar = firstPdvConfig?.calendar || DEFAULT_CALENDAR;
+            const rsWorkday = getWorkdayInfoForMonth(selYear, selMonth - 1, rsCalendar, new Date());
+
+            let rsCalc = EMPTY_CALC;
+            if (pista === "mobile") {
+              const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
+              rsCalc = calcMobilePerPdv(aggregatedRSItems, mConfig, rsCalendar, selYear, selMonth, mobileCategories, rsWorkday);
+            } else if (pista === "fisso") {
+              const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
+              const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
+              rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday);
+            } else if (pista === "partnership") {
+              const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
+              const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
+              rsCalc = calcPartnershipPerPdv(aggregatedRSItems, prConfig, rsWorkday.elapsedWorkingDays, rsPdvs[0].codicePos);
+            }
+
+            totalPremio += rsCalc.premioStimato;
+            totalPunti += rsCalc.puntiTotali;
+            if (rsCalc.sogliaRaggiunta > bestSoglia) bestSoglia = rsCalc.sogliaRaggiunta;
+
+            for (const pdv of rsPdvs) {
+              pdv.pdvCalc = rsCalc;
+            }
+
+            const projectedRSItems = aggregatedRSItems.map(item => {
+              const projPezzi = rsWorkday.elapsedWorkingDays > 0
+                ? Math.round((item.pezzi / rsWorkday.elapsedWorkingDays) * rsWorkday.totalWorkingDays)
+                : item.pezzi;
+              return { ...item, pezzi: projPezzi };
+            });
+
+            let rsProjCalc = EMPTY_CALC;
+            if (pista === "mobile") {
+              const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
+              rsProjCalc = calcMobilePerPdv(projectedRSItems, mConfig, rsCalendar, selYear, selMonth, mobileCategories, rsWorkday);
+            } else if (pista === "fisso") {
+              const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
+              const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
+              rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday);
+            } else if (pista === "partnership") {
+              const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
+              const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
+              rsProjCalc = calcPartnershipPerPdv(projectedRSItems, prConfig, rsWorkday.totalWorkingDays, rsPdvs[0].codicePos);
+            }
+            totalPremioProj += rsProjCalc.premioStimato;
+            totalPuntiProj += rsProjCalc.puntiTotali;
+            if (rsProjCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = rsProjCalc.sogliaRaggiunta;
           });
-          return { ...pdv, items: projectedItems };
-        });
 
-        let totalPremioProj = 0;
-        let totalPuntiProj = 0;
-        let bestSogliaProj = 0;
-        for (const pdv of projItems) {
-          const pdvConfig3 = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
-          const pdvCalendar3 = pdvConfig3?.calendar || DEFAULT_CALENDAR;
-          const pdvWorkday3 = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCalendar3, new Date());
-          let projCalc = EMPTY_CALC;
-          const projRS = pdvConfig3?.ragioneSociale || pdv.ragioneSociale;
-          if (pista === "mobile") {
-            const mConfig = getMobileConfigForPdv(pdv.codicePos, projRS);
-            projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, mobileCategories, pdvWorkday3);
-          } else if (pista === "fisso") {
-            const fConfig = getFissoConfigForPdv(pdv.codicePos, projRS);
-            const cluster = clusterToNumber(pdvConfig3?.clusterFisso);
-            projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3);
-          } else if (pista === "energia") {
-            const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
-            projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia);
-          } else if (pista === "partnership") {
-            const pCfg = getPartnershipConfigForPdv(pdv.codicePos, projRS);
-            const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-            projCalc = calcPartnershipPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos);
-          } else if (pista === "assicurazioni" || pista === "protecta") {
-            projCalc = pdv.pdvCalc;
+          aggregateCalc = {
+            premioStimato: totalPremio,
+            puntiTotali: totalPunti,
+            sogliaRaggiunta: bestSoglia,
+            sogliaLabel: sogliaToLabel(bestSoglia),
+          };
+          aggregateCalcProiezione = {
+            premioStimato: totalPremioProj,
+            puntiTotali: totalPuntiProj,
+            sogliaRaggiunta: bestSogliaProj,
+            sogliaLabel: sogliaToLabel(bestSogliaProj),
+          };
+        } else {
+          let totalPremio = 0;
+          let totalPunti = 0;
+          let bestSoglia = 0;
+          let totalTarget = 0;
+          let totalGap = 0;
+          let hasTarget = false;
+          for (const pdv of pdvBreakdown) {
+            totalPremio += pdv.pdvCalc.premioStimato;
+            totalPunti += pdv.pdvCalc.puntiTotali;
+            if (pdv.pdvCalc.sogliaRaggiunta > bestSoglia) bestSoglia = pdv.pdvCalc.sogliaRaggiunta;
+            if (pdv.pdvCalc.forecastTarget) {
+              hasTarget = true;
+              totalTarget += pdv.pdvCalc.forecastTarget;
+              totalGap += pdv.pdvCalc.forecastGap ?? 0;
+            }
           }
-          totalPremioProj += projCalc.premioStimato;
-          totalPuntiProj += projCalc.puntiTotali;
-          if (projCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = projCalc.sogliaRaggiunta;
+          aggregateCalc = {
+            premioStimato: totalPremio,
+            puntiTotali: totalPunti,
+            sogliaRaggiunta: bestSoglia,
+            sogliaLabel: sogliaToLabel(bestSoglia),
+            forecastTarget: hasTarget ? totalTarget : undefined,
+            forecastGap: hasTarget ? totalGap : undefined,
+          };
+
+          const projItems = pdvBreakdown.map((pdv) => {
+            const pdvConfig2 = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
+            const pdvCal = pdvConfig2?.calendar || DEFAULT_CALENDAR;
+            const pdvWd = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCal, new Date());
+            const projectedItems: AggregatedItem[] = pdv.categories.map((c) => {
+              const projPezzi = pdvWd.elapsedWorkingDays > 0
+                ? Math.round((c.pezzi / pdvWd.elapsedWorkingDays) * pdvWd.totalWorkingDays)
+                : c.pezzi;
+              return { pista, targetCategory: c.category, targetLabel: c.label, pezzi: projPezzi };
+            });
+            return { ...pdv, items: projectedItems };
+          });
+
+          let totalPremioProj = 0;
+          let totalPuntiProj = 0;
+          let bestSogliaProj = 0;
+          for (const pdv of projItems) {
+            const pdvConfig3 = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
+            const pdvCalendar3 = pdvConfig3?.calendar || DEFAULT_CALENDAR;
+            const pdvWorkday3 = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCalendar3, new Date());
+            let projCalc = EMPTY_CALC;
+            const projRS = pdvConfig3?.ragioneSociale || pdv.ragioneSociale;
+            if (pista === "mobile") {
+              const mConfig = getMobileConfigForPdv(pdv.codicePos, projRS);
+              projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, mobileCategories, pdvWorkday3);
+            } else if (pista === "fisso") {
+              const fConfig = getFissoConfigForPdv(pdv.codicePos, projRS);
+              const cluster = clusterToNumber(pdvConfig3?.clusterFisso);
+              projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3);
+            } else if (pista === "energia") {
+              const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
+              projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia);
+            } else if (pista === "partnership") {
+              const pCfg = getPartnershipConfigForPdv(pdv.codicePos, projRS);
+              const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
+              projCalc = calcPartnershipPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos);
+            } else if (pista === "assicurazioni" || pista === "protecta") {
+              projCalc = pdv.pdvCalc;
+            }
+            totalPremioProj += projCalc.premioStimato;
+            totalPuntiProj += projCalc.puntiTotali;
+            if (projCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = projCalc.sogliaRaggiunta;
+          }
+          aggregateCalcProiezione = {
+            premioStimato: totalPremioProj,
+            puntiTotali: totalPuntiProj,
+            sogliaRaggiunta: bestSogliaProj,
+            sogliaLabel: sogliaToLabel(bestSogliaProj),
+          };
         }
-        aggregateCalcProiezione = {
-          premioStimato: totalPremioProj,
-          puntiTotali: totalPuntiProj,
-          sogliaRaggiunta: bestSogliaProj,
-          sogliaLabel: sogliaToLabel(bestSogliaProj),
-        };
       }
 
       stats.push({

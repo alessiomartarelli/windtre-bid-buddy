@@ -392,11 +392,7 @@ export default function ConfigurazioneGara() {
     return map;
   }, [pdvList]);
 
-  const initializeConfigsFromPdvList = useCallback((pdvs: GaraConfigPdv[]) => {
-    setMobileConfig(pdvs.map(p => initMobileConfigForPdv(p)));
-    setFissoConfig(pdvs.map(p => initFissoConfigForPdv(p)));
-    setPartnershipConfig(pdvs.map(p => initPartnershipConfigForPdv(p)));
-
+  const initializeRSConfigsFromPdvList = useCallback((pdvs: GaraConfigPdv[]) => {
     const rsMap = new Map<string, GaraConfigPdv[]>();
     for (const pdv of pdvs) {
       const rs = pdv.ragioneSociale || 'Senza RS';
@@ -430,13 +426,21 @@ export default function ConfigurazioneGara() {
     setMobileRSConfig(mobileRS);
     setFissoRSConfig(fissoRS);
     setPartnershipRSConfig(partnershipRS);
+  }, []);
+
+  const initializeConfigsFromPdvList = useCallback((pdvs: GaraConfigPdv[]) => {
+    setMobileConfig(pdvs.map(p => initMobileConfigForPdv(p)));
+    setFissoConfig(pdvs.map(p => initFissoConfigForPdv(p)));
+    setPartnershipConfig(pdvs.map(p => initPartnershipConfigForPdv(p)));
+
+    initializeRSConfigsFromPdvList(pdvs);
 
     const pdvEnergia = pdvs.filter(p => p.abilitaEnergia).length;
     const pdvAssicurazioni = pdvs.filter(p => p.abilitaAssicurazioni).length;
     const soglieEnergia = calcolaSoglieEnergiaDefault(pdvEnergia);
     setEnergiaConfig(prev => ({ ...prev, pdvInGara: pdvEnergia, pistaSoglia_S1: soglieEnergia.S1, pistaSoglia_S2: soglieEnergia.S2, pistaSoglia_S3: soglieEnergia.S3, pistaSoglia_S4: soglieEnergia.S4, pistaSoglia_S5: soglieEnergia.S5 }));
     setAssicurazioniConfig(prev => ({ ...prev, pdvInGara: pdvAssicurazioni }));
-  }, []);
+  }, [initializeRSConfigsFromPdvList]);
 
   const loadMonthConfig = useCallback(async (month: number, year: number) => {
     setInitialLoaded(false);
@@ -470,17 +474,13 @@ export default function ConfigurazioneGara() {
       if (cfg.pistaMobileRSConfig?.sogliePerRS?.length) {
         setMobileRSConfig(cfg.pistaMobileRSConfig.sogliePerRS);
       } else {
-        setMobileRSConfig([]);
+        initializeRSConfigsFromPdvList(pdvs);
       }
       if (cfg.pistaFissoRSConfig?.sogliePerRS?.length) {
         setFissoRSConfig(cfg.pistaFissoRSConfig.sogliePerRS);
-      } else {
-        setFissoRSConfig([]);
       }
       if (cfg.partnershipRewardRSConfig?.configPerRS?.length) {
         setPartnershipRSConfig(cfg.partnershipRewardRSConfig.configPerRS);
-      } else {
-        setPartnershipRSConfig([]);
       }
       if (cfg.energiaConfig) {
         setEnergiaConfig(cfg.energiaConfig);
@@ -559,20 +559,28 @@ export default function ConfigurazioneGara() {
   };
 
   const handleRemovePdv = (index: number) => {
-    setPdvList(prev => prev.filter((_, i) => i !== index));
+    const updatedPdvs = pdvList.filter((_, i) => i !== index);
+    setPdvList(updatedPdvs);
     setMobileConfig(prev => prev.filter((_, i) => i !== index));
     setFissoConfig(prev => prev.filter((_, i) => i !== index));
     setPartnershipConfig(prev => prev.filter((_, i) => i !== index));
+    if (tipologiaGara === 'gara_operatore_rs') {
+      initializeRSConfigsFromPdvList(updatedPdvs);
+    }
     setIsDirty(true);
   };
 
   const handleAddPdv = () => {
     if (!newPdvCode.trim()) return;
     const newPdv = createEmptyGaraPdv(newPdvCode.trim(), newPdvName.trim(), newPdvRS.trim());
-    setPdvList(prev => [...prev, newPdv]);
+    const updatedPdvs = [...pdvList, newPdv];
+    setPdvList(updatedPdvs);
     setMobileConfig(prev => [...prev, initMobileConfigForPdv(newPdv)]);
     setFissoConfig(prev => [...prev, initFissoConfigForPdv(newPdv)]);
     setPartnershipConfig(prev => [...prev, initPartnershipConfigForPdv(newPdv)]);
+    if (tipologiaGara === 'gara_operatore_rs') {
+      initializeRSConfigsFromPdvList(updatedPdvs);
+    }
     setNewPdvCode('');
     setNewPdvName('');
     setNewPdvRS('');
@@ -785,7 +793,14 @@ export default function ConfigurazioneGara() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-xs">Tipologia Gara</Label>
-                      <Select value={tipologiaGara} onValueChange={(v: string) => { setTipologiaGara(v as 'gara_operatore' | 'gara_operatore_rs'); setIsDirty(true); }}>
+                      <Select value={tipologiaGara} onValueChange={(v: string) => {
+                        const newTipo = v as 'gara_operatore' | 'gara_operatore_rs';
+                        setTipologiaGara(newTipo);
+                        if (newTipo === 'gara_operatore_rs' && mobileRSConfig.length === 0 && pdvList.length > 0) {
+                          initializeRSConfigsFromPdvList(pdvList);
+                        }
+                        setIsDirty(true);
+                      }}>
                         <SelectTrigger className="h-8 text-sm" data-testid="select-tipologia-gara"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="gara_operatore">Gara Operatore</SelectItem>
