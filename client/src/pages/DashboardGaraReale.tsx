@@ -96,6 +96,7 @@ interface AggregatedItem {
   targetCategory: string;
   targetLabel: string;
   pezzi: number;
+  canone: number;
 }
 
 interface PdvData {
@@ -210,6 +211,8 @@ function calcMobilePerPdv(
     pezzi: item.pezzi,
   }));
 
+  const totalCanone = validItems.reduce((sum, item) => sum + (item.canone || 0), 0);
+
   const result = calcolaPremioPistaMobilePerPos({
     configPos: mobileConfig,
     dettaglio,
@@ -218,6 +221,7 @@ function calcMobilePerPdv(
     month: month - 1,
     mobileCategories,
     workdayInfoOverride: workdayInfo,
+    valoreCanoniOverride: totalCanone,
   });
 
   return {
@@ -551,7 +555,7 @@ export default function DashboardGaraReale() {
       assicurazioniConfig: cfg?.assicurazioniConfig as AssicurazioniConfig | undefined,
       tipologiaGara: (cfg?.tipologiaGara as string) || 'gara_operatore',
       modalitaInserimentoRS: (cfg?.modalitaInserimentoRS as string) || 'per_pdv',
-      pistaMobileRSConfig: (cfg?.pistaMobileRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; canoneMedio: number; forecastTargetPunti: number; clusterPista: string }> }) || undefined,
+      pistaMobileRSConfig: (cfg?.pistaMobileRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; forecastTargetPunti: number; clusterPista: string }> }) || undefined,
       pistaFissoRSConfig: (cfg?.pistaFissoRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; soglia5: number; forecastTargetPunti: number }> }) || undefined,
       partnershipRewardRSConfig: (cfg?.partnershipRewardRSConfig as { configPerRS?: Array<{ ragioneSociale: string; target100: number; target80: number; premio100: number; premio80: number }> }) || undefined,
     };
@@ -605,7 +609,6 @@ export default function DashboardGaraReale() {
             multiplierSoglia2: (rsConfig as Record<string, unknown>).multiplierSoglia2 as number || 1.2,
             multiplierSoglia3: (rsConfig as Record<string, unknown>).multiplierSoglia3 as number || 1.5,
             multiplierSoglia4: (rsConfig as Record<string, unknown>).multiplierSoglia4 as number || 2,
-            canoneMedio: rsConfig.canoneMedio,
             forecastTargetPunti: rsConfig.forecastTargetPunti,
             clusterPista: rsConfig.clusterPista as 1 | 2 | 3 | undefined,
           };
@@ -661,7 +664,7 @@ export default function DashboardGaraReale() {
       proiezionePezzi: number;
       calc: PistaCalcResult;
       calcProiezione: PistaCalcResult;
-      categories: Array<{ category: string; label: string; pezzi: number; proiezione: number }>;
+      categories: Array<{ category: string; label: string; pezzi: number; canone: number; proiezione: number }>;
       pdvBreakdown: Array<{
         codicePos: string;
         nomeNegozio: string;
@@ -669,7 +672,7 @@ export default function DashboardGaraReale() {
         pezzi: number;
         proiezione: number;
         pdvCalc: PistaCalcResult;
-        categories: Array<{ category: string; label: string; pezzi: number }>;
+        categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
       }>;
     }> = [];
 
@@ -691,7 +694,7 @@ export default function DashboardGaraReale() {
         continue;
       }
 
-      const categories = Object.values(pistaData).map((cat) => {
+      const categories = Object.values(pistaData).map((cat: any) => {
         const proiezione = workdayInfo.elapsedWorkingDays > 0
           ? Math.round((cat.pezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
           : cat.pezzi;
@@ -699,6 +702,7 @@ export default function DashboardGaraReale() {
           category: cat.targetCategory,
           label: cat.targetLabel,
           pezzi: cat.pezzi,
+          canone: cat.canone || 0,
           proiezione,
         };
       }).sort((a, b) => b.pezzi - a.pezzi);
@@ -752,7 +756,7 @@ export default function DashboardGaraReale() {
             pezzi: pdvPezzi,
             proiezione: pdvProiezione,
             pdvCalc,
-            categories: pdvItems.map((i) => ({ category: i.targetCategory, label: i.targetLabel, pezzi: i.pezzi })),
+            categories: pdvItems.map((i) => ({ category: i.targetCategory, label: i.targetLabel, pezzi: i.pezzi, canone: i.canone || 0 })),
           };
         })
         .filter((p) => p.pezzi > 0)
@@ -779,7 +783,7 @@ export default function DashboardGaraReale() {
           rsGroupMap.forEach((rsPdvs, rs) => {
             const rsItems: AggregatedItem[] = [];
             for (const pdv of rsPdvs) {
-              const pdvItems2 = pdv.categories.map(c => ({ pista, targetCategory: c.category, targetLabel: c.label, pezzi: c.pezzi }));
+              const pdvItems2 = pdv.categories.map(c => ({ pista, targetCategory: c.category, targetLabel: c.label, pezzi: c.pezzi, canone: c.canone || 0 }));
               rsItems.push(...pdvItems2);
             }
             const mergedItems = new Map<string, AggregatedItem>();
@@ -787,6 +791,7 @@ export default function DashboardGaraReale() {
               const key = item.targetCategory;
               if (mergedItems.has(key)) {
                 mergedItems.get(key)!.pezzi += item.pezzi;
+                mergedItems.get(key)!.canone += item.canone;
               } else {
                 mergedItems.set(key, { ...item });
               }
@@ -820,10 +825,10 @@ export default function DashboardGaraReale() {
             }
 
             const projectedRSItems = aggregatedRSItems.map(item => {
-              const projPezzi = rsWorkday.elapsedWorkingDays > 0
-                ? Math.round((item.pezzi / rsWorkday.elapsedWorkingDays) * rsWorkday.totalWorkingDays)
-                : item.pezzi;
-              return { ...item, pezzi: projPezzi };
+              const ratio = rsWorkday.elapsedWorkingDays > 0
+                ? rsWorkday.totalWorkingDays / rsWorkday.elapsedWorkingDays
+                : 1;
+              return { ...item, pezzi: Math.round(item.pezzi * ratio), canone: item.canone * ratio };
             });
 
             let rsProjCalc = EMPTY_CALC;
@@ -887,10 +892,10 @@ export default function DashboardGaraReale() {
             const pdvCal = pdvConfig2?.calendar || DEFAULT_CALENDAR;
             const pdvWd = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCal, new Date());
             const projectedItems: AggregatedItem[] = pdv.categories.map((c) => {
-              const projPezzi = pdvWd.elapsedWorkingDays > 0
-                ? Math.round((c.pezzi / pdvWd.elapsedWorkingDays) * pdvWd.totalWorkingDays)
-                : c.pezzi;
-              return { pista, targetCategory: c.category, targetLabel: c.label, pezzi: projPezzi };
+              const ratio = pdvWd.elapsedWorkingDays > 0
+                ? pdvWd.totalWorkingDays / pdvWd.elapsedWorkingDays
+                : 1;
+              return { pista, targetCategory: c.category, targetLabel: c.label, pezzi: Math.round(c.pezzi * ratio), canone: (c.canone || 0) * ratio };
             });
             return { ...pdv, items: projectedItems };
           });

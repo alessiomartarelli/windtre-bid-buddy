@@ -102,6 +102,7 @@ export function calcolaPremioPistaMobilePerPos(options: {
   mobileCategories: MobileCategoryConfig[];
   today?: Date;
   workdayInfoOverride?: WorkdayInfo;
+  valoreCanoniOverride?: number;
 }): CalcoloPistaMobilePosResult & { extraGettoniEuro: number; gettoneContrattualeEuro: number; gettoneSogliaEuro: number } {
   const {
     configPos,
@@ -112,6 +113,7 @@ export function calcolaPremioPistaMobilePerPos(options: {
     mobileCategories,
     today = new Date(),
     workdayInfoOverride,
+    valoreCanoniOverride,
   } = options;
 
   // Prima passata per calcolare punti e soglia (senza gettoni soglia)
@@ -138,7 +140,7 @@ export function calcolaPremioPistaMobilePerPos(options: {
     ? attivazioni / workdayInfo.totalWorkingDays 
     : 0;
 
-  const valoreCanoni = attivazioni * configPos.canoneMedio;
+  const valoreCanoni = valoreCanoniOverride ?? attivazioni * (configPos.canoneMedio || 0);
 
   const mult = getMultiplierForSoglia(soglia, configPos);
 

@@ -38,7 +38,6 @@ export interface GaraConfigData {
       soglia2: number;
       soglia3: number;
       soglia4: number;
-      canoneMedio: number;
       forecastTargetPunti: number;
       clusterPista?: number;
     }>;
@@ -72,7 +71,6 @@ export interface GaraConfigData {
       soglia2: number;
       soglia3: number;
       soglia4: number;
-      canoneMedio: number;
       forecastTargetPunti: number;
     }>;
   };

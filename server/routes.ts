@@ -1532,13 +1532,12 @@ export async function registerRoutes(
       const { getDefaultMappingRules } = await import("../shared/bisuiteMapping");
       const rules = mappingConfig?.rules || getDefaultMappingRules();
 
-      const { mapBiSuiteSale } = await import("../shared/bisuiteMapping");
-
       type AggregatedItem = {
         pista: string;
         targetCategory: string;
         targetLabel: string;
         pezzi: number;
+        canone: number;
       };
 
       const byPdv: Record<string, {
@@ -1571,40 +1570,42 @@ export async function registerRoutes(
         }
 
         const articoli = raw.articoli || [];
-        const saleForMapping = {
-          cliente: raw.cliente,
-          articoli: articoli,
-        };
-
-        const mapped = mapBiSuiteSale(saleForMapping, rules);
+        const { mapBiSuiteArticle } = await import("../shared/bisuiteMapping");
+        const clienteTipo = raw.cliente?.clienteTipo || '';
         totalArticoli += articoli.length;
         byPdv[codicePos].totalArticoli += articoli.length;
 
-        const unmappedCount = articoli.length - mapped.length;
-        totalUnmapped += unmappedCount;
-        byPdv[codicePos].unmapped += unmappedCount;
-
-        for (const m of mapped) {
-          totalMapped++;
+        let mappedCount = 0;
+        for (const art of articoli) {
+          const m = mapBiSuiteArticle(art, clienteTipo, rules);
+          if (!m) continue;
+          mappedCount++;
+          const artCanone = parseFloat(art.dettaglio?.canone || '0') || 0;
           const existing = byPdv[codicePos].items.find(
             (i) => i.pista === m.pista && i.targetCategory === m.targetCategory
           );
           if (existing) {
             existing.pezzi++;
+            existing.canone += artCanone;
           } else {
             byPdv[codicePos].items.push({
               pista: m.pista,
               targetCategory: m.targetCategory,
               targetLabel: m.targetLabel,
               pezzi: 1,
+              canone: artCanone,
             });
           }
         }
+        totalMapped += mappedCount;
+        const unmappedCount = articoli.length - mappedCount;
+        totalUnmapped += unmappedCount;
+        byPdv[codicePos].unmapped += unmappedCount;
       }
 
       const pdvList = Object.values(byPdv);
 
-      const totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number }>> = {};
+      const totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number; canone: number }>> = {};
       for (const pdv of pdvList) {
         for (const item of pdv.items) {
           if (!totaliPerPista[item.pista]) totaliPerPista[item.pista] = {};
@@ -1613,9 +1614,11 @@ export async function registerRoutes(
               targetCategory: item.targetCategory,
               targetLabel: item.targetLabel,
               pezzi: 0,
+              canone: 0,
             };
           }
           totaliPerPista[item.pista][item.targetCategory].pezzi += item.pezzi;
+          totaliPerPista[item.pista][item.targetCategory].canone += item.canone;
         }
       }
 

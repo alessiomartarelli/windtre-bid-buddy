@@ -59,7 +59,7 @@ function createEmptyGaraPdv(codicePos: string, nome: string, ragioneSociale: str
 function initMobileConfigForPdv(pdv: GaraConfigPdv) {
   const defaultMultipliers = { multiplierSoglia1: 1, multiplierSoglia2: 1.2, multiplierSoglia3: 1.5, multiplierSoglia4: 2 };
   if (!pdv.clusterMobile) {
-    return { posCode: pdv.codicePos, soglia1: 70, soglia2: 105, soglia3: 135, soglia4: 165, ...defaultMultipliers, canoneMedio: 10, forecastTargetPunti: 100, clusterPista: 1 as const };
+    return { posCode: pdv.codicePos, soglia1: 70, soglia2: 105, soglia3: 135, soglia4: 165, ...defaultMultipliers, forecastTargetPunti: 100, clusterPista: 1 as const };
   }
   const clusterPista = mapClusterMobileToClusterPista(pdv.clusterMobile as ClusterCode);
   const thresholds = getThresholdsByCluster(pdv.tipoPosizione || 'altro', clusterPista, pdv.clusterMobile);
@@ -67,7 +67,6 @@ function initMobileConfigForPdv(pdv: GaraConfigPdv) {
     posCode: pdv.codicePos,
     ...thresholds,
     ...defaultMultipliers,
-    canoneMedio: 10,
     forecastTargetPunti: thresholds.soglia4,
     clusterPista,
   };
@@ -422,7 +421,7 @@ export default function ConfigurazioneGara() {
         pTarget += pc.config.target100; pPremio += pc.config.premio100;
       }
 
-      mobileRS.push({ ragioneSociale, soglia1: mS1, soglia2: mS2, soglia3: mS3, soglia4: mS4, canoneMedio: 10, forecastTargetPunti: mS4 });
+      mobileRS.push({ ragioneSociale, soglia1: mS1, soglia2: mS2, soglia3: mS3, soglia4: mS4, forecastTargetPunti: mS4 });
       fissoRS.push({ ragioneSociale, soglia1: fS1, soglia2: fS2, soglia3: fS3, soglia4: fS4, soglia5: fS5, forecastTargetPunti: fS5 });
       partnershipRS.push({ ragioneSociale, target100: pTarget, target80: calculateTarget80(pTarget), premio100: pPremio, premio80: calculatePremio80(pPremio) });
     });
@@ -900,10 +899,6 @@ export default function ConfigurazioneGara() {
                                 </div>
                               ))}
                               <div className="space-y-0.5">
-                                <Label className="text-[10px]">Canone M.</Label>
-                                <Input type="number" step="0.5" className="h-7 text-xs" value={mc.canoneMedio ?? ''} onChange={e => updateMobilePos(index, 'canoneMedio', Number(e.target.value) || 0)} data-testid={`input-mobile-canone-${index}`} />
-                              </div>
-                              <div className="space-y-0.5">
                                 <Label className="text-[10px]">Forecast</Label>
                                 <Input type="number" className="h-7 text-xs" value={mc.forecastTargetPunti ?? ''} onChange={e => updateMobilePos(index, 'forecastTargetPunti', Number(e.target.value) || 0)} data-testid={`input-mobile-forecast-${index}`} />
                               </div>
@@ -992,10 +987,6 @@ export default function ConfigurazioneGara() {
                                   <Input type="number" className="h-7 text-xs" value={mc[f] ?? ''} onChange={e => updateMobileRS(mcIdx, f, Number(e.target.value) || 0)} data-testid={`input-mobile-rs-${f}-${rs}`} />
                                 </div>
                               ))}
-                              <div className="space-y-0.5">
-                                <Label className="text-[10px]">Canone M.</Label>
-                                <Input type="number" step="0.5" className="h-7 text-xs" value={mc.canoneMedio ?? ''} onChange={e => updateMobileRS(mcIdx, 'canoneMedio', Number(e.target.value) || 0)} data-testid={`input-mobile-rs-canone-${rs}`} />
-                              </div>
                               <div className="space-y-0.5">
                                 <Label className="text-[10px]">Forecast</Label>
                                 <Input type="number" className="h-7 text-xs" value={mc.forecastTargetPunti ?? ''} onChange={e => updateMobileRS(mcIdx, 'forecastTargetPunti', Number(e.target.value) || 0)} data-testid={`input-mobile-rs-forecast-${rs}`} />

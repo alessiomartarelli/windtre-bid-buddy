@@ -266,7 +266,7 @@ export interface PistaMobilePosConfig {
   multiplierSoglia2: number;
   multiplierSoglia3: number;
   multiplierSoglia4?: number;
-  canoneMedio: number;
+  canoneMedio?: number;
   forecastTargetPunti?: number;
   clusterPista?: 1 | 2 | 3;
 }
@@ -364,7 +364,7 @@ export interface SoglieMobileRS {
   soglia2: number;
   soglia3: number;
   soglia4: number;
-  canoneMedio: number;
+  canoneMedio?: number;
   forecastTargetPunti?: number;
 }
 
