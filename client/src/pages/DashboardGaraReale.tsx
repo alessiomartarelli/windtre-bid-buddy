@@ -543,8 +543,8 @@ export default function DashboardGaraReale() {
   const garaCalcConfig = useMemo(() => {
     const cfg = garaConfig?.config as Record<string, unknown> | null;
     return {
-      pistaMobileConfig: cfg?.pistaMobileConfig as OrgConfigResponse["config"]["pistaMobileConfig"] | undefined,
-      pistaFissoConfig: cfg?.pistaFissoConfig as OrgConfigResponse["config"]["pistaFissoConfig"] | undefined,
+      pistaMobileConfig: (cfg?.pistaMobileConfig || cfg?.pistaMobile) as OrgConfigResponse["config"]["pistaMobileConfig"] | undefined,
+      pistaFissoConfig: (cfg?.pistaFissoConfig || cfg?.pistaFisso) as OrgConfigResponse["config"]["pistaFissoConfig"] | undefined,
       energiaConfig: cfg?.energiaConfig as EnergiaConfig | undefined,
       mobileCategories: cfg?.mobileCategories as MobileCategoryConfig[] | undefined,
       partnershipRewardConfig: cfg?.partnershipRewardConfig as OrgConfigResponse["config"]["partnershipRewardConfig"] | undefined,
