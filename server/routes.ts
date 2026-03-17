@@ -513,6 +513,8 @@ export async function registerRoutes(
         "pistaMobileConfig", "pistaFissoConfig", "energiaConfig",
         "energiaPdvInGara", "mobileCategories",
         "partnershipRewardConfig", "assicurazioniConfig", "assicurazioniPdvInGara",
+        "tipologiaGara", "modalitaInserimentoRS",
+        "pistaMobileRSConfig", "pistaFissoRSConfig", "partnershipRewardRSConfig",
       ];
 
       if (importSource === "organization_config") {

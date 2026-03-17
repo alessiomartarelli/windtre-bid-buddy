@@ -475,10 +475,9 @@ export default function ConfigurazioneGara() {
       } else {
         setPartnershipConfig(pdvs.map(p => initPartnershipConfigForPdv(p)));
       }
+      initializeRSConfigsFromPdvList(pdvs);
       if (cfg.pistaMobileRSConfig?.sogliePerRS?.length) {
         setMobileRSConfig(cfg.pistaMobileRSConfig.sogliePerRS);
-      } else {
-        initializeRSConfigsFromPdvList(pdvs);
       }
       if (cfg.pistaFissoRSConfig?.sogliePerRS?.length) {
         setFissoRSConfig(cfg.pistaFissoRSConfig.sogliePerRS);
