@@ -1016,7 +1016,9 @@ export async function registerRoutes(
     if (attivitaDiretta && typeof attivitaDiretta === 'object' && !Array.isArray(attivitaDiretta)) {
       codicePos = attivitaDiretta.codiceOperatoreWind || '';
       nomeNegozio = attivitaDiretta.nominativo || '';
-    } else {
+    }
+
+    if (!codicePos && !nomeNegozio) {
       const attivitaAddetto = sale.addetto?.attivita;
       if (Array.isArray(attivitaAddetto) && attivitaAddetto.length > 0) {
         codicePos = attivitaAddetto[0].codiceOperatoreWind || '';
