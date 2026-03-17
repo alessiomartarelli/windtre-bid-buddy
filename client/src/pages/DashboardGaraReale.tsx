@@ -27,9 +27,11 @@ import {
   Calendar,
   Store,
   Loader2,
+  Trophy,
 } from "lucide-react";
 import { apiUrl } from "@/lib/basePath";
 import { AppNavbar } from "@/components/AppNavbar";
+import { type GaraConfigRecord, type GaraConfigPdv } from "@/hooks/useGaraConfig";
 import {
   getWorkdayInfoForMonth,
   calcolaPremioPistaFissoPerPos,
@@ -524,34 +526,63 @@ export default function DashboardGaraReale() {
     },
   });
 
-  const { data: orgConfig, isLoading: loadingConfig } = useQuery<OrgConfigResponse>({
+  const { data: garaConfig, isLoading: loadingConfig } = useQuery<GaraConfigRecord | null>({
+    queryKey: ["/api/gara-config", selMonth, selYear],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/gara-config?month=${selMonth}&year=${selYear}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore config gara");
+      const data = await res.json();
+      return data as GaraConfigRecord | null;
+    },
+  });
+
+  const { data: orgConfig } = useQuery<OrgConfigResponse>({
     queryKey: ["/api/organization-config"],
     queryFn: async () => {
       const res = await fetch(apiUrl("/api/organization-config"), { credentials: "include" });
       if (!res.ok) throw new Error("Errore config");
       return res.json();
     },
+    enabled: !!garaConfig,
   });
 
+  const garaConfigMissing = !loadingConfig && !garaConfig;
+
+  const garaPdvList: GaraConfigPdv[] = garaConfig?.config?.pdvList || [];
+
+  const puntiVenditaFromGara: OrgConfigPdv[] = useMemo(() => {
+    return garaPdvList.map((p) => ({
+      id: p.id,
+      codicePos: p.codicePos,
+      nome: p.nome,
+      ragioneSociale: p.ragioneSociale,
+      calendar: p.calendar as StoreCalendar,
+      clusterMobile: p.clusterMobile,
+      clusterFisso: p.clusterFisso,
+      abilitaEnergia: p.abilitaEnergia,
+      abilitaAssicurazioni: p.abilitaAssicurazioni,
+    }));
+  }, [garaPdvList]);
+
   const workdayInfo = useMemo<WorkdayInfo>(() => {
-    const calendar = orgConfig?.config?.puntiVendita?.[0]?.calendar || DEFAULT_CALENDAR;
+    const calendar = puntiVenditaFromGara[0]?.calendar || DEFAULT_CALENDAR;
     return getWorkdayInfoForMonth(selYear, selMonth - 1, calendar, new Date());
-  }, [orgConfig, selMonth, selYear]);
+  }, [puntiVenditaFromGara, selMonth, selYear]);
 
   const pistaStats = useMemo(() => {
-    if (!mappedData) return [];
+    if (!mappedData || garaConfigMissing) return [];
 
     const cfg = orgConfig?.config;
-    const puntiVendita = cfg?.puntiVendita || [];
+    const puntiVendita = puntiVenditaFromGara;
     const mobileConfigs = cfg?.pistaMobileConfig?.sogliePerPos || [];
     const fissoConfigs = cfg?.pistaFissoConfig?.sogliePerPos || [];
     const energiaConfig = cfg?.energiaConfig;
-    const energiaPdvInGara = cfg?.energiaPdvInGara || [];
+    const energiaPdvInGara = puntiVendita.filter(p => p.abilitaEnergia).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, isInGara: true }));
     const mobileCategories = cfg?.mobileCategories || MOBILE_CATEGORIES_CONFIG_DEFAULT;
-    const numPdvInGaraEnergia = energiaPdvInGara.filter((e) => e.isInGara).length || puntiVendita.length || 1;
+    const numPdvInGaraEnergia = energiaPdvInGara.length || puntiVendita.length || 1;
     const partnershipConfigs = cfg?.partnershipRewardConfig?.configPerPos || [];
     const assicConfig = cfg?.assicurazioniConfig;
-    const assicPdvInGara = cfg?.assicurazioniPdvInGara || [];
+    const assicPdvInGara = puntiVendita.filter(p => p.abilitaAssicurazioni).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, nome: p.nome, isInGara: true }));
 
     const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara);
     const protectaCalcMap = calcProtectaForAllPdv(mappedData, puntiVendita);
@@ -748,7 +779,7 @@ export default function DashboardGaraReale() {
     }
 
     return stats;
-  }, [mappedData, workdayInfo, orgConfig, selMonth, selYear]);
+  }, [mappedData, workdayInfo, orgConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear]);
 
   const isLoading = loadingMapped || loadingConfig;
 
@@ -776,6 +807,23 @@ export default function DashboardGaraReale() {
             <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
             <span className="ml-3 text-gray-500">Caricamento dati...</span>
           </div>
+        ) : garaConfigMissing ? (
+          <Card data-testid="card-no-gara-config">
+            <CardContent className="py-12 text-center">
+              <Trophy className="h-12 w-12 mx-auto text-amber-500 mb-4" />
+              <p className="text-lg font-medium">Configurazione Gara mancante</p>
+              <p className="text-sm text-gray-500 mt-1 mb-4">
+                Non esiste una configurazione gara per il mese selezionato. Configura i PDV, cluster e calendari per visualizzare la dashboard.
+              </p>
+              <Button
+                onClick={() => setLocation('/configurazione-gara')}
+                data-testid="button-goto-config-gara"
+              >
+                <Trophy className="h-4 w-4 mr-2" />
+                Vai alla Configurazione Gara
+              </Button>
+            </CardContent>
+          </Card>
         ) : !mappedData ? (
           <Card>
             <CardContent className="py-12 text-center">

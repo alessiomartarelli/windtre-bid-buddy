@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield, Users,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
+  ChevronDown,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -55,18 +56,23 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
   const isAdminOrSuper = ['super_admin', 'admin'].includes(profile?.role || '');
   const isSuperAdmin = profile?.role === 'super_admin';
 
-  const navItems: Array<{ path: string; label: string; icon: typeof Shield; show: boolean }> = [
-    { path: '/super-admin', label: 'Super Admin', icon: Shield, show: isSuperAdmin },
-    { path: '/admin', label: 'Gestione Team', icon: Users, show: isAdminOrSuper },
-    { path: '/dashboard-gara-reale', label: 'Dashboard', icon: LayoutDashboard, show: true },
-    { path: '/configurazione-gara', label: 'Config Gara', icon: Trophy, show: isAdminOrSuper },
-    { path: '/preventivatore', label: 'Simulatore', icon: FileText, show: true },
-    { path: '/tabelle-calcolo', label: 'Tabelle Calcolo', icon: Table2, show: isAdminOrSuper },
-    { path: '/vendite-bisuite', label: 'Vendite BiSuite', icon: ShoppingCart, show: true },
-    { path: '/mappatura-bisuite', label: 'Mappatura', icon: MapPin, show: isSuperAdmin },
+  const adminItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
+    ...(isSuperAdmin ? [{ path: '/super-admin', label: 'Super Admin', icon: Shield }] : []),
+    ...(isAdminOrSuper ? [{ path: '/admin', label: 'Gestione Team', icon: Users }] : []),
   ];
 
-  const visibleItems = navItems.filter(item => item.show);
+  const garaItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
+    { path: '/dashboard-gara-reale', label: 'Dashboard', icon: LayoutDashboard },
+    ...(isAdminOrSuper ? [{ path: '/configurazione-gara', label: 'Configurazione', icon: Trophy }] : []),
+    { path: '/vendite-bisuite', label: 'Vendite BiSuite', icon: ShoppingCart },
+    ...(isSuperAdmin ? [{ path: '/mappatura-bisuite', label: 'Mappatura', icon: MapPin }] : []),
+  ];
+
+  const simulatoreItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
+    { path: '/preventivatore', label: 'Preventivatore', icon: FileText },
+    { path: '/dashboard', label: 'Dashboard Sim.', icon: LayoutDashboard },
+    ...(isAdminOrSuper ? [{ path: '/tabelle-calcolo', label: 'Tabelle Calcolo', icon: Table2 }] : []),
+  ];
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -81,7 +87,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
           </h1>
 
           <nav className="hidden md:flex items-center gap-1 ml-2">
-            {visibleItems.map((item) => {
+            {adminItems.map((item) => {
               const isActive = location === item.path;
               return (
                 <Button
@@ -97,6 +103,54 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                 </Button>
               );
             })}
+
+            {adminItems.length > 0 && <div className="w-px h-5 bg-border mx-1" />}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={garaItems.some(i => location === i.path) ? "secondary" : "ghost"}
+                  size="sm"
+                  className="text-xs h-8"
+                  data-testid="nav-gara-menu"
+                >
+                  <Trophy className="h-3.5 w-3.5 mr-1" />
+                  Gara
+                  <ChevronDown className="h-3 w-3 ml-0.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {garaItems.map((item) => (
+                  <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)} data-testid={`nav-gara-${item.path.replace(/\//g, '')}`}>
+                    <item.icon className="mr-2 h-4 w-4" />
+                    <span>{item.label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant={simulatoreItems.some(i => location === i.path) ? "secondary" : "ghost"}
+                  size="sm"
+                  className="text-xs h-8"
+                  data-testid="nav-simulatore-menu"
+                >
+                  <FileText className="h-3.5 w-3.5 mr-1" />
+                  Simulatore
+                  <ChevronDown className="h-3 w-3 ml-0.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {simulatoreItems.map((item) => (
+                  <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)} data-testid={`nav-sim-${item.path.replace(/\//g, '')}`}>
+                    <item.icon className="mr-2 h-4 w-4" />
+                    <span>{item.label}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </nav>
         </div>
 
@@ -111,7 +165,27 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                {visibleItems.map((item) => (
+                {adminItems.length > 0 && (
+                  <>
+                    {adminItems.map((item) => (
+                      <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)}>
+                        <item.icon className="mr-2 h-4 w-4" />
+                        <span>{item.label}</span>
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">Gara</DropdownMenuLabel>
+                {garaItems.map((item) => (
+                  <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)}>
+                    <item.icon className="mr-2 h-4 w-4" />
+                    <span>{item.label}</span>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">Simulatore</DropdownMenuLabel>
+                {simulatoreItems.map((item) => (
                   <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)}>
                     <item.icon className="mr-2 h-4 w-4" />
                     <span>{item.label}</span>
