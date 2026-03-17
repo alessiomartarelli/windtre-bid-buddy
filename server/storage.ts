@@ -49,7 +49,7 @@ export interface IStorage {
 
   // Gara Config
   getGaraConfig(orgId: string, month: number, year: number): Promise<GaraConfig | undefined>;
-  upsertGaraConfig(orgId: string, month: number, year: number, config: any): Promise<GaraConfig>;
+  upsertGaraConfig(orgId: string, month: number, year: number, config: Record<string, unknown>): Promise<GaraConfig>;
   listGaraConfigHistory(orgId: string): Promise<{ month: number; year: number; updatedAt: Date | null }[]>;
 
   // Password Reset Tokens
@@ -281,17 +281,13 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async upsertGaraConfig(orgId: string, month: number, year: number, config: any): Promise<GaraConfig> {
-    const existing = await this.getGaraConfig(orgId, month, year);
-    if (existing) {
-      const [result] = await db.update(garaConfig)
-        .set({ config, updatedAt: new Date() })
-        .where(eq(garaConfig.id, existing.id))
-        .returning();
-      return result;
-    }
+  async upsertGaraConfig(orgId: string, month: number, year: number, config: Record<string, unknown>): Promise<GaraConfig> {
     const [result] = await db.insert(garaConfig)
       .values({ organizationId: orgId, month, year, config })
+      .onConflictDoUpdate({
+        target: [garaConfig.organizationId, garaConfig.month, garaConfig.year],
+        set: { config, updatedAt: new Date() },
+      })
       .returning();
     return result;
   }

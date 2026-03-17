@@ -1,4 +1,4 @@
-import { pgTable, text, serial, varchar, timestamp, jsonb, index, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, varchar, timestamp, jsonb, index, boolean, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations, sql } from "drizzle-orm";
@@ -113,7 +113,7 @@ export const garaConfig = pgTable("gara_config", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  index("IDX_gara_config_org_month_year").on(table.organizationId, table.month, table.year),
+  uniqueIndex("UQ_gara_config_org_month_year").on(table.organizationId, table.month, table.year),
 ]);
 
 // Password reset tokens
