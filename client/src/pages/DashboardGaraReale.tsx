@@ -549,6 +549,11 @@ export default function DashboardGaraReale() {
       mobileCategories: cfg?.mobileCategories as MobileCategoryConfig[] | undefined,
       partnershipRewardConfig: cfg?.partnershipRewardConfig as OrgConfigResponse["config"]["partnershipRewardConfig"] | undefined,
       assicurazioniConfig: cfg?.assicurazioniConfig as AssicurazioniConfig | undefined,
+      tipologiaGara: (cfg?.tipologiaGara as string) || 'gara_operatore',
+      modalitaInserimentoRS: (cfg?.modalitaInserimentoRS as string) || 'per_pdv',
+      pistaMobileRSConfig: (cfg?.pistaMobileRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; canoneMedio: number; forecastTargetPunti: number; clusterPista: string }> }) || undefined,
+      pistaFissoRSConfig: (cfg?.pistaFissoRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; soglia5: number; forecastTargetPunti: number }> }) || undefined,
+      partnershipRewardRSConfig: (cfg?.partnershipRewardRSConfig as { configPerRS?: Array<{ ragioneSociale: string; target100: number; target80: number; premio100: number; premio80: number }> }) || undefined,
     };
   }, [garaConfig]);
 
@@ -575,8 +580,12 @@ export default function DashboardGaraReale() {
     if (!mappedData || garaConfigMissing) return [];
 
     const puntiVendita = puntiVenditaFromGara;
+    const isRSPerRS = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
     const mobileConfigs = garaCalcConfig.pistaMobileConfig?.sogliePerPos || [];
     const fissoConfigs = garaCalcConfig.pistaFissoConfig?.sogliePerPos || [];
+    const mobileRSConfigs = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS || [];
+    const fissoRSConfigs = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS || [];
+    const partnershipRSConfigs = garaCalcConfig.partnershipRewardRSConfig?.configPerRS || [];
     const energiaConfig = garaCalcConfig.energiaConfig;
     const energiaPdvInGara = puntiVendita.filter(p => p.abilitaEnergia).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, isInGara: true }));
     const mobileCategories = garaCalcConfig.mobileCategories || MOBILE_CATEGORIES_CONFIG_DEFAULT;
@@ -584,6 +593,36 @@ export default function DashboardGaraReale() {
     const partnershipConfigs = garaCalcConfig.partnershipRewardConfig?.configPerPos || [];
     const assicConfig = garaCalcConfig.assicurazioniConfig;
     const assicPdvInGara = puntiVendita.filter(p => p.abilitaAssicurazioni).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, nome: p.nome, isInGara: true }));
+
+    const getMobileConfigForPdv = (codicePos: string, ragioneSociale: string): PistaMobilePosConfig | undefined => {
+      if (isRSPerRS) {
+        const rsConfig = mobileRSConfigs.find(c => c.ragioneSociale === ragioneSociale);
+        if (rsConfig) {
+          return { posCode: codicePos, soglia1: rsConfig.soglia1, soglia2: rsConfig.soglia2, soglia3: rsConfig.soglia3, soglia4: rsConfig.soglia4, canoneMedio: rsConfig.canoneMedio, forecastTargetPunti: rsConfig.forecastTargetPunti, clusterPista: rsConfig.clusterPista } as PistaMobilePosConfig;
+        }
+      }
+      return mobileConfigs.find(c => c.posCode === codicePos) || mobileConfigs[0];
+    };
+
+    const getFissoConfigForPdv = (codicePos: string, ragioneSociale: string): PistaFissoPosConfig | undefined => {
+      if (isRSPerRS) {
+        const rsConfig = fissoRSConfigs.find(c => c.ragioneSociale === ragioneSociale);
+        if (rsConfig) {
+          return { posCode: codicePos, soglia1: rsConfig.soglia1, soglia2: rsConfig.soglia2, soglia3: rsConfig.soglia3, soglia4: rsConfig.soglia4, soglia5: rsConfig.soglia5, forecastTargetPunti: rsConfig.forecastTargetPunti } as PistaFissoPosConfig;
+        }
+      }
+      return fissoConfigs.find(c => c.posCode === codicePos) || fissoConfigs[0];
+    };
+
+    const getPartnershipConfigForPdv = (codicePos: string, ragioneSociale: string) => {
+      if (isRSPerRS) {
+        const rsConfig = partnershipRSConfigs.find(c => c.ragioneSociale === ragioneSociale);
+        if (rsConfig) {
+          return { posCode: codicePos, config: { target100: rsConfig.target100, target80: rsConfig.target80, premio100: rsConfig.premio100, premio80: rsConfig.premio80 } };
+        }
+      }
+      return partnershipConfigs.find(c => c.posCode === codicePos);
+    };
 
     const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara);
     const protectaCalcMap = calcProtectaForAllPdv(mappedData, puntiVendita);
@@ -658,18 +697,19 @@ export default function DashboardGaraReale() {
           const pdvWorkday = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCalendar, new Date());
 
           let pdvCalc = EMPTY_CALC;
+          const pdvRS = pdvConfig?.ragioneSociale || pdv.ragioneSociale;
           if (pista === "mobile") {
-            const mConfig = mobileConfigs.find((c) => c.posCode === pdv.codicePos) || mobileConfigs[0];
+            const mConfig = getMobileConfigForPdv(pdv.codicePos, pdvRS);
             pdvCalc = calcMobilePerPdv(pdvItems, mConfig, pdvCalendar, selYear, selMonth, mobileCategories, pdvWorkday);
           } else if (pista === "fisso") {
-            const fConfig = fissoConfigs.find((c) => c.posCode === pdv.codicePos) || fissoConfigs[0];
+            const fConfig = getFissoConfigForPdv(pdv.codicePos, pdvRS);
             const cluster = clusterToNumber(pdvConfig?.clusterFisso);
             pdvCalc = calcFissoPerPdv(pdvItems, fConfig, pdvCalendar, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday);
           } else if (pista === "energia") {
             const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
             pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia);
           } else if (pista === "partnership") {
-            const pCfg = partnershipConfigs.find((c) => c.posCode === pdv.codicePos);
+            const pCfg = getPartnershipConfigForPdv(pdv.codicePos, pdvRS);
             const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
             pdvCalc = calcPartnershipPerPdv(pdvItems, prConfig, pdvWorkday.elapsedWorkingDays, pdv.codicePos);
           } else if (pista === "assicurazioni") {
@@ -738,18 +778,19 @@ export default function DashboardGaraReale() {
           const pdvCalendar3 = pdvConfig3?.calendar || DEFAULT_CALENDAR;
           const pdvWorkday3 = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCalendar3, new Date());
           let projCalc = EMPTY_CALC;
+          const projRS = pdvConfig3?.ragioneSociale || pdv.ragioneSociale;
           if (pista === "mobile") {
-            const mConfig = mobileConfigs.find((c) => c.posCode === pdv.codicePos) || mobileConfigs[0];
+            const mConfig = getMobileConfigForPdv(pdv.codicePos, projRS);
             projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, mobileCategories, pdvWorkday3);
           } else if (pista === "fisso") {
-            const fConfig = fissoConfigs.find((c) => c.posCode === pdv.codicePos) || fissoConfigs[0];
+            const fConfig = getFissoConfigForPdv(pdv.codicePos, projRS);
             const cluster = clusterToNumber(pdvConfig3?.clusterFisso);
             projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3);
           } else if (pista === "energia") {
             const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
             projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia);
           } else if (pista === "partnership") {
-            const pCfg = partnershipConfigs.find((c) => c.posCode === pdv.codicePos);
+            const pCfg = getPartnershipConfigForPdv(pdv.codicePos, projRS);
             const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
             projCalc = calcPartnershipPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos);
           } else if (pista === "assicurazioni" || pista === "protecta") {

@@ -785,7 +785,7 @@ export default function ConfigurazioneGara() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-xs">Tipologia Gara</Label>
-                      <Select value={tipologiaGara} onValueChange={v => { setTipologiaGara(v as any); setIsDirty(true); }}>
+                      <Select value={tipologiaGara} onValueChange={(v: string) => { setTipologiaGara(v as 'gara_operatore' | 'gara_operatore_rs'); setIsDirty(true); }}>
                         <SelectTrigger className="h-8 text-sm" data-testid="select-tipologia-gara"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="gara_operatore">Gara Operatore</SelectItem>
@@ -796,7 +796,7 @@ export default function ConfigurazioneGara() {
                     {tipologiaGara === 'gara_operatore_rs' && (
                       <div>
                         <Label className="text-xs">Modalita Inserimento RS</Label>
-                        <Select value={modalitaRS} onValueChange={v => { setModalitaRS(v as any); setIsDirty(true); }}>
+                        <Select value={modalitaRS} onValueChange={(v: string) => { setModalitaRS(v as 'per_pdv' | 'per_rs'); setIsDirty(true); }}>
                           <SelectTrigger className="h-8 text-sm" data-testid="select-modalita-rs"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="per_pdv">Per PDV</SelectItem>
