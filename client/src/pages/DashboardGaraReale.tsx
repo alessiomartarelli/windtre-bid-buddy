@@ -1533,12 +1533,20 @@ export default function DashboardGaraReale() {
                       }
 
                       const pdvCalcByPista: Record<string, PistaCalcResult> = {};
+                      const pdvPremioByPista: Record<string, number> = {};
                       for (const stat of pistaStats) {
                         const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
-                        if (match) pdvCalcByPista[stat.pista] = match.pdvCalc;
+                        if (match) {
+                          pdvCalcByPista[stat.pista] = match.pdvCalc;
+                          const aggPremio = stat.calc.premioStimato;
+                          const totalPuntiPista = stat.pdvBreakdown.reduce((s, b) => s + b.pdvCalc.puntiTotali, 0);
+                          pdvPremioByPista[stat.pista] = totalPuntiPista > 0
+                            ? Math.round((match.pdvCalc.puntiTotali / totalPuntiPista) * aggPremio * 100) / 100
+                            : 0;
+                        }
                       }
 
-                      const totalPremio = Object.values(pdvCalcByPista).reduce((s, c) => s + c.premioStimato, 0);
+                      const totalPremio = Object.values(pdvPremioByPista).reduce((s, v) => s + v, 0);
 
                       return (
                         <AccordionItem key={pdv.codicePos} value={pdv.codicePos} className="border rounded-lg px-2 sm:px-4" data-testid={`pdv-accordion-${pdv.codicePos}`}>
@@ -1589,8 +1597,8 @@ export default function DashboardGaraReale() {
                                         {calc.puntiTotali > 0 && (
                                           <span className="text-[10px] text-gray-500">{calc.puntiTotali.toFixed(1)} pt</span>
                                         )}
-                                        {calc.premioStimato > 0 && (
-                                          <span className="text-[10px] font-medium text-green-700">{formatEuro(calc.premioStimato)}</span>
+                                        {(pdvPremioByPista[pistaKey] ?? 0) > 0 && (
+                                          <span className="text-[10px] font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
                                         )}
                                       </div>
                                     )}
@@ -1632,7 +1640,7 @@ export default function DashboardGaraReale() {
   );
 }
 
-function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[]; workdayInfo: WorkdayInfo; pistaStats: Array<{ pista: string; pdvBreakdown: Array<{ codicePos: string; pdvCalc: PistaCalcResult }> }> }) {
+function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[]; workdayInfo: WorkdayInfo; pistaStats: Array<{ pista: string; calc: PistaCalcResult; pdvBreakdown: Array<{ codicePos: string; pdvCalc: PistaCalcResult }> }> }) {
   const rsByName = useMemo(() => {
     const grouped: Record<string, { ragioneSociale: string; pdvs: PdvData[]; totalPezzi: number }> = {};
     for (const pdv of pdvList) {
@@ -1669,7 +1677,13 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
         for (const pdv of rs.pdvs) {
           for (const stat of pistaStats) {
             const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
-            if (match) rsPremioTotale += match.pdvCalc.premioStimato;
+            if (match) {
+              const aggPremio = stat.calc.premioStimato;
+              const totalPuntiPista = stat.pdvBreakdown.reduce((s, b) => s + b.pdvCalc.puntiTotali, 0);
+              rsPremioTotale += totalPuntiPista > 0
+                ? Math.round((match.pdvCalc.puntiTotali / totalPuntiPista) * aggPremio * 100) / 100
+                : 0;
+            }
           }
         }
 
@@ -1715,7 +1729,11 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
                     for (const stat of pistaStats) {
                       const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
                       if (match) {
-                        pdvPremio += match.pdvCalc.premioStimato;
+                        const aggPremio = stat.calc.premioStimato;
+                        const totalPuntiPista = stat.pdvBreakdown.reduce((s, b) => s + b.pdvCalc.puntiTotali, 0);
+                        pdvPremio += totalPuntiPista > 0
+                          ? Math.round((match.pdvCalc.puntiTotali / totalPuntiPista) * aggPremio * 100) / 100
+                          : 0;
                         if (match.pdvCalc.sogliaLabel !== "N/A" && match.pdvCalc.sogliaLabel !== "Nessuna") {
                           pdvSoglie.push(`${PISTA_CONFIG[stat.pista as keyof typeof PISTA_CONFIG]?.label || stat.pista}: ${match.pdvCalc.sogliaLabel}`);
                         }
