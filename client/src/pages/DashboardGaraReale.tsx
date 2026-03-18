@@ -1280,6 +1280,57 @@ export default function DashboardGaraReale() {
               </CardContent>
             </Card>
 
+            {(() => {
+              const totalPremioAttuale = pistaStats.reduce((s, p) => s + p.calc.premioStimato, 0);
+              const totalPremioProiettato = pistaStats.reduce((s, p) => s + p.calcProiezione.premioStimato, 0);
+              if (totalPremioAttuale <= 0 && totalPremioProiettato <= 0) return null;
+              return (
+                <Card className="border-2 border-green-200 dark:border-green-800 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30" data-testid="card-premio-totale-summary">
+                  <CardContent className="py-5">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-green-100 dark:bg-green-900 rounded-full">
+                          <Trophy className="h-6 w-6 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-500 dark:text-gray-400">Premio Attuale</div>
+                          <div className="text-2xl font-bold text-green-700 dark:text-green-400" data-testid="text-premio-totale-attuale">
+                            {formatEuro(totalPremioAttuale)}
+                          </div>
+                        </div>
+                      </div>
+                      {totalPremioProiettato > 0 && (
+                        <>
+                          <div className="hidden sm:flex items-center">
+                            <TrendingUp className="h-5 w-5 text-blue-400 mx-2" />
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-blue-100 dark:bg-blue-900 rounded-full">
+                              <TrendingUp className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400">Premio Proiezione</div>
+                              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-premio-totale-proiezione">
+                                {formatEuro(totalPremioProiettato)}
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      {totalPremioProiettato > totalPremioAttuale && (
+                        <div className="text-center sm:text-right">
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Differenza</div>
+                          <div className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+                            +{formatEuro(totalPremioProiettato - totalPremioAttuale)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
             {premioPerRS.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="premio-per-rs-summary">
                 {premioPerRS.map((rs) => (
@@ -1296,8 +1347,9 @@ export default function DashboardGaraReale() {
                           </div>
                           <div className="text-xs text-gray-500">Premio attuale</div>
                           {rs.premioProiettato > 0 && (
-                            <div className="text-xs text-gray-400 mt-0.5">
-                              Proiezione: <span className="font-medium text-blue-600">{formatEuro(rs.premioProiettato)}</span>
+                            <div className="text-sm mt-0.5">
+                              <TrendingUp className="h-3 w-3 inline mr-1 text-blue-500" />
+                              <span className="font-semibold text-blue-600">{formatEuro(rs.premioProiettato)}</span>
                             </div>
                           )}
                         </div>
@@ -1309,7 +1361,7 @@ export default function DashboardGaraReale() {
                             <div className="text-right">
                               <span className="font-medium">{formatEuro(d.premioAttuale)}</span>
                               {d.premioProiettato > 0 && (
-                                <span className="text-gray-400 ml-1">→ {formatEuro(d.premioProiettato)}</span>
+                                <span className="text-blue-500 font-medium ml-1">→ {formatEuro(d.premioProiettato)}</span>
                               )}
                             </div>
                           </div>
@@ -1390,12 +1442,25 @@ export default function DashboardGaraReale() {
                         </div>
                       )}
 
-                      {pista.totalePezzi > 0 && pista.calc.premioStimato > 0 && (
-                        <div className="flex items-center justify-between text-sm bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2">
-                          <span className="text-gray-600 dark:text-gray-300">Premio stimato</span>
-                          <span className="font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-${pista.pista}`}>
-                            {formatEuro(pista.calc.premioStimato)}
-                          </span>
+                      {pista.totalePezzi > 0 && (pista.calc.premioStimato > 0 || pista.calcProiezione.premioStimato > 0) && (
+                        <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-500 dark:text-gray-400">Attuale</span>
+                            <span className="font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-${pista.pista}`}>
+                              {formatEuro(pista.calc.premioStimato)}
+                            </span>
+                          </div>
+                          {pista.calcProiezione.premioStimato > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                <TrendingUp className="h-3 w-3 text-blue-500" />
+                                Proiezione
+                              </span>
+                              <span className="font-bold text-blue-600 dark:text-blue-400 text-base" data-testid={`text-premio-proiezione-${pista.pista}`}>
+                                {formatEuro(pista.calcProiezione.premioStimato)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
 
