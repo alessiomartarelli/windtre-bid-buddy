@@ -410,7 +410,7 @@ export default function MappaturaBiSuite() {
                   ) : (
                     <ArticlesTable
                       items={tab === 'prodotti' ? articlesSummary.prodotti : tab === 'servizi' ? articlesSummary.servizi : articlesSummary.nonMappati}
-                      showImporto={tab !== 'non_mappati'}
+                      showImporto={false}
                       showClienteTipo={tab === 'non_mappati'}
                       onCreateRule={tab === 'non_mappati' ? (item) => {
                         const newRule = createEmptyRule('mobile');
