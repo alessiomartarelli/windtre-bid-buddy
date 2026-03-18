@@ -834,7 +834,9 @@ export default function DashboardGaraReale() {
         };
       }).sort((a, b) => b.pezzi - a.pezzi);
 
-      const totalePezzi = categories.reduce((sum, c) => sum + c.pezzi, 0);
+      const totalePezzi = pista === "mobile"
+        ? categories.filter(c => SIM_CONSUMER_CORE.has(c.category) || SIM_PIVA_CORE.has(c.category)).reduce((sum, c) => sum + c.pezzi, 0)
+        : categories.reduce((sum, c) => sum + c.pezzi, 0);
       const proiezionePezzi = workdayInfo.elapsedWorkingDays > 0
         ? Math.round((totalePezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
         : totalePezzi;
@@ -845,7 +847,9 @@ export default function DashboardGaraReale() {
       const pdvBreakdown = mappedData.pdvList
         .map((pdv) => {
           const pdvItems = pdv.items.filter((i) => i.pista === pista);
-          const pdvPezzi = pdvItems.reduce((s, i) => s + i.pezzi, 0);
+          const pdvPezzi = pista === "mobile"
+            ? pdvItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
+            : pdvItems.reduce((s, i) => s + i.pezzi, 0);
           const pdvProiezione = workdayInfo.elapsedWorkingDays > 0
             ? Math.round((pdvPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
             : pdvPezzi;
