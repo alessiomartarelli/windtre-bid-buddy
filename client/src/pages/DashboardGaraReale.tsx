@@ -880,26 +880,17 @@ export default function DashboardGaraReale() {
                 premio: rsAConf.premio,
               } : assicConfig;
               if (rsAssicConfig) {
-                const rsPdvAssic = rsPdvs.filter(p => {
-                  const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
-                  return pc?.abilitaAssicurazioni;
-                });
-                const rsAssicPdvInGara: AssicurazioniPdvInGara[] = rsPdvAssic.map(p => ({
-                  pdvId: p.codicePos, codicePos: p.codicePos, nome: p.nomeNegozio, inGara: true,
-                }));
-                const rsAssicMap = calcAssicurazioniForAllPdv(
-                  { ...mappedData, pdvList: mappedData.pdvList.filter(p => rsPdvs.some(rp => rp.codicePos === p.codicePos)) },
-                  puntiVendita.filter(pv => rsPdvs.some(rp => rp.codicePos === pv.codicePos)),
-                  rsAssicConfig,
-                  rsAssicPdvInGara,
-                );
-                let rsPremio = 0, rsPunti = 0, rsBestSoglia = 0;
-                rsAssicMap.forEach(calc => {
-                  rsPremio += calc.premioStimato;
-                  rsPunti += calc.puntiTotali;
-                  if (calc.sogliaRaggiunta > rsBestSoglia) rsBestSoglia = calc.sogliaRaggiunta;
-                });
-                rsCalc = { premioStimato: rsPremio, puntiTotali: rsPunti, sogliaRaggiunta: rsBestSoglia, sogliaLabel: sogliaToLabel(rsBestSoglia) };
+                let rsTotalPunti = 0;
+                for (const pdv of rsPdvs) {
+                  const pdvAssicCalc = assicCalcMap.get(pdv.codicePos);
+                  if (pdvAssicCalc) rsTotalPunti += pdvAssicCalc.puntiTotali;
+                }
+                const premioVal = rsAssicConfig.premio ?? 750;
+                let rsSoglia = 0;
+                let rsPremio = 0;
+                if (rsTotalPunti >= rsAssicConfig.targetS2) { rsSoglia = 2; rsPremio = premioVal; }
+                else if (rsTotalPunti >= rsAssicConfig.targetS1) { rsSoglia = 1; rsPremio = premioVal; }
+                rsCalc = { premioStimato: rsPremio, puntiTotali: rsTotalPunti, sogliaRaggiunta: rsSoglia, sogliaLabel: sogliaToLabel(rsSoglia) };
               }
             }
 
