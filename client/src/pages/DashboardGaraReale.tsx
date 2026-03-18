@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ import {
   Loader2,
   Trophy,
   Settings,
+  RefreshCw,
 } from "lucide-react";
 import { apiUrl } from "@/lib/basePath";
 import { AppNavbar } from "@/components/AppNavbar";
@@ -513,10 +514,12 @@ function ProjectionBadge({ current, projected, label }: { current: number; proje
 
 export default function DashboardGaraReale() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const now = new Date();
   const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
   const [expandedPistaCategories, setExpandedPistaCategories] = useState<Set<string>>(new Set());
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [selMonth, selYear] = useMemo(() => {
     const parts = selectedPeriod.split("-");
@@ -1170,6 +1173,22 @@ export default function DashboardGaraReale() {
             </SelectContent>
           </Select>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isRefreshing}
+          data-testid="button-refresh-dashboard"
+          onClick={async () => {
+            setIsRefreshing(true);
+            await queryClient.invalidateQueries({ queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear] });
+            await queryClient.invalidateQueries({ queryKey: ["/api/gara-config", selMonth, selYear, effectiveConfigId] });
+            await queryClient.invalidateQueries({ queryKey: ["/api/gara-config/list", selMonth, selYear] });
+            setIsRefreshing(false);
+          }}
+        >
+          <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">Aggiorna</span>
+        </Button>
       </AppNavbar>
       <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
