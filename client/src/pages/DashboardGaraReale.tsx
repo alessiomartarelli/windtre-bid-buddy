@@ -1203,7 +1203,7 @@ export default function DashboardGaraReale() {
           </Card>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <Card data-testid="card-total-sales">
                 <CardContent className="py-4">
                   <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
@@ -1217,33 +1217,18 @@ export default function DashboardGaraReale() {
                 <CardContent className="py-4">
                   <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
                     <Target className="h-4 w-4" />
-                    Articoli Canvass
+                    Attivazioni Gara
                   </div>
-                  <div className="text-2xl font-bold" data-testid="text-total-articoli">{mappedData.totalArticoli}</div>
+                  <div className="text-2xl font-bold" data-testid="text-total-articoli">{mappedData.totalMapped}</div>
                 </CardContent>
               </Card>
-              <Card data-testid="card-mapped">
+              <Card data-testid="card-pdv-active">
                 <CardContent className="py-4">
                   <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                    <Award className="h-4 w-4" />
-                    Mappati
+                    <Store className="h-4 w-4" />
+                    PDV Attivi
                   </div>
-                  <div className="text-2xl font-bold text-green-600" data-testid="text-mapped">{mappedData.totalMapped}</div>
-                  <div className="text-xs text-gray-400">
-                    {mappedData.totalArticoli > 0 ? `${Math.round((mappedData.totalMapped / mappedData.totalArticoli) * 100)}%` : "0%"}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card data-testid="card-unmapped">
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                    <AlertTriangle className="h-4 w-4" />
-                    Non Mappati
-                  </div>
-                  <div className="text-2xl font-bold text-amber-600" data-testid="text-unmapped">{mappedData.totalUnmapped}</div>
-                  <div className="text-xs text-gray-400">
-                    {mappedData.totalArticoli > 0 ? `${Math.round((mappedData.totalUnmapped / mappedData.totalArticoli) * 100)}%` : "0%"}
-                  </div>
+                  <div className="text-2xl font-bold" data-testid="text-pdv-active">{mappedData.pdvList.length}</div>
                 </CardContent>
               </Card>
             </div>
@@ -1270,11 +1255,6 @@ export default function DashboardGaraReale() {
                     <span className="font-medium" data-testid="text-progress-pct">
                       {workdayInfo.totalWorkingDays > 0 ? Math.round((workdayInfo.elapsedWorkingDays / workdayInfo.totalWorkingDays) * 100) : 0}%
                     </span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Store className="h-4 w-4 text-gray-400" />
-                    <span className="text-gray-500">PDV attivi:</span>
-                    <span className="font-medium" data-testid="text-pdv-count">{mappedData.pdvList.length}</span>
                   </span>
                 </div>
               </CardContent>
