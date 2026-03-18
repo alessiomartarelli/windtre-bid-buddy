@@ -1205,6 +1205,13 @@ export default function DashboardGaraReale() {
           </Card>
         ) : (
           <>
+            {mappedData.latestSaleDate && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5" data-testid="text-latest-sale-info">
+                <BarChart3 className="h-4 w-4" />
+                Dati aggiornati al: <span className="font-semibold text-gray-700 dark:text-gray-200">{new Date(mappedData.latestSaleDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-4">
               <Card data-testid="card-total-sales">
                 <CardContent className="py-4">
@@ -1238,15 +1245,6 @@ export default function DashboardGaraReale() {
             <Card data-testid="card-workday-info">
               <CardContent className="py-3">
                 <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm flex-wrap">
-                  {mappedData.latestSaleDate && (
-                    <span className="flex items-center gap-1.5">
-                      <BarChart3 className="h-4 w-4 text-gray-400" />
-                      <span className="text-gray-500">Dati aggiornati al:</span>
-                      <span className="font-medium" data-testid="text-latest-sale-date">
-                        {new Date(mappedData.latestSaleDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      </span>
-                    </span>
-                  )}
                   <span className="flex items-center gap-1.5">
                     <Calendar className="h-4 w-4 text-gray-400" />
                     <span className="text-gray-500">Giorni lavorativi:</span>
