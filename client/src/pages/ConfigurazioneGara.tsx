@@ -1324,15 +1324,15 @@ export default function ConfigurazioneGara() {
                                   <Input type="number" className="h-8 text-sm" value={eConf.targetS3} onChange={e => updateEnergiaRS('targetS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetS3-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio S1 €</Label>
+                                  <Label className="text-xs font-semibold">Premio S1 € per PDV</Label>
                                   <Input type="number" className="h-8 text-sm" value={eConf.premioS1 ?? 250} onChange={e => updateEnergiaRS('premioS1', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS1-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio S2 €</Label>
+                                  <Label className="text-xs font-semibold">Premio S2 € per PDV</Label>
                                   <Input type="number" className="h-8 text-sm" value={eConf.premioS2 ?? 500} onChange={e => updateEnergiaRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS2-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio S3 €</Label>
+                                  <Label className="text-xs font-semibold">Premio S3 € per PDV</Label>
                                   <Input type="number" className="h-8 text-sm" value={eConf.premioS3 ?? 1000} onChange={e => updateEnergiaRS('premioS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS3-${rs}`} />
                                 </div>
                               </div>
@@ -1376,11 +1376,11 @@ export default function ConfigurazioneGara() {
                                   <Input type="number" className="h-8 text-sm" value={aConf.targetS2} onChange={e => updateAssicRS('targetS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-targetS2-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio S1 €</Label>
+                                  <Label className="text-xs font-semibold">Premio S1 € per PDV</Label>
                                   <Input type="number" className="h-8 text-sm" value={aConf.premioS1 ?? 500} onChange={e => updateAssicRS('premioS1', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS1-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio S2 €</Label>
+                                  <Label className="text-xs font-semibold">Premio S2 € per PDV</Label>
                                   <Input type="number" className="h-8 text-sm" value={aConf.premioS2 ?? 750} onChange={e => updateAssicRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS2-${rs}`} />
                                 </div>
                               </div>
@@ -1428,15 +1428,15 @@ export default function ConfigurazioneGara() {
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.targetS3} onChange={e => { setEnergiaConfig(prev => ({ ...prev, targetS3: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-target-s3" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Premio S1 €</Label>
+                      <Label className="text-xs font-semibold">Premio S1 € per PDV</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.premioS1 ?? 250} onChange={e => { setEnergiaConfig(prev => ({ ...prev, premioS1: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-premioS1" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Premio S2 €</Label>
+                      <Label className="text-xs font-semibold">Premio S2 € per PDV</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.premioS2 ?? 500} onChange={e => { setEnergiaConfig(prev => ({ ...prev, premioS2: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-premioS2" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Premio S3 €</Label>
+                      <Label className="text-xs font-semibold">Premio S3 € per PDV</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.premioS3 ?? 1000} onChange={e => { setEnergiaConfig(prev => ({ ...prev, premioS3: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-premioS3" />
                     </div>
                   </div>
@@ -1486,11 +1486,11 @@ export default function ConfigurazioneGara() {
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.targetS2} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, targetS2: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-target-s2" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Premio S1 €</Label>
+                      <Label className="text-xs font-semibold">Premio S1 € per PDV</Label>
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.premioS1 ?? 500} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, premioS1: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-premioS1" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Premio S2 €</Label>
+                      <Label className="text-xs font-semibold">Premio S2 € per PDV</Label>
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.premioS2 ?? 750} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, premioS2: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-premioS2" />
                     </div>
                   </div>
