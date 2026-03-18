@@ -399,10 +399,10 @@ export default function ConfigurazioneGara() {
   const [partnershipRSConfig, setPartnershipRSConfig] = useState<PartnershipRSConf[]>([]);
 
   const [energiaConfig, setEnergiaConfig] = useState<NonNullable<GaraConfigData['energiaConfig']>>({
-    pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premio: 1000,
+    pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premioS1: 250, premioS2: 500, premioS3: 1000,
   });
   const [assicurazioniConfig, setAssicurazioniConfig] = useState<NonNullable<GaraConfigData['assicurazioniConfig']>>({
-    pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premio: 750,
+    pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premioS1: 500, premioS2: 750,
   });
 
   const [energiaRSConfig, setEnergiaRSConfig] = useState<EnergiaRSConf[]>([]);
@@ -471,7 +471,7 @@ export default function ConfigurazioneGara() {
         targetS1: 15 * pdvEnergia,
         targetS2: 25 * pdvEnergia,
         targetS3: 40 * pdvEnergia,
-        premio: 1000,
+        premioS1: 250, premioS2: 500, premioS3: 1000,
         pistaSoglia_S1: soglieE.S1,
         pistaSoglia_S2: soglieE.S2,
         pistaSoglia_S3: soglieE.S3,
@@ -486,7 +486,7 @@ export default function ConfigurazioneGara() {
         targetNoMalus: 15 * pdvAssic,
         targetS1: 20 * pdvAssic,
         targetS2: 25 * pdvAssic,
-        premio: 750,
+        premioS1: 500, premioS2: 750,
       });
     });
 
@@ -507,8 +507,8 @@ export default function ConfigurazioneGara() {
     const pdvEnergia = pdvs.filter(p => p.abilitaEnergia).length;
     const pdvAssicurazioni = pdvs.filter(p => p.abilitaAssicurazioni).length;
     const soglieEnergia = calcolaSoglieEnergiaDefault(pdvEnergia);
-    setEnergiaConfig(prev => ({ ...prev, pdvInGara: pdvEnergia, targetNoMalus: 10 * pdvEnergia, targetS1: 15 * pdvEnergia, targetS2: 25 * pdvEnergia, targetS3: 40 * pdvEnergia, premio: prev.premio ?? 1000, pistaSoglia_S1: soglieEnergia.S1, pistaSoglia_S2: soglieEnergia.S2, pistaSoglia_S3: soglieEnergia.S3, pistaSoglia_S4: soglieEnergia.S4, pistaSoglia_S5: soglieEnergia.S5 }));
-    setAssicurazioniConfig(prev => ({ ...prev, pdvInGara: pdvAssicurazioni, targetNoMalus: 15 * pdvAssicurazioni, targetS1: 20 * pdvAssicurazioni, targetS2: 25 * pdvAssicurazioni, premio: prev.premio ?? 750 }));
+    setEnergiaConfig(prev => ({ ...prev, pdvInGara: pdvEnergia, targetNoMalus: 10 * pdvEnergia, targetS1: 15 * pdvEnergia, targetS2: 25 * pdvEnergia, targetS3: 40 * pdvEnergia, premioS1: prev.premioS1 ?? 250, premioS2: prev.premioS2 ?? 500, premioS3: prev.premioS3 ?? 1000, pistaSoglia_S1: soglieEnergia.S1, pistaSoglia_S2: soglieEnergia.S2, pistaSoglia_S3: soglieEnergia.S3, pistaSoglia_S4: soglieEnergia.S4, pistaSoglia_S5: soglieEnergia.S5 }));
+    setAssicurazioniConfig(prev => ({ ...prev, pdvInGara: pdvAssicurazioni, targetNoMalus: 15 * pdvAssicurazioni, targetS1: 20 * pdvAssicurazioni, targetS2: 25 * pdvAssicurazioni, premioS1: prev.premioS1 ?? 500, premioS2: prev.premioS2 ?? 750 }));
   }, [initializeRSConfigsFromPdvList]);
 
   const loadConfigById = useCallback(async (id: string, month: number, year: number) => {
@@ -597,13 +597,13 @@ export default function ConfigurazioneGara() {
       } else {
         const pdvE = pdvs.filter(p => p.abilitaEnergia).length;
         const se = calcolaSoglieEnergiaDefault(pdvE);
-        setEnergiaConfig({ pdvInGara: pdvE, targetNoMalus: 10 * pdvE, targetS1: 15 * pdvE, targetS2: 25 * pdvE, targetS3: 40 * pdvE, premio: 1000, pistaSoglia_S1: se.S1, pistaSoglia_S2: se.S2, pistaSoglia_S3: se.S3, pistaSoglia_S4: se.S4, pistaSoglia_S5: se.S5 });
+        setEnergiaConfig({ pdvInGara: pdvE, targetNoMalus: 10 * pdvE, targetS1: 15 * pdvE, targetS2: 25 * pdvE, targetS3: 40 * pdvE, premioS1: 250, premioS2: 500, premioS3: 1000, pistaSoglia_S1: se.S1, pistaSoglia_S2: se.S2, pistaSoglia_S3: se.S3, pistaSoglia_S4: se.S4, pistaSoglia_S5: se.S5 });
       }
       if (cfg.assicurazioniConfig) {
         setAssicurazioniConfig(cfg.assicurazioniConfig);
       } else {
         const pdvA = pdvs.filter(p => p.abilitaAssicurazioni).length;
-        setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 15 * pdvA, targetS1: 20 * pdvA, targetS2: 25 * pdvA, premio: 750 });
+        setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 15 * pdvA, targetS1: 20 * pdvA, targetS2: 25 * pdvA, premioS1: 500, premioS2: 750 });
       }
       if (cfg.energiaRSConfig?.configPerRS?.length) {
         setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
@@ -620,8 +620,8 @@ export default function ConfigurazioneGara() {
       setPartnershipRSConfig([]);
       setEnergiaRSConfig([]);
       setAssicurazioniRSConfig([]);
-      setEnergiaConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premio: 1000 });
-      setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premio: 750 });
+      setEnergiaConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premioS1: 250, premioS2: 500, premioS3: 1000 });
+      setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premioS1: 500, premioS2: 750 });
 
       const salesPdvs = await fetchPdvFromSales(month, year);
       if (salesPdvs.length > 0) {
@@ -799,13 +799,13 @@ export default function ConfigurazioneGara() {
       } else {
         const pdvE = pdvs.filter(p => p.abilitaEnergia).length;
         const se = calcolaSoglieEnergiaDefault(pdvE);
-        setEnergiaConfig({ pdvInGara: pdvE, targetNoMalus: 10 * pdvE, targetS1: 15 * pdvE, targetS2: 25 * pdvE, targetS3: 40 * pdvE, premio: 1000, pistaSoglia_S1: se.S1, pistaSoglia_S2: se.S2, pistaSoglia_S3: se.S3, pistaSoglia_S4: se.S4, pistaSoglia_S5: se.S5 });
+        setEnergiaConfig({ pdvInGara: pdvE, targetNoMalus: 10 * pdvE, targetS1: 15 * pdvE, targetS2: 25 * pdvE, targetS3: 40 * pdvE, premioS1: 250, premioS2: 500, premioS3: 1000, pistaSoglia_S1: se.S1, pistaSoglia_S2: se.S2, pistaSoglia_S3: se.S3, pistaSoglia_S4: se.S4, pistaSoglia_S5: se.S5 });
       }
       if (cfg.assicurazioniConfig) {
         setAssicurazioniConfig(cfg.assicurazioniConfig);
       } else {
         const pdvA = pdvs.filter(p => p.abilitaAssicurazioni).length;
-        setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 15 * pdvA, targetS1: 20 * pdvA, targetS2: 25 * pdvA, premio: 750 });
+        setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 15 * pdvA, targetS1: 20 * pdvA, targetS2: 25 * pdvA, premioS1: 500, premioS2: 750 });
       }
 
       setIsDirty(false);
@@ -1324,8 +1324,16 @@ export default function ConfigurazioneGara() {
                                   <Input type="number" className="h-8 text-sm" value={eConf.targetS3} onChange={e => updateEnergiaRS('targetS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetS3-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio €</Label>
-                                  <Input type="number" className="h-8 text-sm" value={eConf.premio} onChange={e => updateEnergiaRS('premio', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premio-${rs}`} />
+                                  <Label className="text-xs font-semibold">Premio S1 €</Label>
+                                  <Input type="number" className="h-8 text-sm" value={eConf.premioS1 ?? 250} onChange={e => updateEnergiaRS('premioS1', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS1-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs font-semibold">Premio S2 €</Label>
+                                  <Input type="number" className="h-8 text-sm" value={eConf.premioS2 ?? 500} onChange={e => updateEnergiaRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS2-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs font-semibold">Premio S3 €</Label>
+                                  <Input type="number" className="h-8 text-sm" value={eConf.premioS3 ?? 1000} onChange={e => updateEnergiaRS('premioS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS3-${rs}`} />
                                 </div>
                               </div>
                               <div>
@@ -1368,8 +1376,12 @@ export default function ConfigurazioneGara() {
                                   <Input type="number" className="h-8 text-sm" value={aConf.targetS2} onChange={e => updateAssicRS('targetS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-targetS2-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio €</Label>
-                                  <Input type="number" className="h-8 text-sm" value={aConf.premio} onChange={e => updateAssicRS('premio', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premio-${rs}`} />
+                                  <Label className="text-xs font-semibold">Premio S1 €</Label>
+                                  <Input type="number" className="h-8 text-sm" value={aConf.premioS1 ?? 500} onChange={e => updateAssicRS('premioS1', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS1-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs font-semibold">Premio S2 €</Label>
+                                  <Input type="number" className="h-8 text-sm" value={aConf.premioS2 ?? 750} onChange={e => updateAssicRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS2-${rs}`} />
                                 </div>
                               </div>
                             </div>
@@ -1402,22 +1414,30 @@ export default function ConfigurazioneGara() {
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.targetNoMalus} onChange={e => { setEnergiaConfig(prev => ({ ...prev, targetNoMalus: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-target-no-malus" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Contr. premio 250€</Label>
+                      <Label className="text-xs">Target S1</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.targetS1} onChange={e => { setEnergiaConfig(prev => ({ ...prev, targetS1: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-target-s1" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Contr. premio 500€</Label>
+                      <Label className="text-xs">Target S2</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.targetS2} onChange={e => { setEnergiaConfig(prev => ({ ...prev, targetS2: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-target-s2" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="space-y-1">
-                      <Label className="text-xs">Contr. premio 1000€</Label>
+                      <Label className="text-xs">Target S3</Label>
                       <Input type="number" className="h-8 text-sm" value={energiaConfig.targetS3} onChange={e => { setEnergiaConfig(prev => ({ ...prev, targetS3: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-target-s3" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Premio €</Label>
-                      <Input type="number" className="h-8 text-sm" value={energiaConfig.premio ?? 1000} onChange={e => { setEnergiaConfig(prev => ({ ...prev, premio: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-premio" />
+                      <Label className="text-xs font-semibold">Premio S1 €</Label>
+                      <Input type="number" className="h-8 text-sm" value={energiaConfig.premioS1 ?? 250} onChange={e => { setEnergiaConfig(prev => ({ ...prev, premioS1: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-premioS1" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Premio S2 €</Label>
+                      <Input type="number" className="h-8 text-sm" value={energiaConfig.premioS2 ?? 500} onChange={e => { setEnergiaConfig(prev => ({ ...prev, premioS2: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-premioS2" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Premio S3 €</Label>
+                      <Input type="number" className="h-8 text-sm" value={energiaConfig.premioS3 ?? 1000} onChange={e => { setEnergiaConfig(prev => ({ ...prev, premioS3: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-energia-premioS3" />
                     </div>
                   </div>
 
@@ -1458,16 +1478,20 @@ export default function ConfigurazioneGara() {
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.targetNoMalus} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, targetNoMalus: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-target-no-malus" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Punti premio 500€</Label>
+                      <Label className="text-xs">Target S1</Label>
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.targetS1} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, targetS1: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-target-s1" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Punti premio 750€</Label>
+                      <Label className="text-xs">Target S2</Label>
                       <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.targetS2} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, targetS2: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-target-s2" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Premio €</Label>
-                      <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.premio ?? 750} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, premio: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-premio" />
+                      <Label className="text-xs font-semibold">Premio S1 €</Label>
+                      <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.premioS1 ?? 500} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, premioS1: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-premioS1" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Premio S2 €</Label>
+                      <Input type="number" className="h-8 text-sm" value={assicurazioniConfig.premioS2 ?? 750} onChange={e => { setAssicurazioniConfig(prev => ({ ...prev, premioS2: Number(e.target.value) || 0 })); setIsDirty(true); }} data-testid="input-assicurazioni-premioS2" />
                     </div>
                   </div>
                 </CardContent>

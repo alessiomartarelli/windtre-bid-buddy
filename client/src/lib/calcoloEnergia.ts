@@ -68,17 +68,19 @@ export function calcoloEnergiaPerPos({
 
   let premioSoglia = 0;
   let sogliaRaggiunta: 0 | 1 | 2 | 3 = 0;
-  const premioVal = config.premio ?? 1000;
+  const premioS1 = (config.premioS1 ?? config.premio ?? 1000) * config.pdvInGara;
+  const premioS2 = (config.premioS2 ?? config.premio ?? 1000) * config.pdvInGara;
+  const premioS3 = (config.premioS3 ?? config.premio ?? 1000) * config.pdvInGara;
   
   if (isNegozioInGara) {
     if (totalePezzi >= config.targetS3) {
-      premioSoglia = premioVal;
+      premioSoglia = premioS3;
       sogliaRaggiunta = 3;
     } else if (totalePezzi >= config.targetS2) {
-      premioSoglia = premioVal;
+      premioSoglia = premioS2;
       sogliaRaggiunta = 2;
     } else if (totalePezzi >= config.targetS1) {
-      premioSoglia = premioVal;
+      premioSoglia = premioS1;
       sogliaRaggiunta = 1;
     }
   }

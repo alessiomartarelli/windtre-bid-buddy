@@ -105,14 +105,15 @@ export function calcoloAssicurazioniPerPos(
         }
       }
 
-      // Target S1: €500 per PDV codificato (basato su punti assicurativi base, senza RF)
+      const premioValS1 = (config.premioS1 ?? 500) * config.pdvInGara;
+      const premioValS2 = (config.premioS2 ?? 750) * config.pdvInGara;
+
       if (puntiTotali >= config.targetS1) {
-        bonusSoglia1 = 500;
+        bonusSoglia1 = premioValS1;
       }
 
-      // Target S2: €750 per PDV (basato su punti totali con RF)
       if (puntiTotaliConReload >= config.targetS2) {
-        bonusSoglia2 = 750;
+        bonusSoglia2 = premioValS2;
       }
     }
 

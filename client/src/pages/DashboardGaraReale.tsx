@@ -957,6 +957,9 @@ export default function DashboardGaraReale() {
                 targetS2: rsEConf.targetS2,
                 targetS3: rsEConf.targetS3,
                 premio: rsEConf.premio,
+                premioS1: rsEConf.premioS1,
+                premioS2: rsEConf.premioS2,
+                premioS3: rsEConf.premioS3,
                 pistaSoglia_S1: rsEConf.pistaSoglia_S1,
                 pistaSoglia_S2: rsEConf.pistaSoglia_S2,
                 pistaSoglia_S3: rsEConf.pistaSoglia_S3,
@@ -969,7 +972,12 @@ export default function DashboardGaraReale() {
               }).length || 1;
               rsCalc = calcEnergiaPerPdv(aggregatedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv);
               if (rsCalc.sogliaRaggiunta >= 1) {
-                const premioPerPdv = rsCalc.sogliaRaggiunta >= 3 ? 1000 : rsCalc.sogliaRaggiunta >= 2 ? 500 : 250;
+                const cfgE = rsEConf || energiaConfig;
+                const premioPerPdv = rsCalc.sogliaRaggiunta >= 3
+                  ? (cfgE?.premioS3 ?? cfgE?.premio ?? 1000)
+                  : rsCalc.sogliaRaggiunta >= 2
+                    ? (cfgE?.premioS2 ?? cfgE?.premio ?? 500)
+                    : (cfgE?.premioS1 ?? cfgE?.premio ?? 250);
                 rsCalc = { ...rsCalc, premioStimato: premioPerPdv * rsNumPdv };
               }
             } else if (pista === "assicurazioni") {
@@ -980,6 +988,8 @@ export default function DashboardGaraReale() {
                 targetS1: rsAConf.targetS1,
                 targetS2: rsAConf.targetS2,
                 premio: rsAConf.premio,
+                premioS1: rsAConf.premioS1,
+                premioS2: rsAConf.premioS2,
               } : assicConfig;
               if (rsAssicConfig) {
                 let rsTotalPunti = 0;
@@ -993,8 +1003,10 @@ export default function DashboardGaraReale() {
                 }).length || 1;
                 let rsSoglia = 0;
                 let rsPremio = 0;
-                if (rsTotalPunti >= rsAssicConfig.targetS2) { rsSoglia = 2; rsPremio = 750 * rsNumPdvAssic; }
-                else if (rsTotalPunti >= rsAssicConfig.targetS1) { rsSoglia = 1; rsPremio = 500 * rsNumPdvAssic; }
+                const aS2Val = rsAssicConfig.premioS2 ?? rsAssicConfig.premio ?? 750;
+                const aS1Val = rsAssicConfig.premioS1 ?? rsAssicConfig.premio ?? 500;
+                if (rsTotalPunti >= rsAssicConfig.targetS2) { rsSoglia = 2; rsPremio = aS2Val * rsNumPdvAssic; }
+                else if (rsTotalPunti >= rsAssicConfig.targetS1) { rsSoglia = 1; rsPremio = aS1Val * rsNumPdvAssic; }
                 rsCalc = { premioStimato: rsPremio, puntiTotali: rsTotalPunti, sogliaRaggiunta: rsSoglia, sogliaLabel: sogliaToLabel(rsSoglia) };
               }
             }
@@ -1031,7 +1043,9 @@ export default function DashboardGaraReale() {
               const rsEnergiaConfig: EnergiaConfig | undefined = rsEConf ? {
                 pdvInGara: rsEConf.pdvInGara, targetNoMalus: rsEConf.targetNoMalus,
                 targetS1: rsEConf.targetS1, targetS2: rsEConf.targetS2, targetS3: rsEConf.targetS3,
-                premio: rsEConf.premio, pistaSoglia_S1: rsEConf.pistaSoglia_S1,
+                premio: rsEConf.premio,
+                premioS1: rsEConf.premioS1, premioS2: rsEConf.premioS2, premioS3: rsEConf.premioS3,
+                pistaSoglia_S1: rsEConf.pistaSoglia_S1,
                 pistaSoglia_S2: rsEConf.pistaSoglia_S2, pistaSoglia_S3: rsEConf.pistaSoglia_S3,
                 pistaSoglia_S4: rsEConf.pistaSoglia_S4, pistaSoglia_S5: rsEConf.pistaSoglia_S5,
               } : energiaConfig;
@@ -1041,14 +1055,20 @@ export default function DashboardGaraReale() {
               }).length || 1;
               rsProjCalc = calcEnergiaPerPdv(projectedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv);
               if (rsProjCalc.sogliaRaggiunta >= 1) {
-                const premioPerPdv = rsProjCalc.sogliaRaggiunta >= 3 ? 1000 : rsProjCalc.sogliaRaggiunta >= 2 ? 500 : 250;
+                const cfgEProj = rsEConf || energiaConfig;
+                const premioPerPdv = rsProjCalc.sogliaRaggiunta >= 3
+                  ? (cfgEProj?.premioS3 ?? cfgEProj?.premio ?? 1000)
+                  : rsProjCalc.sogliaRaggiunta >= 2
+                    ? (cfgEProj?.premioS2 ?? cfgEProj?.premio ?? 500)
+                    : (cfgEProj?.premioS1 ?? cfgEProj?.premio ?? 250);
                 rsProjCalc = { ...rsProjCalc, premioStimato: premioPerPdv * rsNumPdv };
               }
             } else if (pista === "assicurazioni") {
               const rsAConfProj = assicurazioniRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
               const rsAssicConfigProj: AssicurazioniConfig | undefined = rsAConfProj ? {
                 pdvInGara: rsAConfProj.pdvInGara, targetNoMalus: rsAConfProj.targetNoMalus,
-                targetS1: rsAConfProj.targetS1, targetS2: rsAConfProj.targetS2, premio: rsAConfProj.premio,
+                targetS1: rsAConfProj.targetS1, targetS2: rsAConfProj.targetS2,
+                premio: rsAConfProj.premio, premioS1: rsAConfProj.premioS1, premioS2: rsAConfProj.premioS2,
               } : assicConfig;
               if (rsAssicConfigProj) {
                 const totalPuntiProj2 = rsCalc.puntiTotali > 0 && rsWorkday.elapsedWorkingDays > 0
@@ -1059,8 +1079,10 @@ export default function DashboardGaraReale() {
                 }).length || 1;
                 let projSoglia = 0;
                 let projPremio = 0;
-                if (totalPuntiProj2 >= rsAssicConfigProj.targetS2) { projSoglia = 2; projPremio = 750 * rsNumPdvAssicProj; }
-                else if (totalPuntiProj2 >= rsAssicConfigProj.targetS1) { projSoglia = 1; projPremio = 500 * rsNumPdvAssicProj; }
+                const projAS2 = rsAssicConfigProj.premioS2 ?? rsAssicConfigProj.premio ?? 750;
+                const projAS1 = rsAssicConfigProj.premioS1 ?? rsAssicConfigProj.premio ?? 500;
+                if (totalPuntiProj2 >= rsAssicConfigProj.targetS2) { projSoglia = 2; projPremio = projAS2 * rsNumPdvAssicProj; }
+                else if (totalPuntiProj2 >= rsAssicConfigProj.targetS1) { projSoglia = 1; projPremio = projAS1 * rsNumPdvAssicProj; }
                 rsProjCalc = { premioStimato: projPremio, puntiTotali: totalPuntiProj2, sogliaRaggiunta: projSoglia, sogliaLabel: sogliaToLabel(projSoglia) };
               }
             }
@@ -1107,17 +1129,20 @@ export default function DashboardGaraReale() {
 
           if (pista === "energia" && energiaConfig) {
             let aggSoglia = 0;
-            const premioVal = energiaConfig.premio ?? 1000;
-            if (totalPunti >= energiaConfig.targetS3) { aggSoglia = 3; totalPremio = premioVal; }
-            else if (totalPunti >= energiaConfig.targetS2) { aggSoglia = 2; totalPremio = premioVal; }
-            else if (totalPunti >= energiaConfig.targetS1) { aggSoglia = 1; totalPremio = premioVal; }
+            const eS1 = (energiaConfig.premioS1 ?? energiaConfig.premio ?? 250) * energiaConfig.pdvInGara;
+            const eS2 = (energiaConfig.premioS2 ?? energiaConfig.premio ?? 500) * energiaConfig.pdvInGara;
+            const eS3 = (energiaConfig.premioS3 ?? energiaConfig.premio ?? 1000) * energiaConfig.pdvInGara;
+            if (totalPunti >= energiaConfig.targetS3) { aggSoglia = 3; totalPremio = eS3; }
+            else if (totalPunti >= energiaConfig.targetS2) { aggSoglia = 2; totalPremio = eS2; }
+            else if (totalPunti >= energiaConfig.targetS1) { aggSoglia = 1; totalPremio = eS1; }
             bestSoglia = aggSoglia;
           }
           if (pista === "assicurazioni" && assicConfig) {
             let aggSoglia = 0;
-            const premioVal = assicConfig.premio ?? 750;
-            if (totalPunti >= assicConfig.targetS2) { aggSoglia = 2; totalPremio = premioVal; }
-            else if (totalPunti >= assicConfig.targetS1) { aggSoglia = 1; totalPremio = premioVal; }
+            const aS1 = (assicConfig.premioS1 ?? assicConfig.premio ?? 500) * assicConfig.pdvInGara;
+            const aS2 = (assicConfig.premioS2 ?? assicConfig.premio ?? 750) * assicConfig.pdvInGara;
+            if (totalPunti >= assicConfig.targetS2) { aggSoglia = 2; totalPremio = aS2; }
+            else if (totalPunti >= assicConfig.targetS1) { aggSoglia = 1; totalPremio = aS1; }
             bestSoglia = aggSoglia;
           }
 
@@ -1176,19 +1201,22 @@ export default function DashboardGaraReale() {
 
           if (pista === "energia" && energiaConfig) {
             let aggSogliaProj = 0;
-            const premioVal = energiaConfig.premio ?? 1000;
+            const projES1 = (energiaConfig.premioS1 ?? energiaConfig.premio ?? 250) * energiaConfig.pdvInGara;
+            const projES2 = (energiaConfig.premioS2 ?? energiaConfig.premio ?? 500) * energiaConfig.pdvInGara;
+            const projES3 = (energiaConfig.premioS3 ?? energiaConfig.premio ?? 1000) * energiaConfig.pdvInGara;
             totalPremioProj = 0;
-            if (totalPuntiProj >= energiaConfig.targetS3) { aggSogliaProj = 3; totalPremioProj = premioVal; }
-            else if (totalPuntiProj >= energiaConfig.targetS2) { aggSogliaProj = 2; totalPremioProj = premioVal; }
-            else if (totalPuntiProj >= energiaConfig.targetS1) { aggSogliaProj = 1; totalPremioProj = premioVal; }
+            if (totalPuntiProj >= energiaConfig.targetS3) { aggSogliaProj = 3; totalPremioProj = projES3; }
+            else if (totalPuntiProj >= energiaConfig.targetS2) { aggSogliaProj = 2; totalPremioProj = projES2; }
+            else if (totalPuntiProj >= energiaConfig.targetS1) { aggSogliaProj = 1; totalPremioProj = projES1; }
             bestSogliaProj = aggSogliaProj;
           }
           if (pista === "assicurazioni" && assicConfig) {
             let aggSogliaProj = 0;
-            const premioVal = assicConfig.premio ?? 750;
+            const projAS1 = (assicConfig.premioS1 ?? assicConfig.premio ?? 500) * assicConfig.pdvInGara;
+            const projAS2 = (assicConfig.premioS2 ?? assicConfig.premio ?? 750) * assicConfig.pdvInGara;
             totalPremioProj = 0;
-            if (totalPuntiProj >= assicConfig.targetS2) { aggSogliaProj = 2; totalPremioProj = premioVal; }
-            else if (totalPuntiProj >= assicConfig.targetS1) { aggSogliaProj = 1; totalPremioProj = premioVal; }
+            if (totalPuntiProj >= assicConfig.targetS2) { aggSogliaProj = 2; totalPremioProj = projAS2; }
+            else if (totalPuntiProj >= assicConfig.targetS1) { aggSogliaProj = 1; totalPremioProj = projAS1; }
             bestSogliaProj = aggSogliaProj;
           }
 

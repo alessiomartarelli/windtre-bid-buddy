@@ -17,6 +17,8 @@ export interface AssicurazioniConfig {
   targetS1: number;
   targetS2: number;
   premio?: number;
+  premioS1?: number;
+  premioS2?: number;
 }
 
 export interface AssicurazioniPdvInGara {

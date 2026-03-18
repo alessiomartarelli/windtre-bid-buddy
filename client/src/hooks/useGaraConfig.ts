@@ -119,6 +119,9 @@ export interface GaraConfigData {
     targetS2: number;
     targetS3: number;
     premio?: number;
+    premioS1?: number;
+    premioS2?: number;
+    premioS3?: number;
     pistaSoglia_S1?: number;
     pistaSoglia_S2?: number;
     pistaSoglia_S3?: number;
@@ -131,6 +134,8 @@ export interface GaraConfigData {
     targetS1: number;
     targetS2: number;
     premio?: number;
+    premioS1?: number;
+    premioS2?: number;
   };
   energiaRSConfig?: {
     configPerRS: Array<{
@@ -140,7 +145,10 @@ export interface GaraConfigData {
       targetS1: number;
       targetS2: number;
       targetS3: number;
-      premio: number;
+      premio?: number;
+      premioS1?: number;
+      premioS2?: number;
+      premioS3?: number;
       pistaSoglia_S1?: number;
       pistaSoglia_S2?: number;
       pistaSoglia_S3?: number;
@@ -155,7 +163,9 @@ export interface GaraConfigData {
       targetNoMalus: number;
       targetS1: number;
       targetS2: number;
-      premio: number;
+      premio?: number;
+      premioS1?: number;
+      premioS2?: number;
     }>;
   };
   pistaMobile?: Record<string, unknown>;
