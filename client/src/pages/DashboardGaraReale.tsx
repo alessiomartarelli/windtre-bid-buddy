@@ -232,9 +232,14 @@ function groupMobileCategories(
       totalPezzi: corePezzi,
       totalProiezione: coreProiezione,
       children: consumerChildren.sort((a, b) => {
-        const aCore = SIM_CONSUMER_CORE.has(a.category) ? 0 : 1;
-        const bCore = SIM_CONSUMER_CORE.has(b.category) ? 0 : 1;
-        if (aCore !== bCore) return aCore - bCore;
+        const rank = (cat: string) => {
+          if (SIM_CONSUMER_CORE.has(cat)) return 0;
+          if (cat.startsWith("DEVICE_")) return 2;
+          return 1;
+        };
+        const aR = rank(a.category);
+        const bR = rank(b.category);
+        if (aR !== bR) return aR - bR;
         return b.pezzi - a.pezzi;
       }),
     });
