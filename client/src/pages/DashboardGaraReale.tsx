@@ -1317,14 +1317,6 @@ export default function DashboardGaraReale() {
                           </div>
                         </>
                       )}
-                      {totalPremioProiettato > totalPremioAttuale && (
-                        <div className="text-center sm:text-right">
-                          <div className="text-xs text-gray-500 dark:text-gray-400">Differenza</div>
-                          <div className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
-                            +{formatEuro(totalPremioProiettato - totalPremioAttuale)}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </CardContent>
                 </Card>
