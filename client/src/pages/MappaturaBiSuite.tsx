@@ -119,6 +119,7 @@ export default function MappaturaBiSuite() {
   const [hasChanges, setHasChanges] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('mobile');
   const [editingRule, setEditingRule] = useState<BiSuiteMappingRule | null>(null);
+  const [editingFromNonMappati, setEditingFromNonMappati] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
 
   const now = new Date();
@@ -189,6 +190,9 @@ export default function MappaturaBiSuite() {
       if (!res.ok) throw new Error('Errore nel salvataggio');
       setHasChanges(false);
       toast({ title: 'Mappatura salvata', description: 'Le regole di mappatura sono state salvate.' });
+      if (isExtraTab) {
+        loadArticlesSummary(summaryMonth, summaryYear);
+      }
     } catch (err) {
       toast({ title: 'Errore', description: 'Impossibile salvare la mappatura.', variant: 'destructive' });
     } finally {
@@ -319,6 +323,11 @@ export default function MappaturaBiSuite() {
               <TabsTrigger value="non_mappati" className="gap-1.5 text-xs sm:text-sm" data-testid="tab-non-mappati">
                 <AlertTriangle className="h-4 w-4" />
                 <span className="hidden sm:inline">Non Mappati</span>
+                {articlesSummary && articlesSummary.nonMappati.length > 0 && (
+                  <Badge variant="destructive" className="ml-1 h-5 px-1.5 text-[10px]">
+                    {articlesSummary.nonMappati.length}
+                  </Badge>
+                )}
               </TabsTrigger>
             </TabsList>
             </div>
@@ -364,10 +373,17 @@ export default function MappaturaBiSuite() {
             {(['prodotti', 'servizi', 'non_mappati'] as ExtraTab[]).map((tab) => (
               <TabsContent key={tab} value={tab}>
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-base font-semibold">
-                      {tab === 'prodotti' ? 'Prodotti' : tab === 'servizi' ? 'Servizi' : 'Articoli Non Mappati'}
-                    </h3>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <h3 className="text-base font-semibold">
+                        {tab === 'prodotti' ? 'Prodotti' : tab === 'servizi' ? 'Servizi' : 'Articoli Non Mappati'}
+                      </h3>
+                      {tab === 'non_mappati' && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Articoli venduti che non corrispondono a nessuna regola. Crea una regola per mapparli nella pista corretta, salva e verranno spostati.
+                        </p>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeMonth(-1)} data-testid="btn-prev-month">
                         <ChevronLeft className="h-4 w-4" />
@@ -398,7 +414,13 @@ export default function MappaturaBiSuite() {
                       showClienteTipo={tab === 'non_mappati'}
                       onCreateRule={tab === 'non_mappati' ? (item) => {
                         const newRule = createEmptyRule('mobile');
-                        newRule.conditions = { categoriaBiSuite: item.categoria, tipologiaBiSuite: item.tipologia };
+                        newRule.conditions = {
+                          categoriaBiSuite: item.categoria,
+                          tipologiaBiSuite: item.tipologia || undefined,
+                          descrizioneBiSuite: item.descrizione || undefined,
+                          clienteTipo: item.clienteTipo || undefined,
+                        };
+                        setEditingFromNonMappati(true);
                         setEditingRule(newRule);
                         setRules(prev => [...prev, newRule]);
                         setHasChanges(true);
@@ -415,11 +437,16 @@ export default function MappaturaBiSuite() {
       {editingRule && (
         <RuleEditDialog
           rule={editingRule}
+          allowPistaChange={editingFromNonMappati}
           onSave={(updated) => {
             updateRule(updated);
             setEditingRule(null);
+            setEditingFromNonMappati(false);
           }}
-          onCancel={() => setEditingRule(null)}
+          onCancel={() => {
+            setEditingRule(null);
+            setEditingFromNonMappati(false);
+          }}
         />
       )}
 
@@ -457,7 +484,9 @@ function ArticlesTable({
     return (
       <Card>
         <CardContent className="py-8 text-center text-muted-foreground">
-          Nessun articolo trovato per il periodo selezionato.
+          {onCreateRule
+            ? 'Tutti gli articoli sono mappati correttamente!'
+            : 'Nessun articolo trovato per il periodo selezionato.'}
         </CardContent>
       </Card>
     );
@@ -591,10 +620,12 @@ function RuleEditDialog({
   rule,
   onSave,
   onCancel,
+  allowPistaChange,
 }: {
   rule: BiSuiteMappingRule;
   onSave: (rule: BiSuiteMappingRule) => void;
   onCancel: () => void;
+  allowPistaChange?: boolean;
 }) {
   const [draft, setDraft] = useState<BiSuiteMappingRule>({ ...rule, conditions: { ...rule.conditions } });
 
@@ -604,6 +635,16 @@ function RuleEditDialog({
     setDraft((prev) => ({
       ...prev,
       conditions: { ...prev.conditions, [key]: value || undefined },
+    }));
+  };
+
+  const setPista = (pista: GaraPista) => {
+    const newTargets = PISTA_TARGETS[pista] || [];
+    setDraft((prev) => ({
+      ...prev,
+      pista,
+      targetCategory: newTargets[0]?.value || '',
+      targetLabel: newTargets[0]?.label || '',
     }));
   };
 
@@ -624,6 +665,24 @@ function RuleEditDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {allowPistaChange && (
+            <div>
+              <Label>Pista di Destinazione</Label>
+              <Select value={draft.pista} onValueChange={(v) => setPista(v as GaraPista)}>
+                <SelectTrigger data-testid="select-pista">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ALL_PISTE.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {PISTA_LABELS[p]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div>
             <Label>Categoria Gara di Destinazione</Label>
             <Select value={draft.targetCategory} onValueChange={setTarget}>
