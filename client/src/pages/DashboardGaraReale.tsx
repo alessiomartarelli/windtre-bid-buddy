@@ -874,7 +874,7 @@ export default function DashboardGaraReale() {
         pdvCalc: PistaCalcResult;
         categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
       }>;
-      rsCalcBreakdown?: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number }>;
+      rsCalcBreakdown?: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number }>;
     }> = [];
 
     const pisteOrder: (keyof typeof PISTA_CONFIG)[] = ["mobile", "fisso", "energia", "assicurazioni", "partnership", "protecta"];
@@ -975,7 +975,7 @@ export default function DashboardGaraReale() {
         .filter((p) => p.pezzi > 0)
         .sort((a, b) => b.pezzi - a.pezzi);
 
-      let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number }> | undefined;
+      let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number }> | undefined;
 
       if (pdvBreakdown.length > 0) {
         const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership" || pista === "energia" || pista === "assicurazioni");
@@ -994,7 +994,7 @@ export default function DashboardGaraReale() {
           let totalPremioProj = 0;
           let totalPuntiProj = 0;
           let bestSogliaProj = 0;
-          rsCalcBreakdownMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number }>();
+          rsCalcBreakdownMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number }>();
 
           rsGroupMap.forEach((rsPdvs, rs) => {
             const rsItems: AggregatedItem[] = [];
@@ -1188,6 +1188,12 @@ export default function DashboardGaraReale() {
               premioProiettato: rsProjCalc.premioStimato,
               pezziAttuali: rsPezziAttuali,
               pezziProiezione: rsPezziProiezione,
+              sogliaAttuale: rsCalc.sogliaLabel,
+              sogliaProiezione: rsProjCalc.sogliaLabel,
+              puntiAttuali: rsCalc.puntiTotali,
+              puntiProiezione: rsProjCalc.puntiTotali,
+              forecastTarget: rsCalc.forecastTarget,
+              forecastGap: rsCalc.forecastGap,
             });
           });
 
@@ -1665,69 +1671,127 @@ export default function DashboardGaraReale() {
                         </div>
                       )}
 
-                      {pista.totalePezzi > 0 && pista.calc.sogliaLabel !== "N/A" && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="rounded-lg border p-2 text-center">
-                            <div className="text-xs text-gray-500 mb-0.5">Soglia Attuale</div>
-                            <Badge className={`text-xs ${getSogliaColor(pista.calc.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>
-                              {pista.calc.sogliaLabel}
-                            </Badge>
-                            {pista.calc.puntiTotali > 0 && (
-                              <div className="text-xs text-gray-400 mt-0.5">{pista.calc.puntiTotali.toFixed(1)} pt</div>
-                            )}
-                          </div>
-                          <div className="rounded-lg border p-2 text-center">
-                            <div className="text-xs text-gray-500 mb-0.5">Proiezione Soglia</div>
-                            <Badge className={`text-xs ${getSogliaColor(pista.calcProiezione.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>
-                              {pista.calcProiezione.sogliaLabel}
-                            </Badge>
-                            {pista.calcProiezione.puntiTotali > 0 && (
-                              <div className="text-xs text-gray-400 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(1)} pt</div>
-                            )}
+                      {pista.totalePezzi > 0 && pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 ? (
+                        <div className="space-y-2">
+                          {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
+                            <div key={rsKey} className="rounded-lg border p-2.5 space-y-1.5">
+                              <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</div>
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <div className="text-center">
+                                  <div className="text-[10px] text-gray-400">Soglia Att.</div>
+                                  <Badge className={`text-xs ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
+                                  {rsData.puntiAttuali > 0 && <div className="text-[10px] text-gray-400 mt-0.5">{rsData.puntiAttuali.toFixed(1)} pt</div>}
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-[10px] text-gray-400">Proiezione</div>
+                                  <Badge className={`text-xs ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
+                                  {rsData.puntiProiezione > 0 && <div className="text-[10px] text-gray-400 mt-0.5">{rsData.puntiProiezione.toFixed(1)} pt</div>}
+                                </div>
+                              </div>
+                              {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span className="text-gray-400 flex items-center gap-0.5"><Target className="h-2.5 w-2.5" /> Obiettivo</span>
+                                    <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
+                                  </div>
+                                  <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1" />
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                      {(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(1)} pt
+                                    </span>
+                                    <span className="text-gray-400">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                  </div>
+                                </div>
+                              )}
+                              {(rsData.premioAttuale > 0 || rsData.premioProiettato > 0) && (
+                                <div className="flex items-center justify-between text-xs border-t pt-1">
+                                  <span className="text-green-700 font-semibold">{formatEuro(rsData.premioAttuale)}</span>
+                                  {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                    <span className="text-blue-600 font-semibold flex items-center gap-0.5">
+                                      <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2 flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-600">Totale Premio</span>
+                            <div className="flex items-center gap-3">
+                              <span className="font-bold text-green-700" data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
+                              {pista.calcProiezione.premioStimato > 0 && (
+                                <span className="font-bold text-blue-600 flex items-center gap-0.5" data-testid={`text-premio-proiezione-${pista.pista}`}>
+                                  <TrendingUp className="h-3 w-3" /> {formatEuro(pista.calcProiezione.premioStimato)}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      )}
+                      ) : pista.totalePezzi > 0 && pista.calc.sogliaLabel !== "N/A" ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="rounded-lg border p-2 text-center">
+                              <div className="text-xs text-gray-500 mb-0.5">Soglia Attuale</div>
+                              <Badge className={`text-xs ${getSogliaColor(pista.calc.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>
+                                {pista.calc.sogliaLabel}
+                              </Badge>
+                              {pista.calc.puntiTotali > 0 && (
+                                <div className="text-xs text-gray-400 mt-0.5">{pista.calc.puntiTotali.toFixed(1)} pt</div>
+                              )}
+                            </div>
+                            <div className="rounded-lg border p-2 text-center">
+                              <div className="text-xs text-gray-500 mb-0.5">Proiezione Soglia</div>
+                              <Badge className={`text-xs ${getSogliaColor(pista.calcProiezione.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>
+                                {pista.calcProiezione.sogliaLabel}
+                              </Badge>
+                              {pista.calcProiezione.puntiTotali > 0 && (
+                                <div className="text-xs text-gray-400 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(1)} pt</div>
+                              )}
+                            </div>
+                          </div>
 
-                      {pista.totalePezzi > 0 && pista.calc.forecastTarget != null && pista.calc.forecastTarget > 0 && (
-                        <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
-                            <span className="font-medium">{pista.calc.forecastTarget.toFixed(0)} pt</span>
-                          </div>
-                          <Progress
-                            value={Math.min((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100, 100)}
-                            className="h-1.5"
-                          />
-                          <div className="flex items-center justify-between text-xs">
-                            <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
-                              {(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(1)} pt
-                            </span>
-                            <span className="text-gray-400">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {pista.totalePezzi > 0 && (pista.calc.premioStimato > 0 || pista.calcProiezione.premioStimato > 0) && (
-                        <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2.5 space-y-1.5">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500 dark:text-gray-400">Attuale</span>
-                            <span className="font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-${pista.pista}`}>
-                              {formatEuro(pista.calc.premioStimato)}
-                            </span>
-                          </div>
-                          {pista.calcProiezione.premioStimato > 0 && (
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                <TrendingUp className="h-3 w-3 text-blue-500" />
-                                Proiezione
-                              </span>
-                              <span className="font-bold text-blue-600 dark:text-blue-400 text-base" data-testid={`text-premio-proiezione-${pista.pista}`}>
-                                {formatEuro(pista.calcProiezione.premioStimato)}
-                              </span>
+                          {pista.totalePezzi > 0 && pista.calc.forecastTarget != null && pista.calc.forecastTarget > 0 && (
+                            <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                <span className="font-medium">{pista.calc.forecastTarget.toFixed(0)} pt</span>
+                              </div>
+                              <Progress
+                                value={Math.min((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100, 100)}
+                                className="h-1.5"
+                              />
+                              <div className="flex items-center justify-between text-xs">
+                                <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                  {(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(1)} pt
+                                </span>
+                                <span className="text-gray-400">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
+                              </div>
                             </div>
                           )}
-                        </div>
-                      )}
+
+                          {pista.totalePezzi > 0 && (pista.calc.premioStimato > 0 || pista.calcProiezione.premioStimato > 0) && (
+                            <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2.5 space-y-1.5">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-500 dark:text-gray-400">Attuale</span>
+                                <span className="font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-${pista.pista}`}>
+                                  {formatEuro(pista.calc.premioStimato)}
+                                </span>
+                              </div>
+                              {pista.calcProiezione.premioStimato > 0 && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                    <TrendingUp className="h-3 w-3 text-blue-500" />
+                                    Proiezione
+                                  </span>
+                                  <span className="font-bold text-blue-600 dark:text-blue-400 text-base" data-testid={`text-premio-proiezione-${pista.pista}`}>
+                                    {formatEuro(pista.calcProiezione.premioStimato)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : null}
 
                       {pista.totalePezzi === 0 ? (
                         <p className="text-sm text-gray-400 italic">Nessuna attivazione mappata</p>
