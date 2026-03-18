@@ -234,7 +234,8 @@ function groupMobileCategories(
       children: consumerChildren.sort((a, b) => {
         const rank = (cat: string) => {
           if (SIM_CONSUMER_CORE.has(cat)) return 0;
-          if (cat.startsWith("DEVICE_")) return 2;
+          if (cat.startsWith("PIU_SICURI_")) return 2;
+          if (cat.startsWith("DEVICE_")) return 3;
           return 1;
         };
         const aR = rank(a.category);
