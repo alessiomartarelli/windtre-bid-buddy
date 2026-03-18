@@ -689,6 +689,7 @@ export default function DashboardGaraReale() {
         codicePos: string;
         nomeNegozio: string;
         ragioneSociale: string;
+        normalizedRS: string;
         pezzi: number;
         proiezione: number;
         pdvCalc: PistaCalcResult;
@@ -770,11 +771,13 @@ export default function DashboardGaraReale() {
           }
 
           const configuredRS = pdvConfig?.ragioneSociale || pdv.ragioneSociale;
+          const normalizedConfiguredRS = normalizeRS(configuredRS);
 
           return {
             codicePos: pdv.codicePos,
             nomeNegozio: pdv.nomeNegozio,
             ragioneSociale: configuredRS,
+            normalizedRS: normalizedConfiguredRS,
             pezzi: pdvPezzi,
             proiezione: pdvProiezione,
             pdvCalc,
@@ -790,9 +793,9 @@ export default function DashboardGaraReale() {
         if (useRSAggregation) {
           const rsGroupMap = new Map<string, typeof pdvBreakdown>();
           for (const pdv of pdvBreakdown) {
-            const rs = pdv.ragioneSociale || 'Senza RS';
-            if (!rsGroupMap.has(rs)) rsGroupMap.set(rs, []);
-            rsGroupMap.get(rs)!.push(pdv);
+            const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+            if (!rsGroupMap.has(rsKey)) rsGroupMap.set(rsKey, []);
+            rsGroupMap.get(rsKey)!.push(pdv);
           }
 
           let totalPremio = 0;
@@ -1012,6 +1015,71 @@ export default function DashboardGaraReale() {
     return stats;
   }, [mappedData, workdayInfo, garaCalcConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear]);
 
+  const premioPerRS = useMemo(() => {
+    if (!pistaStats.length || garaConfigMissing) return [];
+    const isRSPerRS = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
+    if (!isRSPerRS) return [];
+
+    const normalizeRS = (s: string) => s.trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ');
+    const rsMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>();
+
+    for (const pista of pistaStats) {
+      const isRSPista = pista.pista === "mobile" || pista.pista === "fisso" || pista.pista === "partnership";
+
+      if (isRSPista && pista.pdvBreakdown.length > 0) {
+        const seenRS = new Set<string>();
+        for (const pdv of pista.pdvBreakdown) {
+          const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+          if (seenRS.has(rsKey)) continue;
+          seenRS.add(rsKey);
+
+          if (!rsMap.has(rsKey)) {
+            rsMap.set(rsKey, { displayName: pdv.ragioneSociale || 'Senza RS', premioAttuale: 0, premioProiettato: 0, dettaglio: [] });
+          }
+          const entry = rsMap.get(rsKey)!;
+          entry.premioAttuale += pdv.pdvCalc.premioStimato;
+          entry.dettaglio.push({ pista: pista.pista, label: pista.label, premioAttuale: pdv.pdvCalc.premioStimato, premioProiettato: 0 });
+        }
+      } else if (!isRSPista && pista.calc.premioStimato > 0) {
+        for (const [rsKey, entry] of rsMap) {
+          entry.premioAttuale += pista.calc.premioStimato;
+          entry.dettaglio.push({ pista: pista.pista, label: pista.label, premioAttuale: pista.calc.premioStimato, premioProiettato: pista.calcProiezione.premioStimato });
+        }
+      }
+    }
+
+    for (const pista of pistaStats) {
+      const isRSPista = pista.pista === "mobile" || pista.pista === "fisso" || pista.pista === "partnership";
+      if (!isRSPista) continue;
+
+      const projRsMap = new Map<string, number>();
+      if (pista.pdvBreakdown.length > 0) {
+        const rsGroupMapProj = new Map<string, typeof pista.pdvBreakdown>();
+        for (const pdv of pista.pdvBreakdown) {
+          const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+          if (!rsGroupMapProj.has(rsKey)) rsGroupMapProj.set(rsKey, []);
+          rsGroupMapProj.get(rsKey)!.push(pdv);
+        }
+        rsGroupMapProj.forEach((rsPdvs, rsKey) => {
+          const rsTotalPezzi = rsPdvs.reduce((s, p) => s + p.pezzi, 0);
+          const ratio = workdayInfo.elapsedWorkingDays > 0 ? workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays : 1;
+          const projPezzi = Math.round(rsTotalPezzi * ratio);
+          projRsMap.set(rsKey, projPezzi);
+        });
+      }
+
+      for (const [rsKey, entry] of rsMap) {
+        const det = entry.dettaglio.find(d => d.pista === pista.pista);
+        if (det) {
+          det.premioProiettato = pista.calcProiezione.premioStimato;
+          entry.premioProiettato += pista.calcProiezione.premioStimato;
+        }
+      }
+    }
+
+    return Array.from(rsMap.values()).sort((a, b) => b.premioAttuale - a.premioAttuale);
+  }, [pistaStats, garaCalcConfig, garaConfigMissing, workdayInfo]);
+
   const isLoading = loadingMapped || loadingConfig;
 
   return (
@@ -1156,6 +1224,37 @@ export default function DashboardGaraReale() {
                 </div>
               </CardContent>
             </Card>
+
+            {premioPerRS.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="premio-per-rs-summary">
+                {premioPerRS.map((rs) => (
+                  <Card key={rs.displayName} className="border-l-4 border-l-green-500" data-testid={`card-premio-rs-${rs.displayName}`}>
+                    <CardContent className="py-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Trophy className="h-4 w-4 text-amber-500" />
+                          <span className="font-semibold text-sm">{rs.displayName}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-totale-rs-${rs.displayName}`}>
+                            {formatEuro(rs.premioAttuale)}
+                          </div>
+                          <div className="text-xs text-gray-500">Premio attuale totale</div>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        {rs.dettaglio.filter(d => d.premioAttuale > 0).map((d) => (
+                          <div key={d.pista} className="flex items-center justify-between text-xs">
+                            <span className="text-gray-600 dark:text-gray-300">{d.label}</span>
+                            <span className="font-medium">{formatEuro(d.premioAttuale)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {pistaStats.map((pista) => {

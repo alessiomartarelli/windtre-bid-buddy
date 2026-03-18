@@ -403,6 +403,11 @@ export default function ConfigurazioneGara() {
     pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premio: 750,
   });
 
+  type EnergiaRSConf = NonNullable<GaraConfigData['energiaRSConfig']>[number];
+  type AssicurazioniRSConf = NonNullable<GaraConfigData['assicurazioniRSConfig']>[number];
+  const [energiaRSConfig, setEnergiaRSConfig] = useState<EnergiaRSConf[]>([]);
+  const [assicurazioniRSConfig, setAssicurazioniRSConfig] = useState<AssicurazioniRSConf[]>([]);
+
   const { profile } = useAuth();
   const { toast } = useToast();
   const {
@@ -458,6 +463,38 @@ export default function ConfigurazioneGara() {
     setMobileRSConfig(mobileRS);
     setFissoRSConfig(fissoRS);
     setPartnershipRSConfig(partnershipRS);
+
+    const energiaRS: EnergiaRSConf[] = [];
+    const assicurazioniRS: AssicurazioniRSConf[] = [];
+    rsMap.forEach((rsPdvs, ragioneSociale) => {
+      const pdvE = rsPdvs.filter(p => p.abilitaEnergia).length;
+      const pdvA = rsPdvs.filter(p => p.abilitaAssicurazioni).length;
+      const soglieE = calcolaSoglieEnergiaDefault(pdvE);
+      energiaRS.push({
+        ragioneSociale,
+        pdvInGara: pdvE,
+        targetNoMalus: 10 * pdvE,
+        targetS1: 15 * pdvE,
+        targetS2: 25 * pdvE,
+        targetS3: 40 * pdvE,
+        premio: 1000,
+        pistaSoglia_S1: soglieE.S1,
+        pistaSoglia_S2: soglieE.S2,
+        pistaSoglia_S3: soglieE.S3,
+        pistaSoglia_S4: soglieE.S4,
+        pistaSoglia_S5: soglieE.S5,
+      });
+      assicurazioniRS.push({
+        ragioneSociale,
+        pdvInGara: pdvA,
+        targetNoMalus: 15 * pdvA,
+        targetS1: 20 * pdvA,
+        targetS2: 25 * pdvA,
+        premio: 750,
+      });
+    });
+    setEnergiaRSConfig(energiaRS);
+    setAssicurazioniRSConfig(assicurazioniRS);
   }, []);
 
   const initializeConfigsFromPdvList = useCallback((pdvs: GaraConfigPdv[]) => {
@@ -507,6 +544,8 @@ export default function ConfigurazioneGara() {
       if (cfg.partnershipRewardRSConfig?.configPerRS?.length) setPartnershipRSConfig(cfg.partnershipRewardRSConfig.configPerRS);
       if (cfg.energiaConfig) setEnergiaConfig(cfg.energiaConfig);
       if (cfg.assicurazioniConfig) setAssicurazioniConfig(cfg.assicurazioniConfig);
+      if (cfg.energiaRSConfig?.length) setEnergiaRSConfig(cfg.energiaRSConfig);
+      if (cfg.assicurazioniRSConfig?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig);
     }
     setIsDirty(false);
     setInitialLoaded(true);
@@ -566,6 +605,12 @@ export default function ConfigurazioneGara() {
         const pdvA = pdvs.filter(p => p.abilitaAssicurazioni).length;
         setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 15 * pdvA, targetS1: 20 * pdvA, targetS2: 25 * pdvA, premio: 750 });
       }
+      if (cfg.energiaRSConfig?.length) {
+        setEnergiaRSConfig(cfg.energiaRSConfig);
+      }
+      if (cfg.assicurazioniRSConfig?.length) {
+        setAssicurazioniRSConfig(cfg.assicurazioniRSConfig);
+      }
     } else {
       setConfigName('');
       setTipologiaGara('gara_operatore');
@@ -573,6 +618,8 @@ export default function ConfigurazioneGara() {
       setMobileRSConfig([]);
       setFissoRSConfig([]);
       setPartnershipRSConfig([]);
+      setEnergiaRSConfig([]);
+      setAssicurazioniRSConfig([]);
       setEnergiaConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premio: 1000 });
       setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premio: 750 });
 
@@ -628,6 +675,8 @@ export default function ConfigurazioneGara() {
       partnershipRewardRSConfig: { configPerRS: partnershipRSConfig },
       energiaConfig,
       assicurazioniConfig,
+      energiaRSConfig: tipologiaGara === 'gara_operatore_rs' ? energiaRSConfig : undefined,
+      assicurazioniRSConfig: tipologiaGara === 'gara_operatore_rs' ? assicurazioniRSConfig : undefined,
       ...(garaConfigRecord?.config ? {
         importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
       } : {}),
@@ -1298,6 +1347,104 @@ export default function ConfigurazioneGara() {
                   </div>
                 </CardContent>
               </Card>
+
+              {tipologiaGara === 'gara_operatore_rs' && energiaRSConfig.length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap className="h-4 w-4 text-amber-500" />
+                    <span className="text-sm font-semibold">Energia per Ragione Sociale</span>
+                  </div>
+                  <div className="space-y-3">
+                    {energiaRSConfig.map((rsConf, idx) => (
+                      <Card key={rsConf.ragioneSociale} data-testid={`card-energia-rs-${idx}`}>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">{rsConf.ragioneSociale}</CardTitle>
+                          <CardDescription className="text-xs">
+                            {rsConf.pdvInGara} PDV abilitati energia
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">PDV in Gara</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.pdvInGara} onChange={e => { const v = Number(e.target.value) || 0; setEnergiaRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, pdvInGara: v } : c)); setIsDirty(true); }} data-testid={`input-energia-rs-pdv-${idx}`} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">No malus</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.targetNoMalus} onChange={e => { const v = Number(e.target.value) || 0; setEnergiaRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, targetNoMalus: v } : c)); setIsDirty(true); }} data-testid={`input-energia-rs-nomalus-${idx}`} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">S1</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.targetS1} onChange={e => { const v = Number(e.target.value) || 0; setEnergiaRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, targetS1: v } : c)); setIsDirty(true); }} data-testid={`input-energia-rs-s1-${idx}`} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">S2</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.targetS2} onChange={e => { const v = Number(e.target.value) || 0; setEnergiaRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, targetS2: v } : c)); setIsDirty(true); }} data-testid={`input-energia-rs-s2-${idx}`} />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">S3</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.targetS3} onChange={e => { const v = Number(e.target.value) || 0; setEnergiaRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, targetS3: v } : c)); setIsDirty(true); }} data-testid={`input-energia-rs-s3-${idx}`} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold">Premio €</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.premio ?? 1000} onChange={e => { const v = Number(e.target.value) || 0; setEnergiaRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, premio: v } : c)); setIsDirty(true); }} data-testid={`input-energia-rs-premio-${idx}`} />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {tipologiaGara === 'gara_operatore_rs' && assicurazioniRSConfig.length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield className="h-4 w-4 text-blue-500" />
+                    <span className="text-sm font-semibold">Assicurazioni per Ragione Sociale</span>
+                  </div>
+                  <div className="space-y-3">
+                    {assicurazioniRSConfig.map((rsConf, idx) => (
+                      <Card key={rsConf.ragioneSociale} data-testid={`card-assicurazioni-rs-${idx}`}>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">{rsConf.ragioneSociale}</CardTitle>
+                          <CardDescription className="text-xs">
+                            {rsConf.pdvInGara} PDV abilitati assicurazioni
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">PDV in Gara</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.pdvInGara} onChange={e => { const v = Number(e.target.value) || 0; setAssicurazioniRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, pdvInGara: v } : c)); setIsDirty(true); }} data-testid={`input-assicurazioni-rs-pdv-${idx}`} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">No malus</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.targetNoMalus} onChange={e => { const v = Number(e.target.value) || 0; setAssicurazioniRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, targetNoMalus: v } : c)); setIsDirty(true); }} data-testid={`input-assicurazioni-rs-nomalus-${idx}`} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">S1</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.targetS1} onChange={e => { const v = Number(e.target.value) || 0; setAssicurazioniRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, targetS1: v } : c)); setIsDirty(true); }} data-testid={`input-assicurazioni-rs-s1-${idx}`} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">S2</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.targetS2} onChange={e => { const v = Number(e.target.value) || 0; setAssicurazioniRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, targetS2: v } : c)); setIsDirty(true); }} data-testid={`input-assicurazioni-rs-s2-${idx}`} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold">Premio €</Label>
+                              <Input type="number" className="h-7 text-xs" value={rsConf.premio ?? 750} onChange={e => { const v = Number(e.target.value) || 0; setAssicurazioniRSConfig(prev => prev.map((c, i) => i === idx ? { ...c, premio: v } : c)); setIsDirty(true); }} data-testid={`input-assicurazioni-rs-premio-${idx}`} />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              )}
             </TabsContent>
           </Tabs>
         )}

@@ -132,6 +132,28 @@ export interface GaraConfigData {
     targetS2: number;
     premio?: number;
   };
+  energiaRSConfig?: Array<{
+    ragioneSociale: string;
+    pdvInGara: number;
+    targetNoMalus: number;
+    targetS1: number;
+    targetS2: number;
+    targetS3: number;
+    premio?: number;
+    pistaSoglia_S1?: number;
+    pistaSoglia_S2?: number;
+    pistaSoglia_S3?: number;
+    pistaSoglia_S4?: number;
+    pistaSoglia_S5?: number;
+  }>;
+  assicurazioniRSConfig?: Array<{
+    ragioneSociale: string;
+    pdvInGara: number;
+    targetNoMalus: number;
+    targetS1: number;
+    targetS2: number;
+    premio?: number;
+  }>;
   pistaMobile?: Record<string, unknown>;
   pistaFisso?: Record<string, unknown>;
   calendarioGara?: Record<string, unknown>;
