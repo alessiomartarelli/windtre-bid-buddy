@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1891,13 +1891,39 @@ export default function DashboardGaraReale() {
               </CardHeader>
               <CardContent>
                 <Accordion type="multiple" className="space-y-2">
-                  {mappedData.pdvList
-                    .sort((a, b) => {
-                      const aPezzi = a.items.reduce((s, i) => s + i.pezzi, 0);
-                      const bPezzi = b.items.reduce((s, i) => s + i.pezzi, 0);
-                      return bPezzi - aPezzi;
-                    })
-                    .map((pdv) => {
+                  {(() => {
+                    const pdvListWithRS = mappedData.pdvList.map(pdv => {
+                      const pdvConfig = puntiVenditaFromGara.find(p => p.codicePos === pdv.codicePos);
+                      const rs = pdvConfig?.ragioneSociale || pdv.ragioneSociale || "N/D";
+                      return { ...pdv, configuredRS: rs };
+                    });
+                    const rsGroups = new Map<string, typeof pdvListWithRS>();
+                    for (const pdv of pdvListWithRS) {
+                      const key = pdv.configuredRS;
+                      if (!rsGroups.has(key)) rsGroups.set(key, []);
+                      rsGroups.get(key)!.push(pdv);
+                    }
+                    const sortedRSGroups = Array.from(rsGroups.entries())
+                      .map(([rs, pdvs]) => ({ rs, pdvs, totalPezzi: pdvs.reduce((s, p) => s + p.items.reduce((s2, i) => s2 + i.pezzi, 0), 0) }))
+                      .sort((a, b) => b.totalPezzi - a.totalPezzi);
+                    const sortedPdvList = sortedRSGroups.flatMap(g => 
+                      g.pdvs.sort((a, b) => b.items.reduce((s, i) => s + i.pezzi, 0) - a.items.reduce((s, i) => s + i.pezzi, 0))
+                    );
+                    const showRSHeaders = rsGroups.size > 1;
+                    let lastRS = "";
+                    return sortedPdvList.map((pdv) => {
+                      const rsHeader = showRSHeaders && pdv.configuredRS !== lastRS;
+                      if (showRSHeaders) lastRS = pdv.configuredRS;
+                    return (
+                    <Fragment key={pdv.codicePos}>
+                    {rsHeader && (
+                      <div className="flex items-center gap-2 pt-3 pb-1 first:pt-0">
+                        <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{pdv.configuredRS}</span>
+                        <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                      </div>
+                    )}
+                    {(() => {
                       const totalPezzi = pdv.items.reduce((s, i) => s + i.pezzi, 0);
                       const proiezione = workdayInfo.elapsedWorkingDays > 0
                         ? Math.round((totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
@@ -1995,7 +2021,11 @@ export default function DashboardGaraReale() {
                           </AccordionContent>
                         </AccordionItem>
                       );
-                    })}
+                    })()}
+                    </Fragment>
+                    );
+                    });
+                  })()}
                 </Accordion>
               </CardContent>
             </Card>
