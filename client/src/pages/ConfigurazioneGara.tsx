@@ -886,14 +886,14 @@ export default function ConfigurazioneGara() {
         ) : (
           <Tabs defaultValue="pdv" className="space-y-4">
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="pdv" data-testid="tab-pdv">
-                <Store className="h-4 w-4 mr-1" />PDV ({pdvList.length})
+              <TabsTrigger value="pdv" className="text-xs sm:text-sm" data-testid="tab-pdv">
+                <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">PDV</span> ({pdvList.length})
               </TabsTrigger>
-              <TabsTrigger value="soglie" data-testid="tab-soglie">
-                <Target className="h-4 w-4 mr-1" />Soglie
+              <TabsTrigger value="soglie" className="text-xs sm:text-sm" data-testid="tab-soglie">
+                <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />Soglie
               </TabsTrigger>
-              <TabsTrigger value="extra" data-testid="tab-extra">
-                <Settings className="h-4 w-4 mr-1" />Energia & Ass.
+              <TabsTrigger value="extra" className="text-xs sm:text-sm" data-testid="tab-extra">
+                <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">Energia &</span> Ass.
               </TabsTrigger>
             </TabsList>
 

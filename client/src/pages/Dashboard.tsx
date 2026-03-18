@@ -485,13 +485,13 @@ export default function Dashboard() {
 
       <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 space-y-4 sm:space-y-6">
         <Tabs defaultValue="preventivi" className="space-y-6">
-          <TabsList className="bg-muted/50 p-1 print:hidden">
-            <TabsTrigger value="preventivi" className="flex items-center gap-2 data-[state=active]:bg-background">
-              <FileText className="h-4 w-4" />
+          <TabsList className="bg-muted/50 p-1 print:hidden w-full sm:w-auto">
+            <TabsTrigger value="preventivi" className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm data-[state=active]:bg-background">
+              <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Preventivi
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-2 data-[state=active]:bg-background">
-              <BarChart3 className="h-4 w-4" />
+            <TabsTrigger value="analytics" className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm data-[state=active]:bg-background">
+              <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Analytics
             </TabsTrigger>
           </TabsList>

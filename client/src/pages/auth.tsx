@@ -173,7 +173,7 @@ export default function Auth() {
       </div>
 
       {/* Right Panel - Login Form */}
-      <div className="w-full lg:w-[45%] flex items-center justify-center p-6 sm:p-8 lg:p-12 bg-background">
+      <div className="w-full lg:w-[45%] flex items-center justify-center p-4 sm:p-8 lg:p-12 bg-background">
         <div className="w-full max-w-[420px]">
           {/* Mobile brand header */}
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
