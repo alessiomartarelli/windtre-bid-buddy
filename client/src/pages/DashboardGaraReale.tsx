@@ -875,6 +875,10 @@ export default function DashboardGaraReale() {
                 return pc?.abilitaEnergia;
               }).length || 1;
               rsCalc = calcEnergiaPerPdv(aggregatedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv);
+              if (rsCalc.sogliaRaggiunta >= 1) {
+                const premioPerPdv = rsCalc.sogliaRaggiunta >= 3 ? 1000 : rsCalc.sogliaRaggiunta >= 2 ? 500 : 250;
+                rsCalc = { ...rsCalc, premioStimato: premioPerPdv * rsNumPdv };
+              }
             } else if (pista === "assicurazioni") {
               const rsAConf = assicurazioniRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
               const rsAssicConfig: AssicurazioniConfig | undefined = rsAConf ? {
@@ -890,11 +894,14 @@ export default function DashboardGaraReale() {
                   const pdvAssicCalc = assicCalcMap.get(pdv.codicePos);
                   if (pdvAssicCalc) rsTotalPunti += pdvAssicCalc.puntiTotali;
                 }
-                const premioVal = rsAssicConfig.premio ?? 750;
+                const rsNumPdvAssic = rsAConf?.pdvInGara || rsPdvs.filter(p => {
+                  const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
+                  return pc?.abilitaAssicurazioni;
+                }).length || 1;
                 let rsSoglia = 0;
                 let rsPremio = 0;
-                if (rsTotalPunti >= rsAssicConfig.targetS2) { rsSoglia = 2; rsPremio = premioVal; }
-                else if (rsTotalPunti >= rsAssicConfig.targetS1) { rsSoglia = 1; rsPremio = premioVal; }
+                if (rsTotalPunti >= rsAssicConfig.targetS2) { rsSoglia = 2; rsPremio = 750 * rsNumPdvAssic; }
+                else if (rsTotalPunti >= rsAssicConfig.targetS1) { rsSoglia = 1; rsPremio = 500 * rsNumPdvAssic; }
                 rsCalc = { premioStimato: rsPremio, puntiTotali: rsTotalPunti, sogliaRaggiunta: rsSoglia, sogliaLabel: sogliaToLabel(rsSoglia) };
               }
             }
@@ -940,6 +947,10 @@ export default function DashboardGaraReale() {
                 return pc?.abilitaEnergia;
               }).length || 1;
               rsProjCalc = calcEnergiaPerPdv(projectedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv);
+              if (rsProjCalc.sogliaRaggiunta >= 1) {
+                const premioPerPdv = rsProjCalc.sogliaRaggiunta >= 3 ? 1000 : rsProjCalc.sogliaRaggiunta >= 2 ? 500 : 250;
+                rsProjCalc = { ...rsProjCalc, premioStimato: premioPerPdv * rsNumPdv };
+              }
             } else if (pista === "assicurazioni") {
               const rsAConfProj = assicurazioniRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
               const rsAssicConfigProj: AssicurazioniConfig | undefined = rsAConfProj ? {
@@ -949,11 +960,14 @@ export default function DashboardGaraReale() {
               if (rsAssicConfigProj) {
                 const totalPuntiProj2 = rsCalc.puntiTotali > 0 && rsWorkday.elapsedWorkingDays > 0
                   ? Math.round(rsCalc.puntiTotali * rsWorkday.totalWorkingDays / rsWorkday.elapsedWorkingDays) : rsCalc.puntiTotali;
-                const premioVal = rsAssicConfigProj.premio ?? 750;
+                const rsNumPdvAssicProj = rsAConfProj?.pdvInGara || rsPdvs.filter(p => {
+                  const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
+                  return pc?.abilitaAssicurazioni;
+                }).length || 1;
                 let projSoglia = 0;
                 let projPremio = 0;
-                if (totalPuntiProj2 >= rsAssicConfigProj.targetS2) { projSoglia = 2; projPremio = premioVal; }
-                else if (totalPuntiProj2 >= rsAssicConfigProj.targetS1) { projSoglia = 1; projPremio = premioVal; }
+                if (totalPuntiProj2 >= rsAssicConfigProj.targetS2) { projSoglia = 2; projPremio = 750 * rsNumPdvAssicProj; }
+                else if (totalPuntiProj2 >= rsAssicConfigProj.targetS1) { projSoglia = 1; projPremio = 500 * rsNumPdvAssicProj; }
                 rsProjCalc = { premioStimato: projPremio, puntiTotali: totalPuntiProj2, sogliaRaggiunta: projSoglia, sogliaLabel: sogliaToLabel(projSoglia) };
               }
             }
