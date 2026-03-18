@@ -614,7 +614,7 @@ export default function DashboardGaraReale() {
     const numPdvInGaraEnergia = energiaPdvInGara.length || puntiVendita.length || 1;
     const partnershipConfigs = garaCalcConfig.partnershipRewardConfig?.configPerPos || [];
     const assicConfig = garaCalcConfig.assicurazioniConfig;
-    const assicPdvInGara = puntiVendita.filter(p => p.abilitaAssicurazioni).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, nome: p.nome, isInGara: true }));
+    const assicPdvInGara: AssicurazioniPdvInGara[] = puntiVendita.filter(p => p.abilitaAssicurazioni).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, nome: p.nome, inGara: true }));
 
     const normalizeRS = (s: string) => s.trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ');
 
@@ -698,6 +698,7 @@ export default function DashboardGaraReale() {
         pdvCalc: PistaCalcResult;
         categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
       }>;
+      rsCalcBreakdown?: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number }>;
     }> = [];
 
     const pisteOrder: (keyof typeof PISTA_CONFIG)[] = ["mobile", "fisso", "energia", "assicurazioni", "partnership", "protecta"];
@@ -879,7 +880,7 @@ export default function DashboardGaraReale() {
             totalPuntiProj += rsProjCalc.puntiTotali;
             if (rsProjCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = rsProjCalc.sogliaRaggiunta;
 
-            rsCalcBreakdownMap.set(rs, {
+            rsCalcBreakdownMap!.set(rs, {
               displayName: rsPdvs[0].ragioneSociale || rs,
               premioAttuale: rsCalc.premioStimato,
               premioProiettato: rsProjCalc.premioStimato,
