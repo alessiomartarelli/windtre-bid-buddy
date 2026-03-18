@@ -793,7 +793,13 @@ export default function DashboardGaraReale() {
         .sort((a, b) => b.pezzi - a.pezzi);
 
       if (pdvBreakdown.length > 0) {
-        const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership");
+        const energiaRSConfigs = garaCalcConfig.energiaRSConfig || [];
+        const assicurazioniRSConfigs = garaCalcConfig.assicurazioniRSConfig || [];
+        const useRSAggregation = isRSPerRS && (
+          pista === "mobile" || pista === "fisso" || pista === "partnership"
+          || (pista === "energia" && energiaRSConfigs.length > 0)
+          || (pista === "assicurazioni" && assicurazioniRSConfigs.length > 0)
+        );
 
         if (useRSAggregation) {
           const rsGroupMap = new Map<string, typeof pdvBreakdown>();
@@ -844,6 +850,43 @@ export default function DashboardGaraReale() {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
               rsCalc = calcPartnershipPerPdv(aggregatedRSItems, prConfig, rsWorkday.elapsedWorkingDays, rsPdvs[0].codicePos);
+            } else if (pista === "energia") {
+              const rsEnCfg = energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              if (rsEnCfg) {
+                const rsEnergiaConfig: EnergiaConfig = {
+                  pdvInGara: rsEnCfg.pdvInGara,
+                  targetNoMalus: rsEnCfg.targetNoMalus,
+                  targetS1: rsEnCfg.targetS1,
+                  targetS2: rsEnCfg.targetS2,
+                  targetS3: rsEnCfg.targetS3,
+                  premio: rsEnCfg.premio ?? (energiaConfig?.premio ?? 1000),
+                  pistaSoglia1: energiaConfig?.pistaSoglia1 ?? 0,
+                  pistaSoglia2: energiaConfig?.pistaSoglia2 ?? 0,
+                  pistaSoglia3: energiaConfig?.pistaSoglia3 ?? 0,
+                  pistaSoglia4: energiaConfig?.pistaSoglia4 ?? 0,
+                  pistaSoglia5: energiaConfig?.pistaSoglia5 ?? 0,
+                };
+                const rsNumPdv = rsPdvs.filter(p => puntiVendita.find(pv => pv.codicePos === p.codicePos)?.abilitaEnergia).length || 1;
+                rsCalc = calcEnergiaPerPdv(aggregatedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv);
+                const rsTotalPezzi = aggregatedRSItems.reduce((sum, it) => sum + it.pezzi, 0);
+                let aggSoglia = 0;
+                const premioVal = rsEnergiaConfig.premio ?? 1000;
+                if (rsTotalPezzi >= rsEnergiaConfig.targetS3) { aggSoglia = 3; rsCalc = { ...rsCalc, premioStimato: premioVal, sogliaRaggiunta: 3 }; }
+                else if (rsTotalPezzi >= rsEnergiaConfig.targetS2) { aggSoglia = 2; rsCalc = { ...rsCalc, premioStimato: premioVal, sogliaRaggiunta: 2 }; }
+                else if (rsTotalPezzi >= rsEnergiaConfig.targetS1) { aggSoglia = 1; rsCalc = { ...rsCalc, premioStimato: premioVal, sogliaRaggiunta: 1 }; }
+                else { rsCalc = { ...rsCalc, premioStimato: 0, sogliaRaggiunta: 0 }; }
+              }
+            } else if (pista === "assicurazioni") {
+              const rsAssCfg = assicurazioniRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              if (rsAssCfg) {
+                const rsTotalPezzi = aggregatedRSItems.reduce((sum, it) => sum + it.pezzi, 0);
+                let aggSoglia = 0;
+                const premioVal = rsAssCfg.premio ?? (assicConfig?.premio ?? 750);
+                let premioStimato = 0;
+                if (rsTotalPezzi >= rsAssCfg.targetS2) { aggSoglia = 2; premioStimato = premioVal; }
+                else if (rsTotalPezzi >= rsAssCfg.targetS1) { aggSoglia = 1; premioStimato = premioVal; }
+                rsCalc = { premioStimato, puntiTotali: rsTotalPezzi, sogliaRaggiunta: aggSoglia, sogliaLabel: sogliaToLabel(aggSoglia) };
+              }
             }
 
             totalPremio += rsCalc.premioStimato;
@@ -873,6 +916,43 @@ export default function DashboardGaraReale() {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
               rsProjCalc = calcPartnershipPerPdv(projectedRSItems, prConfig, rsWorkday.totalWorkingDays, rsPdvs[0].codicePos);
+            } else if (pista === "energia") {
+              const rsEnCfg = energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              if (rsEnCfg) {
+                const rsEnergiaConfig: EnergiaConfig = {
+                  pdvInGara: rsEnCfg.pdvInGara,
+                  targetNoMalus: rsEnCfg.targetNoMalus,
+                  targetS1: rsEnCfg.targetS1,
+                  targetS2: rsEnCfg.targetS2,
+                  targetS3: rsEnCfg.targetS3,
+                  premio: rsEnCfg.premio ?? (energiaConfig?.premio ?? 1000),
+                  pistaSoglia1: energiaConfig?.pistaSoglia1 ?? 0,
+                  pistaSoglia2: energiaConfig?.pistaSoglia2 ?? 0,
+                  pistaSoglia3: energiaConfig?.pistaSoglia3 ?? 0,
+                  pistaSoglia4: energiaConfig?.pistaSoglia4 ?? 0,
+                  pistaSoglia5: energiaConfig?.pistaSoglia5 ?? 0,
+                };
+                const rsNumPdv = rsPdvs.filter(p => puntiVendita.find(pv => pv.codicePos === p.codicePos)?.abilitaEnergia).length || 1;
+                rsProjCalc = calcEnergiaPerPdv(projectedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv);
+                const rsTotalPezziProj = projectedRSItems.reduce((sum, it) => sum + it.pezzi, 0);
+                const premioVal = rsEnergiaConfig.premio ?? 1000;
+                let aggSogliaProj = 0;
+                if (rsTotalPezziProj >= rsEnergiaConfig.targetS3) { aggSogliaProj = 3; rsProjCalc = { ...rsProjCalc, premioStimato: premioVal, sogliaRaggiunta: 3 }; }
+                else if (rsTotalPezziProj >= rsEnergiaConfig.targetS2) { aggSogliaProj = 2; rsProjCalc = { ...rsProjCalc, premioStimato: premioVal, sogliaRaggiunta: 2 }; }
+                else if (rsTotalPezziProj >= rsEnergiaConfig.targetS1) { aggSogliaProj = 1; rsProjCalc = { ...rsProjCalc, premioStimato: premioVal, sogliaRaggiunta: 1 }; }
+                else { rsProjCalc = { ...rsProjCalc, premioStimato: 0, sogliaRaggiunta: 0 }; }
+              }
+            } else if (pista === "assicurazioni") {
+              const rsAssCfg = assicurazioniRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              if (rsAssCfg) {
+                const rsTotalPezziProj = projectedRSItems.reduce((sum, it) => sum + it.pezzi, 0);
+                const premioVal = rsAssCfg.premio ?? (assicConfig?.premio ?? 750);
+                let aggSogliaProj = 0;
+                let premioProj = 0;
+                if (rsTotalPezziProj >= rsAssCfg.targetS2) { aggSogliaProj = 2; premioProj = premioVal; }
+                else if (rsTotalPezziProj >= rsAssCfg.targetS1) { aggSogliaProj = 1; premioProj = premioVal; }
+                rsProjCalc = { premioStimato: premioProj, puntiTotali: rsTotalPezziProj, sogliaRaggiunta: aggSogliaProj, sogliaLabel: sogliaToLabel(aggSogliaProj) };
+              }
             }
             totalPremioProj += rsProjCalc.premioStimato;
             totalPuntiProj += rsProjCalc.puntiTotali;
@@ -1028,10 +1108,16 @@ export default function DashboardGaraReale() {
     const nRS = (s: string) => s.trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ');
     const rsMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>();
 
-    for (const pista of pistaStats) {
-      const isRSPista = pista.pista === "mobile" || pista.pista === "fisso" || pista.pista === "partnership";
-      if (!isRSPista || pista.pdvBreakdown.length === 0) continue;
+    const energiaRSConfigs = garaCalcConfig.energiaRSConfig || [];
+    const assicurazioniRSConfigs = garaCalcConfig.assicurazioniRSConfig || [];
+    const rsLevelPiste = new Set(["mobile", "fisso", "partnership"]);
+    if (energiaRSConfigs.length > 0) rsLevelPiste.add("energia");
+    if (assicurazioniRSConfigs.length > 0) rsLevelPiste.add("assicurazioni");
 
+    for (const pista of pistaStats) {
+      if (!rsLevelPiste.has(pista.pista) || pista.pdvBreakdown.length === 0) continue;
+
+      const rsCalcMap = new Map<string, { premioAttuale: number; premioProiettato: number }>();
       const seenRS = new Set<string>();
       for (const pdv of pista.pdvBreakdown) {
         const rsKey = nRS(pdv.ragioneSociale || 'Senza RS');
@@ -1041,38 +1127,92 @@ export default function DashboardGaraReale() {
         if (!rsMap.has(rsKey)) {
           rsMap.set(rsKey, { displayName: pdv.ragioneSociale || 'Senza RS', premioAttuale: 0, premioProiettato: 0, dettaglio: [] });
         }
-        const entry = rsMap.get(rsKey)!;
-        entry.premioAttuale += pdv.pdvCalc.premioStimato;
-        entry.dettaglio.push({ pista: pista.pista, label: pista.label, premioAttuale: pdv.pdvCalc.premioStimato, premioProiettato: 0 });
+        if (!rsCalcMap.has(rsKey)) {
+          rsCalcMap.set(rsKey, { premioAttuale: pdv.pdvCalc.premioStimato, premioProiettato: 0 });
+        }
       }
 
-      const rsCount = rsMap.size;
-      if (rsCount > 0 && pista.calcProiezione.premioStimato > 0) {
-        const projPerRS = Math.round(pista.calcProiezione.premioStimato / rsCount);
-        rsMap.forEach((entry) => {
-          const det = entry.dettaglio.find((d: { pista: string }) => d.pista === pista.pista);
-          if (det) {
-            det.premioProiettato = projPerRS;
-            entry.premioProiettato += projPerRS;
+      const rsGroupCalcs = new Map<string, PistaCalcResult>();
+      const rsGroupMap = new Map<string, typeof pista.pdvBreakdown>();
+      for (const pdv of pista.pdvBreakdown) {
+        const rsKey = nRS(pdv.ragioneSociale || 'Senza RS');
+        if (!rsGroupMap.has(rsKey)) rsGroupMap.set(rsKey, []);
+        rsGroupMap.get(rsKey)!.push(pdv);
+        if (!rsGroupCalcs.has(rsKey)) {
+          rsGroupCalcs.set(rsKey, pdv.pdvCalc);
+        }
+      }
+
+      rsGroupMap.forEach((rsPdvs, rsKey) => {
+        const rsItems: AggregatedItem[] = [];
+        for (const pdv of rsPdvs) {
+          for (const c of pdv.categories) {
+            rsItems.push({ pista: pista.pista, targetCategory: c.category, targetLabel: c.label, pezzi: c.pezzi, canone: c.canone || 0 });
           }
+        }
+        const firstPdvConfig = puntiVenditaFromGara.find(p => p.codicePos === rsPdvs[0].codicePos);
+        const rsCalendar = firstPdvConfig?.calendar || 'standard';
+        const rsWorkday = getWorkdayInfoForMonth(selYear, selMonth - 1, rsCalendar, new Date());
+
+        const projectedItems = rsItems.map(item => {
+          const ratio = rsWorkday.elapsedWorkingDays > 0 ? rsWorkday.totalWorkingDays / rsWorkday.elapsedWorkingDays : 1;
+          return { ...item, pezzi: Math.round(item.pezzi * ratio), canone: item.canone * ratio };
         });
-      }
-    }
 
-    for (const pista of pistaStats) {
-      const isRSPista = pista.pista === "mobile" || pista.pista === "fisso" || pista.pista === "partnership";
-      if (isRSPista) continue;
-      if (pista.calc.premioStimato <= 0 && pista.calcProiezione.premioStimato <= 0) continue;
+        let projCalc = EMPTY_CALC;
+        if (pista.pista === "mobile") {
+          const mConfig = (garaCalcConfig.pistaMobileRSConfig?.sogliePerRS || []).find(c => nRS(c.ragioneSociale) === rsKey);
+          if (mConfig) {
+            projCalc = calcMobilePerPdv(projectedItems, { soglia1: mConfig.soglia1, soglia2: mConfig.soglia2, soglia3: mConfig.soglia3, soglia4: mConfig.soglia4, forecastTargetPunti: mConfig.forecastTargetPunti, clusterPista: mConfig.clusterPista } as any, rsCalendar, selYear, selMonth, garaCalcConfig.mobileCategories || MOBILE_CATEGORIES_CONFIG_DEFAULT, rsWorkday);
+          }
+        } else if (pista.pista === "fisso") {
+          const fConfig = (garaCalcConfig.pistaFissoRSConfig?.sogliePerRS || []).find(c => nRS(c.ragioneSociale) === rsKey);
+          if (fConfig) {
+            const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
+            projCalc = calcFissoPerPdv(projectedItems, fConfig as any, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday);
+          }
+        } else if (pista.pista === "partnership") {
+          const pCfg = (garaCalcConfig.partnershipRewardRSConfig?.configPerRS || []).find(c => nRS(c.ragioneSociale) === rsKey);
+          if (pCfg) {
+            projCalc = calcPartnershipPerPdv(projectedItems, { posCode: rsPdvs[0].codicePos, config: pCfg as any }, rsWorkday.totalWorkingDays, rsPdvs[0].codicePos);
+          }
+        } else if (pista.pista === "energia") {
+          const rsEnCfg = energiaRSConfigs.find(c => nRS(c.ragioneSociale) === rsKey);
+          if (rsEnCfg) {
+            const rsTotalProj = projectedItems.reduce((sum, it) => sum + it.pezzi, 0);
+            const premioVal = rsEnCfg.premio ?? 1000;
+            let sogliaProj = 0, premioProj = 0;
+            if (rsTotalProj >= rsEnCfg.targetS3) { sogliaProj = 3; premioProj = premioVal; }
+            else if (rsTotalProj >= rsEnCfg.targetS2) { sogliaProj = 2; premioProj = premioVal; }
+            else if (rsTotalProj >= rsEnCfg.targetS1) { sogliaProj = 1; premioProj = premioVal; }
+            projCalc = { premioStimato: premioProj, puntiTotali: rsTotalProj, sogliaRaggiunta: sogliaProj, sogliaLabel: sogliaToLabel(sogliaProj) };
+          }
+        } else if (pista.pista === "assicurazioni") {
+          const rsAssCfg = assicurazioniRSConfigs.find(c => nRS(c.ragioneSociale) === rsKey);
+          if (rsAssCfg) {
+            const rsTotalProj = projectedItems.reduce((sum, it) => sum + it.pezzi, 0);
+            const premioVal = rsAssCfg.premio ?? 750;
+            let sogliaProj = 0, premioProj = 0;
+            if (rsTotalProj >= rsAssCfg.targetS2) { sogliaProj = 2; premioProj = premioVal; }
+            else if (rsTotalProj >= rsAssCfg.targetS1) { sogliaProj = 1; premioProj = premioVal; }
+            projCalc = { premioStimato: premioProj, puntiTotali: rsTotalProj, sogliaRaggiunta: sogliaProj, sogliaLabel: sogliaToLabel(sogliaProj) };
+          }
+        }
 
-      rsMap.forEach((entry) => {
-        entry.premioAttuale += pista.calc.premioStimato;
-        entry.premioProiettato += pista.calcProiezione.premioStimato;
-        entry.dettaglio.push({ pista: pista.pista, label: pista.label, premioAttuale: pista.calc.premioStimato, premioProiettato: pista.calcProiezione.premioStimato });
+        const rsCalcEntry = rsCalcMap.get(rsKey);
+        if (rsCalcEntry) rsCalcEntry.premioProiettato = projCalc.premioStimato;
+      });
+
+      rsCalcMap.forEach((calcData, rsKey) => {
+        const entry = rsMap.get(rsKey)!;
+        entry.premioAttuale += calcData.premioAttuale;
+        entry.premioProiettato += calcData.premioProiettato;
+        entry.dettaglio.push({ pista: pista.pista, label: pista.label, premioAttuale: calcData.premioAttuale, premioProiettato: calcData.premioProiettato });
       });
     }
 
     return Array.from(rsMap.values()).sort((a, b) => b.premioAttuale - a.premioAttuale);
-  }, [pistaStats, garaCalcConfig, garaConfigMissing]);
+  }, [pistaStats, garaCalcConfig, garaConfigMissing, puntiVenditaFromGara, selYear, selMonth]);
 
   const isLoading = loadingMapped || loadingConfig;
 
