@@ -183,16 +183,10 @@ const SIM_IVA_CATEGORIES = new Set<string>([
 const SIM_CONSUMER_CORE = new Set<string>([
   MobileActivationType.TIED,
   MobileActivationType.UNTIED,
-  MobileActivationType.MNP,
-  MobileActivationType.MNP_MVNO,
-  MobileActivationType.PHASE_IN_TIED,
-  MobileActivationType.WINBACK,
-  MobileActivationType.CONVERGENTE_SUPERFIBRA_MULTISERVICE,
   MobileActivationType.TOURIST_FULL,
   MobileActivationType.TOURIST_PASS,
   MobileActivationType.TOURIST_XXL,
   MobileActivationType.SIM_ALLARME,
-  MobileActivationType.RELOAD_EXCHANGE,
 ]);
 
 const SIM_PIVA_CORE = new Set<string>([
