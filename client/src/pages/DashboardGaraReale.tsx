@@ -118,6 +118,7 @@ interface MappedSalesResponse {
   totalUnmapped: number;
   pdvList: PdvData[];
   totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number }>>;
+  latestSaleDate: string | null;
 }
 
 interface OrgConfigPdv {
@@ -1237,6 +1238,15 @@ export default function DashboardGaraReale() {
             <Card data-testid="card-workday-info">
               <CardContent className="py-3">
                 <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm flex-wrap">
+                  {mappedData.latestSaleDate && (
+                    <span className="flex items-center gap-1.5">
+                      <BarChart3 className="h-4 w-4 text-gray-400" />
+                      <span className="text-gray-500">Dati aggiornati al:</span>
+                      <span className="font-medium" data-testid="text-latest-sale-date">
+                        {new Date(mappedData.latestSaleDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                    </span>
+                  )}
                   <span className="flex items-center gap-1.5">
                     <Calendar className="h-4 w-4 text-gray-400" />
                     <span className="text-gray-500">Giorni lavorativi:</span>

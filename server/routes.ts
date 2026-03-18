@@ -1606,8 +1606,13 @@ export async function registerRoutes(
       let totalMapped = 0;
       let totalUnmapped = 0;
       let totalArticoli = 0;
+      let latestSaleDate: Date | null = null;
 
       for (const sale of sales) {
+        if (sale.dataVendita) {
+          const d = new Date(sale.dataVendita);
+          if (!latestSaleDate || d > latestSaleDate) latestSaleDate = d;
+        }
         const raw = sale.rawData as any;
         if (!raw) continue;
 
@@ -1697,6 +1702,7 @@ export async function registerRoutes(
         totalUnmapped,
         pdvList,
         totaliPerPista,
+        latestSaleDate: latestSaleDate ? latestSaleDate.toISOString() : null,
       });
     } catch (error: unknown) {
       console.error("BiSuite mapped sales error:", error);
