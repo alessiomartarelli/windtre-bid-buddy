@@ -1721,10 +1721,6 @@ export async function registerRoutes(
       const { getDefaultMappingRules, mapBiSuiteArticle } = await import("../shared/bisuiteMapping");
       const rules = mappingConfig?.rules || getDefaultMappingRules();
 
-      const prodotti: Record<string, { categoria: string; tipologia: string; descrizione: string; pezzi: number; importo: number }> = {};
-      const servizi: Record<string, { categoria: string; tipologia: string; descrizione: string; pezzi: number; importo: number }> = {};
-      const nonMappati: Record<string, { categoria: string; tipologia: string; descrizione: string; pezzi: number; clienteTipo: string }> = {};
-
       const PRODOTTI_CATS = new Set([
         'TELEFONIA', 'MODEM/ROUTER', 'SMART DEVICE', 'INTERNET DEVICE', 'SIM', 'RICARICHE',
         'ACCESSORI', 'GARANZIE', 'RICAMBI', 'RICAMBI PC', 'DEPOSITO CAUZIONALE',
@@ -1733,6 +1729,10 @@ export async function registerRoutes(
       ]);
       const SERVIZI_CATS = new Set(['SPEDIZIONE', 'ASSISTENZA']);
 
+      const prodotti: Record<string, { categoria: string; tipologia: string; descrizione: string; pezzi: number; importo: number }> = {};
+      const servizi: Record<string, { categoria: string; tipologia: string; descrizione: string; pezzi: number; importo: number }> = {};
+      const nonMappati: Record<string, { categoria: string; tipologia: string; descrizione: string; pezzi: number; clienteTipo: string }> = {};
+
       for (const sale of sales) {
         const raw = sale.rawData as any;
         if (!raw) continue;
@@ -1740,9 +1740,9 @@ export async function registerRoutes(
         const clienteTipo = raw.cliente?.clienteTipo || '';
 
         for (const art of articoli) {
-          const cat = (art.categoriaBiSuite || '').toUpperCase().trim();
-          const tip = art.tipologiaBiSuite || '';
-          const desc = art.descrizioneBiSuite || '';
+          const cat = (art.categoria?.nome || '').toUpperCase().trim();
+          const tip = (art.tipologia?.nome || '').trim();
+          const desc = (art.descrizione || '').trim();
           const importo = parseFloat(art.dettaglio?.importo || art.dettaglio?.prezzo || '0') || 0;
 
           if (PRODOTTI_CATS.has(cat)) {
@@ -1758,7 +1758,7 @@ export async function registerRoutes(
           } else {
             const mapped = mapBiSuiteArticle(art, clienteTipo, rules);
             if (!mapped) {
-              const key = `${cat}||${tip}||${desc}`;
+              const key = `${cat}||${tip}||${desc}||${clienteTipo}`;
               if (!nonMappati[key]) nonMappati[key] = { categoria: cat, tipologia: tip, descrizione: desc, pezzi: 0, clienteTipo };
               nonMappati[key].pezzi++;
             }
