@@ -1287,22 +1287,22 @@ export default function DashboardGaraReale() {
           data-testid="button-refresh-dashboard"
           onClick={async () => {
             setIsRefreshing(true);
-            try {
-              const startDate = `${selYear}-${String(selMonth).padStart(2, "0")}-01`;
-              const lastDay = new Date(selYear, selMonth, 0).getDate();
-              const endDate = `${selYear}-${String(selMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-              await fetch(apiUrl("/api/bisuite-fetch"), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                credentials: "include",
-                body: JSON.stringify({ start_date: startDate, end_date: endDate }),
-              });
-            } catch (e) {}
             await Promise.all([
               queryClient.invalidateQueries({ queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear] }),
               queryClient.invalidateQueries({ queryKey: ["/api/gara-config", selMonth, selYear, effectiveConfigId] }),
               queryClient.invalidateQueries({ queryKey: ["/api/gara-config/list", selMonth, selYear] }),
             ]);
+            const startDate = `${selYear}-${String(selMonth).padStart(2, "0")}-01`;
+            const lastDay = new Date(selYear, selMonth, 0).getDate();
+            const endDate = `${selYear}-${String(selMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+            fetch(apiUrl("/api/bisuite-fetch"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ start_date: startDate, end_date: endDate }),
+            }).then(() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear] });
+            }).catch(() => {});
             setIsRefreshing(false);
           }}
         >
