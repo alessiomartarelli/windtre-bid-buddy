@@ -674,8 +674,8 @@ export default function DashboardGaraReale() {
       pistaMobileRSConfig: (cfg?.pistaMobileRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; forecastTargetPunti: number; clusterPista: string }> }) || undefined,
       pistaFissoRSConfig: (cfg?.pistaFissoRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; soglia5: number; forecastTargetPunti: number }> }) || undefined,
       partnershipRewardRSConfig: (cfg?.partnershipRewardRSConfig as { configPerRS?: Array<{ ragioneSociale: string; target100: number; target80: number; premio100: number; premio80: number }> }) || undefined,
-      energiaRSConfig: (cfg?.energiaRSConfig as { configPerRS?: Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; targetS3: number; premio: number; pistaSoglia_S1?: number; pistaSoglia_S2?: number; pistaSoglia_S3?: number; pistaSoglia_S4?: number; pistaSoglia_S5?: number }> }) || undefined,
-      assicurazioniRSConfig: (cfg?.assicurazioniRSConfig as { configPerRS?: Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; premio: number }> }) || undefined,
+      energiaRSConfig: (cfg?.energiaRSConfig as { configPerRS?: Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; targetS3: number; premio: number; premioS1?: number; premioS2?: number; premioS3?: number; pistaSoglia_S1?: number; pistaSoglia_S2?: number; pistaSoglia_S3?: number; pistaSoglia_S4?: number; pistaSoglia_S5?: number }> }) || undefined,
+      assicurazioniRSConfig: (cfg?.assicurazioniRSConfig as { configPerRS?: Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; premio: number; premioS1?: number; premioS2?: number }> }) || undefined,
     };
   }, [garaConfig]);
 
@@ -800,7 +800,7 @@ export default function DashboardGaraReale() {
         pdvCalc: PistaCalcResult;
         categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
       }>;
-      rsCalcBreakdown?: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number }>;
+      rsCalcBreakdown?: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number }>;
     }> = [];
 
     const pisteOrder: (keyof typeof PISTA_CONFIG)[] = ["mobile", "fisso", "energia", "assicurazioni", "partnership", "protecta"];
@@ -897,7 +897,7 @@ export default function DashboardGaraReale() {
         .filter((p) => p.pezzi > 0)
         .sort((a, b) => b.pezzi - a.pezzi);
 
-      let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number }> | undefined;
+      let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number }> | undefined;
 
       if (pdvBreakdown.length > 0) {
         const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership" || pista === "energia" || pista === "assicurazioni");
@@ -916,7 +916,7 @@ export default function DashboardGaraReale() {
           let totalPremioProj = 0;
           let totalPuntiProj = 0;
           let bestSogliaProj = 0;
-          rsCalcBreakdownMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number }>();
+          rsCalcBreakdownMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number }>();
 
           rsGroupMap.forEach((rsPdvs, rs) => {
             const rsItems: AggregatedItem[] = [];
@@ -936,9 +936,17 @@ export default function DashboardGaraReale() {
             }
             const aggregatedRSItems = Array.from(mergedItems.values());
 
+            const rsPezziAttuali = pista === "mobile"
+              ? aggregatedRSItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
+              : aggregatedRSItems.reduce((s, i) => s + i.pezzi, 0);
+
             const firstPdvConfig = puntiVendita.find(p => p.codicePos === rsPdvs[0].codicePos);
             const rsCalendar = firstPdvConfig?.calendar || DEFAULT_CALENDAR;
             const rsWorkday = getWorkdayInfoForMonth(selYear, selMonth - 1, rsCalendar, new Date());
+
+            const rsPezziProiezione = rsWorkday.elapsedWorkingDays > 0
+              ? Math.round((rsPezziAttuali / rsWorkday.elapsedWorkingDays) * rsWorkday.totalWorkingDays)
+              : rsPezziAttuali;
 
             let rsCalc = EMPTY_CALC;
             if (pista === "mobile") {
@@ -1098,6 +1106,8 @@ export default function DashboardGaraReale() {
               displayName: rsPdvs[0].ragioneSociale || rs,
               premioAttuale: rsCalc.premioStimato,
               premioProiettato: rsProjCalc.premioStimato,
+              pezziAttuali: rsPezziAttuali,
+              pezziProiezione: rsPezziProiezione,
             });
           });
 
@@ -1547,10 +1557,33 @@ export default function DashboardGaraReale() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-bold" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
-                        <span className="text-sm text-gray-500">pezzi attuali</span>
-                      </div>
+                      {pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 ? (
+                        <div className="space-y-1">
+                          {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
+                            <div key={rsKey} className="flex items-baseline justify-between">
+                              <span className="text-sm text-gray-600 truncate mr-2">{rsData.displayName}</span>
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-xl font-bold" data-testid={`text-pezzi-${pista.pista}-${rsKey}`}>{rsData.pezziAttuali}</span>
+                                {rsData.pezziProiezione > rsData.pezziAttuali && (
+                                  <span className="text-xs text-blue-500">→ {rsData.pezziProiezione}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                          <div className="flex items-baseline justify-between border-t pt-1 mt-1">
+                            <span className="text-sm font-medium text-gray-700">Totale</span>
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-2xl font-bold" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
+                              <span className="text-xs text-gray-500">pezzi</span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-3xl font-bold" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
+                          <span className="text-sm text-gray-500">pezzi attuali</span>
+                        </div>
+                      )}
 
                       {pista.totalePezzi > 0 && pista.calc.sogliaLabel !== "N/A" && (
                         <div className="grid grid-cols-2 gap-2">
