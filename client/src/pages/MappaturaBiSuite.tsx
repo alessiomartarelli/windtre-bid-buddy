@@ -772,7 +772,7 @@ function RuleEditDialog({
           <Separator />
           <h4 className="text-sm font-medium">Condizione su Domande/Risposte (opzionale)</h4>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className={`grid ${draft.conditions.domandaTesto ? 'grid-cols-3' : 'grid-cols-1'} gap-3`}>
             <div>
               <Label className="text-xs">Testo Domanda (contiene)</Label>
               <Input
@@ -782,32 +782,36 @@ function RuleEditDialog({
                 data-testid="input-domanda-testo"
               />
             </div>
-            <div>
-              <Label className="text-xs">Risposta (contiene)</Label>
-              <Input
-                placeholder="es. TIED"
-                value={draft.conditions.rispostaContiene || ''}
-                onChange={(e) => {
-                  updateCondition('rispostaContiene', e.target.value);
-                  if (e.target.value) updateCondition('rispostaDiversaDa', '');
-                }}
-                disabled={!!draft.conditions.rispostaDiversaDa}
-                data-testid="input-risposta-contiene"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Risposta (diversa da)</Label>
-              <Input
-                placeholder="es. NO"
-                value={draft.conditions.rispostaDiversaDa || ''}
-                onChange={(e) => {
-                  updateCondition('rispostaDiversaDa', e.target.value);
-                  if (e.target.value) updateCondition('rispostaContiene', '');
-                }}
-                disabled={!!draft.conditions.rispostaContiene}
-                data-testid="input-risposta-diversa-da"
-              />
-            </div>
+            {draft.conditions.domandaTesto && (
+              <>
+                <div>
+                  <Label className="text-xs">Risposta (contiene)</Label>
+                  <Input
+                    placeholder="es. TIED"
+                    value={draft.conditions.rispostaContiene || ''}
+                    onChange={(e) => {
+                      updateCondition('rispostaContiene', e.target.value);
+                      if (e.target.value) updateCondition('rispostaDiversaDa', '');
+                    }}
+                    disabled={!!draft.conditions.rispostaDiversaDa}
+                    data-testid="input-risposta-contiene"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Risposta (diversa da)</Label>
+                  <Input
+                    placeholder="es. NO"
+                    value={draft.conditions.rispostaDiversaDa || ''}
+                    onChange={(e) => {
+                      updateCondition('rispostaDiversaDa', e.target.value);
+                      if (e.target.value) updateCondition('rispostaContiene', '');
+                    }}
+                    disabled={!!draft.conditions.rispostaContiene}
+                    data-testid="input-risposta-diversa-da"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <div>

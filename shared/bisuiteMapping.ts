@@ -164,8 +164,8 @@ export function getDefaultMappingRules(): BiSuiteMappingRule[] {
     // MIA UNTIED → UNTIED
     { id: ruleId(), pista: 'mobile', targetCategory: 'UNTIED', targetLabel: 'Untied', conditions: { categoriaBiSuite: 'MIA UNTIED' }, priority: 10, enabled: true },
 
-    // TIED CF con MNP=SI → MNP (priorità alta)
-    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'TIED CF', domandaTesto: 'MNP', rispostaContiene: 'SI' }, priority: 25, enabled: true },
+    // TIED CF con MNP≠NO → MNP (priorità alta)
+    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'TIED CF', domandaTesto: 'MNP', rispostaDiversaDa: 'NO' }, priority: 25, enabled: true },
     // TIED CF con MNP DA OPERATORI VIRTUALI=SI → MNP_MVNO
     { id: ruleId(), pista: 'mobile', targetCategory: 'MNP_MVNO', targetLabel: 'MNP da MVNO', conditions: { categoriaBiSuite: 'TIED CF', domandaTesto: 'MNP DA OPERATORI VIRTUALI', rispostaContiene: 'SI' }, priority: 20, enabled: true },
     // TIED CF con GA CONVERGENTE FISSO=SI → Convergente
@@ -175,8 +175,8 @@ export function getDefaultMappingRules(): BiSuiteMappingRule[] {
     // TIED CF / DATI EASYPAY → TIED
     { id: ruleId(), pista: 'mobile', targetCategory: 'TIED', targetLabel: 'Tied', conditions: { categoriaBiSuite: 'TIED CF', tipologiaBiSuite: 'DATI EASYPAY' }, priority: 5, enabled: true },
 
-    // TIED IVA con MNP=SI → MNP
-    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'TIED IVA', domandaTesto: 'MNP', rispostaContiene: 'SI' }, priority: 25, enabled: true },
+    // TIED IVA con MNP≠NO → MNP
+    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'TIED IVA', domandaTesto: 'MNP', rispostaDiversaDa: 'NO' }, priority: 25, enabled: true },
     // TIED IVA con MNP DA OPERATORI VIRTUALI=SI → MNP_MVNO
     { id: ruleId(), pista: 'mobile', targetCategory: 'MNP_MVNO', targetLabel: 'MNP da MVNO', conditions: { categoriaBiSuite: 'TIED IVA', domandaTesto: 'MNP DA OPERATORI VIRTUALI', rispostaContiene: 'SI' }, priority: 20, enabled: true },
     // TIED IVA / VOCE IVA → SIM_IVA
@@ -184,8 +184,8 @@ export function getDefaultMappingRules(): BiSuiteMappingRule[] {
     // TIED IVA / DATI IVA → SIM_IVA
     { id: ruleId(), pista: 'mobile', targetCategory: 'SIM_IVA', targetLabel: 'SIM IVA', conditions: { categoriaBiSuite: 'TIED IVA', tipologiaBiSuite: 'DATI IVA' }, priority: 10, enabled: true },
 
-    // UNTIED con MNP=SI → MNP
-    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'UNTIED', domandaTesto: 'MNP', rispostaContiene: 'SI' }, priority: 25, enabled: true },
+    // UNTIED con MNP≠NO → MNP
+    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'UNTIED', domandaTesto: 'MNP', rispostaDiversaDa: 'NO' }, priority: 25, enabled: true },
     // UNTIED con MNP DA OPERATORI VIRTUALI=SI → MNP_MVNO
     { id: ruleId(), pista: 'mobile', targetCategory: 'MNP_MVNO', targetLabel: 'MNP da MVNO', conditions: { categoriaBiSuite: 'UNTIED', domandaTesto: 'MNP DA OPERATORI VIRTUALI', rispostaContiene: 'SI' }, priority: 20, enabled: true },
     // UNTIED / RICARICABILE VOCE (catch-all) → UNTIED
@@ -333,7 +333,7 @@ function matchesCondition(
     );
     if (!entry) return false;
     const risposta = (entry.risposta || '').toUpperCase().trim();
-    if (risposta === rispostaEscludi || risposta === '') return false;
+    if (risposta.includes(rispostaEscludi) || risposta === '') return false;
   }
 
   return true;
