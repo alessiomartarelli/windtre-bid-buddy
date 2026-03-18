@@ -7,6 +7,13 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 
+function italianDateRange(from: Date, to: Date): { from: Date; to: Date } {
+  return {
+    from: new Date(from.getTime() - 2 * 60 * 60 * 1000),
+    to: new Date(to.getTime() + 2 * 60 * 60 * 1000),
+  };
+}
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
@@ -632,8 +639,7 @@ export async function registerRoutes(
       if (isNaN(month) || isNaN(year) || month < 1 || month > 12) {
         return res.status(400).json({ message: "Parametri month/year non validi" });
       }
-      const from = new Date(year, month - 1, 1);
-      const to = new Date(year, month, 0, 23, 59, 59);
+      const { from, to } = italianDateRange(new Date(year, month - 1, 1), new Date(year, month, 0, 23, 59, 59));
       const sales = await storage.getBisuiteSales(profile.organizationId!, from, to);
       const pdvMap = new Map<string, { codicePos: string; nomeNegozio: string; ragioneSociale: string; salesCount: number }>();
       for (const sale of sales) {
@@ -1489,8 +1495,19 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Non puoi accedere ai dati di un'altra organizzazione" });
       }
 
-      const from = req.query.from ? new Date(req.query.from as string) : undefined;
-      const to = req.query.to ? new Date(req.query.to as string) : undefined;
+      const fromRaw = req.query.from ? new Date(req.query.from as string) : undefined;
+      const toRaw = req.query.to ? new Date(req.query.to as string) : undefined;
+      let from = fromRaw;
+      let to = toRaw;
+      if (fromRaw && toRaw) {
+        const adj = italianDateRange(fromRaw, toRaw);
+        from = adj.from;
+        to = adj.to;
+      } else if (fromRaw) {
+        from = new Date(fromRaw.getTime() - 2 * 60 * 60 * 1000);
+      } else if (toRaw) {
+        to = new Date(toRaw.getTime() + 2 * 60 * 60 * 1000);
+      }
 
       const sales = await storage.getBisuiteSales(orgId, from, to);
       res.json({ sales, count: sales.length });
@@ -1576,8 +1593,7 @@ export async function registerRoutes(
       const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
       const year = parseInt(req.query.year as string) || new Date().getFullYear();
 
-      const from = new Date(year, month - 1, 1);
-      const to = new Date(year, month, 0, 23, 59, 59);
+      const { from, to } = italianDateRange(new Date(year, month - 1, 1), new Date(year, month, 0, 23, 59, 59));
 
       const sales = await storage.getBisuiteSales(orgId, from, to);
 
@@ -1732,8 +1748,7 @@ export async function registerRoutes(
       const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
       const year = parseInt(req.query.year as string) || new Date().getFullYear();
 
-      const from = new Date(year, month - 1, 1);
-      const to = new Date(year, month, 0, 23, 59, 59);
+      const { from, to } = italianDateRange(new Date(year, month - 1, 1), new Date(year, month, 0, 23, 59, 59));
 
       const sales = await storage.getBisuiteSales(orgId, from, to);
 
