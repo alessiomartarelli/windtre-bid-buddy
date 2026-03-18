@@ -58,7 +58,8 @@ export type FissoCategoriaType =
   | "BOLLETTINO_POSTALE"
   | "PIU_SICURI_CASA_UFFICIO"
   | "ASSICURAZIONI_PLUS_FULL"
-  | "MIGRAZIONI_FTTH_FWA";
+  | "MIGRAZIONI_FTTH_FWA"
+  | "FISSO_VOCE";
 
 // Gettone contrattuale Fisso: 23€ per tutti, 10€ per 2ª linea P.IVA
 const GETTONE_CONTRATTUALE_FISSO: Record<FissoCategoriaType, number> = {
@@ -77,7 +78,8 @@ const GETTONE_CONTRATTUALE_FISSO: Record<FissoCategoriaType, number> = {
   BOLLETTINO_POSTALE: 0,
   PIU_SICURI_CASA_UFFICIO: 0,
   ASSICURAZIONI_PLUS_FULL: 0,
-  MIGRAZIONI_FTTH_FWA: 0, // Le migrazioni non hanno gettone contrattuale, hanno gettone fisso 40€
+  MIGRAZIONI_FTTH_FWA: 0,
+  FISSO_VOCE: 0,
 };
 
 /**
@@ -206,6 +208,13 @@ export const FISSO_CATEGORIE_DEFAULT: FissoCategoriaConfig[] = [
     label: "Migrazioni vs FTTH Extra e FWA Outdoor",
     puntiPerPezzo: 0,
     euroPerPezzo: 40,
+    extraCluster3Euro: 0,
+  },
+  {
+    type: "FISSO_VOCE",
+    label: "Fisso Voce",
+    puntiPerPezzo: 0.5,
+    euroPerPezzo: 0,
     extraCluster3Euro: 0,
   },
 ];

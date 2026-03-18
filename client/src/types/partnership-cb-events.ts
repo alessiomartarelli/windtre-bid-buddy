@@ -20,6 +20,10 @@ export type CBEventType =
   | 'windtre_goplay'
   | 'buy_tied'
   | 'buy_untied'
+  | 'IMP_AGG_0_VAR_FINANZ'
+  | 'IMP_AGG_GT0_FINANZ'
+  | 'IMP_AGG_GT0_VAR'
+  | 'MIGRAZIONI_FTTH_FWA'
   // Altri eventi flat - Fisso
   | 'migrazione_ftth'
   | 'migrazione_ftth_extra'
@@ -84,6 +88,10 @@ export const CB_EVENTS_CONFIG: CBEventConfig[] = [
   { type: 'sostituzione_sim_3g', label: 'Sostituzione SIM 3G', category: 'mobile_flat', gettoni: 5 },
   { type: 'roaming_itz_piva', label: 'Roaming ITZ P.IVA - Opzioni Monthly', category: 'mobile_flat', gettoni: 5 },
   { type: 'pagamento_fatture_pinpad', label: 'Pagamento Fatture tramite Pinpad', category: 'mobile_flat', gettoni: 0.5 },
+  { type: 'IMP_AGG_0_VAR_FINANZ', label: 'IMP.AGG=0 VAR/FINANZ', category: 'customer_base', clusterCard: 'TI', gettoni: 10 },
+  { type: 'IMP_AGG_GT0_FINANZ', label: 'IMP.AGG>0 FINANZ', category: 'customer_base', clusterCard: 'TI', gettoni: 20 },
+  { type: 'IMP_AGG_GT0_VAR', label: 'IMP.AGG>0 VAR', category: 'customer_base', clusterCard: 'TI', gettoni: 15 },
+  { type: 'MIGRAZIONI_FTTH_FWA', label: 'Migrazioni FTTH/FWA', category: 'customer_base', gettoni: 40 },
 ];
 
 // Configurazione cluster per cambi offerta untied

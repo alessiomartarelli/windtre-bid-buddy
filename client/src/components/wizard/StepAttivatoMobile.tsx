@@ -142,6 +142,7 @@ export const StepAttivatoMobile: React.FC<StepAttivatoMobileProps> = ({
     MobileActivationType.TOURIST_FULL,
     MobileActivationType.TOURIST_PASS,
     MobileActivationType.TOURIST_XXL,
+    MobileActivationType.SIM_ALLARME,
   ];
   
   const ivaSims = [

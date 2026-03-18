@@ -111,6 +111,7 @@ const GETTONI_DEFAULTS: Record<string, number> = {
   CHIAMATE_ILLIMITATE: 0,
   BOLLETTINO_POSTALE: 0,
   PIU_SICURI_CASA_UFFICIO: 0,
+  FISSO_VOCE: 0,
 };
 
 const GETTONI_LABELS: Record<string, string> = {
@@ -129,6 +130,7 @@ const GETTONI_LABELS: Record<string, string> = {
   CHIAMATE_ILLIMITATE: 'Chiamate illimitate',
   BOLLETTINO_POSTALE: 'Bollettino postale',
   PIU_SICURI_CASA_UFFICIO: 'Assicurazioni',
+  FISSO_VOCE: 'Fisso Voce',
 };
 
 const ASSICURAZIONI_PRODUCT_KEYS = [

@@ -71,6 +71,7 @@ const FISSO_LABELS: Record<string, string> = {
   PIU_SICURI_CASA_UFFICIO: 'Più Sicuri Casa/Ufficio',
   ASSICURAZIONI_PLUS_FULL: 'Assicurazioni Plus Full',
   MIGRAZIONI_FTTH_FWA: 'Migrazioni FTTH/FWA',
+  FISSO_VOCE: 'Fisso Voce',
 };
 
 const ENERGIA_LABELS: Record<string, string> = {
@@ -140,6 +141,10 @@ const CB_LABELS: Record<string, string> = {
   sostituzione_sim_3g: 'Sostituzione SIM 3G',
   roaming_itz_piva: 'Roaming ITZ P.IVA',
   pagamento_fatture_pinpad: 'Pagamento Fatture Pinpad',
+  IMP_AGG_0_VAR_FINANZ: 'IMP.AGG=0 VAR/FINANZ',
+  IMP_AGG_GT0_FINANZ: 'IMP.AGG>0 FINANZ',
+  IMP_AGG_GT0_VAR: 'IMP.AGG>0 VAR',
+  MIGRAZIONI_FTTH_FWA: 'Migrazioni FTTH/FWA',
 };
 
 const CB_CLUSTER_LABELS: Record<string, string> = {

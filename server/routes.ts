@@ -1646,24 +1646,27 @@ export async function registerRoutes(
           const catNome = (art.categoria?.nome || '').toUpperCase().trim();
           if (PRODOTTI_CATS.has(catNome) || SERVIZI_CATS.has(catNome)) continue;
           canvassCount++;
-          const m = mapBiSuiteArticle(art, clienteTipo, rules);
-          if (!m) continue;
+          const mappedResults = mapBiSuiteArticle(art, clienteTipo, rules);
+          if (mappedResults.length === 0) continue;
           mappedCount++;
           const artCanone = parseFloat(art.dettaglio?.canone || '0') || 0;
-          const existing = byPdv[codicePos].items.find(
-            (i) => i.pista === m.pista && i.targetCategory === m.targetCategory
-          );
-          if (existing) {
-            existing.pezzi++;
-            existing.canone += artCanone;
-          } else {
-            byPdv[codicePos].items.push({
-              pista: m.pista,
-              targetCategory: m.targetCategory,
-              targetLabel: m.targetLabel,
-              pezzi: 1,
-              canone: artCanone,
-            });
+          for (const m of mappedResults) {
+            const canoneForThis = m.ruleType === 'base' ? artCanone : 0;
+            const existing = byPdv[codicePos].items.find(
+              (i) => i.pista === m.pista && i.targetCategory === m.targetCategory
+            );
+            if (existing) {
+              existing.pezzi++;
+              existing.canone += canoneForThis;
+            } else {
+              byPdv[codicePos].items.push({
+                pista: m.pista,
+                targetCategory: m.targetCategory,
+                targetLabel: m.targetLabel,
+                pezzi: 1,
+                canone: canoneForThis,
+              });
+            }
           }
         }
         totalArticoli += canvassCount;
@@ -1774,8 +1777,8 @@ export async function registerRoutes(
             servizi[key].pezzi++;
             servizi[key].importo += importo;
           } else {
-            const mapped = mapBiSuiteArticle(art, clienteTipo, rules);
-            if (!mapped) {
+            const mappedResults = mapBiSuiteArticle(art, clienteTipo, rules);
+            if (mappedResults.length === 0) {
               const key = `${cat}||${tip}||${desc}||${clienteTipo}`;
               if (!nonMappati[key]) nonMappati[key] = { categoria: cat, tipologia: tip, descrizione: desc, pezzi: 0, clienteTipo };
               nonMappati[key].pezzi++;

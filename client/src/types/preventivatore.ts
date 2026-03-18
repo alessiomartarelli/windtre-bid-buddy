@@ -110,6 +110,7 @@ export enum MobileActivationType {
   DEVICE_VAR_SP_LT_200 = "DEVICE_VAR_SP_LT_200",
   DEVICE_VAR_SP_GTE_200 = "DEVICE_VAR_SP_GTE_200",
   DEVICE_2_FINANZIATO = "DEVICE_2_FINANZIATO",
+  SIM_ALLARME = "SIM_ALLARME",
 }
 
 export const MOBILE_CATEGORY_LABELS: { value: MobileActivationType; label: string }[] =
@@ -159,6 +160,7 @@ export const MOBILE_CATEGORY_LABELS: { value: MobileActivationType; label: strin
       label: "Device VAR ≥ 200€",
     },
     { value: MobileActivationType.DEVICE_2_FINANZIATO, label: "2° Device" },
+    { value: MobileActivationType.SIM_ALLARME, label: "SIM Allarme" },
   ];
 
 export interface GettonePerSoglia {
@@ -253,6 +255,11 @@ export const MOBILE_CATEGORIES_CONFIG_DEFAULT: MobileCategoryConfig[] = [
     punti: 0,
     contaSuCanoneMedio: false,
     extraGettoneEuro: 15,
+  },
+  {
+    type: MobileActivationType.SIM_ALLARME,
+    punti: 0.5,
+    contaSuCanoneMedio: true,
   },
 ];
 

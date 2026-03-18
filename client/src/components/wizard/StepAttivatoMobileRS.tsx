@@ -57,6 +57,7 @@ export const StepAttivatoMobileRS: React.FC<StepAttivatoMobileRSProps> = ({
     MobileActivationType.TOURIST_FULL,
     MobileActivationType.TOURIST_PASS,
     MobileActivationType.TOURIST_XXL,
+    MobileActivationType.SIM_ALLARME,
   ];
   
   const ivaSims = [
