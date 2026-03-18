@@ -211,6 +211,12 @@ const FISSO_BUSINESS_CATEGORIES = new Set<string>([
   "FISSO_PIVA_1A_LINEA", "FISSO_PIVA_2A_LINEA", "CHIAMATE_ILLIMITATE",
 ]);
 
+function isCorePezziItem(pista: string, targetCategory: string): boolean {
+  if (pista === "mobile") return SIM_CONSUMER_CORE.has(targetCategory) || SIM_PIVA_CORE.has(targetCategory);
+  if (pista === "fisso") return FISSO_CONSUMER_CORE.has(targetCategory) || FISSO_BUSINESS_CORE.has(targetCategory);
+  return true;
+}
+
 interface MobileGroupedCategory {
   groupLabel: string;
   groupKey: string;
@@ -1904,10 +1910,10 @@ export default function DashboardGaraReale() {
                       rsGroups.get(key)!.push(pdv);
                     }
                     const sortedRSGroups = Array.from(rsGroups.entries())
-                      .map(([rs, pdvs]) => ({ rs, pdvs, totalPezzi: pdvs.reduce((s, p) => s + p.items.reduce((s2, i) => s2 + i.pezzi, 0), 0) }))
+                      .map(([rs, pdvs]) => ({ rs, pdvs, totalPezzi: pdvs.reduce((s, p) => s + p.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s2, i) => s2 + i.pezzi, 0), 0) }))
                       .sort((a, b) => b.totalPezzi - a.totalPezzi);
                     const sortedPdvList = sortedRSGroups.flatMap(g => 
-                      g.pdvs.sort((a, b) => b.items.reduce((s, i) => s + i.pezzi, 0) - a.items.reduce((s, i) => s + i.pezzi, 0))
+                      g.pdvs.sort((a, b) => b.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0) - a.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0))
                     );
                     const showRSHeaders = rsGroups.size > 1;
                     let lastRS = "";
@@ -1924,15 +1930,18 @@ export default function DashboardGaraReale() {
                       </div>
                     )}
                     {(() => {
-                      const totalPezzi = pdv.items.reduce((s, i) => s + i.pezzi, 0);
+                      const totalPezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
                       const proiezione = workdayInfo.elapsedWorkingDays > 0
                         ? Math.round((totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
                         : totalPezzi;
 
-                      const byPista: Record<string, { pezzi: number; items: AggregatedItem[] }> = {};
+                      const byPista: Record<string, { pezzi: number; corePezzi: number; items: AggregatedItem[] }> = {};
                       for (const item of pdv.items) {
-                        if (!byPista[item.pista]) byPista[item.pista] = { pezzi: 0, items: [] };
+                        if (!byPista[item.pista]) byPista[item.pista] = { pezzi: 0, corePezzi: 0, items: [] };
                         byPista[item.pista].pezzi += item.pezzi;
+                        if (isCorePezziItem(item.pista, item.targetCategory)) {
+                          byPista[item.pista].corePezzi += item.pezzi;
+                        }
                         byPista[item.pista].items.push(item);
                       }
 
@@ -1983,7 +1992,7 @@ export default function DashboardGaraReale() {
                           </AccordionTrigger>
                           <AccordionContent>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-3">
-                              {Object.entries(byPista).sort(([, a], [, b]) => b.pezzi - a.pezzi).map(([pistaKey, pistaData]) => {
+                              {Object.entries(byPista).sort(([, a], [, b]) => b.corePezzi - a.corePezzi).map(([pistaKey, pistaData]) => {
                                 const conf = PISTA_CONFIG[pistaKey as keyof typeof PISTA_CONFIG];
                                 if (!conf) return null;
                                 const calc = pdvCalcByPista[pistaKey];
@@ -1991,7 +2000,7 @@ export default function DashboardGaraReale() {
                                   <div key={pistaKey} className={`rounded-lg border p-3 ${conf.lightColor}`}>
                                     <div className="font-medium text-sm mb-2 flex items-center justify-between">
                                       <span>{conf.label}</span>
-                                      <span className="font-bold">{pistaData.pezzi}</span>
+                                      <span className="font-bold">{pistaData.corePezzi}</span>
                                     </div>
                                     {calc && calc.sogliaLabel !== "N/A" && (
                                       <div className="flex items-center gap-2 mb-2">
