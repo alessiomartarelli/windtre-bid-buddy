@@ -792,6 +792,8 @@ export default function DashboardGaraReale() {
         .filter((p) => p.pezzi > 0)
         .sort((a, b) => b.pezzi - a.pezzi);
 
+      let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number }> | undefined;
+
       if (pdvBreakdown.length > 0) {
         const energiaRSConfigs = garaCalcConfig.energiaRSConfig || [];
         const assicurazioniRSConfigs = garaCalcConfig.assicurazioniRSConfig || [];
@@ -800,8 +802,6 @@ export default function DashboardGaraReale() {
           || (pista === "energia" && energiaRSConfigs.length > 0)
           || (pista === "assicurazioni" && assicurazioniRSConfigs.length > 0)
         );
-
-        let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number }> | undefined;
 
         if (useRSAggregation) {
           const rsGroupMap = new Map<string, typeof pdvBreakdown>();
