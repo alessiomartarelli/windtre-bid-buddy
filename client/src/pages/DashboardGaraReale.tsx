@@ -199,6 +199,18 @@ const SIM_PIVA_CORE = new Set<string>([
   MobileActivationType.ALTRE_SIM_IVA,
 ]);
 
+const FISSO_CONSUMER_CORE = new Set<string>([
+  "FISSO_FTTC", "FISSO_FTTH", "FISSO_FWA_OUT", "FISSO_FWA_IND_2P", "FISSO_VOCE",
+]);
+
+const FISSO_BUSINESS_CORE = new Set<string>([
+  "FISSO_PIVA_1A_LINEA", "FISSO_PIVA_2A_LINEA",
+]);
+
+const FISSO_BUSINESS_CATEGORIES = new Set<string>([
+  "FISSO_PIVA_1A_LINEA", "FISSO_PIVA_2A_LINEA", "CHIAMATE_ILLIMITATE",
+]);
+
 interface MobileGroupedCategory {
   groupLabel: string;
   groupKey: string;
@@ -250,11 +262,72 @@ function groupMobileCategories(
     const corePezzi = ivaChildren.filter(c => SIM_PIVA_CORE.has(c.category)).reduce((s, c) => s + c.pezzi, 0);
     const coreProiezione = ivaChildren.filter(c => SIM_PIVA_CORE.has(c.category)).reduce((s, c) => s + c.proiezione, 0);
     groups.push({
-      groupLabel: "SIM P.IVA",
+      groupLabel: "SIM Business",
       groupKey: "sim_iva",
       totalPezzi: corePezzi,
       totalProiezione: coreProiezione,
       children: ivaChildren.sort((a, b) => b.pezzi - a.pezzi),
+    });
+  }
+
+  return groups;
+}
+
+function groupFissoCategories(
+  categories: { category: string; label: string; pezzi: number; proiezione: number }[]
+): MobileGroupedCategory[] {
+  const consumerChildren: typeof categories = [];
+  const businessChildren: typeof categories = [];
+  const otherChildren: typeof categories = [];
+
+  for (const cat of categories) {
+    if (FISSO_BUSINESS_CATEGORIES.has(cat.category)) {
+      businessChildren.push(cat);
+    } else if (FISSO_CONSUMER_CORE.has(cat.category) || ["FRITZ_BOX", "NETFLIX_CON_ADV", "NETFLIX_SENZA_ADV", "CONVERGENZA", "LINEA_ATTIVA", "BOLLETTINO_POSTALE", "PIU_SICURI_CASA_UFFICIO", "ASSICURAZIONI_PLUS_FULL", "MIGRAZIONI_FTTH_FWA"].includes(cat.category)) {
+      consumerChildren.push(cat);
+    } else {
+      otherChildren.push(cat);
+    }
+  }
+
+  const groups: MobileGroupedCategory[] = [];
+
+  if (consumerChildren.length > 0) {
+    const corePezzi = consumerChildren.filter(c => FISSO_CONSUMER_CORE.has(c.category)).reduce((s, c) => s + c.pezzi, 0);
+    const coreProiezione = consumerChildren.filter(c => FISSO_CONSUMER_CORE.has(c.category)).reduce((s, c) => s + c.proiezione, 0);
+    groups.push({
+      groupLabel: "Fisso Consumer",
+      groupKey: "fisso_consumer",
+      totalPezzi: corePezzi,
+      totalProiezione: coreProiezione,
+      children: consumerChildren.sort((a, b) => {
+        const aCore = FISSO_CONSUMER_CORE.has(a.category) ? 0 : 1;
+        const bCore = FISSO_CONSUMER_CORE.has(b.category) ? 0 : 1;
+        if (aCore !== bCore) return aCore - bCore;
+        return b.pezzi - a.pezzi;
+      }),
+    });
+  }
+
+  if (businessChildren.length > 0) {
+    const corePezzi = businessChildren.filter(c => FISSO_BUSINESS_CORE.has(c.category)).reduce((s, c) => s + c.pezzi, 0);
+    const coreProiezione = businessChildren.filter(c => FISSO_BUSINESS_CORE.has(c.category)).reduce((s, c) => s + c.proiezione, 0);
+    groups.push({
+      groupLabel: "Fisso Business",
+      groupKey: "fisso_business",
+      totalPezzi: corePezzi,
+      totalProiezione: coreProiezione,
+      children: businessChildren.sort((a, b) => b.pezzi - a.pezzi),
+    });
+  }
+
+  if (otherChildren.length > 0) {
+    groups.push({
+      groupLabel: "Altro",
+      groupKey: "fisso_altro",
+      totalPezzi: otherChildren.reduce((s, c) => s + c.pezzi, 0),
+      totalProiezione: otherChildren.reduce((s, c) => s + c.proiezione, 0),
+      children: otherChildren.sort((a, b) => b.pezzi - a.pezzi),
     });
   }
 
@@ -611,6 +684,7 @@ export default function DashboardGaraReale() {
   const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
   const [expandedPistaCategories, setExpandedPistaCategories] = useState<Set<string>>(new Set());
   const [expandedMobileGroups, setExpandedMobileGroups] = useState<Set<string>>(new Set());
+  const [expandedFissoGroups, setExpandedFissoGroups] = useState<Set<string>>(new Set());
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -836,7 +910,9 @@ export default function DashboardGaraReale() {
 
       const totalePezzi = pista === "mobile"
         ? categories.filter(c => SIM_CONSUMER_CORE.has(c.category) || SIM_PIVA_CORE.has(c.category)).reduce((sum, c) => sum + c.pezzi, 0)
-        : categories.reduce((sum, c) => sum + c.pezzi, 0);
+        : pista === "fisso"
+          ? categories.filter(c => FISSO_CONSUMER_CORE.has(c.category) || FISSO_BUSINESS_CORE.has(c.category)).reduce((sum, c) => sum + c.pezzi, 0)
+          : categories.reduce((sum, c) => sum + c.pezzi, 0);
       const proiezionePezzi = workdayInfo.elapsedWorkingDays > 0
         ? Math.round((totalePezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
         : totalePezzi;
@@ -849,7 +925,9 @@ export default function DashboardGaraReale() {
           const pdvItems = pdv.items.filter((i) => i.pista === pista);
           const pdvPezzi = pista === "mobile"
             ? pdvItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
-            : pdvItems.reduce((s, i) => s + i.pezzi, 0);
+            : pista === "fisso"
+              ? pdvItems.filter(i => FISSO_CONSUMER_CORE.has(i.targetCategory) || FISSO_BUSINESS_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
+              : pdvItems.reduce((s, i) => s + i.pezzi, 0);
           const pdvProiezione = workdayInfo.elapsedWorkingDays > 0
             ? Math.round((pdvPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
             : pdvPezzi;
@@ -938,7 +1016,9 @@ export default function DashboardGaraReale() {
 
             const rsPezziAttuali = pista === "mobile"
               ? aggregatedRSItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
-              : aggregatedRSItems.reduce((s, i) => s + i.pezzi, 0);
+              : pista === "fisso"
+                ? aggregatedRSItems.filter(i => FISSO_CONSUMER_CORE.has(i.targetCategory) || FISSO_BUSINESS_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
+                : aggregatedRSItems.reduce((s, i) => s + i.pezzi, 0);
 
             const firstPdvConfig = puntiVendita.find(p => p.codicePos === rsPdvs[0].codicePos);
             const rsCalendar = firstPdvConfig?.calendar || DEFAULT_CALENDAR;
@@ -1651,23 +1731,25 @@ export default function DashboardGaraReale() {
 
                       {pista.totalePezzi === 0 ? (
                         <p className="text-sm text-gray-400 italic">Nessuna attivazione mappata</p>
-                      ) : pista.pista === "mobile" ? (
+                      ) : (pista.pista === "mobile" || pista.pista === "fisso") ? (
                         <>
                           <Separator />
                           <div className="space-y-3">
-                            {groupMobileCategories(pista.categories).map((group) => {
-                              const groupExpanded = expandedMobileGroups.has(group.groupKey);
+                            {(pista.pista === "mobile" ? groupMobileCategories(pista.categories) : groupFissoCategories(pista.categories)).map((group) => {
+                              const expandedGroups = pista.pista === "mobile" ? expandedMobileGroups : expandedFissoGroups;
+                              const setExpandedGroups = pista.pista === "mobile" ? setExpandedMobileGroups : setExpandedFissoGroups;
+                              const groupExpanded = expandedGroups.has(group.groupKey);
                               return (
                                 <div key={group.groupKey}>
                                   <button
                                     className="flex items-center justify-between w-full text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 py-0.5 -mx-1"
-                                    onClick={() => setExpandedMobileGroups(prev => {
+                                    onClick={() => setExpandedGroups(prev => {
                                       const next = new Set(prev);
                                       if (next.has(group.groupKey)) next.delete(group.groupKey);
                                       else next.add(group.groupKey);
                                       return next;
                                     })}
-                                    data-testid={`btn-toggle-mobile-group-${group.groupKey}`}
+                                    data-testid={`btn-toggle-${pista.pista}-group-${group.groupKey}`}
                                   >
                                     <span className="font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-1">
                                       <span className="text-xs text-gray-400">{groupExpanded ? "▼" : "▶"}</span>
