@@ -357,6 +357,7 @@ export default function ConfigurazioneGara() {
   const [newPdvCode, setNewPdvCode] = useState('');
   const [newPdvName, setNewPdvName] = useState('');
   const [newPdvRS, setNewPdvRS] = useState('');
+  const [newPdvRSMode, setNewPdvRSMode] = useState<'select' | 'new'>('select');
   const [simulatorConfigs, setSimulatorConfigs] = useState<Array<{ id: string; name: string; updatedAt: string | null }>>([]);
   const [loadingSimConfigs, setLoadingSimConfigs] = useState(false);
   const [initialLoaded, setInitialLoaded] = useState(false);
@@ -839,7 +840,7 @@ export default function ConfigurazioneGara() {
             <Button variant="outline" size="sm" onClick={openImportDialog} data-testid="button-import">
               <Download className="h-4 w-4 mr-1" />Importa
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setAddPdvDialogOpen(true)} data-testid="button-add-pdv">
+            <Button variant="outline" size="sm" onClick={() => { setNewPdvCode(''); setNewPdvName(''); setNewPdvRS(''); setNewPdvRSMode('select'); setAddPdvDialogOpen(true); }} data-testid="button-add-pdv">
               <Plus className="h-4 w-4 mr-1" />PDV
             </Button>
             {garaConfigRecord?.id && (
@@ -1358,7 +1359,28 @@ export default function ConfigurazioneGara() {
               </div>
               <div>
                 <Label className="text-sm">Ragione Sociale</Label>
-                <Input value={newPdvRS} onChange={e => setNewPdvRS(e.target.value)} placeholder="Ragione sociale" data-testid="input-new-pdv-rs" />
+                {newPdvRSMode === 'select' && Array.from(rsGroups.keys()).filter(rs => rs !== 'Senza RS').length > 0 ? (
+                  <div className="space-y-2">
+                    <Select value={newPdvRS} onValueChange={(v) => { if (v === '__new__') { setNewPdvRSMode('new'); setNewPdvRS(''); } else { setNewPdvRS(v); } }}>
+                      <SelectTrigger data-testid="select-new-pdv-rs"><SelectValue placeholder="Seleziona ragione sociale" /></SelectTrigger>
+                      <SelectContent>
+                        {Array.from(rsGroups.keys()).filter(rs => rs !== 'Senza RS').map(rs => (
+                          <SelectItem key={rs} value={rs}>{rs}</SelectItem>
+                        ))}
+                        <SelectItem value="__new__">+ Nuova ragione sociale...</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input value={newPdvRS} onChange={e => setNewPdvRS(e.target.value)} placeholder="Nuova ragione sociale" data-testid="input-new-pdv-rs" className="flex-1" />
+                    {Array.from(rsGroups.keys()).filter(rs => rs !== 'Senza RS').length > 0 && (
+                      <Button type="button" variant="outline" size="sm" onClick={() => { setNewPdvRSMode('select'); setNewPdvRS(''); }} data-testid="button-rs-back-to-select" className="shrink-0 text-xs">
+                        Esistente
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>
