@@ -363,6 +363,8 @@ type PartnershipPosConf = NonNullable<GaraConfigData['partnershipRewardConfig']>
 type MobileRSConf = NonNullable<GaraConfigData['pistaMobileRSConfig']>['sogliePerRS'][number];
 type FissoRSConf = NonNullable<GaraConfigData['pistaFissoRSConfig']>['sogliePerRS'][number];
 type PartnershipRSConf = NonNullable<GaraConfigData['partnershipRewardRSConfig']>['configPerRS'][number];
+type EnergiaRSConf = NonNullable<GaraConfigData['energiaRSConfig']>['configPerRS'][number];
+type AssicurazioniRSConf = NonNullable<GaraConfigData['assicurazioniRSConfig']>['configPerRS'][number];
 
 export default function ConfigurazioneGara() {
   const now = new Date();
@@ -403,6 +405,9 @@ export default function ConfigurazioneGara() {
     pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premio: 750,
   });
 
+  const [energiaRSConfig, setEnergiaRSConfig] = useState<EnergiaRSConf[]>([]);
+  const [assicurazioniRSConfig, setAssicurazioniRSConfig] = useState<AssicurazioniRSConf[]>([]);
+
 
   const { profile } = useAuth();
   const { toast } = useToast();
@@ -436,6 +441,8 @@ export default function ConfigurazioneGara() {
     const mobileRS: MobileRSConf[] = [];
     const fissoRS: FissoRSConf[] = [];
     const partnershipRS: PartnershipRSConf[] = [];
+    const energiaRS: EnergiaRSConf[] = [];
+    const assicurazioniRS: AssicurazioniRSConf[] = [];
 
     rsMap.forEach((pdvs, ragioneSociale) => {
       let mS1 = 0, mS2 = 0, mS3 = 0, mS4 = 0;
@@ -454,11 +461,40 @@ export default function ConfigurazioneGara() {
       mobileRS.push({ ragioneSociale, soglia1: mS1, soglia2: mS2, soglia3: mS3, soglia4: mS4, multiplierSoglia1: 1, multiplierSoglia2: 1.2, multiplierSoglia3: 1.5, multiplierSoglia4: 2, forecastTargetPunti: mS4 });
       fissoRS.push({ ragioneSociale, soglia1: fS1, soglia2: fS2, soglia3: fS3, soglia4: fS4, soglia5: fS5, multiplierSoglia1: 2, multiplierSoglia2: 3, multiplierSoglia3: 3.5, multiplierSoglia4: 4, multiplierSoglia5: 5, forecastTargetPunti: fS5 });
       partnershipRS.push({ ragioneSociale, target100: pTarget, target80: calculateTarget80(pTarget), premio100: pPremio, premio80: calculatePremio80(pPremio) });
+
+      const pdvEnergia = pdvs.filter(p => p.abilitaEnergia).length;
+      const soglieE = calcolaSoglieEnergiaDefault(pdvEnergia);
+      energiaRS.push({
+        ragioneSociale,
+        pdvInGara: pdvEnergia,
+        targetNoMalus: 10 * pdvEnergia,
+        targetS1: 15 * pdvEnergia,
+        targetS2: 25 * pdvEnergia,
+        targetS3: 40 * pdvEnergia,
+        premio: 1000,
+        pistaSoglia_S1: soglieE.S1,
+        pistaSoglia_S2: soglieE.S2,
+        pistaSoglia_S3: soglieE.S3,
+        pistaSoglia_S4: soglieE.S4,
+        pistaSoglia_S5: soglieE.S5,
+      });
+
+      const pdvAssic = pdvs.filter(p => p.abilitaAssicurazioni).length;
+      assicurazioniRS.push({
+        ragioneSociale,
+        pdvInGara: pdvAssic,
+        targetNoMalus: 15 * pdvAssic,
+        targetS1: 20 * pdvAssic,
+        targetS2: 25 * pdvAssic,
+        premio: 750,
+      });
     });
 
     setMobileRSConfig(mobileRS);
     setFissoRSConfig(fissoRS);
     setPartnershipRSConfig(partnershipRS);
+    setEnergiaRSConfig(energiaRS);
+    setAssicurazioniRSConfig(assicurazioniRS);
   }, []);
 
   const initializeConfigsFromPdvList = useCallback((pdvs: GaraConfigPdv[]) => {
@@ -508,6 +544,8 @@ export default function ConfigurazioneGara() {
       if (cfg.partnershipRewardRSConfig?.configPerRS?.length) setPartnershipRSConfig(cfg.partnershipRewardRSConfig.configPerRS);
       if (cfg.energiaConfig) setEnergiaConfig(cfg.energiaConfig);
       if (cfg.assicurazioniConfig) setAssicurazioniConfig(cfg.assicurazioniConfig);
+      if (cfg.energiaRSConfig?.configPerRS?.length) setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
+      if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
     }
     setIsDirty(false);
     setInitialLoaded(true);
@@ -567,6 +605,12 @@ export default function ConfigurazioneGara() {
         const pdvA = pdvs.filter(p => p.abilitaAssicurazioni).length;
         setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 15 * pdvA, targetS1: 20 * pdvA, targetS2: 25 * pdvA, premio: 750 });
       }
+      if (cfg.energiaRSConfig?.configPerRS?.length) {
+        setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
+      }
+      if (cfg.assicurazioniRSConfig?.configPerRS?.length) {
+        setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
+      }
     } else {
       setConfigName('');
       setTipologiaGara('gara_operatore');
@@ -574,6 +618,8 @@ export default function ConfigurazioneGara() {
       setMobileRSConfig([]);
       setFissoRSConfig([]);
       setPartnershipRSConfig([]);
+      setEnergiaRSConfig([]);
+      setAssicurazioniRSConfig([]);
       setEnergiaConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premio: 1000 });
       setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premio: 750 });
 
@@ -629,6 +675,8 @@ export default function ConfigurazioneGara() {
       partnershipRewardRSConfig: { configPerRS: partnershipRSConfig },
       energiaConfig,
       assicurazioniConfig,
+      energiaRSConfig: { configPerRS: energiaRSConfig },
+      assicurazioniRSConfig: { configPerRS: assicurazioniRSConfig },
       ...(garaConfigRecord?.config ? {
         importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
       } : {}),
@@ -739,9 +787,12 @@ export default function ConfigurazioneGara() {
         setPartnershipConfig(pdvs.map(p => initPartnershipConfigForPdv(p)));
       }
 
-      setMobileRSConfig(cfg.pistaMobileRSConfig?.sogliePerRS || []);
-      setFissoRSConfig(cfg.pistaFissoRSConfig?.sogliePerRS || []);
-      setPartnershipRSConfig(cfg.partnershipRewardRSConfig?.configPerRS || []);
+      initializeRSConfigsFromPdvList(pdvs);
+      if (cfg.pistaMobileRSConfig?.sogliePerRS?.length) setMobileRSConfig(cfg.pistaMobileRSConfig.sogliePerRS);
+      if (cfg.pistaFissoRSConfig?.sogliePerRS?.length) setFissoRSConfig(cfg.pistaFissoRSConfig.sogliePerRS);
+      if (cfg.partnershipRewardRSConfig?.configPerRS?.length) setPartnershipRSConfig(cfg.partnershipRewardRSConfig.configPerRS);
+      if (cfg.energiaRSConfig?.configPerRS?.length) setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
+      if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
 
       if (cfg.energiaConfig) {
         setEnergiaConfig(cfg.energiaConfig);
@@ -1208,6 +1259,128 @@ export default function ConfigurazioneGara() {
             </TabsContent>
 
             <TabsContent value="extra" className="space-y-4">
+              {showPerRS ? (
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Energia & Assicurazioni per Ragione Sociale</CardTitle>
+                      <CardDescription className="text-xs">
+                        Configura i target di Energia e Assicurazioni separatamente per ogni Ragione Sociale.
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+
+                  {Array.from(rsGroups.entries()).map(([rs, rsPdvs]) => {
+                    const eConf = energiaRSConfig.find(c => c.ragioneSociale === rs);
+                    const aConf = assicurazioniRSConfig.find(c => c.ragioneSociale === rs);
+                    const pdvECount = rsPdvs.filter(p => p.abilitaEnergia).length;
+                    const pdvACount = rsPdvs.filter(p => p.abilitaAssicurazioni).length;
+
+                    const updateEnergiaRS = (field: string, value: number) => {
+                      setEnergiaRSConfig(prev => prev.map(c => c.ragioneSociale === rs ? { ...c, [field]: value } : c));
+                      setIsDirty(true);
+                    };
+                    const updateAssicRS = (field: string, value: number) => {
+                      setAssicurazioniRSConfig(prev => prev.map(c => c.ragioneSociale === rs ? { ...c, [field]: value } : c));
+                      setIsDirty(true);
+                    };
+
+                    return (
+                      <Card key={rs} data-testid={`card-extra-rs-${rs}`}>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-semibold">{rs}</CardTitle>
+                          <CardDescription className="text-xs">
+                            {rsPdvs.length} PDV — {pdvECount} abil. Energia, {pdvACount} abil. Assicurazioni
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          {eConf && (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <Zap className="h-4 w-4 text-amber-600" />
+                                <Label className="text-xs font-semibold">Energia</Label>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div className="space-y-1">
+                                  <Label className="text-xs">PDV in Gara</Label>
+                                  <Input type="number" className="h-8 text-sm" value={eConf.pdvInGara} onChange={e => updateEnergiaRS('pdvInGara', Number(e.target.value) || 0)} data-testid={`input-energia-rs-pdvInGara-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">No Malus</Label>
+                                  <Input type="number" className="h-8 text-sm" value={eConf.targetNoMalus} onChange={e => updateEnergiaRS('targetNoMalus', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetNoMalus-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Target S1</Label>
+                                  <Input type="number" className="h-8 text-sm" value={eConf.targetS1} onChange={e => updateEnergiaRS('targetS1', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetS1-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Target S2</Label>
+                                  <Input type="number" className="h-8 text-sm" value={eConf.targetS2} onChange={e => updateEnergiaRS('targetS2', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetS2-${rs}`} />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Target S3</Label>
+                                  <Input type="number" className="h-8 text-sm" value={eConf.targetS3} onChange={e => updateEnergiaRS('targetS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetS3-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs font-semibold">Premio €</Label>
+                                  <Input type="number" className="h-8 text-sm" value={eConf.premio} onChange={e => updateEnergiaRS('premio', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premio-${rs}`} />
+                                </div>
+                              </div>
+                              <div>
+                                <Label className="text-xs font-semibold mb-2 block">Soglie Pista</Label>
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                                  {(['pistaSoglia_S1', 'pistaSoglia_S2', 'pistaSoglia_S3', 'pistaSoglia_S4', 'pistaSoglia_S5'] as const).map(f => (
+                                    <div key={f} className="space-y-1">
+                                      <Label className="text-xs">{f.replace('pistaSoglia_', 'S')}</Label>
+                                      <Input type="number" className="h-8 text-sm" value={eConf[f] ?? ''} onChange={e => updateEnergiaRS(f, Number(e.target.value) || 0)} data-testid={`input-energia-rs-${f}-${rs}`} />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {eConf && aConf && <Separator />}
+
+                          {aConf && (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <Shield className="h-4 w-4 text-purple-600" />
+                                <Label className="text-xs font-semibold">Assicurazioni</Label>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div className="space-y-1">
+                                  <Label className="text-xs">PDV in Gara</Label>
+                                  <Input type="number" className="h-8 text-sm" value={aConf.pdvInGara} onChange={e => updateAssicRS('pdvInGara', Number(e.target.value) || 0)} data-testid={`input-assic-rs-pdvInGara-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">No Malus</Label>
+                                  <Input type="number" className="h-8 text-sm" value={aConf.targetNoMalus} onChange={e => updateAssicRS('targetNoMalus', Number(e.target.value) || 0)} data-testid={`input-assic-rs-targetNoMalus-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Target S1</Label>
+                                  <Input type="number" className="h-8 text-sm" value={aConf.targetS1} onChange={e => updateAssicRS('targetS1', Number(e.target.value) || 0)} data-testid={`input-assic-rs-targetS1-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Target S2</Label>
+                                  <Input type="number" className="h-8 text-sm" value={aConf.targetS2} onChange={e => updateAssicRS('targetS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-targetS2-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs font-semibold">Premio €</Label>
+                                  <Input type="number" className="h-8 text-sm" value={aConf.premio} onChange={e => updateAssicRS('premio', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premio-${rs}`} />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              ) : (
+                <>
               <Card data-testid="card-energia-config">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -1299,7 +1472,8 @@ export default function ConfigurazioneGara() {
                   </div>
                 </CardContent>
               </Card>
-
+                </>
+              )}
             </TabsContent>
           </Tabs>
         )}

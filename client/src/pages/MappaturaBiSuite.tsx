@@ -41,6 +41,11 @@ import {
   Users,
   GripVertical,
   Pencil,
+  Package,
+  Wrench,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useLocation } from 'wouter';
 import type {
@@ -65,6 +70,26 @@ const PISTA_ICONS: Record<GaraPista, React.ReactNode> = {
 };
 
 const ALL_PISTE: GaraPista[] = ['mobile', 'fisso', 'energia', 'assicurazioni', 'protecta', 'partnership'];
+
+type ExtraTab = 'prodotti' | 'servizi' | 'non_mappati';
+type ActiveTab = GaraPista | ExtraTab;
+
+interface ArticleSummaryItem {
+  categoria: string;
+  tipologia: string;
+  descrizione: string;
+  pezzi: number;
+  importo?: number;
+  clienteTipo?: string;
+}
+
+interface ArticlesSummaryData {
+  month: number;
+  year: number;
+  prodotti: ArticleSummaryItem[];
+  servizi: ArticleSummaryItem[];
+  nonMappati: ArticleSummaryItem[];
+}
 
 function generateRuleId(): string {
   return `rule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -92,9 +117,39 @@ export default function MappaturaBiSuite() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const [activePista, setActivePista] = useState<GaraPista>('mobile');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('mobile');
   const [editingRule, setEditingRule] = useState<BiSuiteMappingRule | null>(null);
   const [showResetDialog, setShowResetDialog] = useState(false);
+
+  const now = new Date();
+  const [summaryMonth, setSummaryMonth] = useState(now.getMonth() + 1);
+  const [summaryYear, setSummaryYear] = useState(now.getFullYear());
+  const [articlesSummary, setArticlesSummary] = useState<ArticlesSummaryData | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+
+  const isExtraTab = activeTab === 'prodotti' || activeTab === 'servizi' || activeTab === 'non_mappati';
+  const activePista = isExtraTab ? 'mobile' : (activeTab as GaraPista);
+
+  const loadArticlesSummary = useCallback(async (m: number, y: number) => {
+    try {
+      setLoadingSummary(true);
+      const res = await fetch(apiUrl(`/api/admin/bisuite-articles-summary?month=${m}&year=${y}`), { credentials: 'include' });
+      if (!res.ok) throw new Error('Errore');
+      const data = await res.json();
+      setArticlesSummary(data);
+    } catch (err) {
+      console.error('Error loading articles summary:', err);
+      toast({ title: 'Errore', description: 'Impossibile caricare il riepilogo articoli.', variant: 'destructive' });
+    } finally {
+      setLoadingSummary(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (isExtraTab && profile) {
+      loadArticlesSummary(summaryMonth, summaryYear);
+    }
+  }, [isExtraTab, summaryMonth, summaryYear, profile, loadArticlesSummary]);
 
   const loadMapping = useCallback(async () => {
     try {
@@ -172,7 +227,18 @@ export default function MappaturaBiSuite() {
     setHasChanges(true);
   };
 
-  const pistaRules = rules.filter((r) => r.pista === activePista);
+  const pistaRules = isExtraTab ? [] : rules.filter((r) => r.pista === activePista);
+
+  const changeMonth = (delta: number) => {
+    let m = summaryMonth + delta;
+    let y = summaryYear;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    setSummaryMonth(m);
+    setSummaryYear(y);
+  };
+
+  const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 
   if (!['super_admin', 'admin'].includes(profile?.role || '')) {
     return (
@@ -227,9 +293,9 @@ export default function MappaturaBiSuite() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <Tabs value={activePista} onValueChange={(v) => setActivePista(v as GaraPista)}>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ActiveTab)}>
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-            <TabsList className="grid w-max sm:w-full grid-cols-6 mb-6">
+            <TabsList className="grid w-max sm:w-full grid-cols-9 mb-6">
               {ALL_PISTE.map((pista) => {
                 const count = rules.filter((r) => r.pista === pista).length;
                 return (
@@ -242,6 +308,18 @@ export default function MappaturaBiSuite() {
                   </TabsTrigger>
                 );
               })}
+              <TabsTrigger value="prodotti" className="gap-1.5 text-xs sm:text-sm" data-testid="tab-prodotti">
+                <Package className="h-4 w-4" />
+                <span className="hidden sm:inline">Prodotti</span>
+              </TabsTrigger>
+              <TabsTrigger value="servizi" className="gap-1.5 text-xs sm:text-sm" data-testid="tab-servizi">
+                <Wrench className="h-4 w-4" />
+                <span className="hidden sm:inline">Servizi</span>
+              </TabsTrigger>
+              <TabsTrigger value="non_mappati" className="gap-1.5 text-xs sm:text-sm" data-testid="tab-non-mappati">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="hidden sm:inline">Non Mappati</span>
+              </TabsTrigger>
             </TabsList>
             </div>
 
@@ -282,6 +360,54 @@ export default function MappaturaBiSuite() {
                 </div>
               </TabsContent>
             ))}
+
+            {(['prodotti', 'servizi', 'non_mappati'] as ExtraTab[]).map((tab) => (
+              <TabsContent key={tab} value={tab}>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-semibold">
+                      {tab === 'prodotti' ? 'Prodotti' : tab === 'servizi' ? 'Servizi' : 'Articoli Non Mappati'}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeMonth(-1)} data-testid="btn-prev-month">
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm font-medium min-w-[140px] text-center">
+                        {MONTH_NAMES[summaryMonth - 1]} {summaryYear}
+                      </span>
+                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => changeMonth(1)} data-testid="btn-next-month">
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {loadingSummary ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                  ) : !articlesSummary ? (
+                    <Card>
+                      <CardContent className="py-8 text-center text-muted-foreground">
+                        Nessun dato disponibile per il periodo selezionato.
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <ArticlesTable
+                      items={tab === 'prodotti' ? articlesSummary.prodotti : tab === 'servizi' ? articlesSummary.servizi : articlesSummary.nonMappati}
+                      showImporto={tab !== 'non_mappati'}
+                      showClienteTipo={tab === 'non_mappati'}
+                      onCreateRule={tab === 'non_mappati' ? (item) => {
+                        const newRule = createEmptyRule('mobile');
+                        newRule.conditions = { categoriaBiSuite: item.categoria, tipologiaBiSuite: item.tipologia };
+                        setEditingRule(newRule);
+                        setRules(prev => [...prev, newRule]);
+                        setHasChanges(true);
+                      } : undefined}
+                    />
+                  )}
+                </div>
+              </TabsContent>
+            ))}
           </Tabs>
         )}
       </main>
@@ -313,6 +439,84 @@ export default function MappaturaBiSuite() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ArticlesTable({
+  items,
+  showImporto,
+  showClienteTipo,
+  onCreateRule,
+}: {
+  items: ArticleSummaryItem[];
+  showImporto: boolean;
+  showClienteTipo: boolean;
+  onCreateRule?: (item: ArticleSummaryItem) => void;
+}) {
+  if (items.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-muted-foreground">
+          Nessun articolo trovato per il periodo selezionato.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="articles-table">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="text-left px-4 py-2 font-medium">Categoria</th>
+                <th className="text-left px-4 py-2 font-medium">Tipologia</th>
+                <th className="text-left px-4 py-2 font-medium">Descrizione</th>
+                <th className="text-right px-4 py-2 font-medium">Pezzi</th>
+                {showImporto && <th className="text-right px-4 py-2 font-medium">Importo</th>}
+                {showClienteTipo && <th className="text-left px-4 py-2 font-medium">Tipo Cliente</th>}
+                {onCreateRule && <th className="text-center px-4 py-2 font-medium">Azioni</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, i) => (
+                <tr key={i} className="border-b last:border-0 hover:bg-muted/30" data-testid={`row-article-${i}`}>
+                  <td className="px-4 py-2">
+                    <Badge variant="outline" className="text-xs">{item.categoria}</Badge>
+                  </td>
+                  <td className="px-4 py-2 text-xs text-muted-foreground">{item.tipologia || '—'}</td>
+                  <td className="px-4 py-2 text-xs max-w-[300px] truncate">{item.descrizione || '—'}</td>
+                  <td className="px-4 py-2 text-right font-medium">{item.pezzi}</td>
+                  {showImporto && (
+                    <td className="px-4 py-2 text-right text-muted-foreground">
+                      {(item.importo || 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })}
+                    </td>
+                  )}
+                  {showClienteTipo && (
+                    <td className="px-4 py-2 text-xs">{item.clienteTipo || '—'}</td>
+                  )}
+                  {onCreateRule && (
+                    <td className="px-4 py-2 text-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => onCreateRule(item)}
+                        data-testid={`btn-create-rule-${i}`}
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Crea Regola
+                      </Button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

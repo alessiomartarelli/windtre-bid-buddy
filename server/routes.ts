@@ -1693,5 +1693,91 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/bisuite-articles-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !['super_admin', 'admin'].includes(profile.role)) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const orgId = req.query.organization_id || profile.organizationId;
+      if (!orgId) return res.status(400).json({ error: "Organizzazione non specificata" });
+
+      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+
+      const from = new Date(year, month - 1, 1);
+      const to = new Date(year, month, 0, 23, 59, 59);
+
+      const sales = await storage.getBisuiteSales(orgId, from, to);
+
+      const sysMapping = await storage.getSystemConfig("bisuite_mapping");
+      const mappingConfig = sysMapping?.config as { rules?: BiSuiteMappingRule[] } | null;
+      const { getDefaultMappingRules, mapBiSuiteArticle } = await import("../shared/bisuiteMapping");
+      const rules = mappingConfig?.rules || getDefaultMappingRules();
+
+      const prodotti: Record<string, { categoria: string; tipologia: string; descrizione: string; pezzi: number; importo: number }> = {};
+      const servizi: Record<string, { categoria: string; tipologia: string; descrizione: string; pezzi: number; importo: number }> = {};
+      const nonMappati: Record<string, { categoria: string; tipologia: string; descrizione: string; pezzi: number; clienteTipo: string }> = {};
+
+      const PRODOTTI_CATS = new Set([
+        'TELEFONIA', 'MODEM/ROUTER', 'SMART DEVICE', 'INTERNET DEVICE', 'SIM', 'RICARICHE',
+        'ACCESSORI', 'GARANZIE', 'RICAMBI', 'RICAMBI PC', 'DEPOSITO CAUZIONALE',
+        'COSTO ATTIVAZIONE', 'EPAY', 'OPZIONI', 'ARROTONDAMENTO', 'GARANTEASY',
+        'DEMO TELEFONIA WIND3', 'TELEFONIA TRADE-IN', 'ALTRO',
+      ]);
+      const SERVIZI_CATS = new Set(['SPEDIZIONE', 'ASSISTENZA']);
+
+      for (const sale of sales) {
+        const raw = sale.rawData as any;
+        if (!raw) continue;
+        const articoli = raw.articoli || [];
+        const clienteTipo = raw.cliente?.clienteTipo || '';
+
+        for (const art of articoli) {
+          const cat = (art.categoriaBiSuite || '').toUpperCase().trim();
+          const tip = art.tipologiaBiSuite || '';
+          const desc = art.descrizioneBiSuite || '';
+          const importo = parseFloat(art.dettaglio?.importo || art.dettaglio?.prezzo || '0') || 0;
+
+          if (PRODOTTI_CATS.has(cat)) {
+            const key = `${cat}||${tip}||${desc}`;
+            if (!prodotti[key]) prodotti[key] = { categoria: cat, tipologia: tip, descrizione: desc, pezzi: 0, importo: 0 };
+            prodotti[key].pezzi++;
+            prodotti[key].importo += importo;
+          } else if (SERVIZI_CATS.has(cat)) {
+            const key = `${cat}||${tip}||${desc}`;
+            if (!servizi[key]) servizi[key] = { categoria: cat, tipologia: tip, descrizione: desc, pezzi: 0, importo: 0 };
+            servizi[key].pezzi++;
+            servizi[key].importo += importo;
+          } else {
+            const mapped = mapBiSuiteArticle(art, clienteTipo, rules);
+            if (!mapped) {
+              const key = `${cat}||${tip}||${desc}`;
+              if (!nonMappati[key]) nonMappati[key] = { categoria: cat, tipologia: tip, descrizione: desc, pezzi: 0, clienteTipo };
+              nonMappati[key].pezzi++;
+            }
+          }
+        }
+      }
+
+      res.json({
+        month, year,
+        prodotti: Object.values(prodotti).sort((a, b) => b.pezzi - a.pezzi),
+        servizi: Object.values(servizi).sort((a, b) => b.pezzi - a.pezzi),
+        nonMappati: Object.values(nonMappati).sort((a, b) => b.pezzi - a.pezzi),
+      });
+    } catch (error: unknown) {
+      console.error("BiSuite articles summary error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore nel riepilogo articoli", details: msg });
+    }
+  });
+
   return httpServer;
 }
