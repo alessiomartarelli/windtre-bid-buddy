@@ -231,7 +231,12 @@ function groupMobileCategories(
       groupKey: "sim_consumer",
       totalPezzi: corePezzi,
       totalProiezione: coreProiezione,
-      children: consumerChildren.sort((a, b) => b.pezzi - a.pezzi),
+      children: consumerChildren.sort((a, b) => {
+        const aCore = SIM_CONSUMER_CORE.has(a.category) ? 0 : 1;
+        const bCore = SIM_CONSUMER_CORE.has(b.category) ? 0 : 1;
+        if (aCore !== bCore) return aCore - bCore;
+        return b.pezzi - a.pezzi;
+      }),
     });
   }
 
