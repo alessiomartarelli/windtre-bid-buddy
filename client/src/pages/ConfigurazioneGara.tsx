@@ -103,14 +103,18 @@ function initPartnershipConfigForPdv(pdv: GaraConfigPdv) {
 }
 
 function PdvCard({
-  pdv, index, onUpdate, onRemove,
+  pdv, index, onUpdate, onRemove, existingRSNames,
 }: {
   pdv: GaraConfigPdv;
   index: number;
   onUpdate: (index: number, updated: GaraConfigPdv) => void;
   onRemove: (index: number) => void;
+  existingRSNames: string[];
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [rsEditMode, setRsEditMode] = useState<'select' | 'new'>(
+    pdv.ragioneSociale && existingRSNames.includes(pdv.ragioneSociale) ? 'select' : (existingRSNames.length > 0 ? 'select' : 'new')
+  );
 
   const updateField = <K extends keyof GaraConfigPdv>(field: K, value: GaraConfigPdv[K]) => {
     onUpdate(index, { ...pdv, [field]: value });
@@ -162,7 +166,26 @@ function PdvCard({
             </div>
             <div>
               <Label className="text-xs">Ragione Sociale</Label>
-              <Input value={pdv.ragioneSociale} onChange={e => updateField('ragioneSociale', e.target.value)} className="h-8 text-sm" data-testid={`input-rs-pdv-${index}`} />
+              {rsEditMode === 'select' && existingRSNames.length > 0 ? (
+                <Select value={pdv.ragioneSociale || ''} onValueChange={(v) => { if (v === '__new__') { setRsEditMode('new'); updateField('ragioneSociale', ''); } else { updateField('ragioneSociale', v); } }}>
+                  <SelectTrigger className="h-8 text-sm" data-testid={`select-rs-pdv-${index}`}><SelectValue placeholder="Seleziona RS" /></SelectTrigger>
+                  <SelectContent>
+                    {existingRSNames.map(rs => (
+                      <SelectItem key={rs} value={rs}>{rs}</SelectItem>
+                    ))}
+                    <SelectItem value="__new__">+ Nuova ragione sociale...</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex gap-1">
+                  <Input value={pdv.ragioneSociale} onChange={e => updateField('ragioneSociale', e.target.value)} className="h-8 text-sm flex-1" data-testid={`input-rs-pdv-${index}`} placeholder="Nuova ragione sociale" />
+                  {existingRSNames.length > 0 && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setRsEditMode('select')} className="h-8 shrink-0 text-xs px-2" data-testid={`button-rs-back-select-${index}`}>
+                      Esistente
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -937,7 +960,7 @@ export default function ConfigurazioneGara() {
                 <div className="space-y-2">
                   <div className="text-sm text-muted-foreground mb-2">{pdvList.length} PDV configurati</div>
                   {pdvList.map((pdv, idx) => (
-                    <PdvCard key={pdv.id || idx} pdv={pdv} index={idx} onUpdate={handleUpdatePdv} onRemove={handleRemovePdv} />
+                    <PdvCard key={pdv.id || idx} pdv={pdv} index={idx} onUpdate={handleUpdatePdv} onRemove={handleRemovePdv} existingRSNames={Array.from(rsGroups.keys()).filter(rs => rs !== 'Senza RS')} />
                   ))}
                 </div>
               )}
