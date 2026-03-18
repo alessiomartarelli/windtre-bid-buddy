@@ -170,6 +170,63 @@ const DEFAULT_CALENDAR: StoreCalendar = {
   specialDays: [],
 };
 
+const SIM_IVA_CATEGORIES = new Set<string>([
+  MobileActivationType.SIM_IVA,
+  MobileActivationType.PROFESSIONAL_FLEX,
+  MobileActivationType.PROFESSIONAL_DATA_10,
+  MobileActivationType.PROFESSIONAL_SPECIAL,
+  MobileActivationType.PROFESSIONAL_STAFF,
+  MobileActivationType.PROFESSIONAL_WORLD,
+  MobileActivationType.ALTRE_SIM_IVA,
+]);
+
+interface MobileGroupedCategory {
+  groupLabel: string;
+  groupKey: string;
+  totalPezzi: number;
+  totalProiezione: number;
+  children: { category: string; label: string; pezzi: number; proiezione: number }[];
+}
+
+function groupMobileCategories(
+  categories: { category: string; label: string; pezzi: number; proiezione: number }[]
+): MobileGroupedCategory[] {
+  const consumerChildren: typeof categories = [];
+  const ivaChildren: typeof categories = [];
+
+  for (const cat of categories) {
+    if (SIM_IVA_CATEGORIES.has(cat.category)) {
+      ivaChildren.push(cat);
+    } else {
+      consumerChildren.push(cat);
+    }
+  }
+
+  const groups: MobileGroupedCategory[] = [];
+
+  if (consumerChildren.length > 0) {
+    groups.push({
+      groupLabel: "SIM Consumer",
+      groupKey: "sim_consumer",
+      totalPezzi: consumerChildren.reduce((s, c) => s + c.pezzi, 0),
+      totalProiezione: consumerChildren.reduce((s, c) => s + c.proiezione, 0),
+      children: consumerChildren.sort((a, b) => b.pezzi - a.pezzi),
+    });
+  }
+
+  if (ivaChildren.length > 0) {
+    groups.push({
+      groupLabel: "SIM IVA",
+      groupKey: "sim_iva",
+      totalPezzi: ivaChildren.reduce((s, c) => s + c.pezzi, 0),
+      totalProiezione: ivaChildren.reduce((s, c) => s + c.proiezione, 0),
+      children: ivaChildren.sort((a, b) => b.pezzi - a.pezzi),
+    });
+  }
+
+  return groups;
+}
+
 interface PistaCalcResult {
   premioStimato: number;
   puntiTotali: number;
@@ -519,6 +576,7 @@ export default function DashboardGaraReale() {
   const now = new Date();
   const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
   const [expandedPistaCategories, setExpandedPistaCategories] = useState<Set<string>>(new Set());
+  const [expandedMobileGroups, setExpandedMobileGroups] = useState<Set<string>>(new Set());
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -1481,6 +1539,53 @@ export default function DashboardGaraReale() {
 
                       {pista.totalePezzi === 0 ? (
                         <p className="text-sm text-gray-400 italic">Nessuna attivazione mappata</p>
+                      ) : pista.pista === "mobile" ? (
+                        <>
+                          <Separator />
+                          <div className="space-y-3">
+                            {groupMobileCategories(pista.categories).map((group) => {
+                              const groupExpanded = expandedMobileGroups.has(group.groupKey);
+                              return (
+                                <div key={group.groupKey}>
+                                  <button
+                                    className="flex items-center justify-between w-full text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 py-0.5 -mx-1"
+                                    onClick={() => setExpandedMobileGroups(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(group.groupKey)) next.delete(group.groupKey);
+                                      else next.add(group.groupKey);
+                                      return next;
+                                    })}
+                                    data-testid={`btn-toggle-mobile-group-${group.groupKey}`}
+                                  >
+                                    <span className="font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-1">
+                                      <span className="text-xs text-gray-400">{groupExpanded ? "▼" : "▶"}</span>
+                                      {group.groupLabel}
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold">{group.totalPezzi}</span>
+                                      <span className="text-gray-400 text-xs">→ {group.totalProiezione}</span>
+                                    </div>
+                                  </button>
+                                  {groupExpanded && (
+                                    <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-200 dark:border-gray-700 pl-2">
+                                      {group.children.map((cat) => (
+                                        <div key={cat.category} className="flex items-center justify-between text-sm">
+                                          <span className="text-gray-500 dark:text-gray-400 truncate max-w-[55%] text-xs">
+                                            {cat.label}
+                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium text-xs">{cat.pezzi}</span>
+                                            <span className="text-gray-400 text-xs">→ {cat.proiezione}</span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
                       ) : (
                         <>
                           <Separator />
