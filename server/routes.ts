@@ -1626,11 +1626,21 @@ export async function registerRoutes(
         const articoli = raw.articoli || [];
         const { mapBiSuiteArticle } = await import("../shared/bisuiteMapping");
         const clienteTipo = raw.cliente?.clienteTipo || '';
-        totalArticoli += articoli.length;
-        byPdv[codicePos].totalArticoli += articoli.length;
 
+        const PRODOTTI_CATS = new Set([
+          'TELEFONIA', 'MODEM/ROUTER', 'SMART DEVICE', 'INTERNET DEVICE', 'SIM', 'RICARICHE',
+          'ACCESSORI', 'GARANZIE', 'RICAMBI', 'RICAMBI PC', 'DEPOSITO CAUZIONALE',
+          'COSTO ATTIVAZIONE', 'EPAY', 'OPZIONI', 'ARROTONDAMENTO', 'GARANTEASY',
+          'DEMO TELEFONIA WIND3', 'TELEFONIA TRADE-IN', 'ALTRO',
+        ]);
+        const SERVIZI_CATS = new Set(['SPEDIZIONE', 'ASSISTENZA']);
+
+        let canvassCount = 0;
         let mappedCount = 0;
         for (const art of articoli) {
+          const catNome = (art.categoria?.nome || '').toUpperCase().trim();
+          if (PRODOTTI_CATS.has(catNome) || SERVIZI_CATS.has(catNome)) continue;
+          canvassCount++;
           const m = mapBiSuiteArticle(art, clienteTipo, rules);
           if (!m) continue;
           mappedCount++;
@@ -1651,8 +1661,10 @@ export async function registerRoutes(
             });
           }
         }
+        totalArticoli += canvassCount;
+        byPdv[codicePos].totalArticoli += canvassCount;
         totalMapped += mappedCount;
-        const unmappedCount = articoli.length - mappedCount;
+        const unmappedCount = canvassCount - mappedCount;
         totalUnmapped += unmappedCount;
         byPdv[codicePos].unmapped += unmappedCount;
       }

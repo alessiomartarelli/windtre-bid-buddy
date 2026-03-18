@@ -1217,7 +1217,7 @@ export default function DashboardGaraReale() {
                 <CardContent className="py-4">
                   <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
                     <Target className="h-4 w-4" />
-                    Articoli Totali
+                    Articoli Canvass
                   </div>
                   <div className="text-2xl font-bold" data-testid="text-total-articoli">{mappedData.totalArticoli}</div>
                 </CardContent>
