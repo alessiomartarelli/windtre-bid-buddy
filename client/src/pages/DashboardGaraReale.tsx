@@ -180,6 +180,31 @@ const SIM_IVA_CATEGORIES = new Set<string>([
   MobileActivationType.ALTRE_SIM_IVA,
 ]);
 
+const SIM_CONSUMER_CORE = new Set<string>([
+  MobileActivationType.TIED,
+  MobileActivationType.UNTIED,
+  MobileActivationType.MNP,
+  MobileActivationType.MNP_MVNO,
+  MobileActivationType.PHASE_IN_TIED,
+  MobileActivationType.WINBACK,
+  MobileActivationType.CONVERGENTE_SUPERFIBRA_MULTISERVICE,
+  MobileActivationType.TOURIST_FULL,
+  MobileActivationType.TOURIST_PASS,
+  MobileActivationType.TOURIST_XXL,
+  MobileActivationType.SIM_ALLARME,
+  MobileActivationType.RELOAD_EXCHANGE,
+]);
+
+const SIM_PIVA_CORE = new Set<string>([
+  MobileActivationType.SIM_IVA,
+  MobileActivationType.PROFESSIONAL_FLEX,
+  MobileActivationType.PROFESSIONAL_DATA_10,
+  MobileActivationType.PROFESSIONAL_SPECIAL,
+  MobileActivationType.PROFESSIONAL_STAFF,
+  MobileActivationType.PROFESSIONAL_WORLD,
+  MobileActivationType.ALTRE_SIM_IVA,
+]);
+
 interface MobileGroupedCategory {
   groupLabel: string;
   groupKey: string;
@@ -205,21 +230,25 @@ function groupMobileCategories(
   const groups: MobileGroupedCategory[] = [];
 
   if (consumerChildren.length > 0) {
+    const corePezzi = consumerChildren.filter(c => SIM_CONSUMER_CORE.has(c.category)).reduce((s, c) => s + c.pezzi, 0);
+    const coreProiezione = consumerChildren.filter(c => SIM_CONSUMER_CORE.has(c.category)).reduce((s, c) => s + c.proiezione, 0);
     groups.push({
       groupLabel: "SIM Consumer",
       groupKey: "sim_consumer",
-      totalPezzi: consumerChildren.reduce((s, c) => s + c.pezzi, 0),
-      totalProiezione: consumerChildren.reduce((s, c) => s + c.proiezione, 0),
+      totalPezzi: corePezzi,
+      totalProiezione: coreProiezione,
       children: consumerChildren.sort((a, b) => b.pezzi - a.pezzi),
     });
   }
 
   if (ivaChildren.length > 0) {
+    const corePezzi = ivaChildren.filter(c => SIM_PIVA_CORE.has(c.category)).reduce((s, c) => s + c.pezzi, 0);
+    const coreProiezione = ivaChildren.filter(c => SIM_PIVA_CORE.has(c.category)).reduce((s, c) => s + c.proiezione, 0);
     groups.push({
-      groupLabel: "SIM IVA",
+      groupLabel: "SIM P.IVA",
       groupKey: "sim_iva",
-      totalPezzi: ivaChildren.reduce((s, c) => s + c.pezzi, 0),
-      totalProiezione: ivaChildren.reduce((s, c) => s + c.proiezione, 0),
+      totalPezzi: corePezzi,
+      totalProiezione: coreProiezione,
       children: ivaChildren.sort((a, b) => b.pezzi - a.pezzi),
     });
   }
