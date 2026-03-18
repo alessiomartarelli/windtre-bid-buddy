@@ -616,9 +616,11 @@ export default function DashboardGaraReale() {
     const assicConfig = garaCalcConfig.assicurazioniConfig;
     const assicPdvInGara = puntiVendita.filter(p => p.abilitaAssicurazioni).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, nome: p.nome, isInGara: true }));
 
+    const normalizeRS = (s: string) => s.trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ');
+
     const getMobileConfigForPdv = (codicePos: string, ragioneSociale: string): PistaMobilePosConfig | undefined => {
       if (isRSPerRS) {
-        const rsConfig = mobileRSConfigs.find(c => c.ragioneSociale === ragioneSociale);
+        const rsConfig = mobileRSConfigs.find(c => normalizeRS(c.ragioneSociale) === normalizeRS(ragioneSociale));
         if (rsConfig) {
           return {
             posCode: codicePos,
@@ -641,7 +643,7 @@ export default function DashboardGaraReale() {
 
     const getFissoConfigForPdv = (codicePos: string, ragioneSociale: string): PistaFissoPosConfig | undefined => {
       if (isRSPerRS) {
-        const rsConfig = fissoRSConfigs.find(c => c.ragioneSociale === ragioneSociale);
+        const rsConfig = fissoRSConfigs.find(c => normalizeRS(c.ragioneSociale) === normalizeRS(ragioneSociale));
         if (rsConfig) {
           return {
             posCode: codicePos,
@@ -664,7 +666,7 @@ export default function DashboardGaraReale() {
 
     const getPartnershipConfigForPdv = (codicePos: string, ragioneSociale: string) => {
       if (isRSPerRS) {
-        const rsConfig = partnershipRSConfigs.find(c => c.ragioneSociale === ragioneSociale);
+        const rsConfig = partnershipRSConfigs.find(c => normalizeRS(c.ragioneSociale) === normalizeRS(ragioneSociale));
         if (rsConfig) {
           return { posCode: codicePos, config: { target100: rsConfig.target100, target80: rsConfig.target80, premio100: rsConfig.premio100, premio80: rsConfig.premio80 } };
         }
