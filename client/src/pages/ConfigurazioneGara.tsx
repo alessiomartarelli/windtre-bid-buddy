@@ -805,6 +805,15 @@ export default function ConfigurazioneGara() {
         setAssicurazioniConfig({ pdvInGara: pdvA, targetNoMalus: 15 * pdvA, targetS1: 20 * pdvA, targetS2: 25 * pdvA, premio: 750 });
       }
 
+      if (cfg.energiaRSConfig?.length) {
+        setEnergiaRSConfig(cfg.energiaRSConfig);
+      } else {
+        initializeRSConfigsFromPdvList(pdvs);
+      }
+      if (cfg.assicurazioniRSConfig?.length) {
+        setAssicurazioniRSConfig(cfg.assicurazioniRSConfig);
+      }
+
       setIsDirty(false);
       setImportDialogOpen(false);
       fetchHistory();
