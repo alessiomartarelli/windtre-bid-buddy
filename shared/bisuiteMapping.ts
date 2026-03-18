@@ -8,6 +8,7 @@ export interface BiSuiteMappingCondition {
   clienteTipo?: string;
   domandaTesto?: string;
   rispostaContiene?: string;
+  rispostaDiversaDa?: string;
 }
 
 export interface BiSuiteMappingRule {
@@ -321,6 +322,18 @@ function matchesCondition(
         (dr.risposta || '').toUpperCase().trim().includes(rispostaTarget)
     );
     if (!found) return false;
+  }
+
+  if (condition.domandaTesto && condition.rispostaDiversaDa && !condition.rispostaContiene) {
+    const domandeRisposte = articolo.dettaglio?.domandeRisposte || [];
+    const domandaTarget = condition.domandaTesto.toUpperCase().trim();
+    const rispostaEscludi = condition.rispostaDiversaDa.toUpperCase().trim();
+    const entry = domandeRisposte.find(
+      (dr) => (dr.domandaTesto || '').toUpperCase().trim().includes(domandaTarget)
+    );
+    if (!entry) return false;
+    const risposta = (entry.risposta || '').toUpperCase().trim();
+    if (risposta === rispostaEscludi || risposta === '') return false;
   }
 
   return true;
