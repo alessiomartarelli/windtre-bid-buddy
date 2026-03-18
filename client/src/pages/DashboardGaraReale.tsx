@@ -514,6 +514,7 @@ export default function DashboardGaraReale() {
   const [, setLocation] = useLocation();
   const now = new Date();
   const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
+  const [expandedPistaCategories, setExpandedPistaCategories] = useState<Set<string>>(new Set());
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
 
   const [selMonth, selYear] = useMemo(() => {
@@ -1442,7 +1443,7 @@ export default function DashboardGaraReale() {
                         <>
                           <Separator />
                           <div className="space-y-1.5">
-                            {pista.categories.slice(0, 6).map((cat) => (
+                            {(expandedPistaCategories.has(pista.pista) ? pista.categories : pista.categories.slice(0, 6)).map((cat) => (
                               <div key={cat.category} className="flex items-center justify-between text-sm">
                                 <span className="text-gray-600 dark:text-gray-300 truncate max-w-[60%]">{cat.label}</span>
                                 <div className="flex items-center gap-2">
@@ -1452,7 +1453,20 @@ export default function DashboardGaraReale() {
                               </div>
                             ))}
                             {pista.categories.length > 6 && (
-                              <p className="text-xs text-gray-400">+{pista.categories.length - 6} altre categorie</p>
+                              <button
+                                className="text-xs text-primary hover:underline cursor-pointer mt-1"
+                                onClick={() => setExpandedPistaCategories(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(pista.pista)) next.delete(pista.pista);
+                                  else next.add(pista.pista);
+                                  return next;
+                                })}
+                                data-testid={`btn-toggle-categories-${pista.pista}`}
+                              >
+                                {expandedPistaCategories.has(pista.pista)
+                                  ? 'Mostra meno'
+                                  : `+${pista.categories.length - 6} altre categorie`}
+                              </button>
                             )}
                           </div>
                         </>
