@@ -576,6 +576,8 @@ export default function DashboardGaraReale() {
       pistaMobileRSConfig: (cfg?.pistaMobileRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; forecastTargetPunti: number; clusterPista: string }> }) || undefined,
       pistaFissoRSConfig: (cfg?.pistaFissoRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; soglia5: number; forecastTargetPunti: number }> }) || undefined,
       partnershipRewardRSConfig: (cfg?.partnershipRewardRSConfig as { configPerRS?: Array<{ ragioneSociale: string; target100: number; target80: number; premio100: number; premio80: number }> }) || undefined,
+      energiaRSConfig: (cfg?.energiaRSConfig as Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; targetS3: number; premio?: number }>) || undefined,
+      assicurazioniRSConfig: (cfg?.assicurazioniRSConfig as Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; premio?: number }>) || undefined,
     };
   }, [garaConfig]);
 
@@ -630,9 +632,10 @@ export default function DashboardGaraReale() {
             multiplierSoglia3: (rsConfig as Record<string, unknown>).multiplierSoglia3 as number || 1.5,
             multiplierSoglia4: (rsConfig as Record<string, unknown>).multiplierSoglia4 as number || 2,
             forecastTargetPunti: rsConfig.forecastTargetPunti,
-            clusterPista: rsConfig.clusterPista as 1 | 2 | 3 | undefined,
+            clusterPista: rsConfig.clusterPista as unknown as 1 | 2 | 3 | undefined,
           };
         }
+        return undefined;
       }
       const found = mobileConfigs.find(c => c.posCode === codicePos) || mobileConfigs[0];
       if (found && !found.multiplierSoglia1) {
@@ -648,17 +651,18 @@ export default function DashboardGaraReale() {
           return {
             posCode: codicePos,
             soglia1: rsConfig.soglia1, soglia2: rsConfig.soglia2, soglia3: rsConfig.soglia3, soglia4: rsConfig.soglia4, soglia5: rsConfig.soglia5,
-            multiplierSoglia1: (rsConfig as Record<string, unknown>).multiplierSoglia1 as number || 2,
-            multiplierSoglia2: (rsConfig as Record<string, unknown>).multiplierSoglia2 as number || 3,
-            multiplierSoglia3: (rsConfig as Record<string, unknown>).multiplierSoglia3 as number || 3.5,
-            multiplierSoglia4: (rsConfig as Record<string, unknown>).multiplierSoglia4 as number || 4,
-            multiplierSoglia5: (rsConfig as Record<string, unknown>).multiplierSoglia5 as number || 5,
+            multiplierSoglia1: (rsConfig as unknown as Record<string, unknown>).multiplierSoglia1 as number || 2,
+            multiplierSoglia2: (rsConfig as unknown as Record<string, unknown>).multiplierSoglia2 as number || 3,
+            multiplierSoglia3: (rsConfig as unknown as Record<string, unknown>).multiplierSoglia3 as number || 3.5,
+            multiplierSoglia4: (rsConfig as unknown as Record<string, unknown>).multiplierSoglia4 as number || 4,
+            multiplierSoglia5: (rsConfig as unknown as Record<string, unknown>).multiplierSoglia5 as number || 5,
             forecastTargetPunti: rsConfig.forecastTargetPunti,
           };
         }
+        return undefined;
       }
       const found = fissoConfigs.find(c => c.posCode === codicePos) || fissoConfigs[0];
-      if (found && !(found as Record<string, unknown>).multiplierSoglia1) {
+      if (found && !(found as unknown as Record<string, unknown>).multiplierSoglia1) {
         return { ...found, multiplierSoglia1: 2, multiplierSoglia2: 3, multiplierSoglia3: 3.5, multiplierSoglia4: 4, multiplierSoglia5: 5 };
       }
       return found;
@@ -670,6 +674,7 @@ export default function DashboardGaraReale() {
         if (rsConfig) {
           return { posCode: codicePos, config: { target100: rsConfig.target100, target80: rsConfig.target80, premio100: rsConfig.premio100, premio80: rsConfig.premio80 } };
         }
+        return undefined;
       }
       return partnershipConfigs.find(c => c.posCode === codicePos);
     };
@@ -1016,12 +1021,12 @@ export default function DashboardGaraReale() {
   }, [mappedData, workdayInfo, garaCalcConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear]);
 
   const premioPerRS = useMemo(() => {
-    if (!pistaStats.length || garaConfigMissing) return [] as Array<{ displayName: string; premioAttuale: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number }> }>;
+    if (!pistaStats.length || garaConfigMissing) return [] as Array<{ displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>;
     const isRSPerRS = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
     if (!isRSPerRS) return [];
 
     const nRS = (s: string) => s.trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ');
-    const rsMap = new Map<string, { displayName: string; premioAttuale: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number }> }>();
+    const rsMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>();
 
     for (const pista of pistaStats) {
       const isRSPista = pista.pista === "mobile" || pista.pista === "fisso" || pista.pista === "partnership";
@@ -1034,22 +1039,35 @@ export default function DashboardGaraReale() {
         seenRS.add(rsKey);
 
         if (!rsMap.has(rsKey)) {
-          rsMap.set(rsKey, { displayName: pdv.ragioneSociale || 'Senza RS', premioAttuale: 0, dettaglio: [] });
+          rsMap.set(rsKey, { displayName: pdv.ragioneSociale || 'Senza RS', premioAttuale: 0, premioProiettato: 0, dettaglio: [] });
         }
         const entry = rsMap.get(rsKey)!;
         entry.premioAttuale += pdv.pdvCalc.premioStimato;
-        entry.dettaglio.push({ pista: pista.pista, label: pista.label, premioAttuale: pdv.pdvCalc.premioStimato });
+        entry.dettaglio.push({ pista: pista.pista, label: pista.label, premioAttuale: pdv.pdvCalc.premioStimato, premioProiettato: 0 });
+      }
+
+      const rsCount = rsMap.size;
+      if (rsCount > 0 && pista.calcProiezione.premioStimato > 0) {
+        const projPerRS = Math.round(pista.calcProiezione.premioStimato / rsCount);
+        rsMap.forEach((entry) => {
+          const det = entry.dettaglio.find((d: { pista: string }) => d.pista === pista.pista);
+          if (det) {
+            det.premioProiettato = projPerRS;
+            entry.premioProiettato += projPerRS;
+          }
+        });
       }
     }
 
     for (const pista of pistaStats) {
       const isRSPista = pista.pista === "mobile" || pista.pista === "fisso" || pista.pista === "partnership";
       if (isRSPista) continue;
-      if (pista.calc.premioStimato <= 0) continue;
+      if (pista.calc.premioStimato <= 0 && pista.calcProiezione.premioStimato <= 0) continue;
 
       rsMap.forEach((entry) => {
         entry.premioAttuale += pista.calc.premioStimato;
-        entry.dettaglio.push({ pista: pista.pista, label: pista.label, premioAttuale: pista.calc.premioStimato });
+        entry.premioProiettato += pista.calcProiezione.premioStimato;
+        entry.dettaglio.push({ pista: pista.pista, label: pista.label, premioAttuale: pista.calc.premioStimato, premioProiettato: pista.calcProiezione.premioStimato });
       });
     }
 
@@ -1215,14 +1233,24 @@ export default function DashboardGaraReale() {
                           <div className="text-lg font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-totale-rs-${rs.displayName}`}>
                             {formatEuro(rs.premioAttuale)}
                           </div>
-                          <div className="text-xs text-gray-500">Premio attuale totale</div>
+                          <div className="text-xs text-gray-500">Premio attuale</div>
+                          {rs.premioProiettato > 0 && (
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              Proiezione: <span className="font-medium text-blue-600">{formatEuro(rs.premioProiettato)}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="space-y-1">
-                        {rs.dettaglio.filter((d: { premioAttuale: number }) => d.premioAttuale > 0).map((d: { pista: string; label: string; premioAttuale: number }) => (
+                        {rs.dettaglio.filter((d: { premioAttuale: number; premioProiettato: number }) => d.premioAttuale > 0 || d.premioProiettato > 0).map((d: { pista: string; label: string; premioAttuale: number; premioProiettato: number }) => (
                           <div key={d.pista} className="flex items-center justify-between text-xs">
                             <span className="text-gray-600 dark:text-gray-300">{d.label}</span>
-                            <span className="font-medium">{formatEuro(d.premioAttuale)}</span>
+                            <div className="text-right">
+                              <span className="font-medium">{formatEuro(d.premioAttuale)}</span>
+                              {d.premioProiettato > 0 && (
+                                <span className="text-gray-400 ml-1">→ {formatEuro(d.premioProiettato)}</span>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>

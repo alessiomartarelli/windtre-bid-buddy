@@ -1357,7 +1357,7 @@ export default function ConfigurazioneGara() {
                 </CardContent>
               </Card>
 
-              {tipologiaGara === 'gara_operatore_rs' && energiaRSConfig.length > 0 && (
+              {tipologiaGara === 'gara_operatore_rs' && modalitaRS === 'per_rs' && energiaRSConfig.length > 0 && (
                 <>
                   <Separator className="my-4" />
                   <div className="flex items-center gap-2 mb-2">
@@ -1409,7 +1409,7 @@ export default function ConfigurazioneGara() {
                 </>
               )}
 
-              {tipologiaGara === 'gara_operatore_rs' && assicurazioniRSConfig.length > 0 && (
+              {tipologiaGara === 'gara_operatore_rs' && modalitaRS === 'per_rs' && assicurazioniRSConfig.length > 0 && (
                 <>
                   <Separator className="my-4" />
                   <div className="flex items-center gap-2 mb-2">
