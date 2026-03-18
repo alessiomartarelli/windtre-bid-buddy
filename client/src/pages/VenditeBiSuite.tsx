@@ -342,7 +342,7 @@ export default function VenditeBiSuite() {
     <div className="min-h-screen bg-background">
       <AppNavbar title="Incentive W3" />
 
-      <main className="container mx-auto px-4 py-6 space-y-6">
+      <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {fetchResult && (
           <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${fetchResult.success ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
             {fetchResult.success ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
@@ -350,14 +350,14 @@ export default function VenditeBiSuite() {
           </div>
         )}
 
-        <div className="flex flex-wrap gap-4 items-end">
+        <div className="flex flex-wrap gap-2 sm:gap-4 items-end">
           <div className="space-y-1">
             <Label className="text-xs">Da</Label>
             <Input
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="w-40"
+              className="w-[130px] sm:w-40"
               data-testid="input-from-date"
             />
           </div>
@@ -367,7 +367,7 @@ export default function VenditeBiSuite() {
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="w-40"
+              className="w-[130px] sm:w-40"
               data-testid="input-to-date"
             />
           </div>
@@ -392,7 +392,7 @@ export default function VenditeBiSuite() {
               <span>Credenziali BiSuite non configurate</span>
             </div>
           ) : null}
-          <div className="space-y-1 flex-1 min-w-[200px]">
+          <div className="space-y-1 flex-1 min-w-[150px] sm:min-w-[200px]">
             <Label className="text-xs">Cerca</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -405,7 +405,7 @@ export default function VenditeBiSuite() {
               />
             </div>
           </div>
-          <div className="space-y-1 min-w-[160px]">
+          <div className="space-y-1 min-w-[120px] sm:min-w-[160px]">
             <Label className="text-xs">Tipo</Label>
             <Select value={filterType} onValueChange={(v) => { setFilterType(v); if (v !== 'canvass') setFilterPista('all'); }}>
               <SelectTrigger data-testid="select-tipo">
@@ -420,7 +420,7 @@ export default function VenditeBiSuite() {
             </Select>
           </div>
           {(filterType === "canvass" || filterType === "all") && (
-            <div className="space-y-1 min-w-[180px]">
+            <div className="space-y-1 min-w-[130px] sm:min-w-[180px]">
               <Label className="text-xs">Pista</Label>
               <Select value={filterPista} onValueChange={setFilterPista}>
                 <SelectTrigger data-testid="select-pista">
@@ -603,19 +603,19 @@ export default function VenditeBiSuite() {
                         <AccordionItem
                           key={pdv.codicePos}
                           value={pdv.codicePos}
-                          className="border rounded-lg px-4"
+                          className="border rounded-lg px-2 sm:px-4"
                         >
                           <AccordionTrigger className="hover:no-underline">
-                            <div className="flex items-center justify-between w-full pr-4">
-                              <div className="flex items-center gap-3">
-                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
+                              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                                   <Store className="h-4 w-4 text-primary" />
                                 </div>
-                                <div className="text-left">
-                                  <div className="font-semibold text-sm">
+                                <div className="text-left min-w-0">
+                                  <div className="font-semibold text-sm truncate">
                                     {pdv.nomeNegozio}
                                   </div>
-                                  <div className="text-xs text-muted-foreground font-mono">
+                                  <div className="text-xs text-muted-foreground font-mono truncate">
                                     {pdv.codicePos}
                                     {pdv.ragioneSociale && (
                                       <span className="ml-2 font-sans">
@@ -625,11 +625,11 @@ export default function VenditeBiSuite() {
                                   </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <Badge variant="outline" className="text-xs">
+                              <div className="flex items-center gap-2 sm:gap-3 pl-10 sm:pl-0">
+                                <Badge variant="outline" className="text-xs shrink-0">
                                   {pdv.totaleVendite} vendite
                                 </Badge>
-                                <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
+                                <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20 shrink-0">
                                   {formatCurrency(pdv.totaleImporto)}
                                 </Badge>
                               </div>
@@ -701,8 +701,9 @@ export default function VenditeBiSuite() {
                     Nessuna vendita trovata per i filtri selezionati
                   </p>
                 ) : (
+                  <div className="overflow-x-auto">
                   <ScrollArea className="h-[500px]">
-                    <Table>
+                    <Table className="min-w-[700px]">
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-[100px]">Data</TableHead>
@@ -771,6 +772,7 @@ export default function VenditeBiSuite() {
                       </TableBody>
                     </Table>
                   </ScrollArea>
+                  </div>
                 )}
               </CardContent>
             </Card>

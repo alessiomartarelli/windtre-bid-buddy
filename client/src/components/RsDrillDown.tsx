@@ -515,24 +515,24 @@ export function RsDrillDown({ preventivo, forceExpandAll = false }: RsDrillDownP
       <CardContent>
         <Accordion type="multiple" className="space-y-2" defaultValue={forceExpandAll ? rsDetails.map(r => r.rsName) : undefined}>
           {rsDetails.map((rs) => (
-            <AccordionItem key={rs.rsName} value={rs.rsName} className="border rounded-lg px-4">
+            <AccordionItem key={rs.rsName} value={rs.rsName} className="border rounded-lg px-2 sm:px-4">
               <AccordionTrigger className="hover:no-underline">
-                <div className="flex items-center justify-between w-full pr-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                       <Building2 className="h-4 w-4 text-primary" />
                     </div>
-                    <div className="text-left">
-                      <div className="font-semibold text-sm">{rs.rsName}</div>
+                    <div className="text-left min-w-0">
+                      <div className="font-semibold text-sm truncate">{rs.rsName}</div>
                       <div className="text-xs text-muted-foreground">{rs.numPdv} PDV</div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="text-xs">
+                  <div className="flex items-center gap-2 sm:gap-3 pl-10 sm:pl-0">
+                    <Badge variant="outline" className="text-xs shrink-0">
                       {rs.volumiTotali} pezzi
                     </Badge>
                     {rs.premioTotale > 0 && (
-                      <Badge className="text-xs bg-primary/10 text-primary border-primary/20">
+                      <Badge className="text-xs bg-primary/10 text-primary border-primary/20 shrink-0">
                         {formatCurrency(rs.premioTotale)}
                       </Badge>
                     )}

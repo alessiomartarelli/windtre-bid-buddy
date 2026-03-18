@@ -228,7 +228,8 @@ export default function MappaturaBiSuite() {
           </div>
         ) : (
           <Tabs value={activePista} onValueChange={(v) => setActivePista(v as GaraPista)}>
-            <TabsList className="grid w-full grid-cols-6 mb-6">
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <TabsList className="grid w-max sm:w-full grid-cols-6 mb-6">
               {ALL_PISTE.map((pista) => {
                 const count = rules.filter((r) => r.pista === pista).length;
                 return (
@@ -242,6 +243,7 @@ export default function MappaturaBiSuite() {
                 );
               })}
             </TabsList>
+            </div>
 
             {ALL_PISTE.map((pista) => (
               <TabsContent key={pista} value={pista}>
@@ -336,9 +338,9 @@ function RuleCard({
 
   return (
     <Card className={`transition-opacity ${!rule.enabled ? 'opacity-50' : ''}`} data-testid={`rule-card-${rule.id}`}>
-      <CardContent className="py-3 px-4">
-        <div className="flex items-center gap-3">
-          <GripVertical className="h-4 w-4 text-muted-foreground/40 flex-shrink-0" />
+      <CardContent className="py-3 px-3 sm:px-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <GripVertical className="h-4 w-4 text-muted-foreground/40 flex-shrink-0 hidden sm:block" />
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">

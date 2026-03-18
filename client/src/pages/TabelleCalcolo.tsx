@@ -602,14 +602,16 @@ export default function TabelleCalcolo() {
       ) : (
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
           <Tabs defaultValue="mobile" className="space-y-4">
-            <TabsList className="bg-muted/50 p-1">
-              <TabsTrigger value="mobile" data-testid="tab-mobile">Mobile</TabsTrigger>
-              <TabsTrigger value="fisso" data-testid="tab-fisso">Fisso</TabsTrigger>
-              <TabsTrigger value="energia" data-testid="tab-energia">Energia</TabsTrigger>
-              <TabsTrigger value="assicurazioni" data-testid="tab-assicurazioni">Assicurazioni</TabsTrigger>
-              <TabsTrigger value="protecta" data-testid="tab-protecta">Protecta</TabsTrigger>
-              <TabsTrigger value="extraGara" data-testid="tab-extra-gara">Extra Gara P.IVA</TabsTrigger>
+            <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
+            <TabsList className="bg-muted/50 p-1 w-max sm:w-full">
+              <TabsTrigger value="mobile" className="text-xs sm:text-sm" data-testid="tab-mobile">Mobile</TabsTrigger>
+              <TabsTrigger value="fisso" className="text-xs sm:text-sm" data-testid="tab-fisso">Fisso</TabsTrigger>
+              <TabsTrigger value="energia" className="text-xs sm:text-sm" data-testid="tab-energia">Energia</TabsTrigger>
+              <TabsTrigger value="assicurazioni" className="text-xs sm:text-sm" data-testid="tab-assicurazioni">Assicurazioni</TabsTrigger>
+              <TabsTrigger value="protecta" className="text-xs sm:text-sm" data-testid="tab-protecta">Protecta</TabsTrigger>
+              <TabsTrigger value="extraGara" className="text-xs sm:text-sm" data-testid="tab-extra-gara">Extra Gara</TabsTrigger>
             </TabsList>
+            </div>
 
             <TabsContent value="mobile" className="space-y-6">
               <MobileTab
@@ -717,7 +719,7 @@ function MobileTab({ config, systemConfig, isArrayOverridden, updateArrayValue, 
           <CardTitle className="text-base">Soglie Punti per Punto Vendita</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm" data-testid="table-mobile-soglie">
+          <table className="w-full text-sm min-w-[500px]" data-testid="table-mobile-soglie">
             <thead>
               <tr className="bg-orange-500 text-white">
                 <th className="p-2 text-left font-medium rounded-tl-md">Cluster</th>
@@ -795,7 +797,7 @@ function MobileTab({ config, systemConfig, isArrayOverridden, updateArrayValue, 
           <CardTitle className="text-base">Moltiplicatori Canone per Soglia Raggiunta</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm" data-testid="table-mobile-moltiplicatori">
+          <table className="w-full text-sm min-w-[500px]" data-testid="table-mobile-moltiplicatori">
             <thead>
               <tr className="bg-orange-500 text-white">
                 <th className="p-2 text-left font-medium rounded-tl-md">Gruppo</th>
@@ -849,7 +851,7 @@ function FissoTab({ config, systemConfig, isArrayOverridden, updateArrayValue, r
           <CardTitle className="text-base">Soglie Punti per Punto Vendita</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm" data-testid="table-fisso-soglie">
+          <table className="w-full text-sm min-w-[550px]" data-testid="table-fisso-soglie">
             <thead>
               <tr className="bg-orange-500 text-white">
                 <th className="p-2 text-left font-medium rounded-tl-md">Cluster</th>

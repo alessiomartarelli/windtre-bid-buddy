@@ -1064,8 +1064,8 @@ export default function DashboardGaraReale() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900" data-testid="dashboard-gara-reale">
       <AppNavbar title="Incentive W3">
         <Select value={selectedPeriod} onValueChange={(v) => { setSelectedPeriod(v); setSelectedConfigId(""); }} data-testid="select-period">
-          <SelectTrigger className="w-[200px]" data-testid="select-period-trigger">
-            <Calendar className="h-4 w-4 mr-2" />
+          <SelectTrigger className="w-[140px] sm:w-[200px] text-xs sm:text-sm" data-testid="select-period-trigger">
+            <Calendar className="h-4 w-4 mr-1 sm:mr-2 shrink-0" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1078,9 +1078,9 @@ export default function DashboardGaraReale() {
         </Select>
         {configList && configList.length > 0 && (
           <Select value={effectiveConfigId} onValueChange={setSelectedConfigId} data-testid="select-config">
-            <SelectTrigger className="w-[220px]" data-testid="select-config-trigger">
-              <Settings className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Configurazione" />
+            <SelectTrigger className="w-[140px] sm:w-[220px] text-xs sm:text-sm" data-testid="select-config-trigger">
+              <Settings className="h-4 w-4 mr-1 sm:mr-2 shrink-0" />
+              <SelectValue placeholder="Config" />
             </SelectTrigger>
             <SelectContent>
               {configList.map((c) => (
@@ -1092,7 +1092,7 @@ export default function DashboardGaraReale() {
           </Select>
         )}
       </AppNavbar>
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20" data-testid="loading-state">
@@ -1173,7 +1173,7 @@ export default function DashboardGaraReale() {
 
             <Card data-testid="card-workday-info">
               <CardContent className="py-3">
-                <div className="flex items-center gap-6 text-sm flex-wrap">
+                <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm flex-wrap">
                   <span className="flex items-center gap-1.5">
                     <Calendar className="h-4 w-4 text-gray-400" />
                     <span className="text-gray-500">Giorni lavorativi:</span>
@@ -1386,28 +1386,28 @@ export default function DashboardGaraReale() {
                       const totalPremio = Object.values(pdvCalcByPista).reduce((s, c) => s + c.premioStimato, 0);
 
                       return (
-                        <AccordionItem key={pdv.codicePos} value={pdv.codicePos} className="border rounded-lg px-4" data-testid={`pdv-accordion-${pdv.codicePos}`}>
+                        <AccordionItem key={pdv.codicePos} value={pdv.codicePos} className="border rounded-lg px-2 sm:px-4" data-testid={`pdv-accordion-${pdv.codicePos}`}>
                           <AccordionTrigger className="hover:no-underline py-3">
-                            <div className="flex items-center justify-between w-full pr-4">
-                              <div className="flex items-center gap-3">
-                                <Store className="h-4 w-4 text-gray-400" />
-                                <div className="text-left">
-                                  <div className="font-medium text-sm">{pdv.nomeNegozio}</div>
-                                  <div className="text-xs text-gray-500">{pdv.codicePos} · {pdv.ragioneSociale}</div>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
+                              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                <Store className="h-4 w-4 text-gray-400 shrink-0" />
+                                <div className="text-left min-w-0">
+                                  <div className="font-medium text-sm truncate">{pdv.nomeNegozio}</div>
+                                  <div className="text-xs text-gray-500 truncate">{pdv.codicePos} · {pdv.ragioneSociale}</div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-4 text-sm">
+                              <div className="flex items-center gap-2 sm:gap-4 text-sm flex-wrap pl-6 sm:pl-0">
                                 {totalPremio > 0 && (
-                                  <Badge variant="outline" className="text-green-700 border-green-300 text-xs" data-testid={`badge-pdv-premio-${pdv.codicePos}`}>
+                                  <Badge variant="outline" className="text-green-700 border-green-300 text-xs shrink-0" data-testid={`badge-pdv-premio-${pdv.codicePos}`}>
                                     {formatEuro(totalPremio)}
                                   </Badge>
                                 )}
-                                <div className="text-right">
+                                <div className="text-right shrink-0">
                                   <div className="font-bold">{totalPezzi} pezzi</div>
                                   <div className="text-xs text-gray-400">Proiezione: {proiezione}</div>
                                 </div>
                                 {pdv.unmapped > 0 && (
-                                  <Badge variant="outline" className="text-amber-600 border-amber-300 text-xs">
+                                  <Badge variant="outline" className="text-amber-600 border-amber-300 text-xs shrink-0">
                                     {pdv.unmapped} non mappati
                                   </Badge>
                                 )}
@@ -1519,20 +1519,20 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
         }
 
         return (
-          <AccordionItem key={rs.ragioneSociale} value={rs.ragioneSociale} className="border rounded-lg px-4" data-testid={`rs-accordion-${rs.ragioneSociale}`}>
+          <AccordionItem key={rs.ragioneSociale} value={rs.ragioneSociale} className="border rounded-lg px-2 sm:px-4" data-testid={`rs-accordion-${rs.ragioneSociale}`}>
             <AccordionTrigger className="hover:no-underline py-3">
-              <div className="flex items-center justify-between w-full pr-4">
-                <div className="text-left">
-                  <div className="font-medium text-sm">{rs.ragioneSociale}</div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
+                <div className="text-left min-w-0">
+                  <div className="font-medium text-sm truncate">{rs.ragioneSociale}</div>
                   <div className="text-xs text-gray-500">{rs.pdvs.length} PDV</div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                   {rsPremioTotale > 0 && (
-                    <Badge variant="outline" className="text-green-700 border-green-300 text-xs">
+                    <Badge variant="outline" className="text-green-700 border-green-300 text-xs shrink-0">
                       {formatEuro(rsPremioTotale)}
                     </Badge>
                   )}
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <div className="font-bold text-sm">{rs.totalPezzi} pezzi</div>
                     <div className="text-xs text-gray-400">Proiezione: {proiezione}</div>
                   </div>

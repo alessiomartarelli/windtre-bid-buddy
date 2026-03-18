@@ -264,7 +264,7 @@ export default function SuperAdminPanel() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted">
       <AppNavbar title="Incentive W3" />
-      <div className="max-w-6xl mx-auto space-y-6 p-4">
+      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 p-2 sm:p-4">
         <div className="flex items-center justify-end">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
@@ -338,7 +338,7 @@ export default function SuperAdminPanel() {
           </Dialog>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -355,13 +355,14 @@ export default function SuperAdminPanel() {
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
               ) : (
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nome</TableHead>
-                      <TableHead>ID</TableHead>
+                      <TableHead className="hidden sm:table-cell">ID</TableHead>
                       <TableHead>Utenti</TableHead>
-                      <TableHead>Creata il</TableHead>
+                      <TableHead className="hidden sm:table-cell">Creata il</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -369,14 +370,14 @@ export default function SuperAdminPanel() {
                     {organizations.map((org) => (
                       <TableRow key={org.id}>
                         <TableCell className="font-medium">{org.name}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
                             {org.id}
                           </code>
                         </TableCell>
                         <TableCell>{getUserCountForOrg(org.id)}</TableCell>
-                        <TableCell>
-                          {new Date(org.createdAt || org.created_at).toLocaleDateString('it-IT')}
+                        <TableCell className="hidden sm:table-cell">
+                          {new Date(org.createdAt || org.created_at || '').toLocaleDateString('it-IT')}
                         </TableCell>
                         <TableCell>
                           {!isMyOrganization(org.id) && (
@@ -421,6 +422,7 @@ export default function SuperAdminPanel() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -441,6 +443,7 @@ export default function SuperAdminPanel() {
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
               ) : (
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -465,7 +468,7 @@ export default function SuperAdminPanel() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm">
-                          {getOrgName(p.organizationId || p.organization_id)}
+                          {getOrgName(p.organizationId || p.organization_id || null)}
                         </TableCell>
                         <TableCell>
                           {p.role !== 'super_admin' && (
@@ -509,6 +512,7 @@ export default function SuperAdminPanel() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </CardContent>
           </Card>
