@@ -1257,7 +1257,7 @@ export default function DashboardGaraReale() {
       let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }> | undefined;
 
       if (pdvBreakdown.length > 0) {
-        const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership" || pista === "energia" || pista === "assicurazioni" || pista === "extra_gara_iva");
+        const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership" || pista === "energia" || pista === "assicurazioni");
 
         if (useRSAggregation) {
           const rsGroupMap = new Map<string, typeof pdvBreakdown>();
@@ -1628,7 +1628,13 @@ export default function DashboardGaraReale() {
 
       let pistaSoglieRef: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
       if (!rsCalcBreakdown || rsCalcBreakdown.size <= 1) {
-        if (pista === "energia" && energiaConfig) {
+        if (pista === "mobile") {
+          const mSingleRS = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.[0];
+          if (mSingleRS) pistaSoglieRef = { s1: mSingleRS.soglia1, s2: mSingleRS.soglia2, s3: mSingleRS.soglia3, s4: mSingleRS.soglia4 };
+        } else if (pista === "fisso") {
+          const fSingleRS = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.[0];
+          if (fSingleRS) pistaSoglieRef = { s1: fSingleRS.soglia1, s2: fSingleRS.soglia2, s3: fSingleRS.soglia3, s4: fSingleRS.soglia4, s5: fSingleRS.soglia5 };
+        } else if (pista === "energia" && energiaConfig) {
           pistaSoglieRef = { s1: energiaConfig.targetS1, s2: energiaConfig.targetS2, s3: energiaConfig.targetS3 };
         } else if (pista === "assicurazioni" && assicConfig) {
           pistaSoglieRef = { s1: assicConfig.targetS1, s2: assicConfig.targetS2, s3: 0 };
