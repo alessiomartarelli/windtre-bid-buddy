@@ -704,6 +704,49 @@ export async function registerRoutes(
     }
   });
 
+  // === ADMIN: Dipendenti from BiSuite sales ===
+  app.get("/api/admin/bisuite-dipendenti", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      if (!profile.organizationId) {
+        return res.json([]);
+      }
+      const sales = await storage.getBisuiteSales(profile.organizationId);
+      const dipendenteMap = new Map<string, { nome: string; pdvMap: Map<string, { codicePos: string; nomeNegozio: string; vendite: number }> }>();
+      for (const sale of sales) {
+        const nome = (sale.nomeAddetto || "").trim();
+        if (!nome) continue;
+        const nomeKey = nome.toUpperCase();
+        if (!dipendenteMap.has(nomeKey)) {
+          dipendenteMap.set(nomeKey, { nome, pdvMap: new Map() });
+        }
+        const dip = dipendenteMap.get(nomeKey)!;
+        const codicePos = (sale.codicePos || "").trim();
+        if (codicePos) {
+          if (!dip.pdvMap.has(codicePos)) {
+            dip.pdvMap.set(codicePos, { codicePos, nomeNegozio: sale.nomeNegozio || "", vendite: 0 });
+          }
+          dip.pdvMap.get(codicePos)!.vendite++;
+        }
+      }
+      const result = Array.from(dipendenteMap.values())
+        .map(d => ({
+          nome: d.nome,
+          totaleVendite: Array.from(d.pdvMap.values()).reduce((sum, p) => sum + p.vendite, 0),
+          pdv: Array.from(d.pdvMap.values()).sort((a, b) => b.vendite - a.vendite),
+        }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching dipendenti from BiSuite:", error);
+      res.status(500).json({ message: "Errore nel recupero dipendenti" });
+    }
+  });
+
   // === ADMIN: Team Management ===
   app.get("/api/admin/team", isAuthenticated, async (req: any, res) => {
     try {
