@@ -2402,23 +2402,39 @@ export default function DashboardGaraReale() {
                                         {(() => {
                                           const stat = pistaStats.find(s => s.pista === pistaKey);
                                           if (!stat) return null;
+                                          const isPerRS = garaCalcConfig.modalitaInserimentoRS === "per_rs";
                                           const rsKey = normalizeRS(pdv.configuredRS || pdv.ragioneSociale);
-                                          const rsMatch = stat.rsCalcBreakdown?.get(rsKey);
-                                          let ref = rsMatch?.soglieRef;
-                                          if (!ref) {
-                                            if (pistaKey === "mobile") {
-                                              const mRS = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
-                                              if (mRS) ref = { s1: mRS.soglia1, s2: mRS.soglia2, s3: mRS.soglia3, s4: mRS.soglia4 };
-                                            } else if (pistaKey === "fisso") {
-                                              const fRS = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
-                                              if (fRS) ref = { s1: fRS.soglia1, s2: fRS.soglia2, s3: fRS.soglia3, s4: fRS.soglia4, s5: fRS.soglia5 };
-                                            } else if (pistaKey === "extra_gara_iva") {
-                                              const egStat = pistaStats.find(s => s.pista === "extra_gara_iva");
-                                              const egRsMatch = egStat?.rsCalcBreakdown?.get(rsKey);
-                                              if (egRsMatch?.soglieRef) ref = egRsMatch.soglieRef;
+                                          let ref: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
+                                          if (isPerRS) {
+                                            const rsMatch = stat.rsCalcBreakdown?.get(rsKey);
+                                            ref = rsMatch?.soglieRef;
+                                            if (!ref) {
+                                              if (pistaKey === "mobile") {
+                                                const mRS = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
+                                                if (mRS) ref = { s1: mRS.soglia1, s2: mRS.soglia2, s3: mRS.soglia3, s4: mRS.soglia4 };
+                                              } else if (pistaKey === "fisso") {
+                                                const fRS = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
+                                                if (fRS) ref = { s1: fRS.soglia1, s2: fRS.soglia2, s3: fRS.soglia3, s4: fRS.soglia4, s5: fRS.soglia5 };
+                                              } else if (pistaKey === "extra_gara_iva") {
+                                                const egRsMatch = stat.rsCalcBreakdown?.get(rsKey);
+                                                if (egRsMatch?.soglieRef) ref = egRsMatch.soglieRef;
+                                              }
                                             }
-                                            if (!ref) ref = stat.soglieRef;
+                                          } else {
+                                            if (pistaKey === "mobile") {
+                                              const mPdv = garaCalcConfig.pistaMobileConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
+                                              if (mPdv) ref = { s1: mPdv.soglia1, s2: mPdv.soglia2, s3: mPdv.soglia3, s4: mPdv.soglia4 };
+                                            } else if (pistaKey === "fisso") {
+                                              const fPdv = garaCalcConfig.pistaFissoConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
+                                              if (fPdv) ref = { s1: fPdv.soglia1, s2: fPdv.soglia2, s3: fPdv.soglia3, s4: fPdv.soglia4, s5: fPdv.soglia5 };
+                                            } else if (pistaKey === "extra_gara_iva") {
+                                              const match = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                                              if (match?.pdvCalc) {
+                                                ref = stat.soglieRef;
+                                              }
+                                            }
                                           }
+                                          if (!ref) ref = stat.soglieRef;
                                           if (!ref) return null;
                                           const items = [
                                             { label: "S1", value: ref.s1 },
