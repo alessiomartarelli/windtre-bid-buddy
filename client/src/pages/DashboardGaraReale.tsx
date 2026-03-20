@@ -1642,18 +1642,18 @@ export default function DashboardGaraReale() {
       let pistaSoglieRef: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
       if (!rsCalcBreakdown || rsCalcBreakdown.size <= 1) {
         if (pista === "mobile") {
-          const mSingleRS = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.[0];
-          if (mSingleRS) {
-            pistaSoglieRef = { s1: mSingleRS.soglia1, s2: mSingleRS.soglia2, s3: mSingleRS.soglia3, s4: mSingleRS.soglia4 };
+          if (isRSPerRS) {
+            const mSingleRS = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.[0];
+            if (mSingleRS) pistaSoglieRef = { s1: mSingleRS.soglia1, s2: mSingleRS.soglia2, s3: mSingleRS.soglia3, s4: mSingleRS.soglia4 };
           } else if (pdvBreakdown.length > 0) {
             const firstPdv = pdvBreakdown[0];
             const mCfg = getMobileConfigForPdv(firstPdv.codicePos, firstPdv.ragioneSociale);
             if (mCfg) pistaSoglieRef = { s1: mCfg.soglia1, s2: mCfg.soglia2, s3: mCfg.soglia3, s4: mCfg.soglia4 };
           }
         } else if (pista === "fisso") {
-          const fSingleRS = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.[0];
-          if (fSingleRS) {
-            pistaSoglieRef = { s1: fSingleRS.soglia1, s2: fSingleRS.soglia2, s3: fSingleRS.soglia3, s4: fSingleRS.soglia4, s5: fSingleRS.soglia5 };
+          if (isRSPerRS) {
+            const fSingleRS = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.[0];
+            if (fSingleRS) pistaSoglieRef = { s1: fSingleRS.soglia1, s2: fSingleRS.soglia2, s3: fSingleRS.soglia3, s4: fSingleRS.soglia4, s5: fSingleRS.soglia5 };
           } else if (pdvBreakdown.length > 0) {
             const firstPdv = pdvBreakdown[0];
             const fCfg = getFissoConfigForPdv(firstPdv.codicePos, firstPdv.ragioneSociale);
