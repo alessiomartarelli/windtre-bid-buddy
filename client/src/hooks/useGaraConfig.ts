@@ -168,6 +168,15 @@ export interface GaraConfigData {
       premioS2?: number;
     }>;
   };
+  extraGaraIvaConfig?: {
+    puntiAttivazione?: Record<string, number>;
+    soglieMultipos?: Record<string, Record<string, number>>;
+    soglieMonopos?: Record<string, Record<string, number>>;
+    premiPerSoglia?: Record<string, number[]>;
+  };
+  extraGaraIvaSogliePerRS?: {
+    [ragioneSociale: string]: { s1: number; s2: number; s3: number; s4: number };
+  };
   pistaMobile?: Record<string, unknown>;
   pistaFisso?: Record<string, unknown>;
   calendarioGara?: Record<string, unknown>;

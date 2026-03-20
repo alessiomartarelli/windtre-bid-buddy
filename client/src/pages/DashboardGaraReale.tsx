@@ -2331,11 +2331,15 @@ export default function DashboardGaraReale() {
                         const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
                         if (match) {
                           pdvCalcByPista[stat.pista] = match.pdvCalc;
-                          const aggPremio = stat.calc.premioStimato;
-                          const totalPuntiPista = stat.pdvBreakdown.reduce((s, b) => s + b.pdvCalc.puntiTotali, 0);
-                          pdvPremioByPista[stat.pista] = totalPuntiPista > 0
-                            ? Math.round((match.pdvCalc.puntiTotali / totalPuntiPista) * aggPremio * 100) / 100
-                            : 0;
+                          if (match.pdvCalc.premioStimato > 0) {
+                            pdvPremioByPista[stat.pista] = match.pdvCalc.premioStimato;
+                          } else {
+                            const aggPremio = stat.calc.premioStimato;
+                            const totalPuntiPista = stat.pdvBreakdown.reduce((s, b) => s + b.pdvCalc.puntiTotali, 0);
+                            pdvPremioByPista[stat.pista] = totalPuntiPista > 0
+                              ? Math.round((match.pdvCalc.puntiTotali / totalPuntiPista) * aggPremio * 100) / 100
+                              : 0;
+                          }
                         }
                       }
 
