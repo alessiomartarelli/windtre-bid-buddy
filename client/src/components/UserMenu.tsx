@@ -88,8 +88,8 @@ export function UserMenu() {
         
         {isAdminOrSuper && (
           <DropdownMenuItem onClick={() => setLocation('/admin')}>
-            <Users className="mr-2 h-4 w-4" />
-            <span>Gestione Team</span>
+            <Building2 className="mr-2 h-4 w-4" />
+            <span>Gestione Organizzazione</span>
           </DropdownMenuItem>
         )}
         

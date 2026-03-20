@@ -664,6 +664,45 @@ export async function registerRoutes(
     }
   });
 
+  // === ADMIN: Import RS/PDV from BiSuite sales ===
+  app.get("/api/admin/bisuite-rs-pdv", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      if (!profile.organizationId) {
+        return res.json({ ragioniSociali: [], puntiVendita: [] });
+      }
+      const sales = await storage.getBisuiteSales(profile.organizationId);
+      const rsSet = new Set<string>();
+      const pdvMap = new Map<string, { codicePos: string; nomeNegozio: string; ragioneSociale: string; salesCount: number }>();
+      for (const sale of sales) {
+        if (sale.ragioneSociale) rsSet.add(sale.ragioneSociale.trim());
+        const codicePos = sale.codicePos || "";
+        if (!codicePos) continue;
+        if (!pdvMap.has(codicePos)) {
+          pdvMap.set(codicePos, {
+            codicePos,
+            nomeNegozio: sale.nomeNegozio || "",
+            ragioneSociale: sale.ragioneSociale || "",
+            salesCount: 0,
+          });
+        }
+        const entry = pdvMap.get(codicePos);
+        if (entry) entry.salesCount++;
+      }
+      res.json({
+        ragioniSociali: Array.from(rsSet).sort(),
+        puntiVendita: Array.from(pdvMap.values()).sort((a, b) => a.codicePos.localeCompare(b.codicePos)),
+      });
+    } catch (error) {
+      console.error("Error fetching RS/PDV from BiSuite:", error);
+      res.status(500).json({ message: "Errore nel recupero dati BiSuite" });
+    }
+  });
+
   // === ADMIN: Team Management ===
   app.get("/api/admin/team", isAuthenticated, async (req: any, res) => {
     try {

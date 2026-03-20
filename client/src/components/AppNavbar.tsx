@@ -58,7 +58,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
 
   const adminItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
     ...(isSuperAdmin ? [{ path: '/super-admin', label: 'Super Admin', icon: Shield }] : []),
-    ...(isAdminOrSuper ? [{ path: '/admin', label: 'Gestione Team', icon: Users }] : []),
+    ...(isAdminOrSuper ? [{ path: '/admin', label: 'Gestione Organizzazione', icon: Building2 }] : []),
   ];
 
   const garaItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
