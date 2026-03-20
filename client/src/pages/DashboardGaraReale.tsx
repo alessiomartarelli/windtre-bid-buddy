@@ -370,6 +370,10 @@ function sogliaToLabel(soglia: number, maxSoglia: number = 5): string {
   return `S${soglia}`;
 }
 
+function normalizeRS(s: string): string {
+  return s.trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ');
+}
+
 function clusterToNumber(cluster?: string): 1 | 2 | 3 {
   if (!cluster) return 1;
   if (cluster.includes("3") || cluster === "CC3") return 3;
@@ -812,7 +816,6 @@ export default function DashboardGaraReale() {
     const assicConfig = garaCalcConfig.assicurazioniConfig;
     const assicPdvInGara: AssicurazioniPdvInGara[] = puntiVendita.filter(p => p.abilitaAssicurazioni).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, nome: p.nome, inGara: true }));
 
-    const normalizeRS = (s: string) => s.trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ');
 
     const getMobileConfigForPdv = (codicePos: string, ragioneSociale: string): PistaMobilePosConfig | undefined => {
       if (isRSPerRS) {
@@ -2307,6 +2310,24 @@ export default function DashboardGaraReale() {
                         byPista[item.pista].items.push(item);
                       }
 
+                      const egStat = pistaStats.find(s => s.pista === "extra_gara_iva");
+                      if (egStat) {
+                        const egPdvMatch = egStat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                        if (egPdvMatch && egPdvMatch.pezzi > 0) {
+                          byPista["extra_gara_iva"] = {
+                            pezzi: egPdvMatch.pezzi,
+                            corePezzi: egPdvMatch.pezzi,
+                            items: egPdvMatch.categories.map(c => ({
+                              pista: "extra_gara_iva",
+                              targetCategory: c.category,
+                              targetLabel: c.label,
+                              pezzi: c.pezzi,
+                              canone: c.canone,
+                            })),
+                          };
+                        }
+                      }
+
                       const pdvCalcByPista: Record<string, PistaCalcResult> = {};
                       const pdvPremioByPista: Record<string, number> = {};
                       for (const stat of pistaStats) {
@@ -2365,16 +2386,41 @@ export default function DashboardGaraReale() {
                                       <span className="font-bold">{pistaData.corePezzi}</span>
                                     </div>
                                     {calc && calc.sogliaLabel !== "N/A" && (
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Badge className={`text-[10px] ${getSogliaColor(calc.sogliaLabel)}`} variant="outline">
-                                          {calc.sogliaLabel}
-                                        </Badge>
-                                        {calc.puntiTotali > 0 && (
-                                          <span className="text-[10px] text-gray-500">{calc.puntiTotali.toFixed(1)} pt</span>
-                                        )}
-                                        {(pdvPremioByPista[pistaKey] ?? 0) > 0 && (
-                                          <span className="text-[10px] font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
-                                        )}
+                                      <div className="space-y-1 mb-2">
+                                        <div className="flex items-center gap-2">
+                                          <Badge className={`text-[10px] ${getSogliaColor(calc.sogliaLabel)}`} variant="outline">
+                                            {calc.sogliaLabel}
+                                          </Badge>
+                                          {calc.puntiTotali > 0 && (
+                                            <span className="text-[10px] text-gray-500">{calc.puntiTotali.toFixed(1)} pt</span>
+                                          )}
+                                          {(pdvPremioByPista[pistaKey] ?? 0) > 0 && (
+                                            <span className="text-[10px] font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
+                                          )}
+                                        </div>
+                                        {(() => {
+                                          const stat = pistaStats.find(s => s.pista === pistaKey);
+                                          if (!stat) return null;
+                                          const rsMatch = stat.rsCalcBreakdown?.get(normalizeRS(pdv.configuredRS || pdv.ragioneSociale));
+                                          const ref = rsMatch?.soglieRef || stat.soglieRef;
+                                          if (!ref) return null;
+                                          const items = [
+                                            { label: "S1", value: ref.s1 },
+                                            { label: "S2", value: ref.s2 },
+                                            { label: "S3", value: ref.s3 },
+                                            ...(ref.s4 != null && ref.s4 > 0 ? [{ label: "S4", value: ref.s4 }] : []),
+                                            ...(ref.s5 != null && ref.s5 > 0 ? [{ label: "S5", value: ref.s5 }] : []),
+                                          ];
+                                          return (
+                                            <div className="flex flex-wrap gap-0.5">
+                                              {items.map((s) => (
+                                                <span key={s.label} className="text-[8px] text-gray-400 bg-gray-100 dark:bg-gray-800 rounded px-0.5">
+                                                  {s.label}:{s.value}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          );
+                                        })()}
                                       </div>
                                     )}
                                     <div className="space-y-1">
@@ -2419,7 +2465,7 @@ export default function DashboardGaraReale() {
   );
 }
 
-function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[]; workdayInfo: WorkdayInfo; pistaStats: Array<{ pista: string; calc: PistaCalcResult; pdvBreakdown: Array<{ codicePos: string; pdvCalc: PistaCalcResult }> }> }) {
+function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[]; workdayInfo: WorkdayInfo; pistaStats: Array<{ pista: string; calc: PistaCalcResult; pdvBreakdown: Array<{ codicePos: string; pezzi: number; pdvCalc: PistaCalcResult }> }> }) {
   const rsByName = useMemo(() => {
     const grouped: Record<string, { ragioneSociale: string; pdvs: PdvData[]; totalPezzi: number }> = {};
     for (const pdv of pdvList) {
@@ -2450,6 +2496,16 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
         const byPista: Record<string, number> = {};
         for (const item of allItems) {
           byPista[item.pista] = (byPista[item.pista] || 0) + item.pezzi;
+        }
+
+        const egStatRS = pistaStats.find(s => s.pista === "extra_gara_iva");
+        if (egStatRS) {
+          let egPezziRS = 0;
+          for (const pdv of rs.pdvs) {
+            const egMatch = egStatRS.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+            if (egMatch) egPezziRS += egMatch.pezzi;
+          }
+          if (egPezziRS > 0) byPista["extra_gara_iva"] = egPezziRS;
         }
 
         let rsPremioTotale = 0;
