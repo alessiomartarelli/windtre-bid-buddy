@@ -60,9 +60,6 @@ import {
 } from "@/lib/calcoloProtecta";
 import {
   calcolaExtraGaraIva,
-  calcolaSoglieRS as calcolaSoglieExtraGaraRS,
-  PUNTI_EXTRA_GARA,
-  SOGLIE_BASE_EXTRA_GARA,
   PREMI_EXTRA_GARA,
   type ExtraGaraConfigOverrides,
   type ExtraGaraSogliePerRS,
@@ -2401,8 +2398,23 @@ export default function DashboardGaraReale() {
                                         {(() => {
                                           const stat = pistaStats.find(s => s.pista === pistaKey);
                                           if (!stat) return null;
-                                          const rsMatch = stat.rsCalcBreakdown?.get(normalizeRS(pdv.configuredRS || pdv.ragioneSociale));
-                                          const ref = rsMatch?.soglieRef || stat.soglieRef;
+                                          const rsKey = normalizeRS(pdv.configuredRS || pdv.ragioneSociale);
+                                          const rsMatch = stat.rsCalcBreakdown?.get(rsKey);
+                                          let ref = rsMatch?.soglieRef;
+                                          if (!ref) {
+                                            if (pistaKey === "mobile") {
+                                              const mRS = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
+                                              if (mRS) ref = { s1: mRS.soglia1, s2: mRS.soglia2, s3: mRS.soglia3, s4: mRS.soglia4 };
+                                            } else if (pistaKey === "fisso") {
+                                              const fRS = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
+                                              if (fRS) ref = { s1: fRS.soglia1, s2: fRS.soglia2, s3: fRS.soglia3, s4: fRS.soglia4, s5: fRS.soglia5 };
+                                            } else if (pistaKey === "extra_gara_iva") {
+                                              const egStat = pistaStats.find(s => s.pista === "extra_gara_iva");
+                                              const egRsMatch = egStat?.rsCalcBreakdown?.get(rsKey);
+                                              if (egRsMatch?.soglieRef) ref = egRsMatch.soglieRef;
+                                            }
+                                            if (!ref) ref = stat.soglieRef;
+                                          }
                                           if (!ref) return null;
                                           const items = [
                                             { label: "S1", value: ref.s1 },
