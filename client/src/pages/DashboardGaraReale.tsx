@@ -30,6 +30,7 @@ import {
   Trophy,
   Settings,
   RefreshCw,
+  Briefcase,
 } from "lucide-react";
 import { apiUrl } from "@/lib/basePath";
 import { AppNavbar } from "@/components/AppNavbar";
@@ -57,6 +58,16 @@ import {
 import {
   calcolaProtecta,
 } from "@/lib/calcoloProtecta";
+import {
+  calcolaExtraGaraIva,
+  calcolaSoglieRS as calcolaSoglieExtraGaraRS,
+  PUNTI_EXTRA_GARA,
+  SOGLIE_BASE_EXTRA_GARA,
+  PREMI_EXTRA_GARA,
+  type ExtraGaraConfigOverrides,
+  type ExtraGaraSogliePerRS,
+} from "@/lib/calcoloExtraGaraIva";
+import { type ExtraGaraIvaRsResult } from "@/types/extra-gara-iva";
 import {
   type StoreCalendar,
   type Weekday,
@@ -163,6 +174,7 @@ const PISTA_CONFIG = {
   assicurazioni: { label: "Assicurazioni", icon: Shield, color: "bg-purple-500", lightColor: "bg-purple-50 text-purple-700 border-purple-200" },
   partnership: { label: "Partnership", icon: Handshake, color: "bg-cyan-500", lightColor: "bg-cyan-50 text-cyan-700 border-cyan-200" },
   protecta: { label: "Protecta", icon: Shield, color: "bg-rose-500", lightColor: "bg-rose-50 text-rose-700 border-rose-200" },
+  extra_gara_iva: { label: "Extra Gara P.IVA", icon: Briefcase, color: "bg-indigo-500", lightColor: "bg-indigo-50 text-indigo-700 border-indigo-200" },
 } as const;
 
 const DEFAULT_CALENDAR: StoreCalendar = {
@@ -756,6 +768,8 @@ export default function DashboardGaraReale() {
       partnershipRewardRSConfig: (cfg?.partnershipRewardRSConfig as { configPerRS?: Array<{ ragioneSociale: string; target100: number; target80: number; premio100: number; premio80: number }> }) || undefined,
       energiaRSConfig: (cfg?.energiaRSConfig as { configPerRS?: Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; targetS3: number; premio: number; premioS1?: number; premioS2?: number; premioS3?: number; pistaSoglia_S1?: number; pistaSoglia_S2?: number; pistaSoglia_S3?: number; pistaSoglia_S4?: number; pistaSoglia_S5?: number }> }) || undefined,
       assicurazioniRSConfig: (cfg?.assicurazioniRSConfig as { configPerRS?: Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; premio: number; premioS1?: number; premioS2?: number }> }) || undefined,
+      extraGaraIvaConfig: cfg?.extraGaraIvaConfig as ExtraGaraConfigOverrides | undefined,
+      extraGaraIvaSogliePerRS: cfg?.extraGaraIvaSogliePerRS as ExtraGaraSogliePerRS | undefined,
     };
   }, [garaConfig]);
 
@@ -862,6 +876,97 @@ export default function DashboardGaraReale() {
     const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara);
     const protectaCalcMap = calcProtectaForAllPdv(mappedData, puntiVendita);
 
+    const extraGaraResults: ExtraGaraIvaRsResult[] = (() => {
+      const pvForExtraGara: PuntoVendita[] = puntiVendita.map(p => {
+        const garaPdv = garaPdvList.find(g => g.codicePos === p.codicePos);
+        return {
+          id: p.codicePos,
+          codicePos: p.codicePos,
+          nome: p.nome,
+          ragioneSociale: p.ragioneSociale,
+          calendar: p.calendar,
+          tipoPosizione: "strada" as const,
+          canale: "franchising" as const,
+          clusterMobile: (p.clusterMobile || "") as PuntoVendita["clusterMobile"],
+          clusterFisso: (p.clusterFisso || "") as PuntoVendita["clusterFisso"],
+          clusterCB: "" as PuntoVendita["clusterCB"],
+          clusterPIva: (garaPdv?.clusterPIva || "") as PuntoVendita["clusterPIva"],
+          abilitaEnergia: p.abilitaEnergia ?? false,
+          abilitaAssicurazioni: p.abilitaAssicurazioni ?? false,
+        };
+      });
+
+      const mobileEnumValues = new Set(Object.values(MobileActivationType) as string[]);
+      const attivatoMobileByPos: Record<string, AttivatoMobileDettaglio[]> = {};
+      const attivatoFissoByPos: Record<string, AttivatoFissoRiga[]> = {};
+      const attivatoEnergiaByPos: Record<string, EnergiaAttivatoRiga[]> = {};
+      const attivatoAssicurazioniByPos: Record<string, AssicurazioniAttivatoRiga> = {};
+      const attivatoProtectaByPos: Record<string, ProtectaAttivatoRiga> = {};
+
+      for (const pdv of mappedData.pdvList) {
+        const mobileItems = pdv.items.filter(i => i.pista === "mobile" && mobileEnumValues.has(i.targetCategory));
+        if (mobileItems.length > 0) {
+          attivatoMobileByPos[pdv.codicePos] = mobileItems.map((it, idx) => ({
+            id: `b-${idx}`,
+            type: it.targetCategory as MobileActivationType,
+            pezzi: it.pezzi,
+          }));
+        }
+
+        const fissoItems = pdv.items.filter(i => i.pista === "fisso");
+        if (fissoItems.length > 0) {
+          attivatoFissoByPos[pdv.codicePos] = fissoItems.map(it => ({
+            categoria: it.targetCategory as FissoCategoriaType,
+            pezzi: it.pezzi,
+          }));
+        }
+
+        const energiaItems = pdv.items.filter(i => i.pista === "energia");
+        if (energiaItems.length > 0) {
+          attivatoEnergiaByPos[pdv.codicePos] = energiaItems.map((it, idx) => ({
+            id: `b-${idx}`,
+            category: it.targetCategory as any,
+            pezzi: it.pezzi,
+          }));
+        }
+
+        const assicItems = pdv.items.filter(i => i.pista === "assicurazioni");
+        if (assicItems.length > 0) {
+          const riga: AssicurazioniAttivatoRiga = {
+            protezionePro: 0, casaFamigliaFull: 0, casaFamigliaPlus: 0, casaFamigliaStart: 0,
+            sportFamiglia: 0, sportIndividuale: 0, viaggiVacanze: 0, elettrodomestici: 0,
+            micioFido: 0, viaggioMondo: 0, viaggioMondoPremio: 0, reloadForever: 0,
+          };
+          for (const it of assicItems) {
+            const key = it.targetCategory as keyof AssicurazioniAttivatoRiga;
+            if (key in riga) riga[key] = it.pezzi;
+          }
+          attivatoAssicurazioniByPos[pdv.codicePos] = riga;
+        }
+
+        const protectaItems = pdv.items.filter(i => i.pista === "protecta");
+        if (protectaItems.length > 0) {
+          const riga = createEmptyProtectaAttivato();
+          for (const it of protectaItems) {
+            const key = it.targetCategory as keyof ProtectaAttivatoRiga;
+            if (key in riga) riga[key] = it.pezzi;
+          }
+          attivatoProtectaByPos[pdv.codicePos] = riga;
+        }
+      }
+
+      return calcolaExtraGaraIva({
+        puntiVendita: pvForExtraGara,
+        attivatoMobileByPos,
+        attivatoFissoByPos,
+        attivatoEnergiaByPos,
+        attivatoAssicurazioniByPos,
+        attivatoProtectaByPos,
+        configOverrides: garaCalcConfig.extraGaraIvaConfig,
+        soglieOverridePerRS: garaCalcConfig.extraGaraIvaSogliePerRS,
+      });
+    })();
+
     const stats: Array<{
       pista: string;
       label: string;
@@ -880,12 +985,156 @@ export default function DashboardGaraReale() {
         pdvCalc: PistaCalcResult;
         categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
       }>;
-      rsCalcBreakdown?: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number }>;
+      rsCalcBreakdown?: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }>;
+      soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number };
     }> = [];
 
-    const pisteOrder: (keyof typeof PISTA_CONFIG)[] = ["mobile", "fisso", "energia", "assicurazioni", "partnership", "protecta"];
+    const pisteOrder: (keyof typeof PISTA_CONFIG)[] = ["mobile", "fisso", "energia", "assicurazioni", "partnership", "protecta", "extra_gara_iva"];
 
     for (const pista of pisteOrder) {
+      if (pista === "extra_gara_iva") {
+        const totalPremio = extraGaraResults.reduce((s, r) => s + r.premioTotaleRS, 0);
+        const totalPezzi = extraGaraResults.reduce((s, r) => s + r.pezziTotaliRS, 0);
+        const totalPunti = extraGaraResults.reduce((s, r) => s + r.puntiTotaliRS, 0);
+        const bestSoglia = extraGaraResults.reduce((s, r) => Math.max(s, r.sogliaRaggiunta), 0);
+        const proiezionePezziEG = workdayInfo.elapsedWorkingDays > 0
+          ? Math.round((totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+          : totalPezzi;
+        const proiezionePuntiEG = workdayInfo.elapsedWorkingDays > 0
+          ? totalPunti * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays
+          : totalPunti;
+
+        const egCategories: Array<{ category: string; label: string; pezzi: number; canone: number; proiezione: number }> = [];
+        const egCatTotals: Record<string, { pezzi: number; label: string }> = {};
+        for (const rsResult of extraGaraResults) {
+          for (const pdvR of rsResult.pdvResults) {
+            const addCat = (key: string, label: string, pezzi: number) => {
+              if (pezzi > 0) {
+                if (!egCatTotals[key]) egCatTotals[key] = { pezzi: 0, label };
+                egCatTotals[key].pezzi += pezzi;
+              }
+            };
+            addCat("worldStaff", "World/Staff", pdvR.pezziWorldStaff);
+            addCat("fullPlus", "Full Plus/Data 60-100", pdvR.pezziFullPlus);
+            addCat("flexSpecial", "Flex/Special/Data 10", pdvR.pezziFlexSpecial);
+            addCat("fissoPIva", "Fisso P.IVA", pdvR.pezziFissoPIva);
+            addCat("fritzBox", "FRITZ!Box", pdvR.pezziFritzBox);
+            addCat("luceGas", "Luce/Gas Business", pdvR.pezziLuceGas);
+            addCat("protezionePro", "Protezione Pro", pdvR.pezziProtezionePro);
+            addCat("negozioProtetti", "Negozio Protetti", pdvR.pezziNegozioProtetti);
+          }
+        }
+        for (const [key, val] of Object.entries(egCatTotals)) {
+          const proj = workdayInfo.elapsedWorkingDays > 0
+            ? Math.round((val.pezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays) : val.pezzi;
+          egCategories.push({ category: key, label: val.label, pezzi: val.pezzi, canone: 0, proiezione: proj });
+        }
+        egCategories.sort((a, b) => b.pezzi - a.pezzi);
+
+        const egPdvBreakdown = extraGaraResults.flatMap(rsResult =>
+          rsResult.pdvResults.filter(p => p.pezziTotali > 0).map(pdvR => {
+            const pdvProj = workdayInfo.elapsedWorkingDays > 0
+              ? Math.round((pdvR.pezziTotali / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays) : pdvR.pezziTotali;
+            return {
+              codicePos: pdvR.pdvCode,
+              nomeNegozio: pdvR.nome,
+              ragioneSociale: pdvR.ragioneSociale,
+              normalizedRS: normalizeRS(pdvR.ragioneSociale),
+              pezzi: pdvR.pezziTotali,
+              proiezione: pdvProj,
+              pdvCalc: {
+                premioStimato: pdvR.premioTotale,
+                puntiTotali: pdvR.puntiTotali,
+                sogliaRaggiunta: rsResult.sogliaRaggiunta,
+                sogliaLabel: sogliaToLabel(rsResult.sogliaRaggiunta, 4),
+              } as PistaCalcResult,
+              categories: [
+                { category: "worldStaff", label: "World/Staff", pezzi: pdvR.pezziWorldStaff, canone: 0 },
+                { category: "fullPlus", label: "Full Plus/Data 60-100", pezzi: pdvR.pezziFullPlus, canone: 0 },
+                { category: "flexSpecial", label: "Flex/Special/Data 10", pezzi: pdvR.pezziFlexSpecial, canone: 0 },
+                { category: "fissoPIva", label: "Fisso P.IVA", pezzi: pdvR.pezziFissoPIva, canone: 0 },
+                { category: "fritzBox", label: "FRITZ!Box", pezzi: pdvR.pezziFritzBox, canone: 0 },
+                { category: "luceGas", label: "Luce/Gas Business", pezzi: pdvR.pezziLuceGas, canone: 0 },
+                { category: "protezionePro", label: "Protezione Pro", pezzi: pdvR.pezziProtezionePro, canone: 0 },
+                { category: "negozioProtetti", label: "Negozio Protetti", pezzi: pdvR.pezziNegozioProtetti, canone: 0 },
+              ].filter(c => c.pezzi > 0),
+            };
+          })
+        ).sort((a, b) => b.pezzi - a.pezzi);
+
+        let egRsCalcBreakdown: typeof stats[0]["rsCalcBreakdown"] | undefined;
+        if (isRSPerRS && extraGaraResults.length > 0) {
+          egRsCalcBreakdown = new Map();
+          let egTotalPremioProj = 0;
+          for (const rsResult of extraGaraResults) {
+            const projPunti = workdayInfo.elapsedWorkingDays > 0
+              ? rsResult.puntiTotaliRS * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays
+              : rsResult.puntiTotaliRS;
+            const projPezzi = workdayInfo.elapsedWorkingDays > 0
+              ? Math.round(rsResult.pezziTotaliRS * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays)
+              : rsResult.pezziTotaliRS;
+            let projSoglia = 0;
+            if (rsResult.hasBPInRS && projPunti >= rsResult.soglie.s4) projSoglia = 4;
+            else if (projPunti >= rsResult.soglie.s3) projSoglia = 3;
+            else if (projPunti >= rsResult.soglie.s2) projSoglia = 2;
+            else if (projPunti >= rsResult.soglie.s1) projSoglia = 1;
+
+            let projPremio = 0;
+            for (const pdvR of rsResult.pdvResults) {
+              const clusterKey = pdvR.clusterPIva as keyof typeof PREMI_EXTRA_GARA;
+              if (clusterKey && PREMI_EXTRA_GARA[clusterKey]) {
+                const projPdvPezzi = workdayInfo.elapsedWorkingDays > 0
+                  ? Math.round(pdvR.pezziTotali * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays)
+                  : pdvR.pezziTotali;
+                projPremio += projPdvPezzi * (PREMI_EXTRA_GARA[clusterKey][projSoglia] || 0);
+              }
+            }
+            egTotalPremioProj += projPremio;
+
+            egRsCalcBreakdown.set(normalizeRS(rsResult.ragioneSociale), {
+              displayName: rsResult.ragioneSociale,
+              premioAttuale: rsResult.premioTotaleRS,
+              premioProiettato: projPremio,
+              pezziAttuali: rsResult.pezziTotaliRS,
+              pezziProiezione: projPezzi,
+              sogliaAttuale: sogliaToLabel(rsResult.sogliaRaggiunta, 4),
+              sogliaProiezione: sogliaToLabel(projSoglia, 4),
+              puntiAttuali: rsResult.puntiTotaliRS,
+              puntiProiezione: projPunti,
+              soglieRef: rsResult.soglie,
+            });
+          }
+
+          const bestSogliaProj = extraGaraResults.reduce((s, r) => {
+            const pp = workdayInfo.elapsedWorkingDays > 0
+              ? r.puntiTotaliRS * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays : r.puntiTotaliRS;
+            let ps = 0;
+            if (r.hasBPInRS && pp >= r.soglie.s4) ps = 4;
+            else if (pp >= r.soglie.s3) ps = 3;
+            else if (pp >= r.soglie.s2) ps = 2;
+            else if (pp >= r.soglie.s1) ps = 1;
+            return Math.max(s, ps);
+          }, 0);
+
+          stats.push({
+            pista, label: PISTA_CONFIG[pista].label,
+            totalePezzi: totalPezzi, proiezionePezzi: proiezionePezziEG,
+            calc: { premioStimato: totalPremio, puntiTotali: totalPunti, sogliaRaggiunta: bestSoglia, sogliaLabel: sogliaToLabel(bestSoglia, 4) },
+            calcProiezione: { premioStimato: egTotalPremioProj, puntiTotali: proiezionePuntiEG, sogliaRaggiunta: bestSogliaProj, sogliaLabel: sogliaToLabel(bestSogliaProj, 4) },
+            categories: egCategories, pdvBreakdown: egPdvBreakdown, rsCalcBreakdown: egRsCalcBreakdown,
+          });
+        } else {
+          stats.push({
+            pista, label: PISTA_CONFIG[pista].label,
+            totalePezzi: totalPezzi, proiezionePezzi: proiezionePezziEG,
+            calc: { premioStimato: totalPremio, puntiTotali: totalPunti, sogliaRaggiunta: bestSoglia, sogliaLabel: sogliaToLabel(bestSoglia, 4) },
+            calcProiezione: { premioStimato: totalPremio, puntiTotali: proiezionePuntiEG, sogliaRaggiunta: bestSoglia, sogliaLabel: sogliaToLabel(bestSoglia, 4) },
+            categories: egCategories, pdvBreakdown: egPdvBreakdown,
+          });
+        }
+        continue;
+      }
+
       const pistaData = mappedData.totaliPerPista[pista];
       if (!pistaData) {
         stats.push({
@@ -981,10 +1230,10 @@ export default function DashboardGaraReale() {
         .filter((p) => p.pezzi > 0)
         .sort((a, b) => b.pezzi - a.pezzi);
 
-      let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number }> | undefined;
+      let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }> | undefined;
 
       if (pdvBreakdown.length > 0) {
-        const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership" || pista === "energia" || pista === "assicurazioni");
+        const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership" || pista === "energia" || pista === "assicurazioni" || pista === "extra_gara_iva");
 
         if (useRSAggregation) {
           const rsGroupMap = new Map<string, typeof pdvBreakdown>();
@@ -1000,7 +1249,7 @@ export default function DashboardGaraReale() {
           let totalPremioProj = 0;
           let totalPuntiProj = 0;
           let bestSogliaProj = 0;
-          rsCalcBreakdownMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number }>();
+          rsCalcBreakdownMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }>();
 
           rsGroupMap.forEach((rsPdvs, rs) => {
             const rsItems: AggregatedItem[] = [];
@@ -1188,6 +1437,21 @@ export default function DashboardGaraReale() {
             totalPuntiProj += rsProjCalc.puntiTotali;
             if (rsProjCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = rsProjCalc.sogliaRaggiunta;
 
+            let rsSoglieRef: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
+            if (pista === "mobile") {
+              const mSoglie = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              if (mSoglie) rsSoglieRef = { s1: mSoglie.soglia1, s2: mSoglie.soglia2, s3: mSoglie.soglia3, s4: mSoglie.soglia4 };
+            } else if (pista === "fisso") {
+              const fSoglie = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              if (fSoglie) rsSoglieRef = { s1: fSoglie.soglia1, s2: fSoglie.soglia2, s3: fSoglie.soglia3, s4: fSoglie.soglia4, s5: fSoglie.soglia5 };
+            } else if (pista === "energia") {
+              const eConf = energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              if (eConf) rsSoglieRef = { s1: eConf.targetS1, s2: eConf.targetS2, s3: eConf.targetS3 };
+            } else if (pista === "assicurazioni") {
+              const aConf = assicurazioniRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              if (aConf) rsSoglieRef = { s1: aConf.targetS1, s2: aConf.targetS2, s3: 0 };
+            }
+
             rsCalcBreakdownMap!.set(rs, {
               displayName: rsPdvs[0].ragioneSociale || rs,
               premioAttuale: rsCalc.premioStimato,
@@ -1200,6 +1464,7 @@ export default function DashboardGaraReale() {
               puntiProiezione: rsProjCalc.puntiTotali,
               forecastTarget: rsCalc.forecastTarget,
               forecastGap: rsCalc.forecastGap,
+              soglieRef: rsSoglieRef,
             });
           });
 
@@ -1694,6 +1959,21 @@ export default function DashboardGaraReale() {
                                   {rsData.puntiProiezione > 0 && <div className="text-[10px] text-gray-400 mt-0.5">{rsData.puntiProiezione.toFixed(1)} pt</div>}
                                 </div>
                               </div>
+                              {rsData.soglieRef && (
+                                <div className="flex flex-wrap gap-1 justify-center mt-1">
+                                  {[
+                                    { label: "S1", value: rsData.soglieRef.s1 },
+                                    { label: "S2", value: rsData.soglieRef.s2 },
+                                    { label: "S3", value: rsData.soglieRef.s3 },
+                                    ...(rsData.soglieRef.s4 != null && rsData.soglieRef.s4 > 0 ? [{ label: "S4", value: rsData.soglieRef.s4 }] : []),
+                                    ...(rsData.soglieRef.s5 != null && rsData.soglieRef.s5 > 0 ? [{ label: "S5", value: rsData.soglieRef.s5 }] : []),
+                                  ].map((s) => (
+                                    <span key={s.label} className="text-[9px] text-gray-400 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5">
+                                      {s.label}:{s.value}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                               {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
                                 <div className="space-y-0.5">
                                   <div className="flex items-center justify-between text-[10px]">
@@ -1755,6 +2035,22 @@ export default function DashboardGaraReale() {
                               )}
                             </div>
                           </div>
+
+                          {pista.soglieRef && (
+                            <div className="flex flex-wrap gap-1 justify-center">
+                              {[
+                                { label: "S1", value: pista.soglieRef.s1 },
+                                { label: "S2", value: pista.soglieRef.s2 },
+                                { label: "S3", value: pista.soglieRef.s3 },
+                                ...(pista.soglieRef.s4 != null && pista.soglieRef.s4 > 0 ? [{ label: "S4", value: pista.soglieRef.s4 }] : []),
+                                ...(pista.soglieRef.s5 != null && pista.soglieRef.s5 > 0 ? [{ label: "S5", value: pista.soglieRef.s5 }] : []),
+                              ].map((s) => (
+                                <span key={s.label} className="text-[9px] text-gray-400 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5">
+                                  {s.label}:{s.value}
+                                </span>
+                              ))}
+                            </div>
+                          )}
 
                           {pista.totalePezzi > 0 && pista.calc.forecastTarget != null && pista.calc.forecastTarget > 0 && (
                             <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
