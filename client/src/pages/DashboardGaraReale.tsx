@@ -925,7 +925,7 @@ export default function DashboardGaraReale() {
         if (energiaItems.length > 0) {
           attivatoEnergiaByPos[pdv.codicePos] = energiaItems.map((it, idx) => ({
             id: `b-${idx}`,
-            category: it.targetCategory as any,
+            category: it.targetCategory as EnergiaCategory,
             pezzi: it.pezzi,
           }));
         }
@@ -1124,11 +1124,35 @@ export default function DashboardGaraReale() {
             categories: egCategories, pdvBreakdown: egPdvBreakdown, rsCalcBreakdown: egRsCalcBreakdown,
           });
         } else {
+          let projPremioNonRS = 0;
+          let projSogliaNonRS = 0;
+          for (const rsResult of extraGaraResults) {
+            const projPuntiRS = workdayInfo.elapsedWorkingDays > 0
+              ? rsResult.puntiTotaliRS * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays
+              : rsResult.puntiTotaliRS;
+            let pSoglia = 0;
+            if (rsResult.hasBPInRS && projPuntiRS >= rsResult.soglie.s4) pSoglia = 4;
+            else if (projPuntiRS >= rsResult.soglie.s3) pSoglia = 3;
+            else if (projPuntiRS >= rsResult.soglie.s2) pSoglia = 2;
+            else if (projPuntiRS >= rsResult.soglie.s1) pSoglia = 1;
+            if (pSoglia > projSogliaNonRS) projSogliaNonRS = pSoglia;
+
+            for (const pdvR of rsResult.pdvResults) {
+              const clusterKey = pdvR.clusterPIva as keyof typeof PREMI_EXTRA_GARA;
+              if (clusterKey && PREMI_EXTRA_GARA[clusterKey]) {
+                const projPdvPezzi = workdayInfo.elapsedWorkingDays > 0
+                  ? Math.round(pdvR.pezziTotali * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays)
+                  : pdvR.pezziTotali;
+                projPremioNonRS += projPdvPezzi * (PREMI_EXTRA_GARA[clusterKey][pSoglia] || 0);
+              }
+            }
+          }
+
           stats.push({
             pista, label: PISTA_CONFIG[pista].label,
             totalePezzi: totalPezzi, proiezionePezzi: proiezionePezziEG,
             calc: { premioStimato: totalPremio, puntiTotali: totalPunti, sogliaRaggiunta: bestSoglia, sogliaLabel: sogliaToLabel(bestSoglia, 4) },
-            calcProiezione: { premioStimato: totalPremio, puntiTotali: proiezionePuntiEG, sogliaRaggiunta: bestSoglia, sogliaLabel: sogliaToLabel(bestSoglia, 4) },
+            calcProiezione: { premioStimato: projPremioNonRS, puntiTotali: proiezionePuntiEG, sogliaRaggiunta: projSogliaNonRS, sogliaLabel: sogliaToLabel(projSogliaNonRS, 4) },
             categories: egCategories, pdvBreakdown: egPdvBreakdown,
           });
         }
@@ -1601,6 +1625,16 @@ export default function DashboardGaraReale() {
       }
 
       const rsCalcBreakdown = (rsCalcBreakdownMap && rsCalcBreakdownMap.size > 0) ? rsCalcBreakdownMap : undefined;
+
+      let pistaSoglieRef: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
+      if (!rsCalcBreakdown || rsCalcBreakdown.size <= 1) {
+        if (pista === "energia" && energiaConfig) {
+          pistaSoglieRef = { s1: energiaConfig.targetS1, s2: energiaConfig.targetS2, s3: energiaConfig.targetS3 };
+        } else if (pista === "assicurazioni" && assicConfig) {
+          pistaSoglieRef = { s1: assicConfig.targetS1, s2: assicConfig.targetS2, s3: 0 };
+        }
+      }
+
       stats.push({
         pista,
         label: PISTA_CONFIG[pista].label,
@@ -1611,6 +1645,7 @@ export default function DashboardGaraReale() {
         categories,
         pdvBreakdown,
         rsCalcBreakdown,
+        soglieRef: pistaSoglieRef,
       });
     }
 
