@@ -1630,10 +1630,22 @@ export default function DashboardGaraReale() {
       if (!rsCalcBreakdown || rsCalcBreakdown.size <= 1) {
         if (pista === "mobile") {
           const mSingleRS = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.[0];
-          if (mSingleRS) pistaSoglieRef = { s1: mSingleRS.soglia1, s2: mSingleRS.soglia2, s3: mSingleRS.soglia3, s4: mSingleRS.soglia4 };
+          if (mSingleRS) {
+            pistaSoglieRef = { s1: mSingleRS.soglia1, s2: mSingleRS.soglia2, s3: mSingleRS.soglia3, s4: mSingleRS.soglia4 };
+          } else if (pdvBreakdown.length > 0) {
+            const firstPdv = pdvBreakdown[0];
+            const mCfg = getMobileConfigForPdv(firstPdv.codicePos, firstPdv.ragioneSociale);
+            if (mCfg) pistaSoglieRef = { s1: mCfg.soglia1, s2: mCfg.soglia2, s3: mCfg.soglia3, s4: mCfg.soglia4 };
+          }
         } else if (pista === "fisso") {
           const fSingleRS = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.[0];
-          if (fSingleRS) pistaSoglieRef = { s1: fSingleRS.soglia1, s2: fSingleRS.soglia2, s3: fSingleRS.soglia3, s4: fSingleRS.soglia4, s5: fSingleRS.soglia5 };
+          if (fSingleRS) {
+            pistaSoglieRef = { s1: fSingleRS.soglia1, s2: fSingleRS.soglia2, s3: fSingleRS.soglia3, s4: fSingleRS.soglia4, s5: fSingleRS.soglia5 };
+          } else if (pdvBreakdown.length > 0) {
+            const firstPdv = pdvBreakdown[0];
+            const fCfg = getFissoConfigForPdv(firstPdv.codicePos, firstPdv.ragioneSociale);
+            if (fCfg) pistaSoglieRef = { s1: fCfg.soglia1, s2: fCfg.soglia2, s3: fCfg.soglia3, s4: fCfg.soglia4, s5: fCfg.soglia5 };
+          }
         } else if (pista === "energia" && energiaConfig) {
           pistaSoglieRef = { s1: energiaConfig.targetS1, s2: energiaConfig.targetS2, s3: energiaConfig.targetS3 };
         } else if (pista === "assicurazioni" && assicConfig) {
