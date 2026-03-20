@@ -679,7 +679,8 @@ export async function registerRoutes(
       const rsSet = new Set<string>();
       const pdvMap = new Map<string, { codicePos: string; nomeNegozio: string; ragioneSociale: string; salesCount: number }>();
       for (const sale of sales) {
-        if (sale.ragioneSociale) rsSet.add(sale.ragioneSociale.trim());
+        const rsTrimmed = (sale.ragioneSociale || "").trim();
+        if (rsTrimmed) rsSet.add(rsTrimmed);
         const codicePos = sale.codicePos || "";
         if (!codicePos) continue;
         if (!pdvMap.has(codicePos)) {

@@ -651,11 +651,11 @@ export default function AdminPanel() {
               </div>
               <div className="space-y-2">
                 <Label>Ragione Sociale</Label>
-                {ragioniSociali.length > 0 ? (
+                {ragioniSociali.filter(rs => rs.trim()).length > 0 ? (
                   <Select value={pdvForm.ragioneSociale} onValueChange={(v) => setPdvForm({ ...pdvForm, ragioneSociale: v })}>
                     <SelectTrigger data-testid="select-pdv-rs"><SelectValue placeholder="Seleziona RS" /></SelectTrigger>
                     <SelectContent>
-                      {ragioniSociali.map(rs => (
+                      {ragioniSociali.filter(rs => rs.trim()).map(rs => (
                         <SelectItem key={rs} value={rs}>{rs}</SelectItem>
                       ))}
                     </SelectContent>
