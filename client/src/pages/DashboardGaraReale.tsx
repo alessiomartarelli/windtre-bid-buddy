@@ -876,6 +876,17 @@ export default function DashboardGaraReale() {
     const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara);
     const protectaCalcMap = calcProtectaForAllPdv(mappedData, puntiVendita);
 
+    const effectivePremiExtraGara: Record<string, number[]> = (() => {
+      const base = { ...PREMI_EXTRA_GARA };
+      const overrides = garaCalcConfig.extraGaraIvaConfig?.premiPerSoglia;
+      if (overrides) {
+        for (const [key, val] of Object.entries(overrides)) {
+          if (val) base[key as keyof typeof base] = val;
+        }
+      }
+      return base;
+    })();
+
     const extraGaraResults: ExtraGaraIvaRsResult[] = (() => {
       const pvForExtraGara: PuntoVendita[] = puntiVendita.map(p => {
         const garaPdv = garaPdvList.find(g => g.codicePos === p.codicePos);
@@ -1081,12 +1092,12 @@ export default function DashboardGaraReale() {
 
             let projPremio = 0;
             for (const pdvR of rsResult.pdvResults) {
-              const clusterKey = pdvR.clusterPIva as keyof typeof PREMI_EXTRA_GARA;
-              if (clusterKey && PREMI_EXTRA_GARA[clusterKey]) {
+              const clusterKey = pdvR.clusterPIva;
+              if (clusterKey && effectivePremiExtraGara[clusterKey]) {
                 const projPdvPezzi = workdayInfo.elapsedWorkingDays > 0
                   ? Math.round(pdvR.pezziTotali * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays)
                   : pdvR.pezziTotali;
-                projPremio += projPdvPezzi * (PREMI_EXTRA_GARA[clusterKey][projSoglia] || 0);
+                projPremio += projPdvPezzi * (effectivePremiExtraGara[clusterKey][projSoglia] || 0);
               }
             }
             egTotalPremioProj += projPremio;
@@ -1138,22 +1149,24 @@ export default function DashboardGaraReale() {
             if (pSoglia > projSogliaNonRS) projSogliaNonRS = pSoglia;
 
             for (const pdvR of rsResult.pdvResults) {
-              const clusterKey = pdvR.clusterPIva as keyof typeof PREMI_EXTRA_GARA;
-              if (clusterKey && PREMI_EXTRA_GARA[clusterKey]) {
+              const clusterKey = pdvR.clusterPIva;
+              if (clusterKey && effectivePremiExtraGara[clusterKey]) {
                 const projPdvPezzi = workdayInfo.elapsedWorkingDays > 0
                   ? Math.round(pdvR.pezziTotali * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays)
                   : pdvR.pezziTotali;
-                projPremioNonRS += projPdvPezzi * (PREMI_EXTRA_GARA[clusterKey][pSoglia] || 0);
+                projPremioNonRS += projPdvPezzi * (effectivePremiExtraGara[clusterKey][pSoglia] || 0);
               }
             }
           }
 
+          const egSoglieRefNonRS = extraGaraResults.length > 0 ? extraGaraResults[0].soglie : undefined;
           stats.push({
             pista, label: PISTA_CONFIG[pista].label,
             totalePezzi: totalPezzi, proiezionePezzi: proiezionePezziEG,
             calc: { premioStimato: totalPremio, puntiTotali: totalPunti, sogliaRaggiunta: bestSoglia, sogliaLabel: sogliaToLabel(bestSoglia, 4) },
             calcProiezione: { premioStimato: projPremioNonRS, puntiTotali: proiezionePuntiEG, sogliaRaggiunta: projSogliaNonRS, sogliaLabel: sogliaToLabel(projSogliaNonRS, 4) },
             categories: egCategories, pdvBreakdown: egPdvBreakdown,
+            soglieRef: egSoglieRefNonRS,
           });
         }
         continue;
