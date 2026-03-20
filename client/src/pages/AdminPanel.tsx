@@ -159,11 +159,11 @@ export default function AdminPanel() {
         const data = await res.json();
         if (data?.config) {
           setRagioniSociali(data.config.ragioniSociali || []);
-          const pdvs = data.config.puntiVendita || [];
-          setPuntiVendita(pdvs.map((p: any) => ({
-            codicePos: p.codicePos || '',
-            nome: p.nome || '',
-            ragioneSociale: p.ragioneSociale || '',
+          const pdvs: Array<Record<string, string>> = data.config.puntiVendita || [];
+          setPuntiVendita(pdvs.map((p) => ({
+            codicePos: String(p.codicePos || ''),
+            nome: String(p.nome || ''),
+            ragioneSociale: String(p.ragioneSociale || ''),
           })));
         }
       }
