@@ -429,6 +429,7 @@ function calcFissoPerPdv(
   year: number,
   month: number,
   workdayInfo: WorkdayInfo,
+  gettoniContrattualiOverride?: Record<string, number>,
 ): PistaCalcResult {
   if (!fissoConfig || pdvItems.length === 0) return EMPTY_CALC;
 
@@ -454,6 +455,7 @@ function calcFissoPerPdv(
     pistaConfig: fissoConfig,
     attivato,
     workdayInfoOverride: workdayInfo,
+    gettoniContrattualiOverride,
   });
 
   return {
@@ -470,6 +472,8 @@ function calcEnergiaPerPdv(
   posCode: string,
   isInGara: boolean,
   numPdv: number,
+  compensiBaseOverride?: Record<string, number>,
+  bonusPerContrattoOverride?: number,
 ): PistaCalcResult {
   if (!energiaConfig || pdvItems.length === 0) return EMPTY_CALC;
 
@@ -490,6 +494,8 @@ function calcEnergiaPerPdv(
     pdvInGaraList,
     isNegozioInGara: isInGara,
     numPdv,
+    compensiBaseOverride,
+    bonusPerContrattoOverride,
   });
 
   return {
@@ -545,6 +551,8 @@ function calcAssicurazioniForAllPdv(
   puntiVendita: OrgConfigPdv[],
   assicConfig: AssicurazioniConfig | undefined,
   pdvInGara: AssicurazioniPdvInGara[],
+  puntiOverride?: Record<string, number>,
+  premiOverride?: Record<string, number>,
 ): Map<string, PistaCalcResult> {
   const resultMap = new Map<string, PistaCalcResult>();
   if (!assicConfig || puntiVendita.length === 0) return resultMap;
@@ -589,7 +597,7 @@ function calcAssicurazioniForAllPdv(
     abilitaAssicurazioni: p.abilitaAssicurazioni ?? false,
   })) as PuntoVendita[];
 
-  const results = calcoloAssicurazioniPerPos(pdvs, assicConfig, pdvInGara, attivatoByPos);
+  const results = calcoloAssicurazioniPerPos(pdvs, assicConfig, pdvInGara, attivatoByPos, puntiOverride, premiOverride);
   for (const r of results) {
     const sogliaNum = r.bonusSoglia2 > 0 ? 2 : r.bonusSoglia1 > 0 ? 1 : 0;
     resultMap.set(r.pdvId, {
@@ -605,6 +613,7 @@ function calcAssicurazioniForAllPdv(
 function calcProtectaForAllPdv(
   mappedData: MappedSalesResponse,
   puntiVendita: OrgConfigPdv[],
+  gettoniOverride?: Record<string, number>,
 ): Map<string, PistaCalcResult> {
   const resultMap = new Map<string, PistaCalcResult>();
   if (puntiVendita.length === 0) return resultMap;
@@ -644,7 +653,7 @@ function calcProtectaForAllPdv(
     abilitaAssicurazioni: p.abilitaAssicurazioni ?? false,
   })) as PuntoVendita[];
 
-  const results = calcolaProtecta(attivatoByPos, pdvs);
+  const results = calcolaProtecta(attivatoByPos, pdvs, gettoniOverride);
   for (const r of results) {
     resultMap.set(r.pdvId, {
       premioStimato: r.premioTotale,
@@ -771,6 +780,7 @@ export default function DashboardGaraReale() {
       assicurazioniRSConfig: (cfg?.assicurazioniRSConfig as { configPerRS?: Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; premio: number; premioS1?: number; premioS2?: number }> }) || undefined,
       extraGaraIvaConfig: cfg?.extraGaraIvaConfig as ExtraGaraConfigOverrides | undefined,
       extraGaraIvaSogliePerRS: cfg?.extraGaraIvaSogliePerRS as ExtraGaraSogliePerRS | undefined,
+      tabelleCalcolo: cfg?.tabelleCalcolo as Record<string, unknown> | undefined,
     };
   }, [garaConfig]);
 
@@ -873,8 +883,14 @@ export default function DashboardGaraReale() {
       return partnershipConfigs.find(c => c.posCode === codicePos);
     };
 
-    const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara);
-    const protectaCalcMap = calcProtectaForAllPdv(mappedData, puntiVendita);
+    const tc = garaCalcConfig.tabelleCalcolo as Record<string, Record<string, unknown>> | undefined;
+    const tcEnergia = tc?.energia as { compensiBase?: Record<string, number>; bonusPerContratto?: Record<string, number> } | undefined;
+    const tcAssic = tc?.assicurazioni as { puntiProdotto?: Record<string, number>; premiProdotto?: Record<string, number> } | undefined;
+    const tcProtecta = tc?.protecta as { gettoniProdotto?: Record<string, number> } | undefined;
+    const tcFisso = tc?.fisso as { gettoniContrattuali?: Record<string, number> } | undefined;
+
+    const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara, tcAssic?.puntiProdotto, tcAssic?.premiProdotto);
+    const protectaCalcMap = calcProtectaForAllPdv(mappedData, puntiVendita, tcProtecta?.gettoniProdotto);
 
     const effectivePremiExtraGara: Record<string, number[]> = (() => {
       const base = { ...PREMI_EXTRA_GARA };
@@ -1236,10 +1252,10 @@ export default function DashboardGaraReale() {
           } else if (pista === "fisso") {
             const fConfig = getFissoConfigForPdv(pdv.codicePos, pdvRS);
             const cluster = clusterToNumber(pdvConfig?.clusterFisso);
-            pdvCalc = calcFissoPerPdv(pdvItems, fConfig, pdvCalendar, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday);
+            pdvCalc = calcFissoPerPdv(pdvItems, fConfig, pdvCalendar, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday, tcFisso?.gettoniContrattuali);
           } else if (pista === "energia") {
             const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
-            pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia);
+            pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase);
           } else if (pista === "partnership") {
             const pCfg = getPartnershipConfigForPdv(pdv.codicePos, pdvRS);
             const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
@@ -1327,7 +1343,7 @@ export default function DashboardGaraReale() {
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
-              rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday);
+              rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali);
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
@@ -1354,7 +1370,7 @@ export default function DashboardGaraReale() {
                 const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
                 return pc?.abilitaEnergia;
               }).length || 1;
-              rsCalc = calcEnergiaPerPdv(aggregatedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv);
+              rsCalc = calcEnergiaPerPdv(aggregatedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv, tcEnergia?.compensiBase);
               if (rsCalc.sogliaRaggiunta >= 1) {
                 const cfgE = rsEConf || energiaConfig;
                 const premioPerPdv = rsCalc.sogliaRaggiunta >= 3
@@ -1417,7 +1433,7 @@ export default function DashboardGaraReale() {
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
-              rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday);
+              rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali);
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
@@ -1437,7 +1453,7 @@ export default function DashboardGaraReale() {
                 const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
                 return pc?.abilitaEnergia;
               }).length || 1;
-              rsProjCalc = calcEnergiaPerPdv(projectedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv);
+              rsProjCalc = calcEnergiaPerPdv(projectedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv, tcEnergia?.compensiBase);
               if (rsProjCalc.sogliaRaggiunta >= 1) {
                 const cfgEProj = rsEConf || energiaConfig;
                 const premioPerPdv = rsProjCalc.sogliaRaggiunta >= 3
@@ -1591,10 +1607,10 @@ export default function DashboardGaraReale() {
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(pdv.codicePos, projRS);
               const cluster = clusterToNumber(pdvConfig3?.clusterFisso);
-              projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3);
+              projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3, tcFisso?.gettoniContrattuali);
             } else if (pista === "energia") {
               const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
-              projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia);
+              projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase);
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(pdv.codicePos, projRS);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;

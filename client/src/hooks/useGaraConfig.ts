@@ -177,6 +177,37 @@ export interface GaraConfigData {
   extraGaraIvaSogliePerRS?: {
     [ragioneSociale: string]: { s1: number; s2: number; s3: number; s4: number };
   };
+  tabelleCalcolo?: {
+    mobile?: {
+      soglieCluster?: Record<string, number[]>;
+      puntiAttivazione?: Record<string, number>;
+      moltiplicatoriCanone?: Record<string, number[]>;
+    };
+    fisso?: {
+      soglieCluster?: Record<string, number[]>;
+      euroPerPezzo?: Record<string, number>;
+      gettoniContrattuali?: Record<string, number>;
+    };
+    energia?: {
+      compensiBase?: Record<string, number>;
+      pistaBase?: Record<string, number>;
+      pistaDa4?: Record<string, number>;
+      bonusPerContratto?: Record<string, number>;
+    };
+    assicurazioni?: {
+      puntiProdotto?: Record<string, number>;
+      premiProdotto?: Record<string, number>;
+    };
+    protecta?: {
+      gettoniProdotto?: Record<string, number>;
+    };
+    extraGara?: {
+      puntiAttivazione?: Record<string, number>;
+      soglieMultipos?: Record<string, Record<string, number>>;
+      soglieMonopos?: Record<string, Record<string, number>>;
+      premiPerSoglia?: Record<string, number[]>;
+    };
+  };
   pistaMobile?: Record<string, unknown>;
   pistaFisso?: Record<string, unknown>;
   calendarioGara?: Record<string, unknown>;

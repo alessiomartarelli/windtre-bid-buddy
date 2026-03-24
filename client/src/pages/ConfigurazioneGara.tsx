@@ -20,8 +20,9 @@ import { calcolaSoglieDefaultPerRS as calcolaSoglieEnergiaDefault } from '@/type
 import { apiUrl } from '@/lib/basePath';
 import {
   Loader2, Save, Download, Plus, Trash2, CalendarDays, Store,
-  ChevronDown, ChevronUp, History, Upload, Settings, Target, Zap, Shield,
+  ChevronDown, ChevronUp, History, Upload, Settings, Target, Zap, Shield, Calculator,
 } from 'lucide-react';
+import { TabelleCalcoloGara, buildHardcodedDefaults, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
 
 const MONTHS = [
   { value: 1, label: 'Gennaio' },
@@ -408,6 +409,8 @@ export default function ConfigurazioneGara() {
   const [energiaRSConfig, setEnergiaRSConfig] = useState<EnergiaRSConf[]>([]);
   const [assicurazioniRSConfig, setAssicurazioniRSConfig] = useState<AssicurazioniRSConf[]>([]);
 
+  const tabelleCalcoloDefaults = useMemo(() => buildHardcodedDefaults(), []);
+  const [tabelleCalcolo, setTabelleCalcolo] = useState<TabelleCalcoloConfig>(tabelleCalcoloDefaults);
 
   const { profile } = useAuth();
   const { toast } = useToast();
@@ -546,10 +549,11 @@ export default function ConfigurazioneGara() {
       if (cfg.assicurazioniConfig) setAssicurazioniConfig(cfg.assicurazioniConfig);
       if (cfg.energiaRSConfig?.configPerRS?.length) setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
+      setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
     }
     setIsDirty(false);
     setInitialLoaded(true);
-  }, [fetchConfig, initializeRSConfigsFromPdvList]);
+  }, [fetchConfig, initializeRSConfigsFromPdvList, tabelleCalcoloDefaults]);
 
   const loadMonthConfig = useCallback(async (month: number, year: number) => {
     setInitialLoaded(false);
@@ -611,6 +615,7 @@ export default function ConfigurazioneGara() {
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) {
         setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
       }
+      setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
     } else {
       setConfigName('');
       setTipologiaGara('gara_operatore');
@@ -622,6 +627,7 @@ export default function ConfigurazioneGara() {
       setAssicurazioniRSConfig([]);
       setEnergiaConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premioS1: 250, premioS2: 500, premioS3: 1000 });
       setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premioS1: 500, premioS2: 750 });
+      setTabelleCalcolo(JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
 
       const salesPdvs = await fetchPdvFromSales(month, year);
       if (salesPdvs.length > 0) {
@@ -638,7 +644,7 @@ export default function ConfigurazioneGara() {
     }
     setIsDirty(false);
     setInitialLoaded(true);
-  }, [fetchConfig, fetchPdvFromSales, toast, initializeConfigsFromPdvList]);
+  }, [fetchConfig, fetchPdvFromSales, toast, initializeConfigsFromPdvList, tabelleCalcoloDefaults]);
 
   useEffect(() => {
     loadMonthConfig(selectedMonth, selectedYear);
@@ -677,6 +683,7 @@ export default function ConfigurazioneGara() {
       assicurazioniConfig,
       energiaRSConfig: { configPerRS: energiaRSConfig },
       assicurazioniRSConfig: { configPerRS: assicurazioniRSConfig },
+      tabelleCalcolo,
       ...(garaConfigRecord?.config ? {
         importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
       } : {}),
@@ -936,7 +943,7 @@ export default function ConfigurazioneGara() {
           </div>
         ) : (
           <Tabs defaultValue="pdv" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="pdv" className="text-xs sm:text-sm" data-testid="tab-pdv">
                 <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">PDV</span> ({pdvList.length})
               </TabsTrigger>
@@ -945,6 +952,9 @@ export default function ConfigurazioneGara() {
               </TabsTrigger>
               <TabsTrigger value="extra" className="text-xs sm:text-sm" data-testid="tab-extra">
                 <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">Energia &</span> Ass.
+              </TabsTrigger>
+              <TabsTrigger value="tabelleCalcolo" className="text-xs sm:text-sm" data-testid="tab-tabelle-calcolo">
+                <Calculator className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">Tabelle</span><span className="sm:hidden">Tab.</span>
               </TabsTrigger>
             </TabsList>
 
@@ -1498,6 +1508,14 @@ export default function ConfigurazioneGara() {
               </Card>
                 </>
               )}
+            </TabsContent>
+
+            <TabsContent value="tabelleCalcolo" className="space-y-4">
+              <TabelleCalcoloGara
+                config={tabelleCalcolo}
+                onChange={(newConfig) => { setTabelleCalcolo(newConfig); setIsDirty(true); }}
+                baseDefaults={tabelleCalcoloDefaults}
+              />
             </TabsContent>
           </Tabs>
         )}
