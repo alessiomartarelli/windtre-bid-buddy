@@ -194,7 +194,7 @@ function PdvCard({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div>
               <Label className="text-xs">Cluster Mobile</Label>
               <Select value={pdv.clusterMobile || '__none__'} onValueChange={v => updateField('clusterMobile', v === '__none__' ? '' : v)}>
@@ -222,16 +222,6 @@ function PdvCard({
                 <SelectContent>
                   <SelectItem value="__none__">--</SelectItem>
                   {CLUSTER_OPTIONS.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Cluster P.IVA</Label>
-              <Select value={pdv.clusterPIva || '__none__'} onValueChange={v => updateField('clusterPIva', v === '__none__' ? '' : v)}>
-                <SelectTrigger className="h-8 text-sm" data-testid={`select-cluster-piva-${index}`}><SelectValue placeholder="--" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">--</SelectItem>
-                  {CLUSTER_PIVA_OPTIONS.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -779,6 +769,25 @@ export default function ConfigurazioneGara() {
     setIsDirty(true);
   };
 
+  const handleRSClusterPIvaChange = useCallback((rs: string, cluster: string) => {
+    setExtraGaraIvaSogliePerRS(prev => {
+      const existing = prev[rs] || {};
+      if (!cluster) {
+        const entry = { ...existing };
+        delete entry.clusterPIva;
+        const hasOther = entry.s1 !== undefined || entry.s2 !== undefined || entry.s3 !== undefined || entry.s4 !== undefined || entry.pdvCount !== undefined;
+        if (!hasOther) {
+          const updated = { ...prev };
+          delete updated[rs];
+          return updated;
+        }
+        return { ...prev, [rs]: entry };
+      }
+      return { ...prev, [rs]: { ...existing, clusterPIva: cluster as any } };
+    });
+    setIsDirty(true);
+  }, []);
+
   const handleRemovePdv = (index: number) => {
     const updatedPdvs = pdvList.filter((_, i) => i !== index);
     setPdvList(updatedPdvs);
@@ -1077,11 +1086,45 @@ export default function ConfigurazioneGara() {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-4">
                   <div className="text-sm text-muted-foreground mb-2">{pdvList.length} PDV configurati</div>
-                  {pdvList.map((pdv, idx) => (
-                    <PdvCard key={pdv.id || idx} pdv={pdv} index={idx} onUpdate={handleUpdatePdv} onRemove={handleRemovePdv} onSave={handleQuickSave} saving={saving} existingRSNames={Array.from(rsGroups.keys()).filter(rs => rs !== 'Senza RS')} />
-                  ))}
+                  {(() => {
+                    const grouped: { rs: string; pdvs: { pdv: GaraConfigPdv; globalIdx: number }[] }[] = [];
+                    const rsOrder: string[] = [];
+                    pdvList.forEach((pdv, idx) => {
+                      const rs = pdv.ragioneSociale || 'Senza RS';
+                      let group = grouped.find(g => g.rs === rs);
+                      if (!group) {
+                        group = { rs, pdvs: [] };
+                        grouped.push(group);
+                        rsOrder.push(rs);
+                      }
+                      group.pdvs.push({ pdv, globalIdx: idx });
+                    });
+                    return grouped.map(({ rs, pdvs }) => {
+                      const rsCluster = extraGaraIvaSogliePerRS?.[rs]?.clusterPIva || '';
+                      return (
+                        <div key={rs} className="space-y-2">
+                          <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-4 py-2">
+                            <span className="font-semibold text-sm flex-1">{rs} <span className="text-muted-foreground font-normal">({pdvs.length} PDV)</span></span>
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs text-muted-foreground whitespace-nowrap">Cluster P.IVA</Label>
+                              <Select value={rsCluster || '__none__'} onValueChange={v => handleRSClusterPIvaChange(rs, v === '__none__' ? '' : v)}>
+                                <SelectTrigger className="h-7 text-xs w-44" data-testid={`select-cluster-piva-rs-${rs.replace(/\s+/g, '-')}`}><SelectValue placeholder="--" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">--</SelectItem>
+                                  {CLUSTER_PIVA_OPTIONS.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          {pdvs.map(({ pdv, globalIdx }) => (
+                            <PdvCard key={pdv.id || globalIdx} pdv={pdv} index={globalIdx} onUpdate={handleUpdatePdv} onRemove={handleRemovePdv} onSave={handleQuickSave} saving={saving} existingRSNames={Array.from(rsGroups.keys()).filter(r => r !== 'Senza RS')} />
+                          ))}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </TabsContent>
