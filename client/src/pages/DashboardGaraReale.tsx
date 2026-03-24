@@ -55,6 +55,7 @@ import {
 import {
   calcoloAssicurazioniPerPos,
 } from "@/lib/calcoloAssicurazioni";
+import { useTabelleCalcoloConfig } from "@/hooks/useTabelleCalcoloConfig";
 import {
   calcolaProtecta,
 } from "@/lib/calcoloProtecta";
@@ -387,7 +388,6 @@ function calcMobilePerPdv(
   mobileCategories: MobileCategoryConfig[],
   workdayInfo: WorkdayInfo,
   soglieOverride?: { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number },
-  moltiplicatoriOverride?: { mult1?: number; mult2?: number; mult3?: number; mult4?: number },
 ): PistaCalcResult {
   if (!mobileConfig || pdvItems.length === 0) return EMPTY_CALC;
 
@@ -411,7 +411,6 @@ function calcMobilePerPdv(
     workdayInfoOverride: workdayInfo,
     valoreCanoniOverride: totalCanone,
     soglieOverride,
-    moltiplicatoriOverride,
   });
 
   return {
@@ -726,6 +725,8 @@ export default function DashboardGaraReale() {
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const { config: orgSystemTcDefaults } = useTabelleCalcoloConfig();
+
   const [selMonth, selYear] = useMemo(() => {
     const parts = selectedPeriod.split("-");
     return [parseInt(parts[1]), parseInt(parts[0])];
@@ -893,13 +894,26 @@ export default function DashboardGaraReale() {
       return partnershipConfigs.find(c => c.posCode === codicePos);
     };
 
-    const tc = garaCalcConfig.tabelleCalcolo as Record<string, Record<string, unknown>> | undefined;
-    const tcMobile = tc?.mobile as { puntiAttivazione?: Record<string, number>; soglieCluster?: Record<string, number[]>; moltiplicatoriCanone?: Record<string, number[]> } | undefined;
-    const tcEnergia = tc?.energia as { compensiBase?: Record<string, number>; bonusPerContratto?: Record<string, number>; pistaBase?: Record<string, number>; pistaDa4?: Record<string, number> } | undefined;
-    const tcAssic = tc?.assicurazioni as { puntiProdotto?: Record<string, number>; premiProdotto?: Record<string, number> } | undefined;
-    const tcProtecta = tc?.protecta as { gettoniProdotto?: Record<string, number> } | undefined;
-    const tcFisso = tc?.fisso as { gettoniContrattuali?: Record<string, number>; soglieCluster?: Record<string, number[]> } | undefined;
-    const tcExtraGara = tc?.extraGara as { puntiAttivazione?: Record<string, number>; soglieMultipos?: Record<string, Record<string, number>>; soglieMonopos?: Record<string, Record<string, number>>; premiPerSoglia?: Record<string, number[]> } | undefined;
+    const garaTC = garaCalcConfig.tabelleCalcolo as Record<string, Record<string, unknown>> | undefined;
+    const fallbackTC = {
+      mobile: { puntiAttivazione: Object.fromEntries(orgSystemTcDefaults.mobile.categories.map(c => [c.type, c.punti])), soglieCluster: orgSystemTcDefaults.mobile.soglieCluster, moltiplicatoriCanone: orgSystemTcDefaults.mobile.moltiplicatoriCanone } as Record<string, unknown>,
+      energia: { compensiBase: orgSystemTcDefaults.energia.compensiBase, bonusPerContratto: orgSystemTcDefaults.energia.bonusPerContratto, pistaBase: orgSystemTcDefaults.energia.pistaBase, pistaDa4: orgSystemTcDefaults.energia.pistaDa4 } as Record<string, unknown>,
+      assicurazioni: { puntiProdotto: orgSystemTcDefaults.assicurazioni.puntiProdotto, premiProdotto: orgSystemTcDefaults.assicurazioni.premiProdotto } as Record<string, unknown>,
+      protecta: { gettoniProdotto: orgSystemTcDefaults.protecta.gettoniProdotto } as Record<string, unknown>,
+      fisso: { gettoniContrattuali: orgSystemTcDefaults.fisso.gettoniContrattuali, soglieCluster: orgSystemTcDefaults.fisso.soglieCluster } as Record<string, unknown>,
+      extraGara: { puntiAttivazione: orgSystemTcDefaults.extraGara.puntiAttivazione, soglieMultipos: orgSystemTcDefaults.extraGara.soglieMultipos, soglieMonopos: orgSystemTcDefaults.extraGara.soglieMonopos, premiPerSoglia: orgSystemTcDefaults.extraGara.premiPerSoglia } as Record<string, unknown>,
+    };
+    const mergeSection = (section: string) => {
+      const base = fallbackTC[section as keyof typeof fallbackTC] || {};
+      const over = garaTC?.[section] || {};
+      return { ...base, ...over };
+    };
+    const tcMobile = mergeSection('mobile') as { puntiAttivazione?: Record<string, number>; soglieCluster?: Record<string, number[]>; moltiplicatoriCanone?: Record<string, number[]> };
+    const tcEnergia = mergeSection('energia') as { compensiBase?: Record<string, number>; bonusPerContratto?: Record<string, number>; pistaBase?: Record<string, number>; pistaDa4?: Record<string, number> };
+    const tcAssic = mergeSection('assicurazioni') as { puntiProdotto?: Record<string, number>; premiProdotto?: Record<string, number> };
+    const tcProtecta = mergeSection('protecta') as { gettoniProdotto?: Record<string, number> };
+    const tcFisso = mergeSection('fisso') as { gettoniContrattuali?: Record<string, number>; soglieCluster?: Record<string, number[]> };
+    const tcExtraGara = mergeSection('extraGara') as { puntiAttivazione?: Record<string, number>; soglieMultipos?: Record<string, Record<string, number>>; soglieMonopos?: Record<string, Record<string, number>>; premiPerSoglia?: Record<string, number[]> };
 
     const getMobileSoglieForCluster = (clusterStr: string | undefined): { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number } | undefined => {
       if (!tcMobile?.soglieCluster || !clusterStr) return undefined;
@@ -907,13 +921,6 @@ export default function DashboardGaraReale() {
       if (!vals || vals.length < 4) return undefined;
       return { soglia1: vals[0], soglia2: vals[1], soglia3: vals[2], soglia4: vals[3] };
     };
-    const getMobileMoltForCluster = (clusterStr: string | undefined): { mult1?: number; mult2?: number; mult3?: number; mult4?: number } | undefined => {
-      if (!tcMobile?.moltiplicatoriCanone || !clusterStr) return undefined;
-      const vals = tcMobile.moltiplicatoriCanone[clusterStr];
-      if (!vals || vals.length < 4) return undefined;
-      return { mult1: vals[0], mult2: vals[1], mult3: vals[2], mult4: vals[3] };
-    };
-
     const effectiveMobileCategories = (() => {
       const base = [...mobileCategories];
       if (tcMobile?.puntiAttivazione) {
@@ -1308,7 +1315,7 @@ export default function DashboardGaraReale() {
           if (pista === "mobile") {
             const mConfig = getMobileConfigForPdv(pdv.codicePos, pdvRS);
             const clusterMobile = pdvConfig?.clusterMobile;
-            pdvCalc = calcMobilePerPdv(pdvItems, mConfig, pdvCalendar, selYear, selMonth, effectiveMobileCategories, pdvWorkday, getMobileSoglieForCluster(clusterMobile), getMobileMoltForCluster(clusterMobile));
+            pdvCalc = calcMobilePerPdv(pdvItems, mConfig, pdvCalendar, selYear, selMonth, effectiveMobileCategories, pdvWorkday, getMobileSoglieForCluster(clusterMobile));
           } else if (pista === "fisso") {
             const fConfig = getFissoConfigForPdv(pdv.codicePos, pdvRS);
             const cluster = clusterToNumber(pdvConfig?.clusterFisso);
@@ -1400,7 +1407,7 @@ export default function DashboardGaraReale() {
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
               const rsClusterMobile = firstPdvConfig?.clusterMobile;
-              rsCalc = calcMobilePerPdv(aggregatedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, getMobileSoglieForCluster(rsClusterMobile), getMobileMoltForCluster(rsClusterMobile));
+              rsCalc = calcMobilePerPdv(aggregatedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, getMobileSoglieForCluster(rsClusterMobile));
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
@@ -1491,7 +1498,7 @@ export default function DashboardGaraReale() {
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
               const rsClusterMobile2 = firstPdvConfig?.clusterMobile;
-              rsProjCalc = calcMobilePerPdv(projectedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, getMobileSoglieForCluster(rsClusterMobile2), getMobileMoltForCluster(rsClusterMobile2));
+              rsProjCalc = calcMobilePerPdv(projectedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, getMobileSoglieForCluster(rsClusterMobile2));
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
@@ -1666,7 +1673,7 @@ export default function DashboardGaraReale() {
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(pdv.codicePos, projRS);
               const clusterMobile3 = pdvConfig3?.clusterMobile;
-              projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, effectiveMobileCategories, pdvWorkday3, getMobileSoglieForCluster(clusterMobile3), getMobileMoltForCluster(clusterMobile3));
+              projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, effectiveMobileCategories, pdvWorkday3, getMobileSoglieForCluster(clusterMobile3));
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(pdv.codicePos, projRS);
               const cluster = clusterToNumber(pdvConfig3?.clusterFisso);
@@ -1760,7 +1767,7 @@ export default function DashboardGaraReale() {
     }
 
     return stats;
-  }, [mappedData, workdayInfo, garaCalcConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear]);
+  }, [mappedData, workdayInfo, garaCalcConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear, orgSystemTcDefaults]);
 
   const premioPerRS = useMemo(() => {
     if (!pistaStats.length || garaConfigMissing) return [] as Array<{ displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>;

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { MOBILE_CATEGORIES_CONFIG_DEFAULT, MobileCategoryConfig } from "@/types/preventivatore";
-import { ENERGIA_BASE_PAY, PISTA_ENERGIA_BONUS_PER_CONTRATTO, PistaEnergiaSoglia } from "@/types/energia";
+import { ENERGIA_BASE_PAY, PISTA_ENERGIA_BONUS_PER_CONTRATTO, PISTA_ENERGIA_SOGLIE_BASE, PISTA_ENERGIA_SOGLIE_DA4, PistaEnergiaSoglia } from "@/types/energia";
 import { ASSICURAZIONI_POINTS, ASSICURAZIONI_PREMIUMS } from "@/types/assicurazioni";
 import { PROTECTA_GETTONI, ProtectaProduct } from "@/types/protecta";
 import { PUNTI_EXTRA_GARA, SOGLIE_BASE_EXTRA_GARA, PREMI_EXTRA_GARA } from "@/lib/calcoloExtraGaraIva";
@@ -11,14 +11,19 @@ import { ClusterPIvaCode } from "@/types/preventivatore";
 export interface TabelleCalcoloValues {
   mobile: {
     categories: MobileCategoryConfig[];
+    soglieCluster: Record<string, number[]>;
+    moltiplicatoriCanone: Record<string, number[]>;
   };
   fisso: {
     euroPerPezzo: Record<string, number>;
     gettoniContrattuali: Record<string, number>;
+    soglieCluster: Record<string, number[]>;
   };
   energia: {
     compensiBase: Record<string, number>;
     bonusPerContratto: Record<string, number>;
+    pistaBase: Record<string, number>;
+    pistaDa4: Record<string, number>;
   };
   assicurazioni: {
     puntiProdotto: Record<string, number>;
@@ -108,10 +113,39 @@ function buildDefaults(): TabelleCalcoloValues {
     extraPremi[cluster] = [...PREMI_EXTRA_GARA[cluster as ClusterPIvaCode]];
   }
 
+  const mobileSoglieCluster: Record<string, number[]> = {
+    strada_1: [70, 105, 135, 165],
+    strada_2: [70, 115, 160, 200],
+    strada_3: [70, 130, 185, 225],
+    cc_1: [80, 115, 160, 205],
+    cc_2: [80, 120, 185, 225],
+    cc_3: [80, 135, 205, 245],
+  };
+
+  const moltiplicatoriCanone: Record<string, number[]> = {
+    ga_base: [1.0, 1.5, 2.0, 2.25],
+    ga_underground: [0.5, 1.0, 1.5, 1.75],
+    mnp: [1.0, 1.0, 1.0, 1.0],
+    tied: [2.0, 2.0, 2.25, 2.25],
+    piva: [1.0, 1.0, 1.0, 1.0],
+  };
+
+  const fissoSoglieCluster: Record<string, number[]> = {
+    strada_1: [28, 46, 57, 67, 80],
+    strada_2: [34, 60, 72, 83, 97],
+    strada_3: [39, 67, 82, 96, 108],
+    cc_1: [30, 48, 59, 70, 84],
+    cc_2: [36, 62, 74, 86, 100],
+    cc_3: [41, 69, 84, 99, 110],
+  };
+
+  const pistaBase: Record<string, number> = { ...PISTA_ENERGIA_SOGLIE_BASE };
+  const pistaDa4: Record<string, number> = { ...PISTA_ENERGIA_SOGLIE_DA4 };
+
   return {
-    mobile: { categories: [...MOBILE_CATEGORIES_CONFIG_DEFAULT] },
-    fisso: { euroPerPezzo: fissoEuro, gettoniContrattuali: fissoGettoni },
-    energia: { compensiBase: energiaCompensi, bonusPerContratto: energiaBonus },
+    mobile: { categories: [...MOBILE_CATEGORIES_CONFIG_DEFAULT], soglieCluster: mobileSoglieCluster, moltiplicatoriCanone },
+    fisso: { euroPerPezzo: fissoEuro, gettoniContrattuali: fissoGettoni, soglieCluster: fissoSoglieCluster },
+    energia: { compensiBase: energiaCompensi, bonusPerContratto: energiaBonus, pistaBase, pistaDa4 },
     assicurazioni: { puntiProdotto: assicPunti, premiProdotto: assicPremi },
     protecta: { gettoniProdotto: protectaGettoni },
     extraGara: {
@@ -136,11 +170,30 @@ function applyConfigToDefaults(merged: any, defaults: TabelleCalcoloValues): Tab
     });
   }
 
+  if (merged.mobile?.soglieCluster) {
+    for (const key of Object.keys(merged.mobile.soglieCluster)) {
+      const arr = merged.mobile.soglieCluster[key];
+      if (Array.isArray(arr)) result.mobile.soglieCluster[key] = [...arr];
+    }
+  }
+  if (merged.mobile?.moltiplicatoriCanone) {
+    for (const key of Object.keys(merged.mobile.moltiplicatoriCanone)) {
+      const arr = merged.mobile.moltiplicatoriCanone[key];
+      if (Array.isArray(arr)) result.mobile.moltiplicatoriCanone[key] = [...arr];
+    }
+  }
+
   if (merged.fisso?.euroPerPezzo) {
     Object.assign(result.fisso.euroPerPezzo, merged.fisso.euroPerPezzo);
   }
   if (merged.fisso?.gettoniContrattuali) {
     Object.assign(result.fisso.gettoniContrattuali, merged.fisso.gettoniContrattuali);
+  }
+  if (merged.fisso?.soglieCluster) {
+    for (const key of Object.keys(merged.fisso.soglieCluster)) {
+      const arr = merged.fisso.soglieCluster[key];
+      if (Array.isArray(arr)) result.fisso.soglieCluster[key] = [...arr];
+    }
   }
 
   if (merged.energia?.compensiBase) {
@@ -148,6 +201,12 @@ function applyConfigToDefaults(merged: any, defaults: TabelleCalcoloValues): Tab
   }
   if (merged.energia?.bonusPerContratto) {
     Object.assign(result.energia.bonusPerContratto, merged.energia.bonusPerContratto);
+  }
+  if (merged.energia?.pistaBase) {
+    Object.assign(result.energia.pistaBase, merged.energia.pistaBase);
+  }
+  if (merged.energia?.pistaDa4) {
+    Object.assign(result.energia.pistaDa4, merged.energia.pistaDa4);
   }
 
   if (merged.assicurazioni?.puntiProdotto) {
