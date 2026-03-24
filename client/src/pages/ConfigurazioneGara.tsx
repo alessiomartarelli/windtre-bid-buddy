@@ -1379,17 +1379,33 @@ export default function ConfigurazioneGara() {
             {garaConfigRecord && <Badge variant="secondary" className="text-xs">{garaConfigRecord.name || 'Salvato'}</Badge>}
             {importedFiles.length > 0 && (
               <div className="relative" ref={importedFilesRef}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100 dark:text-blue-300 dark:border-blue-700 dark:bg-blue-950 gap-1"
-                  onClick={() => setImportedFilesPopoverOpen(!importedFilesPopoverOpen)}
-                  data-testid="button-imported-files"
-                >
+                <Badge variant="outline" className="text-xs text-blue-700 border-blue-300 bg-blue-50 dark:text-blue-300 dark:border-blue-700 dark:bg-blue-950 gap-1">
                   <FileText className="h-3 w-3" />
-                  File caricati ({importedFiles.length})
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
+                  {importedFiles[importedFiles.length - 1].label}
+                </Badge>
+                {importedFiles.length > 1 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100 dark:text-blue-300 dark:border-blue-700 dark:bg-blue-950 gap-1"
+                    onClick={() => setImportedFilesPopoverOpen(!importedFilesPopoverOpen)}
+                    data-testid="button-imported-files"
+                  >
+                    +{importedFiles.length - 1} file
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                )}
+                {importedFiles.length === 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground gap-1 px-1"
+                    onClick={() => setImportedFilesPopoverOpen(!importedFilesPopoverOpen)}
+                    data-testid="button-imported-files"
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                )}
                 {importedFilesPopoverOpen && (
                   <div className="absolute top-full left-0 mt-1 z-50 bg-background border rounded-lg shadow-lg p-2 min-w-[280px] max-w-[400px]">
                     <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">File PDF importati</div>
