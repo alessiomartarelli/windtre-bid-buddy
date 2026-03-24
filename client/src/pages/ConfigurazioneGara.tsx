@@ -1896,9 +1896,9 @@ export default function ConfigurazioneGara() {
         <Dialog open={pdfImportDialogOpen} onOpenChange={(open) => { setPdfImportDialogOpen(open); if (!open) { setPdfData(null); setPdfError(null); } }}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Importa da PDF Gara WindTre</DialogTitle>
+              <DialogTitle>{pdfData?.mese ? `Incentivazione Franchising W3 ${pdfData.mese}` : 'Importa da PDF Gara WindTre'}</DialogTitle>
               <DialogDescription>
-                Carica il PDF della lettera di incentivazione per importare automaticamente cluster PDV, soglie e codici RS.
+                {pdfData ? 'Riepilogo dei dati estratti dal PDF. Verifica e applica.' : 'Carica il PDF della lettera di incentivazione per importare automaticamente cluster PDV, soglie e codici RS.'}
               </DialogDescription>
             </DialogHeader>
 

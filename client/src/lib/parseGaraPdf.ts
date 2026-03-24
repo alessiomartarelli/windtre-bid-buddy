@@ -134,71 +134,87 @@ function parsePdvTable(text: string): PdfPdvEntry[] {
   return pdvEntries;
 }
 
-function parseSoglieMobile(text: string): PdfSoglieMobile | null {
-  const pistaIdx = text.indexOf('PISTA MOBILE');
-  if (pistaIdx === -1) return null;
+function extractSectionText(text: string, sectionMarker: string, nextMarkers: string[]): string | null {
+  const idx = text.indexOf(sectionMarker);
+  if (idx === -1) return null;
 
-  const afterPista = text.substring(pistaIdx, pistaIdx + 600);
+  const afterMarker = text.substring(idx);
 
-  const sogliaLabels = /S\s*1\s+S\s*2\s+S\s*3\s+S\s*4/i;
-  const labelMatch = afterPista.match(sogliaLabels);
-  if (labelMatch) {
-    const afterLabels = afterPista.substring(labelMatch.index! + labelMatch[0].length);
-    const nums = [...afterLabels.matchAll(/\b(\d{2,4})\b/g)]
-      .map(m => parseInt(m[1]))
-      .filter(n => n >= 50 && n <= 5000);
-    if (nums.length >= 4) {
-      return { s1: nums[0], s2: nums[1], s3: nums[2], s4: nums[3] };
+  let endIdx = afterMarker.length;
+  for (const marker of nextMarkers) {
+    const markerIdx = afterMarker.indexOf(marker, sectionMarker.length);
+    if (markerIdx !== -1 && markerIdx < endIdx) {
+      endIdx = markerIdx;
     }
   }
 
-  const numbers = [...afterPista.matchAll(/\b(\d{3,4})\b/g)]
-    .map(m => parseInt(m[1]))
-    .filter(n => n >= 50 && n <= 5000);
+  return afterMarker.substring(0, endIdx);
+}
 
-  if (numbers.length >= 4) {
+function extractSoglieFromSection(sectionText: string, count: number, minVal: number, maxVal: number): number[] | null {
+  const sogliaLabelPattern = /[1-5][°^a]\s*soglia/gi;
+  const labelMatches = [...sectionText.matchAll(sogliaLabelPattern)];
+
+  if (labelMatches.length >= count) {
+    const lastLabel = labelMatches[count - 1];
+    const afterLabels = sectionText.substring(lastLabel.index! + lastLabel[0].length);
+    const nums = [...afterLabels.matchAll(/\b(\d{2,4})\b/g)]
+      .map(m => parseInt(m[1]))
+      .filter(n => n >= minVal && n <= maxVal);
+    if (nums.length >= count) {
+      return nums.slice(0, count);
+    }
+  }
+
+  const s1s2Pattern = /S\s*1\s+S\s*2/i;
+  const s1s2Match = sectionText.match(s1s2Pattern);
+  if (s1s2Match) {
+    const afterLabels = sectionText.substring(s1s2Match.index! + s1s2Match[0].length);
+    const nums = [...afterLabels.matchAll(/\b(\d{2,4})\b/g)]
+      .map(m => parseInt(m[1]))
+      .filter(n => n >= minVal && n <= maxVal);
+    if (nums.length >= count) {
+      return nums.slice(0, count);
+    }
+  }
+
+  const numbers = [...sectionText.matchAll(/\b(\d{3,4})\b/g)]
+    .map(m => parseInt(m[1]))
+    .filter(n => n >= minVal && n <= maxVal);
+
+  if (numbers.length >= count) {
     const sorted = [...numbers].sort((a, b) => a - b);
-    return { s1: sorted[0], s2: sorted[1], s3: sorted[2], s4: sorted[3] };
+    return sorted.slice(0, count);
   }
 
   return null;
+}
+
+function parseSoglieMobile(text: string): PdfSoglieMobile | null {
+  const sectionText = extractSectionText(text, 'PISTA MOBILE', ['PISTA FISSO', 'PISTA EXTRA', 'ALLEGATO']);
+  if (!sectionText) return null;
+
+  const nums = extractSoglieFromSection(sectionText, 4, 50, 5000);
+  if (!nums) return null;
+
+  return { s1: nums[0], s2: nums[1], s3: nums[2], s4: nums[3] };
 }
 
 function parseSoglieFisso(text: string): PdfSoglieFisso | null {
-  const pistaIdx = text.indexOf('PISTA FISSO');
-  if (pistaIdx === -1) return null;
+  const sectionText = extractSectionText(text, 'PISTA FISSO', ['PISTA EXTRA', 'PISTA MOBILE', 'ALLEGATO']);
+  if (!sectionText) return null;
 
-  const afterPista = text.substring(pistaIdx, pistaIdx + 600);
+  const nums = extractSoglieFromSection(sectionText, 5, 10, 3000);
+  if (!nums) return null;
 
-  const sogliaLabels = /S\s*1\s+S\s*2\s+S\s*3\s+S\s*4\s+S\s*5/i;
-  const labelMatch = afterPista.match(sogliaLabels);
-  if (labelMatch) {
-    const afterLabels = afterPista.substring(labelMatch.index! + labelMatch[0].length);
-    const nums = [...afterLabels.matchAll(/\b(\d{2,4})\b/g)]
-      .map(m => parseInt(m[1]))
-      .filter(n => n >= 10 && n <= 3000);
-    if (nums.length >= 5) {
-      return { s1: nums[0], s2: nums[1], s3: nums[2], s4: nums[3], s5: nums[4] };
-    }
-  }
-
-  const numbers = [...afterPista.matchAll(/\b(\d{2,4})\b/g)]
-    .map(m => parseInt(m[1]))
-    .filter(n => n >= 10 && n <= 3000);
-
-  if (numbers.length >= 5) {
-    const sorted = [...numbers].sort((a, b) => a - b);
-    return { s1: sorted[0], s2: sorted[1], s3: sorted[2], s4: sorted[3], s5: sorted[4] };
-  }
-
-  return null;
+  return { s1: nums[0], s2: nums[1], s3: nums[2], s4: nums[3], s5: nums[4] };
 }
 
 function parseSoglieExtraPIva(text: string): PdfSoglieExtraPIva | null {
-  const pistaIdx = text.indexOf('PISTA EXTRA PARTITA IVA');
-  if (pistaIdx === -1) return null;
+  const sectionText = extractSectionText(text, 'PISTA EXTRA PARTITA IVA', ['PISTA MOBILE', 'PISTA FISSO', 'ALLEGATO']);
+  if (!sectionText) return null;
 
-  const afterPista = text.substring(pistaIdx, pistaIdx + 500);
+  const afterPista = sectionText;
 
   let cluster = '';
   if (afterPista.includes('BUSINESS PROMOTER PLUS') || afterPista.includes('PROMOTER PLUS')) {
