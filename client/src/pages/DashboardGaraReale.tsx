@@ -927,15 +927,24 @@ export default function DashboardGaraReale() {
     const tcFisso = mergeSection('fisso') as { gettoniContrattuali?: Record<string, number>; soglieCluster?: Record<string, number[]>; euroPerPezzo?: Record<string, number> };
     const tcExtraGara = mergeSection('extraGara') as { puntiAttivazione?: Record<string, number>; soglieMultipos?: Record<string, Record<string, number>>; soglieMonopos?: Record<string, Record<string, number>>; premiPerSoglia?: Record<string, number[]> };
 
+    const normalizeClusterKey = (clusterStr: string): string => {
+      const upper = clusterStr.toUpperCase();
+      if (upper === "CC1") return "cc_1";
+      if (upper === "CC2") return "cc_2";
+      if (upper === "CC3") return "cc_3";
+      return clusterStr;
+    };
     const getMobileSoglieForCluster = (clusterStr: string | undefined): { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number } | undefined => {
       if (!tcMobile?.soglieCluster || !clusterStr) return undefined;
-      const vals = tcMobile.soglieCluster[clusterStr];
+      const key = normalizeClusterKey(clusterStr);
+      const vals = tcMobile.soglieCluster[key];
       if (!vals || vals.length < 4) return undefined;
       return { soglia1: vals[0], soglia2: vals[1], soglia3: vals[2], soglia4: vals[3] };
     };
     const getFissoSoglieForCluster = (clusterStr: string | undefined): { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number; soglia5?: number } | undefined => {
       if (!tcFisso?.soglieCluster || !clusterStr) return undefined;
-      const vals = tcFisso.soglieCluster[clusterStr];
+      const key = normalizeClusterKey(clusterStr);
+      const vals = tcFisso.soglieCluster[key];
       if (!vals || vals.length < 5) return undefined;
       return { soglia1: vals[0], soglia2: vals[1], soglia3: vals[2], soglia4: vals[3], soglia5: vals[4] };
     };
