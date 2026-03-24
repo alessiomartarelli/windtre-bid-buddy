@@ -103,9 +103,11 @@ export function calcolaPremioPistaMobilePerPos(options: {
   today?: Date;
   workdayInfoOverride?: WorkdayInfo;
   valoreCanoniOverride?: number;
+  soglieOverride?: { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number };
+  moltiplicatoriOverride?: { mult1?: number; mult2?: number; mult3?: number; mult4?: number };
 }): CalcoloPistaMobilePosResult & { extraGettoniEuro: number; gettoneContrattualeEuro: number; gettoneSogliaEuro: number } {
   const {
-    configPos,
+    configPos: configPosRaw,
     dettaglio,
     calendar,
     year,
@@ -114,7 +116,21 @@ export function calcolaPremioPistaMobilePerPos(options: {
     today = new Date(),
     workdayInfoOverride,
     valoreCanoniOverride,
+    soglieOverride,
+    moltiplicatoriOverride,
   } = options;
+
+  const configPos = (soglieOverride || moltiplicatoriOverride) ? {
+    ...configPosRaw,
+    ...(soglieOverride?.soglia1 !== undefined && { soglia1: soglieOverride.soglia1 }),
+    ...(soglieOverride?.soglia2 !== undefined && { soglia2: soglieOverride.soglia2 }),
+    ...(soglieOverride?.soglia3 !== undefined && { soglia3: soglieOverride.soglia3 }),
+    ...(soglieOverride?.soglia4 !== undefined && { soglia4: soglieOverride.soglia4 }),
+    ...(moltiplicatoriOverride?.mult1 !== undefined && { multiplierSoglia1: moltiplicatoriOverride.mult1 }),
+    ...(moltiplicatoriOverride?.mult2 !== undefined && { multiplierSoglia2: moltiplicatoriOverride.mult2 }),
+    ...(moltiplicatoriOverride?.mult3 !== undefined && { multiplierSoglia3: moltiplicatoriOverride.mult3 }),
+    ...(moltiplicatoriOverride?.mult4 !== undefined && { multiplierSoglia4: moltiplicatoriOverride.mult4 }),
+  } : configPosRaw;
 
   // Prima passata per calcolare punti e soglia (senza gettoni soglia)
   const aggPreliminare = aggregateMobileAttivato(dettaglio, mobileCategories, 0);

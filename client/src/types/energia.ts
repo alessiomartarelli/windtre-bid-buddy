@@ -74,20 +74,22 @@ export const PISTA_ENERGIA_BONUS_PER_CONTRATTO: Record<PistaEnergiaSoglia, numbe
   S5: 45,
 };
 
-export function calcolaSoglieDefaultPerRS(numPdv: number): PistaEnergiaSoglieSet {
+export function calcolaSoglieDefaultPerRS(numPdv: number, pistaBaseOverride?: Record<string, number>, pistaDa4Override?: Record<string, number>): PistaEnergiaSoglieSet {
   const base = Math.min(numPdv, 3);
   const extra = Math.max(numPdv - 3, 0);
+  const pb = pistaBaseOverride ? { ...PISTA_ENERGIA_SOGLIE_BASE, ...pistaBaseOverride } as typeof PISTA_ENERGIA_SOGLIE_BASE : PISTA_ENERGIA_SOGLIE_BASE;
+  const pd = pistaDa4Override ? { ...PISTA_ENERGIA_SOGLIE_DA4, ...pistaDa4Override } as typeof PISTA_ENERGIA_SOGLIE_DA4 : PISTA_ENERGIA_SOGLIE_DA4;
   return {
-    S1: PISTA_ENERGIA_SOGLIE_BASE.S1 * base + PISTA_ENERGIA_SOGLIE_DA4.S1 * extra,
-    S2: PISTA_ENERGIA_SOGLIE_BASE.S2 * base + PISTA_ENERGIA_SOGLIE_DA4.S2 * extra,
-    S3: PISTA_ENERGIA_SOGLIE_BASE.S3 * base + PISTA_ENERGIA_SOGLIE_DA4.S3 * extra,
-    S4: PISTA_ENERGIA_SOGLIE_BASE.S4 * base + PISTA_ENERGIA_SOGLIE_DA4.S4 * extra,
-    S5: PISTA_ENERGIA_SOGLIE_BASE.S5 * base + PISTA_ENERGIA_SOGLIE_DA4.S5 * extra,
+    S1: pb.S1 * base + pd.S1 * extra,
+    S2: pb.S2 * base + pd.S2 * extra,
+    S3: pb.S3 * base + pd.S3 * extra,
+    S4: pb.S4 * base + pd.S4 * extra,
+    S5: pb.S5 * base + pd.S5 * extra,
   };
 }
 
-export function getSoglieFromConfig(config: EnergiaConfig, numPdv: number): PistaEnergiaSoglieSet {
-  const defaults = calcolaSoglieDefaultPerRS(numPdv);
+export function getSoglieFromConfig(config: EnergiaConfig, numPdv: number, pistaBaseOverride?: Record<string, number>, pistaDa4Override?: Record<string, number>): PistaEnergiaSoglieSet {
+  const defaults = calcolaSoglieDefaultPerRS(numPdv, pistaBaseOverride, pistaDa4Override);
   return {
     S1: config.pistaSoglia_S1 || defaults.S1,
     S2: config.pistaSoglia_S2 || defaults.S2,
@@ -97,8 +99,8 @@ export function getSoglieFromConfig(config: EnergiaConfig, numPdv: number): Pist
   };
 }
 
-export function determinaPistaEnergiaSoglia(totalePezzi: number, config: EnergiaConfig, numPdv: number): PistaEnergiaSoglia | null {
-  const soglie = getSoglieFromConfig(config, numPdv);
+export function determinaPistaEnergiaSoglia(totalePezzi: number, config: EnergiaConfig, numPdv: number, pistaBaseOverride?: Record<string, number>, pistaDa4Override?: Record<string, number>): PistaEnergiaSoglia | null {
+  const soglie = getSoglieFromConfig(config, numPdv, pistaBaseOverride, pistaDa4Override);
   if (totalePezzi >= soglie.S5) return "S5";
   if (totalePezzi >= soglie.S4) return "S4";
   if (totalePezzi >= soglie.S3) return "S3";
@@ -107,8 +109,8 @@ export function determinaPistaEnergiaSoglia(totalePezzi: number, config: Energia
   return null;
 }
 
-export function calcolaBonusPistaEnergia(totalePezzi: number, config: EnergiaConfig, numPdv: number, bonusPerContrattoOverride?: Record<string, number>): { sogliaRaggiunta: PistaEnergiaSoglia | null; bonusPerContratto: number; bonusTotale: number } {
-  const soglia = determinaPistaEnergiaSoglia(totalePezzi, config, numPdv);
+export function calcolaBonusPistaEnergia(totalePezzi: number, config: EnergiaConfig, numPdv: number, bonusPerContrattoOverride?: Record<string, number>, pistaBaseOverride?: Record<string, number>, pistaDa4Override?: Record<string, number>): { sogliaRaggiunta: PistaEnergiaSoglia | null; bonusPerContratto: number; bonusTotale: number } {
+  const soglia = determinaPistaEnergiaSoglia(totalePezzi, config, numPdv, pistaBaseOverride, pistaDa4Override);
   if (!soglia) return { sogliaRaggiunta: null, bonusPerContratto: 0, bonusTotale: 0 };
   const bonusPerContratto = bonusPerContrattoOverride?.[soglia] ?? PISTA_ENERGIA_BONUS_PER_CONTRATTO[soglia];
   return { sogliaRaggiunta: soglia, bonusPerContratto, bonusTotale: bonusPerContratto * totalePezzi };

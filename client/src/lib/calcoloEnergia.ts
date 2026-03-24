@@ -20,6 +20,8 @@ interface CalcoloEnergiaParams {
   compensiBaseOverride?: Record<string, number>;
   bonusPerContrattoOverride?: number;
   pistaBonusPerContrattoOverride?: Record<string, number>;
+  pistaBaseOverride?: Record<string, number>;
+  pistaDa4Override?: Record<string, number>;
 }
 
 export function calcoloEnergiaPerPos({
@@ -32,6 +34,8 @@ export function calcoloEnergiaPerPos({
   compensiBaseOverride,
   bonusPerContrattoOverride,
   pistaBonusPerContrattoOverride,
+  pistaBaseOverride,
+  pistaDa4Override,
 }: CalcoloEnergiaParams): EnergiaResult {
   const pezziPerCategoria: Record<EnergiaCategory, number> = {
     CONSUMER_CON_SDD: 0,
@@ -87,7 +91,7 @@ export function calcoloEnergiaPerPos({
     }
   }
 
-  const pistaEnergia = calcolaBonusPistaEnergiaFn(totalePezzi, config, numPdv, pistaBonusPerContrattoOverride);
+  const pistaEnergia = calcolaBonusPistaEnergiaFn(totalePezzi, config, numPdv, pistaBonusPerContrattoOverride, pistaBaseOverride, pistaDa4Override);
 
   const premioTotale = premioBase + bonusRaggiungimentoSoglia + premioSoglia + pistaEnergia.bonusTotale;
 
