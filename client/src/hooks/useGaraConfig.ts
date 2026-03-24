@@ -168,6 +168,20 @@ export interface GaraConfigData {
       premioS2?: number;
     }>;
   };
+  protectaRSConfig?: {
+    configPerRS: Array<{
+      ragioneSociale: string;
+      targetExtra: number;
+      targetDecurtazione: number;
+      premioExtra: number;
+    }>;
+  };
+  decurtazioneRSConfig?: {
+    configPerRS: Array<{
+      ragioneSociale: string;
+      importo: number;
+    }>;
+  };
   extraGaraIvaConfig?: {
     puntiAttivazione?: Record<string, number>;
     soglieMultipos?: Record<string, Record<string, number>>;

@@ -485,6 +485,8 @@ export default function ConfigurazioneGara() {
 
   const [energiaRSConfig, setEnergiaRSConfig] = useState<EnergiaRSConf[]>([]);
   const [assicurazioniRSConfig, setAssicurazioniRSConfig] = useState<AssicurazioniRSConf[]>([]);
+  const [protectaRSConfig, setProtectaRSConfig] = useState<Array<{ ragioneSociale: string; targetExtra: number; targetDecurtazione: number; premioExtra: number }>>([]);
+  const [decurtazioneRSConfig, setDecurtazioneRSConfig] = useState<Array<{ ragioneSociale: string; importo: number }>>([]);
 
   const { config: orgTabelleConfig } = useTabelleCalcoloConfig();
   const tabelleCalcoloDefaults = useMemo<TabelleCalcoloConfig>(() => {
@@ -594,11 +596,16 @@ export default function ConfigurazioneGara() {
       });
     });
 
+    const protectaRS = rsNames.map(rs => ({ ragioneSociale: rs, targetExtra: 0, targetDecurtazione: 0, premioExtra: 350 }));
+    const decurtazioneRS = rsNames.map(rs => ({ ragioneSociale: rs, importo: 0 }));
+
     setMobileRSConfig(mobileRS);
     setFissoRSConfig(fissoRS);
     setPartnershipRSConfig(partnershipRS);
     setEnergiaRSConfig(energiaRS);
     setAssicurazioniRSConfig(assicurazioniRS);
+    setProtectaRSConfig(protectaRS);
+    setDecurtazioneRSConfig(decurtazioneRS);
   }, []);
 
   const initializeConfigsFromPdvList = useCallback((pdvs: GaraConfigPdv[]) => {
@@ -650,6 +657,8 @@ export default function ConfigurazioneGara() {
       if (cfg.assicurazioniConfig) setAssicurazioniConfig(cfg.assicurazioniConfig);
       if (cfg.energiaRSConfig?.configPerRS?.length) setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
+      if (cfg.protectaRSConfig?.configPerRS?.length) setProtectaRSConfig(cfg.protectaRSConfig.configPerRS);
+      if (cfg.decurtazioneRSConfig?.configPerRS?.length) setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS(cfg.extraGaraIvaSogliePerRS || {});
     }
@@ -717,6 +726,12 @@ export default function ConfigurazioneGara() {
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) {
         setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
       }
+      if (cfg.protectaRSConfig?.configPerRS?.length) {
+        setProtectaRSConfig(cfg.protectaRSConfig.configPerRS);
+      }
+      if (cfg.decurtazioneRSConfig?.configPerRS?.length) {
+        setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
+      }
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS(cfg.extraGaraIvaSogliePerRS || {});
     } else {
@@ -728,6 +743,8 @@ export default function ConfigurazioneGara() {
       setPartnershipRSConfig([]);
       setEnergiaRSConfig([]);
       setAssicurazioniRSConfig([]);
+      setProtectaRSConfig([]);
+      setDecurtazioneRSConfig([]);
       setEnergiaConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premioS1: 250, premioS2: 500, premioS3: 1000 });
       setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premioS1: 500, premioS2: 750 });
       setTabelleCalcolo(JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
@@ -769,12 +786,14 @@ export default function ConfigurazioneGara() {
     assicurazioniConfig,
     energiaRSConfig: { configPerRS: energiaRSConfig },
     assicurazioniRSConfig: { configPerRS: assicurazioniRSConfig },
+    protectaRSConfig: { configPerRS: protectaRSConfig },
+    decurtazioneRSConfig: { configPerRS: decurtazioneRSConfig },
     tabelleCalcolo,
     ...(Object.keys(extraGaraIvaSogliePerRS).length > 0 ? { extraGaraIvaSogliePerRS } : {}),
     ...(garaConfigRecord?.config ? {
       importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
     } : {}),
-  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, tabelleCalcolo, extraGaraIvaSogliePerRS, garaConfigRecord]);
+  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, tabelleCalcolo, extraGaraIvaSogliePerRS, garaConfigRecord]);
 
   const handleQuickSave = useCallback(async () => {
     if (!garaConfigRecord?.id) {
@@ -1042,11 +1061,34 @@ export default function ConfigurazioneGara() {
         }
 
         if (pdfData.soglieProtecta) {
-          parts.push(`Protecta: target ≥${pdfData.soglieProtecta.targetExtra}, decurt. <${pdfData.soglieProtecta.targetDecurtazione}`);
+          setProtectaRSConfig(prev => prev.map(c => {
+            if (c.ragioneSociale !== targetRS) return c;
+            return {
+              ...c,
+              targetExtra: pdfData.soglieProtecta!.targetExtra,
+              targetDecurtazione: pdfData.soglieProtecta!.targetDecurtazione,
+              premioExtra: pdfData.soglieProtecta!.premioExtra,
+            };
+          }));
+          parts.push('Protecta target/decurtazione impostati');
         }
 
         if (pdfData.decurtazione) {
-          parts.push(`decurtazione ${pdfData.decurtazione.importo.toLocaleString('it-IT')}€`);
+          setDecurtazioneRSConfig(prev => prev.map(c => {
+            if (c.ragioneSociale !== targetRS) return c;
+            return { ...c, importo: pdfData.decurtazione!.importo };
+          }));
+          parts.push(`decurtazione ${pdfData.decurtazione.importo.toLocaleString('it-IT')}€ impostata`);
+        }
+
+        if (pdfData.soglieEnergia?.targetFissoRS) {
+          if (tipologiaGara === 'gara_operatore_rs' && modalitaRS === 'per_rs') {
+            setFissoRSConfig(prev => prev.map(c => {
+              if (c.ragioneSociale !== targetRS) return c;
+              return { ...c, forecastTargetPunti: pdfData.soglieEnergia!.targetFissoRS };
+            }));
+          }
+          parts.push(`target Fisso RS: ${pdfData.soglieEnergia.targetFissoRS}`);
         }
 
         parts.push(`RS: ${targetRS}`);
@@ -1223,6 +1265,8 @@ export default function ConfigurazioneGara() {
       if (cfg.partnershipRewardRSConfig?.configPerRS?.length) setPartnershipRSConfig(cfg.partnershipRewardRSConfig.configPerRS);
       if (cfg.energiaRSConfig?.configPerRS?.length) setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
+      if (cfg.protectaRSConfig?.configPerRS?.length) setProtectaRSConfig(cfg.protectaRSConfig.configPerRS);
+      if (cfg.decurtazioneRSConfig?.configPerRS?.length) setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
 
       if (cfg.energiaConfig) {
         setEnergiaConfig(cfg.energiaConfig);
