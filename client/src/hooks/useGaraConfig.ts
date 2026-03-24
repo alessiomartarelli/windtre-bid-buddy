@@ -175,7 +175,7 @@ export interface GaraConfigData {
     premiPerSoglia?: Record<string, number[]>;
   };
   extraGaraIvaSogliePerRS?: {
-    [ragioneSociale: string]: { s1?: number; s2?: number; s3?: number; s4?: number; pdvCount?: number };
+    [ragioneSociale: string]: { s1?: number; s2?: number; s3?: number; s4?: number; pdvCount?: number; clusterPIva?: string; codiciRS?: string[] };
   };
   tabelleCalcolo?: {
     mobile?: {

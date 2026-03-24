@@ -21,10 +21,12 @@ import { apiUrl } from '@/lib/basePath';
 import {
   Loader2, Save, Download, Plus, Trash2, CalendarDays, Store,
   ChevronDown, ChevronUp, History, Upload, Settings, Target, Zap, Shield, Calculator,
+  FileText, X, Check, AlertTriangle,
 } from 'lucide-react';
 import { TabelleCalcoloGara, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
 import { useTabelleCalcoloConfig } from '@/hooks/useTabelleCalcoloConfig';
 import type { ExtraGaraSogliePerRS } from '@/lib/calcoloExtraGaraIva';
+import { parseGaraPdf, type PdfGaraData } from '@/lib/parseGaraPdf';
 
 const MONTHS = [
   { value: 1, label: 'Gennaio' },
@@ -367,6 +369,62 @@ type PartnershipRSConf = NonNullable<GaraConfigData['partnershipRewardRSConfig']
 type EnergiaRSConf = NonNullable<GaraConfigData['energiaRSConfig']>['configPerRS'][number];
 type AssicurazioniRSConf = NonNullable<GaraConfigData['assicurazioniRSConfig']>['configPerRS'][number];
 
+function CodiciRSInput({ codici, onChange, rsName }: { codici: string[]; onChange: (codici: string[]) => void; rsName: string }) {
+  const [inputVal, setInputVal] = useState('');
+
+  const handleAdd = () => {
+    const val = inputVal.trim();
+    if (val && !codici.includes(val)) {
+      onChange([...codici, val]);
+    }
+    setInputVal('');
+  };
+
+  const handleRemove = (codice: string) => {
+    onChange(codici.filter(c => c !== codice));
+  };
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Label className="text-xs text-muted-foreground whitespace-nowrap">Codici RS</Label>
+      {codici.map(codice => (
+        <Badge key={codice} variant="secondary" className="text-xs gap-1 pl-2 pr-1 py-0.5">
+          {codice}
+          <button
+            type="button"
+            onClick={() => handleRemove(codice)}
+            className="hover:bg-muted rounded-full p-0.5"
+            data-testid={`button-remove-codice-rs-${codice}`}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </Badge>
+      ))}
+      <div className="flex items-center gap-1">
+        <Input
+          value={inputVal}
+          onChange={e => setInputVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
+          placeholder="es. 8000006456"
+          className="h-6 text-xs w-32"
+          data-testid={`input-codice-rs-${rsName.replace(/\s+/g, '-')}`}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0"
+          onClick={handleAdd}
+          disabled={!inputVal.trim()}
+          data-testid={`button-add-codice-rs-${rsName.replace(/\s+/g, '-')}`}
+        >
+          <Plus className="h-3 w-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function ConfigurazioneGara() {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -374,6 +432,10 @@ export default function ConfigurazioneGara() {
   const [pdvList, setPdvList] = useState<GaraConfigPdv[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [pdfImportDialogOpen, setPdfImportDialogOpen] = useState(false);
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const [pdfData, setPdfData] = useState<PdfGaraData | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [addPdvDialogOpen, setAddPdvDialogOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -818,6 +880,159 @@ export default function ConfigurazioneGara() {
     setIsDirty(true);
   };
 
+  const handleRSCodiciChange = useCallback((rs: string, codici: string[]) => {
+    setExtraGaraIvaSogliePerRS(prev => {
+      const existing = prev[rs] || {};
+      return { ...prev, [rs]: { ...existing, codiciRS: codici } };
+    });
+    setIsDirty(true);
+  }, []);
+
+  const handlePdfFileSelect = async (file: File) => {
+    setPdfParsing(true);
+    setPdfError(null);
+    setPdfData(null);
+    try {
+      const data = await parseGaraPdf(file);
+      if (data.pdvList.length === 0 && !data.soglieMobile && !data.soglieFisso) {
+        setPdfError('Nessun dato riconosciuto nel PDF. Verificare che sia un PDF di gara WindTre con allegato PDV.');
+      } else {
+        setPdfData(data);
+      }
+    } catch (err) {
+      console.error('PDF parse error:', err);
+      setPdfError('Errore nella lettura del PDF. Verificare che il file sia un PDF valido.');
+    } finally {
+      setPdfParsing(false);
+    }
+  };
+
+  const handleApplyPdfImport = useCallback(() => {
+    if (!pdfData) return;
+
+    const updatedPdvList = [...pdvList];
+    let matchedCount = 0;
+    let unmatchedPdf: string[] = [];
+
+    for (const pdfPdv of pdfData.pdvList) {
+      const idx = updatedPdvList.findIndex(p => p.codicePos === pdfPdv.codicePos);
+      if (idx >= 0) {
+        if (pdfPdv.clusterMobile > 0) {
+          const clusterVal = `strada_${pdfPdv.clusterMobile}`;
+          updatedPdvList[idx] = { ...updatedPdvList[idx], clusterMobile: clusterVal };
+        }
+        if (pdfPdv.clusterFisso > 0) {
+          const clusterVal = `strada_${pdfPdv.clusterFisso}`;
+          updatedPdvList[idx] = { ...updatedPdvList[idx], clusterFisso: clusterVal };
+        }
+        matchedCount++;
+      } else {
+        unmatchedPdf.push(pdfPdv.codicePos);
+      }
+    }
+
+    setPdvList(updatedPdvList);
+
+    let targetRS: string | null = null;
+    if (pdfData.codiciDealer.length > 0) {
+      for (const [rs, soglieData] of Object.entries(extraGaraIvaSogliePerRS)) {
+        if (soglieData.codiciRS?.some(c => pdfData.codiciDealer.includes(c))) {
+          targetRS = rs;
+          break;
+        }
+      }
+
+      if (!targetRS) {
+        const rsNames = Array.from(new Set(updatedPdvList.map(p => p.ragioneSociale).filter(Boolean)));
+        if (rsNames.length === 1) {
+          targetRS = rsNames[0];
+        } else if (rsNames.length > 1) {
+          for (const rs of rsNames) {
+            const rsPdvCodes = updatedPdvList.filter(p => p.ragioneSociale === rs).map(p => p.codicePos);
+            const pdfCodes = pdfData.pdvList.map(p => p.codicePos);
+            const overlap = rsPdvCodes.filter(c => pdfCodes.includes(c));
+            if (overlap.length > 0) {
+              targetRS = rs;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (targetRS) {
+      const updatedSoglie = { ...extraGaraIvaSogliePerRS };
+      const existing = updatedSoglie[targetRS] || {};
+
+      updatedSoglie[targetRS] = {
+        ...existing,
+        codiciRS: [...new Set([...(existing.codiciRS || []), ...pdfData.codiciDealer])],
+      };
+
+      if (pdfData.soglieExtraPIva) {
+        updatedSoglie[targetRS].clusterPIva = pdfData.soglieExtraPIva.cluster;
+        updatedSoglie[targetRS].s1 = pdfData.soglieExtraPIva.s1;
+        updatedSoglie[targetRS].s2 = pdfData.soglieExtraPIva.s2;
+        updatedSoglie[targetRS].s3 = pdfData.soglieExtraPIva.s3;
+        updatedSoglie[targetRS].s4 = pdfData.soglieExtraPIva.s4;
+      }
+
+      setExtraGaraIvaSogliePerRS(updatedSoglie);
+
+      if (pdfData.soglieMobile) {
+        if (tipologiaGara === 'gara_operatore_rs' && modalitaRS === 'per_rs') {
+          setMobileRSConfig(prev => prev.map(c => {
+            if (c.ragioneSociale !== targetRS) return c;
+            return {
+              ...c,
+              soglia1: pdfData.soglieMobile!.s1,
+              soglia2: pdfData.soglieMobile!.s2,
+              soglia3: pdfData.soglieMobile!.s3,
+              soglia4: pdfData.soglieMobile!.s4,
+              forecastTargetPunti: pdfData.soglieMobile!.s4,
+            };
+          }));
+        }
+      }
+
+      if (pdfData.soglieFisso) {
+        if (tipologiaGara === 'gara_operatore_rs' && modalitaRS === 'per_rs') {
+          setFissoRSConfig(prev => prev.map(c => {
+            if (c.ragioneSociale !== targetRS) return c;
+            return {
+              ...c,
+              soglia1: pdfData.soglieFisso!.s1,
+              soglia2: pdfData.soglieFisso!.s2,
+              soglia3: pdfData.soglieFisso!.s3,
+              soglia4: pdfData.soglieFisso!.s4,
+              soglia5: pdfData.soglieFisso!.s5,
+              forecastTargetPunti: pdfData.soglieFisso!.s5,
+            };
+          }));
+        }
+      }
+    }
+
+    initializeConfigsFromPdvList(updatedPdvList);
+
+    setIsDirty(true);
+    setPdfImportDialogOpen(false);
+    setPdfData(null);
+
+    const parts: string[] = [];
+    if (matchedCount > 0) parts.push(`${matchedCount} PDV aggiornati`);
+    if (unmatchedPdf.length > 0) parts.push(`${unmatchedPdf.length} PDV del PDF non trovati`);
+    if (pdfData.soglieMobile) parts.push('soglie Mobile impostate');
+    if (pdfData.soglieFisso) parts.push('soglie Fisso impostate');
+    if (pdfData.soglieExtraPIva) parts.push('soglie Extra P.IVA impostate');
+    if (targetRS) parts.push(`RS: ${targetRS}`);
+
+    toast({
+      title: 'Importazione PDF completata',
+      description: parts.join(', ') || 'Dati importati dal PDF.',
+    });
+  }, [pdfData, pdvList, extraGaraIvaSogliePerRS, tipologiaGara, modalitaRS, initializeConfigsFromPdvList, toast]);
+
   const reinitFromClusters = () => {
     initializeConfigsFromPdvList(pdvList);
     setIsDirty(true);
@@ -1103,20 +1318,28 @@ export default function ConfigurazioneGara() {
                     });
                     return grouped.map(({ rs, pdvs }) => {
                       const rsCluster = extraGaraIvaSogliePerRS?.[rs]?.clusterPIva || '';
+                      const rsCodici = extraGaraIvaSogliePerRS?.[rs]?.codiciRS || [];
                       return (
                         <div key={rs} className="space-y-2">
-                          <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-4 py-2">
-                            <span className="font-semibold text-sm flex-1">{rs} <span className="text-muted-foreground font-normal">({pdvs.length} PDV)</span></span>
-                            <div className="flex items-center gap-2">
-                              <Label className="text-xs text-muted-foreground whitespace-nowrap">Cluster P.IVA</Label>
-                              <Select value={rsCluster || '__none__'} onValueChange={v => handleRSClusterPIvaChange(rs, v === '__none__' ? '' : v)}>
-                                <SelectTrigger className="h-7 text-xs w-44" data-testid={`select-cluster-piva-rs-${rs.replace(/\s+/g, '-')}`}><SelectValue placeholder="--" /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">--</SelectItem>
-                                  {CLUSTER_PIVA_OPTIONS.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
+                          <div className="flex flex-col gap-2 bg-muted/50 rounded-lg px-4 py-2">
+                            <div className="flex items-center gap-3">
+                              <span className="font-semibold text-sm flex-1">{rs} <span className="text-muted-foreground font-normal">({pdvs.length} PDV)</span></span>
+                              <div className="flex items-center gap-2">
+                                <Label className="text-xs text-muted-foreground whitespace-nowrap">Cluster P.IVA</Label>
+                                <Select value={rsCluster || '__none__'} onValueChange={v => handleRSClusterPIvaChange(rs, v === '__none__' ? '' : v)}>
+                                  <SelectTrigger className="h-7 text-xs w-44" data-testid={`select-cluster-piva-rs-${rs.replace(/\s+/g, '-')}`}><SelectValue placeholder="--" /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">--</SelectItem>
+                                    {CLUSTER_PIVA_OPTIONS.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </div>
+                            <CodiciRSInput
+                              codici={rsCodici}
+                              onChange={(codici) => handleRSCodiciChange(rs, codici)}
+                              rsName={rs}
+                            />
                           </div>
                           {pdvs.map(({ pdv, globalIdx }) => (
                             <PdvCard key={pdv.id || globalIdx} pdv={pdv} index={globalIdx} onUpdate={handleUpdatePdv} onRemove={handleRemovePdv} onSave={handleQuickSave} saving={saving} existingRSNames={Array.from(rsGroups.keys()).filter(r => r !== 'Senza RS')} />
@@ -1627,12 +1850,22 @@ export default function ConfigurazioneGara() {
         <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Importa da Simulatore</DialogTitle>
+              <DialogTitle>Importa Configurazione</DialogTitle>
               <DialogDescription>
-                Importa la configurazione PDV da una configurazione salvata nel simulatore o dalla configurazione corrente dell'organizzazione.
+                Importa da PDF gara WindTre, dal simulatore o dalla configurazione corrente.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              <Button variant="outline" className="w-full justify-start h-auto py-3" onClick={() => { setImportDialogOpen(false); setPdfData(null); setPdfError(null); setPdfImportDialogOpen(true); }} data-testid="button-import-pdf-gara">
+                <FileText className="h-4 w-4 mr-2 shrink-0" />
+                <div className="text-left">
+                  <div className="font-medium text-sm">Importa da PDF Gara</div>
+                  <div className="text-xs text-muted-foreground">Legge cluster PDV, soglie e codici RS dal PDF WindTre</div>
+                </div>
+              </Button>
+
+              <Separator />
+
               <Button variant="outline" className="w-full justify-start h-auto py-3" onClick={() => handleImport('organization_config')} disabled={saving} data-testid="button-import-org-config">
                 <Upload className="h-4 w-4 mr-2 shrink-0" />
                 <div className="text-left">
@@ -1657,6 +1890,189 @@ export default function ConfigurazioneGara() {
                 ))
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={pdfImportDialogOpen} onOpenChange={(open) => { setPdfImportDialogOpen(open); if (!open) { setPdfData(null); setPdfError(null); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Importa da PDF Gara WindTre</DialogTitle>
+              <DialogDescription>
+                Carica il PDF della lettera di incentivazione per importare automaticamente cluster PDV, soglie e codici RS.
+              </DialogDescription>
+            </DialogHeader>
+
+            {!pdfData && !pdfParsing && (
+              <div className="space-y-4">
+                <label
+                  htmlFor="pdf-upload"
+                  className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-8 cursor-pointer hover:bg-muted/50 transition-colors"
+                >
+                  <FileText className="h-10 w-10 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Clicca per selezionare il PDF</span>
+                  <span className="text-xs text-muted-foreground">Formato: PDF gara WindTre con allegato PDV</span>
+                </label>
+                <input
+                  id="pdf-upload"
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handlePdfFileSelect(f); e.target.value = ''; }}
+                  data-testid="input-pdf-upload"
+                />
+                {pdfError && (
+                  <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-lg">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>{pdfError}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {pdfParsing && (
+              <div className="flex flex-col items-center justify-center py-8 gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground">Analisi del PDF in corso...</span>
+              </div>
+            )}
+
+            {pdfData && (
+              <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                {pdfData.nomeRS && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">RS:</span>
+                    <span className="font-medium">{pdfData.nomeRS}</span>
+                  </div>
+                )}
+                {pdfData.mese && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Periodo:</span>
+                    <span className="font-medium">{pdfData.mese}</span>
+                  </div>
+                )}
+
+                {pdfData.codiciDealer.length > 0 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Codici Dealer (RS)</Label>
+                    <div className="flex gap-1 flex-wrap">
+                      {pdfData.codiciDealer.map(c => <Badge key={c} variant="secondary" className="text-xs">{c}</Badge>)}
+                    </div>
+                  </div>
+                )}
+
+                {pdfData.pdvList.length > 0 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">PDV trovati nel PDF ({pdfData.pdvList.length})</Label>
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted/50">
+                            <th className="px-2 py-1 text-left">Codice POS</th>
+                            <th className="px-2 py-1 text-center">Cluster M</th>
+                            <th className="px-2 py-1 text-center">Cluster F</th>
+                            <th className="px-2 py-1 text-center">Stato</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pdfData.pdvList.map(p => {
+                            const found = pdvList.some(pdv => pdv.codicePos === p.codicePos);
+                            return (
+                              <tr key={p.codicePos} className="border-t">
+                                <td className="px-2 py-1 font-mono">{p.codicePos}</td>
+                                <td className="px-2 py-1 text-center">{p.clusterMobile || '-'}</td>
+                                <td className="px-2 py-1 text-center">{p.clusterFisso || '-'}</td>
+                                <td className="px-2 py-1 text-center">
+                                  {found ? (
+                                    <Badge variant="secondary" className="text-[10px]"><Check className="h-3 w-3 mr-0.5" />Trovato</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px] text-amber-600"><AlertTriangle className="h-3 w-3 mr-0.5" />Non trovato</Badge>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {pdfData.soglieMobile && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Soglie Pista Mobile</Label>
+                    <div className="grid grid-cols-4 gap-2">
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">S1</div>
+                        <div className="text-sm font-semibold">{pdfData.soglieMobile.s1}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">S2</div>
+                        <div className="text-sm font-semibold">{pdfData.soglieMobile.s2}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">S3</div>
+                        <div className="text-sm font-semibold">{pdfData.soglieMobile.s3}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">S4</div>
+                        <div className="text-sm font-semibold">{pdfData.soglieMobile.s4}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pdfData.soglieFisso && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Soglie Pista Fisso</Label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[pdfData.soglieFisso.s1, pdfData.soglieFisso.s2, pdfData.soglieFisso.s3, pdfData.soglieFisso.s4, pdfData.soglieFisso.s5].map((v, i) => (
+                        <div key={i} className="bg-muted/50 rounded p-2 text-center">
+                          <div className="text-[10px] text-muted-foreground">S{i + 1}</div>
+                          <div className="text-sm font-semibold">{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {pdfData.soglieExtraPIva && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Pista Extra P.IVA</Label>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs text-muted-foreground">Cluster:</span>
+                      <Badge variant="outline" className="text-xs">
+                        {pdfData.soglieExtraPIva.cluster === 'business_promoter_plus' ? 'Business Promoter Plus' :
+                         pdfData.soglieExtraPIva.cluster === 'business_promoter' ? 'Business Promoter' :
+                         pdfData.soglieExtraPIva.cluster === 'senza_business_promoter' ? 'Senza Business Promoter' :
+                         pdfData.soglieExtraPIva.cluster || '—'}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[pdfData.soglieExtraPIva.s1, pdfData.soglieExtraPIva.s2, pdfData.soglieExtraPIva.s3, pdfData.soglieExtraPIva.s4].map((v, i) => (
+                        <div key={i} className="bg-muted/50 rounded p-2 text-center">
+                          <div className="text-[10px] text-muted-foreground">S{i + 1}</div>
+                          <div className="text-sm font-semibold">{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <DialogFooter>
+              {pdfData && (
+                <>
+                  <Button variant="outline" onClick={() => { setPdfData(null); setPdfError(null); }} data-testid="button-pdf-back">
+                    Cambia file
+                  </Button>
+                  <Button onClick={handleApplyPdfImport} data-testid="button-pdf-apply">
+                    <Check className="h-4 w-4 mr-1" />
+                    Applica modifiche
+                  </Button>
+                </>
+              )}
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 

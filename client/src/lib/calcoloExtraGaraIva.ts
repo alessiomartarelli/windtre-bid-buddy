@@ -50,6 +50,7 @@ export interface ExtraGaraRsSoglie {
   s4?: number;
   pdvCount?: number;
   clusterPIva?: ClusterPIvaCode;
+  codiciRS?: string[];
 }
 
 export interface ExtraGaraSogliePerRS {
