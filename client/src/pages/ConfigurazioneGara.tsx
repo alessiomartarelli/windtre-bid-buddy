@@ -933,6 +933,10 @@ export default function ConfigurazioneGara() {
 
     setPdvList(updatedPdvList);
 
+    setMobileConfig(updatedPdvList.map(p => initMobileConfigForPdv(p)));
+    setFissoConfig(updatedPdvList.map(p => initFissoConfigForPdv(p)));
+    setPartnershipConfig(updatedPdvList.map(p => initPartnershipConfigForPdv(p)));
+
     let targetRS: string | null = null;
     if (pdfData.codiciDealer.length > 0) {
       for (const [rs, soglieData] of Object.entries(extraGaraIvaSogliePerRS)) {
@@ -1013,8 +1017,6 @@ export default function ConfigurazioneGara() {
       }
     }
 
-    initializeConfigsFromPdvList(updatedPdvList);
-
     setIsDirty(true);
     setPdfImportDialogOpen(false);
     setPdfData(null);
@@ -1031,7 +1033,7 @@ export default function ConfigurazioneGara() {
       title: 'Importazione PDF completata',
       description: parts.join(', ') || 'Dati importati dal PDF.',
     });
-  }, [pdfData, pdvList, extraGaraIvaSogliePerRS, tipologiaGara, modalitaRS, initializeConfigsFromPdvList, toast]);
+  }, [pdfData, pdvList, extraGaraIvaSogliePerRS, tipologiaGara, modalitaRS, toast]);
 
   const reinitFromClusters = () => {
     initializeConfigsFromPdvList(pdvList);
