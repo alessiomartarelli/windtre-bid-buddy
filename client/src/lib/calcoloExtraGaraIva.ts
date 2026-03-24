@@ -218,11 +218,21 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
     const isMultipos = pdvList.length > 1;
     const soglieCalcolate = calcolaSoglieRS(pdvList, isMultipos, configOverrides);
     const rsOverride = soglieOverridePerRS?.[ragioneSociale];
+    let soglieBase = soglieCalcolate;
+    if (rsOverride?.pdvCount !== undefined && rsOverride.pdvCount !== pdvList.length && pdvList.length > 0) {
+      const ratio = rsOverride.pdvCount / pdvList.length;
+      soglieBase = {
+        s1: Math.round(soglieCalcolate.s1 * ratio),
+        s2: Math.round(soglieCalcolate.s2 * ratio),
+        s3: Math.round(soglieCalcolate.s3 * ratio),
+        s4: Math.round(soglieCalcolate.s4 * ratio),
+      };
+    }
     const soglie = {
-      s1: rsOverride?.s1 ?? soglieCalcolate.s1,
-      s2: rsOverride?.s2 ?? soglieCalcolate.s2,
-      s3: rsOverride?.s3 ?? soglieCalcolate.s3,
-      s4: rsOverride?.s4 ?? soglieCalcolate.s4,
+      s1: rsOverride?.s1 ?? soglieBase.s1,
+      s2: rsOverride?.s2 ?? soglieBase.s2,
+      s3: rsOverride?.s3 ?? soglieBase.s3,
+      s4: rsOverride?.s4 ?? soglieBase.s4,
     };
     
     // Verifica se almeno un PDV ha Business Promoter

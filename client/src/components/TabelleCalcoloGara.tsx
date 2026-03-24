@@ -856,35 +856,11 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
   const handleRSPdvCountChange = useCallback((rs: string, newPdvCount: number) => {
     const current = extraGaraIvaSogliePerRS || {};
     const existing = current[rs] || {};
-    const soglieConfigOverrides = config.extraGara ? {
-      soglieMultipos: config.extraGara.soglieMultipos,
-      soglieMonopos: config.extraGara.soglieMonopos,
-    } : undefined;
-    const pdvs = pdvList?.filter(p => (p.ragioneSociale || 'Senza RS') === rs) || [];
-    const baseComputed = calcolaSoglieRS(
-      pdvs as unknown as Parameters<typeof calcolaSoglieRS>[0],
-      pdvs.length > 1,
-      soglieConfigOverrides
-    );
-    const ratio = pdvs.length > 0 ? newPdvCount / pdvs.length : 1;
-    const scaled = {
-      s1: Math.round(baseComputed.s1 * ratio),
-      s2: Math.round(baseComputed.s2 * ratio),
-      s3: Math.round(baseComputed.s3 * ratio),
-      s4: Math.round(baseComputed.s4 * ratio),
-    };
     onExtraGaraIvaSogliePerRSChange?.({
       ...current,
-      [rs]: {
-        ...existing,
-        pdvCount: newPdvCount,
-        s1: existing.s1 !== undefined ? existing.s1 : scaled.s1,
-        s2: existing.s2 !== undefined ? existing.s2 : scaled.s2,
-        s3: existing.s3 !== undefined ? existing.s3 : scaled.s3,
-        s4: existing.s4 !== undefined ? existing.s4 : scaled.s4,
-      },
+      [rs]: { ...existing, pdvCount: newPdvCount },
     });
-  }, [extraGaraIvaSogliePerRS, config.extraGara, pdvList, onExtraGaraIvaSogliePerRSChange]);
+  }, [extraGaraIvaSogliePerRS, onExtraGaraIvaSogliePerRSChange]);
 
   const handleRSPdvCountReset = useCallback((rs: string) => {
     if (!extraGaraIvaSogliePerRS?.[rs]) return;

@@ -106,12 +106,14 @@ function initPartnershipConfigForPdv(pdv: GaraConfigPdv) {
 }
 
 function PdvCard({
-  pdv, index, onUpdate, onRemove, existingRSNames,
+  pdv, index, onUpdate, onRemove, onSave, saving, existingRSNames,
 }: {
   pdv: GaraConfigPdv;
   index: number;
   onUpdate: (index: number, updated: GaraConfigPdv) => void;
   onRemove: (index: number) => void;
+  onSave?: () => void;
+  saving?: boolean;
   existingRSNames: string[];
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -348,11 +350,17 @@ function PdvCard({
             </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => onRemove(index)} data-testid={`button-remove-pdv-${index}`}>
               <Trash2 className="h-3.5 w-3.5 mr-1" />
               Rimuovi
             </Button>
+            {onSave && (
+              <Button size="sm" onClick={onSave} disabled={saving} data-testid={`button-save-pdv-${index}`}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                Salva
+              </Button>
+            )}
           </div>
         </CardContent>
       )}
@@ -680,6 +688,45 @@ export default function ConfigurazioneGara() {
     fetchHistory();
   }, [selectedMonth, selectedYear, loadMonthConfig, fetchHistory]);
 
+  const buildConfigData = useCallback((): GaraConfigData => ({
+    pdvList,
+    tipologiaGara,
+    modalitaInserimentoRS: tipologiaGara === 'gara_operatore_rs' ? modalitaRS : null,
+    pistaMobileConfig: { sogliePerPos: mobileConfig },
+    pistaFissoConfig: { sogliePerPos: fissoConfig },
+    partnershipRewardConfig: { configPerPos: partnershipConfig },
+    pistaMobileRSConfig: { sogliePerRS: mobileRSConfig },
+    pistaFissoRSConfig: { sogliePerRS: fissoRSConfig },
+    partnershipRewardRSConfig: { configPerRS: partnershipRSConfig },
+    energiaConfig,
+    assicurazioniConfig,
+    energiaRSConfig: { configPerRS: energiaRSConfig },
+    assicurazioniRSConfig: { configPerRS: assicurazioniRSConfig },
+    tabelleCalcolo,
+    ...(Object.keys(extraGaraIvaSogliePerRS).length > 0 ? { extraGaraIvaSogliePerRS } : {}),
+    ...(garaConfigRecord?.config ? {
+      importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
+    } : {}),
+  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, tabelleCalcolo, extraGaraIvaSogliePerRS, garaConfigRecord]);
+
+  const handleQuickSave = useCallback(async () => {
+    if (!garaConfigRecord?.id) {
+      setSaveAsNew(false);
+      setSaveDialogOpen(true);
+      return;
+    }
+    const configData = buildConfigData();
+    const result = await saveConfig(selectedMonth, selectedYear, configData, garaConfigRecord.name || 'Configurazione', garaConfigRecord.id);
+    if (result) {
+      setIsDirty(false);
+      fetchHistory();
+      fetchConfigList(selectedMonth, selectedYear);
+      toast({ title: 'Salvato', description: 'Configurazione salvata con successo.' });
+    } else {
+      toast({ title: 'Errore', description: 'Impossibile salvare la configurazione.', variant: 'destructive' });
+    }
+  }, [garaConfigRecord, buildConfigData, saveConfig, selectedMonth, selectedYear, fetchHistory, fetchConfigList, toast]);
+
   const handleSaveClick = () => {
     if (garaConfigRecord?.id && !saveAsNew) {
       setConfigName(garaConfigRecord.name || configName || 'Configurazione');
@@ -698,26 +745,7 @@ export default function ConfigurazioneGara() {
 
   const handleSaveConfirm = async () => {
     const nameToUse = configName.trim() || 'Configurazione';
-    const configData: GaraConfigData = {
-      pdvList,
-      tipologiaGara,
-      modalitaInserimentoRS: tipologiaGara === 'gara_operatore_rs' ? modalitaRS : null,
-      pistaMobileConfig: { sogliePerPos: mobileConfig },
-      pistaFissoConfig: { sogliePerPos: fissoConfig },
-      partnershipRewardConfig: { configPerPos: partnershipConfig },
-      pistaMobileRSConfig: { sogliePerRS: mobileRSConfig },
-      pistaFissoRSConfig: { sogliePerRS: fissoRSConfig },
-      partnershipRewardRSConfig: { configPerRS: partnershipRSConfig },
-      energiaConfig,
-      assicurazioniConfig,
-      energiaRSConfig: { configPerRS: energiaRSConfig },
-      assicurazioniRSConfig: { configPerRS: assicurazioniRSConfig },
-      tabelleCalcolo,
-      ...(Object.keys(extraGaraIvaSogliePerRS).length > 0 ? { extraGaraIvaSogliePerRS } : {}),
-      ...(garaConfigRecord?.config ? {
-        importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
-      } : {}),
-    };
+    const configData = buildConfigData();
     const existingId = (!saveAsNew && garaConfigRecord?.id) ? garaConfigRecord.id : undefined;
     const result = await saveConfig(selectedMonth, selectedYear, configData, nameToUse, existingId);
     if (result) {
@@ -1052,7 +1080,7 @@ export default function ConfigurazioneGara() {
                 <div className="space-y-2">
                   <div className="text-sm text-muted-foreground mb-2">{pdvList.length} PDV configurati</div>
                   {pdvList.map((pdv, idx) => (
-                    <PdvCard key={pdv.id || idx} pdv={pdv} index={idx} onUpdate={handleUpdatePdv} onRemove={handleRemovePdv} existingRSNames={Array.from(rsGroups.keys()).filter(rs => rs !== 'Senza RS')} />
+                    <PdvCard key={pdv.id || idx} pdv={pdv} index={idx} onUpdate={handleUpdatePdv} onRemove={handleRemovePdv} onSave={handleQuickSave} saving={saving} existingRSNames={Array.from(rsGroups.keys()).filter(rs => rs !== 'Senza RS')} />
                   ))}
                 </div>
               )}
