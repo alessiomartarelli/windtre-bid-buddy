@@ -474,6 +474,7 @@ function calcEnergiaPerPdv(
   numPdv: number,
   compensiBaseOverride?: Record<string, number>,
   bonusPerContrattoOverride?: number,
+  pistaBonusPerContrattoOverride?: Record<string, number>,
 ): PistaCalcResult {
   if (!energiaConfig || pdvItems.length === 0) return EMPTY_CALC;
 
@@ -496,6 +497,7 @@ function calcEnergiaPerPdv(
     numPdv,
     compensiBaseOverride,
     bonusPerContrattoOverride,
+    pistaBonusPerContrattoOverride,
   });
 
   return {
@@ -884,11 +886,12 @@ export default function DashboardGaraReale() {
     };
 
     const tc = garaCalcConfig.tabelleCalcolo as Record<string, Record<string, unknown>> | undefined;
-    const tcMobile = tc?.mobile as { puntiAttivazione?: Record<string, number> } | undefined;
-    const tcEnergia = tc?.energia as { compensiBase?: Record<string, number>; bonusPerContratto?: Record<string, number> } | undefined;
+    const tcMobile = tc?.mobile as { puntiAttivazione?: Record<string, number>; soglieCluster?: Record<string, number[]>; moltiplicatoriCanone?: Record<string, number[]> } | undefined;
+    const tcEnergia = tc?.energia as { compensiBase?: Record<string, number>; bonusPerContratto?: Record<string, number>; pistaBase?: Record<string, number>; pistaDa4?: Record<string, number> } | undefined;
     const tcAssic = tc?.assicurazioni as { puntiProdotto?: Record<string, number>; premiProdotto?: Record<string, number> } | undefined;
     const tcProtecta = tc?.protecta as { gettoniProdotto?: Record<string, number> } | undefined;
-    const tcFisso = tc?.fisso as { gettoniContrattuali?: Record<string, number> } | undefined;
+    const tcFisso = tc?.fisso as { gettoniContrattuali?: Record<string, number>; soglieCluster?: Record<string, number[]> } | undefined;
+    const tcExtraGara = tc?.extraGara as { puntiAttivazione?: Record<string, number>; soglieMultipos?: Record<string, Record<string, number>>; soglieMonopos?: Record<string, Record<string, number>>; premiPerSoglia?: Record<string, number[]> } | undefined;
 
     const effectiveMobileCategories = (() => {
       const base = [...mobileCategories];
@@ -906,6 +909,11 @@ export default function DashboardGaraReale() {
 
     const effectivePremiExtraGara: Record<string, number[]> = (() => {
       const base = { ...PREMI_EXTRA_GARA };
+      if (tcExtraGara?.premiPerSoglia) {
+        for (const [key, val] of Object.entries(tcExtraGara.premiPerSoglia)) {
+          if (val) base[key as keyof typeof base] = val;
+        }
+      }
       const overrides = garaCalcConfig.extraGaraIvaConfig?.premiPerSoglia;
       if (overrides) {
         for (const [key, val] of Object.entries(overrides)) {
@@ -994,6 +1002,24 @@ export default function DashboardGaraReale() {
         }
       }
 
+      const mergedExtraGaraOverrides: ExtraGaraConfigOverrides = {
+        ...garaCalcConfig.extraGaraIvaConfig,
+      };
+      if (tcExtraGara) {
+        if (tcExtraGara.puntiAttivazione && !mergedExtraGaraOverrides.puntiAttivazione) {
+          mergedExtraGaraOverrides.puntiAttivazione = tcExtraGara.puntiAttivazione;
+        }
+        if (tcExtraGara.soglieMultipos && !mergedExtraGaraOverrides.soglieMultipos) {
+          mergedExtraGaraOverrides.soglieMultipos = tcExtraGara.soglieMultipos;
+        }
+        if (tcExtraGara.soglieMonopos && !mergedExtraGaraOverrides.soglieMonopos) {
+          mergedExtraGaraOverrides.soglieMonopos = tcExtraGara.soglieMonopos;
+        }
+        if (tcExtraGara.premiPerSoglia && !mergedExtraGaraOverrides.premiPerSoglia) {
+          mergedExtraGaraOverrides.premiPerSoglia = tcExtraGara.premiPerSoglia;
+        }
+      }
+
       return calcolaExtraGaraIva({
         puntiVendita: pvForExtraGara,
         attivatoMobileByPos,
@@ -1001,7 +1027,7 @@ export default function DashboardGaraReale() {
         attivatoEnergiaByPos,
         attivatoAssicurazioniByPos,
         attivatoProtectaByPos,
-        configOverrides: garaCalcConfig.extraGaraIvaConfig,
+        configOverrides: mergedExtraGaraOverrides,
         soglieOverridePerRS: garaCalcConfig.extraGaraIvaSogliePerRS,
       });
     })();
@@ -1267,7 +1293,7 @@ export default function DashboardGaraReale() {
             pdvCalc = calcFissoPerPdv(pdvItems, fConfig, pdvCalendar, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday, tcFisso?.gettoniContrattuali);
           } else if (pista === "energia") {
             const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
-            pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase);
+            pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto);
           } else if (pista === "partnership") {
             const pCfg = getPartnershipConfigForPdv(pdv.codicePos, pdvRS);
             const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
@@ -1382,7 +1408,7 @@ export default function DashboardGaraReale() {
                 const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
                 return pc?.abilitaEnergia;
               }).length || 1;
-              rsCalc = calcEnergiaPerPdv(aggregatedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv, tcEnergia?.compensiBase);
+              rsCalc = calcEnergiaPerPdv(aggregatedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto);
               if (rsCalc.sogliaRaggiunta >= 1) {
                 const cfgE = rsEConf || energiaConfig;
                 const premioPerPdv = rsCalc.sogliaRaggiunta >= 3
@@ -1465,7 +1491,7 @@ export default function DashboardGaraReale() {
                 const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
                 return pc?.abilitaEnergia;
               }).length || 1;
-              rsProjCalc = calcEnergiaPerPdv(projectedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv, tcEnergia?.compensiBase);
+              rsProjCalc = calcEnergiaPerPdv(projectedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto);
               if (rsProjCalc.sogliaRaggiunta >= 1) {
                 const cfgEProj = rsEConf || energiaConfig;
                 const premioPerPdv = rsProjCalc.sogliaRaggiunta >= 3
@@ -1622,7 +1648,7 @@ export default function DashboardGaraReale() {
               projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3, tcFisso?.gettoniContrattuali);
             } else if (pista === "energia") {
               const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
-              projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase);
+              projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto);
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(pdv.codicePos, projRS);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;

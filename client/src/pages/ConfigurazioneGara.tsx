@@ -22,7 +22,7 @@ import {
   Loader2, Save, Download, Plus, Trash2, CalendarDays, Store,
   ChevronDown, ChevronUp, History, Upload, Settings, Target, Zap, Shield, Calculator,
 } from 'lucide-react';
-import { TabelleCalcoloGara, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
+import { TabelleCalcoloGara, deepMergeTabelleCalcolo, buildHardcodedDefaults, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
 import { useTabelleCalcoloConfig } from '@/hooks/useTabelleCalcoloConfig';
 
 const MONTHS = [
@@ -412,10 +412,24 @@ export default function ConfigurazioneGara() {
 
   const { config: orgTabelleConfig } = useTabelleCalcoloConfig();
   const tabelleCalcoloDefaults = useMemo<TabelleCalcoloConfig>(() => {
+    const hardcoded = buildHardcodedDefaults();
     return {
-      mobile: { puntiAttivazione: Object.fromEntries(orgTabelleConfig.mobile.categories.map(c => [c.type, c.punti])) },
-      fisso: { euroPerPezzo: { ...orgTabelleConfig.fisso.euroPerPezzo }, gettoniContrattuali: { ...orgTabelleConfig.fisso.gettoniContrattuali } },
-      energia: { compensiBase: { ...orgTabelleConfig.energia.compensiBase }, bonusPerContratto: { ...orgTabelleConfig.energia.bonusPerContratto } },
+      mobile: {
+        soglieCluster: hardcoded.mobile?.soglieCluster,
+        puntiAttivazione: Object.fromEntries(orgTabelleConfig.mobile.categories.map(c => [c.type, c.punti])),
+        moltiplicatoriCanone: hardcoded.mobile?.moltiplicatoriCanone,
+      },
+      fisso: {
+        soglieCluster: hardcoded.fisso?.soglieCluster,
+        euroPerPezzo: { ...orgTabelleConfig.fisso.euroPerPezzo },
+        gettoniContrattuali: { ...orgTabelleConfig.fisso.gettoniContrattuali },
+      },
+      energia: {
+        compensiBase: { ...orgTabelleConfig.energia.compensiBase },
+        pistaBase: hardcoded.energia?.pistaBase,
+        pistaDa4: hardcoded.energia?.pistaDa4,
+        bonusPerContratto: { ...orgTabelleConfig.energia.bonusPerContratto },
+      },
       assicurazioni: { puntiProdotto: { ...orgTabelleConfig.assicurazioni.puntiProdotto }, premiProdotto: { ...orgTabelleConfig.assicurazioni.premiProdotto } },
       protecta: { gettoniProdotto: { ...orgTabelleConfig.protecta.gettoniProdotto } },
       extraGara: { puntiAttivazione: { ...orgTabelleConfig.extraGara.puntiAttivazione }, soglieMultipos: JSON.parse(JSON.stringify(orgTabelleConfig.extraGara.soglieMultipos)), soglieMonopos: JSON.parse(JSON.stringify(orgTabelleConfig.extraGara.soglieMonopos)), premiPerSoglia: JSON.parse(JSON.stringify(orgTabelleConfig.extraGara.premiPerSoglia)) },
