@@ -98,8 +98,8 @@ const StepExtraGaraIva: React.FC<StepExtraGaraIvaProps> = ({
   }, [puntiVendita, configOverrides]);
 
   const startEditing = (rs: string) => {
-    const current = soglieOverride?.[rs] || defaultSogliePerRS[rs] || { s1: 0, s2: 0, s3: 0, s4: 0 };
-    setEditValues({ ...current });
+    const rsData = soglieOverride?.[rs] || defaultSogliePerRS[rs] || { s1: 0, s2: 0, s3: 0, s4: 0 };
+    setEditValues({ s1: rsData.s1 ?? 0, s2: rsData.s2 ?? 0, s3: rsData.s3 ?? 0, s4: rsData.s4 ?? 0 });
     setEditingRS(rs);
   };
 

@@ -43,8 +43,16 @@ export interface ExtraGaraConfigOverrides {
   premiPerSoglia?: Record<string, number[]>;
 }
 
+export interface ExtraGaraRsSoglie {
+  s1?: number;
+  s2?: number;
+  s3?: number;
+  s4?: number;
+  pdvCount?: number;
+}
+
 export interface ExtraGaraSogliePerRS {
-  [ragioneSociale: string]: { s1: number; s2: number; s3: number; s4: number };
+  [ragioneSociale: string]: ExtraGaraRsSoglie;
 }
 
 interface CalcolaExtraGaraIvaParams {
@@ -209,7 +217,13 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
   for (const [ragioneSociale, pdvList] of Object.entries(pdvPerRS)) {
     const isMultipos = pdvList.length > 1;
     const soglieCalcolate = calcolaSoglieRS(pdvList, isMultipos, configOverrides);
-    const soglie = soglieOverridePerRS?.[ragioneSociale] || soglieCalcolate;
+    const rsOverride = soglieOverridePerRS?.[ragioneSociale];
+    const soglie = {
+      s1: rsOverride?.s1 ?? soglieCalcolate.s1,
+      s2: rsOverride?.s2 ?? soglieCalcolate.s2,
+      s3: rsOverride?.s3 ?? soglieCalcolate.s3,
+      s4: rsOverride?.s4 ?? soglieCalcolate.s4,
+    };
     
     // Verifica se almeno un PDV ha Business Promoter
     const hasBPInRS = pdvList.some(pdv => haBusinessPromoter(pdv.clusterPIva || ""));

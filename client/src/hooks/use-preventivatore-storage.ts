@@ -59,7 +59,7 @@ export interface PreventivatoreConfig {
   // Modalità inserimento RS
   modalitaInserimentoRS?: "per_rs" | "per_pdv" | null;
   // Extra Gara IVA soglie override per RS
-  extraGaraSoglieOverride?: Record<string, { s1: number; s2: number; s3: number; s4: number }>;
+  extraGaraSoglieOverride?: Record<string, { s1?: number; s2?: number; s3?: number; s4?: number; pdvCount?: number }>;
   savedAt: string;
   configVersion: string;
 }

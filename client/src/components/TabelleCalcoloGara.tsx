@@ -820,49 +820,109 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
       grouped[rs].push(pdv);
     }
     return Object.entries(grouped).map(([rs, pdvs]) => {
-      const isMultipos = pdvs.length > 1;
+      const actualPdvCount = pdvs.length;
+      const customPdvCount = extraGaraIvaSogliePerRS?.[rs]?.pdvCount;
+      const effectivePdvCount = customPdvCount ?? actualPdvCount;
+      const isMultipos = effectivePdvCount > 1;
       const soglieConfigOverrides = config.extraGara ? {
         soglieMultipos: config.extraGara.soglieMultipos,
         soglieMonopos: config.extraGara.soglieMonopos,
       } : undefined;
-      const computed = calcolaSoglieRS(
+      const computedFromActual = calcolaSoglieRS(
         pdvs as unknown as Parameters<typeof calcolaSoglieRS>[0],
-        isMultipos,
+        actualPdvCount > 1,
         soglieConfigOverrides
       );
-      return { ragioneSociale: rs, pdvCount: pdvs.length, isMultipos, computed };
+      let computed: { s1: number; s2: number; s3: number; s4: number };
+      if (customPdvCount !== undefined && customPdvCount !== actualPdvCount && actualPdvCount > 0) {
+        const ratio = customPdvCount / actualPdvCount;
+        computed = {
+          s1: Math.round(computedFromActual.s1 * ratio),
+          s2: Math.round(computedFromActual.s2 * ratio),
+          s3: Math.round(computedFromActual.s3 * ratio),
+          s4: Math.round(computedFromActual.s4 * ratio),
+        };
+      } else {
+        computed = computedFromActual;
+      }
+      return { ragioneSociale: rs, actualPdvCount, effectivePdvCount, isMultipos, computed };
     });
-  }, [pdvList, config.extraGara]);
+  }, [pdvList, config.extraGara, extraGaraIvaSogliePerRS]);
+
+  const getComputedForRS = useCallback((rs: string) => {
+    return rsGroups.find(g => g.ragioneSociale === rs)?.computed ?? { s1: 0, s2: 0, s3: 0, s4: 0 };
+  }, [rsGroups]);
+
+  const handleRSPdvCountChange = useCallback((rs: string, newPdvCount: number) => {
+    const current = extraGaraIvaSogliePerRS || {};
+    const existing = current[rs] || {};
+    const group = rsGroups.find(g => g.ragioneSociale === rs);
+    if (!group) return;
+    const soglieConfigOverrides = config.extraGara ? {
+      soglieMultipos: config.extraGara.soglieMultipos,
+      soglieMonopos: config.extraGara.soglieMonopos,
+    } : undefined;
+    const pdvs = pdvList?.filter(p => (p.ragioneSociale || 'Senza RS') === rs) || [];
+    const baseComputed = calcolaSoglieRS(
+      pdvs as unknown as Parameters<typeof calcolaSoglieRS>[0],
+      pdvs.length > 1,
+      soglieConfigOverrides
+    );
+    const ratio = pdvs.length > 0 ? newPdvCount / pdvs.length : 1;
+    const scaled = {
+      s1: Math.round(baseComputed.s1 * ratio),
+      s2: Math.round(baseComputed.s2 * ratio),
+      s3: Math.round(baseComputed.s3 * ratio),
+      s4: Math.round(baseComputed.s4 * ratio),
+    };
+    onExtraGaraIvaSogliePerRSChange?.({
+      ...current,
+      [rs]: {
+        pdvCount: newPdvCount,
+        s1: scaled.s1,
+        s2: scaled.s2,
+        s3: scaled.s3,
+        s4: scaled.s4,
+      },
+    });
+  }, [extraGaraIvaSogliePerRS, rsGroups, config.extraGara, pdvList, onExtraGaraIvaSogliePerRSChange]);
+
+  const handleRSPdvCountReset = useCallback((rs: string) => {
+    if (!extraGaraIvaSogliePerRS?.[rs]) return;
+    const current = { ...extraGaraIvaSogliePerRS };
+    const entry = { ...current[rs] };
+    delete entry.pdvCount;
+    const hasAnyValue = entry.s1 !== undefined || entry.s2 !== undefined || entry.s3 !== undefined || entry.s4 !== undefined;
+    if (!hasAnyValue) {
+      delete current[rs];
+    } else {
+      current[rs] = entry;
+    }
+    onExtraGaraIvaSogliePerRSChange?.(current);
+  }, [extraGaraIvaSogliePerRS, onExtraGaraIvaSogliePerRSChange]);
 
   const handleRSSogliaChange = useCallback((rs: string, field: 's1' | 's2' | 's3' | 's4', value: number) => {
     const current = extraGaraIvaSogliePerRS || {};
-    const updated = {
+    const existing = current[rs] || {};
+    onExtraGaraIvaSogliePerRSChange?.({
       ...current,
-      [rs]: {
-        s1: current[rs]?.s1 ?? rsGroups.find(g => g.ragioneSociale === rs)?.computed.s1 ?? 0,
-        s2: current[rs]?.s2 ?? rsGroups.find(g => g.ragioneSociale === rs)?.computed.s2 ?? 0,
-        s3: current[rs]?.s3 ?? rsGroups.find(g => g.ragioneSociale === rs)?.computed.s3 ?? 0,
-        s4: current[rs]?.s4 ?? rsGroups.find(g => g.ragioneSociale === rs)?.computed.s4 ?? 0,
-        [field]: value,
-      },
-    };
-    onExtraGaraIvaSogliePerRSChange?.(updated);
-  }, [extraGaraIvaSogliePerRS, rsGroups, onExtraGaraIvaSogliePerRSChange]);
+      [rs]: { ...existing, [field]: value },
+    });
+  }, [extraGaraIvaSogliePerRS, onExtraGaraIvaSogliePerRSChange]);
 
   const handleRSSogliaReset = useCallback((rs: string, field: 's1' | 's2' | 's3' | 's4') => {
-    if (!extraGaraIvaSogliePerRS) return;
+    if (!extraGaraIvaSogliePerRS?.[rs]) return;
     const current = { ...extraGaraIvaSogliePerRS };
-    if (!current[rs]) return;
-    const computed = rsGroups.find(g => g.ragioneSociale === rs)?.computed;
-    if (!computed) return;
-    const updated = { ...current[rs], [field]: computed[field] };
-    if (updated.s1 === computed.s1 && updated.s2 === computed.s2 && updated.s3 === computed.s3 && updated.s4 === computed.s4) {
+    const entry = { ...current[rs] };
+    delete entry[field];
+    const hasAnyValue = entry.s1 !== undefined || entry.s2 !== undefined || entry.s3 !== undefined || entry.s4 !== undefined || entry.pdvCount !== undefined;
+    if (!hasAnyValue) {
       delete current[rs];
     } else {
-      current[rs] = updated;
+      current[rs] = entry;
     }
     onExtraGaraIvaSogliePerRSChange?.(current);
-  }, [extraGaraIvaSogliePerRS, rsGroups, onExtraGaraIvaSogliePerRSChange]);
+  }, [extraGaraIvaSogliePerRS, onExtraGaraIvaSogliePerRSChange]);
 
   return (
     <>
@@ -1015,12 +1075,20 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
                 </tr>
               </thead>
               <tbody>
-                {rsGroups.map(({ ragioneSociale, pdvCount, isMultipos, computed }) => {
+                {rsGroups.map(({ ragioneSociale, actualPdvCount, effectivePdvCount, isMultipos, computed }) => {
                   const override = extraGaraIvaSogliePerRS?.[ragioneSociale];
+                  const pdvIsOverridden = override?.pdvCount !== undefined && override.pdvCount !== actualPdvCount;
                   return (
                     <tr key={ragioneSociale} className="even:bg-muted/30">
                       <td className="p-2 font-medium border border-border">{ragioneSociale}</td>
-                      <td className="p-2 text-center border border-border">{pdvCount}</td>
+                      <EditableCell
+                        value={effectivePdvCount}
+                        defaultValue={actualPdvCount}
+                        isOverridden={pdvIsOverridden}
+                        onChange={v => handleRSPdvCountChange(ragioneSociale, Math.max(1, Math.round(v)))}
+                        onReset={() => handleRSPdvCountReset(ragioneSociale)}
+                        testId={`input-gara-extra-gara-pdv-rs-${ragioneSociale.replace(/\s+/g, '-')}`}
+                      />
                       <td className="p-2 text-center border border-border">
                         <Badge variant="outline" className="text-xs">{isMultipos ? 'Multi' : 'Mono'}</Badge>
                       </td>
