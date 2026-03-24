@@ -856,8 +856,6 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
   const handleRSPdvCountChange = useCallback((rs: string, newPdvCount: number) => {
     const current = extraGaraIvaSogliePerRS || {};
     const existing = current[rs] || {};
-    const group = rsGroups.find(g => g.ragioneSociale === rs);
-    if (!group) return;
     const soglieConfigOverrides = config.extraGara ? {
       soglieMultipos: config.extraGara.soglieMultipos,
       soglieMonopos: config.extraGara.soglieMonopos,
@@ -878,14 +876,15 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
     onExtraGaraIvaSogliePerRSChange?.({
       ...current,
       [rs]: {
+        ...existing,
         pdvCount: newPdvCount,
-        s1: scaled.s1,
-        s2: scaled.s2,
-        s3: scaled.s3,
-        s4: scaled.s4,
+        s1: existing.s1 !== undefined ? existing.s1 : scaled.s1,
+        s2: existing.s2 !== undefined ? existing.s2 : scaled.s2,
+        s3: existing.s3 !== undefined ? existing.s3 : scaled.s3,
+        s4: existing.s4 !== undefined ? existing.s4 : scaled.s4,
       },
     });
-  }, [extraGaraIvaSogliePerRS, rsGroups, config.extraGara, pdvList, onExtraGaraIvaSogliePerRSChange]);
+  }, [extraGaraIvaSogliePerRS, config.extraGara, pdvList, onExtraGaraIvaSogliePerRSChange]);
 
   const handleRSPdvCountReset = useCallback((rs: string) => {
     if (!extraGaraIvaSogliePerRS?.[rs]) return;
