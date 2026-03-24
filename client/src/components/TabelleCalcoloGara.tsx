@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
-import { X, RotateCcw, Info } from 'lucide-react';
+import { X, RotateCcw, Info, ChevronDown } from 'lucide-react';
 import { MobileActivationType, MOBILE_CATEGORY_LABELS, MOBILE_CATEGORIES_CONFIG_DEFAULT, ClusterPIvaCode } from '@/types/preventivatore';
 import { ENERGIA_BASE_PAY, ENERGIA_CATEGORY_LABELS, ENERGIA_W3_CATEGORY_LABELS, PISTA_ENERGIA_SOGLIE_BASE, PISTA_ENERGIA_SOGLIE_DA4, PISTA_ENERGIA_BONUS_PER_CONTRATTO } from '@/types/energia';
 import { ASSICURAZIONI_POINTS, ASSICURAZIONI_PREMIUMS, ASSICURAZIONI_LABELS } from '@/types/assicurazioni';
@@ -384,6 +384,20 @@ interface SimpleSubTabProps {
   resetValue: (path: string) => void;
 }
 
+function CalcInfoBox({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30 rounded-lg" data-testid="calc-info-box">
+      <button className="w-full flex items-center gap-2 p-3 text-left text-sm font-medium text-blue-700 dark:text-blue-300" onClick={() => setOpen(!open)}>
+        <Info className="h-4 w-4 shrink-0" />
+        <span>{title}</span>
+        <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <div className="px-3 pb-3 text-xs text-muted-foreground space-y-1">{children}</div>}
+    </div>
+  );
+}
+
 function MobileSubTab({ config, baseDefaults, isArrayOverridden, updateArrayValue, resetArrayValue, isOverridden, updateValue, resetValue }: SubTabProps) {
   const soglieKeys = Object.keys(MOBILE_SOGLIE_DEFAULTS);
   const soglieLabels = ['1\u00B0 Soglia', '2\u00B0 Soglia', '3\u00B0 Soglia', '4\u00B0 Soglia'];
@@ -391,6 +405,12 @@ function MobileSubTab({ config, baseDefaults, isArrayOverridden, updateArrayValu
 
   return (
     <>
+      <CalcInfoBox title="Come funziona il calcolo Mobile">
+        <p>Il premio Mobile si basa su <strong>punti</strong> accumulati da ogni PDV. Ogni attivazione genera punti in base al tipo (GA Base, MNP, P.IVA, ecc.).</p>
+        <p>I punti vengono confrontati con le <strong>soglie</strong> del cluster assegnato al PDV per determinare la soglia raggiunta (S1–S4).</p>
+        <p>Il premio finale = pezzi × canone medio × moltiplicatore della soglia raggiunta.</p>
+        <p>I <strong>moltiplicatori canone</strong> amplificano il valore del canone per ogni livello di soglia raggiunto.</p>
+      </CalcInfoBox>
       <Card>
         <CardHeader><CardTitle className="text-base">Soglie Punti per Punto Vendita</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
@@ -486,6 +506,11 @@ function FissoSubTab({ config, baseDefaults, isArrayOverridden, updateArrayValue
 
   return (
     <>
+      <CalcInfoBox title="Come funziona il calcolo Fisso">
+        <p>Ogni attivazione Fisso genera <strong>punti</strong> (basati su €/pezzo per categoria) e <strong>gettoni contrattuali</strong>.</p>
+        <p>I punti vengono confrontati con le <strong>soglie</strong> (S1–S5) del cluster PDV. Il premio = gettoni contrattuali + bonus soglia × moltiplicatore.</p>
+        <p>I <strong>gettoni contrattuali</strong> sono compensi fissi per ogni contratto attivato, indipendenti dalla soglia raggiunta.</p>
+      </CalcInfoBox>
       <Card>
         <CardHeader><CardTitle className="text-base">Soglie Punti per Punto Vendita</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
@@ -576,6 +601,11 @@ function EnergiaSubTab({ config, baseDefaults, isOverridden, updateValue, resetV
 
   return (
     <>
+      <CalcInfoBox title="Come funziona il calcolo Energia">
+        <p>Il compenso Energia si basa su un <strong>compenso base per contratto</strong> per ogni categoria (Dual Luce+Gas, Solo Luce, ecc.).</p>
+        <p>Le <strong>soglie pista</strong> determinano i livelli target: al superamento di ogni soglia si ottiene un bonus aggiuntivo.</p>
+        <p>Il bonus per contratto varia per fascia di soglia raggiunta (S1–S5), applicato sul totale dei contratti attivati.</p>
+      </CalcInfoBox>
       <Card>
         <CardHeader><CardTitle className="text-base">Compensi Base per Contratto</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
@@ -668,6 +698,10 @@ function EnergiaSubTab({ config, baseDefaults, isOverridden, updateValue, resetV
 function AssicurazioniSubTab({ config, baseDefaults, isOverridden, updateValue, resetValue }: SimpleSubTabProps) {
   return (
     <>
+      <CalcInfoBox title="Come funziona il calcolo Assicurazioni">
+        <p>Ogni prodotto assicurativo venduto genera <strong>punti</strong>. Il totale punti determina la soglia raggiunta.</p>
+        <p>Il premio viene calcolato in base ai <strong>premi unitari per prodotto</strong> × quantità venduta, moltiplicato per il fattore soglia.</p>
+      </CalcInfoBox>
       <Card>
         <CardHeader><CardTitle className="text-base">Punti per Prodotto</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
@@ -727,7 +761,12 @@ function AssicurazioniSubTab({ config, baseDefaults, isOverridden, updateValue, 
 
 function ProtectaSubTab({ config, baseDefaults, isOverridden, updateValue, resetValue }: SimpleSubTabProps) {
   return (
-    <Card>
+    <>
+      <CalcInfoBox title="Come funziona il calcolo Protecta">
+        <p>Per ogni prodotto Protecta venduto viene riconosciuto un <strong>gettone fisso</strong> in euro.</p>
+        <p>Il premio totale Protecta = somma dei gettoni di tutti i prodotti venduti nel mese.</p>
+      </CalcInfoBox>
+      <Card>
       <CardHeader><CardTitle className="text-base">Gettoni per Prodotto Protecta</CardTitle></CardHeader>
       <CardContent className="overflow-x-auto">
         <table className="w-full text-sm" data-testid="table-gara-protecta-gettoni">
@@ -753,6 +792,7 @@ function ProtectaSubTab({ config, baseDefaults, isOverridden, updateValue, reset
         </table>
       </CardContent>
     </Card>
+    </>
   );
 }
 
@@ -763,6 +803,11 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
 
   return (
     <>
+      <CalcInfoBox title="Come funziona il calcolo Extra Gara P.IVA">
+        <p>Le attivazioni P.IVA generano <strong>punti</strong> per tipo (GA Multi-POS, GA Mono-POS, MNP Multi, ecc.).</p>
+        <p>Il totale punti viene confrontato con le <strong>soglie</strong> per cluster per determinare il premio extra gara.</p>
+        <p>Il premio varia in base al cluster del PDV e alla soglia raggiunta.</p>
+      </CalcInfoBox>
       <Card>
         <CardHeader><CardTitle className="text-base">Punti per Tipo Attivazione P.IVA</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">

@@ -884,10 +884,22 @@ export default function DashboardGaraReale() {
     };
 
     const tc = garaCalcConfig.tabelleCalcolo as Record<string, Record<string, unknown>> | undefined;
+    const tcMobile = tc?.mobile as { puntiAttivazione?: Record<string, number> } | undefined;
     const tcEnergia = tc?.energia as { compensiBase?: Record<string, number>; bonusPerContratto?: Record<string, number> } | undefined;
     const tcAssic = tc?.assicurazioni as { puntiProdotto?: Record<string, number>; premiProdotto?: Record<string, number> } | undefined;
     const tcProtecta = tc?.protecta as { gettoniProdotto?: Record<string, number> } | undefined;
     const tcFisso = tc?.fisso as { gettoniContrattuali?: Record<string, number> } | undefined;
+
+    const effectiveMobileCategories = (() => {
+      const base = [...mobileCategories];
+      if (tcMobile?.puntiAttivazione) {
+        return base.map(cat => {
+          const override = tcMobile.puntiAttivazione![cat.type];
+          return override !== undefined ? { ...cat, punti: override } : cat;
+        });
+      }
+      return base;
+    })();
 
     const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara, tcAssic?.puntiProdotto, tcAssic?.premiProdotto);
     const protectaCalcMap = calcProtectaForAllPdv(mappedData, puntiVendita, tcProtecta?.gettoniProdotto);
@@ -1248,7 +1260,7 @@ export default function DashboardGaraReale() {
           const pdvRS = pdvConfig?.ragioneSociale || pdv.ragioneSociale;
           if (pista === "mobile") {
             const mConfig = getMobileConfigForPdv(pdv.codicePos, pdvRS);
-            pdvCalc = calcMobilePerPdv(pdvItems, mConfig, pdvCalendar, selYear, selMonth, mobileCategories, pdvWorkday);
+            pdvCalc = calcMobilePerPdv(pdvItems, mConfig, pdvCalendar, selYear, selMonth, effectiveMobileCategories, pdvWorkday);
           } else if (pista === "fisso") {
             const fConfig = getFissoConfigForPdv(pdv.codicePos, pdvRS);
             const cluster = clusterToNumber(pdvConfig?.clusterFisso);
@@ -1339,7 +1351,7 @@ export default function DashboardGaraReale() {
             let rsCalc = EMPTY_CALC;
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
-              rsCalc = calcMobilePerPdv(aggregatedRSItems, mConfig, rsCalendar, selYear, selMonth, mobileCategories, rsWorkday);
+              rsCalc = calcMobilePerPdv(aggregatedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday);
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
@@ -1429,7 +1441,7 @@ export default function DashboardGaraReale() {
             let rsProjCalc = EMPTY_CALC;
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
-              rsProjCalc = calcMobilePerPdv(projectedRSItems, mConfig, rsCalendar, selYear, selMonth, mobileCategories, rsWorkday);
+              rsProjCalc = calcMobilePerPdv(projectedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday);
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
@@ -1603,7 +1615,7 @@ export default function DashboardGaraReale() {
             const projRS = pdvConfig3?.ragioneSociale || pdv.ragioneSociale;
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(pdv.codicePos, projRS);
-              projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, mobileCategories, pdvWorkday3);
+              projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, effectiveMobileCategories, pdvWorkday3);
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(pdv.codicePos, projRS);
               const cluster = clusterToNumber(pdvConfig3?.clusterFisso);

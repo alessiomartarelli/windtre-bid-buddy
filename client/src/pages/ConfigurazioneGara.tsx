@@ -22,7 +22,8 @@ import {
   Loader2, Save, Download, Plus, Trash2, CalendarDays, Store,
   ChevronDown, ChevronUp, History, Upload, Settings, Target, Zap, Shield, Calculator,
 } from 'lucide-react';
-import { TabelleCalcoloGara, buildHardcodedDefaults, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
+import { TabelleCalcoloGara, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
+import { useTabelleCalcoloConfig } from '@/hooks/useTabelleCalcoloConfig';
 
 const MONTHS = [
   { value: 1, label: 'Gennaio' },
@@ -409,7 +410,17 @@ export default function ConfigurazioneGara() {
   const [energiaRSConfig, setEnergiaRSConfig] = useState<EnergiaRSConf[]>([]);
   const [assicurazioniRSConfig, setAssicurazioniRSConfig] = useState<AssicurazioniRSConf[]>([]);
 
-  const tabelleCalcoloDefaults = useMemo(() => buildHardcodedDefaults(), []);
+  const { config: orgTabelleConfig } = useTabelleCalcoloConfig();
+  const tabelleCalcoloDefaults = useMemo<TabelleCalcoloConfig>(() => {
+    return {
+      mobile: { puntiAttivazione: Object.fromEntries(orgTabelleConfig.mobile.categories.map(c => [c.type, c.punti])) },
+      fisso: { euroPerPezzo: { ...orgTabelleConfig.fisso.euroPerPezzo }, gettoniContrattuali: { ...orgTabelleConfig.fisso.gettoniContrattuali } },
+      energia: { compensiBase: { ...orgTabelleConfig.energia.compensiBase }, bonusPerContratto: { ...orgTabelleConfig.energia.bonusPerContratto } },
+      assicurazioni: { puntiProdotto: { ...orgTabelleConfig.assicurazioni.puntiProdotto }, premiProdotto: { ...orgTabelleConfig.assicurazioni.premiProdotto } },
+      protecta: { gettoniProdotto: { ...orgTabelleConfig.protecta.gettoniProdotto } },
+      extraGara: { puntiAttivazione: { ...orgTabelleConfig.extraGara.puntiAttivazione }, soglieMultipos: JSON.parse(JSON.stringify(orgTabelleConfig.extraGara.soglieMultipos)), soglieMonopos: JSON.parse(JSON.stringify(orgTabelleConfig.extraGara.soglieMonopos)), premiPerSoglia: JSON.parse(JSON.stringify(orgTabelleConfig.extraGara.premiPerSoglia)) },
+    };
+  }, [orgTabelleConfig]);
   const [tabelleCalcolo, setTabelleCalcolo] = useState<TabelleCalcoloConfig>(tabelleCalcoloDefaults);
 
   const { profile } = useAuth();
