@@ -11,7 +11,8 @@ import { ENERGIA_BASE_PAY, ENERGIA_CATEGORY_LABELS, ENERGIA_W3_CATEGORY_LABELS, 
 import { ASSICURAZIONI_POINTS, ASSICURAZIONI_PREMIUMS, ASSICURAZIONI_LABELS } from '@/types/assicurazioni';
 import { FISSO_CATEGORIE_DEFAULT } from '@/lib/calcoloPistaFisso';
 import { PROTECTA_GETTONI, PROTECTA_LABELS, ProtectaProduct } from '@/types/protecta';
-import { PUNTI_EXTRA_GARA, SOGLIE_BASE_EXTRA_GARA, PREMI_EXTRA_GARA } from '@/lib/calcoloExtraGaraIva';
+import { PUNTI_EXTRA_GARA, SOGLIE_BASE_EXTRA_GARA, PREMI_EXTRA_GARA, calcolaSoglieRS, type ExtraGaraSogliePerRS } from '@/lib/calcoloExtraGaraIva';
+import type { GaraConfigPdv } from '@/hooks/useGaraConfig';
 
 export interface TabelleCalcoloConfig {
   mobile?: {
@@ -260,9 +261,12 @@ interface TabelleCalcoloGaraProps {
   config: TabelleCalcoloConfig;
   onChange: (config: TabelleCalcoloConfig) => void;
   baseDefaults: TabelleCalcoloConfig;
+  pdvList?: GaraConfigPdv[];
+  extraGaraIvaSogliePerRS?: ExtraGaraSogliePerRS;
+  onExtraGaraIvaSogliePerRSChange?: (soglie: ExtraGaraSogliePerRS) => void;
 }
 
-export function TabelleCalcoloGara({ config, onChange, baseDefaults }: TabelleCalcoloGaraProps) {
+export function TabelleCalcoloGara({ config, onChange, baseDefaults, pdvList, extraGaraIvaSogliePerRS, onExtraGaraIvaSogliePerRSChange }: TabelleCalcoloGaraProps) {
   const isOverridden = useCallback((path: string): boolean => {
     const current = getNestedValue(config, path);
     const def = getNestedValue(baseDefaults, path);
@@ -358,7 +362,7 @@ export function TabelleCalcoloGara({ config, onChange, baseDefaults }: TabelleCa
           <ProtectaSubTab config={config} baseDefaults={baseDefaults} isOverridden={isOverridden} updateValue={updateValue} resetValue={resetValue} />
         </TabsContent>
         <TabsContent value="extraGara" className="space-y-6">
-          <ExtraGaraSubTab config={config} baseDefaults={baseDefaults} isOverridden={isOverridden} isArrayOverridden={isArrayOverridden} updateValue={updateValue} updateArrayValue={updateArrayValue} resetValue={resetValue} resetArrayValue={resetArrayValue} />
+          <ExtraGaraSubTab config={config} baseDefaults={baseDefaults} isOverridden={isOverridden} isArrayOverridden={isArrayOverridden} updateValue={updateValue} updateArrayValue={updateArrayValue} resetValue={resetValue} resetArrayValue={resetArrayValue} pdvList={pdvList} extraGaraIvaSogliePerRS={extraGaraIvaSogliePerRS} onExtraGaraIvaSogliePerRSChange={onExtraGaraIvaSogliePerRSChange} />
         </TabsContent>
       </Tabs>
     </div>
@@ -796,10 +800,69 @@ function ProtectaSubTab({ config, baseDefaults, isOverridden, updateValue, reset
   );
 }
 
-function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden, updateValue, updateArrayValue, resetValue, resetArrayValue }: SubTabProps) {
+interface ExtraGaraSubTabProps extends SubTabProps {
+  pdvList?: GaraConfigPdv[];
+  extraGaraIvaSogliePerRS?: ExtraGaraSogliePerRS;
+  onExtraGaraIvaSogliePerRSChange?: (soglie: ExtraGaraSogliePerRS) => void;
+}
+
+function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden, updateValue, updateArrayValue, resetValue, resetArrayValue, pdvList, extraGaraIvaSogliePerRS, onExtraGaraIvaSogliePerRSChange }: ExtraGaraSubTabProps) {
   const puntiKeys = Object.keys(PUNTI_EXTRA_GARA);
   const soglieKeys = Object.keys(EXTRA_GARA_SOGLIE_LABELS);
   const clusterKeys = Object.keys(PREMI_EXTRA_GARA);
+
+  const rsGroups = useMemo(() => {
+    if (!pdvList?.length) return [];
+    const grouped: Record<string, GaraConfigPdv[]> = {};
+    for (const pdv of pdvList) {
+      const rs = pdv.ragioneSociale || 'Senza RS';
+      if (!grouped[rs]) grouped[rs] = [];
+      grouped[rs].push(pdv);
+    }
+    return Object.entries(grouped).map(([rs, pdvs]) => {
+      const isMultipos = pdvs.length > 1;
+      const soglieConfigOverrides = config.extraGara ? {
+        soglieMultipos: config.extraGara.soglieMultipos,
+        soglieMonopos: config.extraGara.soglieMonopos,
+      } : undefined;
+      const computed = calcolaSoglieRS(
+        pdvs as unknown as Parameters<typeof calcolaSoglieRS>[0],
+        isMultipos,
+        soglieConfigOverrides
+      );
+      return { ragioneSociale: rs, pdvCount: pdvs.length, isMultipos, computed };
+    });
+  }, [pdvList, config.extraGara]);
+
+  const handleRSSogliaChange = useCallback((rs: string, field: 's1' | 's2' | 's3' | 's4', value: number) => {
+    const current = extraGaraIvaSogliePerRS || {};
+    const updated = {
+      ...current,
+      [rs]: {
+        s1: current[rs]?.s1 ?? rsGroups.find(g => g.ragioneSociale === rs)?.computed.s1 ?? 0,
+        s2: current[rs]?.s2 ?? rsGroups.find(g => g.ragioneSociale === rs)?.computed.s2 ?? 0,
+        s3: current[rs]?.s3 ?? rsGroups.find(g => g.ragioneSociale === rs)?.computed.s3 ?? 0,
+        s4: current[rs]?.s4 ?? rsGroups.find(g => g.ragioneSociale === rs)?.computed.s4 ?? 0,
+        [field]: value,
+      },
+    };
+    onExtraGaraIvaSogliePerRSChange?.(updated);
+  }, [extraGaraIvaSogliePerRS, rsGroups, onExtraGaraIvaSogliePerRSChange]);
+
+  const handleRSSogliaReset = useCallback((rs: string, field: 's1' | 's2' | 's3' | 's4') => {
+    if (!extraGaraIvaSogliePerRS) return;
+    const current = { ...extraGaraIvaSogliePerRS };
+    if (!current[rs]) return;
+    const computed = rsGroups.find(g => g.ragioneSociale === rs)?.computed;
+    if (!computed) return;
+    const updated = { ...current[rs], [field]: computed[field] };
+    if (updated.s1 === computed.s1 && updated.s2 === computed.s2 && updated.s3 === computed.s3 && updated.s4 === computed.s4) {
+      delete current[rs];
+    } else {
+      current[rs] = updated;
+    }
+    onExtraGaraIvaSogliePerRSChange?.(current);
+  }, [extraGaraIvaSogliePerRS, rsGroups, onExtraGaraIvaSogliePerRSChange]);
 
   return (
     <>
@@ -931,6 +994,59 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
           </table>
         </CardContent>
       </Card>
+
+      {rsGroups.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Soglie per Ragione Sociale (Riepilogo)</CardTitle>
+            <p className="text-xs text-muted-foreground">Soglie calcolate aggregando i PDV. Puoi sovrascriverle se i valori reali differiscono.</p>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="table-gara-extra-gara-soglie-rs">
+              <thead>
+                <tr className="bg-orange-500 text-white">
+                  <th className="p-2 text-left font-medium rounded-tl-md">Ragione Sociale</th>
+                  <th className="p-2 text-center font-medium w-16">PDV</th>
+                  <th className="p-2 text-center font-medium w-20">Tipo</th>
+                  <th className="p-2 text-center font-medium">S1</th>
+                  <th className="p-2 text-center font-medium">S2</th>
+                  <th className="p-2 text-center font-medium">S3</th>
+                  <th className="p-2 text-center font-medium rounded-tr-md">S4</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rsGroups.map(({ ragioneSociale, pdvCount, isMultipos, computed }) => {
+                  const override = extraGaraIvaSogliePerRS?.[ragioneSociale];
+                  return (
+                    <tr key={ragioneSociale} className="even:bg-muted/30">
+                      <td className="p-2 font-medium border border-border">{ragioneSociale}</td>
+                      <td className="p-2 text-center border border-border">{pdvCount}</td>
+                      <td className="p-2 text-center border border-border">
+                        <Badge variant="outline" className="text-xs">{isMultipos ? 'Multi' : 'Mono'}</Badge>
+                      </td>
+                      {(['s1', 's2', 's3', 's4'] as const).map(sk => {
+                        const val = override?.[sk] ?? computed[sk];
+                        const isOvr = override?.[sk] !== undefined && override[sk] !== computed[sk];
+                        return (
+                          <EditableCell
+                            key={sk}
+                            value={val}
+                            defaultValue={computed[sk]}
+                            isOverridden={isOvr}
+                            onChange={v => handleRSSogliaChange(ragioneSociale, sk, v)}
+                            onReset={() => handleRSSogliaReset(ragioneSociale, sk)}
+                            testId={`input-gara-extra-gara-soglia-rs-${ragioneSociale.replace(/\s+/g, '-')}-${sk}`}
+                          />
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
     </>
   );
 }

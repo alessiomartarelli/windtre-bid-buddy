@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { TabelleCalcoloGara, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
 import { useTabelleCalcoloConfig } from '@/hooks/useTabelleCalcoloConfig';
+import type { ExtraGaraSogliePerRS } from '@/lib/calcoloExtraGaraIva';
 
 const MONTHS = [
   { value: 1, label: 'Gennaio' },
@@ -435,6 +436,7 @@ export default function ConfigurazioneGara() {
     };
   }, [orgTabelleConfig]);
   const [tabelleCalcolo, setTabelleCalcolo] = useState<TabelleCalcoloConfig>(tabelleCalcoloDefaults);
+  const [extraGaraIvaSogliePerRS, setExtraGaraIvaSogliePerRS] = useState<ExtraGaraSogliePerRS>({});
 
   const { profile } = useAuth();
   const { toast } = useToast();
@@ -574,6 +576,7 @@ export default function ConfigurazioneGara() {
       if (cfg.energiaRSConfig?.configPerRS?.length) setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
+      setExtraGaraIvaSogliePerRS(cfg.extraGaraIvaSogliePerRS || {});
     }
     setIsDirty(false);
     setInitialLoaded(true);
@@ -640,6 +643,7 @@ export default function ConfigurazioneGara() {
         setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
       }
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
+      setExtraGaraIvaSogliePerRS(cfg.extraGaraIvaSogliePerRS || {});
     } else {
       setConfigName('');
       setTipologiaGara('gara_operatore');
@@ -652,6 +656,7 @@ export default function ConfigurazioneGara() {
       setEnergiaConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premioS1: 250, premioS2: 500, premioS3: 1000 });
       setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premioS1: 500, premioS2: 750 });
       setTabelleCalcolo(JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
+      setExtraGaraIvaSogliePerRS({});
 
       const salesPdvs = await fetchPdvFromSales(month, year);
       if (salesPdvs.length > 0) {
@@ -708,6 +713,7 @@ export default function ConfigurazioneGara() {
       energiaRSConfig: { configPerRS: energiaRSConfig },
       assicurazioniRSConfig: { configPerRS: assicurazioniRSConfig },
       tabelleCalcolo,
+      ...(Object.keys(extraGaraIvaSogliePerRS).length > 0 ? { extraGaraIvaSogliePerRS } : {}),
       ...(garaConfigRecord?.config ? {
         importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
       } : {}),
@@ -1539,6 +1545,9 @@ export default function ConfigurazioneGara() {
                 config={tabelleCalcolo}
                 onChange={(newConfig) => { setTabelleCalcolo(newConfig); setIsDirty(true); }}
                 baseDefaults={tabelleCalcoloDefaults}
+                pdvList={pdvList}
+                extraGaraIvaSogliePerRS={extraGaraIvaSogliePerRS}
+                onExtraGaraIvaSogliePerRSChange={(soglie) => { setExtraGaraIvaSogliePerRS(soglie); setIsDirty(true); }}
               />
             </TabsContent>
           </Tabs>
