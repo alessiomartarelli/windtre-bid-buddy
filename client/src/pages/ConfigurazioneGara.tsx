@@ -1032,7 +1032,9 @@ export default function ConfigurazioneGara() {
     if (pdfData.soglieExtraPIva) parts.push('soglie Extra P.IVA impostate');
     if (targetRS) parts.push(`RS: ${targetRS}`);
 
-    const importLabel = pdfFileName || 'PDF';
+    const importLabel = pdfData.mese
+      ? `Incentivazione Franchising WindTre ${pdfData.mese}`
+      : (pdfFileName || 'PDF importato');
     setLastPdfImportLabel(importLabel);
 
     toast({
@@ -1200,6 +1202,12 @@ export default function ConfigurazioneGara() {
               </SelectContent>
             </Select>
             {garaConfigRecord && <Badge variant="secondary" className="text-xs">{garaConfigRecord.name || 'Salvato'}</Badge>}
+            {lastPdfImportLabel && (
+              <Badge variant="outline" className="text-xs text-blue-700 border-blue-300 bg-blue-50 dark:text-blue-300 dark:border-blue-700 dark:bg-blue-950 gap-1">
+                <FileText className="h-3 w-3" />
+                {lastPdfImportLabel}
+              </Badge>
+            )}
             {isDirty && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Modifiche non salvate</Badge>}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
