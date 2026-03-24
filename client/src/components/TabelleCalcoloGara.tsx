@@ -6,7 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { X, RotateCcw, Info, ChevronDown } from 'lucide-react';
-import { MobileActivationType, MOBILE_CATEGORY_LABELS, MOBILE_CATEGORIES_CONFIG_DEFAULT, ClusterPIvaCode } from '@/types/preventivatore';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MobileActivationType, MOBILE_CATEGORY_LABELS, MOBILE_CATEGORIES_CONFIG_DEFAULT, ClusterPIvaCode, CLUSTER_PIVA_OPTIONS } from '@/types/preventivatore';
 import { ENERGIA_BASE_PAY, ENERGIA_CATEGORY_LABELS, ENERGIA_W3_CATEGORY_LABELS, PISTA_ENERGIA_SOGLIE_BASE, PISTA_ENERGIA_SOGLIE_DA4, PISTA_ENERGIA_BONUS_PER_CONTRATTO } from '@/types/energia';
 import { ASSICURAZIONI_POINTS, ASSICURAZIONI_PREMIUMS, ASSICURAZIONI_LABELS } from '@/types/assicurazioni';
 import { FISSO_CATEGORIE_DEFAULT } from '@/lib/calcoloPistaFisso';
@@ -821,8 +822,10 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
     }
     return Object.entries(grouped).map(([rs, pdvs]) => {
       const actualPdvCount = pdvs.length;
-      const customPdvCount = extraGaraIvaSogliePerRS?.[rs]?.pdvCount;
+      const rsOverride = extraGaraIvaSogliePerRS?.[rs];
+      const customPdvCount = rsOverride?.pdvCount;
       const effectivePdvCount = customPdvCount ?? actualPdvCount;
+      const rsClusterPIva = rsOverride?.clusterPIva;
       const isMultipos = effectivePdvCount > 1;
       const soglieConfigOverrides = config.extraGara ? {
         soglieMultipos: config.extraGara.soglieMultipos,
@@ -831,7 +834,8 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
       const computedFromActual = calcolaSoglieRS(
         pdvs as unknown as Parameters<typeof calcolaSoglieRS>[0],
         actualPdvCount > 1,
-        soglieConfigOverrides
+        soglieConfigOverrides,
+        rsClusterPIva
       );
       let computed: { s1: number; s2: number; s3: number; s4: number };
       if (customPdvCount !== undefined && customPdvCount !== actualPdvCount && actualPdvCount > 0) {
@@ -845,7 +849,8 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
       } else {
         computed = computedFromActual;
       }
-      return { ragioneSociale: rs, actualPdvCount, effectivePdvCount, isMultipos, computed };
+      const defaultCluster: ClusterPIvaCode | '' = (pdvs[0] as any)?.clusterPIva || '';
+      return { ragioneSociale: rs, actualPdvCount, effectivePdvCount, isMultipos, computed, rsClusterPIva, defaultCluster };
     });
   }, [pdvList, config.extraGara, extraGaraIvaSogliePerRS]);
 
@@ -874,6 +879,28 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
       current[rs] = entry;
     }
     onExtraGaraIvaSogliePerRSChange?.(current);
+  }, [extraGaraIvaSogliePerRS, onExtraGaraIvaSogliePerRSChange]);
+
+  const handleRSClusterChange = useCallback((rs: string, cluster: ClusterPIvaCode | '') => {
+    const current = extraGaraIvaSogliePerRS || {};
+    const existing = current[rs] || {};
+    if (!cluster) {
+      const entry = { ...existing };
+      delete entry.clusterPIva;
+      const hasAny = entry.s1 !== undefined || entry.s2 !== undefined || entry.s3 !== undefined || entry.s4 !== undefined || entry.pdvCount !== undefined;
+      if (!hasAny) {
+        const updated = { ...current };
+        delete updated[rs];
+        onExtraGaraIvaSogliePerRSChange?.(updated);
+      } else {
+        onExtraGaraIvaSogliePerRSChange?.({ ...current, [rs]: entry });
+      }
+    } else {
+      onExtraGaraIvaSogliePerRSChange?.({
+        ...current,
+        [rs]: { ...existing, clusterPIva: cluster as ClusterPIvaCode },
+      });
+    }
   }, [extraGaraIvaSogliePerRS, onExtraGaraIvaSogliePerRSChange]);
 
   const handleRSSogliaChange = useCallback((rs: string, field: 's1' | 's2' | 's3' | 's4', value: number) => {
@@ -1041,6 +1068,7 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
               <thead>
                 <tr className="bg-orange-500 text-white">
                   <th className="p-2 text-left font-medium rounded-tl-md">Ragione Sociale</th>
+                  <th className="p-2 text-center font-medium w-40">Cluster P.IVA</th>
                   <th className="p-2 text-center font-medium w-16">PDV</th>
                   <th className="p-2 text-center font-medium w-20">Tipo</th>
                   <th className="p-2 text-center font-medium">S1</th>
@@ -1050,12 +1078,36 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
                 </tr>
               </thead>
               <tbody>
-                {rsGroups.map(({ ragioneSociale, actualPdvCount, effectivePdvCount, isMultipos, computed }) => {
+                {rsGroups.map(({ ragioneSociale, actualPdvCount, effectivePdvCount, isMultipos, computed, rsClusterPIva, defaultCluster }) => {
                   const override = extraGaraIvaSogliePerRS?.[ragioneSociale];
                   const pdvIsOverridden = override?.pdvCount !== undefined && override.pdvCount !== actualPdvCount;
+                  const clusterIsOverridden = !!rsClusterPIva && rsClusterPIva !== defaultCluster;
                   return (
                     <tr key={ragioneSociale} className="even:bg-muted/30">
                       <td className="p-2 font-medium border border-border">{ragioneSociale}</td>
+                      <td className={`p-1 border border-border ${clusterIsOverridden ? 'bg-amber-50 dark:bg-amber-950' : ''}`}>
+                        <div className="flex items-center gap-1">
+                          <Select
+                            value={rsClusterPIva || defaultCluster || '__none'}
+                            onValueChange={(v) => handleRSClusterChange(ragioneSociale, v === '__none' ? '' : v as ClusterPIvaCode)}
+                          >
+                            <SelectTrigger className="h-7 text-xs" data-testid={`select-cluster-piva-rs-${ragioneSociale.replace(/\s+/g, '-')}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none">—</SelectItem>
+                              {CLUSTER_PIVA_OPTIONS.map(opt => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {clusterIsOverridden && (
+                            <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={() => handleRSClusterChange(ragioneSociale, '')}>
+                              <RotateCcw className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
                       <EditableCell
                         value={effectivePdvCount}
                         defaultValue={actualPdvCount}

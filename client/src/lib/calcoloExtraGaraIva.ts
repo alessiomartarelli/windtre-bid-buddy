@@ -49,6 +49,7 @@ export interface ExtraGaraRsSoglie {
   s3?: number;
   s4?: number;
   pdvCount?: number;
+  clusterPIva?: ClusterPIvaCode;
 }
 
 export interface ExtraGaraSogliePerRS {
@@ -142,11 +143,13 @@ export const calcolaSoglieRS = (
   pdvList: PuntoVendita[],
   isMultipos: boolean,
   soglieOverride?: ExtraGaraConfigOverrides,
+  rsClusterPIva?: ClusterPIvaCode,
 ): { s1: number; s2: number; s3: number; s4: number } => {
   let s1 = 0, s2 = 0, s3 = 0, s4 = 0;
   
   for (const pdv of pdvList) {
-    const hasBP = haBusinessPromoter(pdv.clusterPIva || "");
+    const effectiveCluster = rsClusterPIva || pdv.clusterPIva || "";
+    const hasBP = haBusinessPromoter(effectiveCluster as ClusterPIvaCode | "");
     const baseKey = hasBP ? "conBP" : "senzaBP";
     
     let base: { s1: number; s2: number; s3: number; s4: number };
@@ -216,8 +219,9 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
 
   for (const [ragioneSociale, pdvList] of Object.entries(pdvPerRS)) {
     const isMultipos = pdvList.length > 1;
-    const soglieCalcolate = calcolaSoglieRS(pdvList, isMultipos, configOverrides);
     const rsOverride = soglieOverridePerRS?.[ragioneSociale];
+    const rsClusterPIva = rsOverride?.clusterPIva;
+    const soglieCalcolate = calcolaSoglieRS(pdvList, isMultipos, configOverrides, rsClusterPIva);
     let soglieBase = soglieCalcolate;
     if (rsOverride?.pdvCount !== undefined && rsOverride.pdvCount !== pdvList.length && pdvList.length > 0) {
       const ratio = rsOverride.pdvCount / pdvList.length;
@@ -235,8 +239,9 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
       s4: rsOverride?.s4 ?? soglieBase.s4,
     };
     
-    // Verifica se almeno un PDV ha Business Promoter
-    const hasBPInRS = pdvList.some(pdv => haBusinessPromoter(pdv.clusterPIva || ""));
+    const hasBPInRS = rsClusterPIva
+      ? haBusinessPromoter(rsClusterPIva)
+      : pdvList.some(pdv => haBusinessPromoter(pdv.clusterPIva || ""));
 
     // Calcola risultati per ogni PDV
     const pdvResults: ExtraGaraIvaPdvResult[] = [];
@@ -311,10 +316,9 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
     // Determina soglia raggiunta per la RS
     const sogliaRaggiunta = determinaSogliaRaggiunta(puntiTotaliRS, soglie, hasBPInRS);
 
-    // Calcola premio per ogni PDV in base alla soglia raggiunta
     let premioTotaleRS = 0;
     for (const pdvResult of pdvResults) {
-      const clusterPIva = pdvResult.clusterPIva as ClusterPIvaCode;
+      const clusterPIva = (rsClusterPIva || pdvResult.clusterPIva) as ClusterPIvaCode;
       if (!clusterPIva || !effectivePremi[clusterPIva]) {
         pdvResult.premioUnitario = 0;
         pdvResult.premioTotale = 0;

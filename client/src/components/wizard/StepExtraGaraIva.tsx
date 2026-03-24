@@ -92,10 +92,11 @@ const StepExtraGaraIva: React.FC<StepExtraGaraIvaProps> = ({
     const defaults: Record<string, { s1: number; s2: number; s3: number; s4: number }> = {};
     for (const [rs, pdvList] of Object.entries(pdvPerRS)) {
       const isMultipos = pdvList.length > 1;
-      defaults[rs] = calcolaSoglieRS(pdvList, isMultipos, configOverrides);
+      const rsClusterPIva = soglieOverride?.[rs]?.clusterPIva;
+      defaults[rs] = calcolaSoglieRS(pdvList, isMultipos, configOverrides, rsClusterPIva);
     }
     return defaults;
-  }, [puntiVendita, configOverrides]);
+  }, [puntiVendita, configOverrides, soglieOverride]);
 
   const startEditing = (rs: string) => {
     const rsData = soglieOverride?.[rs] || defaultSogliePerRS[rs] || { s1: 0, s2: 0, s3: 0, s4: 0 };
