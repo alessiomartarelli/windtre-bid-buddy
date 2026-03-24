@@ -388,6 +388,7 @@ function calcMobilePerPdv(
   mobileCategories: MobileCategoryConfig[],
   workdayInfo: WorkdayInfo,
   soglieOverride?: { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number },
+  moltiplicatoriPerGruppo?: Record<string, number[]>,
 ): PistaCalcResult {
   if (!mobileConfig || pdvItems.length === 0) return EMPTY_CALC;
 
@@ -401,6 +402,11 @@ function calcMobilePerPdv(
 
   const totalCanone = validItems.reduce((sum, item) => sum + (item.canone || 0), 0);
 
+  const canonePerType: Record<string, number> = {};
+  for (const item of validItems) {
+    canonePerType[item.targetCategory] = (canonePerType[item.targetCategory] || 0) + (item.canone || 0);
+  }
+
   const result = calcolaPremioPistaMobilePerPos({
     configPos: mobileConfig,
     dettaglio,
@@ -411,6 +417,8 @@ function calcMobilePerPdv(
     workdayInfoOverride: workdayInfo,
     valoreCanoniOverride: totalCanone,
     soglieOverride,
+    moltiplicatoriPerGruppo,
+    canonePerType,
   });
 
   return {
@@ -433,6 +441,8 @@ function calcFissoPerPdv(
   month: number,
   workdayInfo: WorkdayInfo,
   gettoniContrattualiOverride?: Record<string, number>,
+  soglieOverride?: { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number; soglia5?: number },
+  euroPerPezzoOverride?: Record<string, number>,
 ): PistaCalcResult {
   if (!fissoConfig || pdvItems.length === 0) return EMPTY_CALC;
 
@@ -459,6 +469,8 @@ function calcFissoPerPdv(
     attivato,
     workdayInfoOverride: workdayInfo,
     gettoniContrattualiOverride,
+    soglieOverride,
+    euroPerPezzoOverride,
   });
 
   return {
@@ -900,7 +912,7 @@ export default function DashboardGaraReale() {
       energia: { compensiBase: orgSystemTcDefaults.energia.compensiBase, bonusPerContratto: orgSystemTcDefaults.energia.bonusPerContratto, pistaBase: orgSystemTcDefaults.energia.pistaBase, pistaDa4: orgSystemTcDefaults.energia.pistaDa4 } as Record<string, unknown>,
       assicurazioni: { puntiProdotto: orgSystemTcDefaults.assicurazioni.puntiProdotto, premiProdotto: orgSystemTcDefaults.assicurazioni.premiProdotto } as Record<string, unknown>,
       protecta: { gettoniProdotto: orgSystemTcDefaults.protecta.gettoniProdotto } as Record<string, unknown>,
-      fisso: { gettoniContrattuali: orgSystemTcDefaults.fisso.gettoniContrattuali, soglieCluster: orgSystemTcDefaults.fisso.soglieCluster } as Record<string, unknown>,
+      fisso: { gettoniContrattuali: orgSystemTcDefaults.fisso.gettoniContrattuali, soglieCluster: orgSystemTcDefaults.fisso.soglieCluster, euroPerPezzo: orgSystemTcDefaults.fisso.euroPerPezzo } as Record<string, unknown>,
       extraGara: { puntiAttivazione: orgSystemTcDefaults.extraGara.puntiAttivazione, soglieMultipos: orgSystemTcDefaults.extraGara.soglieMultipos, soglieMonopos: orgSystemTcDefaults.extraGara.soglieMonopos, premiPerSoglia: orgSystemTcDefaults.extraGara.premiPerSoglia } as Record<string, unknown>,
     };
     const mergeSection = (section: string) => {
@@ -912,7 +924,7 @@ export default function DashboardGaraReale() {
     const tcEnergia = mergeSection('energia') as { compensiBase?: Record<string, number>; bonusPerContratto?: Record<string, number>; pistaBase?: Record<string, number>; pistaDa4?: Record<string, number> };
     const tcAssic = mergeSection('assicurazioni') as { puntiProdotto?: Record<string, number>; premiProdotto?: Record<string, number> };
     const tcProtecta = mergeSection('protecta') as { gettoniProdotto?: Record<string, number> };
-    const tcFisso = mergeSection('fisso') as { gettoniContrattuali?: Record<string, number>; soglieCluster?: Record<string, number[]> };
+    const tcFisso = mergeSection('fisso') as { gettoniContrattuali?: Record<string, number>; soglieCluster?: Record<string, number[]>; euroPerPezzo?: Record<string, number> };
     const tcExtraGara = mergeSection('extraGara') as { puntiAttivazione?: Record<string, number>; soglieMultipos?: Record<string, Record<string, number>>; soglieMonopos?: Record<string, Record<string, number>>; premiPerSoglia?: Record<string, number[]> };
 
     const getMobileSoglieForCluster = (clusterStr: string | undefined): { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number } | undefined => {
@@ -920,6 +932,12 @@ export default function DashboardGaraReale() {
       const vals = tcMobile.soglieCluster[clusterStr];
       if (!vals || vals.length < 4) return undefined;
       return { soglia1: vals[0], soglia2: vals[1], soglia3: vals[2], soglia4: vals[3] };
+    };
+    const getFissoSoglieForCluster = (clusterStr: string | undefined): { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number; soglia5?: number } | undefined => {
+      if (!tcFisso?.soglieCluster || !clusterStr) return undefined;
+      const vals = tcFisso.soglieCluster[clusterStr];
+      if (!vals || vals.length < 5) return undefined;
+      return { soglia1: vals[0], soglia2: vals[1], soglia3: vals[2], soglia4: vals[3], soglia5: vals[4] };
     };
     const effectiveMobileCategories = (() => {
       const base = [...mobileCategories];
@@ -1315,11 +1333,11 @@ export default function DashboardGaraReale() {
           if (pista === "mobile") {
             const mConfig = getMobileConfigForPdv(pdv.codicePos, pdvRS);
             const clusterMobile = pdvConfig?.clusterMobile;
-            pdvCalc = calcMobilePerPdv(pdvItems, mConfig, pdvCalendar, selYear, selMonth, effectiveMobileCategories, pdvWorkday, getMobileSoglieForCluster(clusterMobile));
+            pdvCalc = calcMobilePerPdv(pdvItems, mConfig, pdvCalendar, selYear, selMonth, effectiveMobileCategories, pdvWorkday, getMobileSoglieForCluster(clusterMobile), tcMobile?.moltiplicatoriCanone);
           } else if (pista === "fisso") {
             const fConfig = getFissoConfigForPdv(pdv.codicePos, pdvRS);
             const cluster = clusterToNumber(pdvConfig?.clusterFisso);
-            pdvCalc = calcFissoPerPdv(pdvItems, fConfig, pdvCalendar, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday, tcFisso?.gettoniContrattuali);
+            pdvCalc = calcFissoPerPdv(pdvItems, fConfig, pdvCalendar, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(pdvConfig?.clusterFisso), tcFisso?.euroPerPezzo);
           } else if (pista === "energia") {
             const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
             pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto, tcEnergia?.pistaBase, tcEnergia?.pistaDa4);
@@ -1407,11 +1425,11 @@ export default function DashboardGaraReale() {
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
               const rsClusterMobile = firstPdvConfig?.clusterMobile;
-              rsCalc = calcMobilePerPdv(aggregatedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, getMobileSoglieForCluster(rsClusterMobile));
+              rsCalc = calcMobilePerPdv(aggregatedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, getMobileSoglieForCluster(rsClusterMobile), tcMobile?.moltiplicatoriCanone);
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
-              rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali);
+              rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(firstPdvConfig?.clusterFisso), tcFisso?.euroPerPezzo);
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
@@ -1498,11 +1516,11 @@ export default function DashboardGaraReale() {
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
               const rsClusterMobile2 = firstPdvConfig?.clusterMobile;
-              rsProjCalc = calcMobilePerPdv(projectedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, getMobileSoglieForCluster(rsClusterMobile2));
+              rsProjCalc = calcMobilePerPdv(projectedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, getMobileSoglieForCluster(rsClusterMobile2), tcMobile?.moltiplicatoriCanone);
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
-              rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali);
+              rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(firstPdvConfig?.clusterFisso), tcFisso?.euroPerPezzo);
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
@@ -1673,11 +1691,11 @@ export default function DashboardGaraReale() {
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(pdv.codicePos, projRS);
               const clusterMobile3 = pdvConfig3?.clusterMobile;
-              projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, effectiveMobileCategories, pdvWorkday3, getMobileSoglieForCluster(clusterMobile3));
+              projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, effectiveMobileCategories, pdvWorkday3, getMobileSoglieForCluster(clusterMobile3), tcMobile?.moltiplicatoriCanone);
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(pdv.codicePos, projRS);
               const cluster = clusterToNumber(pdvConfig3?.clusterFisso);
-              projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3, tcFisso?.gettoniContrattuali);
+              projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(pdvConfig3?.clusterFisso), tcFisso?.euroPerPezzo);
             } else if (pista === "energia") {
               const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
               projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto, tcEnergia?.pistaBase, tcEnergia?.pistaDa4);

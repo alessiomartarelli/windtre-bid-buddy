@@ -373,6 +373,8 @@ export function calcolaPremioPistaFissoPerPos(params: {
   today?: Date;
   workdayInfoOverride?: WorkdayInfo;
   gettoniContrattualiOverride?: Record<string, number>;
+  soglieOverride?: { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number; soglia5?: number };
+  euroPerPezzoOverride?: Record<string, number>;
 }): CalcoloFissoPerPosResult {
   const {
     annoGara,
@@ -380,22 +382,41 @@ export function calcolaPremioPistaFissoPerPos(params: {
     calendar,
     clusterFisso,
     posCode,
-    pistaConfig,
+    pistaConfig: rawPistaConfig,
     attivato,
     categorieConfig = FISSO_CATEGORIE_DEFAULT,
     today = new Date(),
     workdayInfoOverride,
     gettoniContrattualiOverride,
+    soglieOverride,
+    euroPerPezzoOverride,
   } = params;
+
+  const pistaConfig: PistaFissoPosConfig = soglieOverride
+    ? {
+        ...rawPistaConfig,
+        ...(soglieOverride.soglia1 !== undefined && { soglia1: soglieOverride.soglia1 }),
+        ...(soglieOverride.soglia2 !== undefined && { soglia2: soglieOverride.soglia2 }),
+        ...(soglieOverride.soglia3 !== undefined && { soglia3: soglieOverride.soglia3 }),
+        ...(soglieOverride.soglia4 !== undefined && { soglia4: soglieOverride.soglia4 }),
+        ...(soglieOverride.soglia5 !== undefined && { soglia5: soglieOverride.soglia5 }),
+      }
+    : rawPistaConfig;
 
   const effectiveGettoni = gettoniContrattualiOverride
     ? { ...GETTONE_CONTRATTUALE_FISSO, ...gettoniContrattualiOverride } as Record<FissoCategoriaType, number>
     : GETTONE_CONTRATTUALE_FISSO;
 
   const monthIndex = meseGara - 1;
+  const effectiveCategorie = euroPerPezzoOverride
+    ? categorieConfig.map(c => {
+        const ov = euroPerPezzoOverride[c.type];
+        return ov !== undefined ? { ...c, euroPerPezzo: ov } : c;
+      })
+    : categorieConfig;
   const categorieMap = new Map<FissoCategoriaType, FissoCategoriaConfig>();
 
-  for (const c of categorieConfig) {
+  for (const c of effectiveCategorie) {
     categorieMap.set(c.type, c);
   }
 
