@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { MOBILE_CATEGORIES_CONFIG_DEFAULT, MobileCategoryConfig } from "@/types/preventivatore";
@@ -263,17 +264,17 @@ export function useTabelleCalcoloConfig(): {
     enabled: !!user,
   });
 
-  const defaults = buildDefaults();
+  const defaults = useMemo(() => buildDefaults(), []);
 
-  if (sysLoading || orgLoading) {
-    return { config: defaults, isLoading: true };
-  }
+  const config = useMemo(() => {
+    if (sysLoading || orgLoading) {
+      return defaults;
+    }
+    const systemConfig = systemConfigData?.config || {};
+    const orgOverrides = orgConfigData?.config?.tabelleCalcolo || null;
+    const merged = mergeConfigs(systemConfig, orgOverrides);
+    return applyConfigToDefaults(merged, defaults);
+  }, [sysLoading, orgLoading, systemConfigData, orgConfigData, defaults]);
 
-  const systemConfig = systemConfigData?.config || {};
-  const orgOverrides = orgConfigData?.config?.tabelleCalcolo || null;
-
-  const merged = mergeConfigs(systemConfig, orgOverrides);
-  const config = applyConfigToDefaults(merged, defaults);
-
-  return { config, isLoading: false };
+  return { config, isLoading: sysLoading || orgLoading };
 }
