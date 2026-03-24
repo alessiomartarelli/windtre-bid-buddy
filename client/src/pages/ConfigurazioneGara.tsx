@@ -436,6 +436,8 @@ export default function ConfigurazioneGara() {
   const [pdfParsing, setPdfParsing] = useState(false);
   const [pdfData, setPdfData] = useState<PdfGaraData | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const [lastPdfImportLabel, setLastPdfImportLabel] = useState<string | null>(null);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [addPdvDialogOpen, setAddPdvDialogOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -892,6 +894,7 @@ export default function ConfigurazioneGara() {
     setPdfParsing(true);
     setPdfError(null);
     setPdfData(null);
+    setPdfFileName(file.name);
     try {
       const data = await parseGaraPdf(file);
       if (data.pdvList.length === 0 && !data.soglieMobile && !data.soglieFisso) {
@@ -1029,11 +1032,14 @@ export default function ConfigurazioneGara() {
     if (pdfData.soglieExtraPIva) parts.push('soglie Extra P.IVA impostate');
     if (targetRS) parts.push(`RS: ${targetRS}`);
 
+    const importLabel = pdfFileName || 'PDF';
+    setLastPdfImportLabel(importLabel);
+
     toast({
       title: 'Importazione PDF completata',
-      description: parts.join(', ') || 'Dati importati dal PDF.',
+      description: `File: ${importLabel}. ${parts.join(', ') || 'Dati importati dal PDF.'}`,
     });
-  }, [pdfData, pdvList, extraGaraIvaSogliePerRS, tipologiaGara, modalitaRS, toast]);
+  }, [pdfData, pdvList, extraGaraIvaSogliePerRS, tipologiaGara, modalitaRS, pdfFileName, toast]);
 
   const reinitFromClusters = () => {
     initializeConfigsFromPdvList(pdvList);
@@ -1940,6 +1946,13 @@ export default function ConfigurazioneGara() {
 
             {pdfData && (
               <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                {pdfFileName && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-muted-foreground">File:</span>
+                    <span className="font-medium truncate">{pdfFileName}</span>
+                  </div>
+                )}
                 {pdfData.nomeRS && (
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-muted-foreground">RS:</span>
