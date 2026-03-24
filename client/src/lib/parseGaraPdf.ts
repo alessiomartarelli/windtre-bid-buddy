@@ -36,7 +36,46 @@ export interface PdfSoglieExtraPIva {
   s4: number;
 }
 
+export interface PdfPartnershipTarget {
+  target100: number;
+  premio100: number;
+  target80: number;
+  premio80: number;
+}
+
+export interface PdfSoglieEnergia {
+  targetS1: number;
+  targetS2: number;
+  targetS3: number;
+  targetNoMalus: number;
+  targetFissoRS: number;
+  premioS1: number;
+  premioS2: number;
+  premioS3: number;
+}
+
+export interface PdfSoglieAssicurazioni {
+  targetS1: number;
+  targetS2: number;
+  targetNoMalus: number;
+  premioS1: number;
+  premioS2: number;
+}
+
+export interface PdfSoglieProtecta {
+  targetExtra: number;
+  premioExtra: number;
+  targetDecurtazione: number;
+}
+
+export interface PdfDecurtazione {
+  importo: number;
+}
+
+export type PdfType = 'fonia_mobile_fissa' | 'partnership_reward';
+
 export interface PdfGaraData {
+  pdfType: PdfType;
   codiciDealer: string[];
   pdvList: PdfPdvEntry[];
   soglieMobile: PdfSoglieMobile | null;
@@ -44,6 +83,11 @@ export interface PdfGaraData {
   soglieExtraPIva: PdfSoglieExtraPIva | null;
   nomeRS: string;
   mese: string;
+  partnershipTarget: PdfPartnershipTarget | null;
+  soglieEnergia: PdfSoglieEnergia | null;
+  soglieAssicurazioni: PdfSoglieAssicurazioni | null;
+  soglieProtecta: PdfSoglieProtecta | null;
+  decurtazione: PdfDecurtazione | null;
 }
 
 async function extractTextFromPdf(file: File): Promise<string> {
@@ -67,9 +111,7 @@ function parsePdvTable(text: string): PdfPdvEntry[] {
   const pdvEntries: PdfPdvEntry[] = [];
 
   const posPattern = /\b(9\d{9})\b/g;
-  const dealerPattern = /\b(8\d{9})\b/g;
 
-  const lines = text.split('\n');
   const fullText = text;
 
   const allegatoIdx = fullText.indexOf('ALLEGATO');
@@ -78,7 +120,6 @@ function parsePdvTable(text: string): PdfPdvEntry[] {
   const allegatoText = fullText.substring(allegatoIdx);
 
   const posMatches = [...allegatoText.matchAll(posPattern)];
-  const dealerMatches = [...allegatoText.matchAll(dealerPattern)];
 
   if (posMatches.length === 0) return pdvEntries;
 
@@ -256,27 +297,190 @@ function parseMese(text: string): string {
   return '';
 }
 
+function parseMesePartnership(text: string): string {
+  const meseMatch = text.match(/PARTNERSHIP\s+REWARD\s+([\wÀ-ÿ]+)\s+(\d{4})/i);
+  if (meseMatch) {
+    return `${meseMatch[1]} ${meseMatch[2]}`;
+  }
+  return '';
+}
+
+function parseEuroAmount(str: string): number {
+  const cleaned = str.replace(/[€\s]/g, '').replace(/\./g, '').replace(',', '.');
+  return parseFloat(cleaned) || 0;
+}
+
+function parseAllegatoA(text: string): PdfPartnershipTarget | null {
+  const section = extractSectionText(text, 'ALLEGATO A', ['ALLEGATO B', 'ALLEGATO C', 'ALLEGATO D', 'ALLEGATO E']);
+  if (!section) return null;
+
+  const targetMatch = section.match(/(?:TARGET\s+PARTNERSHIP|PARTNERSHIP)\s*\n?\s*(\d[\d.]*)/i)
+    || section.match(/\b(\d{3,5})\b/);
+  if (!targetMatch) return null;
+
+  const target100 = parseInt(targetMatch[1].replace(/\./g, ''));
+
+  const euroMatches = [...section.matchAll(/([\d.]+)\s*€/g)];
+  if (euroMatches.length < 2) return null;
+
+  const premio100 = parseEuroAmount(euroMatches[0][1]);
+  const premio80 = parseEuroAmount(euroMatches[1][1]);
+
+  const target80 = Math.round(target100 * 0.8);
+
+  return { target100, premio100, target80, premio80 };
+}
+
+function parseAllegatoB(text: string): PdfSoglieEnergia | null {
+  const section = extractSectionText(text, 'ALLEGATO B', ['ALLEGATO C', 'ALLEGATO D', 'ALLEGATO E']);
+  if (!section) return null;
+
+  const numbers = [...section.matchAll(/\b(\d{2,4})\b/g)]
+    .map(m => parseInt(m[1]))
+    .filter(n => n >= 10 && n <= 5000);
+
+  if (numbers.length < 4) return null;
+
+  const lessThanMatch = section.match(/<\s*(\d{2,4})/);
+  const targetNoMalus = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
+
+  const targetS1 = numbers[0];
+  const targetS2 = numbers[1];
+  const targetS3 = numbers[2];
+
+  let targetFissoRS = 0;
+  if (numbers.length >= 4) {
+    targetFissoRS = numbers[3];
+  }
+
+  return {
+    targetS1,
+    targetS2,
+    targetS3,
+    targetNoMalus,
+    targetFissoRS,
+    premioS1: 250,
+    premioS2: 500,
+    premioS3: 1000,
+  };
+}
+
+function parseAllegatoC(text: string): PdfSoglieAssicurazioni | null {
+  const section = extractSectionText(text, 'ALLEGATO C', ['ALLEGATO D', 'ALLEGATO E']);
+  if (!section) return null;
+
+  const numbers = [...section.matchAll(/\b(\d{2,4})\b/g)]
+    .map(m => parseInt(m[1]))
+    .filter(n => n >= 10 && n <= 5000);
+
+  const lessThanMatch = section.match(/<\s*(\d{2,4})/);
+  const targetNoMalus = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
+
+  const targets = numbers.filter(n => n !== targetNoMalus);
+  if (targets.length < 2) return null;
+
+  const premioS1Match = section.match(/500\s*€/);
+  const premioS2Match = section.match(/750\s*€/);
+
+  return {
+    targetS1: targets[0],
+    targetS2: targets[1],
+    targetNoMalus,
+    premioS1: premioS1Match ? 500 : 500,
+    premioS2: premioS2Match ? 750 : 750,
+  };
+}
+
+function parseAllegatoD(text: string): PdfSoglieProtecta | null {
+  const section = extractSectionText(text, 'ALLEGATO D', ['ALLEGATO E', 'Wind Tre S.p.A. con Socio Unico']);
+  if (!section) return null;
+
+  const geqMatch = section.match(/[≥>=]+\s*(\d{1,4})/);
+  const targetExtra = geqMatch ? parseInt(geqMatch[1]) : 0;
+
+  const premioMatch = section.match(/(\d{2,4})\s*€/);
+  const premioExtra = premioMatch ? parseInt(premioMatch[1]) : 350;
+
+  const lessThanMatch = section.match(/<\s*(\d{1,4})/);
+  const targetDecurtazione = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
+
+  if (targetExtra === 0 && targetDecurtazione === 0) return null;
+
+  return { targetExtra, premioExtra, targetDecurtazione };
+}
+
+function parseAllegatoE(text: string): PdfDecurtazione | null {
+  const section = extractSectionText(text, 'ALLEGATO E', ['Wind Tre S.p.A. con Socio Unico']);
+  if (!section) return null;
+
+  const euroMatches = [...section.matchAll(/([\d.]+)\s*€/g)];
+  if (euroMatches.length === 0) return null;
+
+  const importo = parseEuroAmount(euroMatches[0][1]);
+  if (importo === 0) return null;
+
+  return { importo };
+}
+
+function detectPdfType(text: string): PdfType {
+  if (text.includes('PARTNERSHIP REWARD') || text.includes('Partnership Reward')) {
+    return 'partnership_reward';
+  }
+  return 'fonia_mobile_fissa';
+}
+
 export async function parseGaraPdf(file: File): Promise<PdfGaraData> {
   const text = await extractTextFromPdf(file);
 
+  const pdfType = detectPdfType(text);
+
+  const codiciDealer: string[] = [];
+  const dealerMatches = [...text.matchAll(/Cod\.\s*Dealer:\s*(8\d{9})/gi)];
+  for (const m of dealerMatches) {
+    if (!codiciDealer.includes(m[1])) codiciDealer.push(m[1]);
+  }
+
+  const nomeRS = parseNomeRS(text);
+
+  if (pdfType === 'partnership_reward') {
+    const mese = parseMesePartnership(text);
+    const partnershipTarget = parseAllegatoA(text);
+    const soglieEnergia = parseAllegatoB(text);
+    const soglieAssicurazioni = parseAllegatoC(text);
+    const soglieProtecta = parseAllegatoD(text);
+    const decurtazione = parseAllegatoE(text);
+
+    return {
+      pdfType,
+      codiciDealer,
+      pdvList: [],
+      soglieMobile: null,
+      soglieFisso: null,
+      soglieExtraPIva: null,
+      nomeRS,
+      mese,
+      partnershipTarget,
+      soglieEnergia,
+      soglieAssicurazioni,
+      soglieProtecta,
+      decurtazione,
+    };
+  }
+
   const pdvList = parsePdvTable(text);
 
-  const codiciDealer = [...new Set(pdvList.map(p => p.codiceDealer).filter(Boolean))];
-
   if (codiciDealer.length === 0) {
-    const dealerMatches = [...text.matchAll(/Cod\.\s*Dealer:\s*(8\d{9})/gi)];
-    for (const m of dealerMatches) {
-      if (!codiciDealer.includes(m[1])) codiciDealer.push(m[1]);
-    }
+    const pdvDealers = [...new Set(pdvList.map(p => p.codiceDealer).filter(Boolean))];
+    codiciDealer.push(...pdvDealers);
   }
 
   const soglieMobile = parseSoglieMobile(text);
   const soglieFisso = parseSoglieFisso(text);
   const soglieExtraPIva = parseSoglieExtraPIva(text);
-  const nomeRS = parseNomeRS(text);
   const mese = parseMese(text);
 
   return {
+    pdfType,
     codiciDealer,
     pdvList,
     soglieMobile,
@@ -284,5 +488,10 @@ export async function parseGaraPdf(file: File): Promise<PdfGaraData> {
     soglieExtraPIva,
     nomeRS,
     mese,
+    partnershipTarget: null,
+    soglieEnergia: null,
+    soglieAssicurazioni: null,
+    soglieProtecta: null,
+    decurtazione: null,
   };
 }

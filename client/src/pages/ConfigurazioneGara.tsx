@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AppNavbar } from '@/components/AppNavbar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,7 @@ import {
 import { TabelleCalcoloGara, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
 import { useTabelleCalcoloConfig } from '@/hooks/useTabelleCalcoloConfig';
 import type { ExtraGaraSogliePerRS } from '@/lib/calcoloExtraGaraIva';
-import { parseGaraPdf, type PdfGaraData } from '@/lib/parseGaraPdf';
+import { parseGaraPdf, type PdfGaraData, type PdfType } from '@/lib/parseGaraPdf';
 
 const MONTHS = [
   { value: 1, label: 'Gennaio' },
@@ -437,7 +437,20 @@ export default function ConfigurazioneGara() {
   const [pdfData, setPdfData] = useState<PdfGaraData | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
-  const [lastPdfImportLabel, setLastPdfImportLabel] = useState<string | null>(null);
+  const [importedFiles, setImportedFiles] = useState<Array<{ label: string; type: PdfType; fileName: string }>>([]);
+  const [importedFilesPopoverOpen, setImportedFilesPopoverOpen] = useState(false);
+  const importedFilesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!importedFilesPopoverOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (importedFilesRef.current && !importedFilesRef.current.contains(e.target as Node)) {
+        setImportedFilesPopoverOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [importedFilesPopoverOpen]);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [addPdvDialogOpen, setAddPdvDialogOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -897,10 +910,18 @@ export default function ConfigurazioneGara() {
     setPdfFileName(file.name);
     try {
       const data = await parseGaraPdf(file);
-      if (data.pdvList.length === 0 && !data.soglieMobile && !data.soglieFisso) {
-        setPdfError('Nessun dato riconosciuto nel PDF. Verificare che sia un PDF di gara WindTre con allegato PDV.');
+      if (data.pdfType === 'partnership_reward') {
+        if (!data.partnershipTarget && !data.soglieEnergia && !data.soglieAssicurazioni && !data.soglieProtecta) {
+          setPdfError('Nessun dato riconosciuto nel PDF Partnership Reward. Verificare che il file contenga gli allegati A-E.');
+        } else {
+          setPdfData(data);
+        }
       } else {
-        setPdfData(data);
+        if (data.pdvList.length === 0 && !data.soglieMobile && !data.soglieFisso) {
+          setPdfError('Nessun dato riconosciuto nel PDF. Verificare che sia un PDF di gara WindTre con allegato PDV.');
+        } else {
+          setPdfData(data);
+        }
       }
     } catch (err) {
       console.error('PDF parse error:', err);
@@ -910,8 +931,144 @@ export default function ConfigurazioneGara() {
     }
   };
 
+  const findTargetRS = useCallback((dealerCodes: string[], currentPdvList: GaraConfigPdv[], pdfPdvCodes: string[]): string | null => {
+    if (dealerCodes.length > 0) {
+      for (const [rs, soglieData] of Object.entries(extraGaraIvaSogliePerRS)) {
+        if (soglieData.codiciRS?.some(c => dealerCodes.includes(c))) {
+          return rs;
+        }
+      }
+    }
+
+    const rsNames = Array.from(new Set(currentPdvList.map(p => p.ragioneSociale).filter(Boolean)));
+    if (rsNames.length === 1) return rsNames[0];
+    if (rsNames.length > 1) {
+      for (const rs of rsNames) {
+        const rsPdvCodes = currentPdvList.filter(p => p.ragioneSociale === rs).map(p => p.codicePos);
+        const overlap = rsPdvCodes.filter(c => pdfPdvCodes.includes(c));
+        if (overlap.length > 0) return rs;
+      }
+    }
+    return null;
+  }, [extraGaraIvaSogliePerRS]);
+
   const handleApplyPdfImport = useCallback(() => {
     if (!pdfData) return;
+
+    const parts: string[] = [];
+
+    if (pdfData.pdfType === 'partnership_reward') {
+      const targetRS = findTargetRS(pdfData.codiciDealer, pdvList, []);
+
+      if (targetRS) {
+        const updatedSoglie = { ...extraGaraIvaSogliePerRS };
+        const existing = updatedSoglie[targetRS] || {};
+        updatedSoglie[targetRS] = {
+          ...existing,
+          codiciRS: [...new Set([...(existing.codiciRS || []), ...pdfData.codiciDealer])],
+        };
+        setExtraGaraIvaSogliePerRS(updatedSoglie);
+
+        if (pdfData.partnershipTarget) {
+          if (tipologiaGara === 'gara_operatore_rs' && modalitaRS === 'per_rs') {
+            setPartnershipRSConfig(prev => prev.map(c => {
+              if (c.ragioneSociale !== targetRS) return c;
+              return {
+                ...c,
+                target100: pdfData.partnershipTarget!.target100,
+                premio100: pdfData.partnershipTarget!.premio100,
+                target80: pdfData.partnershipTarget!.target80,
+                premio80: pdfData.partnershipTarget!.premio80,
+              };
+            }));
+          }
+          parts.push('Partnership target/premio impostati');
+        }
+
+        if (pdfData.soglieEnergia) {
+          if (tipologiaGara === 'gara_operatore_rs' && modalitaRS === 'per_rs') {
+            setEnergiaRSConfig(prev => prev.map(c => {
+              if (c.ragioneSociale !== targetRS) return c;
+              return {
+                ...c,
+                targetS1: pdfData.soglieEnergia!.targetS1,
+                targetS2: pdfData.soglieEnergia!.targetS2,
+                targetS3: pdfData.soglieEnergia!.targetS3,
+                targetNoMalus: pdfData.soglieEnergia!.targetNoMalus,
+                premioS1: pdfData.soglieEnergia!.premioS1,
+                premioS2: pdfData.soglieEnergia!.premioS2,
+                premioS3: pdfData.soglieEnergia!.premioS3,
+              };
+            }));
+          } else {
+            setEnergiaConfig(prev => ({
+              ...prev,
+              targetS1: pdfData.soglieEnergia!.targetS1,
+              targetS2: pdfData.soglieEnergia!.targetS2,
+              targetS3: pdfData.soglieEnergia!.targetS3,
+              targetNoMalus: pdfData.soglieEnergia!.targetNoMalus,
+              premioS1: pdfData.soglieEnergia!.premioS1,
+              premioS2: pdfData.soglieEnergia!.premioS2,
+              premioS3: pdfData.soglieEnergia!.premioS3,
+            }));
+          }
+          parts.push('soglie Energia impostate');
+        }
+
+        if (pdfData.soglieAssicurazioni) {
+          if (tipologiaGara === 'gara_operatore_rs' && modalitaRS === 'per_rs') {
+            setAssicurazioniRSConfig(prev => prev.map(c => {
+              if (c.ragioneSociale !== targetRS) return c;
+              return {
+                ...c,
+                targetS1: pdfData.soglieAssicurazioni!.targetS1,
+                targetS2: pdfData.soglieAssicurazioni!.targetS2,
+                targetNoMalus: pdfData.soglieAssicurazioni!.targetNoMalus,
+                premioS1: pdfData.soglieAssicurazioni!.premioS1,
+                premioS2: pdfData.soglieAssicurazioni!.premioS2,
+              };
+            }));
+          } else {
+            setAssicurazioniConfig(prev => ({
+              ...prev,
+              targetS1: pdfData.soglieAssicurazioni!.targetS1,
+              targetS2: pdfData.soglieAssicurazioni!.targetS2,
+              targetNoMalus: pdfData.soglieAssicurazioni!.targetNoMalus,
+              premioS1: pdfData.soglieAssicurazioni!.premioS1,
+              premioS2: pdfData.soglieAssicurazioni!.premioS2,
+            }));
+          }
+          parts.push('soglie Assicurazioni impostate');
+        }
+
+        if (pdfData.soglieProtecta) {
+          parts.push(`Protecta: target ≥${pdfData.soglieProtecta.targetExtra}, decurt. <${pdfData.soglieProtecta.targetDecurtazione}`);
+        }
+
+        if (pdfData.decurtazione) {
+          parts.push(`decurtazione ${pdfData.decurtazione.importo.toLocaleString('it-IT')}€`);
+        }
+
+        parts.push(`RS: ${targetRS}`);
+      } else {
+        parts.push('RS non identificata — codici dealer non corrispondono');
+      }
+
+      setIsDirty(true);
+      setPdfImportDialogOpen(false);
+      setPdfData(null);
+
+      const importLabel = pdfData.mese
+        ? `Partnership Reward ${pdfData.mese}`
+        : (pdfFileName || 'PDF Partnership Reward');
+      setImportedFiles(prev => [...prev, { label: importLabel, type: pdfData.pdfType, fileName: pdfFileName || '' }]);
+
+      toast({
+        title: 'Importazione PDF completata',
+        description: parts.join(', ') || 'Dati importati dal PDF.',
+      });
+      return;
+    }
 
     const updatedPdvList = [...pdvList];
     let matchedCount = 0;
@@ -940,32 +1097,7 @@ export default function ConfigurazioneGara() {
     setFissoConfig(updatedPdvList.map(p => initFissoConfigForPdv(p)));
     setPartnershipConfig(updatedPdvList.map(p => initPartnershipConfigForPdv(p)));
 
-    let targetRS: string | null = null;
-    if (pdfData.codiciDealer.length > 0) {
-      for (const [rs, soglieData] of Object.entries(extraGaraIvaSogliePerRS)) {
-        if (soglieData.codiciRS?.some(c => pdfData.codiciDealer.includes(c))) {
-          targetRS = rs;
-          break;
-        }
-      }
-
-      if (!targetRS) {
-        const rsNames = Array.from(new Set(updatedPdvList.map(p => p.ragioneSociale).filter(Boolean)));
-        if (rsNames.length === 1) {
-          targetRS = rsNames[0];
-        } else if (rsNames.length > 1) {
-          for (const rs of rsNames) {
-            const rsPdvCodes = updatedPdvList.filter(p => p.ragioneSociale === rs).map(p => p.codicePos);
-            const pdfCodes = pdfData.pdvList.map(p => p.codicePos);
-            const overlap = rsPdvCodes.filter(c => pdfCodes.includes(c));
-            if (overlap.length > 0) {
-              targetRS = rs;
-              break;
-            }
-          }
-        }
-      }
-    }
+    const targetRS = findTargetRS(pdfData.codiciDealer, updatedPdvList, pdfData.pdvList.map(p => p.codicePos));
 
     if (targetRS) {
       const updatedSoglie = { ...extraGaraIvaSogliePerRS };
@@ -1024,7 +1156,6 @@ export default function ConfigurazioneGara() {
     setPdfImportDialogOpen(false);
     setPdfData(null);
 
-    const parts: string[] = [];
     if (matchedCount > 0) parts.push(`${matchedCount} PDV aggiornati`);
     if (unmatchedPdf.length > 0) parts.push(`${unmatchedPdf.length} PDV del PDF non trovati`);
     if (pdfData.soglieMobile) parts.push('soglie Mobile impostate');
@@ -1035,13 +1166,13 @@ export default function ConfigurazioneGara() {
     const importLabel = pdfData.mese
       ? `Incentivazione Franchising WindTre ${pdfData.mese}`
       : (pdfFileName || 'PDF importato');
-    setLastPdfImportLabel(importLabel);
+    setImportedFiles(prev => [...prev, { label: importLabel, type: pdfData.pdfType, fileName: pdfFileName || '' }]);
 
     toast({
       title: 'Importazione PDF completata',
-      description: `File: ${importLabel}. ${parts.join(', ') || 'Dati importati dal PDF.'}`,
+      description: parts.join(', ') || 'Dati importati dal PDF.',
     });
-  }, [pdfData, pdvList, extraGaraIvaSogliePerRS, tipologiaGara, modalitaRS, pdfFileName, toast]);
+  }, [pdfData, pdvList, extraGaraIvaSogliePerRS, tipologiaGara, modalitaRS, pdfFileName, toast, findTargetRS]);
 
   const reinitFromClusters = () => {
     initializeConfigsFromPdvList(pdvList);
@@ -1202,11 +1333,39 @@ export default function ConfigurazioneGara() {
               </SelectContent>
             </Select>
             {garaConfigRecord && <Badge variant="secondary" className="text-xs">{garaConfigRecord.name || 'Salvato'}</Badge>}
-            {lastPdfImportLabel && (
-              <Badge variant="outline" className="text-xs text-blue-700 border-blue-300 bg-blue-50 dark:text-blue-300 dark:border-blue-700 dark:bg-blue-950 gap-1">
-                <FileText className="h-3 w-3" />
-                {lastPdfImportLabel}
-              </Badge>
+            {importedFiles.length > 0 && (
+              <div className="relative" ref={importedFilesRef}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100 dark:text-blue-300 dark:border-blue-700 dark:bg-blue-950 gap-1"
+                  onClick={() => setImportedFilesPopoverOpen(!importedFilesPopoverOpen)}
+                  data-testid="button-imported-files"
+                >
+                  <FileText className="h-3 w-3" />
+                  File caricati ({importedFiles.length})
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+                {importedFilesPopoverOpen && (
+                  <div className="absolute top-full left-0 mt-1 z-50 bg-background border rounded-lg shadow-lg p-2 min-w-[280px] max-w-[400px]">
+                    <div className="text-xs font-semibold text-muted-foreground mb-2 px-1">File PDF importati</div>
+                    <div className="space-y-1">
+                      {importedFiles.map((f, i) => (
+                        <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 text-xs">
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{f.label}</div>
+                            <div className="text-muted-foreground truncate">{f.fileName}</div>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] shrink-0 ml-auto">
+                            {f.type === 'partnership_reward' ? 'PR' : 'Fonia'}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             {isDirty && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Modifiche non salvate</Badge>}
           </div>
@@ -1912,7 +2071,13 @@ export default function ConfigurazioneGara() {
         <Dialog open={pdfImportDialogOpen} onOpenChange={(open) => { setPdfImportDialogOpen(open); if (!open) { setPdfData(null); setPdfError(null); } }}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>{pdfData?.mese ? `Incentivazione Franchising W3 ${pdfData.mese}` : 'Importa da PDF Gara WindTre'}</DialogTitle>
+              <DialogTitle>
+                {pdfData?.pdfType === 'partnership_reward' && pdfData.mese
+                  ? `Partnership Reward ${pdfData.mese}`
+                  : pdfData?.mese
+                    ? `Incentivazione Franchising W3 ${pdfData.mese}`
+                    : 'Importa da PDF Gara WindTre'}
+              </DialogTitle>
               <DialogDescription>
                 {pdfData ? 'Riepilogo dei dati estratti dal PDF. Verifica e applica.' : 'Carica il PDF della lettera di incentivazione per importare automaticamente cluster PDV, soglie e codici RS.'}
               </DialogDescription>
@@ -2077,6 +2242,106 @@ export default function ConfigurazioneGara() {
                           <div className="text-sm font-semibold">{v}</div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {pdfData.partnershipTarget && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Partnership Reward</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Target 100%</div>
+                        <div className="text-sm font-semibold">{pdfData.partnershipTarget.target100.toLocaleString('it-IT')}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Premio 100%</div>
+                        <div className="text-sm font-semibold">{pdfData.partnershipTarget.premio100.toLocaleString('it-IT')} €</div>
+                      </div>
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Target 80%</div>
+                        <div className="text-sm font-semibold">{pdfData.partnershipTarget.target80.toLocaleString('it-IT')}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Premio 80%</div>
+                        <div className="text-sm font-semibold">{pdfData.partnershipTarget.premio80.toLocaleString('it-IT')} €</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pdfData.soglieEnergia && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Energia (Luce & Gas)</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">S1 (250€/PDV)</div>
+                        <div className="text-sm font-semibold">{pdfData.soglieEnergia.targetS1}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">S2 (20% min 500€)</div>
+                        <div className="text-sm font-semibold">{pdfData.soglieEnergia.targetS2}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">S3 (1.000€/PDV)</div>
+                        <div className="text-sm font-semibold">{pdfData.soglieEnergia.targetS3}</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-amber-50 dark:bg-amber-950/30 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Decurtazione (&lt;)</div>
+                        <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">{pdfData.soglieEnergia.targetNoMalus}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Target Fisso RS</div>
+                        <div className="text-sm font-semibold">{pdfData.soglieEnergia.targetFissoRS}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pdfData.soglieAssicurazioni && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Assicurazioni</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">S1 (500€/PDV)</div>
+                        <div className="text-sm font-semibold">{pdfData.soglieAssicurazioni.targetS1}</div>
+                      </div>
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">S2 (750€/PDV)</div>
+                        <div className="text-sm font-semibold">{pdfData.soglieAssicurazioni.targetS2}</div>
+                      </div>
+                      <div className="bg-amber-50 dark:bg-amber-950/30 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Decurtazione (&lt;)</div>
+                        <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">{pdfData.soglieAssicurazioni.targetNoMalus}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pdfData.soglieProtecta && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Protecta (Casa e Negozio Protetti)</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-muted/50 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Target Extra ({pdfData.soglieProtecta.premioExtra}€/PDV)</div>
+                        <div className="text-sm font-semibold">≥ {pdfData.soglieProtecta.targetExtra}</div>
+                      </div>
+                      <div className="bg-amber-50 dark:bg-amber-950/30 rounded p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Decurtazione (&lt;)</div>
+                        <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">{pdfData.soglieProtecta.targetDecurtazione}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pdfData.decurtazione && (
+                  <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                      <span className="text-muted-foreground">Importo Decurtazione Totale:</span>
+                      <span className="font-semibold text-amber-700 dark:text-amber-400">{pdfData.decurtazione.importo.toLocaleString('it-IT')} €</span>
                     </div>
                   </div>
                 )}
