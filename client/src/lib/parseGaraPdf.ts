@@ -353,15 +353,31 @@ function parseAllegatoB(text: string): PdfSoglieEnergia | null {
     targetFissoRS = numbers[3];
   }
 
+  const premioS1Match = section.match(/(\d{3,5})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
+  const premioS1 = premioS1Match ? parseInt(premioS1Match[1]) : 250;
+
+  const pctMatch = section.match(/(\d{1,3})\s*%\s*(?:del\s+)?premio\s*base/i);
+  const minMatch = section.match(/min(?:imo)?\s*(\d{3,5})\s*€/i);
+  let premioS2 = 500;
+  if (pctMatch && minMatch) {
+    premioS2 = parseInt(minMatch[1]);
+  } else {
+    const s2PremioMatch = section.match(/(?:S2|soglia\s*2)\D*?(\d{3,5})\s*€/i);
+    if (s2PremioMatch) premioS2 = parseInt(s2PremioMatch[1]);
+  }
+
+  const premioS3Match = section.match(/(\d{1,2}\.?\d{3})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
+  const premioS3 = premioS3Match ? parseInt(premioS3Match[1].replace('.', '')) : 1000;
+
   return {
     targetS1,
     targetS2,
     targetS3,
     targetNoMalus,
     targetFissoRS,
-    premioS1: 250,
-    premioS2: 500,
-    premioS3: 1000,
+    premioS1,
+    premioS2,
+    premioS3,
   };
 }
 
@@ -379,15 +395,18 @@ function parseAllegatoC(text: string): PdfSoglieAssicurazioni | null {
   const targets = numbers.filter(n => n !== targetNoMalus);
   if (targets.length < 2) return null;
 
-  const premioS1Match = section.match(/500\s*€/);
-  const premioS2Match = section.match(/750\s*€/);
+  const premioMatches = [...section.matchAll(/(\d{3,5})\s*€/g)]
+    .map(m => parseInt(m[1]))
+    .filter(n => n >= 100 && n <= 5000);
+  const premioS1 = premioMatches.length >= 1 ? premioMatches[0] : 500;
+  const premioS2 = premioMatches.length >= 2 ? premioMatches[1] : 750;
 
   return {
     targetS1: targets[0],
     targetS2: targets[1],
     targetNoMalus,
-    premioS1: premioS1Match ? 500 : 500,
-    premioS2: premioS2Match ? 750 : 750,
+    premioS1,
+    premioS2,
   };
 }
 
