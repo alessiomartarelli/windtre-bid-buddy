@@ -296,13 +296,13 @@ interface CellProps {
 
 function EditableCell({ value, defaultValue, isOverridden, onChange, onReset, testId, step = '1' }: CellProps) {
   return (
-    <td className={`relative p-1 ${isOverridden ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800' : 'border border-border'}`}>
+    <td className={`relative p-1 ${isOverridden ? 'border-l-2 border-l-blue-500 border border-border' : 'border border-border'}`}>
       <div className="flex items-center gap-1">
         <Input
           type="number"
           value={value}
           onChange={e => onChange(parseFloat(e.target.value) || 0)}
-          className="text-sm text-center w-full"
+          className={`text-sm text-center w-full ${isOverridden ? 'text-blue-700 dark:text-blue-300 font-medium' : ''}`}
           step={step}
           data-testid={testId}
         />
@@ -313,10 +313,10 @@ function EditableCell({ value, defaultValue, isOverridden, onChange, onReset, te
                 variant="ghost"
                 size="icon"
                 onClick={onReset}
-                className="shrink-0 h-6 w-6 text-blue-500 dark:text-blue-400"
+                className="shrink-0 h-6 w-6 text-gray-400 hover:text-red-500"
                 data-testid={`${testId}-reset`}
               >
-                <X className="h-3 w-3" />
+                <RotateCcw className="h-3 w-3" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
@@ -325,9 +325,6 @@ function EditableCell({ value, defaultValue, isOverridden, onChange, onReset, te
           </Tooltip>
         )}
       </div>
-      {isOverridden && (
-        <span className="absolute -top-2 right-1 text-[9px] text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950 px-1 rounded">(modificato)</span>
-      )}
     </td>
   );
 }
