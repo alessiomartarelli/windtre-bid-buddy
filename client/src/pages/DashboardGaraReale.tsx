@@ -171,8 +171,7 @@ const PISTA_CONFIG = {
   fisso: { label: "Fisso", icon: Wifi, color: "bg-green-500", lightColor: "bg-green-50 text-green-700 border-green-200" },
   energia: { label: "Energia", icon: Zap, color: "bg-amber-500", lightColor: "bg-amber-50 text-amber-700 border-amber-200" },
   assicurazioni: { label: "Assicurazioni", icon: Shield, color: "bg-purple-500", lightColor: "bg-purple-50 text-purple-700 border-purple-200" },
-  cb: { label: "CB", icon: Handshake, color: "bg-cyan-500", lightColor: "bg-cyan-50 text-cyan-700 border-cyan-200" },
-  partnership_reward: { label: "Partnership Reward", icon: Award, color: "bg-teal-500", lightColor: "bg-teal-50 text-teal-700 border-teal-200" },
+  partnership: { label: "Partnership", icon: Handshake, color: "bg-cyan-500", lightColor: "bg-cyan-50 text-cyan-700 border-cyan-200" },
   protecta: { label: "Protecta", icon: Shield, color: "bg-rose-500", lightColor: "bg-rose-50 text-rose-700 border-rose-200" },
   extra_gara_iva: { label: "Extra Gara P.IVA", icon: Briefcase, color: "bg-indigo-500", lightColor: "bg-indigo-50 text-indigo-700 border-indigo-200" },
 } as const;
@@ -532,44 +531,35 @@ function calcEnergiaPerPdv(
 const CB_EVENT_LOOKUP = new Map(CB_EVENTS_CONFIG.map((c) => [c.type, c]));
 const VALID_CB_TYPES = new Set(CB_EVENTS_CONFIG.map((c) => c.type as string));
 
-function calcCBPerPdv(
-  pdvItems: AggregatedItem[],
-): PistaCalcResult {
-  if (pdvItems.length === 0) return EMPTY_CALC;
-
-  const validItems = pdvItems.filter((item) => VALID_CB_TYPES.has(item.targetCategory));
-  let totaleGettoni = 0;
-  let totalePezzi = 0;
-  for (const item of validItems) {
-    const eventConf = CB_EVENT_LOOKUP.get(item.targetCategory as CBEventType);
-    const gettoni = eventConf?.gettoni ?? 0;
-    totaleGettoni += item.pezzi * gettoni;
-    totalePezzi += item.pezzi;
-  }
-
-  return {
-    premioStimato: totaleGettoni,
-    puntiTotali: totalePezzi,
-    sogliaRaggiunta: 0,
-    sogliaLabel: "N/A",
-  };
-}
-
-function calcPartnershipRewardOnlyPerPdv(
+function calcPartnershipPerPdv(
   pdvItems: AggregatedItem[],
   partnershipConfig: PartnershipRewardPosConfig | undefined,
   giorniLavorativi: number,
   posCode: string,
 ): PistaCalcResult {
-  if (!partnershipConfig || pdvItems.length === 0) return EMPTY_CALC;
+  if (pdvItems.length === 0) return EMPTY_CALC;
 
   const validItems = pdvItems.filter((item) => VALID_CB_TYPES.has(item.targetCategory));
-  const attivato: AttivatoCBDettaglio[] = validItems.map((item) => ({
-    eventType: item.targetCategory as CBEventType,
-    pezzi: item.pezzi,
-    gettoni: 0,
-    puntiPartnership: 1,
-  }));
+  const attivato: AttivatoCBDettaglio[] = validItems.map((item) => {
+    const eventConf = CB_EVENT_LOOKUP.get(item.targetCategory as CBEventType);
+    return {
+      eventType: item.targetCategory as CBEventType,
+      pezzi: item.pezzi,
+      gettoni: eventConf?.gettoni ?? 0,
+      puntiPartnership: 1,
+    };
+  });
+
+  if (!partnershipConfig) {
+    let totaleGettoni = 0;
+    for (const a of attivato) totaleGettoni += a.pezzi * a.gettoni;
+    return {
+      premioStimato: totaleGettoni,
+      puntiTotali: 0,
+      sogliaRaggiunta: 0,
+      sogliaLabel: "N/A",
+    };
+  }
 
   const result = calcolaPartnershipRewardPerPos({
     posCode,
@@ -578,15 +568,9 @@ function calcPartnershipRewardOnlyPerPdv(
     giorniLavorativi,
   });
 
-  const premioTarget = result.targetRaggiunto === "100%"
-    ? (partnershipConfig.config.premio100 || 0)
-    : result.targetRaggiunto === "80%"
-      ? (partnershipConfig.config.premio80 || 0)
-      : 0;
-
   const targetNum = result.targetRaggiunto === "100%" ? 2 : result.targetRaggiunto === "80%" ? 1 : 0;
   return {
-    premioStimato: premioTarget,
+    premioStimato: result.premioMaturato,
     puntiTotali: result.punti,
     sogliaRaggiunta: targetNum,
     sogliaLabel: result.targetRaggiunto === "nessuno" ? "Nessuna" : result.targetRaggiunto,
@@ -1137,8 +1121,7 @@ export default function DashboardGaraReale() {
       soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number };
     }> = [];
 
-    const pisteOrder: (keyof typeof PISTA_CONFIG)[] = ["mobile", "fisso", "energia", "assicurazioni", "cb", "partnership_reward", "protecta", "extra_gara_iva"];
-    const PISTA_DATA_SOURCE: Record<string, string> = { cb: "partnership", partnership_reward: "partnership" };
+    const pisteOrder: (keyof typeof PISTA_CONFIG)[] = ["mobile", "fisso", "energia", "assicurazioni", "partnership", "protecta", "extra_gara_iva"];
 
     for (const pista of pisteOrder) {
       if (pista === "extra_gara_iva") {
@@ -1310,8 +1293,7 @@ export default function DashboardGaraReale() {
         continue;
       }
 
-      const dataSourcePista = PISTA_DATA_SOURCE[pista] || pista;
-      const pistaData = mappedData.totaliPerPista[dataSourcePista];
+      const pistaData = mappedData.totaliPerPista[pista];
       if (!pistaData) {
         stats.push({
           pista,
@@ -1353,8 +1335,7 @@ export default function DashboardGaraReale() {
 
       const pdvBreakdown = mappedData.pdvList
         .map((pdv) => {
-          const dataSource = PISTA_DATA_SOURCE[pista] || pista;
-          const pdvItems = pdv.items.filter((i) => i.pista === dataSource);
+          const pdvItems = pdv.items.filter((i) => i.pista === pista);
           const pdvPezzi = pista === "mobile"
             ? pdvItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
             : pista === "fisso"
@@ -1381,12 +1362,10 @@ export default function DashboardGaraReale() {
           } else if (pista === "energia") {
             const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
             pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto, tcEnergia?.pistaBase, tcEnergia?.pistaDa4);
-          } else if (pista === "cb") {
-            pdvCalc = calcCBPerPdv(pdvItems);
-          } else if (pista === "partnership_reward") {
+          } else if (pista === "partnership") {
             const pCfg = getPartnershipConfigForPdv(pdv.codicePos, pdvRS);
             const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-            pdvCalc = calcPartnershipRewardOnlyPerPdv(pdvItems, prConfig, pdvWorkday.elapsedWorkingDays, pdv.codicePos);
+            pdvCalc = calcPartnershipPerPdv(pdvItems, prConfig, pdvWorkday.elapsedWorkingDays, pdv.codicePos);
           } else if (pista === "assicurazioni") {
             pdvCalc = assicCalcMap.get(pdv.codicePos) || EMPTY_CALC;
           } else if (pista === "protecta") {
@@ -1413,7 +1392,7 @@ export default function DashboardGaraReale() {
       let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }> | undefined;
 
       if (pdvBreakdown.length > 0) {
-        const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "cb" || pista === "partnership_reward" || pista === "energia" || pista === "assicurazioni");
+        const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership" || pista === "energia" || pista === "assicurazioni");
 
         if (useRSAggregation) {
           const rsGroupMap = new Map<string, typeof pdvBreakdown>();
@@ -1472,12 +1451,10 @@ export default function DashboardGaraReale() {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
               rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(firstPdvConfig?.clusterFisso), tcFisso?.euroPerPezzo);
-            } else if (pista === "cb") {
-              rsCalc = calcCBPerPdv(aggregatedRSItems);
-            } else if (pista === "partnership_reward") {
+            } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-              rsCalc = calcPartnershipRewardOnlyPerPdv(aggregatedRSItems, prConfig, rsWorkday.elapsedWorkingDays, rsPdvs[0].codicePos);
+              rsCalc = calcPartnershipPerPdv(aggregatedRSItems, prConfig, rsWorkday.elapsedWorkingDays, rsPdvs[0].codicePos);
             } else if (pista === "energia") {
               const rsEConf = energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
               const rsEnergiaConfig: EnergiaConfig | undefined = rsEConf ? {
@@ -1565,12 +1542,10 @@ export default function DashboardGaraReale() {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
               rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(firstPdvConfig?.clusterFisso), tcFisso?.euroPerPezzo);
-            } else if (pista === "cb") {
-              rsProjCalc = calcCBPerPdv(projectedRSItems);
-            } else if (pista === "partnership_reward") {
+            } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-              rsProjCalc = calcPartnershipRewardOnlyPerPdv(projectedRSItems, prConfig, rsWorkday.totalWorkingDays, rsPdvs[0].codicePos);
+              rsProjCalc = calcPartnershipPerPdv(projectedRSItems, prConfig, rsWorkday.totalWorkingDays, rsPdvs[0].codicePos);
             } else if (pista === "energia") {
               const rsEConf = energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
               const rsEnergiaConfig: EnergiaConfig | undefined = rsEConf ? {
@@ -1720,7 +1695,7 @@ export default function DashboardGaraReale() {
               const ratio = pdvWd.elapsedWorkingDays > 0
                 ? pdvWd.totalWorkingDays / pdvWd.elapsedWorkingDays
                 : 1;
-              return { pista: PISTA_DATA_SOURCE[pista] || pista, targetCategory: c.category, targetLabel: c.label, pezzi: Math.round(c.pezzi * ratio), canone: (c.canone || 0) * ratio };
+              return { pista, targetCategory: c.category, targetLabel: c.label, pezzi: Math.round(c.pezzi * ratio), canone: (c.canone || 0) * ratio };
             });
             return { ...pdv, items: projectedItems };
           });
@@ -1745,12 +1720,10 @@ export default function DashboardGaraReale() {
             } else if (pista === "energia") {
               const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
               projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto, tcEnergia?.pistaBase, tcEnergia?.pistaDa4);
-            } else if (pista === "cb") {
-              projCalc = calcCBPerPdv(pdv.items);
-            } else if (pista === "partnership_reward") {
+            } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(pdv.codicePos, projRS);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-              projCalc = calcPartnershipRewardOnlyPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos);
+              projCalc = calcPartnershipPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos);
             } else if (pista === "assicurazioni" || pista === "protecta") {
               projCalc = pdv.pdvCalc;
             }
@@ -2566,16 +2539,12 @@ export default function DashboardGaraReale() {
 
                           const byPista: Record<string, { pezzi: number; corePezzi: number; items: AggregatedItem[] }> = {};
                           for (const item of pdv.items) {
-                            const displayPista = item.pista === "partnership" ? "cb" : item.pista;
-                            if (!byPista[displayPista]) byPista[displayPista] = { pezzi: 0, corePezzi: 0, items: [] };
-                            byPista[displayPista].pezzi += item.pezzi;
+                            if (!byPista[item.pista]) byPista[item.pista] = { pezzi: 0, corePezzi: 0, items: [] };
+                            byPista[item.pista].pezzi += item.pezzi;
                             if (isCorePezziItem(item.pista, item.targetCategory)) {
-                              byPista[displayPista].corePezzi += item.pezzi;
+                              byPista[item.pista].corePezzi += item.pezzi;
                             }
-                            byPista[displayPista].items.push(item);
-                          }
-                          if (byPista["cb"]) {
-                            byPista["partnership_reward"] = { ...byPista["cb"], items: [...byPista["cb"].items] };
+                            byPista[item.pista].items.push(item);
                           }
 
                           const egStat = pistaStats.find(s => s.pista === "extra_gara_iva");
@@ -2807,11 +2776,7 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
 
         const byPista: Record<string, number> = {};
         for (const item of allItems) {
-          const displayPista = item.pista === "partnership" ? "cb" : item.pista;
-          byPista[displayPista] = (byPista[displayPista] || 0) + item.pezzi;
-        }
-        if (byPista["cb"]) {
-          byPista["partnership_reward"] = byPista["cb"];
+          byPista[item.pista] = (byPista[item.pista] || 0) + item.pezzi;
         }
 
         const egStatRS = pistaStats.find(s => s.pista === "extra_gara_iva");
