@@ -2636,7 +2636,7 @@ export default function DashboardGaraReale() {
                                             <span className="font-bold">{pistaData.corePezzi}</span>
                                           </div>
                                         </div>
-                                        {calc && calc.sogliaLabel !== "N/A" && (
+                                        {!isRSMode && calc && calc.sogliaLabel !== "N/A" && (
                                           <div className="space-y-1.5 mb-2">
                                             <div className="flex items-center gap-2">
                                               <Badge className={`text-xs ${getSogliaColor(calc.sogliaLabel)}`} variant="outline">
@@ -2652,36 +2652,17 @@ export default function DashboardGaraReale() {
                                             {(() => {
                                               const stat = pistaStats.find(s => s.pista === pistaKey);
                                               if (!stat) return null;
-                                              const isPerRS = garaCalcConfig.modalitaInserimentoRS === "per_rs";
-                                              const rsKey = normalizeRS(pdv.configuredRS || pdv.ragioneSociale);
                                               let ref: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
-                                              if (isPerRS) {
-                                                const rsMatch = stat.rsCalcBreakdown?.get(rsKey);
-                                                ref = rsMatch?.soglieRef;
-                                                if (!ref) {
-                                                  if (pistaKey === "mobile") {
-                                                    const mRS = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
-                                                    if (mRS) ref = { s1: mRS.soglia1, s2: mRS.soglia2, s3: mRS.soglia3, s4: mRS.soglia4 };
-                                                  } else if (pistaKey === "fisso") {
-                                                    const fRS = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
-                                                    if (fRS) ref = { s1: fRS.soglia1, s2: fRS.soglia2, s3: fRS.soglia3, s4: fRS.soglia4, s5: fRS.soglia5 };
-                                                  } else if (pistaKey === "extra_gara_iva") {
-                                                    const egRsMatch = stat.rsCalcBreakdown?.get(rsKey);
-                                                    if (egRsMatch?.soglieRef) ref = egRsMatch.soglieRef;
-                                                  }
-                                                }
-                                              } else {
-                                                if (pistaKey === "mobile") {
-                                                  const mPdv = garaCalcConfig.pistaMobileConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
-                                                  if (mPdv) ref = { s1: mPdv.soglia1, s2: mPdv.soglia2, s3: mPdv.soglia3, s4: mPdv.soglia4 };
-                                                } else if (pistaKey === "fisso") {
-                                                  const fPdv = garaCalcConfig.pistaFissoConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
-                                                  if (fPdv) ref = { s1: fPdv.soglia1, s2: fPdv.soglia2, s3: fPdv.soglia3, s4: fPdv.soglia4, s5: fPdv.soglia5 };
-                                                } else if (pistaKey === "extra_gara_iva") {
-                                                  const match = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
-                                                  if (match?.pdvCalc) {
-                                                    ref = stat.soglieRef;
-                                                  }
+                                              if (pistaKey === "mobile") {
+                                                const mPdv = garaCalcConfig.pistaMobileConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
+                                                if (mPdv) ref = { s1: mPdv.soglia1, s2: mPdv.soglia2, s3: mPdv.soglia3, s4: mPdv.soglia4 };
+                                              } else if (pistaKey === "fisso") {
+                                                const fPdv = garaCalcConfig.pistaFissoConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
+                                                if (fPdv) ref = { s1: fPdv.soglia1, s2: fPdv.soglia2, s3: fPdv.soglia3, s4: fPdv.soglia4, s5: fPdv.soglia5 };
+                                              } else if (pistaKey === "extra_gara_iva") {
+                                                const egMatch = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                                                if (egMatch?.pdvCalc) {
+                                                  ref = stat.soglieRef;
                                                 }
                                               }
                                               if (!ref) ref = stat.soglieRef;
@@ -2703,6 +2684,11 @@ export default function DashboardGaraReale() {
                                                 </div>
                                               );
                                             })()}
+                                          </div>
+                                        )}
+                                        {isRSMode && (pdvPremioByPista[pistaKey] ?? 0) > 0 && (
+                                          <div className="mb-2">
+                                            <span className="text-xs font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
                                           </div>
                                         )}
                                         <div className="space-y-1">
@@ -2843,40 +2829,15 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {rs.pdvs.map((pdv) => {
                     const pdvPezzi = pdv.items.reduce((s, i) => s + i.pezzi, 0);
-                    let pdvPremio = 0;
-                    const pdvSoglie: string[] = [];
-                    for (const stat of pistaStats) {
-                      const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
-                      if (match) {
-                        const aggPremio = stat.calc.premioStimato;
-                        const totalPuntiPista = stat.pdvBreakdown.reduce((s, b) => s + b.pdvCalc.puntiTotali, 0);
-                        pdvPremio += totalPuntiPista > 0
-                          ? Math.round((match.pdvCalc.puntiTotali / totalPuntiPista) * aggPremio * 100) / 100
-                          : 0;
-                        if (match.pdvCalc.sogliaLabel !== "N/A" && match.pdvCalc.sogliaLabel !== "Nessuna") {
-                          pdvSoglie.push(`${PISTA_CONFIG[stat.pista as keyof typeof PISTA_CONFIG]?.label || stat.pista}: ${match.pdvCalc.sogliaLabel}`);
-                        }
-                      }
-                    }
                     return (
                       <div key={pdv.codicePos} className="border rounded p-3 text-sm">
                         <div className="flex justify-between">
                           <span className="font-medium">{pdv.nomeNegozio}</span>
                           <div className="flex items-center gap-2">
-                            {pdvPremio > 0 && (
-                              <span className="text-sm font-medium text-green-700">{formatEuro(pdvPremio)}</span>
-                            )}
                             <span className="font-bold">{pdvPezzi}</span>
                           </div>
                         </div>
                         <div className="text-sm text-gray-400">{pdv.codicePos}</div>
-                        {pdvSoglie.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {pdvSoglie.map((s) => (
-                              <Badge key={s} variant="outline" className="text-xs py-0.5">{s}</Badge>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     );
                   })}
