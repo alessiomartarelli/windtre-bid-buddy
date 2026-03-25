@@ -182,6 +182,11 @@ export interface GaraConfigData {
       importo: number;
     }>;
   };
+  importedFiles?: Array<{
+    label: string;
+    type: string;
+    fileName: string;
+  }>;
   extraGaraIvaConfig?: {
     puntiAttivazione?: Record<string, number>;
     soglieMultipos?: Record<string, Record<string, number>>;

@@ -660,6 +660,8 @@ export default function ConfigurazioneGara() {
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
       if (cfg.protectaRSConfig?.configPerRS?.length) setProtectaRSConfig(cfg.protectaRSConfig.configPerRS);
       if (cfg.decurtazioneRSConfig?.configPerRS?.length) setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
+      if (cfg.importedFiles?.length) setImportedFiles(cfg.importedFiles as Array<{ label: string; type: PdfType; fileName: string }>);
+      else setImportedFiles([]);
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS(cfg.extraGaraIvaSogliePerRS || {});
     }
@@ -733,6 +735,11 @@ export default function ConfigurazioneGara() {
       if (cfg.decurtazioneRSConfig?.configPerRS?.length) {
         setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
       }
+      if (cfg.importedFiles?.length) {
+        setImportedFiles(cfg.importedFiles as Array<{ label: string; type: PdfType; fileName: string }>);
+      } else {
+        setImportedFiles([]);
+      }
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS(cfg.extraGaraIvaSogliePerRS || {});
     } else {
@@ -746,6 +753,7 @@ export default function ConfigurazioneGara() {
       setAssicurazioniRSConfig([]);
       setProtectaRSConfig([]);
       setDecurtazioneRSConfig([]);
+      setImportedFiles([]);
       setEnergiaConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, targetS3: 0, premioS1: 250, premioS2: 500, premioS3: 1000 });
       setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premioS1: 500, premioS2: 750 });
       setTabelleCalcolo(JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
@@ -789,12 +797,13 @@ export default function ConfigurazioneGara() {
     assicurazioniRSConfig: { configPerRS: assicurazioniRSConfig },
     protectaRSConfig: { configPerRS: protectaRSConfig },
     decurtazioneRSConfig: { configPerRS: decurtazioneRSConfig },
+    importedFiles,
     tabelleCalcolo,
     ...(Object.keys(extraGaraIvaSogliePerRS).length > 0 ? { extraGaraIvaSogliePerRS } : {}),
     ...(garaConfigRecord?.config ? {
       importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
     } : {}),
-  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, tabelleCalcolo, extraGaraIvaSogliePerRS, garaConfigRecord]);
+  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, garaConfigRecord]);
 
   const handleQuickSave = useCallback(async () => {
     if (!garaConfigRecord?.id) {
@@ -1268,6 +1277,8 @@ export default function ConfigurazioneGara() {
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
       if (cfg.protectaRSConfig?.configPerRS?.length) setProtectaRSConfig(cfg.protectaRSConfig.configPerRS);
       if (cfg.decurtazioneRSConfig?.configPerRS?.length) setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
+      if (cfg.importedFiles?.length) setImportedFiles(cfg.importedFiles as Array<{ label: string; type: PdfType; fileName: string }>);
+      else setImportedFiles([]);
 
       if (cfg.energiaConfig) {
         setEnergiaConfig(cfg.energiaConfig);
