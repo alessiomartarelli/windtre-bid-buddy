@@ -7,6 +7,8 @@ export interface CategoryClassification {
   pista?: PistaCanvass;
 }
 
+const EXCLUDED_CATEGORIES = new Set(['ARROTONDAMENTO']);
+
 const CATEGORY_MAP: Record<string, CategoryClassification> = {
   'UNTIED': { type: 'canvass', pista: 'mobile' },
   'TIED CF': { type: 'canvass', pista: 'mobile' },
@@ -126,6 +128,7 @@ export function classifySaleArticles(rawData: any): SaleClassification {
 
   for (const art of articoli) {
     const catNome = (art.categoria?.nome || '').trim();
+    if (EXCLUDED_CATEGORIES.has(catNome.toUpperCase())) continue;
     const tipNome = (art.tipologia?.nome || '').trim();
     const desc = (art.descrizione || '').trim();
     const prezzo = parseFloat(art.dettaglio?.prezzo || '0') || 0;
