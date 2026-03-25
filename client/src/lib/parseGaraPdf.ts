@@ -314,17 +314,36 @@ function parseAllegatoA(text: string): PdfPartnershipTarget | null {
   const section = extractSectionText(text, 'ALLEGATO A', ['ALLEGATO B', 'ALLEGATO C', 'ALLEGATO D', 'ALLEGATO E']);
   if (!section) return null;
 
-  const targetMatch = section.match(/(?:TARGET\s+PARTNERSHIP|PARTNERSHIP)\s*\n?\s*(\d[\d.]*)/i)
-    || section.match(/\b(\d{3,5})\b/);
-  if (!targetMatch) return null;
-
-  const target100 = parseInt(targetMatch[1].replace(/\./g, ''));
-
-  const euroMatches = [...section.matchAll(/([\d.]+)\s*€/g)];
+  const euroMatches = [...section.matchAll(/([\d.]+(?:,\d+)?)\s*€/g)];
   if (euroMatches.length < 2) return null;
 
   const premio100 = parseEuroAmount(euroMatches[0][1]);
   const premio80 = parseEuroAmount(euroMatches[1][1]);
+
+  let target100 = 0;
+
+  const thousandSepMatch = section.match(/(\d{1,3}(?:\.\d{3})+)\b/);
+  if (thousandSepMatch) {
+    target100 = parseInt(thousandSepMatch[1].replace(/\./g, ''));
+  }
+
+  if (target100 <= 0) {
+    const targetMatch = section.match(/TARGET[\s\S]*?(\d{3,6})\b/i);
+    if (targetMatch) {
+      target100 = parseInt(targetMatch[1]);
+    }
+  }
+
+  if (target100 <= 0) {
+    const allNums = [...section.matchAll(/\b(\d{3,6})\b/g)]
+      .map(m => parseInt(m[1]))
+      .filter(n => n >= 100 && n !== premio100 && n !== premio80);
+    if (allNums.length > 0) {
+      target100 = allNums[0];
+    }
+  }
+
+  if (target100 <= 0) return null;
 
   const target80 = Math.round(target100 * 0.8);
 
@@ -335,7 +354,6 @@ function parseAllegatoB(text: string): PdfSoglieEnergia | null {
   const section = extractSectionText(text, 'ALLEGATO B', ['ALLEGATO C', 'ALLEGATO D', 'ALLEGATO E']);
   if (!section) return null;
 
-  console.log('[parseAllegatoB] section:', section);
 
   const premioS1Match = section.match(/(\d{3,5})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
   const premioS1 = premioS1Match ? parseInt(premioS1Match[1]) : 250;
@@ -353,8 +371,8 @@ function parseAllegatoB(text: string): PdfSoglieEnergia | null {
     premioS3 = parseInt(val.replace(/\./g, ''));
   }
 
-  const lessThanMatch = section.match(/<\s*(\d{1,4})/);
-  const targetNoMalus = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
+  const lessThanMatches = [...section.matchAll(/<\s*(\d{2,4})/g)];
+  const targetNoMalus = lessThanMatches.length > 0 ? parseInt(lessThanMatches[lessThanMatches.length - 1][1]) : 0;
 
   const lastHeaderMatch = section.match(/(?:per\s+PDV|1[°ª]\s*soglia|Decurtazione\s+Premio\s+per\s+PDV)\s*/gi);
   let searchArea = section;
@@ -394,14 +412,13 @@ function parseAllegatoC(text: string): PdfSoglieAssicurazioni | null {
   const section = extractSectionText(text, 'ALLEGATO C', ['ALLEGATO D', 'ALLEGATO E']);
   if (!section) return null;
 
-  console.log('[parseAllegatoC] section:', section);
 
   const premioHeaderMatches = [...section.matchAll(/(\d{3,5})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/gi)];
   const premioS1 = premioHeaderMatches.length >= 1 ? parseInt(premioHeaderMatches[0][1]) : 500;
   const premioS2 = premioHeaderMatches.length >= 2 ? parseInt(premioHeaderMatches[1][1]) : 750;
 
-  const lessThanMatch = section.match(/<\s*(\d{1,4})/);
-  const targetNoMalus = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
+  const lessThanMatches = [...section.matchAll(/<\s*(\d{2,4})/g)];
+  const targetNoMalus = lessThanMatches.length > 0 ? parseInt(lessThanMatches[lessThanMatches.length - 1][1]) : 0;
 
   const lastHeaderMatch = section.match(/(?:per\s+PDV|Decurtazione\s+Premio\s+per\s+PDV)\s*/gi);
   let searchArea = section;
@@ -438,7 +455,6 @@ function parseAllegatoD(text: string): PdfSoglieProtecta | null {
   const section = extractSectionText(text, 'ALLEGATO D', ['ALLEGATO E', 'Wind Tre S.p.A. con Socio Unico']);
   if (!section) return null;
 
-  console.log('[parseAllegatoD] section:', section);
 
   const premioHeaderMatch = section.match(/(\d{2,4})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
   const premioExtra = premioHeaderMatch ? parseInt(premioHeaderMatch[1]) : 350;
@@ -496,12 +512,6 @@ export async function parseGaraPdf(file: File): Promise<PdfGaraData> {
   const nomeRS = parseNomeRS(text);
 
   if (pdfType === 'partnership_reward') {
-    console.log('[parseGaraPdf] Full text:', text);
-    console.log('[parseGaraPdf] Has ALLEGATO A:', text.includes('ALLEGATO A'));
-    console.log('[parseGaraPdf] Has ALLEGATO B:', text.includes('ALLEGATO B'));
-    console.log('[parseGaraPdf] Has ALLEGATO C:', text.includes('ALLEGATO C'));
-    console.log('[parseGaraPdf] Has ALLEGATO D:', text.includes('ALLEGATO D'));
-    console.log('[parseGaraPdf] Has ALLEGATO E:', text.includes('ALLEGATO E'));
     const mese = parseMesePartnership(text);
     const partnershipTarget = parseAllegatoA(text);
     const soglieEnergia = parseAllegatoB(text);
