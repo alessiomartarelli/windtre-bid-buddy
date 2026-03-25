@@ -1850,6 +1850,7 @@ export default function ConfigurazioneGara() {
                       setIsDirty(true);
                     };
                     const pConf = protectaRSConfig.find(c => c.ragioneSociale === rs);
+                    const dConf = decurtazioneRSConfig.find(c => c.ragioneSociale === rs);
                     const updateProtectaRS = (field: string, value: number) => {
                       setProtectaRSConfig(prev => prev.map(c => c.ragioneSociale === rs ? { ...c, [field]: value } : c));
                       setIsDirty(true);
@@ -1975,8 +1976,28 @@ export default function ConfigurazioneGara() {
                                   <Input type="number" className="h-8 text-sm" value={pConf.premioExtra} onChange={e => updateProtectaRS('premioExtra', Number(e.target.value) || 0)} data-testid={`input-protecta-rs-premioExtra-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs">Decurtazione Premio ({'<'} N)</Label>
+                                  <Label className="text-xs">Decurtazione Protecta ({'<'} N)</Label>
                                   <Input type="number" className="h-8 text-sm" value={pConf.targetDecurtazione} onChange={e => updateProtectaRS('targetDecurtazione', Number(e.target.value) || 0)} data-testid={`input-protecta-rs-targetDecurtazione-${rs}`} />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {(pConf || aConf || eConf) && dConf && <Separator />}
+
+                          {dConf && (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                <Label className="text-xs font-semibold">Decurtazione Premio Totale (Allegato E)</Label>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Importo Decurtazione €</Label>
+                                  <Input type="number" className="h-8 text-sm" value={dConf.importo} onChange={e => {
+                                    setDecurtazioneRSConfig(prev => prev.map(c => c.ragioneSociale === rs ? { ...c, importo: Number(e.target.value) || 0 } : c));
+                                    setIsDirty(true);
+                                  }} data-testid={`input-decurtazione-rs-importo-${rs}`} />
                                 </div>
                               </div>
                             </div>
