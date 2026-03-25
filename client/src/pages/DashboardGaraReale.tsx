@@ -1,4 +1,5 @@
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo, Fragment, useCallback } from "react";
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2363,234 +2364,330 @@ export default function DashboardGaraReale() {
               })}
             </div>
 
-            <Card data-testid="card-pdv-breakdown">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Store className="h-5 w-5" />
-                  Dettaglio per PDV
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Accordion type="multiple" className="space-y-2">
-                  {(() => {
-                    const pdvListWithRS = mappedData.pdvList.map(pdv => {
-                      const pdvConfig = puntiVenditaFromGara.find(p => p.codicePos === pdv.codicePos);
-                      const rs = pdvConfig?.ragioneSociale || pdv.ragioneSociale || "N/D";
-                      return { ...pdv, configuredRS: rs };
-                    });
-                    const rsGroups = new Map<string, typeof pdvListWithRS>();
-                    for (const pdv of pdvListWithRS) {
-                      const key = pdv.configuredRS;
-                      if (!rsGroups.has(key)) rsGroups.set(key, []);
-                      rsGroups.get(key)!.push(pdv);
-                    }
-                    const sortedRSGroups = Array.from(rsGroups.entries())
-                      .map(([rs, pdvs]) => ({ rs, pdvs, totalPezzi: pdvs.reduce((s, p) => s + p.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s2, i) => s2 + i.pezzi, 0), 0) }))
-                      .sort((a, b) => b.totalPezzi - a.totalPezzi);
-                    const sortedPdvList = sortedRSGroups.flatMap(g => 
-                      g.pdvs.sort((a, b) => b.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0) - a.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0))
-                    );
-                    const showRSHeaders = rsGroups.size > 1;
-                    let lastRS = "";
-                    return sortedPdvList.map((pdv) => {
-                      const rsHeader = showRSHeaders && pdv.configuredRS !== lastRS;
-                      if (showRSHeaders) lastRS = pdv.configuredRS;
-                    return (
-                    <Fragment key={pdv.codicePos}>
-                    {rsHeader && (
-                      <div className="flex items-center gap-2 pt-3 pb-1 first:pt-0">
-                        <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{pdv.configuredRS}</span>
-                        <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+            {(() => {
+              const PDV_CHART_COLORS = [
+                "#f97316", "#3b82f6", "#22c55e", "#a855f7", "#ec4899",
+                "#14b8a6", "#eab308", "#6366f1", "#f43f5e", "#0ea5e9",
+                "#84cc16", "#d946ef", "#f59e0b", "#06b6d4", "#8b5cf6",
+              ];
+
+              const pdvListWithRS = mappedData.pdvList.map(pdv => {
+                const pdvConfig = puntiVenditaFromGara.find(p => p.codicePos === pdv.codicePos);
+                const rs = pdvConfig?.ragioneSociale || pdv.ragioneSociale || "N/D";
+                return { ...pdv, configuredRS: rs };
+              });
+
+              const pdvSummaries = pdvListWithRS.map(pdv => {
+                const corePezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+
+                let pdvPuntiTotali = 0;
+                for (const stat of pistaStats) {
+                  const match = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                  if (match) pdvPuntiTotali += match.pdvCalc.puntiTotali;
+                }
+
+                return {
+                  codicePos: pdv.codicePos,
+                  nomeNegozio: pdv.nomeNegozio,
+                  configuredRS: pdv.configuredRS,
+                  corePezzi,
+                  puntiTotali: pdvPuntiTotali,
+                };
+              }).filter(p => p.corePezzi > 0);
+
+              const grandTotalPezzi = pdvSummaries.reduce((s, p) => s + p.corePezzi, 0);
+
+              const pieData = pdvSummaries
+                .sort((a, b) => b.corePezzi - a.corePezzi)
+                .map((p, i) => ({
+                  name: p.nomeNegozio,
+                  value: p.corePezzi,
+                  pct: grandTotalPezzi > 0 ? Math.round((p.corePezzi / grandTotalPezzi) * 1000) / 10 : 0,
+                  color: PDV_CHART_COLORS[i % PDV_CHART_COLORS.length],
+                }));
+
+              const rsGroups = new Map<string, typeof pdvListWithRS>();
+              for (const pdv of pdvListWithRS) {
+                const key = pdv.configuredRS;
+                if (!rsGroups.has(key)) rsGroups.set(key, []);
+                rsGroups.get(key)!.push(pdv);
+              }
+              const sortedRSGroups = Array.from(rsGroups.entries())
+                .map(([rs, pdvs]) => ({ rs, pdvs, totalPezzi: pdvs.reduce((s, p) => s + p.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s2, i) => s2 + i.pezzi, 0), 0) }))
+                .sort((a, b) => b.totalPezzi - a.totalPezzi);
+              const sortedPdvList = sortedRSGroups.flatMap(g =>
+                g.pdvs.sort((a, b) => b.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0) - a.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0))
+              );
+              const showRSHeaders = rsGroups.size > 1;
+
+              const pdvColorMap = new Map<string, string>();
+              pieData.forEach((p, i) => { pdvColorMap.set(p.name, p.color); });
+              const sortedPdvForColor = [...pdvSummaries].sort((a, b) => b.corePezzi - a.corePezzi);
+              sortedPdvForColor.forEach((p, i) => { pdvColorMap.set(p.nomeNegozio, PDV_CHART_COLORS[i % PDV_CHART_COLORS.length]); });
+
+              return (
+                <Card data-testid="card-pdv-breakdown">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Store className="h-5 w-5" />
+                      Dettaglio per PDV
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {pieData.length > 1 && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
+                        <div className="flex justify-center" data-testid="pdv-pie-chart">
+                          <ResponsiveContainer width="100%" height={280}>
+                            <PieChart>
+                              <Pie
+                                data={pieData}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={110}
+                                paddingAngle={2}
+                                stroke="none"
+                              >
+                                {pieData.map((entry, index) => (
+                                  <Cell key={entry.name} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <RechartsTooltip
+                                formatter={(value: number, name: string) => [`${value} pezzi (${pieData.find(p => p.name === name)?.pct ?? 0}%)`, name]}
+                                contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "13px" }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="space-y-1.5" data-testid="pdv-pie-legend">
+                          {pieData.map((p) => (
+                            <div key={p.name} className="flex items-center gap-2 text-sm">
+                              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                              <span className="truncate flex-1 text-gray-700 dark:text-gray-300">{p.name}</span>
+                              <span className="font-bold shrink-0">{p.value}</span>
+                              <span className="text-gray-500 shrink-0 w-14 text-right">{p.pct}%</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
-                    {(() => {
-                      const totalPezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
-                      const proiezione = workdayInfo.elapsedWorkingDays > 0
-                        ? Math.round((totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
-                        : totalPezzi;
 
-                      const byPista: Record<string, { pezzi: number; corePezzi: number; items: AggregatedItem[] }> = {};
-                      for (const item of pdv.items) {
-                        if (!byPista[item.pista]) byPista[item.pista] = { pezzi: 0, corePezzi: 0, items: [] };
-                        byPista[item.pista].pezzi += item.pezzi;
-                        if (isCorePezziItem(item.pista, item.targetCategory)) {
-                          byPista[item.pista].corePezzi += item.pezzi;
-                        }
-                        byPista[item.pista].items.push(item);
-                      }
+                    <Accordion type="multiple" className="space-y-2">
+                      {(() => {
+                        let lastRS = "";
+                        return sortedPdvList.map((pdv) => {
+                          const rsHeader = showRSHeaders && pdv.configuredRS !== lastRS;
+                          if (showRSHeaders) lastRS = pdv.configuredRS;
+                        return (
+                        <Fragment key={pdv.codicePos}>
+                        {rsHeader && (
+                          <div className="flex items-center gap-2 pt-3 pb-1 first:pt-0">
+                            <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{pdv.configuredRS}</span>
+                            <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                          </div>
+                        )}
+                        {(() => {
+                          const totalPezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+                          const proiezione = workdayInfo.elapsedWorkingDays > 0
+                            ? Math.round((totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+                            : totalPezzi;
+                          const pctContrib = grandTotalPezzi > 0 ? Math.round((totalPezzi / grandTotalPezzi) * 1000) / 10 : 0;
+                          const pdvChartColor = pdvColorMap.get(pdv.nomeNegozio) || "#9ca3af";
 
-                      const egStat = pistaStats.find(s => s.pista === "extra_gara_iva");
-                      if (egStat) {
-                        const egPdvMatch = egStat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
-                        if (egPdvMatch && egPdvMatch.pezzi > 0) {
-                          byPista["extra_gara_iva"] = {
-                            pezzi: egPdvMatch.pezzi,
-                            corePezzi: egPdvMatch.pezzi,
-                            items: egPdvMatch.categories.map(c => ({
-                              pista: "extra_gara_iva",
-                              targetCategory: c.category,
-                              targetLabel: c.label,
-                              pezzi: c.pezzi,
-                              canone: c.canone,
-                            })),
-                          };
-                        }
-                      }
-
-                      const pdvCalcByPista: Record<string, PistaCalcResult> = {};
-                      const pdvPremioByPista: Record<string, number> = {};
-                      for (const stat of pistaStats) {
-                        const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
-                        if (match) {
-                          pdvCalcByPista[stat.pista] = match.pdvCalc;
-                          if (match.pdvCalc.premioStimato > 0) {
-                            pdvPremioByPista[stat.pista] = match.pdvCalc.premioStimato;
-                          } else {
-                            const aggPremio = stat.calc.premioStimato;
-                            const totalPuntiPista = stat.pdvBreakdown.reduce((s, b) => s + b.pdvCalc.puntiTotali, 0);
-                            pdvPremioByPista[stat.pista] = totalPuntiPista > 0
-                              ? Math.round((match.pdvCalc.puntiTotali / totalPuntiPista) * aggPremio * 100) / 100
-                              : 0;
+                          const byPista: Record<string, { pezzi: number; corePezzi: number; items: AggregatedItem[] }> = {};
+                          for (const item of pdv.items) {
+                            if (!byPista[item.pista]) byPista[item.pista] = { pezzi: 0, corePezzi: 0, items: [] };
+                            byPista[item.pista].pezzi += item.pezzi;
+                            if (isCorePezziItem(item.pista, item.targetCategory)) {
+                              byPista[item.pista].corePezzi += item.pezzi;
+                            }
+                            byPista[item.pista].items.push(item);
                           }
-                        }
-                      }
 
-                      const totalPremio = Object.values(pdvPremioByPista).reduce((s, v) => s + v, 0);
+                          const egStat = pistaStats.find(s => s.pista === "extra_gara_iva");
+                          if (egStat) {
+                            const egPdvMatch = egStat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                            if (egPdvMatch && egPdvMatch.pezzi > 0) {
+                              byPista["extra_gara_iva"] = {
+                                pezzi: egPdvMatch.pezzi,
+                                corePezzi: egPdvMatch.pezzi,
+                                items: egPdvMatch.categories.map(c => ({
+                                  pista: "extra_gara_iva",
+                                  targetCategory: c.category,
+                                  targetLabel: c.label,
+                                  pezzi: c.pezzi,
+                                  canone: c.canone,
+                                })),
+                              };
+                            }
+                          }
 
-                      return (
-                        <AccordionItem key={pdv.codicePos} value={pdv.codicePos} className="border rounded-lg px-2 sm:px-4" data-testid={`pdv-accordion-${pdv.codicePos}`}>
-                          <AccordionTrigger className="hover:no-underline py-3">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
-                              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                                <Store className="h-4 w-4 text-gray-400 shrink-0" />
-                                <div className="text-left min-w-0">
-                                  <div className="font-medium text-sm truncate">{pdv.nomeNegozio}</div>
-                                  <div className="text-xs text-gray-500 truncate">{pdv.codicePos} · {pdv.ragioneSociale}</div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 sm:gap-4 text-sm flex-wrap pl-6 sm:pl-0">
-                                {totalPremio > 0 && (
-                                  <Badge variant="outline" className="text-green-700 border-green-300 text-sm shrink-0" data-testid={`badge-pdv-premio-${pdv.codicePos}`}>
-                                    {formatEuro(totalPremio)}
-                                  </Badge>
-                                )}
-                                <div className="text-right shrink-0">
-                                  <div className="font-bold">{totalPezzi} pezzi</div>
-                                  <div className="text-sm text-gray-400">Proiezione: {proiezione}</div>
-                                </div>
-                                {pdv.unmapped > 0 && (
-                                  <Badge variant="outline" className="text-amber-600 border-amber-300 text-sm shrink-0">
-                                    {pdv.unmapped} non mappati
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-3">
-                              {Object.entries(byPista).sort(([, a], [, b]) => b.corePezzi - a.corePezzi).map(([pistaKey, pistaData]) => {
-                                const conf = PISTA_CONFIG[pistaKey as keyof typeof PISTA_CONFIG];
-                                if (!conf) return null;
-                                const calc = pdvCalcByPista[pistaKey];
-                                return (
-                                  <div key={pistaKey} className={`rounded-lg border p-3 ${conf.lightColor}`}>
-                                    <div className="font-medium text-sm mb-2 flex items-center justify-between">
-                                      <span>{conf.label}</span>
-                                      <span className="font-bold">{pistaData.corePezzi}</span>
-                                    </div>
-                                    {calc && calc.sogliaLabel !== "N/A" && (
-                                      <div className="space-y-1.5 mb-2">
-                                        <div className="flex items-center gap-2">
-                                          <Badge className={`text-xs ${getSogliaColor(calc.sogliaLabel)}`} variant="outline">
-                                            {calc.sogliaLabel}
-                                          </Badge>
-                                          {calc.puntiTotali > 0 && (
-                                            <span className="text-xs text-gray-500">{calc.puntiTotali.toFixed(1)} pt</span>
-                                          )}
-                                          {(pdvPremioByPista[pistaKey] ?? 0) > 0 && (
-                                            <span className="text-xs font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
-                                          )}
-                                        </div>
-                                        {(() => {
-                                          const stat = pistaStats.find(s => s.pista === pistaKey);
-                                          if (!stat) return null;
-                                          const isPerRS = garaCalcConfig.modalitaInserimentoRS === "per_rs";
-                                          const rsKey = normalizeRS(pdv.configuredRS || pdv.ragioneSociale);
-                                          let ref: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
-                                          if (isPerRS) {
-                                            const rsMatch = stat.rsCalcBreakdown?.get(rsKey);
-                                            ref = rsMatch?.soglieRef;
-                                            if (!ref) {
-                                              if (pistaKey === "mobile") {
-                                                const mRS = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
-                                                if (mRS) ref = { s1: mRS.soglia1, s2: mRS.soglia2, s3: mRS.soglia3, s4: mRS.soglia4 };
-                                              } else if (pistaKey === "fisso") {
-                                                const fRS = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
-                                                if (fRS) ref = { s1: fRS.soglia1, s2: fRS.soglia2, s3: fRS.soglia3, s4: fRS.soglia4, s5: fRS.soglia5 };
-                                              } else if (pistaKey === "extra_gara_iva") {
-                                                const egRsMatch = stat.rsCalcBreakdown?.get(rsKey);
-                                                if (egRsMatch?.soglieRef) ref = egRsMatch.soglieRef;
-                                              }
-                                            }
-                                          } else {
-                                            if (pistaKey === "mobile") {
-                                              const mPdv = garaCalcConfig.pistaMobileConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
-                                              if (mPdv) ref = { s1: mPdv.soglia1, s2: mPdv.soglia2, s3: mPdv.soglia3, s4: mPdv.soglia4 };
-                                            } else if (pistaKey === "fisso") {
-                                              const fPdv = garaCalcConfig.pistaFissoConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
-                                              if (fPdv) ref = { s1: fPdv.soglia1, s2: fPdv.soglia2, s3: fPdv.soglia3, s4: fPdv.soglia4, s5: fPdv.soglia5 };
-                                            } else if (pistaKey === "extra_gara_iva") {
-                                              const match = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
-                                              if (match?.pdvCalc) {
-                                                ref = stat.soglieRef;
-                                              }
-                                            }
-                                          }
-                                          if (!ref) ref = stat.soglieRef;
-                                          if (!ref) return null;
-                                          const items = [
-                                            { label: "S1", value: ref.s1 },
-                                            { label: "S2", value: ref.s2 },
-                                            { label: "S3", value: ref.s3 },
-                                            ...(ref.s4 != null && ref.s4 > 0 ? [{ label: "S4", value: ref.s4 }] : []),
-                                            ...(ref.s5 != null && ref.s5 > 0 ? [{ label: "S5", value: ref.s5 }] : []),
-                                          ];
-                                          return (
-                                            <div className="flex flex-wrap gap-0.5">
-                                              {items.map((s) => (
-                                                <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5">
-                                                  {s.label}:{s.value}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          );
-                                        })()}
-                                      </div>
-                                    )}
-                                    <div className="space-y-1">
-                                      {pistaData.items.sort((a, b) => b.pezzi - a.pezzi).map((item) => (
-                                        <div key={item.targetCategory} className="flex justify-between text-sm">
-                                          <span className="truncate max-w-[70%]">{item.targetLabel}</span>
-                                          <span className="font-medium">{item.pezzi}</span>
-                                        </div>
-                                      ))}
+                          const pdvCalcByPista: Record<string, PistaCalcResult> = {};
+                          const pdvPremioByPista: Record<string, number> = {};
+                          for (const stat of pistaStats) {
+                            const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
+                            if (match) {
+                              pdvCalcByPista[stat.pista] = match.pdvCalc;
+                              if (match.pdvCalc.premioStimato > 0) {
+                                pdvPremioByPista[stat.pista] = match.pdvCalc.premioStimato;
+                              } else {
+                                const aggPremio = stat.calc.premioStimato;
+                                const totalPezziPista = stat.pdvBreakdown.reduce((s, b) => s + b.pezzi, 0);
+                                pdvPremioByPista[stat.pista] = totalPezziPista > 0
+                                  ? Math.round((match.pezzi / totalPezziPista) * aggPremio * 100) / 100
+                                  : 0;
+                              }
+                            }
+                          }
+
+                          const totalPremio = Object.values(pdvPremioByPista).reduce((s, v) => s + v, 0);
+
+                          return (
+                            <AccordionItem key={pdv.codicePos} value={pdv.codicePos} className="border rounded-lg px-2 sm:px-4" data-testid={`pdv-accordion-${pdv.codicePos}`}>
+                              <AccordionTrigger className="hover:no-underline py-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
+                                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: pdvChartColor }} />
+                                    <div className="text-left min-w-0">
+                                      <div className="font-medium text-sm truncate">{pdv.nomeNegozio}</div>
+                                      <div className="text-xs text-gray-500 truncate">{pdv.codicePos} · {pdv.ragioneSociale}</div>
                                     </div>
                                   </div>
-                                );
-                              })}
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      );
-                    })()}
-                    </Fragment>
-                    );
-                    });
-                  })()}
-                </Accordion>
-              </CardContent>
-            </Card>
+                                  <div className="flex items-center gap-2 sm:gap-4 text-sm flex-wrap pl-6 sm:pl-0">
+                                    <Badge variant="outline" className="text-sm font-bold shrink-0" style={{ color: pdvChartColor, borderColor: pdvChartColor }}>
+                                      {pctContrib}%
+                                    </Badge>
+                                    {totalPremio > 0 && (
+                                      <Badge variant="outline" className="text-green-700 border-green-300 text-sm shrink-0" data-testid={`badge-pdv-premio-${pdv.codicePos}`}>
+                                        {formatEuro(totalPremio)}
+                                      </Badge>
+                                    )}
+                                    <div className="text-right shrink-0">
+                                      <div className="font-bold">{totalPezzi} pezzi</div>
+                                      <div className="text-sm text-gray-400">Proiezione: {proiezione}</div>
+                                    </div>
+                                    {pdv.unmapped > 0 && (
+                                      <Badge variant="outline" className="text-amber-600 border-amber-300 text-sm shrink-0">
+                                        {pdv.unmapped} non mappati
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-3">
+                                  {Object.entries(byPista).sort(([, a], [, b]) => b.corePezzi - a.corePezzi).map(([pistaKey, pistaData]) => {
+                                    const conf = PISTA_CONFIG[pistaKey as keyof typeof PISTA_CONFIG];
+                                    if (!conf) return null;
+                                    const calc = pdvCalcByPista[pistaKey];
+                                    const pistaTotalPezzi = pistaStats.find(s => s.pista === pistaKey)?.totalePezzi || 0;
+                                    const pistaPct = pistaTotalPezzi > 0 ? Math.round((pistaData.corePezzi / pistaTotalPezzi) * 1000) / 10 : 0;
+                                    return (
+                                      <div key={pistaKey} className={`rounded-lg border p-3 ${conf.lightColor}`}>
+                                        <div className="font-medium text-sm mb-2 flex items-center justify-between">
+                                          <span>{conf.label}</span>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-500">{pistaPct}%</span>
+                                            <span className="font-bold">{pistaData.corePezzi}</span>
+                                          </div>
+                                        </div>
+                                        {calc && calc.sogliaLabel !== "N/A" && (
+                                          <div className="space-y-1.5 mb-2">
+                                            <div className="flex items-center gap-2">
+                                              <Badge className={`text-xs ${getSogliaColor(calc.sogliaLabel)}`} variant="outline">
+                                                {calc.sogliaLabel}
+                                              </Badge>
+                                              {calc.puntiTotali > 0 && (
+                                                <span className="text-xs text-gray-500">{calc.puntiTotali.toFixed(1)} pt</span>
+                                              )}
+                                              {(pdvPremioByPista[pistaKey] ?? 0) > 0 && (
+                                                <span className="text-xs font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
+                                              )}
+                                            </div>
+                                            {(() => {
+                                              const stat = pistaStats.find(s => s.pista === pistaKey);
+                                              if (!stat) return null;
+                                              const isPerRS = garaCalcConfig.modalitaInserimentoRS === "per_rs";
+                                              const rsKey = normalizeRS(pdv.configuredRS || pdv.ragioneSociale);
+                                              let ref: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
+                                              if (isPerRS) {
+                                                const rsMatch = stat.rsCalcBreakdown?.get(rsKey);
+                                                ref = rsMatch?.soglieRef;
+                                                if (!ref) {
+                                                  if (pistaKey === "mobile") {
+                                                    const mRS = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
+                                                    if (mRS) ref = { s1: mRS.soglia1, s2: mRS.soglia2, s3: mRS.soglia3, s4: mRS.soglia4 };
+                                                  } else if (pistaKey === "fisso") {
+                                                    const fRS = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rsKey);
+                                                    if (fRS) ref = { s1: fRS.soglia1, s2: fRS.soglia2, s3: fRS.soglia3, s4: fRS.soglia4, s5: fRS.soglia5 };
+                                                  } else if (pistaKey === "extra_gara_iva") {
+                                                    const egRsMatch = stat.rsCalcBreakdown?.get(rsKey);
+                                                    if (egRsMatch?.soglieRef) ref = egRsMatch.soglieRef;
+                                                  }
+                                                }
+                                              } else {
+                                                if (pistaKey === "mobile") {
+                                                  const mPdv = garaCalcConfig.pistaMobileConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
+                                                  if (mPdv) ref = { s1: mPdv.soglia1, s2: mPdv.soglia2, s3: mPdv.soglia3, s4: mPdv.soglia4 };
+                                                } else if (pistaKey === "fisso") {
+                                                  const fPdv = garaCalcConfig.pistaFissoConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
+                                                  if (fPdv) ref = { s1: fPdv.soglia1, s2: fPdv.soglia2, s3: fPdv.soglia3, s4: fPdv.soglia4, s5: fPdv.soglia5 };
+                                                } else if (pistaKey === "extra_gara_iva") {
+                                                  const match = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                                                  if (match?.pdvCalc) {
+                                                    ref = stat.soglieRef;
+                                                  }
+                                                }
+                                              }
+                                              if (!ref) ref = stat.soglieRef;
+                                              if (!ref) return null;
+                                              const items = [
+                                                { label: "S1", value: ref.s1 },
+                                                { label: "S2", value: ref.s2 },
+                                                { label: "S3", value: ref.s3 },
+                                                ...(ref.s4 != null && ref.s4 > 0 ? [{ label: "S4", value: ref.s4 }] : []),
+                                                ...(ref.s5 != null && ref.s5 > 0 ? [{ label: "S5", value: ref.s5 }] : []),
+                                              ];
+                                              return (
+                                                <div className="flex flex-wrap gap-0.5">
+                                                  {items.map((s) => (
+                                                    <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5">
+                                                      {s.label}:{s.value}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              );
+                                            })()}
+                                          </div>
+                                        )}
+                                        <div className="space-y-1">
+                                          {pistaData.items.sort((a, b) => b.pezzi - a.pezzi).map((item) => (
+                                            <div key={item.targetCategory} className="flex justify-between text-sm">
+                                              <span className="truncate max-w-[70%]">{item.targetLabel}</span>
+                                              <span className="font-medium">{item.pezzi}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })()}
+                        </Fragment>
+                        );
+                        });
+                      })()}
+                    </Accordion>
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             <Card data-testid="card-rs-breakdown">
               <CardHeader>
