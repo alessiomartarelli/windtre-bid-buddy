@@ -51,7 +51,6 @@ const CATEGORY_MAP: Record<string, CategoryClassification> = {
   'COSTO ATTIVAZIONE': { type: 'prodotti' },
   'EPAY': { type: 'prodotti' },
   'OPZIONI': { type: 'prodotti' },
-  'ARROTONDAMENTO': { type: 'prodotti' },
   'GARANTEASY': { type: 'prodotti' },
   'DEMO TELEFONIA WIND3': { type: 'prodotti' },
   'TELEFONIA TRADE-IN': { type: 'prodotti' },
