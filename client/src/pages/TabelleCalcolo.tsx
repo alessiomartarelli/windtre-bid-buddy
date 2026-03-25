@@ -803,10 +803,10 @@ function MobileTab({ config, systemConfig, isArrayOverridden, updateArrayValue, 
             <thead>
               <tr className="bg-orange-500 text-white">
                 <th className="p-2 text-left font-medium rounded-tl-md">Gruppo</th>
-                <th className="p-2 text-center font-medium">1°</th>
-                <th className="p-2 text-center font-medium">2°</th>
-                <th className="p-2 text-center font-medium">3°</th>
-                <th className="p-2 text-center font-medium rounded-tr-md">4°</th>
+                <th className="p-2 text-center font-medium">S1</th>
+                <th className="p-2 text-center font-medium">S2</th>
+                <th className="p-2 text-center font-medium">S3</th>
+                <th className="p-2 text-center font-medium rounded-tr-md">S4</th>
               </tr>
             </thead>
             <tbody>
