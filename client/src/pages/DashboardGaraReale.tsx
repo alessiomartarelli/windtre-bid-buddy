@@ -719,8 +719,8 @@ function ProjectionBadge({ current, projected, label }: { current: number; proje
   const color = ratio >= 1 ? "bg-green-100 text-green-800" : ratio >= 0.7 ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800";
 
   return (
-    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${color}`} data-testid={`projection-badge-${label}`}>
-      <TrendingUp className="h-3 w-3" />
+    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${color}`} data-testid={`projection-badge-${label}`}>
+      <TrendingUp className="h-3.5 w-3.5" />
       Proiezione: {projected}
     </div>
   );
@@ -2043,7 +2043,7 @@ export default function DashboardGaraReale() {
                           <div className="text-lg font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-totale-rs-${rs.displayName}`}>
                             {formatEuro(rs.premioAttuale)}
                           </div>
-                          <div className="text-xs text-gray-500">Premio attuale</div>
+                          <div className="text-sm text-gray-500">Premio attuale</div>
                           {rs.premioProiettato > 0 && (
                             <div className="text-sm mt-0.5">
                               <TrendingUp className="h-3 w-3 inline mr-1 text-blue-500" />
@@ -2054,7 +2054,7 @@ export default function DashboardGaraReale() {
                       </div>
                       <div className="space-y-1">
                         {rs.dettaglio.filter((d: { premioAttuale: number; premioProiettato: number }) => d.premioAttuale > 0 || d.premioProiettato > 0).map((d: { pista: string; label: string; premioAttuale: number; premioProiettato: number }) => (
-                          <div key={d.pista} className="flex items-center justify-between text-xs">
+                          <div key={d.pista} className="flex items-center justify-between text-sm">
                             <span className="text-gray-600 dark:text-gray-300">{d.label}</span>
                             <div className="text-right">
                               <span className="font-medium">{formatEuro(d.premioAttuale)}</span>
@@ -2125,17 +2125,17 @@ export default function DashboardGaraReale() {
                         <div className="space-y-2">
                           {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
                             <div key={rsKey} className="rounded-lg border p-2.5 space-y-1.5">
-                              <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</div>
-                              <div className="grid grid-cols-2 gap-1.5">
+                              <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</div>
+                              <div className="grid grid-cols-2 gap-2">
                                 <div className="text-center">
-                                  <div className="text-[10px] text-gray-400">Soglia Att.</div>
-                                  <Badge className={`text-xs ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
-                                  {rsData.puntiAttuali > 0 && <div className="text-[10px] text-gray-400 mt-0.5">{rsData.puntiAttuali.toFixed(1)} pt</div>}
+                                  <div className="text-xs text-gray-500">Soglia Att.</div>
+                                  <Badge className={`text-sm ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
+                                  {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiAttuali.toFixed(1)} pt</div>}
                                 </div>
                                 <div className="text-center">
-                                  <div className="text-[10px] text-gray-400">Proiezione</div>
-                                  <Badge className={`text-xs ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
-                                  {rsData.puntiProiezione > 0 && <div className="text-[10px] text-gray-400 mt-0.5">{rsData.puntiProiezione.toFixed(1)} pt</div>}
+                                  <div className="text-xs text-gray-500">Proiezione</div>
+                                  <Badge className={`text-sm ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
+                                  {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiProiezione.toFixed(1)} pt</div>}
                                 </div>
                               </div>
                               {rsData.soglieRef && (
@@ -2147,24 +2147,24 @@ export default function DashboardGaraReale() {
                                     ...(rsData.soglieRef.s4 != null && rsData.soglieRef.s4 > 0 ? [{ label: "S4", value: rsData.soglieRef.s4 }] : []),
                                     ...(rsData.soglieRef.s5 != null && rsData.soglieRef.s5 > 0 ? [{ label: "S5", value: rsData.soglieRef.s5 }] : []),
                                   ].map((s) => (
-                                    <span key={s.label} className="text-[9px] text-gray-400 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5">
+                                    <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">
                                       {s.label}:{s.value}
                                     </span>
                                   ))}
                                 </div>
                               )}
                               {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
-                                <div className="space-y-0.5">
-                                  <div className="flex items-center justify-between text-[10px]">
-                                    <span className="text-gray-400 flex items-center gap-0.5"><Target className="h-2.5 w-2.5" /> Obiettivo</span>
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
                                     <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
                                   </div>
-                                  <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1" />
-                                  <div className="flex items-center justify-between text-[10px]">
+                                  <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
+                                  <div className="flex items-center justify-between text-xs">
                                     <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
                                       {(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(1)} pt
                                     </span>
-                                    <span className="text-gray-400">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                    <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
                                   </div>
                                 </div>
                               )}
@@ -2194,29 +2194,29 @@ export default function DashboardGaraReale() {
                         </div>
                       ) : pista.totalePezzi > 0 && pista.calc.sogliaLabel !== "N/A" ? (
                         <>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="rounded-lg border p-2 text-center">
-                              <div className="text-xs text-gray-500 mb-0.5">Soglia Attuale</div>
-                              <Badge className={`text-xs ${getSogliaColor(pista.calc.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="rounded-lg border p-3 text-center">
+                              <div className="text-xs text-gray-500 mb-1">Soglia Attuale</div>
+                              <Badge className={`text-sm ${getSogliaColor(pista.calc.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>
                                 {pista.calc.sogliaLabel}
                               </Badge>
                               {pista.calc.puntiTotali > 0 && (
-                                <div className="text-xs text-gray-400 mt-0.5">{pista.calc.puntiTotali.toFixed(1)} pt</div>
+                                <div className="text-sm text-gray-500 mt-1 font-medium">{pista.calc.puntiTotali.toFixed(1)} pt</div>
                               )}
                             </div>
-                            <div className="rounded-lg border p-2 text-center">
-                              <div className="text-xs text-gray-500 mb-0.5">Proiezione Soglia</div>
-                              <Badge className={`text-xs ${getSogliaColor(pista.calcProiezione.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>
+                            <div className="rounded-lg border p-3 text-center">
+                              <div className="text-xs text-gray-500 mb-1">Proiezione Soglia</div>
+                              <Badge className={`text-sm ${getSogliaColor(pista.calcProiezione.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>
                                 {pista.calcProiezione.sogliaLabel}
                               </Badge>
                               {pista.calcProiezione.puntiTotali > 0 && (
-                                <div className="text-xs text-gray-400 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(1)} pt</div>
+                                <div className="text-sm text-gray-500 mt-1 font-medium">{pista.calcProiezione.puntiTotali.toFixed(1)} pt</div>
                               )}
                             </div>
                           </div>
 
                           {pista.soglieRef && (
-                            <div className="flex flex-wrap gap-1 justify-center">
+                            <div className="flex flex-wrap gap-1.5 justify-center">
                               {[
                                 { label: "S1", value: pista.soglieRef.s1 },
                                 { label: "S2", value: pista.soglieRef.s2 },
@@ -2224,7 +2224,7 @@ export default function DashboardGaraReale() {
                                 ...(pista.soglieRef.s4 != null && pista.soglieRef.s4 > 0 ? [{ label: "S4", value: pista.soglieRef.s4 }] : []),
                                 ...(pista.soglieRef.s5 != null && pista.soglieRef.s5 > 0 ? [{ label: "S5", value: pista.soglieRef.s5 }] : []),
                               ].map((s) => (
-                                <span key={s.label} className="text-[9px] text-gray-400 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5">
+                                <span key={s.label} className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 font-medium">
                                   {s.label}:{s.value}
                                 </span>
                               ))}
@@ -2302,19 +2302,19 @@ export default function DashboardGaraReale() {
                                     </span>
                                     <div className="flex items-center gap-2">
                                       <span className="font-bold">{group.totalPezzi}</span>
-                                      <span className="text-gray-400 text-xs">→ {group.totalProiezione}</span>
+                                      <span className="text-gray-400 text-sm">→ {group.totalProiezione}</span>
                                     </div>
                                   </button>
                                   {groupExpanded && (
                                     <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-200 dark:border-gray-700 pl-2">
                                       {group.children.map((cat) => (
                                         <div key={cat.category} className="flex items-center justify-between text-sm">
-                                          <span className="text-gray-500 dark:text-gray-400 truncate max-w-[55%] text-xs">
+                                          <span className="text-gray-500 dark:text-gray-400 truncate max-w-[55%]">
                                             {cat.label}
                                           </span>
                                           <div className="flex items-center gap-2">
-                                            <span className="font-medium text-xs">{cat.pezzi}</span>
-                                            <span className="text-gray-400 text-xs">→ {cat.proiezione}</span>
+                                            <span className="font-medium">{cat.pezzi}</span>
+                                            <span className="text-gray-400">→ {cat.proiezione}</span>
                                           </div>
                                         </div>
                                       ))}
@@ -2334,13 +2334,13 @@ export default function DashboardGaraReale() {
                                 <span className="text-gray-600 dark:text-gray-300 truncate max-w-[60%]">{cat.label}</span>
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium">{cat.pezzi}</span>
-                                  <span className="text-gray-400 text-xs">→ {cat.proiezione}</span>
+                                  <span className="text-gray-400">→ {cat.proiezione}</span>
                                 </div>
                               </div>
                             ))}
                             {pista.categories.length > 6 && (
                               <button
-                                className="text-xs text-primary hover:underline cursor-pointer mt-1"
+                                className="text-sm text-primary hover:underline cursor-pointer mt-1"
                                 onClick={() => setExpandedPistaCategories(prev => {
                                   const next = new Set(prev);
                                   if (next.has(pista.pista)) next.delete(pista.pista);
@@ -2471,16 +2471,16 @@ export default function DashboardGaraReale() {
                               </div>
                               <div className="flex items-center gap-2 sm:gap-4 text-sm flex-wrap pl-6 sm:pl-0">
                                 {totalPremio > 0 && (
-                                  <Badge variant="outline" className="text-green-700 border-green-300 text-xs shrink-0" data-testid={`badge-pdv-premio-${pdv.codicePos}`}>
+                                  <Badge variant="outline" className="text-green-700 border-green-300 text-sm shrink-0" data-testid={`badge-pdv-premio-${pdv.codicePos}`}>
                                     {formatEuro(totalPremio)}
                                   </Badge>
                                 )}
                                 <div className="text-right shrink-0">
                                   <div className="font-bold">{totalPezzi} pezzi</div>
-                                  <div className="text-xs text-gray-400">Proiezione: {proiezione}</div>
+                                  <div className="text-sm text-gray-400">Proiezione: {proiezione}</div>
                                 </div>
                                 {pdv.unmapped > 0 && (
-                                  <Badge variant="outline" className="text-amber-600 border-amber-300 text-xs shrink-0">
+                                  <Badge variant="outline" className="text-amber-600 border-amber-300 text-sm shrink-0">
                                     {pdv.unmapped} non mappati
                                   </Badge>
                                 )}
@@ -2500,16 +2500,16 @@ export default function DashboardGaraReale() {
                                       <span className="font-bold">{pistaData.corePezzi}</span>
                                     </div>
                                     {calc && calc.sogliaLabel !== "N/A" && (
-                                      <div className="space-y-1 mb-2">
+                                      <div className="space-y-1.5 mb-2">
                                         <div className="flex items-center gap-2">
-                                          <Badge className={`text-[10px] ${getSogliaColor(calc.sogliaLabel)}`} variant="outline">
+                                          <Badge className={`text-xs ${getSogliaColor(calc.sogliaLabel)}`} variant="outline">
                                             {calc.sogliaLabel}
                                           </Badge>
                                           {calc.puntiTotali > 0 && (
-                                            <span className="text-[10px] text-gray-500">{calc.puntiTotali.toFixed(1)} pt</span>
+                                            <span className="text-xs text-gray-500">{calc.puntiTotali.toFixed(1)} pt</span>
                                           )}
                                           {(pdvPremioByPista[pistaKey] ?? 0) > 0 && (
-                                            <span className="text-[10px] font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
+                                            <span className="text-xs font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
                                           )}
                                         </div>
                                         {(() => {
@@ -2559,7 +2559,7 @@ export default function DashboardGaraReale() {
                                           return (
                                             <div className="flex flex-wrap gap-0.5">
                                               {items.map((s) => (
-                                                <span key={s.label} className="text-[8px] text-gray-400 bg-gray-100 dark:bg-gray-800 rounded px-0.5">
+                                                <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5">
                                                   {s.label}:{s.value}
                                                 </span>
                                               ))}
@@ -2570,7 +2570,7 @@ export default function DashboardGaraReale() {
                                     )}
                                     <div className="space-y-1">
                                       {pistaData.items.sort((a, b) => b.pezzi - a.pezzi).map((item) => (
-                                        <div key={item.targetCategory} className="flex justify-between text-xs">
+                                        <div key={item.targetCategory} className="flex justify-between text-sm">
                                           <span className="truncate max-w-[70%]">{item.targetLabel}</span>
                                           <span className="font-medium">{item.pezzi}</span>
                                         </div>
@@ -2673,17 +2673,17 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
                 <div className="text-left min-w-0">
                   <div className="font-medium text-sm truncate">{rs.ragioneSociale}</div>
-                  <div className="text-xs text-gray-500">{rs.pdvs.length} PDV</div>
+                  <div className="text-sm text-gray-500">{rs.pdvs.length} PDV</div>
                 </div>
                 <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                   {rsPremioTotale > 0 && (
-                    <Badge variant="outline" className="text-green-700 border-green-300 text-xs shrink-0">
+                    <Badge variant="outline" className="text-green-700 border-green-300 text-sm shrink-0">
                       {formatEuro(rsPremioTotale)}
                     </Badge>
                   )}
                   <div className="text-right shrink-0">
                     <div className="font-bold text-sm">{rs.totalPezzi} pezzi</div>
-                    <div className="text-xs text-gray-400">Proiezione: {proiezione}</div>
+                    <div className="text-sm text-gray-400">Proiezione: {proiezione}</div>
                   </div>
                 </div>
               </div>
@@ -2720,21 +2720,21 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
                       }
                     }
                     return (
-                      <div key={pdv.codicePos} className="border rounded p-2 text-sm">
+                      <div key={pdv.codicePos} className="border rounded p-3 text-sm">
                         <div className="flex justify-between">
                           <span className="font-medium">{pdv.nomeNegozio}</span>
                           <div className="flex items-center gap-2">
                             {pdvPremio > 0 && (
-                              <span className="text-xs font-medium text-green-700">{formatEuro(pdvPremio)}</span>
+                              <span className="text-sm font-medium text-green-700">{formatEuro(pdvPremio)}</span>
                             )}
                             <span className="font-bold">{pdvPezzi}</span>
                           </div>
                         </div>
-                        <div className="text-xs text-gray-400">{pdv.codicePos}</div>
+                        <div className="text-sm text-gray-400">{pdv.codicePos}</div>
                         {pdvSoglie.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {pdvSoglie.map((s) => (
-                              <Badge key={s} variant="outline" className="text-[10px] py-0">{s}</Badge>
+                              <Badge key={s} variant="outline" className="text-xs py-0.5">{s}</Badge>
                             ))}
                           </div>
                         )}
