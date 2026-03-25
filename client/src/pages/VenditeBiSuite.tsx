@@ -60,6 +60,7 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCircle2,
+  X,
 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -693,6 +694,17 @@ export default function VenditeBiSuite() {
                   <Badge variant="outline" className="ml-2 text-xs">
                     {filteredSales.length} record
                   </Badge>
+                  {selectedPdv && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 ml-auto"
+                      onClick={() => setSelectedPdv(null)}
+                      data-testid="button-close-pdv-filter"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
