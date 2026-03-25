@@ -20,7 +20,7 @@ import { calcolaSoglieDefaultPerRS as calcolaSoglieEnergiaDefault } from '@/type
 import { apiUrl } from '@/lib/basePath';
 import {
   Loader2, Save, Download, Plus, Trash2, CalendarDays, Store,
-  ChevronDown, ChevronUp, History, Upload, Settings, Target, Zap, Shield, Calculator,
+  ChevronDown, ChevronUp, History, Upload, Settings, Target, Zap, Shield, ShieldCheck, Calculator,
   FileText, X, Check, AlertTriangle,
 } from 'lucide-react';
 import { TabelleCalcoloGara, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
@@ -1464,7 +1464,7 @@ export default function ConfigurazioneGara() {
                 <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />Soglie
               </TabsTrigger>
               <TabsTrigger value="extra" className="text-xs sm:text-sm" data-testid="tab-extra">
-                <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">Energia &</span> Ass.
+                <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">En. Ass.</span> Prot.
               </TabsTrigger>
               <TabsTrigger value="tabelleCalcolo" className="text-xs sm:text-sm" data-testid="tab-tabelle-calcolo">
                 <Calculator className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">Tabelle</span><span className="sm:hidden">Tab.</span>
@@ -1828,9 +1828,9 @@ export default function ConfigurazioneGara() {
                 <div className="space-y-6">
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Energia & Assicurazioni per Ragione Sociale</CardTitle>
+                      <CardTitle className="text-base">Energia, Assicurazioni & Protecta per Ragione Sociale</CardTitle>
                       <CardDescription className="text-xs">
-                        Configura i target di Energia e Assicurazioni separatamente per ogni Ragione Sociale.
+                        Configura i target di Energia, Assicurazioni e Protecta separatamente per ogni Ragione Sociale.
                       </CardDescription>
                     </CardHeader>
                   </Card>
@@ -1847,6 +1847,11 @@ export default function ConfigurazioneGara() {
                     };
                     const updateAssicRS = (field: string, value: number) => {
                       setAssicurazioniRSConfig(prev => prev.map(c => c.ragioneSociale === rs ? { ...c, [field]: value } : c));
+                      setIsDirty(true);
+                    };
+                    const pConf = protectaRSConfig.find(c => c.ragioneSociale === rs);
+                    const updateProtectaRS = (field: string, value: number) => {
+                      setProtectaRSConfig(prev => prev.map(c => c.ragioneSociale === rs ? { ...c, [field]: value } : c));
                       setIsDirty(true);
                     };
 
@@ -1947,6 +1952,31 @@ export default function ConfigurazioneGara() {
                                 <div className="space-y-1">
                                   <Label className="text-xs font-semibold">Premio S2 € per PDV</Label>
                                   <Input type="number" className="h-8 text-sm" value={aConf.premioS2 ?? 750} onChange={e => updateAssicRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS2-${rs}`} />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {(aConf || eConf) && pConf && <Separator />}
+
+                          {pConf && (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <ShieldCheck className="h-4 w-4 text-teal-600" />
+                                <Label className="text-xs font-semibold">Protecta (Casa e Negozio Protetti)</Label>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Target Extra (≥ N per PDV)</Label>
+                                  <Input type="number" className="h-8 text-sm" value={pConf.targetExtra} onChange={e => updateProtectaRS('targetExtra', Number(e.target.value) || 0)} data-testid={`input-protecta-rs-targetExtra-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Premio Extra € per PDV</Label>
+                                  <Input type="number" className="h-8 text-sm" value={pConf.premioExtra} onChange={e => updateProtectaRS('premioExtra', Number(e.target.value) || 0)} data-testid={`input-protecta-rs-premioExtra-${rs}`} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs">Decurtazione Premio ({'<'} N)</Label>
+                                  <Input type="number" className="h-8 text-sm" value={pConf.targetDecurtazione} onChange={e => updateProtectaRS('targetDecurtazione', Number(e.target.value) || 0)} data-testid={`input-protecta-rs-targetDecurtazione-${rs}`} />
                                 </div>
                               </div>
                             </div>
