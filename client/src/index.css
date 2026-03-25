@@ -42,6 +42,10 @@
   --ring: 25 100% 50%;
 
   --radius: 0.75rem;
+
+  --glass-bg: 0 0% 100% / 0.72;
+  --glass-border: 0 0% 100% / 0.25;
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
 }
 
 .dark {
@@ -72,6 +76,10 @@
   --border: 217.2 32.6% 17.5%;
   --input: 217.2 32.6% 17.5%;
   --ring: 25 100% 50%;
+
+  --glass-bg: 222 40% 8% / 0.72;
+  --glass-border: 0 0% 100% / 0.08;
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 @layer base {
@@ -101,9 +109,21 @@
   transition-duration: 300ms;
 }
 
-/* Glassmorphism for cards */
+/* Glassmorphism utilities */
 .glass-panel {
-  @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+  background: hsl(var(--glass-bg));
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid hsl(var(--glass-border));
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-overlay {
+  background: hsl(var(--glass-bg));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid hsl(var(--glass-border));
+  box-shadow: var(--glass-shadow), 0 0 0 1px hsl(var(--glass-border));
 }
 
 /* ── Print / PDF export ─────────────────────────────────────── */

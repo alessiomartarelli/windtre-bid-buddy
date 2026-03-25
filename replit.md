@@ -16,7 +16,7 @@ Preferred communication style: Simple, everyday language.
 - **Framework**: React with TypeScript, bundled by Vite
 - **Routing**: `wouter` (lightweight router, not React Router)
 - **State Management**: TanStack React Query for server state; local React state and custom hooks for form/wizard state
-- **UI Components**: shadcn/ui (new-york style) with Radix UI primitives, Tailwind CSS for styling
+- **UI Components**: shadcn/ui (new-york style) with Radix UI primitives, Tailwind CSS for styling, glassmorphism applied globally via CSS custom properties (`--glass-bg`, `--glass-border`, `--glass-shadow`) and utility classes (`.glass-panel`, `.glass-overlay`). Components affected: Card, Dialog, Popover, DropdownMenu, Select, Tooltip, Sheet — all use semi-transparent backgrounds with backdrop-blur
 - **Charts**: Recharts for data visualization in dashboards
 - **Path Aliases**: `@/` maps to `client/src/`, `@shared/` maps to `shared/`
 - **Key Design Patterns**:
