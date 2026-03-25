@@ -2380,10 +2380,20 @@ export default function DashboardGaraReale() {
               const pdvSummaries = pdvListWithRS.map(pdv => {
                 const corePezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
 
-                let pdvPuntiTotali = 0;
+                let pdvPremioTotale = 0;
                 for (const stat of pistaStats) {
                   const match = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
-                  if (match) pdvPuntiTotali += match.pdvCalc.puntiTotali;
+                  if (match) {
+                    if (match.pdvCalc.premioStimato > 0) {
+                      pdvPremioTotale += match.pdvCalc.premioStimato;
+                    } else {
+                      const aggPremio = stat.calc.premioStimato;
+                      const totalPezziPista = stat.pdvBreakdown.reduce((s, b) => s + b.pezzi, 0);
+                      pdvPremioTotale += totalPezziPista > 0
+                        ? Math.round((match.pezzi / totalPezziPista) * aggPremio * 100) / 100
+                        : 0;
+                    }
+                  }
                 }
 
                 return {
@@ -2391,18 +2401,20 @@ export default function DashboardGaraReale() {
                   nomeNegozio: pdv.nomeNegozio,
                   configuredRS: pdv.configuredRS,
                   corePezzi,
-                  puntiTotali: pdvPuntiTotali,
+                  premioTotale: pdvPremioTotale,
                 };
               }).filter(p => p.corePezzi > 0);
 
               const grandTotalPezzi = pdvSummaries.reduce((s, p) => s + p.corePezzi, 0);
+              const grandTotalPremio = pdvSummaries.reduce((s, p) => s + p.premioTotale, 0);
 
               const pieData = pdvSummaries
-                .sort((a, b) => b.corePezzi - a.corePezzi)
+                .sort((a, b) => b.premioTotale - a.premioTotale)
                 .map((p, i) => ({
                   name: p.nomeNegozio,
-                  value: p.corePezzi,
-                  pct: grandTotalPezzi > 0 ? Math.round((p.corePezzi / grandTotalPezzi) * 1000) / 10 : 0,
+                  value: Math.round(p.premioTotale * 100) / 100,
+                  pezzi: p.corePezzi,
+                  pct: grandTotalPremio > 0 ? Math.round((p.premioTotale / grandTotalPremio) * 1000) / 10 : 0,
                   color: PDV_CHART_COLORS[i % PDV_CHART_COLORS.length],
                 }));
 
@@ -2421,9 +2433,7 @@ export default function DashboardGaraReale() {
               const showRSHeaders = rsGroups.size > 1;
 
               const pdvColorMap = new Map<string, string>();
-              pieData.forEach((p, i) => { pdvColorMap.set(p.name, p.color); });
-              const sortedPdvForColor = [...pdvSummaries].sort((a, b) => b.corePezzi - a.corePezzi);
-              sortedPdvForColor.forEach((p, i) => { pdvColorMap.set(p.nomeNegozio, PDV_CHART_COLORS[i % PDV_CHART_COLORS.length]); });
+              pieData.forEach((p) => { pdvColorMap.set(p.name, p.color); });
 
               return (
                 <Card data-testid="card-pdv-breakdown">
@@ -2455,7 +2465,10 @@ export default function DashboardGaraReale() {
                                 ))}
                               </Pie>
                               <RechartsTooltip
-                                formatter={(value: number, name: string) => [`${value} pezzi (${pieData.find(p => p.name === name)?.pct ?? 0}%)`, name]}
+                                formatter={(value: number, name: string) => {
+                                  const entry = pieData.find(p => p.name === name);
+                                  return [`${formatEuro(value)} (${entry?.pct ?? 0}%) · ${entry?.pezzi ?? 0} pezzi`, name];
+                                }}
                                 contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "13px" }}
                               />
                             </PieChart>
@@ -2466,8 +2479,8 @@ export default function DashboardGaraReale() {
                             <div key={p.name} className="flex items-center gap-2 text-sm">
                               <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
                               <span className="truncate flex-1 text-gray-700 dark:text-gray-300">{p.name}</span>
-                              <span className="font-bold shrink-0">{p.value}</span>
-                              <span className="text-gray-500 shrink-0 w-14 text-right">{p.pct}%</span>
+                              <span className="font-bold text-green-700 shrink-0">{formatEuro(p.value)}</span>
+                              <span className="text-gray-500 shrink-0 w-14 text-right font-semibold">{p.pct}%</span>
                             </div>
                           ))}
                         </div>
@@ -2494,7 +2507,9 @@ export default function DashboardGaraReale() {
                           const proiezione = workdayInfo.elapsedWorkingDays > 0
                             ? Math.round((totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
                             : totalPezzi;
-                          const pctContrib = grandTotalPezzi > 0 ? Math.round((totalPezzi / grandTotalPezzi) * 1000) / 10 : 0;
+                          const pdvSummary = pdvSummaries.find(s => s.codicePos === pdv.codicePos);
+                          const pdvPremioCalc = pdvSummary?.premioTotale ?? 0;
+                          const pctContrib = grandTotalPremio > 0 ? Math.round((pdvPremioCalc / grandTotalPremio) * 1000) / 10 : 0;
                           const pdvChartColor = pdvColorMap.get(pdv.nomeNegozio) || "#9ca3af";
 
                           const byPista: Record<string, { pezzi: number; corePezzi: number; items: AggregatedItem[] }> = {};
@@ -2583,8 +2598,9 @@ export default function DashboardGaraReale() {
                                     const conf = PISTA_CONFIG[pistaKey as keyof typeof PISTA_CONFIG];
                                     if (!conf) return null;
                                     const calc = pdvCalcByPista[pistaKey];
-                                    const pistaTotalPezzi = pistaStats.find(s => s.pista === pistaKey)?.totalePezzi || 0;
-                                    const pistaPct = pistaTotalPezzi > 0 ? Math.round((pistaData.corePezzi / pistaTotalPezzi) * 1000) / 10 : 0;
+                                    const pistaAggPremio = pistaStats.find(s => s.pista === pistaKey)?.calc.premioStimato || 0;
+                                    const pistaPdvPremio = pdvPremioByPista[pistaKey] ?? 0;
+                                    const pistaPct = pistaAggPremio > 0 ? Math.round((pistaPdvPremio / pistaAggPremio) * 1000) / 10 : 0;
                                     return (
                                       <div key={pistaKey} className={`rounded-lg border p-3 ${conf.lightColor}`}>
                                         <div className="font-medium text-sm mb-2 flex items-center justify-between">
