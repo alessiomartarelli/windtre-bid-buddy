@@ -596,8 +596,9 @@ export default function ConfigurazioneGara() {
       });
     });
 
-    const protectaRS = rsNames.map(rs => ({ ragioneSociale: rs, targetExtra: 0, targetDecurtazione: 0, premioExtra: 350 }));
-    const decurtazioneRS = rsNames.map(rs => ({ ragioneSociale: rs, importo: 0 }));
+    const allRsNames = Array.from(rsMap.keys());
+    const protectaRS = allRsNames.map(rs => ({ ragioneSociale: rs, targetExtra: 0, targetDecurtazione: 0, premioExtra: 350 }));
+    const decurtazioneRS = allRsNames.map(rs => ({ ragioneSociale: rs, importo: 0 }));
 
     setMobileRSConfig(mobileRS);
     setFissoRSConfig(fissoRS);
