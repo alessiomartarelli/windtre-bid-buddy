@@ -335,46 +335,49 @@ function parseAllegatoB(text: string): PdfSoglieEnergia | null {
   const section = extractSectionText(text, 'ALLEGATO B', ['ALLEGATO C', 'ALLEGATO D', 'ALLEGATO E']);
   if (!section) return null;
 
-  const numbers = [...section.matchAll(/\b(\d{2,4})\b/g)]
-    .map(m => parseInt(m[1]))
-    .filter(n => n >= 10 && n <= 5000);
-
-  if (numbers.length < 4) return null;
-
-  const lessThanMatch = section.match(/<\s*(\d{2,4})/);
-  const targetNoMalus = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
-
-  const targetS1 = numbers[0];
-  const targetS2 = numbers[1];
-  const targetS3 = numbers[2];
-
-  let targetFissoRS = 0;
-  if (numbers.length >= 4) {
-    targetFissoRS = numbers[3];
-  }
-
   const premioS1Match = section.match(/(\d{3,5})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
   const premioS1 = premioS1Match ? parseInt(premioS1Match[1]) : 250;
 
-  const pctMatch = section.match(/(\d{1,3})\s*%\s*(?:del\s+)?premio\s*base/i);
-  const minMatch = section.match(/min(?:imo)?\s*(\d{3,5})\s*€/i);
+  const pctMatch = section.match(/(\d{1,3})\s*%/);
+  const minMatch = section.match(/min(?:imo)?\s*(?:di\s+)?(\d{3,5})\s*€/i);
   let premioS2 = 500;
   if (pctMatch && minMatch) {
     premioS2 = parseInt(minMatch[1]);
-  } else {
-    const s2PremioMatch = section.match(/(?:S2|soglia\s*2)\D*?(\d{3,5})\s*€/i);
-    if (s2PremioMatch) premioS2 = parseInt(s2PremioMatch[1]);
   }
 
-  const premioS3Match = section.match(/(\d{1,2}\.?\d{3})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
-  const premioS3 = premioS3Match ? parseInt(premioS3Match[1].replace('.', '')) : 1000;
+  const premioS3Match = section.match(/([\d.]+)\s*€\s*(?:per|\/)\s*(?:pdv|punto)/gi);
+  let premioS3 = 1000;
+  if (premioS3Match && premioS3Match.length >= 2) {
+    const last = premioS3Match[premioS3Match.length - 1];
+    const val = last.match(/([\d.]+)\s*€/);
+    if (val) premioS3 = parseInt(val[1].replace(/\./g, ''));
+  }
+
+  const lines = section.split('\n');
+  const dataLine = lines.find(line => {
+    const stripped = line.replace(/[<≥>=€%.,]/g, '').trim();
+    const tokens = stripped.split(/\s+/);
+    return tokens.length >= 3 && tokens.every(t => /^\d+$/.test(t));
+  });
+
+  if (!dataLine) return null;
+
+  const lessThanMatch = dataLine.match(/<\s*(\d{1,4})/);
+  const targetNoMalus = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
+
+  const cleanedLine = dataLine.replace(/<\s*\d+/g, '');
+  const dataNumbers = [...cleanedLine.matchAll(/\b(\d{2,4})\b/g)]
+    .map(m => parseInt(m[1]))
+    .filter(n => n >= 10 && n <= 5000);
+
+  if (dataNumbers.length < 3) return null;
 
   return {
-    targetS1,
-    targetS2,
-    targetS3,
+    targetS1: dataNumbers[0],
+    targetS2: dataNumbers[1],
+    targetS3: dataNumbers[2],
     targetNoMalus,
-    targetFissoRS,
+    targetFissoRS: dataNumbers.length >= 4 ? dataNumbers[3] : 0,
     premioS1,
     premioS2,
     premioS3,
@@ -385,25 +388,33 @@ function parseAllegatoC(text: string): PdfSoglieAssicurazioni | null {
   const section = extractSectionText(text, 'ALLEGATO C', ['ALLEGATO D', 'ALLEGATO E']);
   if (!section) return null;
 
-  const numbers = [...section.matchAll(/\b(\d{2,4})\b/g)]
+  const premioS1HeaderMatch = section.match(/(\d{3,5})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
+  const premioS1 = premioS1HeaderMatch ? parseInt(premioS1HeaderMatch[1]) : 500;
+  const premioS2Matches = [...section.matchAll(/(\d{3,5})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/gi)];
+  const premioS2 = premioS2Matches.length >= 2 ? parseInt(premioS2Matches[1][1]) : 750;
+
+  const lines = section.split('\n');
+  const dataLine = lines.find(line => {
+    const stripped = line.replace(/[<≥>=€%.,]/g, '').trim();
+    const tokens = stripped.split(/\s+/);
+    return tokens.length >= 2 && tokens.every(t => /^\d+$/.test(t));
+  });
+
+  if (!dataLine) return null;
+
+  const lessThanMatch = dataLine.match(/<\s*(\d{1,4})/);
+  const targetNoMalus = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
+
+  const cleanedLine = dataLine.replace(/<\s*\d+/g, '');
+  const dataNumbers = [...cleanedLine.matchAll(/\b(\d{2,4})\b/g)]
     .map(m => parseInt(m[1]))
     .filter(n => n >= 10 && n <= 5000);
 
-  const lessThanMatch = section.match(/<\s*(\d{2,4})/);
-  const targetNoMalus = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
-
-  const targets = numbers.filter(n => n !== targetNoMalus);
-  if (targets.length < 2) return null;
-
-  const premioMatches = [...section.matchAll(/(\d{3,5})\s*€/g)]
-    .map(m => parseInt(m[1]))
-    .filter(n => n >= 100 && n <= 5000);
-  const premioS1 = premioMatches.length >= 1 ? premioMatches[0] : 500;
-  const premioS2 = premioMatches.length >= 2 ? premioMatches[1] : 750;
+  if (dataNumbers.length < 2) return null;
 
   return {
-    targetS1: targets[0],
-    targetS2: targets[1],
+    targetS1: dataNumbers[0],
+    targetS2: dataNumbers[1],
     targetNoMalus,
     premioS1,
     premioS2,
@@ -414,14 +425,26 @@ function parseAllegatoD(text: string): PdfSoglieProtecta | null {
   const section = extractSectionText(text, 'ALLEGATO D', ['ALLEGATO E', 'Wind Tre S.p.A. con Socio Unico']);
   if (!section) return null;
 
-  const geqMatch = section.match(/[≥>=]+\s*(\d{1,4})/);
-  const targetExtra = geqMatch ? parseInt(geqMatch[1]) : 0;
+  const premioHeaderMatch = section.match(/(\d{2,4})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
+  const premioExtra = premioHeaderMatch ? parseInt(premioHeaderMatch[1]) : 350;
 
-  const premioMatch = section.match(/(\d{2,4})\s*€/);
-  const premioExtra = premioMatch ? parseInt(premioMatch[1]) : 350;
+  const lines = section.split('\n');
+  const dataLine = lines.find(line => {
+    const stripped = line.replace(/[<≥>=€%.,]/g, '').trim();
+    const tokens = stripped.split(/\s+/);
+    return tokens.length >= 1 && tokens.every(t => /^\d+$/.test(t)) && stripped.length > 0;
+  });
 
-  const lessThanMatch = section.match(/<\s*(\d{1,4})/);
-  const targetDecurtazione = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
+  let targetExtra = 0;
+  let targetDecurtazione = 0;
+
+  if (dataLine) {
+    const geqMatch = dataLine.match(/[≥>=]+\s*(\d{1,4})/);
+    targetExtra = geqMatch ? parseInt(geqMatch[1]) : 0;
+
+    const lessThanMatch = dataLine.match(/<\s*(\d{1,4})/);
+    targetDecurtazione = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
+  }
 
   if (targetExtra === 0 && targetDecurtazione === 0) return null;
 
