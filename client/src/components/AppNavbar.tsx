@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield, Users,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
-  ChevronDown,
+  ChevronDown, Zap,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -75,18 +75,23 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
   ];
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <h1
-            className="text-base sm:text-lg font-bold text-foreground truncate cursor-pointer"
+    <header className="sticky top-0 z-50 glass-panel border-b-0" style={{ borderBottom: '1px solid hsl(var(--glass-border))' }}>
+      <div className="container mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <div
+            className="flex items-center gap-2 cursor-pointer group"
             onClick={() => setLocation('/')}
             data-testid="text-app-title"
           >
-            {title}
-          </h1>
+            <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 shadow-sm group-hover:shadow-md transition-shadow">
+              <Zap className="h-4 w-4 text-white" />
+            </div>
+            <h1 className="text-base sm:text-lg font-bold text-foreground truncate tracking-tight">
+              {title}
+            </h1>
+          </div>
 
-          <nav className="hidden md:flex items-center gap-1 ml-2">
+          <nav className="hidden md:flex items-center gap-0.5 ml-1">
             {adminItems.map((item) => {
               const isActive = location === item.path;
               return (
@@ -94,7 +99,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                   key={item.path}
                   variant={isActive ? "secondary" : "ghost"}
                   size="sm"
-                  className="text-xs h-8"
+                  className={`text-xs h-8 rounded-lg transition-all ${isActive ? 'shadow-sm' : ''}`}
                   onClick={() => setLocation(item.path)}
                   data-testid={`nav-${item.path.replace(/\//g, '')}`}
                 >
@@ -104,19 +109,19 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
               );
             })}
 
-            {adminItems.length > 0 && <div className="w-px h-5 bg-border mx-1" />}
+            {adminItems.length > 0 && <div className="w-px h-5 bg-border/60 mx-1.5" />}
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant={garaItems.some(i => location === i.path) ? "secondary" : "ghost"}
                   size="sm"
-                  className="text-xs h-8"
+                  className={`text-xs h-8 rounded-lg transition-all ${garaItems.some(i => location === i.path) ? 'shadow-sm' : ''}`}
                   data-testid="nav-gara-menu"
                 >
                   <Trophy className="h-3.5 w-3.5 mr-1" />
                   Gara
-                  <ChevronDown className="h-3 w-3 ml-0.5" />
+                  <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
@@ -134,12 +139,12 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                 <Button
                   variant={simulatoreItems.some(i => location === i.path) ? "secondary" : "ghost"}
                   size="sm"
-                  className="text-xs h-8"
+                  className={`text-xs h-8 rounded-lg transition-all ${simulatoreItems.some(i => location === i.path) ? 'shadow-sm' : ''}`}
                   data-testid="nav-simulatore-menu"
                 >
                   <FileText className="h-3.5 w-3.5 mr-1" />
                   Simulatore
-                  <ChevronDown className="h-3 w-3 ml-0.5" />
+                  <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
@@ -160,7 +165,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
           <div className="md:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" data-testid="button-mobile-menu">
+                <Button variant="ghost" size="icon" className="rounded-lg" data-testid="button-mobile-menu">
                   <Menu className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -176,7 +181,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                     <DropdownMenuSeparator />
                   </>
                 )}
-                <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">Gara</DropdownMenuLabel>
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Gara</DropdownMenuLabel>
                 {garaItems.map((item) => (
                   <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)}>
                     <item.icon className="mr-2 h-4 w-4" />
@@ -184,7 +189,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">Simulatore</DropdownMenuLabel>
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Simulatore</DropdownMenuLabel>
                 {simulatoreItems.map((item) => (
                   <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)}>
                     <item.icon className="mr-2 h-4 w-4" />
@@ -203,8 +208,8 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-user-menu">
-                <Avatar className="h-9 w-9">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                <Avatar className="h-9 w-9 ring-2 ring-border/50 ring-offset-1 ring-offset-background">
+                  <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-semibold">
                     {getInitials()}
                   </AvatarFallback>
                 </Avatar>
@@ -213,7 +218,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{profile?.full_name || 'Utente'}</p>
+                  <p className="text-sm font-semibold leading-none">{profile?.full_name || 'Utente'}</p>
                   <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
                 </div>
               </DropdownMenuLabel>
@@ -232,7 +237,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                 <span className="truncate">{organization?.name || 'Organizzazione'}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut}>
+              <DropdownMenuItem onClick={handleSignOut} className="text-red-600 focus:text-red-600">
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Esci</span>
               </DropdownMenuItem>

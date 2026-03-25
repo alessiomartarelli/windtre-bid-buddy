@@ -1,85 +1,86 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Incentive W3 Brand Colors */
-  --windtre-orange: 25 100% 50%; /* #FF6A00 */
-  --windtre-blue: 227 32% 17%;   /* #1D2338 */
-  --windtre-dark: 225 15% 12%;   /* #1A1D24 */
-  
-  --font-display: 'Outfit', sans-serif;
+  --windtre-orange: 24 95% 53%;
+  --windtre-blue: 227 32% 17%;
+  --windtre-dark: 225 15% 12%;
+
+  --font-display: 'Plus Jakarta Sans', sans-serif;
   --font-body: 'Inter', sans-serif;
 
-  --background: 210 40% 98%;
-  --foreground: 227 32% 17%;
+  --background: 220 20% 97%;
+  --foreground: 224 30% 14%;
 
   --card: 0 0% 100%;
-  --card-foreground: 227 32% 17%;
+  --card-foreground: 224 30% 14%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 227 32% 17%;
+  --popover-foreground: 224 30% 14%;
 
-  --primary: 25 100% 50%;
+  --primary: 24 95% 53%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 220 16% 93%;
+  --secondary-foreground: 224 30% 20%;
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 220 16% 93%;
+  --muted-foreground: 220 10% 46%;
 
-  --accent: 25 100% 96%;
-  --accent-foreground: 25 100% 40%;
+  --accent: 24 100% 96%;
+  --accent-foreground: 24 90% 38%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
 
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 25 100% 50%;
+  --border: 220 15% 90%;
+  --input: 220 15% 90%;
+  --ring: 24 95% 53%;
 
   --radius: 0.75rem;
 
-  --glass-bg: 0 0% 100% / 0.72;
-  --glass-border: 0 0% 100% / 0.25;
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+  --glass-bg: 0 0% 100% / 0.65;
+  --glass-border: 220 20% 92% / 0.8;
+  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --glass-blur: 20px;
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
+  --background: 224 30% 6%;
+  --foreground: 210 40% 96%;
 
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
+  --card: 224 25% 10%;
+  --card-foreground: 210 40% 96%;
 
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
+  --popover: 224 25% 10%;
+  --popover-foreground: 210 40% 96%;
 
-  --primary: 25 100% 50%;
-  --primary-foreground: 222.2 47.4% 11.2%;
+  --primary: 24 95% 53%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 224 20% 16%;
+  --secondary-foreground: 210 40% 96%;
 
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
+  --muted: 224 20% 16%;
+  --muted-foreground: 220 12% 60%;
 
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 224 20% 16%;
+  --accent-foreground: 210 40% 96%;
 
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 62% 30%;
+  --destructive-foreground: 210 40% 96%;
 
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 25 100% 50%;
+  --border: 224 20% 16%;
+  --input: 224 20% 16%;
+  --ring: 24 95% 53%;
 
-  --glass-bg: 222 40% 8% / 0.72;
-  --glass-border: 0 0% 100% / 0.08;
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --glass-bg: 224 30% 8% / 0.75;
+  --glass-border: 0 0% 100% / 0.06;
+  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15);
+  --glass-blur: 20px;
 }
 
 @layer base {
@@ -98,7 +99,7 @@
 
 @layer utilities {
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-orange-600;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-orange-500;
   }
 }
 
@@ -112,23 +113,30 @@
 /* Glassmorphism utilities */
 .glass-panel {
   background: hsl(var(--glass-bg));
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
   border: 1px solid hsl(var(--glass-border));
   box-shadow: var(--glass-shadow);
 }
 
 .glass-overlay {
   background: hsl(var(--glass-bg));
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
   border: 1px solid hsl(var(--glass-border));
   box-shadow: var(--glass-shadow), 0 0 0 1px hsl(var(--glass-border));
 }
 
+/* Subtle page background pattern */
+.page-bg {
+  background-color: hsl(var(--background));
+  background-image:
+    radial-gradient(at 20% 0%, hsl(24 95% 53% / 0.03) 0px, transparent 50%),
+    radial-gradient(at 80% 100%, hsl(220 60% 50% / 0.03) 0px, transparent 50%);
+}
+
 /* ── Print / PDF export ─────────────────────────────────────── */
 @media print {
-  /* Margini pagina */
   @page {
     margin: 15mm 12mm;
     size: A4;
@@ -140,19 +148,16 @@
     color-adjust: exact;
   }
 
-  /* Radix Accordion: rimuovi overflow hidden che blocca i page-break */
   [data-radix-accordion-content],
   [data-state="open"] {
     overflow: visible !important;
   }
 
-  /* Evita tagli nei container grafici */
   .bg-muted\/30 {
     page-break-inside: avoid;
     break-inside: avoid;
   }
 
-  /* I grafici Recharts non devono essere tagliati */
   .recharts-wrapper,
   .recharts-surface,
   .recharts-responsive-container {
@@ -160,19 +165,16 @@
     break-inside: avoid;
   }
 
-  /* Grid dei grafici: tienila intera */
   .grid.gap-4 {
     page-break-inside: avoid;
     break-inside: avoid;
   }
 
-  /* Tabella: no break nelle righe */
   tr, thead, tfoot {
     page-break-inside: avoid;
     break-inside: avoid;
   }
 
-  /* I dettagli espansi di ogni pista non devono essere tagliati */
   tr + tr > td > div {
     page-break-inside: avoid;
     break-inside: avoid;
