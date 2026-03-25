@@ -335,49 +335,55 @@ function parseAllegatoB(text: string): PdfSoglieEnergia | null {
   const section = extractSectionText(text, 'ALLEGATO B', ['ALLEGATO C', 'ALLEGATO D', 'ALLEGATO E']);
   if (!section) return null;
 
+  console.log('[parseAllegatoB] section:', section);
+
   const premioS1Match = section.match(/(\d{3,5})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
   const premioS1 = premioS1Match ? parseInt(premioS1Match[1]) : 250;
 
-  const pctMatch = section.match(/(\d{1,3})\s*%/);
   const minMatch = section.match(/min(?:imo)?\s*(?:di\s+)?(\d{3,5})\s*€/i);
   let premioS2 = 500;
-  if (pctMatch && minMatch) {
+  if (minMatch) {
     premioS2 = parseInt(minMatch[1]);
   }
 
-  const premioS3Match = section.match(/([\d.]+)\s*€\s*(?:per|\/)\s*(?:pdv|punto)/gi);
+  const premioS3Matches = [...section.matchAll(/([\d.]+)\s*€\s*(?:per|\/)\s*(?:pdv|punto)/gi)];
   let premioS3 = 1000;
-  if (premioS3Match && premioS3Match.length >= 2) {
-    const last = premioS3Match[premioS3Match.length - 1];
-    const val = last.match(/([\d.]+)\s*€/);
-    if (val) premioS3 = parseInt(val[1].replace(/\./g, ''));
+  if (premioS3Matches.length >= 2) {
+    const val = premioS3Matches[premioS3Matches.length - 1][1];
+    premioS3 = parseInt(val.replace(/\./g, ''));
   }
 
-  const lines = section.split('\n');
-  const dataLine = lines.find(line => {
-    const stripped = line.replace(/[<≥>=€%.,]/g, '').trim();
-    const tokens = stripped.split(/\s+/);
-    return tokens.length >= 3 && tokens.every(t => /^\d+$/.test(t));
-  });
-
-  if (!dataLine) return null;
-
-  const lessThanMatch = dataLine.match(/<\s*(\d{1,4})/);
+  const lessThanMatch = section.match(/<\s*(\d{1,4})/);
   const targetNoMalus = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
 
-  const cleanedLine = dataLine.replace(/<\s*\d+/g, '');
-  const dataNumbers = [...cleanedLine.matchAll(/\b(\d{2,4})\b/g)]
-    .map(m => parseInt(m[1]))
-    .filter(n => n >= 10 && n <= 5000);
+  const lastHeaderMatch = section.match(/(?:per\s+PDV|1[°ª]\s*soglia|Decurtazione\s+Premio\s+per\s+PDV)\s*/gi);
+  let searchArea = section;
+  if (lastHeaderMatch) {
+    const lastIdx = section.lastIndexOf(lastHeaderMatch[lastHeaderMatch.length - 1]);
+    if (lastIdx !== -1) {
+      searchArea = section.substring(lastIdx);
+    }
+  }
 
-  if (dataNumbers.length < 3) return null;
+  const allNumbers = [...searchArea.matchAll(/\b(\d{2,4})\b/g)]
+    .map(m => parseInt(m[1]))
+    .filter(n => n !== targetNoMalus && n >= 10 && n <= 5000);
+
+  const uniqueNumbers = allNumbers.filter(n => {
+    if (n === premioS1 || n === premioS2 || n === premioS3) return false;
+    return true;
+  });
+
+  const targetCandidates = uniqueNumbers.length >= 3 ? uniqueNumbers : allNumbers;
+
+  if (targetCandidates.length < 3) return null;
 
   return {
-    targetS1: dataNumbers[0],
-    targetS2: dataNumbers[1],
-    targetS3: dataNumbers[2],
+    targetS1: targetCandidates[0],
+    targetS2: targetCandidates[1],
+    targetS3: targetCandidates[2],
     targetNoMalus,
-    targetFissoRS: dataNumbers.length >= 4 ? dataNumbers[3] : 0,
+    targetFissoRS: targetCandidates.length >= 4 ? targetCandidates[3] : 0,
     premioS1,
     premioS2,
     premioS3,
@@ -388,33 +394,40 @@ function parseAllegatoC(text: string): PdfSoglieAssicurazioni | null {
   const section = extractSectionText(text, 'ALLEGATO C', ['ALLEGATO D', 'ALLEGATO E']);
   if (!section) return null;
 
-  const premioS1HeaderMatch = section.match(/(\d{3,5})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
-  const premioS1 = premioS1HeaderMatch ? parseInt(premioS1HeaderMatch[1]) : 500;
-  const premioS2Matches = [...section.matchAll(/(\d{3,5})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/gi)];
-  const premioS2 = premioS2Matches.length >= 2 ? parseInt(premioS2Matches[1][1]) : 750;
+  console.log('[parseAllegatoC] section:', section);
 
-  const lines = section.split('\n');
-  const dataLine = lines.find(line => {
-    const stripped = line.replace(/[<≥>=€%.,]/g, '').trim();
-    const tokens = stripped.split(/\s+/);
-    return tokens.length >= 2 && tokens.every(t => /^\d+$/.test(t));
-  });
+  const premioHeaderMatches = [...section.matchAll(/(\d{3,5})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/gi)];
+  const premioS1 = premioHeaderMatches.length >= 1 ? parseInt(premioHeaderMatches[0][1]) : 500;
+  const premioS2 = premioHeaderMatches.length >= 2 ? parseInt(premioHeaderMatches[1][1]) : 750;
 
-  if (!dataLine) return null;
-
-  const lessThanMatch = dataLine.match(/<\s*(\d{1,4})/);
+  const lessThanMatch = section.match(/<\s*(\d{1,4})/);
   const targetNoMalus = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
 
-  const cleanedLine = dataLine.replace(/<\s*\d+/g, '');
-  const dataNumbers = [...cleanedLine.matchAll(/\b(\d{2,4})\b/g)]
-    .map(m => parseInt(m[1]))
-    .filter(n => n >= 10 && n <= 5000);
+  const lastHeaderMatch = section.match(/(?:per\s+PDV|Decurtazione\s+Premio\s+per\s+PDV)\s*/gi);
+  let searchArea = section;
+  if (lastHeaderMatch) {
+    const lastIdx = section.lastIndexOf(lastHeaderMatch[lastHeaderMatch.length - 1]);
+    if (lastIdx !== -1) {
+      searchArea = section.substring(lastIdx);
+    }
+  }
 
-  if (dataNumbers.length < 2) return null;
+  const allNumbers = [...searchArea.matchAll(/\b(\d{2,4})\b/g)]
+    .map(m => parseInt(m[1]))
+    .filter(n => n !== targetNoMalus && n >= 10 && n <= 5000);
+
+  const uniqueNumbers = allNumbers.filter(n => {
+    if (n === premioS1 || n === premioS2) return false;
+    return true;
+  });
+
+  const targetCandidates = uniqueNumbers.length >= 2 ? uniqueNumbers : allNumbers;
+
+  if (targetCandidates.length < 2) return null;
 
   return {
-    targetS1: dataNumbers[0],
-    targetS2: dataNumbers[1],
+    targetS1: targetCandidates[0],
+    targetS2: targetCandidates[1],
     targetNoMalus,
     premioS1,
     premioS2,
@@ -425,25 +438,23 @@ function parseAllegatoD(text: string): PdfSoglieProtecta | null {
   const section = extractSectionText(text, 'ALLEGATO D', ['ALLEGATO E', 'Wind Tre S.p.A. con Socio Unico']);
   if (!section) return null;
 
+  console.log('[parseAllegatoD] section:', section);
+
   const premioHeaderMatch = section.match(/(\d{2,4})\s*€\s*(?:per|\/)\s*(?:pdv|punto)/i);
   const premioExtra = premioHeaderMatch ? parseInt(premioHeaderMatch[1]) : 350;
 
-  const lines = section.split('\n');
-  const dataLine = lines.find(line => {
-    const stripped = line.replace(/[<≥>=€%.,]/g, '').trim();
-    const tokens = stripped.split(/\s+/);
-    return tokens.length >= 1 && tokens.every(t => /^\d+$/.test(t)) && stripped.length > 0;
-  });
-
+  const geqMatches = [...section.matchAll(/[≥>=]+\s*(\d{1,4})/g)];
   let targetExtra = 0;
+  if (geqMatches.length > 0) {
+    const lastGeq = geqMatches[geqMatches.length - 1];
+    targetExtra = parseInt(lastGeq[1]);
+  }
+
+  const lessThanMatches = [...section.matchAll(/<\s*(\d{1,4})/g)];
   let targetDecurtazione = 0;
-
-  if (dataLine) {
-    const geqMatch = dataLine.match(/[≥>=]+\s*(\d{1,4})/);
-    targetExtra = geqMatch ? parseInt(geqMatch[1]) : 0;
-
-    const lessThanMatch = dataLine.match(/<\s*(\d{1,4})/);
-    targetDecurtazione = lessThanMatch ? parseInt(lessThanMatch[1]) : 0;
+  if (lessThanMatches.length > 0) {
+    const lastLt = lessThanMatches[lessThanMatches.length - 1];
+    targetDecurtazione = parseInt(lastLt[1]);
   }
 
   if (targetExtra === 0 && targetDecurtazione === 0) return null;
@@ -485,6 +496,12 @@ export async function parseGaraPdf(file: File): Promise<PdfGaraData> {
   const nomeRS = parseNomeRS(text);
 
   if (pdfType === 'partnership_reward') {
+    console.log('[parseGaraPdf] Full text:', text);
+    console.log('[parseGaraPdf] Has ALLEGATO A:', text.includes('ALLEGATO A'));
+    console.log('[parseGaraPdf] Has ALLEGATO B:', text.includes('ALLEGATO B'));
+    console.log('[parseGaraPdf] Has ALLEGATO C:', text.includes('ALLEGATO C'));
+    console.log('[parseGaraPdf] Has ALLEGATO D:', text.includes('ALLEGATO D'));
+    console.log('[parseGaraPdf] Has ALLEGATO E:', text.includes('ALLEGATO E'));
     const mese = parseMesePartnership(text);
     const partnershipTarget = parseAllegatoA(text);
     const soglieEnergia = parseAllegatoB(text);
