@@ -2377,13 +2377,27 @@ export default function DashboardGaraReale() {
                 return { ...pdv, configuredRS: rs };
               });
 
+              const isRSMode = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
+
               const pdvSummaries = pdvListWithRS.map(pdv => {
                 const corePezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+                const pdvRS = normalizeRS(pdv.configuredRS);
 
                 let pdvPremioTotale = 0;
                 for (const stat of pistaStats) {
                   const match = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
-                  if (match) {
+                  if (!match) continue;
+
+                  if (isRSMode && stat.rsCalcBreakdown) {
+                    const rsData = stat.rsCalcBreakdown.get(pdvRS);
+                    if (rsData && rsData.premioAttuale > 0) {
+                      const rsPdvs = stat.pdvBreakdown.filter(b => normalizeRS(b.ragioneSociale) === pdvRS);
+                      const rsTotalPezzi = rsPdvs.reduce((s, b) => s + b.pezzi, 0);
+                      pdvPremioTotale += rsTotalPezzi > 0
+                        ? Math.round((match.pezzi / rsTotalPezzi) * rsData.premioAttuale * 100) / 100
+                        : 0;
+                    }
+                  } else {
                     if (match.pdvCalc.premioStimato > 0) {
                       pdvPremioTotale += match.pdvCalc.premioStimato;
                     } else {
@@ -2542,11 +2556,23 @@ export default function DashboardGaraReale() {
 
                           const pdvCalcByPista: Record<string, PistaCalcResult> = {};
                           const pdvPremioByPista: Record<string, number> = {};
+                          const pdvNormRS = normalizeRS(pdv.configuredRS);
                           for (const stat of pistaStats) {
                             const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
                             if (match) {
                               pdvCalcByPista[stat.pista] = match.pdvCalc;
-                              if (match.pdvCalc.premioStimato > 0) {
+                              if (isRSMode && stat.rsCalcBreakdown) {
+                                const rsData = stat.rsCalcBreakdown.get(pdvNormRS);
+                                if (rsData && rsData.premioAttuale > 0) {
+                                  const rsPdvs = stat.pdvBreakdown.filter(b => normalizeRS(b.ragioneSociale) === pdvNormRS);
+                                  const rsTotalPezzi = rsPdvs.reduce((s, b) => s + b.pezzi, 0);
+                                  pdvPremioByPista[stat.pista] = rsTotalPezzi > 0
+                                    ? Math.round((match.pezzi / rsTotalPezzi) * rsData.premioAttuale * 100) / 100
+                                    : 0;
+                                } else {
+                                  pdvPremioByPista[stat.pista] = 0;
+                                }
+                              } else if (match.pdvCalc.premioStimato > 0) {
                                 pdvPremioByPista[stat.pista] = match.pdvCalc.premioStimato;
                               } else {
                                 const aggPremio = stat.calc.premioStimato;
