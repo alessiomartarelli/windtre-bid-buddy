@@ -514,3 +514,31 @@ export function mapBiSuiteSale(
 
   return results;
 }
+
+function ruleFingerprint(r: BiSuiteMappingRule): string {
+  const c = r.conditions;
+  return [
+    r.pista,
+    r.targetCategory,
+    r.ruleType || 'base',
+    c.categoriaBiSuite || '',
+    c.tipologiaBiSuite || '',
+    c.domandaTesto || '',
+    c.descrizioneBiSuite || '',
+    c.clienteTipo || '',
+    c.rispostaContiene || '',
+    c.rispostaDiversaDa || '',
+    c.rispostaEsatta || '',
+  ].join('|');
+}
+
+export function mergeWithDefaultRules(
+  savedRules: BiSuiteMappingRule[],
+  defaultRules?: BiSuiteMappingRule[],
+): BiSuiteMappingRule[] {
+  const defaults = defaultRules || getDefaultMappingRules();
+  const existingKeys = new Set(savedRules.map(ruleFingerprint));
+  const missing = defaults.filter(d => !existingKeys.has(ruleFingerprint(d)));
+  if (missing.length === 0) return savedRules;
+  return [...savedRules, ...missing];
+}
