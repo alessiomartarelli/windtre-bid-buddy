@@ -351,7 +351,7 @@ function groupFissoCategories(
 
   if (otherChildren.length > 0) {
     groups.push({
-      groupLabel: "Altro",
+      groupLabel: "Altre Info / Add-on",
       groupKey: "fisso_altro",
       totalPezzi: otherChildren.reduce((s, c) => s + c.pezzi, 0),
       totalProiezione: otherChildren.reduce((s, c) => s + c.proiezione, 0),
