@@ -112,11 +112,20 @@ interface AggregatedItem {
   ruleType?: 'base' | 'additional';
 }
 
+interface AddonItem {
+  pista: string;
+  targetCategory: string;
+  targetLabel: string;
+  occorrenze: number;
+  canone: number;
+}
+
 interface PdvData {
   codicePos: string;
   nomeNegozio: string;
   ragioneSociale: string;
   items: AggregatedItem[];
+  addons?: AddonItem[];
   unmapped: number;
   totalArticoli: number;
 }
@@ -130,6 +139,7 @@ interface MappedSalesResponse {
   totalUnmapped: number;
   pdvList: PdvData[];
   totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number }>>;
+  totaliAddonsPerPista?: Record<string, Record<string, { targetCategory: string; targetLabel: string; occorrenze: number; canone: number }>>;
   latestSaleDate: string | null;
 }
 
@@ -433,6 +443,22 @@ function calcMobilePerPdv(
   };
 }
 
+function mergeItemsWithAddons(items: AggregatedItem[], addons?: AddonItem[]): AggregatedItem[] {
+  if (!addons || addons.length === 0) return items;
+  const merged = [...items];
+  for (const addon of addons) {
+    merged.push({
+      pista: addon.pista,
+      targetCategory: addon.targetCategory,
+      targetLabel: addon.targetLabel,
+      pezzi: addon.occorrenze,
+      canone: addon.canone,
+      ruleType: 'additional',
+    });
+  }
+  return merged;
+}
+
 function calcFissoPerPdv(
   pdvItems: AggregatedItem[],
   fissoConfig: PistaFissoPosConfig | undefined,
@@ -445,8 +471,10 @@ function calcFissoPerPdv(
   gettoniContrattualiOverride?: Record<string, number>,
   soglieOverride?: { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number; soglia5?: number },
   euroPerPezzoOverride?: Record<string, number>,
+  addons?: AddonItem[],
 ): PistaCalcResult {
-  if (!fissoConfig || pdvItems.length === 0) return EMPTY_CALC;
+  const allItems = mergeItemsWithAddons(pdvItems, addons?.filter(a => a.pista === 'fisso'));
+  if (!fissoConfig || allItems.length === 0) return EMPTY_CALC;
 
   const VALID_FISSO_TYPES: Set<string> = new Set([
     "FISSO_FTTC","FISSO_FTTH","FISSO_FWA_OUT","FISSO_FWA_IND_2P","FRITZ_BOX",
@@ -455,7 +483,7 @@ function calcFissoPerPdv(
     "BOLLETTINO_POSTALE","PIU_SICURI_CASA_UFFICIO","ASSICURAZIONI_PLUS_FULL","MIGRAZIONI_FTTH_FWA",
     "FISSO_VOCE",
   ]);
-  const validFissoItems = pdvItems.filter((item) => VALID_FISSO_TYPES.has(item.targetCategory));
+  const validFissoItems = allItems.filter((item) => VALID_FISSO_TYPES.has(item.targetCategory));
   const attivato: AttivatoFissoRiga[] = validFissoItems.map((item) => ({
     categoria: item.targetCategory as FissoCategoriaType,
     pezzi: item.pezzi,
@@ -475,11 +503,11 @@ function calcFissoPerPdv(
     euroPerPezzoOverride,
   });
 
-  const convergenzaItem = validFissoItems.find(i => i.targetCategory === "CONVERGENZA");
+  const convergenzaAddon = addons?.filter(a => a.pista === 'fisso').find(a => a.targetCategory === "CONVERGENZA");
   let premioAdjusted = result.premio;
-  if (convergenzaItem && convergenzaItem.pezzi > 0) {
-    const hardcoded46 = convergenzaItem.pezzi * 46;
-    const canoneX2 = (convergenzaItem.canone || 0) * 2;
+  if (convergenzaAddon && convergenzaAddon.occorrenze > 0) {
+    const hardcoded46 = convergenzaAddon.occorrenze * 46;
+    const canoneX2 = (convergenzaAddon.canone || 0) * 2;
     premioAdjusted = premioAdjusted - hardcoded46 + canoneX2;
   }
 
@@ -1037,11 +1065,18 @@ export default function DashboardGaraReale() {
         }
 
         const fissoItems = pdv.items.filter(i => i.pista === "fisso");
-        if (fissoItems.length > 0) {
-          attivatoFissoByPos[pdv.codicePos] = fissoItems.map(it => ({
-            categoria: it.targetCategory as FissoCategoriaType,
-            pezzi: it.pezzi,
-          }));
+        const fissoAddons = (pdv.addons || []).filter(a => a.pista === "fisso");
+        if (fissoItems.length > 0 || fissoAddons.length > 0) {
+          attivatoFissoByPos[pdv.codicePos] = [
+            ...fissoItems.map(it => ({
+              categoria: it.targetCategory as FissoCategoriaType,
+              pezzi: it.pezzi,
+            })),
+            ...fissoAddons.map(a => ({
+              categoria: a.targetCategory as FissoCategoriaType,
+              pezzi: a.occorrenze,
+            })),
+          ];
         }
 
         const energiaItems = pdv.items.filter(i => i.pista === "energia");
@@ -1317,7 +1352,7 @@ export default function DashboardGaraReale() {
         continue;
       }
 
-      const categories = Object.values(pistaData).map((cat: any) => {
+      const baseCategories = Object.values(pistaData).map((cat: any) => {
         const proiezione = workdayInfo.elapsedWorkingDays > 0
           ? Math.round((cat.pezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
           : cat.pezzi;
@@ -1328,7 +1363,21 @@ export default function DashboardGaraReale() {
           canone: cat.canone || 0,
           proiezione,
         };
-      }).sort((a, b) => b.pezzi - a.pezzi);
+      });
+      const addonPistaData = mappedData.totaliAddonsPerPista?.[pista];
+      const addonCategories = addonPistaData ? Object.values(addonPistaData).map((cat: any) => {
+        const proiezione = workdayInfo.elapsedWorkingDays > 0
+          ? Math.round((cat.occorrenze / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+          : cat.occorrenze;
+        return {
+          category: cat.targetCategory,
+          label: cat.targetLabel,
+          pezzi: cat.occorrenze,
+          canone: cat.canone || 0,
+          proiezione,
+        };
+      }) : [];
+      const categories = [...baseCategories, ...addonCategories].sort((a, b) => b.pezzi - a.pezzi);
 
       const totalePezzi = pista === "mobile"
         ? categories.filter(c => SIM_CONSUMER_CORE.has(c.category) || SIM_PIVA_CORE.has(c.category)).reduce((sum, c) => sum + c.pezzi, 0)
@@ -1367,7 +1416,7 @@ export default function DashboardGaraReale() {
           } else if (pista === "fisso") {
             const fConfig = getFissoConfigForPdv(pdv.codicePos, pdvRS);
             const cluster = clusterToNumber(pdvConfig?.clusterFisso);
-            pdvCalc = calcFissoPerPdv(pdvItems, fConfig, pdvCalendar, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(pdvConfig?.clusterFisso), tcFisso?.euroPerPezzo);
+            pdvCalc = calcFissoPerPdv(pdvItems, fConfig, pdvCalendar, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(pdvConfig?.clusterFisso), tcFisso?.euroPerPezzo, pdv.addons);
           } else if (pista === "energia") {
             const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
             pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto, tcEnergia?.pistaBase, tcEnergia?.pistaDa4);
@@ -1384,6 +1433,8 @@ export default function DashboardGaraReale() {
           const configuredRS = pdvConfig?.ragioneSociale || pdv.ragioneSociale;
           const normalizedConfiguredRS = normalizeRS(configuredRS);
 
+          const pdvAddons = (pdv.addons || []).filter(a => a.pista === pista);
+          const addonAsCats = pdvAddons.map(a => ({ category: a.targetCategory, label: a.targetLabel, pezzi: a.occorrenze, canone: a.canone || 0 }));
           return {
             codicePos: pdv.codicePos,
             nomeNegozio: pdv.nomeNegozio,
@@ -1392,10 +1443,14 @@ export default function DashboardGaraReale() {
             pezzi: pdvPezzi,
             proiezione: pdvProiezione,
             pdvCalc,
-            categories: pdvItems.map((i) => ({ category: i.targetCategory, label: i.targetLabel, pezzi: i.pezzi, canone: i.canone || 0 })),
+            categories: [
+              ...pdvItems.map((i) => ({ category: i.targetCategory, label: i.targetLabel, pezzi: i.pezzi, canone: i.canone || 0 })),
+              ...addonAsCats,
+            ],
+            addons: pdvAddons,
           };
         })
-        .filter((p) => p.pezzi > 0)
+        .filter((p) => p.pezzi > 0 || (p.addons && p.addons.length > 0))
         .sort((a, b) => b.pezzi - a.pezzi);
 
       let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }> | undefined;
@@ -1421,9 +1476,11 @@ export default function DashboardGaraReale() {
 
           rsGroupMap.forEach((rsPdvs, rs) => {
             const rsItems: AggregatedItem[] = [];
+            const rsAddonsRaw: AddonItem[] = [];
             for (const pdv of rsPdvs) {
               const pdvItems2 = pdv.categories.map(c => ({ pista, targetCategory: c.category, targetLabel: c.label, pezzi: c.pezzi, canone: c.canone || 0 }));
               rsItems.push(...pdvItems2);
+              if (pdv.addons) rsAddonsRaw.push(...pdv.addons);
             }
             const mergedItems = new Map<string, AggregatedItem>();
             for (const item of rsItems) {
@@ -1436,6 +1493,17 @@ export default function DashboardGaraReale() {
               }
             }
             const aggregatedRSItems = Array.from(mergedItems.values());
+            const mergedAddons = new Map<string, AddonItem>();
+            for (const addon of rsAddonsRaw) {
+              const key = addon.targetCategory;
+              if (mergedAddons.has(key)) {
+                mergedAddons.get(key)!.occorrenze += addon.occorrenze;
+                mergedAddons.get(key)!.canone += addon.canone;
+              } else {
+                mergedAddons.set(key, { ...addon });
+              }
+            }
+            const aggregatedRSAddons = Array.from(mergedAddons.values());
 
             const rsPezziAttuali = pista === "mobile"
               ? aggregatedRSItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
@@ -1459,7 +1527,7 @@ export default function DashboardGaraReale() {
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
-              rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(firstPdvConfig?.clusterFisso), tcFisso?.euroPerPezzo);
+              rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(firstPdvConfig?.clusterFisso), tcFisso?.euroPerPezzo, aggregatedRSAddons);
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
@@ -1535,12 +1603,15 @@ export default function DashboardGaraReale() {
               pdv.pdvCalc = rsCalc;
             }
 
+            const ratio = rsWorkday.elapsedWorkingDays > 0
+              ? rsWorkday.totalWorkingDays / rsWorkday.elapsedWorkingDays
+              : 1;
             const projectedRSItems = aggregatedRSItems.map(item => {
-              const ratio = rsWorkday.elapsedWorkingDays > 0
-                ? rsWorkday.totalWorkingDays / rsWorkday.elapsedWorkingDays
-                : 1;
               return { ...item, pezzi: Math.round(item.pezzi * ratio), canone: item.canone * ratio };
             });
+            const projectedRSAddons = aggregatedRSAddons.map(addon => ({
+              ...addon, occorrenze: Math.round(addon.occorrenze * ratio), canone: addon.canone * ratio,
+            }));
 
             let rsProjCalc = EMPTY_CALC;
             if (pista === "mobile") {
@@ -1550,7 +1621,7 @@ export default function DashboardGaraReale() {
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
-              rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(firstPdvConfig?.clusterFisso), tcFisso?.euroPerPezzo);
+              rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(firstPdvConfig?.clusterFisso), tcFisso?.euroPerPezzo, projectedRSAddons);
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
@@ -1700,13 +1771,16 @@ export default function DashboardGaraReale() {
             const pdvConfig2 = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
             const pdvCal = pdvConfig2?.calendar || DEFAULT_CALENDAR;
             const pdvWd = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCal, new Date());
+            const projRatio = pdvWd.elapsedWorkingDays > 0
+              ? pdvWd.totalWorkingDays / pdvWd.elapsedWorkingDays
+              : 1;
             const projectedItems: AggregatedItem[] = pdv.categories.map((c) => {
-              const ratio = pdvWd.elapsedWorkingDays > 0
-                ? pdvWd.totalWorkingDays / pdvWd.elapsedWorkingDays
-                : 1;
-              return { pista, targetCategory: c.category, targetLabel: c.label, pezzi: Math.round(c.pezzi * ratio), canone: (c.canone || 0) * ratio };
+              return { pista, targetCategory: c.category, targetLabel: c.label, pezzi: Math.round(c.pezzi * projRatio), canone: (c.canone || 0) * projRatio };
             });
-            return { ...pdv, items: projectedItems };
+            const projectedAddons: AddonItem[] = (pdv.addons || []).map(a => ({
+              ...a, occorrenze: Math.round(a.occorrenze * projRatio), canone: a.canone * projRatio,
+            }));
+            return { ...pdv, items: projectedItems, addons: projectedAddons };
           });
 
           let totalPremioProj = 0;
@@ -1725,7 +1799,7 @@ export default function DashboardGaraReale() {
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(pdv.codicePos, projRS);
               const cluster = clusterToNumber(pdvConfig3?.clusterFisso);
-              projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(pdvConfig3?.clusterFisso), tcFisso?.euroPerPezzo);
+              projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(pdvConfig3?.clusterFisso), tcFisso?.euroPerPezzo, pdv.addons);
             } else if (pista === "energia") {
               const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
               projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto, tcEnergia?.pistaBase, tcEnergia?.pistaDa4);

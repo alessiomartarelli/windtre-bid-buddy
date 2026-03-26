@@ -1694,11 +1694,20 @@ export async function registerRoutes(
         ruleType: 'base' | 'additional';
       };
 
+      type AddonItem = {
+        pista: string;
+        targetCategory: string;
+        targetLabel: string;
+        occorrenze: number;
+        canone: number;
+      };
+
       const byPdv: Record<string, {
         codicePos: string;
         nomeNegozio: string;
         ragioneSociale: string;
         items: AggregatedItem[];
+        addons: AddonItem[];
         unmapped: number;
         totalArticoli: number;
       }> = {};
@@ -1723,6 +1732,7 @@ export async function registerRoutes(
             nomeNegozio: sale.nomeNegozio || codicePos,
             ragioneSociale: sale.ragioneSociale || "",
             items: [],
+            addons: [],
             unmapped: 0,
             totalArticoli: 0,
           };
@@ -1751,23 +1761,42 @@ export async function registerRoutes(
           mappedCount++;
           const artCanone = parseFloat(art.dettaglio?.canone || '0') || 0;
           for (const m of mappedResults) {
-            const canoneForThis = m.ruleType === 'base' || m.targetCategory === 'CONVERGENZA' ? artCanone : 0;
             const effectiveRuleType = m.ruleType || 'base';
-            const existing = byPdv[codicePos].items.find(
-              (i) => i.pista === m.pista && i.targetCategory === m.targetCategory
-            );
-            if (existing) {
-              existing.pezzi++;
-              existing.canone += canoneForThis;
+            if (effectiveRuleType === 'additional') {
+              const canoneForAddon = m.targetCategory === 'CONVERGENZA' ? artCanone : 0;
+              const existingAddon = byPdv[codicePos].addons.find(
+                (a) => a.pista === m.pista && a.targetCategory === m.targetCategory
+              );
+              if (existingAddon) {
+                existingAddon.occorrenze++;
+                existingAddon.canone += canoneForAddon;
+              } else {
+                byPdv[codicePos].addons.push({
+                  pista: m.pista,
+                  targetCategory: m.targetCategory,
+                  targetLabel: m.targetLabel,
+                  occorrenze: 1,
+                  canone: canoneForAddon,
+                });
+              }
             } else {
-              byPdv[codicePos].items.push({
-                pista: m.pista,
-                targetCategory: m.targetCategory,
-                targetLabel: m.targetLabel,
-                pezzi: 1,
-                canone: canoneForThis,
-                ruleType: effectiveRuleType,
-              });
+              const canoneForThis = artCanone;
+              const existing = byPdv[codicePos].items.find(
+                (i) => i.pista === m.pista && i.targetCategory === m.targetCategory
+              );
+              if (existing) {
+                existing.pezzi++;
+                existing.canone += canoneForThis;
+              } else {
+                byPdv[codicePos].items.push({
+                  pista: m.pista,
+                  targetCategory: m.targetCategory,
+                  targetLabel: m.targetLabel,
+                  pezzi: 1,
+                  canone: canoneForThis,
+                  ruleType: 'base',
+                });
+              }
             }
           }
         }
@@ -1782,6 +1811,7 @@ export async function registerRoutes(
       const pdvList = Object.values(byPdv);
 
       const totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number; canone: number; ruleType: string }>> = {};
+      const totaliAddonsPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; occorrenze: number; canone: number }>> = {};
       for (const pdv of pdvList) {
         for (const item of pdv.items) {
           if (!totaliPerPista[item.pista]) totaliPerPista[item.pista] = {};
@@ -1797,6 +1827,19 @@ export async function registerRoutes(
           totaliPerPista[item.pista][item.targetCategory].pezzi += item.pezzi;
           totaliPerPista[item.pista][item.targetCategory].canone += item.canone;
         }
+        for (const addon of pdv.addons) {
+          if (!totaliAddonsPerPista[addon.pista]) totaliAddonsPerPista[addon.pista] = {};
+          if (!totaliAddonsPerPista[addon.pista][addon.targetCategory]) {
+            totaliAddonsPerPista[addon.pista][addon.targetCategory] = {
+              targetCategory: addon.targetCategory,
+              targetLabel: addon.targetLabel,
+              occorrenze: 0,
+              canone: 0,
+            };
+          }
+          totaliAddonsPerPista[addon.pista][addon.targetCategory].occorrenze += addon.occorrenze;
+          totaliAddonsPerPista[addon.pista][addon.targetCategory].canone += addon.canone;
+        }
       }
 
       res.json({
@@ -1808,6 +1851,7 @@ export async function registerRoutes(
         totalUnmapped,
         pdvList,
         totaliPerPista,
+        totaliAddonsPerPista,
         latestSaleDate: latestSaleDate ? latestSaleDate.toISOString() : null,
       });
     } catch (error: unknown) {
