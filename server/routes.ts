@@ -1691,6 +1691,7 @@ export async function registerRoutes(
         targetLabel: string;
         pezzi: number;
         canone: number;
+        ruleType: 'base' | 'additional';
       };
 
       const byPdv: Record<string, {
@@ -1751,6 +1752,7 @@ export async function registerRoutes(
           const artCanone = parseFloat(art.dettaglio?.canone || '0') || 0;
           for (const m of mappedResults) {
             const canoneForThis = m.ruleType === 'base' || m.targetCategory === 'CONVERGENZA' ? artCanone : 0;
+            const effectiveRuleType = m.ruleType || 'base';
             const existing = byPdv[codicePos].items.find(
               (i) => i.pista === m.pista && i.targetCategory === m.targetCategory
             );
@@ -1764,6 +1766,7 @@ export async function registerRoutes(
                 targetLabel: m.targetLabel,
                 pezzi: 1,
                 canone: canoneForThis,
+                ruleType: effectiveRuleType,
               });
             }
           }
@@ -1778,7 +1781,7 @@ export async function registerRoutes(
 
       const pdvList = Object.values(byPdv);
 
-      const totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number; canone: number }>> = {};
+      const totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number; canone: number; ruleType: string }>> = {};
       for (const pdv of pdvList) {
         for (const item of pdv.items) {
           if (!totaliPerPista[item.pista]) totaliPerPista[item.pista] = {};
@@ -1788,6 +1791,7 @@ export async function registerRoutes(
               targetLabel: item.targetLabel,
               pezzi: 0,
               canone: 0,
+              ruleType: item.ruleType,
             };
           }
           totaliPerPista[item.pista][item.targetCategory].pezzi += item.pezzi;

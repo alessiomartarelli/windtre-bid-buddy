@@ -109,6 +109,7 @@ interface AggregatedItem {
   targetLabel: string;
   pezzi: number;
   canone: number;
+  ruleType?: 'base' | 'additional';
 }
 
 interface PdvData {
