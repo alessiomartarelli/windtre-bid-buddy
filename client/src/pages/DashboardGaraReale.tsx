@@ -1941,54 +1941,57 @@ export default function DashboardGaraReale() {
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
               <Card data-testid="card-total-sales">
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                    <BarChart3 className="h-4 w-4" />
-                    Vendite Totali
+                <CardContent className="p-3 sm:py-4 sm:px-6 text-center">
+                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 mb-1">
+                    <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                    <span className="hidden sm:inline">Vendite Totali</span>
+                    <span className="sm:hidden">Vendite</span>
                   </div>
-                  <div className="text-2xl font-bold" data-testid="text-total-sales">{mappedData.totalSales}</div>
+                  <div className="text-xl sm:text-2xl font-bold" data-testid="text-total-sales">{mappedData.totalSales}</div>
                 </CardContent>
               </Card>
               <Card data-testid="card-total-articoli">
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                    <Target className="h-4 w-4" />
-                    Attivazioni Gara
+                <CardContent className="p-3 sm:py-4 sm:px-6 text-center">
+                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 mb-1">
+                    <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                    <span className="hidden sm:inline">Attivazioni Gara</span>
+                    <span className="sm:hidden">Attivaz.</span>
                   </div>
-                  <div className="text-2xl font-bold" data-testid="text-total-articoli">{mappedData.totalMapped}</div>
+                  <div className="text-xl sm:text-2xl font-bold" data-testid="text-total-articoli">{mappedData.totalMapped}</div>
                 </CardContent>
               </Card>
-              <Card data-testid="card-pdv-active">
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                    <Store className="h-4 w-4" />
+              <Card className="col-span-2 sm:col-span-1" data-testid="card-pdv-active">
+                <CardContent className="p-3 sm:py-4 sm:px-6 text-center">
+                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 mb-1">
+                    <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                     PDV Attivi
                   </div>
-                  <div className="text-2xl font-bold" data-testid="text-pdv-active">{mappedData.pdvList.length}</div>
+                  <div className="text-xl sm:text-2xl font-bold" data-testid="text-pdv-active">{mappedData.pdvList.length}</div>
                 </CardContent>
               </Card>
             </div>
 
             <Card data-testid="card-workday-info">
-              <CardContent className="py-3">
-                <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm flex-wrap">
-                  <span className="flex items-center gap-1.5">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <span className="text-gray-500">Giorni lavorativi:</span>
+              <CardContent className="p-3 sm:py-3 sm:px-6">
+                <div className="flex items-center gap-2 sm:gap-6 text-[11px] sm:text-sm flex-wrap">
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 shrink-0" />
+                    <span className="text-gray-500 hidden sm:inline">Giorni lavorativi:</span>
+                    <span className="text-gray-500 sm:hidden">GG:</span>
                     <span className="font-medium" data-testid="text-elapsed-days">{workdayInfo.elapsedWorkingDays}</span>
                     <span className="text-gray-400">/ {workdayInfo.totalWorkingDays}</span>
                   </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-gray-500">Rimanenti:</span>
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <span className="text-gray-500 hidden sm:inline">Rimanenti:</span>
+                    <span className="text-gray-500 sm:hidden">Rim:</span>
                     <span className="font-medium" data-testid="text-remaining-days">{workdayInfo.remainingWorkingDays}</span>
                   </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-gray-500">Avanzamento:</span>
+                  <span className="flex items-center gap-1 sm:gap-1.5">
                     <Progress
                       value={workdayInfo.totalWorkingDays > 0 ? (workdayInfo.elapsedWorkingDays / workdayInfo.totalWorkingDays) * 100 : 0}
-                      className="w-24 h-2"
+                      className="w-16 sm:w-24 h-2"
                     />
                     <span className="font-medium" data-testid="text-progress-pct">
                       {workdayInfo.totalWorkingDays > 0 ? Math.round((workdayInfo.elapsedWorkingDays / workdayInfo.totalWorkingDays) * 100) : 0}%

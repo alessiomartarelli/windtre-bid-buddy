@@ -457,53 +457,53 @@ export default function VenditeBiSuite() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
               <Card>
-                <CardContent className="p-4 text-center">
-                  <ShoppingCart className="h-5 w-5 mx-auto mb-1 text-primary" />
-                  <p className="text-2xl font-bold" data-testid="text-total-sales">
+                <CardContent className="p-3 sm:p-4 text-center">
+                  <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 text-primary" />
+                  <p className="text-lg sm:text-2xl font-bold" data-testid="text-total-sales">
                     {sales.length}
                   </p>
-                  <p className="text-xs text-muted-foreground">Vendite Totali</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Vendite Totali</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-4 text-center">
-                  <Euro className="h-5 w-5 mx-auto mb-1 text-green-500" />
+                <CardContent className="p-3 sm:p-4 text-center">
+                  <Euro className="h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 text-green-500" />
                   <p
-                    className="text-2xl font-bold text-green-600"
+                    className="text-sm sm:text-2xl font-bold text-green-600"
                     data-testid="text-total-amount"
                   >
                     {formatCurrency(totaleImporto)}
                   </p>
-                  <p className="text-xs text-muted-foreground">Importo Totale</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Importo Totale</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-4 text-center">
-                  <Store className="h-5 w-5 mx-auto mb-1 text-blue-500" />
-                  <p className="text-2xl font-bold" data-testid="text-total-pdv">
+                <CardContent className="p-3 sm:p-4 text-center">
+                  <Store className="h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 text-blue-500" />
+                  <p className="text-lg sm:text-2xl font-bold" data-testid="text-total-pdv">
                     {pdvSummaries.length}
                   </p>
-                  <p className="text-xs text-muted-foreground">Punti Vendita</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Punti Vendita</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-4 text-center">
-                  <TrendingUp className="h-5 w-5 mx-auto mb-1 text-orange-500" />
-                  <p className="text-2xl font-bold" data-testid="text-avg-sale">
+                <CardContent className="p-3 sm:p-4 text-center">
+                  <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 text-orange-500" />
+                  <p className="text-sm sm:text-2xl font-bold" data-testid="text-avg-sale">
                     {sales.length > 0
                       ? formatCurrency(totaleImporto / sales.length)
                       : "€ 0"}
                   </p>
-                  <p className="text-xs text-muted-foreground">Media per Vendita</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Media per Vendita</p>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
               <Card className="border-l-4 border-l-orange-500">
-                <CardContent className="p-4">
+                <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <Tag className="h-4 w-4 text-orange-600" />
@@ -535,7 +535,7 @@ export default function VenditeBiSuite() {
                 </CardContent>
               </Card>
               <Card className="border-l-4 border-l-slate-400">
-                <CardContent className="p-4">
+                <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <Package className="h-4 w-4 text-slate-600" />
@@ -559,7 +559,7 @@ export default function VenditeBiSuite() {
                 </CardContent>
               </Card>
               <Card className="border-l-4 border-l-cyan-500">
-                <CardContent className="p-4">
+                <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <Wrench className="h-4 w-4 text-cyan-600" />
@@ -713,19 +713,19 @@ export default function VenditeBiSuite() {
                     Nessuna vendita trovata per i filtri selezionati
                   </p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto -mx-2 sm:mx-0">
                   <ScrollArea className="h-[500px]">
-                    <Table className="min-w-[700px]">
+                    <Table className="min-w-[500px] sm:min-w-[700px]">
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-[100px]">Data</TableHead>
+                          <TableHead className="w-[80px] sm:w-[100px]">Data</TableHead>
                           <TableHead>Negozio</TableHead>
-                          <TableHead>Addetto</TableHead>
-                          <TableHead>Cliente</TableHead>
+                          <TableHead className="hidden md:table-cell">Addetto</TableHead>
+                          <TableHead className="hidden lg:table-cell">Cliente</TableHead>
                           <TableHead>Pista / Tipo</TableHead>
-                          <TableHead>Stato</TableHead>
+                          <TableHead className="hidden sm:table-cell">Stato</TableHead>
                           <TableHead className="text-right">Importo</TableHead>
-                          <TableHead className="w-[50px]"></TableHead>
+                          <TableHead className="w-[40px] sm:w-[50px]"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -749,16 +749,16 @@ export default function VenditeBiSuite() {
                                   {sale.codicePos || "-"}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-sm">
+                              <TableCell className="text-sm hidden md:table-cell">
                                 {sale.nomeAddetto || "-"}
                               </TableCell>
-                              <TableCell className="text-sm">
+                              <TableCell className="text-sm hidden lg:table-cell">
                                 {sale.nomeCliente || "-"}
                               </TableCell>
                               <TableCell>
                                 <SalePistaBadges classification={sc} />
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="hidden sm:table-cell">
                                 <Badge
                                   variant={
                                     sale.stato === "FINALIZZATA IN CASSA"
@@ -871,7 +871,7 @@ function SaleDetailDialog({
 
   return (
     <Dialog open={!!sale} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] sm:max-w-6xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5 text-primary" />
@@ -959,15 +959,16 @@ function SaleDetailDialog({
                   Articoli ({articoli.length})
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-4 pb-3">
+              <CardContent className="px-2 sm:px-4 pb-3">
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Descrizione</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Tipologia</TableHead>
+                      <TableHead className="hidden sm:table-cell">Categoria</TableHead>
+                      <TableHead className="hidden md:table-cell">Tipologia</TableHead>
                       <TableHead>Pista</TableHead>
-                      <TableHead className="text-right">Canone</TableHead>
+                      <TableHead className="text-right hidden sm:table-cell">Canone</TableHead>
                       <TableHead className="text-right">Prezzo</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -985,7 +986,7 @@ function SaleDetailDialog({
                               </span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden sm:table-cell">
                             {cls ? (
                               <Badge className={cls.pista ? PISTA_CANVASS_COLORS[cls.pista] : TYPE_COLORS[cls.type] + " text-xs"}>
                                 {art.categoria?.nome || "-"}
@@ -996,7 +997,7 @@ function SaleDetailDialog({
                               </Badge>
                             )}
                           </TableCell>
-                          <TableCell className="text-xs">
+                          <TableCell className="text-xs hidden md:table-cell">
                             {art.tipologia?.nome || "-"}
                           </TableCell>
                           <TableCell>
@@ -1013,7 +1014,7 @@ function SaleDetailDialog({
                               <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right text-sm">
+                          <TableCell className="text-right text-sm hidden sm:table-cell">
                             {art.dettaglio?.canone &&
                             art.dettaglio.canone !== "0" &&
                             art.dettaglio.canone !== "0.00"
@@ -1028,6 +1029,7 @@ function SaleDetailDialog({
                     })}
                   </TableBody>
                 </Table>
+                </div>
 
                 {articoli.some(
                   (a: any) =>

@@ -1425,26 +1425,26 @@ export default function ConfigurazioneGara() {
             )}
             {isDirty && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Modifiche non salvate</Badge>}
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={() => { setConfigListDialogOpen(true); fetchConfigList(selectedMonth, selectedYear); }} data-testid="button-config-list">
-              <Settings className="h-4 w-4 mr-1" />Configurazioni ({configList.length})
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            <Button variant="outline" size="sm" className="h-8 text-xs sm:text-sm" onClick={() => { setConfigListDialogOpen(true); fetchConfigList(selectedMonth, selectedYear); }} data-testid="button-config-list">
+              <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">Configurazioni</span><span className="sm:hidden">Config</span> ({configList.length})
             </Button>
-            <Button variant="outline" size="sm" onClick={() => { setHistoryDialogOpen(true); fetchHistory(); }} data-testid="button-history">
-              <History className="h-4 w-4 mr-1" />Storico
+            <Button variant="outline" size="sm" className="h-8 text-xs sm:text-sm" onClick={() => { setHistoryDialogOpen(true); fetchHistory(); }} data-testid="button-history" title="Storico">
+              <History className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1" /><span className="hidden sm:inline">Storico</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={openImportDialog} data-testid="button-import">
-              <Download className="h-4 w-4 mr-1" />Importa
+            <Button variant="outline" size="sm" className="h-8 text-xs sm:text-sm" onClick={openImportDialog} data-testid="button-import" title="Importa">
+              <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1" /><span className="hidden sm:inline">Importa</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={() => { setNewPdvCode(''); setNewPdvName(''); setNewPdvRS(''); setNewPdvRSMode('select'); setAddPdvDialogOpen(true); }} data-testid="button-add-pdv">
-              <Plus className="h-4 w-4 mr-1" />PDV
+            <Button variant="outline" size="sm" className="h-8 text-xs sm:text-sm" onClick={() => { setNewPdvCode(''); setNewPdvName(''); setNewPdvRS(''); setNewPdvRSMode('select'); setAddPdvDialogOpen(true); }} data-testid="button-add-pdv">
+              <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />PDV
             </Button>
             {garaConfigRecord?.id && (
-              <Button variant="outline" size="sm" onClick={handleSaveAsNewClick} disabled={saving} data-testid="button-save-as-new">
-                <Plus className="h-4 w-4 mr-1" />Salva come nuova
+              <Button variant="outline" size="sm" className="h-8 text-xs sm:text-sm" onClick={handleSaveAsNewClick} disabled={saving} data-testid="button-save-as-new">
+                <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">Salva come nuova</span><span className="sm:hidden">Nuova</span>
               </Button>
             )}
-            <Button size="sm" onClick={handleSaveClick} disabled={saving} data-testid="button-save">
-              {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+            <Button size="sm" className="h-8 text-xs sm:text-sm" onClick={handleSaveClick} disabled={saving} data-testid="button-save">
+              {saving ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />}
               {garaConfigRecord?.id ? 'Salva' : 'Salva nuova'}
             </Button>
           </div>
@@ -1456,20 +1456,22 @@ export default function ConfigurazioneGara() {
           </div>
         ) : (
           <Tabs defaultValue="pdv" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="pdv" className="text-xs sm:text-sm" data-testid="tab-pdv">
-                <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">PDV</span> ({pdvList.length})
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <TabsList className="grid w-full grid-cols-4 min-w-[320px]">
+              <TabsTrigger value="pdv" className="text-[11px] sm:text-sm px-2 sm:px-3" data-testid="tab-pdv">
+                <Store className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 sm:mr-1" /><span className="hidden sm:inline">PDV</span> ({pdvList.length})
               </TabsTrigger>
-              <TabsTrigger value="soglie" className="text-xs sm:text-sm" data-testid="tab-soglie">
-                <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />Soglie
+              <TabsTrigger value="soglie" className="text-[11px] sm:text-sm px-2 sm:px-3" data-testid="tab-soglie">
+                <Target className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 sm:mr-1" />Soglie
               </TabsTrigger>
-              <TabsTrigger value="extra" className="text-xs sm:text-sm" data-testid="tab-extra">
-                <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">En. Ass.</span> Prot.
+              <TabsTrigger value="extra" className="text-[11px] sm:text-sm px-2 sm:px-3" data-testid="tab-extra">
+                <Settings className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 sm:mr-1" /><span className="hidden sm:inline">En. Ass.</span><span className="sm:hidden">E.A.</span> Prot.
               </TabsTrigger>
-              <TabsTrigger value="tabelleCalcolo" className="text-xs sm:text-sm" data-testid="tab-tabelle-calcolo">
+              <TabsTrigger value="tabelleCalcolo" className="text-[11px] sm:text-sm px-2 sm:px-3" data-testid="tab-tabelle-calcolo">
                 <Calculator className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">Tabelle</span><span className="sm:hidden">Tab.</span>
               </TabsTrigger>
             </TabsList>
+            </div>
 
             <TabsContent value="pdv" className="space-y-4">
               <Card>
