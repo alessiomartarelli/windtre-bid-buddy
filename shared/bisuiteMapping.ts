@@ -80,6 +80,10 @@ export const FISSO_TARGETS = [
   { value: 'ASSICURAZIONI_PLUS_FULL', label: 'Assicurazioni Plus Full' },
   { value: 'MIGRAZIONI_FTTH_FWA', label: 'Migrazioni FTTH/FWA' },
   { value: 'FISSO_VOCE', label: 'Fisso Voce' },
+  { value: 'FIBRA_FTTH_ADDON', label: 'Fibra FTTH (add-on)' },
+  { value: 'VOCE_UNLIMITED', label: 'Voce Unlimited' },
+  { value: 'CONVERGENZA_LUCE_GAS', label: 'Convergenza Luce/Gas' },
+  { value: 'CONVERGENTE_ASSICUR', label: 'Convergente Assicur.' },
 ];
 
 export const ENERGIA_TARGETS = [
@@ -232,11 +236,21 @@ export function getDefaultMappingRules(): BiSuiteMappingRule[] {
     { id: ruleId(), pista: 'fisso', targetCategory: 'LINEA_ATTIVA', targetLabel: 'Linea Attiva', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', domandaTesto: 'LINEA ATTIVA', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
     { id: ruleId(), pista: 'fisso', targetCategory: 'NETFLIX_CON_ADV', targetLabel: 'Netflix con ADV', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', domandaTesto: 'NETFLIX', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
     { id: ruleId(), pista: 'fisso', targetCategory: 'PIU_SICURI_CASA_UFFICIO', targetLabel: 'Più Sicuri Casa/Ufficio', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', domandaTesto: 'PIU SICURI CASA E UFFICIO', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'FIBRA_FTTH_ADDON', targetLabel: 'Fibra FTTH (add-on)', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', domandaTesto: 'FIBRA IN TECNOLOGIA FTTH', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'VOCE_UNLIMITED', targetLabel: 'Voce Unlimited', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', domandaTesto: 'VOCE UNLIMITED', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'VOCE_UNLIMITED', targetLabel: 'Voce Unlimited', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', domandaTesto: 'CALL YOUR COUNTRY HOME', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'CONVERGENZA_LUCE_GAS', targetLabel: 'Convergenza Luce/Gas', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', domandaTesto: 'CONVERGENZA LUCE/GAS', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'CONVERGENTE_ASSICUR', targetLabel: 'Convergente Assicur.', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF', domandaTesto: 'CONVERGENTE ASSICUR. CASA E FAMI', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
 
     { id: ruleId(), pista: 'fisso', targetCategory: 'CONVERGENZA', targetLabel: 'Convergenza', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', domandaTesto: 'CONVERGENTE MOBILE', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
     { id: ruleId(), pista: 'fisso', targetCategory: 'LINEA_ATTIVA', targetLabel: 'Linea Attiva', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', domandaTesto: 'LINEA ATTIVA', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
     { id: ruleId(), pista: 'fisso', targetCategory: 'NETFLIX_CON_ADV', targetLabel: 'Netflix con ADV', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', domandaTesto: 'NETFLIX', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
     { id: ruleId(), pista: 'fisso', targetCategory: 'PIU_SICURI_CASA_UFFICIO', targetLabel: 'Più Sicuri Casa/Ufficio', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', domandaTesto: 'PIU SICURI CASA E UFFICIO', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'FIBRA_FTTH_ADDON', targetLabel: 'Fibra FTTH (add-on)', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', domandaTesto: 'FIBRA IN TECNOLOGIA FTTH', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'VOCE_UNLIMITED', targetLabel: 'Voce Unlimited', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', domandaTesto: 'VOCE UNLIMITED', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'VOCE_UNLIMITED', targetLabel: 'Voce Unlimited', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', domandaTesto: 'CALL YOUR COUNTRY HOME', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'CONVERGENZA_LUCE_GAS', targetLabel: 'Convergenza Luce/Gas', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', domandaTesto: 'CONVERGENZA LUCE/GAS', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'fisso', targetCategory: 'CONVERGENTE_ASSICUR', targetLabel: 'Convergente Assicur.', conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA', domandaTesto: 'CONVERGENTE ASSICUR. CASA E FAMI', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
 
     // ═══════════════ ENERGIA — BASE ═══════════════
     { id: ruleId(), pista: 'energia', targetCategory: 'CONSUMER_NO_SDD_W3', targetLabel: 'Consumer no SDD (ex W3)', conditions: { categoriaBiSuite: 'ENERGIA W3', clienteTipo: 'FISICA', domandaTesto: 'EX W3 ENERGIA BY ACEA', rispostaContiene: 'SI' }, priority: 15, enabled: true, ruleType: 'base' },

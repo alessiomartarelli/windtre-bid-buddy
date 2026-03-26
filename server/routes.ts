@@ -1763,7 +1763,11 @@ export async function registerRoutes(
           for (const m of mappedResults) {
             const effectiveRuleType = m.ruleType || 'base';
             if (effectiveRuleType === 'additional') {
-              const canoneForAddon = m.targetCategory === 'CONVERGENZA' ? artCanone : 0;
+              const CANONE_BASED_ADDONS = new Set([
+                'CONVERGENZA', 'LINEA_ATTIVA', 'FIBRA_FTTH_ADDON',
+                'VOCE_UNLIMITED', 'CONVERGENZA_LUCE_GAS', 'CONVERGENTE_ASSICUR',
+              ]);
+              const canoneForAddon = CANONE_BASED_ADDONS.has(m.targetCategory) ? artCanone : 0;
               const existingAddon = byPdv[codicePos].addons.find(
                 (a) => a.pista === m.pista && a.targetCategory === m.targetCategory
               );

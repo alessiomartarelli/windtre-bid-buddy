@@ -482,6 +482,7 @@ function calcFissoPerPdv(
     "FISSO_PIVA_1A_LINEA","FISSO_PIVA_2A_LINEA","CHIAMATE_ILLIMITATE",
     "BOLLETTINO_POSTALE","PIU_SICURI_CASA_UFFICIO","ASSICURAZIONI_PLUS_FULL","MIGRAZIONI_FTTH_FWA",
     "FISSO_VOCE",
+    "FIBRA_FTTH_ADDON","VOCE_UNLIMITED","CONVERGENZA_LUCE_GAS","CONVERGENTE_ASSICUR",
   ]);
   const validFissoItems = allItems.filter((item) => VALID_FISSO_TYPES.has(item.targetCategory));
   const attivato: AttivatoFissoRiga[] = validFissoItems.map((item) => ({
@@ -503,12 +504,42 @@ function calcFissoPerPdv(
     euroPerPezzoOverride,
   });
 
-  const convergenzaAddon = addons?.filter(a => a.pista === 'fisso').find(a => a.targetCategory === "CONVERGENZA");
+  const fissoAddons = addons?.filter(a => a.pista === 'fisso') || [];
   let premioAdjusted = result.premio;
-  if (convergenzaAddon && convergenzaAddon.occorrenze > 0) {
-    const hardcoded46 = convergenzaAddon.occorrenze * 46;
-    const canoneX2 = (convergenzaAddon.canone || 0) * 2;
-    premioAdjusted = premioAdjusted - hardcoded46 + canoneX2;
+
+  for (const addon of fissoAddons) {
+    if (addon.occorrenze <= 0) continue;
+    const canone = addon.canone || 0;
+
+    switch (addon.targetCategory) {
+      case "CONVERGENZA":
+        premioAdjusted -= addon.occorrenze * 46;
+        premioAdjusted += canone * 2;
+        break;
+      case "LINEA_ATTIVA":
+        premioAdjusted -= addon.occorrenze * 23;
+        premioAdjusted += canone * 1;
+        break;
+      case "FIBRA_FTTH_ADDON":
+        premioAdjusted += canone * 1;
+        break;
+      case "VOCE_UNLIMITED": {
+        let multVoce = 0;
+        if (result.soglia === 1) multVoce = 0.25;
+        else if (result.soglia === 2) multVoce = 0.5;
+        else if (result.soglia === 3) multVoce = 0.5;
+        else if (result.soglia === 4) multVoce = 1;
+        else if (result.soglia >= 5) multVoce = 1.5;
+        premioAdjusted += canone * multVoce;
+        break;
+      }
+      case "CONVERGENZA_LUCE_GAS":
+        premioAdjusted += canone * 2;
+        break;
+      case "CONVERGENTE_ASSICUR":
+        premioAdjusted += canone * 2;
+        break;
+    }
   }
 
   return {
