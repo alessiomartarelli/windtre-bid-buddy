@@ -520,15 +520,8 @@ function ruleFingerprint(r: BiSuiteMappingRule): string {
   return [
     r.pista,
     r.targetCategory,
-    r.ruleType || 'base',
     c.categoriaBiSuite || '',
-    c.tipologiaBiSuite || '',
     c.domandaTesto || '',
-    c.descrizioneBiSuite || '',
-    c.clienteTipo || '',
-    c.rispostaContiene || '',
-    c.rispostaDiversaDa || '',
-    c.rispostaEsatta || '',
   ].join('|');
 }
 
