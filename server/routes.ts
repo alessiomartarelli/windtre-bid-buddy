@@ -1750,7 +1750,7 @@ export async function registerRoutes(
           mappedCount++;
           const artCanone = parseFloat(art.dettaglio?.canone || '0') || 0;
           for (const m of mappedResults) {
-            const canoneForThis = m.ruleType === 'base' ? artCanone : 0;
+            const canoneForThis = m.ruleType === 'base' || m.targetCategory === 'CONVERGENZA' ? artCanone : 0;
             const existing = byPdv[codicePos].items.find(
               (i) => i.pista === m.pista && i.targetCategory === m.targetCategory
             );

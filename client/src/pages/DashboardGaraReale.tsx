@@ -474,8 +474,16 @@ function calcFissoPerPdv(
     euroPerPezzoOverride,
   });
 
+  const convergenzaItem = validFissoItems.find(i => i.targetCategory === "CONVERGENZA");
+  let premioAdjusted = result.premio;
+  if (convergenzaItem && convergenzaItem.pezzi > 0) {
+    const hardcoded46 = convergenzaItem.pezzi * 46;
+    const canoneX2 = (convergenzaItem.canone || 0) * 2;
+    premioAdjusted = premioAdjusted - hardcoded46 + canoneX2;
+  }
+
   return {
-    premioStimato: result.premio,
+    premioStimato: premioAdjusted,
     puntiTotali: result.punti,
     sogliaRaggiunta: result.soglia,
     sogliaLabel: sogliaToLabel(result.soglia, 5),
