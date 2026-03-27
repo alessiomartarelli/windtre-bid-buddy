@@ -1,4 +1,4 @@
-export type GaraPista = 'mobile' | 'fisso' | 'energia' | 'assicurazioni' | 'protecta' | 'partnership';
+export type GaraPista = 'mobile' | 'fisso' | 'energia' | 'assicurazioni' | 'protecta' | 'partnership' | 'cb';
 
 export interface BiSuiteMappingCondition {
   categoriaBiSuite?: string;
@@ -152,6 +152,7 @@ export const PISTA_TARGETS: Record<GaraPista, { value: string; label: string }[]
   assicurazioni: ASSICURAZIONI_TARGETS,
   protecta: PROTECTA_TARGETS,
   partnership: PARTNERSHIP_TARGETS,
+  cb: PARTNERSHIP_TARGETS,
 };
 
 export const PISTA_LABELS: Record<GaraPista, string> = {
@@ -161,6 +162,7 @@ export const PISTA_LABELS: Record<GaraPista, string> = {
   assicurazioni: 'Assicurazioni',
   protecta: 'Protecta',
   partnership: 'Partnership',
+  cb: 'Customer Base',
 };
 
 let _ruleIdCounter = 0;
@@ -273,38 +275,38 @@ export function getDefaultMappingRules(): BiSuiteMappingRule[] {
     // ═══════════════ PROTECTA — BASE ═══════════════
     { id: ruleId(), pista: 'protecta', targetCategory: 'casaStart', targetLabel: 'Casa Start', conditions: { categoriaBiSuite: 'ALLARMI', tipologiaBiSuite: 'ALLARMI PROTECTA' }, priority: 10, enabled: true, ruleType: 'base' },
 
-    // ═══════════════ PARTNERSHIP / CB — BASE ═══════════════
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'MIA EASYPAY STANDARD' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'MIA EASYPAY CYC' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'COUPON CARING TIED' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'MIA UNTIED', tipologiaBiSuite: 'MIA UNTIED STANDARD' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'MIA UNTIED', tipologiaBiSuite: 'MIA UNTIED CYC' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'MIA UNTIED', tipologiaBiSuite: 'COUPON CARING UNTIED' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLO VOCE' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLI IVA' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLO DATI' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'ALTRI EVENTI CB', tipologiaBiSuite: 'ALTRI CAMBI OFFERTA CB' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'MIGRAZIONI_FTTH_FWA', targetLabel: 'Migrazioni FTTH/FWA', conditions: { categoriaBiSuite: 'ALTRI EVENTI CB', tipologiaBiSuite: 'MIGRAZIONI' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'addon_ricorrenti_mensile_high', targetLabel: 'Add On ≥ 9.99€', conditions: { categoriaBiSuite: 'ADD-ON CB', tipologiaBiSuite: 'ADD-ON CON CANONE MENSILE', canoneMinimo: 9.99 }, priority: 15, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'addon_ricorrenti_mensile_low', targetLabel: 'Add On ≤ 9.99€', conditions: { categoriaBiSuite: 'ADD-ON CB', tipologiaBiSuite: 'ADD-ON CON CANONE MENSILE' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'addon_one_off', targetLabel: 'Add On One Off', conditions: { categoriaBiSuite: 'ADD-ON CB', tipologiaBiSuite: 'ADD-ON SENZA CANONE MENSILE' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'opzione_piu_sicuri_pro', targetLabel: 'WindTre Security Pro', conditions: { categoriaBiSuite: 'WINDTRE SECURITY PRO CB', tipologiaBiSuite: 'WINDTRE SECURITY PRO CB' }, priority: 10, enabled: true, ruleType: 'base' },
+    // ═══════════════ CB (CUSTOMER BASE) — BASE ═══════════════
+    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'MIA EASYPAY STANDARD' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'MIA EASYPAY CYC' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'COUPON CARING TIED' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'MIA UNTIED', tipologiaBiSuite: 'MIA UNTIED STANDARD' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'MIA UNTIED', tipologiaBiSuite: 'MIA UNTIED CYC' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'MIA UNTIED', tipologiaBiSuite: 'COUPON CARING UNTIED' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLO VOCE' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLI IVA' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLO DATI' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'ALTRI EVENTI CB', tipologiaBiSuite: 'ALTRI CAMBI OFFERTA CB' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'MIGRAZIONI_FTTH_FWA', targetLabel: 'Migrazioni FTTH/FWA', conditions: { categoriaBiSuite: 'ALTRI EVENTI CB', tipologiaBiSuite: 'MIGRAZIONI' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'addon_ricorrenti_mensile_high', targetLabel: 'Add On ≥ 9.99€', conditions: { categoriaBiSuite: 'ADD-ON CB', tipologiaBiSuite: 'ADD-ON CON CANONE MENSILE', canoneMinimo: 9.99 }, priority: 15, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'addon_ricorrenti_mensile_low', targetLabel: 'Add On ≤ 9.99€', conditions: { categoriaBiSuite: 'ADD-ON CB', tipologiaBiSuite: 'ADD-ON CON CANONE MENSILE' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'addon_one_off', targetLabel: 'Add On One Off', conditions: { categoriaBiSuite: 'ADD-ON CB', tipologiaBiSuite: 'ADD-ON SENZA CANONE MENSILE' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'opzione_piu_sicuri_pro', targetLabel: 'WindTre Security Pro', conditions: { categoriaBiSuite: 'WINDTRE SECURITY PRO CB', tipologiaBiSuite: 'WINDTRE SECURITY PRO CB' }, priority: 10, enabled: true, ruleType: 'base' },
 
-    // ═══════════════ PARTNERSHIP / CB — ADDITIONAL ═══════════════
-    { id: ruleId(), pista: 'partnership', targetCategory: 'opzione_piu_sicuri', targetLabel: 'Più Sicuri Mobile', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'PIU SICURI MOBILE CB', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'opzione_piu_sicuri_pro', targetLabel: 'Più Sicuri Mobile Pro', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'PIU SICURI MOBILE PRO CB', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'opzione_piu_sicuri', targetLabel: 'Più Sicuri Mobile', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'PIU SICURI MOBILE CB', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'opzione_piu_sicuri_pro', targetLabel: 'Più Sicuri Mobile Pro', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'PIU SICURI MOBILE PRO CB', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'IMP_AGG_0_VAR_FINANZ', targetLabel: 'IMP.AGG=0 VAR/FINANZ', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'MIA TELEFONO FINANZIAMENTO', rispostaNumericaUguale: 0 }, priority: 20, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'IMP_AGG_GT0_FINANZ', targetLabel: 'IMP.AGG>0 FINANZ', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'MIA TELEFONO FINANZIAMENTO', rispostaNumericaMaggiore: 0 }, priority: 18, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'IMP_AGG_0_VAR_FINANZ', targetLabel: 'IMP.AGG=0 VAR/FINANZ', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'MIA TELEFONO VAR', rispostaNumericaUguale: 0 }, priority: 20, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'IMP_AGG_GT0_VAR', targetLabel: 'IMP.AGG>0 VAR', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'MIA TELEFONO VAR', rispostaNumericaMaggiore: 0 }, priority: 18, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'IMP_AGG_0_VAR_FINANZ', targetLabel: 'IMP.AGG=0 VAR/FINANZ', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'MIA TELEFONO FINANZIAMENTO', rispostaNumericaUguale: 0 }, priority: 20, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'IMP_AGG_GT0_FINANZ', targetLabel: 'IMP.AGG>0 FINANZ', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'MIA TELEFONO FINANZIAMENTO', rispostaNumericaMaggiore: 0 }, priority: 18, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'IMP_AGG_0_VAR_FINANZ', targetLabel: 'IMP.AGG=0 VAR/FINANZ', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'MIA TELEFONO VAR', rispostaNumericaUguale: 0 }, priority: 20, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'IMP_AGG_GT0_VAR', targetLabel: 'IMP.AGG>0 VAR', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'MIA TELEFONO VAR', rispostaNumericaMaggiore: 0 }, priority: 18, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'multi_device_finanziamento', targetLabel: 'Multi Device Finanziamento', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'TELEFONO INCLUSO MULTI FINANZIAMENTO', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'partnership', targetCategory: 'multi_device_finanziamento', targetLabel: 'Multi Device Finanziamento', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'TELEFONO INCLUSO MULTI FINANZIAMENTO', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    // ═══════════════ CB (CUSTOMER BASE) — ADDITIONAL ═══════════════
+    { id: ruleId(), pista: 'cb', targetCategory: 'opzione_piu_sicuri', targetLabel: 'Più Sicuri Mobile', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'PIU SICURI MOBILE CB', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'opzione_piu_sicuri_pro', targetLabel: 'Più Sicuri Mobile Pro', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'PIU SICURI MOBILE PRO CB', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'opzione_piu_sicuri', targetLabel: 'Più Sicuri Mobile', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'PIU SICURI MOBILE CB', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'opzione_piu_sicuri_pro', targetLabel: 'Più Sicuri Mobile Pro', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'PIU SICURI MOBILE PRO CB', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'IMP_AGG_0_VAR_FINANZ', targetLabel: 'IMP.AGG=0 VAR/FINANZ', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'MIA TELEFONO FINANZIAMENTO', rispostaNumericaUguale: 0 }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'IMP_AGG_GT0_FINANZ', targetLabel: 'IMP.AGG>0 FINANZ', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'MIA TELEFONO FINANZIAMENTO', rispostaNumericaMaggiore: 0 }, priority: 18, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'IMP_AGG_0_VAR_FINANZ', targetLabel: 'IMP.AGG=0 VAR/FINANZ', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'MIA TELEFONO VAR', rispostaNumericaUguale: 0 }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'IMP_AGG_GT0_VAR', targetLabel: 'IMP.AGG>0 VAR', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'MIA TELEFONO VAR', rispostaNumericaMaggiore: 0 }, priority: 18, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'IMP_AGG_0_VAR_FINANZ', targetLabel: 'IMP.AGG=0 VAR/FINANZ', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'MIA TELEFONO FINANZIAMENTO', rispostaNumericaUguale: 0 }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'IMP_AGG_GT0_FINANZ', targetLabel: 'IMP.AGG>0 FINANZ', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'MIA TELEFONO FINANZIAMENTO', rispostaNumericaMaggiore: 0 }, priority: 18, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'IMP_AGG_0_VAR_FINANZ', targetLabel: 'IMP.AGG=0 VAR/FINANZ', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'MIA TELEFONO VAR', rispostaNumericaUguale: 0 }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'IMP_AGG_GT0_VAR', targetLabel: 'IMP.AGG>0 VAR', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'MIA TELEFONO VAR', rispostaNumericaMaggiore: 0 }, priority: 18, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'multi_device_finanziamento', targetLabel: 'Multi Device Finanziamento', conditions: { categoriaBiSuite: 'MIA TIED', domandaTesto: 'TELEFONO INCLUSO MULTI FINANZIAMENTO', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'multi_device_finanziamento', targetLabel: 'Multi Device Finanziamento', conditions: { categoriaBiSuite: 'MIA UNTIED', domandaTesto: 'TELEFONO INCLUSO MULTI FINANZIAMENTO', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
   ];
 }
 

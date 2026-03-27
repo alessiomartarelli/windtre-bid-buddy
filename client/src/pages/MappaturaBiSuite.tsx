@@ -67,9 +67,10 @@ const PISTA_ICONS: Record<GaraPista, React.ReactNode> = {
   assicurazioni: <Shield className="h-4 w-4" />,
   protecta: <Award className="h-4 w-4" />,
   partnership: <Users className="h-4 w-4" />,
+  cb: <Users className="h-4 w-4" />,
 };
 
-const ALL_PISTE: GaraPista[] = ['mobile', 'fisso', 'energia', 'assicurazioni', 'protecta', 'partnership'];
+const ALL_PISTE: GaraPista[] = ['mobile', 'fisso', 'energia', 'assicurazioni', 'protecta', 'partnership', 'cb'];
 
 type ExtraTab = 'prodotti' | 'servizi' | 'non_mappati';
 type ActiveTab = GaraPista | ExtraTab;
