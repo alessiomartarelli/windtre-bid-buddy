@@ -75,7 +75,7 @@ export const CB_EVENTS_CONFIG: CBEventConfig[] = [
   { type: 'migrazione_ftth', label: 'Migrazioni verso Fibra FTTH', category: 'fisso_flat', gettoni: 40 },
   { type: 'migrazione_ftth_extra', label: 'Migrazioni verso Fibra FTTH EXTRA', category: 'fisso_flat', gettoni: 40 },
   { type: 'migrazione_fwa_indoor_outdoor', label: 'Migrazioni verso FWA Indoor 2P/Outdoor 1ª Casa', category: 'fisso_flat', gettoni: 40 },
-  { type: 'migrazione_super_fibra_professional', label: 'Migrazioni Super Fibra Professional Box con modem FRITZ!Box', category: 'fisso_flat', gettoni: 40 },
+  { type: 'migrazione_super_fibra_professional', label: 'Migrazioni Super Fibra Professional Box con modem FRITZ!Box', category: 'fisso_flat', gettoni: 80 },
   { type: 'migrazione_fttc', label: 'Migrazioni verso Fibra FTTC', category: 'fisso_flat', gettoni: 10 },
   { type: 'migrazione_casa_professional', label: 'Migrazioni verso Casa/Professional', category: 'fisso_flat', gettoni: 10 },
   { type: 'offerta_superfibra_netflix_no_adv', label: 'Offerta Superfibra & Netflix senza ADV', category: 'fisso_flat', gettoni: 10 },
