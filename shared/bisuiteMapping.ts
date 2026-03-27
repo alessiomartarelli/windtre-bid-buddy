@@ -145,6 +145,45 @@ export const PARTNERSHIP_TARGETS = [
   { value: 'MIGRAZIONI_FTTH_FWA', label: 'Migrazioni FTTH/FWA' },
 ];
 
+export const CB_TARGETS = [
+  { value: 'cambio_offerta_untied', label: 'Cambio Offerta Untied' },
+  { value: 'cambio_offerta_rivincoli', label: 'Cambio Offerta Rivincoli' },
+  { value: 'cambio_offerta_smart_pack', label: 'Cambio Offerta Smart Pack OTP' },
+  { value: 'telefono_incluso_var', label: 'Telefono Incluso' },
+  { value: 'telefono_incluso_smart_pack_compass_findomestic', label: 'Smart Pack Compass/Findomestic' },
+  { value: 'multi_device_standard', label: 'Multi Device Standard' },
+  { value: 'multi_device_finanziamento', label: 'Multi Device Finanziamento' },
+  { value: 'addon_ricorrenti_mensile_low', label: 'Add On ≤ 9.99€' },
+  { value: 'addon_ricorrenti_mensile_high', label: 'Add On ≥ 9.99€' },
+  { value: 'addon_one_off', label: 'Add On One Off' },
+  { value: 'addon_unlimited_giga', label: 'Unlimited Giga Boom' },
+  { value: 'opzione_piu_sicuri_pro', label: 'Più Sicuri Mobile Pro' },
+  { value: 'opzione_piu_sicuri', label: 'Più Sicuri Mobile' },
+  { value: 'reload_exchange', label: 'Reload Exchange' },
+  { value: 'gestione_cambia_telefono', label: 'Cambia Telefono Reload Plus' },
+  { value: 'windtre_goplay', label: 'WindTre GoPlay' },
+  { value: 'buy_tied', label: 'BUY TIED' },
+  { value: 'buy_untied', label: 'BUY UNTIED' },
+  { value: 'IMP_AGG_0_VAR_FINANZ', label: 'IMP.AGG=0 VAR/FINANZ' },
+  { value: 'IMP_AGG_GT0_FINANZ', label: 'IMP.AGG>0 FINANZ' },
+  { value: 'IMP_AGG_GT0_VAR', label: 'IMP.AGG>0 VAR' },
+  { value: 'MIGRAZIONI_FTTH_FWA', label: 'Migrazioni FTTH/FWA' },
+  { value: 'migrazione_ftth', label: 'Migrazioni FTTH' },
+  { value: 'migrazione_ftth_extra', label: 'Migrazioni FTTH EXTRA' },
+  { value: 'migrazione_fwa_indoor_outdoor', label: 'Migrazioni FWA Indoor/Outdoor' },
+  { value: 'migrazione_super_fibra_professional', label: 'Super Fibra Professional FRITZ!Box' },
+  { value: 'migrazione_fttc', label: 'Migrazioni FTTC' },
+  { value: 'migrazione_casa_professional', label: 'Migrazioni Casa/Professional' },
+  { value: 'offerta_superfibra_netflix_no_adv', label: 'Superfibra Netflix senza ADV' },
+  { value: 'offerta_superfibra_netflix_adv', label: 'Superfibra Netflix con ADV' },
+  { value: 'piu_sicuri_casa_ufficio', label: 'Più Sicuri Casa & Ufficio' },
+  { value: 'cambio_piano_fisso', label: 'Cambio Piano Fisso CB' },
+  { value: 'cambio_offerta_microbusiness', label: 'Cambio Offerta Microbusiness OTP' },
+  { value: 'sostituzione_sim_3g', label: 'Sostituzione SIM 3G' },
+  { value: 'roaming_itz_piva', label: 'Roaming ITZ P.IVA' },
+  { value: 'pagamento_fatture_pinpad', label: 'Pagamento Fatture Pinpad' },
+];
+
 export const PISTA_TARGETS: Record<GaraPista, { value: string; label: string }[]> = {
   mobile: MOBILE_TARGETS,
   fisso: FISSO_TARGETS,
@@ -152,7 +191,7 @@ export const PISTA_TARGETS: Record<GaraPista, { value: string; label: string }[]
   assicurazioni: ASSICURAZIONI_TARGETS,
   protecta: PROTECTA_TARGETS,
   partnership: PARTNERSHIP_TARGETS,
-  cb: PARTNERSHIP_TARGETS,
+  cb: CB_TARGETS,
 };
 
 export const PISTA_LABELS: Record<GaraPista, string> = {
@@ -527,13 +566,25 @@ function ruleFingerprint(r: BiSuiteMappingRule): string {
   ].join('|');
 }
 
+const CB_TARGET_CATEGORIES = new Set(CB_TARGETS.map(t => t.value));
+
+function migratePartnershipToCB(rules: BiSuiteMappingRule[]): BiSuiteMappingRule[] {
+  return rules.map(r => {
+    if (r.pista === 'partnership' && CB_TARGET_CATEGORIES.has(r.targetCategory)) {
+      return { ...r, pista: 'cb' as GaraPista };
+    }
+    return r;
+  });
+}
+
 export function mergeWithDefaultRules(
   savedRules: BiSuiteMappingRule[],
   defaultRules?: BiSuiteMappingRule[],
 ): BiSuiteMappingRule[] {
+  const migrated = migratePartnershipToCB(savedRules);
   const defaults = defaultRules || getDefaultMappingRules();
-  const existingKeys = new Set(savedRules.map(ruleFingerprint));
+  const existingKeys = new Set(migrated.map(ruleFingerprint));
   const missing = defaults.filter(d => !existingKeys.has(ruleFingerprint(d)));
-  if (missing.length === 0) return savedRules;
-  return [...savedRules, ...missing];
+  if (missing.length === 0) return migrated;
+  return [...migrated, ...missing];
 }
