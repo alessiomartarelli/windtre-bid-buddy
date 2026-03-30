@@ -2284,7 +2284,148 @@ export default function DashboardGaraReale() {
                         </div>
                       )}
 
-                      {pista.totalePezzi > 0 && pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 ? (
+                      {pista.pista === "cb" && pista.totalePezzi > 0 ? (
+                        <div className="space-y-2">
+                          {pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 && (
+                            <div className="space-y-2">
+                              {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
+                                <div key={rsKey} className="rounded-lg border p-2.5 space-y-1.5">
+                                  <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</div>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="text-center">
+                                      <div className="text-xs text-gray-500">Pezzi</div>
+                                      <span className="text-lg font-bold">{rsData.pezziAttuali}</span>
+                                      {rsData.pezziProiezione > rsData.pezziAttuali && (
+                                        <div className="text-xs text-blue-500">→ {rsData.pezziProiezione}</div>
+                                      )}
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-xs text-gray-500">Gettoni €</div>
+                                      <span className="text-lg font-bold text-orange-700 dark:text-orange-400">{formatEuro(rsData.premioAttuale)}</span>
+                                      {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                        <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5">
+                                          <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="rounded-lg border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20 px-3 py-2.5 space-y-1.5">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-500 dark:text-gray-400">Pezzi</span>
+                              <span className="font-bold" data-testid={`text-pezzi-cb-total`}>{pista.totalePezzi}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-500 dark:text-gray-400">Gettoni Attuali</span>
+                              <span className="font-bold text-orange-700 dark:text-orange-400" data-testid={`text-premio-${pista.pista}`}>
+                                {formatEuro(pista.calc.premioStimato)}
+                              </span>
+                            </div>
+                            {pista.calcProiezione.premioStimato > 0 && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                  <TrendingUp className="h-3 w-3 text-blue-500" />
+                                  Proiezione
+                                </span>
+                                <span className="font-bold text-blue-600 dark:text-blue-400 text-base" data-testid={`text-premio-proiezione-${pista.pista}`}>
+                                  {formatEuro(pista.calcProiezione.premioStimato)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : pista.pista === "partnership" && pista.totalePezzi > 0 ? (
+                        <div className="space-y-2">
+                          {pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 && (
+                            <div className="space-y-2">
+                              {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
+                                <div key={rsKey} className="rounded-lg border p-2.5 space-y-1.5">
+                                  <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</div>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="text-center">
+                                      <div className="text-xs text-gray-500">Punti</div>
+                                      <span className="text-lg font-bold">{rsData.puntiAttuali.toFixed(0)}</span>
+                                      {rsData.puntiProiezione > rsData.puntiAttuali && (
+                                        <div className="text-xs text-blue-500">→ {rsData.puntiProiezione.toFixed(0)}</div>
+                                      )}
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-xs text-gray-500">Premio €</div>
+                                      <span className="text-lg font-bold text-green-700 dark:text-green-400">{formatEuro(rsData.premioAttuale)}</span>
+                                      {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                        <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5">
+                                          <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
+                                    <div className="space-y-1">
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
+                                        <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
+                                      </div>
+                                      <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                          {(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(0)} pt
+                                        </span>
+                                        <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {pista.calc.forecastTarget != null && pista.calc.forecastTarget > 0 && (
+                            <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
+                                <span className="font-medium">{pista.calc.forecastTarget.toFixed(0)} pt</span>
+                              </div>
+                              <Progress
+                                value={Math.min((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100, 100)}
+                                className="h-1.5"
+                              />
+                              <div className="flex items-center justify-between text-xs">
+                                <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                  {(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(0)} pt
+                                </span>
+                                <span className="text-gray-400">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2.5 space-y-1.5">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-500 dark:text-gray-400">Punti</span>
+                              <span className="font-bold" data-testid={`text-punti-partnership`}>{pista.calc.puntiTotali.toFixed(0)} pt</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-500 dark:text-gray-400">Premio Attuale</span>
+                              <span className="font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-${pista.pista}`}>
+                                {formatEuro(pista.calc.premioStimato)}
+                              </span>
+                            </div>
+                            {pista.calcProiezione.premioStimato > 0 && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                  <TrendingUp className="h-3 w-3 text-blue-500" />
+                                  Proiezione
+                                </span>
+                                <span className="font-bold text-blue-600 dark:text-blue-400 text-base" data-testid={`text-premio-proiezione-${pista.pista}`}>
+                                  {formatEuro(pista.calcProiezione.premioStimato)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : pista.totalePezzi > 0 && pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 ? (
                         <div className="space-y-2">
                           {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
                             <div key={rsKey} className="rounded-lg border p-2.5 space-y-1.5">
@@ -2435,26 +2576,6 @@ export default function DashboardGaraReale() {
                             </div>
                           )}
                         </>
-                      ) : pista.pista === "cb" && pista.totalePezzi > 0 && pista.calc.premioStimato > 0 ? (
-                        <div className="rounded-lg border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20 px-3 py-2.5 space-y-1.5">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-500 dark:text-gray-400">Gettoni Attuali</span>
-                            <span className="font-bold text-orange-700 dark:text-orange-400" data-testid={`text-premio-${pista.pista}`}>
-                              {formatEuro(pista.calc.premioStimato)}
-                            </span>
-                          </div>
-                          {pista.calcProiezione.premioStimato > 0 && (
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                <TrendingUp className="h-3 w-3 text-blue-500" />
-                                Proiezione
-                              </span>
-                              <span className="font-bold text-blue-600 dark:text-blue-400 text-base" data-testid={`text-premio-proiezione-${pista.pista}`}>
-                                {formatEuro(pista.calcProiezione.premioStimato)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
                       ) : null}
 
                       {pista.totalePezzi === 0 ? (
