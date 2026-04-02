@@ -1288,6 +1288,26 @@ function SaleDetailDialog({
               </Card>
             );
           })()}
+
+          {pagamento && (
+            <details>
+              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                Dettaglio Pagamento (raw)
+              </summary>
+              <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-muted/30 rounded p-3">
+                {Object.entries(pagamento)
+                  .filter(([k]) => k !== "id")
+                  .map(([key, val]) => (
+                    <div key={key}>
+                      <span className="text-muted-foreground">{key}:</span>{" "}
+                      <span className="font-medium">
+                        {formatCurrency(val as string)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </details>
+          )}
         </div>
       </DialogContent>
     </Dialog>
