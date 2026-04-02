@@ -341,7 +341,8 @@ export default function VenditeBiSuite() {
       coupon: 0,
       altriPagamenti: 0,
     };
-    for (const sale of sales) {
+    const source = selectedPdv ? sales.filter(s => (s.codicePos || "N/D") === selectedPdv) : sales;
+    for (const sale of source) {
       const pag = sale.rawData?.pagamento;
       if (pag) {
         t.contanti += parseFloat(pag.contanti || "0") || 0;
@@ -366,7 +367,7 @@ export default function VenditeBiSuite() {
       }
     }
     return t;
-  }, [sales]);
+  }, [sales, selectedPdv]);
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("it-IT", {
