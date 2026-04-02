@@ -61,6 +61,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   X,
+  Banknote,
+  CreditCard,
+  Landmark,
+  FileText,
+  Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -323,6 +328,46 @@ export default function VenditeBiSuite() {
     0
   );
 
+  const incassoTotals = useMemo(() => {
+    const t = {
+      contanti: 0,
+      pos: 0,
+      finanziato: 0,
+      var: 0,
+      nonScontrinatoPos: 0,
+      bonifici: 0,
+      assegni: 0,
+      buoni: 0,
+      coupon: 0,
+      altriPagamenti: 0,
+    };
+    for (const sale of sales) {
+      const pag = sale.rawData?.pagamento;
+      if (pag) {
+        t.contanti += parseFloat(pag.contanti || "0") || 0;
+        t.pos += parseFloat(pag.pagamentiElettronici || "0") || 0;
+        t.nonScontrinatoPos += parseFloat(pag.nonScontrinatoPos || "0") || 0;
+        t.bonifici += parseFloat(pag.bonifici || "0") || 0;
+        t.assegni += parseFloat(pag.assegni || "0") || 0;
+        t.buoni += parseFloat(pag.buoni || "0") || 0;
+        t.coupon += parseFloat(pag.coupon || "0") || 0;
+        t.altriPagamenti += parseFloat(pag.altriPagamenti || "0") || 0;
+      }
+      const articoli = sale.rawData?.articoli;
+      if (Array.isArray(articoli)) {
+        for (const art of articoli) {
+          const det = art?.dettaglio;
+          if (!det) continue;
+          const impFinanziato = parseFloat(det.importoFinanziato || "0") || 0;
+          const impCredito = parseFloat(det.importoCredito || "0") || 0;
+          if (impFinanziato > 0) t.finanziato += impFinanziato;
+          if (impCredito > 0) t.var += impCredito;
+        }
+      }
+    }
+    return t;
+  }, [sales]);
+
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("it-IT", {
       style: "currency",
@@ -500,6 +545,50 @@ export default function VenditeBiSuite() {
                 </CardContent>
               </Card>
             </div>
+
+            {(() => {
+              const incassoItems: { key: string; label: string; value: number; icon: React.ReactNode; color: string }[] = [
+                { key: "contanti", label: "Contanti", value: incassoTotals.contanti, icon: <Banknote className="h-3.5 w-3.5" />, color: "text-green-600" },
+                { key: "pos", label: "POS", value: incassoTotals.pos, icon: <CreditCard className="h-3.5 w-3.5" />, color: "text-blue-600" },
+                { key: "finanziato", label: "Finanziato", value: incassoTotals.finanziato, icon: <Landmark className="h-3.5 w-3.5" />, color: "text-purple-600" },
+                { key: "var", label: "VAR", value: incassoTotals.var, icon: <FileText className="h-3.5 w-3.5" />, color: "text-amber-600" },
+                { key: "nonScontrinatoPos", label: "Non scont. POS", value: incassoTotals.nonScontrinatoPos, icon: <CreditCard className="h-3.5 w-3.5" />, color: "text-rose-600" },
+                { key: "bonifici", label: "Bonifici", value: incassoTotals.bonifici, icon: <Landmark className="h-3.5 w-3.5" />, color: "text-teal-600" },
+                { key: "assegni", label: "Assegni", value: incassoTotals.assegni, icon: <FileText className="h-3.5 w-3.5" />, color: "text-slate-600" },
+                { key: "buoni", label: "Buoni", value: incassoTotals.buoni, icon: <Wallet className="h-3.5 w-3.5" />, color: "text-orange-600" },
+                { key: "coupon", label: "Coupon", value: incassoTotals.coupon, icon: <Tag className="h-3.5 w-3.5" />, color: "text-pink-600" },
+                { key: "altriPagamenti", label: "Altri Pag.", value: incassoTotals.altriPagamenti, icon: <Wallet className="h-3.5 w-3.5" />, color: "text-gray-600" },
+              ];
+              const active = incassoItems.filter(i => i.value > 0);
+              const inactive = incassoItems.filter(i => i.value === 0);
+              if (active.length === 0 && sales.length === 0) return null;
+              return (
+                <Card>
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Wallet className="h-4 w-4 text-primary" />
+                      <span className="font-semibold text-sm">Modalità di Incasso</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 sm:gap-3">
+                      {active.map(item => (
+                        <div key={item.key} className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2.5 py-1.5" data-testid={`incasso-${item.key}`}>
+                          <span className={item.color}>{item.icon}</span>
+                          <span className="text-xs text-muted-foreground">{item.label}</span>
+                          <span className={`text-xs font-semibold ${item.color}`}>{formatCurrency(item.value)}</span>
+                        </div>
+                      ))}
+                      {inactive.map(item => (
+                        <div key={item.key} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 opacity-40" data-testid={`incasso-${item.key}`}>
+                          <span className="text-muted-foreground">{item.icon}</span>
+                          <span className="text-xs text-muted-foreground">{item.label}</span>
+                          <span className="text-xs text-muted-foreground">{formatCurrency(0)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
               <Card className="border-l-4 border-l-orange-500">
