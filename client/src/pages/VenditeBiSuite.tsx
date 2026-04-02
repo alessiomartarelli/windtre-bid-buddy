@@ -1268,7 +1268,7 @@ function SaleDetailDialog({
             </Card>
           )}
 
-          {pagamento && (() => {
+          {pagamento && Object.keys(pagamento).filter(k => k !== "id").length > 0 && (() => {
             const saleIncasso = computeIncassoTotals([sale]);
             const fmtC = (val: number) => {
               if (isNaN(val)) return "€ 0,00";
@@ -1289,7 +1289,7 @@ function SaleDetailDialog({
             );
           })()}
 
-          {pagamento && (
+          {pagamento && Object.keys(pagamento).filter(k => k !== "id").length > 0 && (
             <details>
               <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
                 Dettaglio Pagamento (raw)
