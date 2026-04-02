@@ -121,6 +121,89 @@ const PISTA_ICONS: Record<PistaCanvass, React.ReactNode> = {
   energia: <Zap className="h-3.5 w-3.5" />,
 };
 
+interface IncassoTotals {
+  contanti: number;
+  pos: number;
+  finanziato: number;
+  var: number;
+  nonScontrinatoPos: number;
+  bonifici: number;
+  assegni: number;
+  buoni: number;
+  coupon: number;
+  altriPagamenti: number;
+}
+
+function computeIncassoTotals(salesList: BisuiteSale[]): IncassoTotals {
+  const t: IncassoTotals = {
+    contanti: 0, pos: 0, finanziato: 0, var: 0, nonScontrinatoPos: 0,
+    bonifici: 0, assegni: 0, buoni: 0, coupon: 0, altriPagamenti: 0,
+  };
+  for (const sale of salesList) {
+    const pag = sale.rawData?.pagamento;
+    if (pag) {
+      t.contanti += parseFloat(pag.contanti || "0") || 0;
+      t.pos += parseFloat(pag.pagamentiElettronici || "0") || 0;
+      t.nonScontrinatoPos += parseFloat(pag.nonScontrinatoPos || "0") || 0;
+      t.bonifici += parseFloat(pag.bonifici || "0") || 0;
+      t.assegni += parseFloat(pag.assegni || "0") || 0;
+      t.buoni += parseFloat(pag.buoni || "0") || 0;
+      t.coupon += parseFloat(pag.coupon || "0") || 0;
+      t.altriPagamenti += parseFloat(pag.altriPagamenti || "0") || 0;
+    }
+    const articoli = sale.rawData?.articoli;
+    if (Array.isArray(articoli)) {
+      for (const art of articoli) {
+        const det = art?.dettaglio;
+        if (!det) continue;
+        const impFinanziato = parseFloat(det.importoFinanziato || "0") || 0;
+        const impCredito = parseFloat(det.importoCredito || "0") || 0;
+        if (impFinanziato > 0) t.finanziato += impFinanziato;
+        if (impCredito > 0) t.var += impCredito;
+      }
+    }
+  }
+  return t;
+}
+
+const INCASSO_ITEMS_CONFIG: { key: keyof IncassoTotals; label: string; icon: string; color: string }[] = [
+  { key: "contanti", label: "Contanti", icon: "banknote", color: "text-green-600" },
+  { key: "pos", label: "POS", icon: "creditcard", color: "text-blue-600" },
+  { key: "finanziato", label: "Finanziato", icon: "landmark", color: "text-purple-600" },
+  { key: "var", label: "VAR", icon: "filetext", color: "text-amber-600" },
+  { key: "nonScontrinatoPos", label: "Non scont. POS", icon: "creditcard", color: "text-rose-600" },
+  { key: "bonifici", label: "Bonifici", icon: "landmark", color: "text-teal-600" },
+  { key: "assegni", label: "Assegni", icon: "filetext", color: "text-slate-600" },
+  { key: "buoni", label: "Buoni", icon: "wallet", color: "text-orange-600" },
+  { key: "coupon", label: "Coupon", icon: "tag", color: "text-pink-600" },
+  { key: "altriPagamenti", label: "Altri Pag.", icon: "wallet", color: "text-gray-600" },
+];
+
+const INCASSO_ICON_MAP: Record<string, React.ReactNode> = {
+  banknote: <Banknote className="h-3.5 w-3.5" />,
+  creditcard: <CreditCard className="h-3.5 w-3.5" />,
+  landmark: <Landmark className="h-3.5 w-3.5" />,
+  filetext: <FileText className="h-3.5 w-3.5" />,
+  wallet: <Wallet className="h-3.5 w-3.5" />,
+  tag: <Tag className="h-3.5 w-3.5" />,
+};
+
+function IncassoBadges({ totals, formatter, compact }: { totals: IncassoTotals; formatter: (v: number) => string; compact?: boolean }) {
+  const active = INCASSO_ITEMS_CONFIG.filter(i => totals[i.key] > 0);
+  if (active.length === 0) return null;
+  return (
+    <div className={`flex flex-wrap ${compact ? "gap-1.5" : "gap-2 sm:gap-3"}`}>
+      {active.map(item => (
+        <div key={item.key} className={`flex items-center gap-1 ${compact ? "bg-muted/40 rounded px-1.5 py-0.5" : "bg-muted/50 rounded-lg px-2.5 py-1.5"}`} data-testid={`incasso-${item.key}`}>
+          <span className={item.color}>{INCASSO_ICON_MAP[item.icon]}</span>
+          <span className={`${compact ? "text-[10px]" : "text-xs"} text-muted-foreground`}>{item.label}</span>
+          <span className={`${compact ? "text-[10px]" : "text-xs"} font-semibold ${item.color}`}>{formatter(totals[item.key])}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function getDefaultDates() {
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -329,45 +412,36 @@ export default function VenditeBiSuite() {
   );
 
   const incassoTotals = useMemo(() => {
-    const t = {
-      contanti: 0,
-      pos: 0,
-      finanziato: 0,
-      var: 0,
-      nonScontrinatoPos: 0,
-      bonifici: 0,
-      assegni: 0,
-      buoni: 0,
-      coupon: 0,
-      altriPagamenti: 0,
-    };
     const source = selectedPdv ? sales.filter(s => (s.codicePos || "N/D") === selectedPdv) : sales;
-    for (const sale of source) {
-      const pag = sale.rawData?.pagamento;
-      if (pag) {
-        t.contanti += parseFloat(pag.contanti || "0") || 0;
-        t.pos += parseFloat(pag.pagamentiElettronici || "0") || 0;
-        t.nonScontrinatoPos += parseFloat(pag.nonScontrinatoPos || "0") || 0;
-        t.bonifici += parseFloat(pag.bonifici || "0") || 0;
-        t.assegni += parseFloat(pag.assegni || "0") || 0;
-        t.buoni += parseFloat(pag.buoni || "0") || 0;
-        t.coupon += parseFloat(pag.coupon || "0") || 0;
-        t.altriPagamenti += parseFloat(pag.altriPagamenti || "0") || 0;
-      }
-      const articoli = sale.rawData?.articoli;
-      if (Array.isArray(articoli)) {
-        for (const art of articoli) {
-          const det = art?.dettaglio;
-          if (!det) continue;
-          const impFinanziato = parseFloat(det.importoFinanziato || "0") || 0;
-          const impCredito = parseFloat(det.importoCredito || "0") || 0;
-          if (impFinanziato > 0) t.finanziato += impFinanziato;
-          if (impCredito > 0) t.var += impCredito;
-        }
-      }
-    }
-    return t;
+    return computeIncassoTotals(source);
   }, [sales, selectedPdv]);
+
+  const incassoByPdv = useMemo(() => {
+    const map = new Map<string, IncassoTotals>();
+    const grouped = new Map<string, BisuiteSale[]>();
+    for (const sale of sales) {
+      const code = sale.codicePos || "N/D";
+      if (!grouped.has(code)) grouped.set(code, []);
+      grouped.get(code)!.push(sale);
+    }
+    for (const [code, pdvSales] of grouped) {
+      map.set(code, computeIncassoTotals(pdvSales));
+    }
+    return map;
+  }, [sales]);
+
+  const rsSummaries = useMemo(() => {
+    const map = new Map<string, { ragioneSociale: string; vendite: BisuiteSale[]; totaleImporto: number; pdvCodes: Set<string> }>();
+    for (const sale of sales) {
+      const rs = sale.ragioneSociale || "N/D";
+      if (!map.has(rs)) map.set(rs, { ragioneSociale: rs, vendite: [], totaleImporto: 0, pdvCodes: new Set() });
+      const entry = map.get(rs)!;
+      entry.vendite.push(sale);
+      entry.totaleImporto += parseFloat(sale.totale || "0") || 0;
+      entry.pdvCodes.add(sale.codicePos || "N/D");
+    }
+    return Array.from(map.values()).sort((a, b) => b.vendite.length - a.vendite.length);
+  }, [sales]);
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("it-IT", {
@@ -547,49 +621,17 @@ export default function VenditeBiSuite() {
               </Card>
             </div>
 
-            {(() => {
-              const incassoItems: { key: string; label: string; value: number; icon: React.ReactNode; color: string }[] = [
-                { key: "contanti", label: "Contanti", value: incassoTotals.contanti, icon: <Banknote className="h-3.5 w-3.5" />, color: "text-green-600" },
-                { key: "pos", label: "POS", value: incassoTotals.pos, icon: <CreditCard className="h-3.5 w-3.5" />, color: "text-blue-600" },
-                { key: "finanziato", label: "Finanziato", value: incassoTotals.finanziato, icon: <Landmark className="h-3.5 w-3.5" />, color: "text-purple-600" },
-                { key: "var", label: "VAR", value: incassoTotals.var, icon: <FileText className="h-3.5 w-3.5" />, color: "text-amber-600" },
-                { key: "nonScontrinatoPos", label: "Non scont. POS", value: incassoTotals.nonScontrinatoPos, icon: <CreditCard className="h-3.5 w-3.5" />, color: "text-rose-600" },
-                { key: "bonifici", label: "Bonifici", value: incassoTotals.bonifici, icon: <Landmark className="h-3.5 w-3.5" />, color: "text-teal-600" },
-                { key: "assegni", label: "Assegni", value: incassoTotals.assegni, icon: <FileText className="h-3.5 w-3.5" />, color: "text-slate-600" },
-                { key: "buoni", label: "Buoni", value: incassoTotals.buoni, icon: <Wallet className="h-3.5 w-3.5" />, color: "text-orange-600" },
-                { key: "coupon", label: "Coupon", value: incassoTotals.coupon, icon: <Tag className="h-3.5 w-3.5" />, color: "text-pink-600" },
-                { key: "altriPagamenti", label: "Altri Pag.", value: incassoTotals.altriPagamenti, icon: <Wallet className="h-3.5 w-3.5" />, color: "text-gray-600" },
-              ];
-              const active = incassoItems.filter(i => i.value > 0);
-              const inactive = incassoItems.filter(i => i.value === 0);
-              if (active.length === 0 && sales.length === 0) return null;
-              return (
-                <Card>
-                  <CardContent className="p-3 sm:p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Wallet className="h-4 w-4 text-primary" />
-                      <span className="font-semibold text-sm">Modalità di Incasso</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2 sm:gap-3">
-                      {active.map(item => (
-                        <div key={item.key} className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2.5 py-1.5" data-testid={`incasso-${item.key}`}>
-                          <span className={item.color}>{item.icon}</span>
-                          <span className="text-xs text-muted-foreground">{item.label}</span>
-                          <span className={`text-xs font-semibold ${item.color}`}>{formatCurrency(item.value)}</span>
-                        </div>
-                      ))}
-                      {inactive.map(item => (
-                        <div key={item.key} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 opacity-40" data-testid={`incasso-${item.key}`}>
-                          <span className="text-muted-foreground">{item.icon}</span>
-                          <span className="text-xs text-muted-foreground">{item.label}</span>
-                          <span className="text-xs text-muted-foreground">{formatCurrency(0)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })()}
+            {sales.length > 0 && (
+              <Card>
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Wallet className="h-4 w-4 text-primary" />
+                    <span className="font-semibold text-sm">Modalità di Incasso{selectedPdv ? ` - ${pdvSummaries.find(p => p.codicePos === selectedPdv)?.nomeNegozio || selectedPdv}` : ""}</span>
+                  </div>
+                  <IncassoBadges totals={incassoTotals} formatter={formatCurrency} />
+                </CardContent>
+              </Card>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
               <Card className="border-l-4 border-l-orange-500">
@@ -674,6 +716,50 @@ export default function VenditeBiSuite() {
               </Card>
             </div>
 
+            {!selectedPdv && rsSummaries.length > 1 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Users className="h-5 w-5 text-primary" />
+                    Riepilogo per Ragione Sociale
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Accordion type="multiple" className="space-y-2">
+                    {rsSummaries.map((rs) => {
+                      const rsIncasso = computeIncassoTotals(rs.vendite);
+                      return (
+                        <AccordionItem key={rs.ragioneSociale} value={rs.ragioneSociale} className="border rounded-lg px-2 sm:px-4">
+                          <AccordionTrigger className="hover:no-underline">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
+                              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                <div className="h-8 w-8 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+                                  <Users className="h-4 w-4 text-violet-600" />
+                                </div>
+                                <div className="text-left min-w-0">
+                                  <div className="font-semibold text-sm truncate">{rs.ragioneSociale}</div>
+                                  <div className="text-xs text-muted-foreground">{rs.pdvCodes.size} PDV</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 sm:gap-3 pl-10 sm:pl-0">
+                                <Badge variant="outline" className="text-xs shrink-0">{rs.vendite.length} vendite</Badge>
+                                <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20 shrink-0">{formatCurrency(rs.totaleImporto)}</Badge>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="space-y-2 pb-2">
+                              <IncassoBadges totals={rsIncasso} formatter={formatCurrency} compact />
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
+                </CardContent>
+              </Card>
+            )}
+
             {!selectedPdv && (
               <Card>
                 <CardHeader>
@@ -755,6 +841,15 @@ export default function VenditeBiSuite() {
                                   </Badge>
                                 )}
                               </div>
+                              {(() => {
+                                const pdvInc = incassoByPdv.get(pdv.codicePos);
+                                if (!pdvInc) return null;
+                                return (
+                                  <div className="mt-1">
+                                    <IncassoBadges totals={pdvInc} formatter={formatCurrency} compact />
+                                  </div>
+                                );
+                              })()}
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -1173,25 +1268,26 @@ function SaleDetailDialog({
             </Card>
           )}
 
-          {pagamento && (
-            <details>
-              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                Dettaglio Pagamento
-              </summary>
-              <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-muted/30 rounded p-3">
-                {Object.entries(pagamento)
-                  .filter(([k]) => k !== "id")
-                  .map(([key, val]) => (
-                    <div key={key}>
-                      <span className="text-muted-foreground">{key}:</span>{" "}
-                      <span className="font-medium">
-                        {formatCurrency(val as string)}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </details>
-          )}
+          {pagamento && (() => {
+            const saleIncasso = computeIncassoTotals([sale]);
+            const fmtC = (val: number) => {
+              if (isNaN(val)) return "€ 0,00";
+              return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(val);
+            };
+            return (
+              <Card>
+                <CardHeader className="py-3 px-4">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Wallet className="h-4 w-4" />
+                    Modalità di Incasso
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-3">
+                  <IncassoBadges totals={saleIncasso} formatter={fmtC} compact />
+                </CardContent>
+              </Card>
+            );
+          })()}
         </div>
       </DialogContent>
     </Dialog>
