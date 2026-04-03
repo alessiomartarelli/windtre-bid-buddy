@@ -1389,6 +1389,17 @@ export default function ConfigurazioneGara() {
               </SelectContent>
             </Select>
             {garaConfigRecord && <Badge variant="secondary" className="text-xs">{garaConfigRecord.name || 'Salvato'}</Badge>}
+            {(() => {
+              const firstDay = new Date(selectedYear, selectedMonth - 1, 1);
+              const lastDay = new Date(selectedYear, selectedMonth, 0);
+              const fmt = (d: Date) => d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+              return (
+                <span className="text-[11px] text-muted-foreground flex items-center gap-1" data-testid="text-periodo-gara">
+                  <CalendarDays className="h-3 w-3" />
+                  Periodo: {fmt(firstDay)} – {fmt(lastDay)}
+                </span>
+              );
+            })()}
             {importedFiles.length > 0 && (
               <div className="relative" ref={importedFilesRef}>
                 <Button
