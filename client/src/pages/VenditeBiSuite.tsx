@@ -298,8 +298,8 @@ export default function VenditeBiSuite() {
     const byPista: Partial<Record<PistaCanvass, number>> = {};
     const amtByPista: Partial<Record<PistaCanvass, number>> = {};
     let totalArticles = 0;
-    const prodottiByCategory: Record<string, number> = {};
-    const serviziByLabel: Record<string, number> = {};
+    const prodottiByCategory: Record<string, { pezzi: number; importo: number }> = {};
+    const serviziByLabel: Record<string, { pezzi: number; importo: number }> = {};
 
     saleClassifications.forEach((sc) => {
       byType.canvass += sc.countByType.canvass;
@@ -313,10 +313,14 @@ export default function VenditeBiSuite() {
       for (const art of sc.articles) {
         if (art.type === 'prodotti' && art.categoriaNome) {
           const key = art.categoriaNome.toUpperCase();
-          prodottiByCategory[key] = (prodottiByCategory[key] || 0) + 1;
+          if (!prodottiByCategory[key]) prodottiByCategory[key] = { pezzi: 0, importo: 0 };
+          prodottiByCategory[key].pezzi++;
+          prodottiByCategory[key].importo += art.prezzo;
         }
         if (art.type === 'servizi' && art.descrizione) {
-          serviziByLabel[art.descrizione] = (serviziByLabel[art.descrizione] || 0) + 1;
+          if (!serviziByLabel[art.descrizione]) serviziByLabel[art.descrizione] = { pezzi: 0, importo: 0 };
+          serviziByLabel[art.descrizione].pezzi++;
+          serviziByLabel[art.descrizione].importo += art.prezzo;
         }
       }
 
@@ -683,11 +687,14 @@ export default function VenditeBiSuite() {
                   <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.prodotti)}</p>
                   <div className="space-y-1">
                     {Object.entries(globalCounts.prodottiByCategory)
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([cat, count]) => (
+                      .sort(([, a], [, b]) => b.pezzi - a.pezzi)
+                      .map(([cat, { pezzi, importo }]) => (
                         <div key={cat} className="flex items-center justify-between text-xs">
                           <span className="truncate mr-2 text-muted-foreground">{cat}</span>
-                          <Badge variant="outline" className="text-[10px] shrink-0">{count}</Badge>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {importo > 0 && <span className="text-[10px] text-green-600">{formatCurrency(importo)}</span>}
+                            <Badge variant="outline" className="text-[10px]">{pezzi}</Badge>
+                          </div>
                         </div>
                       ))}
                   </div>
@@ -707,11 +714,14 @@ export default function VenditeBiSuite() {
                   <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.servizi)}</p>
                   <div className="space-y-1">
                     {Object.entries(globalCounts.serviziByLabel)
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([label, count]) => (
+                      .sort(([, a], [, b]) => b.pezzi - a.pezzi)
+                      .map(([label, { pezzi, importo }]) => (
                         <div key={label} className="flex items-center justify-between text-xs">
                           <span className="truncate mr-2 text-muted-foreground">{label}</span>
-                          <Badge variant="outline" className="text-[10px] shrink-0">{count}</Badge>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {importo > 0 && <span className="text-[10px] text-green-600">{formatCurrency(importo)}</span>}
+                            <Badge variant="outline" className="text-[10px]">{pezzi}</Badge>
+                          </div>
                         </div>
                       ))}
                   </div>
