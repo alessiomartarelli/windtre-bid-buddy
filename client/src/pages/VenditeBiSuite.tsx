@@ -228,6 +228,8 @@ export default function VenditeBiSuite() {
   const [selectedSale, setSelectedSale] = useState<BisuiteSale | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
   const [filterPista, setFilterPista] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"vendite" | "addetti">("vendite");
+  const [selectedAddetto, setSelectedAddetto] = useState<string | null>(null);
 
   const orgId = profile?.organizationId || "";
   const queryClient = useQueryClient();
@@ -443,6 +445,19 @@ export default function VenditeBiSuite() {
       const rs = sale.ragioneSociale || "N/D";
       if (!map.has(rs)) map.set(rs, { ragioneSociale: rs, vendite: [], totaleImporto: 0, pdvCodes: new Set() });
       const entry = map.get(rs)!;
+      entry.vendite.push(sale);
+      entry.totaleImporto += parseFloat(sale.totale || "0") || 0;
+      entry.pdvCodes.add(sale.codicePos || "N/D");
+    }
+    return Array.from(map.values()).sort((a, b) => b.vendite.length - a.vendite.length);
+  }, [sales]);
+
+  const addettoSummaries = useMemo(() => {
+    const map = new Map<string, { nomeAddetto: string; vendite: BisuiteSale[]; totaleImporto: number; pdvCodes: Set<string> }>();
+    for (const sale of sales) {
+      const addetto = sale.nomeAddetto || "N/D";
+      if (!map.has(addetto)) map.set(addetto, { nomeAddetto: addetto, vendite: [], totaleImporto: 0, pdvCodes: new Set() });
+      const entry = map.get(addetto)!;
       entry.vendite.push(sale);
       entry.totaleImporto += parseFloat(sale.totale || "0") || 0;
       entry.pdvCodes.add(sale.codicePos || "N/D");
@@ -774,6 +789,162 @@ export default function VenditeBiSuite() {
             )}
 
             {!selectedPdv && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={viewMode === "vendite" ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => { setViewMode("vendite"); setSelectedAddetto(null); }}
+                  data-testid="button-view-vendite"
+                >
+                  <Store className="h-3.5 w-3.5 mr-1" />
+                  Per PDV
+                </Button>
+                <Button
+                  variant={viewMode === "addetti" ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => { setViewMode("addetti"); setSelectedPdv(null); }}
+                  data-testid="button-view-addetti"
+                >
+                  <User className="h-3.5 w-3.5 mr-1" />
+                  Per Addetto ({addettoSummaries.length})
+                </Button>
+              </div>
+            )}
+
+            {!selectedPdv && viewMode === "addetti" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <User className="h-5 w-5 text-primary" />
+                    Riepilogo per Addetto
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {addettoSummaries.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">Nessun addetto trovato</p>
+                  ) : selectedAddetto ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center">
+                            <User className="h-4 w-4 text-blue-600" />
+                          </div>
+                          <div>
+                            <div className="font-semibold text-sm">{selectedAddetto}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {addettoSummaries.find(a => a.nomeAddetto === selectedAddetto)?.vendite.length || 0} vendite ·{" "}
+                              {formatCurrency(addettoSummaries.find(a => a.nomeAddetto === selectedAddetto)?.totaleImporto || 0)}
+                            </div>
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => setSelectedAddetto(null)} data-testid="button-back-addetti">
+                          <X className="h-4 w-4 mr-1" /> Torna alla lista
+                        </Button>
+                      </div>
+                      <div className="overflow-x-auto -mx-2 sm:mx-0">
+                        <ScrollArea className="h-[500px]">
+                          <Table className="min-w-[900px]">
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[90px]">Data</TableHead>
+                                <TableHead>Negozio</TableHead>
+                                <TableHead>Stato</TableHead>
+                                <TableHead>Categorie</TableHead>
+                                <TableHead>Tipologie</TableHead>
+                                <TableHead>Descrizioni</TableHead>
+                                <TableHead>Cod. Contratto</TableHead>
+                                <TableHead>CF / P.IVA</TableHead>
+                                <TableHead>Cliente</TableHead>
+                                <TableHead className="text-right">Importo</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {(addettoSummaries.find(a => a.nomeAddetto === selectedAddetto)?.vendite || []).map((sale) => {
+                                const raw = sale.rawData || {};
+                                const articoli: any[] = raw.articoli || [];
+                                const cliente = raw.cliente || {};
+                                const categorie = [...new Set(articoli.map((a: any) => (a.categoria?.nome || '').trim()).filter(Boolean))].join(', ');
+                                const tipologie = [...new Set(articoli.map((a: any) => (a.tipologia?.nome || '').trim()).filter(Boolean))].join(', ');
+                                const descrizioni = articoli.map((a: any) => (a.descrizione || '').trim()).filter(Boolean).join(', ');
+                                const codiceContratto = raw.codiceEsterno || raw.id || '';
+                                const cf = cliente.codiceFiscale || '';
+                                const piva = cliente.piva || '';
+                                const cfPiva = [cf, piva].filter(Boolean).join(' / ');
+                                return (
+                                  <TableRow
+                                    key={sale.id}
+                                    className="cursor-pointer hover:bg-muted/50"
+                                    onClick={() => setSelectedSale(sale)}
+                                    data-testid={`row-addetto-sale-${sale.bisuiteId}`}
+                                  >
+                                    <TableCell className="text-xs whitespace-nowrap">{formatDate(sale.dataVendita)}</TableCell>
+                                    <TableCell>
+                                      <div className="text-sm font-medium">{sale.nomeNegozio || '-'}</div>
+                                      <div className="text-[10px] text-muted-foreground font-mono">{sale.codicePos || '-'}</div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline" className="text-[10px]">{sale.stato || '-'}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-xs max-w-[120px] truncate" title={categorie}>{categorie || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[120px] truncate" title={tipologie}>{tipologie || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[150px] truncate" title={descrizioni}>{descrizioni || '-'}</TableCell>
+                                    <TableCell className="text-xs font-mono">{codiceContratto || '-'}</TableCell>
+                                    <TableCell className="text-xs font-mono max-w-[130px] truncate" title={cfPiva}>{cfPiva || '-'}</TableCell>
+                                    <TableCell className="text-sm">{sale.nomeCliente || cliente.nominativo || '-'}</TableCell>
+                                    <TableCell className="text-right font-medium">{formatCurrency(parseFloat(sale.totale || '0') || 0)}</TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
+                      </div>
+                    </div>
+                  ) : (
+                    <Accordion type="multiple" className="space-y-2">
+                      {addettoSummaries.map((addetto) => (
+                        <AccordionItem key={addetto.nomeAddetto} value={addetto.nomeAddetto} className="border rounded-lg px-2 sm:px-4">
+                          <AccordionTrigger className="hover:no-underline">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
+                              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                <div className="h-8 w-8 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
+                                  <User className="h-4 w-4 text-blue-600" />
+                                </div>
+                                <div className="text-left min-w-0">
+                                  <div className="font-semibold text-sm truncate">{addetto.nomeAddetto}</div>
+                                  <div className="text-xs text-muted-foreground">{addetto.pdvCodes.size} PDV</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 sm:gap-3 pl-10 sm:pl-0">
+                                <Badge variant="outline" className="text-xs shrink-0">{addetto.vendite.length} vendite</Badge>
+                                <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20 shrink-0">{formatCurrency(addetto.totaleImporto)}</Badge>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="space-y-3 pb-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedAddetto(addetto.nomeAddetto)}
+                                data-testid={`button-view-addetto-${addetto.nomeAddetto}`}
+                              >
+                                Vedi dettaglio vendite
+                                <ChevronRight className="h-4 w-4 ml-1" />
+                              </Button>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {!selectedPdv && viewMode === "vendite" && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
