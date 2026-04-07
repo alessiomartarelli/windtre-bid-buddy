@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { apiUrl } from "@/lib/basePath";
 import { useLocation } from "wouter";
+import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +67,7 @@ import {
   Landmark,
   FileText,
   Wallet,
+  Download,
 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -465,6 +467,130 @@ export default function VenditeBiSuite() {
     return Array.from(map.values()).sort((a, b) => b.vendite.length - a.vendite.length);
   }, [sales]);
 
+  const allDomande = useMemo(() => {
+    const set = new Set<string>();
+    for (const sale of sales) {
+      const articoli: any[] = sale.rawData?.articoli || [];
+      for (const art of articoli) {
+        const qas: any[] = art.dettaglio?.domandeRisposte || [];
+        for (const qa of qas) {
+          if (qa.domandaTesto) set.add(qa.domandaTesto);
+        }
+      }
+    }
+    return Array.from(set).sort();
+  }, [sales]);
+
+  const buildSaleRow = useCallback((sale: BisuiteSale) => {
+    const raw = sale.rawData || {};
+    const articoli: any[] = raw.articoli || [];
+    const cliente = raw.cliente || {};
+    const canvassArts = articoli.filter((a: any) => {
+      const cls = classifyCategory((a.categoria?.nome || '').trim());
+      return cls?.type === 'canvass';
+    });
+    const prodottiArts = articoli.filter((a: any) => {
+      const cls = classifyCategory((a.categoria?.nome || '').trim());
+      return cls?.type === 'prodotti' || cls?.type === 'servizi';
+    });
+    const domandeMap: Record<string, string> = {};
+    for (const art of articoli) {
+      const qas: any[] = art.dettaglio?.domandeRisposte || [];
+      for (const qa of qas) {
+        if (qa.domandaTesto && qa.risposta) {
+          domandeMap[qa.domandaTesto] = qa.risposta;
+        }
+      }
+    }
+    return {
+      catCanvass: [...new Set(canvassArts.map((a: any) => (a.categoria?.nome || '').trim()).filter(Boolean))].join(', '),
+      tipCanvass: [...new Set(canvassArts.map((a: any) => (a.tipologia?.nome || '').trim()).filter(Boolean))].join(', '),
+      descCanvass: canvassArts.map((a: any) => (a.descrizione || '').trim()).filter(Boolean).join(', '),
+      catProdotto: [...new Set(prodottiArts.map((a: any) => (a.categoria?.nome || '').trim()).filter(Boolean))].join(', '),
+      tipProdotto: [...new Set(prodottiArts.map((a: any) => (a.tipologia?.nome || '').trim()).filter(Boolean))].join(', '),
+      descProdotto: prodottiArts.map((a: any) => (a.descrizione || '').trim()).filter(Boolean).join(', '),
+      domandeMap,
+      codiceContratto: String(raw.codiceEsterno || raw.id || ''),
+      cf: cliente.codiceFiscale || '',
+      piva: cliente.piva || '',
+      nomeCliente: sale.nomeCliente || cliente.nominativo || '',
+    };
+  }, []);
+
+  const exportExcelDettaglio = useCallback(() => {
+    const rows: Record<string, any>[] = [];
+    for (const sale of sales) {
+      const r = buildSaleRow(sale);
+      const row: Record<string, any> = {
+        'Addetto': sale.nomeAddetto || '-',
+        'Data': sale.dataVendita ? format(new Date(sale.dataVendita), "dd/MM/yyyy", { locale: it }) : '-',
+        'Negozio': sale.nomeNegozio || '-',
+        'Cod. POS': sale.codicePos || '-',
+        'Stato': sale.stato || '-',
+        'Cat. Canvass': r.catCanvass || '-',
+        'Tip. Canvass': r.tipCanvass || '-',
+        'Desc. Canvass': r.descCanvass || '-',
+        'Cat. Prodotto': r.catProdotto || '-',
+        'Tip. Prodotto': r.tipProdotto || '-',
+        'Desc. Prodotto': r.descProdotto || '-',
+      };
+      for (const d of allDomande) {
+        row[d] = r.domandeMap[d] || '';
+      }
+      row['Cod. Contratto'] = r.codiceContratto || '-';
+      row['CF'] = r.cf || '-';
+      row['P.IVA'] = r.piva || '-';
+      row['Cliente'] = r.nomeCliente || '-';
+      row['Importo'] = parseFloat(sale.totale || '0') || 0;
+      rows.push(row);
+    }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Vendite Dettaglio');
+    XLSX.writeFile(wb, `vendite_dettaglio_${fromDate}_${toDate}.xlsx`);
+  }, [sales, allDomande, buildSaleRow, fromDate, toDate]);
+
+  const exportExcelPerAddetto = useCallback(() => {
+    const rows: Record<string, any>[] = [];
+    for (const addetto of addettoSummaries) {
+      const row: Record<string, any> = {
+        'Addetto': addetto.nomeAddetto,
+        'N. Vendite': addetto.vendite.length,
+        'Importo Totale': addetto.totaleImporto,
+        'N. PDV': addetto.pdvCodes.size,
+        'PDV': Array.from(addetto.pdvCodes).join(', '),
+      };
+      const canvassCounts: Record<string, number> = {};
+      const prodottiCounts: Record<string, number> = {};
+      const domandeSi: Record<string, number> = {};
+      for (const sale of addetto.vendite) {
+        const articoli: any[] = sale.rawData?.articoli || [];
+        for (const art of articoli) {
+          const catName = (art.categoria?.nome || '').trim();
+          const cls = classifyCategory(catName);
+          if (cls?.type === 'canvass') canvassCounts[catName] = (canvassCounts[catName] || 0) + 1;
+          if (cls?.type === 'prodotti' || cls?.type === 'servizi') prodottiCounts[catName] = (prodottiCounts[catName] || 0) + 1;
+          const qas: any[] = art.dettaglio?.domandeRisposte || [];
+          for (const qa of qas) {
+            if (qa.domandaTesto && qa.risposta?.toUpperCase() === 'SI') {
+              domandeSi[qa.domandaTesto] = (domandeSi[qa.domandaTesto] || 0) + 1;
+            }
+          }
+        }
+      }
+      row['Categorie Canvass'] = Object.entries(canvassCounts).map(([k, v]) => `${k} (${v})`).join(', ');
+      row['Categorie Prodotto'] = Object.entries(prodottiCounts).map(([k, v]) => `${k} (${v})`).join(', ');
+      for (const d of allDomande) {
+        row[`SI: ${d}`] = domandeSi[d] || 0;
+      }
+      rows.push(row);
+    }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Riepilogo Addetti');
+    XLSX.writeFile(wb, `vendite_per_addetto_${fromDate}_${toDate}.xlsx`);
+  }, [addettoSummaries, allDomande, fromDate, toDate]);
+
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("it-IT", {
       style: "currency",
@@ -816,10 +942,20 @@ export default function VenditeBiSuite() {
             {!selectedPdv && viewMode === "addetti" && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <User className="h-5 w-5 text-primary" />
-                    Riepilogo per Addetto
-                  </CardTitle>
+                  <div className="flex items-center justify-between w-full">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <User className="h-5 w-5 text-primary" />
+                      Riepilogo per Addetto
+                    </CardTitle>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={exportExcelDettaglio} data-testid="button-export-dettaglio-header">
+                        <Download className="h-4 w-4 mr-1" /> Dettaglio
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={exportExcelPerAddetto} data-testid="button-export-per-addetto-header">
+                        <Download className="h-4 w-4 mr-1" /> Per Addetto
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {addettoSummaries.length === 0 ? (
@@ -845,10 +981,10 @@ export default function VenditeBiSuite() {
                       </div>
                       <div className="overflow-x-auto -mx-2 sm:mx-0">
                         <ScrollArea className="h-[500px]">
-                          <Table className="min-w-[900px]">
+                          <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead className="w-[90px]">Data</TableHead>
+                                <TableHead className="w-[90px] sticky left-0 bg-background z-10">Data</TableHead>
                                 <TableHead>Negozio</TableHead>
                                 <TableHead>Stato</TableHead>
                                 <TableHead>Cat. Canvass</TableHead>
@@ -857,7 +993,9 @@ export default function VenditeBiSuite() {
                                 <TableHead>Cat. Prodotto</TableHead>
                                 <TableHead>Tip. Prodotto</TableHead>
                                 <TableHead>Desc. Prodotto</TableHead>
-                                <TableHead>Domande</TableHead>
+                                {allDomande.map((d) => (
+                                  <TableHead key={d} className="whitespace-nowrap text-[10px] max-w-[120px]" title={d}>{d.length > 20 ? d.slice(0, 20) + '…' : d}</TableHead>
+                                ))}
                                 <TableHead>Cod. Contratto</TableHead>
                                 <TableHead>CF / P.IVA</TableHead>
                                 <TableHead>Cliente</TableHead>
@@ -866,37 +1004,8 @@ export default function VenditeBiSuite() {
                             </TableHeader>
                             <TableBody>
                               {(addettoSummaries.find(a => a.nomeAddetto === selectedAddetto)?.vendite || []).map((sale) => {
-                                const raw = sale.rawData || {};
-                                const articoli: any[] = raw.articoli || [];
-                                const cliente = raw.cliente || {};
-                                const canvassArts = articoli.filter((a: any) => {
-                                  const cls = classifyCategory((a.categoria?.nome || '').trim());
-                                  return cls?.type === 'canvass';
-                                });
-                                const prodottiArts = articoli.filter((a: any) => {
-                                  const cls = classifyCategory((a.categoria?.nome || '').trim());
-                                  return cls?.type === 'prodotti' || cls?.type === 'servizi';
-                                });
-                                const catCanvass = [...new Set(canvassArts.map((a: any) => (a.categoria?.nome || '').trim()).filter(Boolean))].join(', ');
-                                const tipCanvass = [...new Set(canvassArts.map((a: any) => (a.tipologia?.nome || '').trim()).filter(Boolean))].join(', ');
-                                const descCanvass = canvassArts.map((a: any) => (a.descrizione || '').trim()).filter(Boolean).join(', ');
-                                const catProdotto = [...new Set(prodottiArts.map((a: any) => (a.categoria?.nome || '').trim()).filter(Boolean))].join(', ');
-                                const tipProdotto = [...new Set(prodottiArts.map((a: any) => (a.tipologia?.nome || '').trim()).filter(Boolean))].join(', ');
-                                const descProdotto = prodottiArts.map((a: any) => (a.descrizione || '').trim()).filter(Boolean).join(', ');
-                                const domande: string[] = [];
-                                for (const art of articoli) {
-                                  const qas: any[] = art.dettaglio?.domandeRisposte || [];
-                                  for (const qa of qas) {
-                                    if (qa.domandaTesto && qa.risposta) {
-                                      domande.push(`${qa.domandaTesto}: ${qa.risposta}`);
-                                    }
-                                  }
-                                }
-                                const domandeText = domande.join(' | ');
-                                const codiceContratto = raw.codiceEsterno || raw.id || '';
-                                const cf = cliente.codiceFiscale || '';
-                                const piva = cliente.piva || '';
-                                const cfPiva = [cf, piva].filter(Boolean).join(' / ');
+                                const r = buildSaleRow(sale);
+                                const cfPiva = [r.cf, r.piva].filter(Boolean).join(' / ');
                                 return (
                                   <TableRow
                                     key={sale.id}
@@ -904,7 +1013,7 @@ export default function VenditeBiSuite() {
                                     onClick={() => setSelectedSale(sale)}
                                     data-testid={`row-addetto-sale-${sale.bisuiteId}`}
                                   >
-                                    <TableCell className="text-xs whitespace-nowrap">{formatDate(sale.dataVendita)}</TableCell>
+                                    <TableCell className="text-xs whitespace-nowrap sticky left-0 bg-background z-10">{formatDate(sale.dataVendita)}</TableCell>
                                     <TableCell>
                                       <div className="text-sm font-medium">{sale.nomeNegozio || '-'}</div>
                                       <div className="text-[10px] text-muted-foreground font-mono">{sale.codicePos || '-'}</div>
@@ -912,16 +1021,24 @@ export default function VenditeBiSuite() {
                                     <TableCell>
                                       <Badge variant="outline" className="text-[10px]">{sale.stato || '-'}</Badge>
                                     </TableCell>
-                                    <TableCell className="text-xs max-w-[110px] truncate" title={catCanvass}>{catCanvass || '-'}</TableCell>
-                                    <TableCell className="text-xs max-w-[110px] truncate" title={tipCanvass}>{tipCanvass || '-'}</TableCell>
-                                    <TableCell className="text-xs max-w-[130px] truncate" title={descCanvass}>{descCanvass || '-'}</TableCell>
-                                    <TableCell className="text-xs max-w-[110px] truncate" title={catProdotto}>{catProdotto || '-'}</TableCell>
-                                    <TableCell className="text-xs max-w-[110px] truncate" title={tipProdotto}>{tipProdotto || '-'}</TableCell>
-                                    <TableCell className="text-xs max-w-[130px] truncate" title={descProdotto}>{descProdotto || '-'}</TableCell>
-                                    <TableCell className="text-xs max-w-[150px] truncate" title={domandeText}>{domandeText || '-'}</TableCell>
-                                    <TableCell className="text-xs font-mono">{codiceContratto || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[110px] truncate" title={r.catCanvass}>{r.catCanvass || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[110px] truncate" title={r.tipCanvass}>{r.tipCanvass || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[130px] truncate" title={r.descCanvass}>{r.descCanvass || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[110px] truncate" title={r.catProdotto}>{r.catProdotto || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[110px] truncate" title={r.tipProdotto}>{r.tipProdotto || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[130px] truncate" title={r.descProdotto}>{r.descProdotto || '-'}</TableCell>
+                                    {allDomande.map((d) => (
+                                      <TableCell key={d} className="text-xs text-center whitespace-nowrap">
+                                        {r.domandeMap[d] ? (
+                                          <Badge variant={r.domandeMap[d].toUpperCase() === 'SI' ? 'default' : 'outline'} className="text-[9px]">
+                                            {r.domandeMap[d]}
+                                          </Badge>
+                                        ) : '-'}
+                                      </TableCell>
+                                    ))}
+                                    <TableCell className="text-xs font-mono">{r.codiceContratto || '-'}</TableCell>
                                     <TableCell className="text-xs font-mono max-w-[130px] truncate" title={cfPiva}>{cfPiva || '-'}</TableCell>
-                                    <TableCell className="text-sm">{sale.nomeCliente || cliente.nominativo || '-'}</TableCell>
+                                    <TableCell className="text-sm">{r.nomeCliente || '-'}</TableCell>
                                     <TableCell className="text-right font-medium">{formatCurrency(parseFloat(sale.totale || '0') || 0)}</TableCell>
                                   </TableRow>
                                 );
