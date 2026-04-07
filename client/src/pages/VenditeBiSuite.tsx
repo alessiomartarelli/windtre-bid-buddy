@@ -979,8 +979,7 @@ export default function VenditeBiSuite() {
                           <X className="h-4 w-4 mr-1" /> Torna alla lista
                         </Button>
                       </div>
-                      <div className="overflow-x-auto -mx-2 sm:mx-0">
-                        <ScrollArea className="h-[500px]">
+                      <div className="overflow-auto max-h-[500px] -mx-2 sm:mx-0 border rounded-md">
                           <Table>
                             <TableHeader>
                               <TableRow>
@@ -1045,7 +1044,6 @@ export default function VenditeBiSuite() {
                               })}
                             </TableBody>
                           </Table>
-                        </ScrollArea>
                       </div>
                     </div>
                   ) : (
