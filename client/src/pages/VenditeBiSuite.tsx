@@ -851,9 +851,13 @@ export default function VenditeBiSuite() {
                                 <TableHead className="w-[90px]">Data</TableHead>
                                 <TableHead>Negozio</TableHead>
                                 <TableHead>Stato</TableHead>
-                                <TableHead>Categorie</TableHead>
-                                <TableHead>Tipologie</TableHead>
-                                <TableHead>Descrizioni</TableHead>
+                                <TableHead>Cat. Canvass</TableHead>
+                                <TableHead>Tip. Canvass</TableHead>
+                                <TableHead>Desc. Canvass</TableHead>
+                                <TableHead>Cat. Prodotto</TableHead>
+                                <TableHead>Tip. Prodotto</TableHead>
+                                <TableHead>Desc. Prodotto</TableHead>
+                                <TableHead>Domande</TableHead>
                                 <TableHead>Cod. Contratto</TableHead>
                                 <TableHead>CF / P.IVA</TableHead>
                                 <TableHead>Cliente</TableHead>
@@ -865,9 +869,30 @@ export default function VenditeBiSuite() {
                                 const raw = sale.rawData || {};
                                 const articoli: any[] = raw.articoli || [];
                                 const cliente = raw.cliente || {};
-                                const categorie = [...new Set(articoli.map((a: any) => (a.categoria?.nome || '').trim()).filter(Boolean))].join(', ');
-                                const tipologie = [...new Set(articoli.map((a: any) => (a.tipologia?.nome || '').trim()).filter(Boolean))].join(', ');
-                                const descrizioni = articoli.map((a: any) => (a.descrizione || '').trim()).filter(Boolean).join(', ');
+                                const canvassArts = articoli.filter((a: any) => {
+                                  const cls = classifyCategory((a.categoria?.nome || '').trim());
+                                  return cls?.type === 'canvass';
+                                });
+                                const prodottiArts = articoli.filter((a: any) => {
+                                  const cls = classifyCategory((a.categoria?.nome || '').trim());
+                                  return cls?.type === 'prodotti' || cls?.type === 'servizi';
+                                });
+                                const catCanvass = [...new Set(canvassArts.map((a: any) => (a.categoria?.nome || '').trim()).filter(Boolean))].join(', ');
+                                const tipCanvass = [...new Set(canvassArts.map((a: any) => (a.tipologia?.nome || '').trim()).filter(Boolean))].join(', ');
+                                const descCanvass = canvassArts.map((a: any) => (a.descrizione || '').trim()).filter(Boolean).join(', ');
+                                const catProdotto = [...new Set(prodottiArts.map((a: any) => (a.categoria?.nome || '').trim()).filter(Boolean))].join(', ');
+                                const tipProdotto = [...new Set(prodottiArts.map((a: any) => (a.tipologia?.nome || '').trim()).filter(Boolean))].join(', ');
+                                const descProdotto = prodottiArts.map((a: any) => (a.descrizione || '').trim()).filter(Boolean).join(', ');
+                                const domande: string[] = [];
+                                for (const art of articoli) {
+                                  const qas: any[] = art.dettaglio?.domandeRisposte || [];
+                                  for (const qa of qas) {
+                                    if (qa.domandaTesto && qa.risposta) {
+                                      domande.push(`${qa.domandaTesto}: ${qa.risposta}`);
+                                    }
+                                  }
+                                }
+                                const domandeText = domande.join(' | ');
                                 const codiceContratto = raw.codiceEsterno || raw.id || '';
                                 const cf = cliente.codiceFiscale || '';
                                 const piva = cliente.piva || '';
@@ -887,9 +912,13 @@ export default function VenditeBiSuite() {
                                     <TableCell>
                                       <Badge variant="outline" className="text-[10px]">{sale.stato || '-'}</Badge>
                                     </TableCell>
-                                    <TableCell className="text-xs max-w-[120px] truncate" title={categorie}>{categorie || '-'}</TableCell>
-                                    <TableCell className="text-xs max-w-[120px] truncate" title={tipologie}>{tipologie || '-'}</TableCell>
-                                    <TableCell className="text-xs max-w-[150px] truncate" title={descrizioni}>{descrizioni || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[110px] truncate" title={catCanvass}>{catCanvass || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[110px] truncate" title={tipCanvass}>{tipCanvass || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[130px] truncate" title={descCanvass}>{descCanvass || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[110px] truncate" title={catProdotto}>{catProdotto || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[110px] truncate" title={tipProdotto}>{tipProdotto || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[130px] truncate" title={descProdotto}>{descProdotto || '-'}</TableCell>
+                                    <TableCell className="text-xs max-w-[150px] truncate" title={domandeText}>{domandeText || '-'}</TableCell>
                                     <TableCell className="text-xs font-mono">{codiceContratto || '-'}</TableCell>
                                     <TableCell className="text-xs font-mono max-w-[130px] truncate" title={cfPiva}>{cfPiva || '-'}</TableCell>
                                     <TableCell className="text-sm">{sale.nomeCliente || cliente.nominativo || '-'}</TableCell>
