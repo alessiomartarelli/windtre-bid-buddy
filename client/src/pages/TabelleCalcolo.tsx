@@ -224,6 +224,11 @@ function buildHardcodedDefaults(): TabelleCalcoloConfig {
     partnershipGettoni[key] = val.gettoni;
   }
 
+  const clusterGettoniUntied: Record<string, number> = {};
+  CAMBIO_OFFERTA_UNTIED_CLUSTERS.forEach(c => { clusterGettoniUntied[c.cluster] = c.gettoni; });
+  const clusterGettoniRivincoli: Record<string, number> = {};
+  CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS.forEach(c => { clusterGettoniRivincoli[c.cluster] = c.gettoni; });
+
   return {
     mobile: {
       soglieCluster: { ...MOBILE_SOGLIE_DEFAULTS },
@@ -257,6 +262,8 @@ function buildHardcodedDefaults(): TabelleCalcoloConfig {
     partnership: {
       puntiPartnership: partnershipPunti,
       gettoniEvento: partnershipGettoni,
+      clusterGettoniUntied,
+      clusterGettoniRivincoli,
     },
   };
 }
