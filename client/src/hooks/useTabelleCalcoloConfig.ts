@@ -8,6 +8,7 @@ import { PROTECTA_GETTONI, ProtectaProduct } from "@/types/protecta";
 import { PUNTI_EXTRA_GARA, SOGLIE_BASE_EXTRA_GARA, PREMI_EXTRA_GARA } from "@/lib/calcoloExtraGaraIva";
 import { FISSO_CATEGORIE_DEFAULT, FissoCategoriaConfig } from "@/lib/calcoloPistaFisso";
 import { ClusterPIvaCode } from "@/types/preventivatore";
+import { PARTNERSHIP_DEFAULTS } from "@/types/partnership-cb-events";
 
 export interface TabelleCalcoloValues {
   mobile: {
@@ -38,6 +39,10 @@ export interface TabelleCalcoloValues {
     soglieMultipos: Record<string, Record<string, number>>;
     soglieMonopos: Record<string, Record<string, number>>;
     premiPerSoglia: Record<string, number[]>;
+  };
+  partnership: {
+    puntiPartnership: Record<string, number>;
+    gettoniEvento: Record<string, number>;
   };
 }
 
@@ -143,6 +148,13 @@ function buildDefaults(): TabelleCalcoloValues {
   const pistaBase: Record<string, number> = { ...PISTA_ENERGIA_SOGLIE_BASE };
   const pistaDa4: Record<string, number> = { ...PISTA_ENERGIA_SOGLIE_DA4 };
 
+  const partnershipPunti: Record<string, number> = {};
+  const partnershipGettoni: Record<string, number> = {};
+  for (const [key, val] of Object.entries(PARTNERSHIP_DEFAULTS)) {
+    partnershipPunti[key] = val.puntiPartnership;
+    partnershipGettoni[key] = val.gettoni;
+  }
+
   return {
     mobile: { categories: [...MOBILE_CATEGORIES_CONFIG_DEFAULT], soglieCluster: mobileSoglieCluster, moltiplicatoriCanone },
     fisso: { euroPerPezzo: fissoEuro, gettoniContrattuali: fissoGettoni, soglieCluster: fissoSoglieCluster },
@@ -154,6 +166,10 @@ function buildDefaults(): TabelleCalcoloValues {
       soglieMultipos: extraSoglieMulti,
       soglieMonopos: extraSoglieMono,
       premiPerSoglia: extraPremi,
+    },
+    partnership: {
+      puntiPartnership: partnershipPunti,
+      gettoniEvento: partnershipGettoni,
     },
   };
 }
@@ -243,6 +259,13 @@ function applyConfigToDefaults(merged: any, defaults: TabelleCalcoloValues): Tab
         result.extraGara.premiPerSoglia[key] = [...arr];
       }
     }
+  }
+
+  if (merged.partnership?.puntiPartnership) {
+    Object.assign(result.partnership.puntiPartnership, merged.partnership.puntiPartnership);
+  }
+  if (merged.partnership?.gettoniEvento) {
+    Object.assign(result.partnership.gettoniEvento, merged.partnership.gettoniEvento);
   }
 
   return result;

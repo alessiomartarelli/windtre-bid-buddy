@@ -126,6 +126,29 @@ export interface AttivatoCBDettaglio {
   note?: string;
 }
 
+export const PARTNERSHIP_DEFAULTS: Record<string, { gettoni: number; puntiPartnership: number; label: string }> = {};
+CB_EVENTS_CONFIG.filter(e => e.category === 'customer_base').forEach(e => {
+  PARTNERSHIP_DEFAULTS[e.type] = { gettoni: e.gettoni, puntiPartnership: 1, label: e.label };
+});
+PARTNERSHIP_DEFAULTS['cambio_offerta_untied'] = { gettoni: 3, puntiPartnership: 2, label: 'Cambio Offerta UNTIED (media cluster)' };
+PARTNERSHIP_DEFAULTS['cambio_offerta_rivincoli'] = { gettoni: 4, puntiPartnership: 4, label: 'Cambio Offerta Rivincoli (media cluster)' };
+PARTNERSHIP_DEFAULTS['telefono_incluso_var'] = { gettoni: 10, puntiPartnership: 6, label: 'Telefono Incluso VAR (media)' };
+PARTNERSHIP_DEFAULTS['telefono_incluso_smart_pack_compass_findomestic'] = { gettoni: 20, puntiPartnership: 8, label: 'Telefono Incluso Compass/Findomestic' };
+PARTNERSHIP_DEFAULTS['cambio_offerta_smart_pack'] = { gettoni: 12, puntiPartnership: 2, label: 'Cambio Offerta Smart Pack con OTP' };
+PARTNERSHIP_DEFAULTS['multi_device_standard'] = { gettoni: 15, puntiPartnership: 6, label: 'Multi Device Standard' };
+PARTNERSHIP_DEFAULTS['multi_device_finanziamento'] = { gettoni: 15, puntiPartnership: 6, label: 'Multi Device Finanziamento' };
+PARTNERSHIP_DEFAULTS['addon_ricorrenti_mensile_low'] = { gettoni: 3, puntiPartnership: 1, label: 'Add On Ricorrenti ≤ 9.99€' };
+PARTNERSHIP_DEFAULTS['addon_ricorrenti_mensile_high'] = { gettoni: 5, puntiPartnership: 1, label: 'Add On Ricorrenti ≥ 9.99€' };
+PARTNERSHIP_DEFAULTS['addon_one_off'] = { gettoni: 3, puntiPartnership: 1, label: 'Add On One Off' };
+PARTNERSHIP_DEFAULTS['addon_unlimited_giga'] = { gettoni: 5, puntiPartnership: 1, label: 'Add On Unlimited Giga Boom' };
+PARTNERSHIP_DEFAULTS['opzione_piu_sicuri_pro'] = { gettoni: 5, puntiPartnership: 1, label: 'Più Sicuri Mobile Pro' };
+PARTNERSHIP_DEFAULTS['opzione_piu_sicuri'] = { gettoni: 0.5, puntiPartnership: 1, label: 'Più Sicuri Mobile' };
+PARTNERSHIP_DEFAULTS['reload_exchange'] = { gettoni: 5, puntiPartnership: 1, label: 'Reload Exchange' };
+PARTNERSHIP_DEFAULTS['gestione_cambia_telefono'] = { gettoni: 17, puntiPartnership: 1, label: 'Gestione Cambia Telefono con Reload Plus' };
+PARTNERSHIP_DEFAULTS['windtre_goplay'] = { gettoni: 3, puntiPartnership: 1, label: 'WindTre GoPlay' };
+PARTNERSHIP_DEFAULTS['buy_tied'] = { gettoni: 12, puntiPartnership: 2, label: 'BUY TIED con OTP' };
+PARTNERSHIP_DEFAULTS['buy_untied'] = { gettoni: 8, puntiPartnership: 2, label: 'BUY UNTIED' };
+
 export interface CalcoloPartnershipRewardResult {
   punti: number;
   totaleGettoni: number;

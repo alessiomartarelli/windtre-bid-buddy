@@ -19,6 +19,7 @@ import { FISSO_CATEGORIE_DEFAULT } from '@/lib/calcoloPistaFisso';
 import { PROTECTA_GETTONI, PROTECTA_LABELS, ProtectaProduct } from '@/types/protecta';
 import { PUNTI_EXTRA_GARA, SOGLIE_BASE_EXTRA_GARA, PREMI_EXTRA_GARA } from '@/lib/calcoloExtraGaraIva';
 import { ClusterPIvaCode } from '@/types/preventivatore';
+import { PARTNERSHIP_DEFAULTS } from '@/types/partnership-cb-events';
 
 interface TabelleCalcoloConfig {
   mobile?: {
@@ -49,6 +50,10 @@ interface TabelleCalcoloConfig {
     soglieMultipos?: Record<string, Record<string, number>>;
     soglieMonopos?: Record<string, Record<string, number>>;
     premiPerSoglia?: Record<string, number[]>;
+  };
+  partnership?: {
+    puntiPartnership?: Record<string, number>;
+    gettoniEvento?: Record<string, number>;
   };
 }
 
@@ -210,6 +215,13 @@ function buildHardcodedDefaults(): TabelleCalcoloConfig {
     premiPerSoglia[cluster] = [...PREMI_EXTRA_GARA[cluster as ClusterPIvaCode]];
   }
 
+  const partnershipPunti: Record<string, number> = {};
+  const partnershipGettoni: Record<string, number> = {};
+  for (const [key, val] of Object.entries(PARTNERSHIP_DEFAULTS)) {
+    partnershipPunti[key] = val.puntiPartnership;
+    partnershipGettoni[key] = val.gettoni;
+  }
+
   return {
     mobile: {
       soglieCluster: { ...MOBILE_SOGLIE_DEFAULTS },
@@ -239,6 +251,10 @@ function buildHardcodedDefaults(): TabelleCalcoloConfig {
       soglieMultipos,
       soglieMonopos,
       premiPerSoglia,
+    },
+    partnership: {
+      puntiPartnership: partnershipPunti,
+      gettoniEvento: partnershipGettoni,
     },
   };
 }
@@ -456,7 +472,7 @@ export default function TabelleCalcolo() {
 
   const computeOverrides = useCallback((): TabelleCalcoloConfig => {
     const overrides: TabelleCalcoloConfig = {};
-    const sections = ['mobile', 'fisso', 'energia', 'assicurazioni', 'protecta', 'extraGara'] as const;
+    const sections = ['mobile', 'fisso', 'energia', 'assicurazioni', 'protecta', 'extraGara', 'partnership'] as const;
     for (const section of sections) {
       const currentSection = config[section];
       const defaultSection = systemConfig[section];
@@ -609,6 +625,7 @@ export default function TabelleCalcolo() {
               <TabsTrigger value="assicurazioni" className="text-xs sm:text-sm" data-testid="tab-assicurazioni">Assicurazioni</TabsTrigger>
               <TabsTrigger value="protecta" className="text-xs sm:text-sm" data-testid="tab-protecta">Protecta</TabsTrigger>
               <TabsTrigger value="extraGara" className="text-xs sm:text-sm" data-testid="tab-extra-gara">Extra Gara</TabsTrigger>
+              <TabsTrigger value="partnership" className="text-xs sm:text-sm" data-testid="tab-partnership">Partnership</TabsTrigger>
             </TabsList>
             </div>
 
@@ -678,6 +695,16 @@ export default function TabelleCalcolo() {
                 updateArrayValue={updateArrayValue}
                 resetValue={resetValue}
                 resetArrayValue={resetArrayValue}
+              />
+            </TabsContent>
+
+            <TabsContent value="partnership" className="space-y-6">
+              <PartnershipTab
+                config={config}
+                systemConfig={systemConfig}
+                isOverridden={isOverridden}
+                updateValue={updateValue}
+                resetValue={resetValue}
               />
             </TabsContent>
           </Tabs>
@@ -1387,5 +1414,73 @@ function ExtraGaraTab({ config, systemConfig, isOverridden, isArrayOverridden, u
         </CardContent>
       </Card>
     </>
+  );
+}
+
+interface PartnershipTabProps {
+  config: TabelleCalcoloConfig;
+  systemConfig: TabelleCalcoloConfig;
+  isOverridden: (path: string) => boolean;
+  updateValue: (path: string, value: number) => void;
+  resetValue: (path: string) => void;
+}
+
+const PARTNERSHIP_EVENT_KEYS = Object.keys(PARTNERSHIP_DEFAULTS);
+
+function PartnershipTab({ config, systemConfig, isOverridden, updateValue, resetValue }: PartnershipTabProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Punti e Gettoni per Evento CB</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-2 font-medium text-muted-foreground">Evento</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Punti Partnership</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Gettoni (€)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PARTNERSHIP_EVENT_KEYS.map((key) => {
+                const label = PARTNERSHIP_DEFAULTS[key]?.label || key;
+                const puntiPath = `partnership.puntiPartnership.${key}`;
+                const gettoniPath = `partnership.gettoniEvento.${key}`;
+                const puntiVal = getNestedValue(config, puntiPath) ?? PARTNERSHIP_DEFAULTS[key]?.puntiPartnership ?? 1;
+                const gettoniVal = getNestedValue(config, gettoniPath) ?? PARTNERSHIP_DEFAULTS[key]?.gettoni ?? 0;
+                const puntiDef = getNestedValue(systemConfig, puntiPath) ?? PARTNERSHIP_DEFAULTS[key]?.puntiPartnership ?? 1;
+                const gettoniDef = getNestedValue(systemConfig, gettoniPath) ?? PARTNERSHIP_DEFAULTS[key]?.gettoni ?? 0;
+
+                return (
+                  <tr key={key} className="border-b hover:bg-muted/30">
+                    <td className="p-2 text-sm">{label}</td>
+                    <EditableCell
+                      value={puntiVal}
+                      defaultValue={puntiDef}
+                      isOverridden={isOverridden(puntiPath)}
+                      onChange={v => updateValue(puntiPath, v)}
+                      onReset={() => resetValue(puntiPath)}
+                      testId={`input-partnership-punti-${key}`}
+                      step="0.5"
+                    />
+                    <EditableCell
+                      value={gettoniVal}
+                      defaultValue={gettoniDef}
+                      isOverridden={isOverridden(gettoniPath)}
+                      onChange={v => updateValue(gettoniPath, v)}
+                      onReset={() => resetValue(gettoniPath)}
+                      testId={`input-partnership-gettoni-${key}`}
+                      step="0.5"
+                    />
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
