@@ -601,7 +601,6 @@ function calcEnergiaPerPdv(
   };
 }
 
-const CB_EVENT_LOOKUP = new Map(CB_EVENTS_CONFIG.map((c) => [c.type, c]));
 const VALID_CB_TYPES = new Set(CB_EVENTS_CONFIG.map((c) => c.type as string));
 
 function resolveClusterGettoniFromConfig(

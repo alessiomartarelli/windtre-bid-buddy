@@ -54,6 +54,8 @@ interface TabelleCalcoloConfig {
   partnership?: {
     puntiPartnership?: Record<string, number>;
     gettoniEvento?: Record<string, number>;
+    clusterGettoniUntied?: Record<string, number>;
+    clusterGettoniRivincoli?: Record<string, number>;
   };
 }
 
@@ -1426,8 +1428,6 @@ interface PartnershipTabProps {
 }
 
 const PARTNERSHIP_EVENT_KEYS = Object.keys(PARTNERSHIP_DEFAULTS);
-
-const CLUSTER_VARIANT_EVENTS = new Set(['cambio_offerta_untied', 'cambio_offerta_rivincoli']);
 
 function PartnershipTab({ config, systemConfig, isOverridden, updateValue, resetValue }: PartnershipTabProps) {
   return (

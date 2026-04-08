@@ -135,14 +135,7 @@ export interface PartnershipDefaultEntry {
 
 export const PARTNERSHIP_DEFAULTS: Record<string, PartnershipDefaultEntry> = {};
 
-const UNTIED_CLUSTER_MAP: Record<string, number> = {};
-CAMBIO_OFFERTA_UNTIED_CLUSTERS.forEach(c => { UNTIED_CLUSTER_MAP[c.cluster] = c.gettoni; });
 
-const RIVINCOLI_CLUSTER_MAP: Record<string, number> = {};
-CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS.forEach(c => { RIVINCOLI_CLUSTER_MAP[c.cluster] = c.gettoni; });
-
-const TI_OPTION_MAP: Record<string, { gettoni: number; puntiPartnership: number }> = {};
-TELEFONO_INCLUSO_OPTIONS.forEach(o => { TI_OPTION_MAP[o.option] = { gettoni: o.gettoni, puntiPartnership: o.puntiPartnership }; });
 
 CB_EVENTS_CONFIG.forEach(e => {
   if (!PARTNERSHIP_DEFAULTS[e.type]) {
@@ -173,17 +166,6 @@ PARTNERSHIP_DEFAULTS['IMP_AGG_GT0_FINANZ'] = { gettoni: 20, puntiPartnership: 8,
 PARTNERSHIP_DEFAULTS['IMP_AGG_GT0_VAR'] = { gettoni: 15, puntiPartnership: 6, label: 'IMP.AGG>0 VAR' };
 PARTNERSHIP_DEFAULTS['MIGRAZIONI_FTTH_FWA'] = { gettoni: 40, puntiPartnership: 1, label: 'Migrazioni FTTH/FWA' };
 
-export function resolveClusterGettoni(eventType: string, clusterCard?: string): number | undefined {
-  if (eventType === 'cambio_offerta_untied' && clusterCard) {
-    return UNTIED_CLUSTER_MAP[clusterCard];
-  }
-  if (eventType === 'cambio_offerta_rivincoli' && clusterCard) {
-    return RIVINCOLI_CLUSTER_MAP[clusterCard];
-  }
-  return undefined;
-}
-
-export { UNTIED_CLUSTER_MAP, RIVINCOLI_CLUSTER_MAP, TI_OPTION_MAP };
 
 export interface CalcoloPartnershipRewardResult {
   punti: number;
