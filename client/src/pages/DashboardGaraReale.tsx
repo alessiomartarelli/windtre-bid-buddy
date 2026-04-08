@@ -623,10 +623,14 @@ function calcPartnershipPerPdv(
       ?? 1;
 
     const clusterGettoni = resolveClusterGettoni(item.targetCategory, clusterCB);
-    const gettoni = tcPartnership?.gettoniEvento?.[item.targetCategory]
-      ?? clusterGettoni
-      ?? defaults?.gettoni
-      ?? 0;
+    let gettoni: number;
+    if (clusterGettoni !== undefined) {
+      gettoni = clusterGettoni;
+    } else {
+      gettoni = tcPartnership?.gettoniEvento?.[item.targetCategory]
+        ?? defaults?.gettoni
+        ?? 0;
+    }
     return {
       eventType: item.targetCategory as CBEventType,
       pezzi: item.pezzi,

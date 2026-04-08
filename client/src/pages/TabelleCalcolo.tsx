@@ -1458,12 +1458,13 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
                   const puntiDef = getNestedValue(systemConfig, puntiPath) ?? defaults.puntiPartnership;
                   const gettoniDef = getNestedValue(systemConfig, gettoniPath) ?? defaults.gettoni;
 
+                  const isClusterDep = !!defaults.clusterDependent;
                   return (
-                    <tr key={key} className={`border-b hover:bg-muted/30 ${CLUSTER_VARIANT_EVENTS.has(key) ? 'bg-muted/10' : ''}`}>
+                    <tr key={key} className={`border-b hover:bg-muted/30 ${isClusterDep ? 'bg-muted/10' : ''}`}>
                       <td className="p-2 text-sm">
                         {label}
-                        {defaults.clusterDependent && (
-                          <span className="ml-1 text-xs text-muted-foreground">(gettoni medi, vedi cluster sotto)</span>
+                        {isClusterDep && (
+                          <span className="ml-1 text-xs text-muted-foreground">(gettoni da cluster, vedi tabella sotto)</span>
                         )}
                       </td>
                       <EditableCell
@@ -1475,15 +1476,19 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
                         testId={`input-partnership-punti-${key}`}
                         step="0.5"
                       />
-                      <EditableCell
-                        value={gettoniVal}
-                        defaultValue={gettoniDef}
-                        isOverridden={isOverridden(gettoniPath)}
-                        onChange={v => updateValue(gettoniPath, v)}
-                        onReset={() => resetValue(gettoniPath)}
-                        testId={`input-partnership-gettoni-${key}`}
-                        step="0.5"
-                      />
+                      {isClusterDep ? (
+                        <td className="p-2 text-center text-sm text-muted-foreground italic">da cluster</td>
+                      ) : (
+                        <EditableCell
+                          value={gettoniVal}
+                          defaultValue={gettoniDef}
+                          isOverridden={isOverridden(gettoniPath)}
+                          onChange={v => updateValue(gettoniPath, v)}
+                          onReset={() => resetValue(gettoniPath)}
+                          testId={`input-partnership-gettoni-${key}`}
+                          step="0.5"
+                        />
+                      )}
                     </tr>
                   );
                 })}
