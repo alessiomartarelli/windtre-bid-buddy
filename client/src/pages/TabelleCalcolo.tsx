@@ -19,7 +19,7 @@ import { FISSO_CATEGORIE_DEFAULT } from '@/lib/calcoloPistaFisso';
 import { PROTECTA_GETTONI, PROTECTA_LABELS, ProtectaProduct } from '@/types/protecta';
 import { PUNTI_EXTRA_GARA, SOGLIE_BASE_EXTRA_GARA, PREMI_EXTRA_GARA } from '@/lib/calcoloExtraGaraIva';
 import { ClusterPIvaCode } from '@/types/preventivatore';
-import { PARTNERSHIP_DEFAULTS } from '@/types/partnership-cb-events';
+import { PARTNERSHIP_DEFAULTS, CAMBIO_OFFERTA_UNTIED_CLUSTERS, CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS, TELEFONO_INCLUSO_OPTIONS } from '@/types/partnership-cb-events';
 
 interface TabelleCalcoloConfig {
   mobile?: {
@@ -1427,60 +1427,152 @@ interface PartnershipTabProps {
 
 const PARTNERSHIP_EVENT_KEYS = Object.keys(PARTNERSHIP_DEFAULTS);
 
+const CLUSTER_VARIANT_EVENTS = new Set(['cambio_offerta_untied', 'cambio_offerta_rivincoli']);
+
 function PartnershipTab({ config, systemConfig, isOverridden, updateValue, resetValue }: PartnershipTabProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Punti e Gettoni per Evento CB</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Punti e Gettoni per Evento CB</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-2 font-medium text-muted-foreground">Evento</th>
+                  <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Punti Partnership</th>
+                  <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Gettoni (€)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {PARTNERSHIP_EVENT_KEYS.map((key) => {
+                  const defaults = PARTNERSHIP_DEFAULTS[key];
+                  if (!defaults) return null;
+                  const label = defaults.label;
+                  const puntiPath = `partnership.puntiPartnership.${key}`;
+                  const gettoniPath = `partnership.gettoniEvento.${key}`;
+                  const puntiVal = getNestedValue(config, puntiPath) ?? defaults.puntiPartnership;
+                  const gettoniVal = getNestedValue(config, gettoniPath) ?? defaults.gettoni;
+                  const puntiDef = getNestedValue(systemConfig, puntiPath) ?? defaults.puntiPartnership;
+                  const gettoniDef = getNestedValue(systemConfig, gettoniPath) ?? defaults.gettoni;
+
+                  return (
+                    <tr key={key} className={`border-b hover:bg-muted/30 ${CLUSTER_VARIANT_EVENTS.has(key) ? 'bg-muted/10' : ''}`}>
+                      <td className="p-2 text-sm">
+                        {label}
+                        {defaults.clusterDependent && (
+                          <span className="ml-1 text-xs text-muted-foreground">(gettoni medi, vedi cluster sotto)</span>
+                        )}
+                      </td>
+                      <EditableCell
+                        value={puntiVal}
+                        defaultValue={puntiDef}
+                        isOverridden={isOverridden(puntiPath)}
+                        onChange={v => updateValue(puntiPath, v)}
+                        onReset={() => resetValue(puntiPath)}
+                        testId={`input-partnership-punti-${key}`}
+                        step="0.5"
+                      />
+                      <EditableCell
+                        value={gettoniVal}
+                        defaultValue={gettoniDef}
+                        isOverridden={isOverridden(gettoniPath)}
+                        onChange={v => updateValue(gettoniPath, v)}
+                        onReset={() => resetValue(gettoniPath)}
+                        testId={`input-partnership-gettoni-${key}`}
+                        step="0.5"
+                      />
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Gettoni per Cluster — Cambio Offerta Untied</CardTitle>
+          <p className="text-xs text-muted-foreground">Punti partnership: 2 per tutti i cluster. Gettoni variano per cluster cliente.</p>
+        </CardHeader>
+        <CardContent>
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b">
-                <th className="text-left p-2 font-medium text-muted-foreground">Evento</th>
-                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Punti Partnership</th>
+                <th className="text-left p-2 font-medium text-muted-foreground">Cluster</th>
                 <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Gettoni (€)</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Punti</th>
               </tr>
             </thead>
             <tbody>
-              {PARTNERSHIP_EVENT_KEYS.map((key) => {
-                const label = PARTNERSHIP_DEFAULTS[key]?.label || key;
-                const puntiPath = `partnership.puntiPartnership.${key}`;
-                const gettoniPath = `partnership.gettoniEvento.${key}`;
-                const puntiVal = getNestedValue(config, puntiPath) ?? PARTNERSHIP_DEFAULTS[key]?.puntiPartnership ?? 1;
-                const gettoniVal = getNestedValue(config, gettoniPath) ?? PARTNERSHIP_DEFAULTS[key]?.gettoni ?? 0;
-                const puntiDef = getNestedValue(systemConfig, puntiPath) ?? PARTNERSHIP_DEFAULTS[key]?.puntiPartnership ?? 1;
-                const gettoniDef = getNestedValue(systemConfig, gettoniPath) ?? PARTNERSHIP_DEFAULTS[key]?.gettoni ?? 0;
-
-                return (
-                  <tr key={key} className="border-b hover:bg-muted/30">
-                    <td className="p-2 text-sm">{label}</td>
-                    <EditableCell
-                      value={puntiVal}
-                      defaultValue={puntiDef}
-                      isOverridden={isOverridden(puntiPath)}
-                      onChange={v => updateValue(puntiPath, v)}
-                      onReset={() => resetValue(puntiPath)}
-                      testId={`input-partnership-punti-${key}`}
-                      step="0.5"
-                    />
-                    <EditableCell
-                      value={gettoniVal}
-                      defaultValue={gettoniDef}
-                      isOverridden={isOverridden(gettoniPath)}
-                      onChange={v => updateValue(gettoniPath, v)}
-                      onReset={() => resetValue(gettoniPath)}
-                      testId={`input-partnership-gettoni-${key}`}
-                      step="0.5"
-                    />
-                  </tr>
-                );
-              })}
+              {CAMBIO_OFFERTA_UNTIED_CLUSTERS.map((c) => (
+                <tr key={c.cluster} className="border-b hover:bg-muted/30">
+                  <td className="p-2 text-sm font-medium">{c.cluster}</td>
+                  <td className="p-2 text-center text-sm">{c.gettoni}€</td>
+                  <td className="p-2 text-center text-sm">{c.puntiPartnership}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Gettoni per Cluster — Cambio Offerta Rivincoli</CardTitle>
+          <p className="text-xs text-muted-foreground">Punti partnership: 4 per tutti i cluster. Gettoni variano per cluster cliente.</p>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-2 font-medium text-muted-foreground">Cluster</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Gettoni (€)</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Punti</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS.map((c) => (
+                <tr key={c.cluster} className="border-b hover:bg-muted/30">
+                  <td className="p-2 text-sm font-medium">{c.cluster}</td>
+                  <td className="p-2 text-center text-sm">{c.gettoni}€</td>
+                  <td className="p-2 text-center text-sm">{c.puntiPartnership}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Telefono Incluso — Opzioni</CardTitle>
+          <p className="text-xs text-muted-foreground">Valori per sotto-evento telefono incluso. Mappati via regole BiSuite a IMP_AGG_* targetCategory.</p>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-2 font-medium text-muted-foreground">Opzione</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Gettoni (€)</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Punti Partnership</th>
+              </tr>
+            </thead>
+            <tbody>
+              {TELEFONO_INCLUSO_OPTIONS.map((o) => (
+                <tr key={o.option} className="border-b hover:bg-muted/30">
+                  <td className="p-2 text-sm">{o.label}</td>
+                  <td className="p-2 text-center text-sm">{o.gettoni}€</td>
+                  <td className="p-2 text-center text-sm">{o.puntiPartnership}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </>
   );
 }

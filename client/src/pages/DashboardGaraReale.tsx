@@ -90,6 +90,9 @@ import {
   type AttivatoCBDettaglio,
   CB_EVENTS_CONFIG,
   PARTNERSHIP_DEFAULTS,
+  resolveClusterGettoni,
+  CAMBIO_OFFERTA_UNTIED_CLUSTERS,
+  CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS,
 } from "@/types/partnership-cb-events";
 import { calcoloCBPerPdv, type CBCalcItem } from "@/lib/calcoloCB";
 import {
@@ -615,11 +618,13 @@ function calcPartnershipPerPdv(
 
   const validItems = pdvItems.filter((item) => VALID_CB_TYPES.has(item.targetCategory));
   const attivato: AttivatoCBDettaglio[] = validItems.map((item) => {
+    const defaults = PARTNERSHIP_DEFAULTS[item.targetCategory];
     const eventConf = CB_EVENT_LOOKUP.get(item.targetCategory as CBEventType);
     const punti = tcPartnership?.puntiPartnership?.[item.targetCategory]
-      ?? PARTNERSHIP_DEFAULTS[item.targetCategory]?.puntiPartnership
+      ?? defaults?.puntiPartnership
       ?? 1;
     const gettoni = tcPartnership?.gettoniEvento?.[item.targetCategory]
+      ?? defaults?.gettoni
       ?? eventConf?.gettoni
       ?? 0;
     return {

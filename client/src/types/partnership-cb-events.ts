@@ -126,15 +126,29 @@ export interface AttivatoCBDettaglio {
   note?: string;
 }
 
-export const PARTNERSHIP_DEFAULTS: Record<string, { gettoni: number; puntiPartnership: number; label: string }> = {};
-CB_EVENTS_CONFIG.filter(e => e.category === 'customer_base').forEach(e => {
-  PARTNERSHIP_DEFAULTS[e.type] = { gettoni: e.gettoni, puntiPartnership: 1, label: e.label };
-});
-PARTNERSHIP_DEFAULTS['cambio_offerta_untied'] = { gettoni: 3, puntiPartnership: 2, label: 'Cambio Offerta UNTIED (media cluster)' };
-PARTNERSHIP_DEFAULTS['cambio_offerta_rivincoli'] = { gettoni: 4, puntiPartnership: 4, label: 'Cambio Offerta Rivincoli (media cluster)' };
-PARTNERSHIP_DEFAULTS['telefono_incluso_var'] = { gettoni: 10, puntiPartnership: 6, label: 'Telefono Incluso VAR (media)' };
-PARTNERSHIP_DEFAULTS['telefono_incluso_smart_pack_compass_findomestic'] = { gettoni: 20, puntiPartnership: 8, label: 'Telefono Incluso Compass/Findomestic' };
+export interface PartnershipDefaultEntry {
+  gettoni: number;
+  puntiPartnership: number;
+  label: string;
+  clusterDependent?: boolean;
+}
+
+export const PARTNERSHIP_DEFAULTS: Record<string, PartnershipDefaultEntry> = {};
+
+const UNTIED_CLUSTER_MAP: Record<string, number> = {};
+CAMBIO_OFFERTA_UNTIED_CLUSTERS.forEach(c => { UNTIED_CLUSTER_MAP[c.cluster] = c.gettoni; });
+
+const RIVINCOLI_CLUSTER_MAP: Record<string, number> = {};
+CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS.forEach(c => { RIVINCOLI_CLUSTER_MAP[c.cluster] = c.gettoni; });
+
+const TI_OPTION_MAP: Record<string, { gettoni: number; puntiPartnership: number }> = {};
+TELEFONO_INCLUSO_OPTIONS.forEach(o => { TI_OPTION_MAP[o.option] = { gettoni: o.gettoni, puntiPartnership: o.puntiPartnership }; });
+
+PARTNERSHIP_DEFAULTS['cambio_offerta_untied'] = { gettoni: 3, puntiPartnership: 2, label: 'Cambio Offerta UNTIED', clusterDependent: true };
+PARTNERSHIP_DEFAULTS['cambio_offerta_rivincoli'] = { gettoni: 4, puntiPartnership: 4, label: 'Cambio Offerta Rivincoli', clusterDependent: true };
 PARTNERSHIP_DEFAULTS['cambio_offerta_smart_pack'] = { gettoni: 12, puntiPartnership: 2, label: 'Cambio Offerta Smart Pack con OTP' };
+PARTNERSHIP_DEFAULTS['telefono_incluso_var'] = { gettoni: 10, puntiPartnership: 6, label: 'Telefono Incluso VAR' };
+PARTNERSHIP_DEFAULTS['telefono_incluso_smart_pack_compass_findomestic'] = { gettoni: 20, puntiPartnership: 8, label: 'Telefono Incluso Compass/Findomestic' };
 PARTNERSHIP_DEFAULTS['multi_device_standard'] = { gettoni: 15, puntiPartnership: 6, label: 'Multi Device Standard' };
 PARTNERSHIP_DEFAULTS['multi_device_finanziamento'] = { gettoni: 15, puntiPartnership: 6, label: 'Multi Device Finanziamento' };
 PARTNERSHIP_DEFAULTS['addon_ricorrenti_mensile_low'] = { gettoni: 3, puntiPartnership: 1, label: 'Add On Ricorrenti ≤ 9.99€' };
@@ -148,6 +162,21 @@ PARTNERSHIP_DEFAULTS['gestione_cambia_telefono'] = { gettoni: 17, puntiPartnersh
 PARTNERSHIP_DEFAULTS['windtre_goplay'] = { gettoni: 3, puntiPartnership: 1, label: 'WindTre GoPlay' };
 PARTNERSHIP_DEFAULTS['buy_tied'] = { gettoni: 12, puntiPartnership: 2, label: 'BUY TIED con OTP' };
 PARTNERSHIP_DEFAULTS['buy_untied'] = { gettoni: 8, puntiPartnership: 2, label: 'BUY UNTIED' };
+PARTNERSHIP_DEFAULTS['IMP_AGG_0_VAR_FINANZ'] = { gettoni: 10, puntiPartnership: 6, label: 'IMP.AGG=0 VAR/FINANZ' };
+PARTNERSHIP_DEFAULTS['IMP_AGG_GT0_FINANZ'] = { gettoni: 20, puntiPartnership: 8, label: 'IMP.AGG>0 FINANZ (Compass/Findomestic)' };
+PARTNERSHIP_DEFAULTS['IMP_AGG_GT0_VAR'] = { gettoni: 15, puntiPartnership: 6, label: 'IMP.AGG>0 VAR' };
+
+export function resolveClusterGettoni(eventType: string, clusterCard?: string): number | undefined {
+  if (eventType === 'cambio_offerta_untied' && clusterCard) {
+    return UNTIED_CLUSTER_MAP[clusterCard];
+  }
+  if (eventType === 'cambio_offerta_rivincoli' && clusterCard) {
+    return RIVINCOLI_CLUSTER_MAP[clusterCard];
+  }
+  return undefined;
+}
+
+export { UNTIED_CLUSTER_MAP, RIVINCOLI_CLUSTER_MAP, TI_OPTION_MAP };
 
 export interface CalcoloPartnershipRewardResult {
   punti: number;
