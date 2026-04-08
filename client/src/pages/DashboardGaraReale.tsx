@@ -91,8 +91,6 @@ import {
   CB_EVENTS_CONFIG,
   PARTNERSHIP_DEFAULTS,
   resolveClusterGettoni,
-  CAMBIO_OFFERTA_UNTIED_CLUSTERS,
-  CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS,
 } from "@/types/partnership-cb-events";
 import { calcoloCBPerPdv, type CBCalcItem } from "@/lib/calcoloCB";
 import {
@@ -613,25 +611,28 @@ function calcPartnershipPerPdv(
   giorniLavorativi: number,
   posCode: string,
   tcPartnership?: { puntiPartnership?: Record<string, number>; gettoniEvento?: Record<string, number> },
+  clusterCB?: string,
 ): PistaCalcResult {
   if (pdvItems.length === 0) return EMPTY_CALC;
 
   const validItems = pdvItems.filter((item) => VALID_CB_TYPES.has(item.targetCategory));
   const attivato: AttivatoCBDettaglio[] = validItems.map((item) => {
     const defaults = PARTNERSHIP_DEFAULTS[item.targetCategory];
-    const eventConf = CB_EVENT_LOOKUP.get(item.targetCategory as CBEventType);
     const punti = tcPartnership?.puntiPartnership?.[item.targetCategory]
       ?? defaults?.puntiPartnership
       ?? 1;
+
+    const clusterGettoni = resolveClusterGettoni(item.targetCategory, clusterCB);
     const gettoni = tcPartnership?.gettoniEvento?.[item.targetCategory]
+      ?? clusterGettoni
       ?? defaults?.gettoni
-      ?? eventConf?.gettoni
       ?? 0;
     return {
       eventType: item.targetCategory as CBEventType,
       pezzi: item.pezzi,
       gettoni,
       puntiPartnership: punti,
+      clusterCard: clusterCB,
     };
   });
 
@@ -1494,7 +1495,7 @@ export default function DashboardGaraReale() {
           } else if (pista === "partnership") {
             const pCfg = getPartnershipConfigForPdv(pdv.codicePos, pdvRS);
             const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-            pdvCalc = calcPartnershipPerPdv(pdvItems, prConfig, pdvWorkday.elapsedWorkingDays, pdv.codicePos, tcPartnership);
+            pdvCalc = calcPartnershipPerPdv(pdvItems, prConfig, pdvWorkday.elapsedWorkingDays, pdv.codicePos, tcPartnership, pdvConfig?.clusterCB);
           } else if (pista === "cb") {
             const cbAddons = (pdv.addons || []).filter(a => a.pista === 'cb');
             pdvCalc = calcCBFromItemsAndAddons(pdvItems, cbAddons, pdvConfig?.clusterCB);
@@ -1605,7 +1606,7 @@ export default function DashboardGaraReale() {
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-              rsCalc = calcPartnershipPerPdv(aggregatedRSItems, prConfig, rsWorkday.elapsedWorkingDays, rsPdvs[0].codicePos, tcPartnership);
+              rsCalc = calcPartnershipPerPdv(aggregatedRSItems, prConfig, rsWorkday.elapsedWorkingDays, rsPdvs[0].codicePos, tcPartnership, firstPdvConfig?.clusterCB);
             } else if (pista === "cb") {
               rsCalc = calcCBFromItems(aggregatedRSItems, firstPdvConfig?.clusterCB);
             } else if (pista === "energia") {
@@ -1701,7 +1702,7 @@ export default function DashboardGaraReale() {
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-              rsProjCalc = calcPartnershipPerPdv(projectedRSItems, prConfig, rsWorkday.totalWorkingDays, rsPdvs[0].codicePos, tcPartnership);
+              rsProjCalc = calcPartnershipPerPdv(projectedRSItems, prConfig, rsWorkday.totalWorkingDays, rsPdvs[0].codicePos, tcPartnership, firstPdvConfig?.clusterCB);
             } else if (pista === "cb") {
               rsProjCalc = calcCBFromItems(projectedRSItems, firstPdvConfig?.clusterCB);
             } else if (pista === "energia") {
@@ -1884,7 +1885,7 @@ export default function DashboardGaraReale() {
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(pdv.codicePos, projRS);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-              projCalc = calcPartnershipPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos, tcPartnership);
+              projCalc = calcPartnershipPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos, tcPartnership, pdvConfig3?.clusterCB);
             } else if (pista === "cb") {
               projCalc = calcCBFromItems(pdv.items, pdvConfig3?.clusterCB);
             } else if (pista === "assicurazioni" || pista === "protecta") {

@@ -144,6 +144,12 @@ CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS.forEach(c => { RIVINCOLI_CLUSTER_MAP[c.cluster
 const TI_OPTION_MAP: Record<string, { gettoni: number; puntiPartnership: number }> = {};
 TELEFONO_INCLUSO_OPTIONS.forEach(o => { TI_OPTION_MAP[o.option] = { gettoni: o.gettoni, puntiPartnership: o.puntiPartnership }; });
 
+CB_EVENTS_CONFIG.forEach(e => {
+  if (!PARTNERSHIP_DEFAULTS[e.type]) {
+    PARTNERSHIP_DEFAULTS[e.type] = { gettoni: e.gettoni, puntiPartnership: 1, label: e.label };
+  }
+});
+
 PARTNERSHIP_DEFAULTS['cambio_offerta_untied'] = { gettoni: 3, puntiPartnership: 2, label: 'Cambio Offerta UNTIED', clusterDependent: true };
 PARTNERSHIP_DEFAULTS['cambio_offerta_rivincoli'] = { gettoni: 4, puntiPartnership: 4, label: 'Cambio Offerta Rivincoli', clusterDependent: true };
 PARTNERSHIP_DEFAULTS['cambio_offerta_smart_pack'] = { gettoni: 12, puntiPartnership: 2, label: 'Cambio Offerta Smart Pack con OTP' };
@@ -165,6 +171,7 @@ PARTNERSHIP_DEFAULTS['buy_untied'] = { gettoni: 8, puntiPartnership: 2, label: '
 PARTNERSHIP_DEFAULTS['IMP_AGG_0_VAR_FINANZ'] = { gettoni: 10, puntiPartnership: 6, label: 'IMP.AGG=0 VAR/FINANZ' };
 PARTNERSHIP_DEFAULTS['IMP_AGG_GT0_FINANZ'] = { gettoni: 20, puntiPartnership: 8, label: 'IMP.AGG>0 FINANZ (Compass/Findomestic)' };
 PARTNERSHIP_DEFAULTS['IMP_AGG_GT0_VAR'] = { gettoni: 15, puntiPartnership: 6, label: 'IMP.AGG>0 VAR' };
+PARTNERSHIP_DEFAULTS['MIGRAZIONI_FTTH_FWA'] = { gettoni: 40, puntiPartnership: 1, label: 'Migrazioni FTTH/FWA' };
 
 export function resolveClusterGettoni(eventType: string, clusterCard?: string): number | undefined {
   if (eventType === 'cambio_offerta_untied' && clusterCard) {
