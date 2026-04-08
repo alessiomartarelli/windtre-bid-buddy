@@ -8,7 +8,7 @@ import { PROTECTA_GETTONI, ProtectaProduct } from "@/types/protecta";
 import { PUNTI_EXTRA_GARA, SOGLIE_BASE_EXTRA_GARA, PREMI_EXTRA_GARA } from "@/lib/calcoloExtraGaraIva";
 import { FISSO_CATEGORIE_DEFAULT, FissoCategoriaConfig } from "@/lib/calcoloPistaFisso";
 import { ClusterPIvaCode } from "@/types/preventivatore";
-import { PARTNERSHIP_DEFAULTS } from "@/types/partnership-cb-events";
+import { PARTNERSHIP_DEFAULTS, CAMBIO_OFFERTA_UNTIED_CLUSTERS, CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS } from "@/types/partnership-cb-events";
 
 export interface TabelleCalcoloValues {
   mobile: {
@@ -43,6 +43,8 @@ export interface TabelleCalcoloValues {
   partnership: {
     puntiPartnership: Record<string, number>;
     gettoniEvento: Record<string, number>;
+    clusterGettoniUntied: Record<string, number>;
+    clusterGettoniRivincoli: Record<string, number>;
   };
 }
 
@@ -155,6 +157,12 @@ function buildDefaults(): TabelleCalcoloValues {
     partnershipGettoni[key] = val.gettoni;
   }
 
+  const clusterGettoniUntied: Record<string, number> = {};
+  CAMBIO_OFFERTA_UNTIED_CLUSTERS.forEach(c => { clusterGettoniUntied[c.cluster] = c.gettoni; });
+
+  const clusterGettoniRivincoli: Record<string, number> = {};
+  CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS.forEach(c => { clusterGettoniRivincoli[c.cluster] = c.gettoni; });
+
   return {
     mobile: { categories: [...MOBILE_CATEGORIES_CONFIG_DEFAULT], soglieCluster: mobileSoglieCluster, moltiplicatoriCanone },
     fisso: { euroPerPezzo: fissoEuro, gettoniContrattuali: fissoGettoni, soglieCluster: fissoSoglieCluster },
@@ -170,6 +178,8 @@ function buildDefaults(): TabelleCalcoloValues {
     partnership: {
       puntiPartnership: partnershipPunti,
       gettoniEvento: partnershipGettoni,
+      clusterGettoniUntied,
+      clusterGettoniRivincoli,
     },
   };
 }
@@ -266,6 +276,12 @@ function applyConfigToDefaults(merged: any, defaults: TabelleCalcoloValues): Tab
   }
   if (merged.partnership?.gettoniEvento) {
     Object.assign(result.partnership.gettoniEvento, merged.partnership.gettoniEvento);
+  }
+  if (merged.partnership?.clusterGettoniUntied) {
+    Object.assign(result.partnership.clusterGettoniUntied, merged.partnership.clusterGettoniUntied);
+  }
+  if (merged.partnership?.clusterGettoniRivincoli) {
+    Object.assign(result.partnership.clusterGettoniRivincoli, merged.partnership.clusterGettoniRivincoli);
   }
 
   return result;

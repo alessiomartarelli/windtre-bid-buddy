@@ -604,19 +604,37 @@ function calcEnergiaPerPdv(
 const CB_EVENT_LOOKUP = new Map(CB_EVENTS_CONFIG.map((c) => [c.type, c]));
 const VALID_CB_TYPES = new Set(CB_EVENTS_CONFIG.map((c) => c.type as string));
 
+function resolveClusterGettoniFromConfig(
+  eventType: string,
+  clusterCB: string | undefined,
+  tcPartnership?: { clusterGettoniUntied?: Record<string, number>; clusterGettoniRivincoli?: Record<string, number> },
+): number | undefined {
+  const clusterLevel = clusterCBToLevel(clusterCB);
+  const clusterKeys = ['C0U', 'C1U', 'C2U', 'C3U'];
+  const clusterKeysT = ['C0T', 'C1T', 'C2T', 'C3T'];
+
+  if (eventType === 'cambio_offerta_untied') {
+    const key = clusterKeys[clusterLevel] || 'C0U';
+    return tcPartnership?.clusterGettoniUntied?.[key]
+      ?? getCBGettoniForCategory(eventType, clusterLevel);
+  }
+  if (eventType === 'cambio_offerta_rivincoli') {
+    const key = clusterKeysT[clusterLevel] || 'C0T';
+    return tcPartnership?.clusterGettoniRivincoli?.[key]
+      ?? getCBGettoniForCategory(eventType, clusterLevel);
+  }
+  return undefined;
+}
+
 function calcPartnershipPerPdv(
   pdvItems: AggregatedItem[],
   partnershipConfig: PartnershipRewardPosConfig | undefined,
   giorniLavorativi: number,
   posCode: string,
-  tcPartnership?: { puntiPartnership?: Record<string, number>; gettoniEvento?: Record<string, number> },
+  tcPartnership?: { puntiPartnership?: Record<string, number>; gettoniEvento?: Record<string, number>; clusterGettoniUntied?: Record<string, number>; clusterGettoniRivincoli?: Record<string, number> },
   clusterCB?: string,
 ): PistaCalcResult {
   if (pdvItems.length === 0) return EMPTY_CALC;
-
-  const clusterLevel = clusterCBToLevel(clusterCB);
-  const isClusterDependent = (cat: string) =>
-    cat === 'cambio_offerta_untied' || cat === 'cambio_offerta_rivincoli';
 
   const validItems = pdvItems.filter((item) => VALID_CB_TYPES.has(item.targetCategory));
   const attivato: AttivatoCBDettaglio[] = validItems.map((item) => {
@@ -625,14 +643,11 @@ function calcPartnershipPerPdv(
       ?? defaults?.puntiPartnership
       ?? 1;
 
-    let gettoni: number;
-    if (isClusterDependent(item.targetCategory)) {
-      gettoni = getCBGettoniForCategory(item.targetCategory, clusterLevel);
-    } else {
-      gettoni = tcPartnership?.gettoniEvento?.[item.targetCategory]
-        ?? defaults?.gettoni
-        ?? 0;
-    }
+    const clusterGettoni = resolveClusterGettoniFromConfig(item.targetCategory, clusterCB, tcPartnership);
+    const gettoni = clusterGettoni
+      ?? tcPartnership?.gettoniEvento?.[item.targetCategory]
+      ?? defaults?.gettoni
+      ?? 0;
     return {
       eventType: item.targetCategory as CBEventType,
       pezzi: item.pezzi,
@@ -1039,7 +1054,7 @@ export default function DashboardGaraReale() {
       protecta: { gettoniProdotto: orgSystemTcDefaults.protecta.gettoniProdotto } as Record<string, unknown>,
       fisso: { gettoniContrattuali: orgSystemTcDefaults.fisso.gettoniContrattuali, soglieCluster: orgSystemTcDefaults.fisso.soglieCluster, euroPerPezzo: orgSystemTcDefaults.fisso.euroPerPezzo } as Record<string, unknown>,
       extraGara: { puntiAttivazione: orgSystemTcDefaults.extraGara.puntiAttivazione, soglieMultipos: orgSystemTcDefaults.extraGara.soglieMultipos, soglieMonopos: orgSystemTcDefaults.extraGara.soglieMonopos, premiPerSoglia: orgSystemTcDefaults.extraGara.premiPerSoglia } as Record<string, unknown>,
-      partnership: { puntiPartnership: orgSystemTcDefaults.partnership.puntiPartnership, gettoniEvento: orgSystemTcDefaults.partnership.gettoniEvento } as Record<string, unknown>,
+      partnership: { puntiPartnership: orgSystemTcDefaults.partnership.puntiPartnership, gettoniEvento: orgSystemTcDefaults.partnership.gettoniEvento, clusterGettoniUntied: orgSystemTcDefaults.partnership.clusterGettoniUntied, clusterGettoniRivincoli: orgSystemTcDefaults.partnership.clusterGettoniRivincoli } as Record<string, unknown>,
     };
     const mergeSection = (section: string) => {
       const base = fallbackTC[section as keyof typeof fallbackTC] || {};
@@ -1052,7 +1067,7 @@ export default function DashboardGaraReale() {
     const tcProtecta = mergeSection('protecta') as { gettoniProdotto?: Record<string, number> };
     const tcFisso = mergeSection('fisso') as { gettoniContrattuali?: Record<string, number>; soglieCluster?: Record<string, number[]>; euroPerPezzo?: Record<string, number> };
     const tcExtraGara = mergeSection('extraGara') as { puntiAttivazione?: Record<string, number>; soglieMultipos?: Record<string, Record<string, number>>; soglieMonopos?: Record<string, Record<string, number>>; premiPerSoglia?: Record<string, number[]> };
-    const tcPartnership = mergeSection('partnership') as { puntiPartnership?: Record<string, number>; gettoniEvento?: Record<string, number> };
+    const tcPartnership = mergeSection('partnership') as { puntiPartnership?: Record<string, number>; gettoniEvento?: Record<string, number>; clusterGettoniUntied?: Record<string, number>; clusterGettoniRivincoli?: Record<string, number> };
 
     const normalizeClusterKey = (clusterStr: string): string => {
       const upper = clusterStr.toUpperCase();

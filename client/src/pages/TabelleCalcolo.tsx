@@ -1501,7 +1501,7 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Gettoni per Cluster — Cambio Offerta Untied</CardTitle>
-          <p className="text-xs text-muted-foreground">Punti partnership: 2 per tutti i cluster. Gettoni variano per cluster cliente.</p>
+          <p className="text-xs text-muted-foreground">Punti partnership: 2 per tutti i cluster. Gettoni configurabili per livello cluster.</p>
         </CardHeader>
         <CardContent>
           <table className="w-full text-sm border-collapse">
@@ -1513,13 +1513,26 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
               </tr>
             </thead>
             <tbody>
-              {CAMBIO_OFFERTA_UNTIED_CLUSTERS.map((c) => (
-                <tr key={c.cluster} className="border-b hover:bg-muted/30">
-                  <td className="p-2 text-sm font-medium">{c.cluster}</td>
-                  <td className="p-2 text-center text-sm">{c.gettoni}€</td>
-                  <td className="p-2 text-center text-sm">{c.puntiPartnership}</td>
-                </tr>
-              ))}
+              {CAMBIO_OFFERTA_UNTIED_CLUSTERS.map((c) => {
+                const gPath = `partnership.clusterGettoniUntied.${c.cluster}`;
+                const gVal = getNestedValue(config, gPath) ?? c.gettoni;
+                const gDef = getNestedValue(systemConfig, gPath) ?? c.gettoni;
+                return (
+                  <tr key={c.cluster} className="border-b hover:bg-muted/30">
+                    <td className="p-2 text-sm font-medium">{c.cluster}</td>
+                    <EditableCell
+                      value={gVal}
+                      defaultValue={gDef}
+                      isOverridden={isOverridden(gPath)}
+                      onChange={v => updateValue(gPath, v)}
+                      onReset={() => resetValue(gPath)}
+                      testId={`input-partnership-untied-${c.cluster}`}
+                      step="1"
+                    />
+                    <td className="p-2 text-center text-sm">{c.puntiPartnership}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </CardContent>
@@ -1528,7 +1541,7 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Gettoni per Cluster — Cambio Offerta Rivincoli</CardTitle>
-          <p className="text-xs text-muted-foreground">Punti partnership: 4 per tutti i cluster. Gettoni variano per cluster cliente.</p>
+          <p className="text-xs text-muted-foreground">Punti partnership: 4 per tutti i cluster. Gettoni configurabili per livello cluster.</p>
         </CardHeader>
         <CardContent>
           <table className="w-full text-sm border-collapse">
@@ -1540,13 +1553,26 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
               </tr>
             </thead>
             <tbody>
-              {CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS.map((c) => (
-                <tr key={c.cluster} className="border-b hover:bg-muted/30">
-                  <td className="p-2 text-sm font-medium">{c.cluster}</td>
-                  <td className="p-2 text-center text-sm">{c.gettoni}€</td>
-                  <td className="p-2 text-center text-sm">{c.puntiPartnership}</td>
-                </tr>
-              ))}
+              {CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS.map((c) => {
+                const gPath = `partnership.clusterGettoniRivincoli.${c.cluster}`;
+                const gVal = getNestedValue(config, gPath) ?? c.gettoni;
+                const gDef = getNestedValue(systemConfig, gPath) ?? c.gettoni;
+                return (
+                  <tr key={c.cluster} className="border-b hover:bg-muted/30">
+                    <td className="p-2 text-sm font-medium">{c.cluster}</td>
+                    <EditableCell
+                      value={gVal}
+                      defaultValue={gDef}
+                      isOverridden={isOverridden(gPath)}
+                      onChange={v => updateValue(gPath, v)}
+                      onReset={() => resetValue(gPath)}
+                      testId={`input-partnership-rivincoli-${c.cluster}`}
+                      step="1"
+                    />
+                    <td className="p-2 text-center text-sm">{c.puntiPartnership}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </CardContent>
@@ -1555,7 +1581,7 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Telefono Incluso — Opzioni</CardTitle>
-          <p className="text-xs text-muted-foreground">Valori per sotto-evento telefono incluso. Mappati via regole BiSuite a IMP_AGG_* targetCategory.</p>
+          <p className="text-xs text-muted-foreground">Sotto-eventi telefono incluso mappati a IMP_AGG_* targetCategory. Configurabili nella tabella eventi sopra.</p>
         </CardHeader>
         <CardContent>
           <table className="w-full text-sm border-collapse">
