@@ -90,9 +90,8 @@ import {
   type AttivatoCBDettaglio,
   CB_EVENTS_CONFIG,
   PARTNERSHIP_DEFAULTS,
-  resolveClusterGettoni,
 } from "@/types/partnership-cb-events";
-import { calcoloCBPerPdv, type CBCalcItem } from "@/lib/calcoloCB";
+import { calcoloCBPerPdv, clusterCBToLevel, getCBGettoniForCategory, type CBCalcItem } from "@/lib/calcoloCB";
 import {
   type PartnershipRewardPosConfig,
 } from "@/types/partnership-reward";
@@ -615,6 +614,10 @@ function calcPartnershipPerPdv(
 ): PistaCalcResult {
   if (pdvItems.length === 0) return EMPTY_CALC;
 
+  const clusterLevel = clusterCBToLevel(clusterCB);
+  const isClusterDependent = (cat: string) =>
+    cat === 'cambio_offerta_untied' || cat === 'cambio_offerta_rivincoli';
+
   const validItems = pdvItems.filter((item) => VALID_CB_TYPES.has(item.targetCategory));
   const attivato: AttivatoCBDettaglio[] = validItems.map((item) => {
     const defaults = PARTNERSHIP_DEFAULTS[item.targetCategory];
@@ -622,10 +625,9 @@ function calcPartnershipPerPdv(
       ?? defaults?.puntiPartnership
       ?? 1;
 
-    const clusterGettoni = resolveClusterGettoni(item.targetCategory, clusterCB);
     let gettoni: number;
-    if (clusterGettoni !== undefined) {
-      gettoni = clusterGettoni;
+    if (isClusterDependent(item.targetCategory)) {
+      gettoni = getCBGettoniForCategory(item.targetCategory, clusterLevel);
     } else {
       gettoni = tcPartnership?.gettoniEvento?.[item.targetCategory]
         ?? defaults?.gettoni
