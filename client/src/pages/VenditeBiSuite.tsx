@@ -455,17 +455,46 @@ export default function VenditeBiSuite() {
   }, [sales]);
 
   const addettoSummaries = useMemo(() => {
-    const map = new Map<string, { nomeAddetto: string; vendite: BisuiteSale[]; totaleImporto: number; pdvCodes: Set<string> }>();
+    const map = new Map<string, {
+      nomeAddetto: string;
+      vendite: BisuiteSale[];
+      totaleImporto: number;
+      pdvCodes: Set<string>;
+      countByType: Record<ArticleType, number>;
+      amountByType: Record<ArticleType, number>;
+      countByPista: Partial<Record<PistaCanvass, number>>;
+      amountByPista: Partial<Record<PistaCanvass, number>>;
+    }>();
     for (const sale of sales) {
       const addetto = sale.nomeAddetto || "N/D";
-      if (!map.has(addetto)) map.set(addetto, { nomeAddetto: addetto, vendite: [], totaleImporto: 0, pdvCodes: new Set() });
+      if (!map.has(addetto)) map.set(addetto, {
+        nomeAddetto: addetto, vendite: [], totaleImporto: 0, pdvCodes: new Set(),
+        countByType: { canvass: 0, prodotti: 0, servizi: 0 },
+        amountByType: { canvass: 0, prodotti: 0, servizi: 0 },
+        countByPista: {}, amountByPista: {},
+      });
       const entry = map.get(addetto)!;
       entry.vendite.push(sale);
       entry.totaleImporto += parseFloat(sale.totale || "0") || 0;
       entry.pdvCodes.add(sale.codicePos || "N/D");
+      const sc = saleClassifications.get(sale.id);
+      if (sc) {
+        entry.countByType.canvass += sc.countByType.canvass;
+        entry.countByType.prodotti += sc.countByType.prodotti;
+        entry.countByType.servizi += sc.countByType.servizi;
+        entry.amountByType.canvass += sc.amountByType.canvass;
+        entry.amountByType.prodotti += sc.amountByType.prodotti;
+        entry.amountByType.servizi += sc.amountByType.servizi;
+        for (const [p, c] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
+          entry.countByPista[p] = (entry.countByPista[p] || 0) + c;
+        }
+        for (const [p, a] of Object.entries(sc.amountByPista) as [PistaCanvass, number][]) {
+          entry.amountByPista[p] = (entry.amountByPista[p] || 0) + a;
+        }
+      }
     }
     return Array.from(map.values()).sort((a, b) => b.vendite.length - a.vendite.length);
-  }, [sales]);
+  }, [sales, saleClassifications]);
 
   const allDomande = useMemo(() => {
     const set = new Set<string>();
@@ -1069,13 +1098,50 @@ export default function VenditeBiSuite() {
                           </AccordionTrigger>
                           <AccordionContent>
                             <div className="space-y-3 pb-2">
+                              <div className="flex flex-wrap gap-2">
+                                {(Object.entries(addetto.countByPista) as [PistaCanvass, number][])
+                                  .filter(([, c]) => c > 0)
+                                  .sort(([, a], [, b]) => b - a)
+                                  .map(([pista, count]) => (
+                                    <Badge
+                                      key={pista}
+                                      className={PISTA_CANVASS_COLORS[pista] + " text-xs gap-1"}
+                                    >
+                                      {PISTA_ICONS[pista]}
+                                      {PISTA_CANVASS_LABELS[pista]}: {count}
+                                      <span className="text-[10px] opacity-75">({formatCurrency(addetto.amountByPista[pista] || 0)})</span>
+                                    </Badge>
+                                  ))}
+                                {addetto.countByType.prodotti > 0 && (
+                                  <Badge className={TYPE_COLORS.prodotti + " text-xs"}>
+                                    Prodotti: {addetto.countByType.prodotti}
+                                    <span className="text-[10px] opacity-75 ml-1">({formatCurrency(addetto.amountByType.prodotti)})</span>
+                                  </Badge>
+                                )}
+                                {addetto.countByType.servizi > 0 && (
+                                  <Badge className={TYPE_COLORS.servizi + " text-xs"}>
+                                    Servizi: {addetto.countByType.servizi}
+                                    <span className="text-[10px] opacity-75 ml-1">({formatCurrency(addetto.amountByType.servizi)})</span>
+                                  </Badge>
+                                )}
+                              </div>
+                              {(() => {
+                                const addettoInc = computeIncassoTotals(addetto.vendite);
+                                const hasIncasso = INCASSO_ITEMS_CONFIG.some(i => addettoInc[i.key] > 0);
+                                if (!hasIncasso) return null;
+                                return (
+                                  <div className="mt-1">
+                                    <IncassoBadges totals={addettoInc} formatter={formatCurrency} compact />
+                                  </div>
+                                );
+                              })()}
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => setSelectedAddetto(addetto.nomeAddetto)}
                                 data-testid={`button-view-addetto-${addetto.nomeAddetto}`}
                               >
-                                Vedi dettaglio vendite
+                                Vedi tutte le vendite
                                 <ChevronRight className="h-4 w-4 ml-1" />
                               </Button>
                             </div>
