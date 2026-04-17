@@ -2,9 +2,7 @@
 
 ## Overview
 
-This is a **WindTre sales quoting/estimating platform** ("Preventivatore") built for telecom retail operators in Italy. The application allows organizations to create, configure, and manage sales forecasts ("preventivi") across multiple product lines: Mobile, Fixed-line (Fisso), Energy, Insurance (Assicurazioni), Partnership Rewards, Protecta, and Extra Gara P.IVA. Each product line has its own calculation engine with thresholds, bonuses, and point systems tied to WindTre's incentive structures.
-
-The platform supports multi-tenant organizations with role-based access (super_admin, admin, operatore), where each organization manages its own set of retail points of sale (PDV - Punti di Vendita) with per-store configurations including calendars, clusters, and sales targets.
+This project is a WindTre sales quoting/estimating platform ("Preventivatore") designed for Italian telecom retail operators. Its core purpose is to enable organizations to create, configure, and manage sales forecasts ("preventivi") across various product lines: Mobile, Fixed-line, Energy, Insurance, Partnership Rewards, Protecta, and Extra Gara P.IVA. Each product line incorporates its own calculation engine, aligning with WindTre's incentive structures through thresholds, bonuses, and point systems. The platform supports multi-tenant organizations, offering role-based access (super_admin, admin, operatore) and per-store configurations for retail points of sale (PDV), including calendars, clusters, and sales targets.
 
 ## User Preferences
 
@@ -12,116 +10,44 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Frontend (React + Vite)
-- **Framework**: React with TypeScript, bundled by Vite
-- **Routing**: `wouter` (lightweight router, not React Router)
-- **State Management**: TanStack React Query for server state; local React state and custom hooks for form/wizard state
-- **UI Components**: shadcn/ui (new-york style) with Radix UI primitives, Tailwind CSS for styling, glassmorphism applied globally via CSS custom properties (`--glass-bg`, `--glass-border`, `--glass-shadow`) and utility classes (`.glass-panel`, `.glass-overlay`). Components affected: Card, Dialog, Popover, DropdownMenu, Select, Tooltip, Sheet — all use semi-transparent backgrounds with backdrop-blur
-- **Charts**: Recharts for data visualization in dashboards
-- **Path Aliases**: `@/` maps to `client/src/`, `@shared/` maps to `shared/`
-- **Key Design Patterns**:
-  - Multi-step wizard pattern for the Preventivatore (quote builder) with ~15+ steps
-  - Complex calculation engines in `client/src/lib/calcolo*.ts` files handle business logic for each product line (Mobile, Fisso, Energia, Assicurazioni, Partnership, Protecta, Extra Gara)
-  - Local storage persistence via `use-preventivatore-storage` hook for saving wizard state between sessions
-  - Remote config sync via `useOrganizationConfig` hook with debounced auto-save
+### Frontend
+- **Framework**: React with TypeScript, bundled by Vite.
+- **Routing**: `wouter`.
+- **State Management**: TanStack React Query for server state; local React state and custom hooks for UI state.
+- **UI Components**: `shadcn/ui` (New York style) with Radix UI primitives and Tailwind CSS for styling. Glassmorphism is applied globally.
+- **Charts**: Recharts for data visualization.
+- **Design Patterns**: Multi-step wizard for quote building, complex calculation engines for each product line, local storage persistence for wizard state, and remote config synchronization.
 
-### Backend (Express + Node.js)
-- **Framework**: Express.js with TypeScript, run via `tsx` in dev
-- **Architecture**: Monolithic server serving both API routes and the Vite-built SPA
-- **API Pattern**: RESTful JSON APIs under `/api/*` prefix
-- **Build**: esbuild for server bundling, Vite for client; output to `dist/`
-- **Server entry**: `server/index.ts` creates HTTP server, registers routes, serves static files in production or Vite dev middleware in development
+### Backend
+- **Framework**: Express.js with TypeScript.
+- **Architecture**: Monolithic server providing RESTful JSON APIs and serving the frontend SPA.
+- **Build**: esbuild for server, Vite for client.
 
 ### Authentication
-- **Method**: Replit Auth via OpenID Connect (OIDC)
-- **Session Storage**: PostgreSQL-backed sessions using `connect-pg-simple`
-- **Auth Flow**: Passport.js with OIDC strategy; sessions stored in `sessions` table
-- **User Management**: Profiles auto-created on first login, linked to organizations
-- **Role System**: Three roles - `super_admin` (manages all orgs), `admin` (manages their org's users), `operatore` (standard user)
-- **Important**: There are two auth hook files - `useAuth.ts` (custom fetch-based, primary) and `use-auth.ts` (React Query-based, secondary/legacy). The main app uses `useAuth.ts`.
+- **Method**: Replit Auth via OpenID Connect (OIDC).
+- **Session Storage**: PostgreSQL-backed sessions using `connect-pg-simple`.
+- **Auth Flow**: Passport.js with OIDC strategy.
+- **User Management**: Profiles auto-created on first login, linked to organizations with `super_admin`, `admin`, and `operatore` roles.
 
 ### Database
-- **Database**: PostgreSQL (required, provisioned via Replit)
-- **ORM**: Drizzle ORM with `drizzle-zod` for schema validation
-- **Schema Location**: `shared/schema.ts`
-- **Key Tables**:
-  - `sessions` - Auth session storage
-  - `organizations` - Multi-tenant org support
-  - `profiles` - User profiles linked to Replit Auth and organizations
-  - `preventivi` - Saved quotes with JSONB `data` column storing all calculation state
-  - `organization_config` - Per-org configuration (PDV setup, thresholds, calendars) stored as JSONB
-  - `gara_config` - Per-org, per-month competition (gara) configuration with JSONB config; indexed on (org, month, year). API: GET/PUT `/api/gara-config`, GET `/api/gara-config/history`, POST `/api/gara-config/import-from-simulator`, GET `/api/gara-config/pdv-from-sales`
-- **Migrations**: `drizzle-kit push` for schema sync (no migration files workflow)
-- **Storage Layer**: `server/storage.ts` implements `IStorage` interface with `DatabaseStorage` class
+- **Database**: PostgreSQL.
+- **ORM**: Drizzle ORM with `drizzle-zod` for schema validation.
+- **Key Tables**: `sessions`, `organizations`, `profiles`, `preventivi` (quotes with JSONB data), `organization_config` (per-org config as JSONB), `gara_config` (per-org, per-month competition config as JSONB).
+- **Migrations**: `drizzle-kit push` for schema synchronization.
 
-### External Integrations
-- **BiSuite API**: Integration for fetching sales data from an external system (endpoint at `http://85.94.215.97/api/v1/sales/full`), configured per-organization with OAuth2 client credentials stored in `organization_config.config.bisuiteCredentials` JSONB field. Backend proxy routes handle OAuth2 token acquisition and API calls (`/api/admin/bisuite-credentials` GET/POST/PUT, `/api/admin/bisuite-api` POST with actions `test_connection` and `fetch_sales`)
-- **BiSuite Mapping**: Global (cross-tenant) configurable rules engine for mapping BiSuite sale articles to gara categories. Super_admin only. Types/engine in `shared/bisuiteMapping.ts`, API endpoints GET/PUT `/api/admin/bisuite-mapping`, UI at `/mappatura-bisuite` (`client/src/pages/MappaturaBiSuite.tsx`). Stored globally in `system_config` table (key `"bisuite_mapping"`) as `BiSuiteMappingConfig { rules, version }`. Rules match on `categoriaBiSuite`, `tipologiaBiSuite`, `descrizioneBiSuite`, `descrizioneEscludi` (comma-separated exclusions), `clienteTipo`, and Q&A conditions; priority-based first-match wins. Additional tabs: **Prodotti** (product articles with pezzi/importo), **Servizi** (service articles), **Non Mappati** (unmapped articles with "Crea Regola" quick-action). Backend: `GET /api/admin/bisuite-articles-summary?month=M&year=Y` returns categorized article summaries.
-- **Configurazione Gara**: Admin page at `/configurazione-gara` (`client/src/pages/ConfigurazioneGara.tsx`) for per-month gara configuration. Hook `client/src/hooks/useGaraConfig.ts` wraps all `/api/gara-config*` endpoints. Three-tab layout: **PDV** (PDV list with cluster/calendar editing, tipo gara selector gara_operatore/gara_operatore_rs, modalità RS per_pdv/per_rs), **Soglie** (editable Mobile S1-S4 + forecast, Fisso S1-S5 + forecast, Partnership Reward target100/premio100 per PDV or per RS with key-based mapping), **Energia & Ass.** (aggregate Energia config OR per-RS Energia/Assicurazioni config when modalità=per_rs: pdvInGara, targetNoMalus, targetS1-S3, pistaSoglia S1-S5 for Energia; pdvInGara, targetNoMalus, targetS1-S2 for Assicurazioni). `energiaRSConfig` and `assicurazioniRSConfig` fields in `GaraConfigData` store per-RS configs. Import from simulator, manual PDV add, save, history browser. Soglie auto-initialized from cluster using existing helper functions. Admin/super_admin only.
-- **Dashboard Gara Reale**: Real sales dashboard at `/dashboard-gara-reale` (`client/src/pages/DashboardGaraReale.tsx`). Reads PDV configuration (clusters, calendars, abilitaEnergia/abilitaAssicurazioni) from `gara_config` for the selected month/year instead of `organization_config`. Falls back to a "configurazione mancante" message with link to `/configurazione-gara` if no gara_config exists for the selected period. Backend API `GET /api/admin/bisuite-mapped-sales?month=M&year=Y` fetches sales from `bisuite_sales`, applies mapping rules, and returns aggregated volumes + canone sums by PDV/pista/category. Canone is extracted from `raw_data.articoli[].dettaglio.canone` per article. Mobile premio calculation uses actual canone totals from sales (via `valoreCanoniOverride`) instead of `canoneMedio` config — `canoneMedio` is only used in the Simulator for manual estimation. Frontend shows KPI cards per pista with working-day projections, PDV drill-down, and RS breakdown. Integrates calculation engines for Mobile (punti + gettoni), Fisso (punti + gettoni contrattuali + euro/pezzo), and Energia (compensi base per category) to display soglia raggiunta (current + projected) and premio stimato per pista card. Color-coded soglia badges (red=none, amber=S1, yellow=S2, lime=S3, green=S4+). Admin/super_admin only.
-- **Navigation Structure**: AppNavbar groups links into two dropdown sections — **Gara** (Dashboard, Configurazione, Vendite BiSuite, Mappatura) and **Simulatore** (Simulatore, Dashboard Sim., Tabelle Calcolo). Admin items (Super Admin, Gestione Organizzazione, Amministrazione) appear as standalone buttons before the dropdowns. Mobile menu uses section labels with separators.
-- **Amministrazione**: Admin/super_admin page at `/amministrazione` (`client/src/pages/Amministrazione.tsx`). Reads BiSuite sales via existing `GET /api/bisuite-sales?from&to&organization_id`. Two tabs: **Prima Nota Contabile** (one row per scontrino with totale + payment method breakdown: contanti, POS, finanziato, VAR/credito, non scontrinato cont./POS, bonifici, assegni, buoni, coupon, altri) and **Prima Nota IVA** (one row per articolo with categoria/descrizione/aliquota/imponibile/imposta/lordo + riepilogo per aliquota). VAT calculation: `imposta = importoScontrino - importoImponibile` when both > 0; fallback `imponibile * aliquota / 100`. Articles with `aliquotaPrezzo=0` and zero importi marked "Fuori scontrino" (canoni/servizi fatturati a parte). Filters: date range, PDV, RS, search. Excel export produces 3 sheets: "Prima Nota Contabile", "Prima Nota IVA", "Riepilogo IVA".
-- **PDF Generation**: `jsPDF` with `jspdf-autotable` for exporting quotes
-- **Excel Export**: `xlsx` library for spreadsheet generation
-- **Google Fonts**: Outfit (display) and Inter (body) font families
+### Business Logic
+- Core calculation engines are located in `client/src/lib/`, handling product-specific point/premium calculations, thresholds, and bonuses (e.g., `calcoliMobile.ts`, `calcoloPistaFisso.ts`, `calcoloEnergia.ts`).
+- Centralized configuration for calculation parameters is managed via the "Tabelle Calcolo" UI, leveraging a hierarchy of system defaults and organization-specific overrides.
 
-### Business Logic Architecture
-The calculation engines are the core of the application, located in `client/src/lib/`:
-- `calcoliMobile.ts` - Mobile line point/premium calculations with threshold tiers (accepts `valoreCanoniOverride` to use actual canone from sales data instead of `canoneMedio` config)
-- `calcoloPistaFisso.ts` - Fixed-line calculations with 5-tier thresholds (accepts `gettoniContrattualiOverride`)
-- `calcoloPartnershipReward.ts` - Partnership reward with target-based bonuses
-- `calcoloEnergia.ts` - Energy contract commissions with per-category rates (accepts `compensiBaseOverride`, `bonusPerContrattoOverride`)
-- `calcoloAssicurazioni.ts` - Insurance product point/premium calculations (accepts `puntiOverride`, `premiOverride`)
-- `calcoloProtecta.ts` - Protecta insurance product calculations (accepts `gettoniOverride`)
-- `calcoloExtraGaraIva.ts` - Extra competition P.IVA calculations with multi/mono-POS thresholds (accepts `configOverrides` with puntiAttivazione, soglie, premi)
-
-Each engine takes per-PDV configurations and activated volumes, returning structured results with breakdowns by product, threshold reached, and total premiums.
-
-### Centralized Configuration (Tabelle Calcolo)
-- **Page**: `client/src/pages/TabelleCalcolo.tsx` - Admin UI with 6 tabs for configuring calculation parameters
-- **Hook**: `client/src/hooks/useTabelleCalcoloConfig.ts` - Merges system defaults + org overrides into `TabelleCalcoloValues`
-- **Config Hierarchy**: Hardcoded defaults -> System config (key="tabelle_calcolo" in system_config table) -> Org overrides (in organization_config.tabelleCalcolo)
-- **Integration**: Preventivatore loads config via `useTabelleCalcoloConfig` hook and passes overrides to all calculation engine calls
-- **Configurable Values**: Unit prices/points/gettoni per product line; thresholds and aggregate logic remain automatic
-- **RS Calculations**: Remain unchanged - only per-PDV calculations use configurable values
-
-## Production Deployment (VPS Multi-App Architecture)
-
-### Architecture
-- **VPS**: 85.215.124.207, multi-app setup with Nginx reverse proxy
-- **Port**: 3001 (set via `PORT=3001` env var)
-- **Base Path**: `/incentivew3` - all routes, API calls, and static assets are served under this prefix in production
-- **Nginx**: Routes `/incentivew3` to `localhost:3001`, config example in `nginx-incentivew3.conf`
-
-### How It Works
-- `client/src/lib/basePath.ts`: Exports `BASE_PATH` (empty in dev, `/incentivew3` in production) and `apiUrl()` helper
-- All client-side `fetch()` calls use `apiUrl('/api/...')` to prefix the base path automatically
-- `server/index.ts`: In production, creates a sub-app mounted at `/incentivew3`; in dev, everything runs at root `/`
-- `server/static.ts`: In production, injects `<base href="/incentivew3/">` into the HTML for correct asset resolution
-- `wouter` Router uses `BASE_PATH` as its `base` prop for correct client-side routing
-- **Development on Replit**: Runs on port 5000 with no base path - completely unaffected
-
-### Deploy Commands (on VPS)
-```bash
-npm run build
-PORT=3001 npm run start
-```
-
-### Session Configuration
-- `FORCE_HTTPS=true` env var enables secure cookies in production
-- `SESSION_SECRET` must be set for session encryption
+### Production Deployment
+- **Environment**: VPS with Nginx reverse proxy.
+- **Base Path**: `/incentivew3` for all production assets and API calls.
+- **Mechanism**: Client-side `BASE_PATH` constant and `apiUrl()` helper, server-side sub-app mounting, and base href injection for asset resolution.
 
 ## External Dependencies
 
-- **PostgreSQL**: Primary database, connected via `DATABASE_URL` environment variable
-- **Replit Auth (OIDC)**: Authentication provider, uses `ISSUER_URL`, `REPL_ID`, and `SESSION_SECRET` environment variables
-- **BiSuite Sales API**: External sales data API at `http://85.94.215.97/api/v1/sales/full`, configured per-organization with `clientId` and `clientSecret`
-- **Google Fonts CDN**: Outfit, Inter, DM Sans, Fira Code, Geist Mono, Architects Daughter fonts
-- **npm packages of note**: `recharts` (charts), `jspdf` + `jspdf-autotable` (PDF export), `xlsx` (Excel export), `framer-motion` (animations), `date-fns` (date formatting with Italian locale), `zod` (validation)
-
-## Dashboard - Drill-Down Logica
-
-Il componente drill-down nella Dashboard varia in base al tipo di preventivo:
-- **gara_operatore** standard → `PdvDrillDown` (accordion per PDV)
-- **gara_operatore_rs** con `modalitaInserimentoRS = "per_pdv"` → `PdvDrillDown` (dati inseriti per PDV, breakdown disponibile)
-- **gara_operatore_rs** con `modalitaInserimentoRS = "per_rs"` → `RsDrillDown` (accordion per Ragione Sociale; legge `attivatoMobileByRS`, `attivatoFissoByRS`, ecc.)
+- **PostgreSQL**: Primary database.
+- **Replit Auth (OIDC)**: Authentication provider.
+- **BiSuite Sales API**: External service for fetching sales data, configured per-organization with OAuth2 client credentials. Includes a global rules engine for mapping sales articles to competition categories.
+- **Google Fonts CDN**: For custom fonts (Outfit, Inter).
+- **npm packages**: `recharts` (charts), `jspdf` and `jspdf-autotable` (PDF export), `xlsx` (Excel export), `framer-motion` (animations), `date-fns` (date utilities), `zod` (validation).
