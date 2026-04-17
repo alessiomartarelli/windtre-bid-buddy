@@ -30,7 +30,7 @@ import {
   Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  BookOpen, Receipt, Loader2, Download, Search,
+  BookOpen, Receipt, Loader2, Download, Search, AlertTriangle, HelpCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -270,6 +270,7 @@ export default function Amministrazione() {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<TabKey>("contabile");
   const [escludiZero, setEscludiZero] = useState<boolean>(false);
+  const [ivaCategoryFilter, setIvaCategoryFilter] = useState<IvaCategoria | "all">("all");
 
   const orgId = profile?.organizationId || "";
   const isAuthorized = !!profile && ["admin", "super_admin"].includes(profile.role);
@@ -347,9 +348,36 @@ export default function Amministrazione() {
   const contabileRows = useMemo(() => buildContabileRows(filteredSales), [filteredSales]);
   const ivaRowsAll = useMemo(() => buildIvaRows(filteredSales), [filteredSales]);
   const ivaRows = useMemo(() => {
-    if (!escludiZero) return ivaRowsAll;
-    return ivaRowsAll.filter((r) => r.fiscalCategory !== "fuori_scontrino");
-  }, [ivaRowsAll, escludiZero]);
+    let rows = ivaRowsAll;
+    if (escludiZero) rows = rows.filter((r) => r.fiscalCategory !== "fuori_scontrino");
+    if (ivaCategoryFilter !== "all") rows = rows.filter((r) => r.fiscalCategory === ivaCategoryFilter);
+    return rows;
+  }, [ivaRowsAll, escludiZero, ivaCategoryFilter]);
+
+  const ivaAlerts = useMemo(() => {
+    const nonStdSales = new Set<string>();
+    const daVerSales = new Set<string>();
+    let nonStdLordo = 0;
+    let daVerLordo = 0;
+    for (const r of ivaRowsAll) {
+      if (r.fiscalCategory === "non_standard") {
+        nonStdSales.add(r.saleId);
+        nonStdLordo += r.lordo;
+      } else if (r.fiscalCategory === "da_verificare") {
+        daVerSales.add(r.saleId);
+        daVerLordo += r.lordo;
+      }
+    }
+    return {
+      nonStandard: { scontrini: nonStdSales.size, lordo: nonStdLordo },
+      daVerificare: { scontrini: daVerSales.size, lordo: daVerLordo },
+    };
+  }, [ivaRowsAll]);
+
+  const goToIvaCategory = (cat: IvaCategoria) => {
+    setIvaCategoryFilter(cat);
+    setTab("iva");
+  };
 
   const contabileTotals = useMemo<{ totale: number; incasso: IncassoTotals }>(() => {
     return {
@@ -679,6 +707,55 @@ export default function Amministrazione() {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : (
+          <>
+          {(ivaAlerts.nonStandard.scontrini > 0 || ivaAlerts.daVerificare.scontrini > 0) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Card
+                className={`cursor-pointer transition-colors hover-elevate active-elevate-2 ${
+                  ivaAlerts.nonStandard.scontrini > 0 ? "border-destructive/50" : "opacity-60"
+                }`}
+                onClick={() => ivaAlerts.nonStandard.scontrini > 0 && goToIvaCategory("non_standard")}
+                data-testid="card-alert-non-standard"
+              >
+                <CardContent className="pt-6 flex items-center gap-3">
+                  <div className="p-2 rounded-md bg-destructive/10 text-destructive">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-muted-foreground">Aliquote non standard</div>
+                    <div className="text-lg font-semibold" data-testid="text-alert-non-standard-count">
+                      {ivaAlerts.nonStandard.scontrini} scontrini
+                    </div>
+                    <div className="text-xs text-muted-foreground" data-testid="text-alert-non-standard-lordo">
+                      Lordo: {fmtCurrency(ivaAlerts.nonStandard.lordo)}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card
+                className={`cursor-pointer transition-colors hover-elevate active-elevate-2 ${
+                  ivaAlerts.daVerificare.scontrini > 0 ? "border-destructive/50" : "opacity-60"
+                }`}
+                onClick={() => ivaAlerts.daVerificare.scontrini > 0 && goToIvaCategory("da_verificare")}
+                data-testid="card-alert-da-verificare"
+              >
+                <CardContent className="pt-6 flex items-center gap-3">
+                  <div className="p-2 rounded-md bg-destructive/10 text-destructive">
+                    <HelpCircle className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-muted-foreground">Da verificare</div>
+                    <div className="text-lg font-semibold" data-testid="text-alert-da-verificare-count">
+                      {ivaAlerts.daVerificare.scontrini} scontrini
+                    </div>
+                    <div className="text-xs text-muted-foreground" data-testid="text-alert-da-verificare-lordo">
+                      Lordo: {fmtCurrency(ivaAlerts.daVerificare.lordo)}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
           <Tabs
             value={tab}
             onValueChange={(v) => { if (isTabKey(v)) setTab(v); }}
@@ -794,16 +871,37 @@ export default function Amministrazione() {
             </TabsContent>
 
             <TabsContent value="iva" className="space-y-4">
-              <div className="flex items-center justify-end gap-2">
-                <Label htmlFor="escludi-zero" className="text-xs cursor-pointer">
-                  Nascondi righe a 0 nel dettaglio (totali sempre completi)
-                </Label>
-                <Switch
-                  id="escludi-zero"
-                  checked={escludiZero}
-                  onCheckedChange={setEscludiZero}
-                  data-testid="switch-escludi-zero"
-                />
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="iva-cat-filter" className="text-xs">Categoria fiscale</Label>
+                  <Select
+                    value={ivaCategoryFilter}
+                    onValueChange={(v) => setIvaCategoryFilter(v as IvaCategoria | "all")}
+                  >
+                    <SelectTrigger id="iva-cat-filter" className="h-8 w-[200px]" data-testid="select-iva-category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tutte le categorie</SelectItem>
+                      <SelectItem value="standard">{FISCAL_CATEGORY_LABELS.standard}</SelectItem>
+                      <SelectItem value="non_standard">{FISCAL_CATEGORY_LABELS.non_standard}</SelectItem>
+                      <SelectItem value="natura">{FISCAL_CATEGORY_LABELS.natura}</SelectItem>
+                      <SelectItem value="da_verificare">{FISCAL_CATEGORY_LABELS.da_verificare}</SelectItem>
+                      <SelectItem value="fuori_scontrino">{FISCAL_CATEGORY_LABELS.fuori_scontrino}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="escludi-zero" className="text-xs cursor-pointer">
+                    Nascondi righe a 0 nel dettaglio (totali sempre completi)
+                  </Label>
+                  <Switch
+                    id="escludi-zero"
+                    checked={escludiZero}
+                    onCheckedChange={setEscludiZero}
+                    data-testid="switch-escludi-zero"
+                  />
+                </div>
               </div>
 
               <Card>
@@ -987,6 +1085,7 @@ export default function Amministrazione() {
               </Card>
             </TabsContent>
           </Tabs>
+          </>
         )}
       </main>
     </div>
