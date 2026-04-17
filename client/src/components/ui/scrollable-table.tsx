@@ -58,6 +58,33 @@ export function ScrollableTable({
 
   return (
     <div className={cn("relative", className)}>
+      {/* Sticky overlay that follows viewport vertically; takes 0 height so it doesn't affect layout */}
+      {(canLeft || canRight) && (
+        <div className="sticky top-1/2 h-0 z-30 pointer-events-none">
+          {canLeft && (
+            <button
+              type="button"
+              onClick={() => scroll(-1)}
+              className="absolute left-2 top-0 -translate-y-1/2 pointer-events-auto h-10 w-10 rounded-full bg-background border-2 border-primary/50 shadow-xl hover-elevate active-elevate-2 flex items-center justify-center text-primary"
+              aria-label="Scorri a sinistra"
+              data-testid="button-scroll-left"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
+          {canRight && (
+            <button
+              type="button"
+              onClick={() => scroll(1)}
+              className="absolute right-2 top-0 -translate-y-1/2 pointer-events-auto h-10 w-10 rounded-full bg-background border-2 border-primary/50 shadow-xl hover-elevate active-elevate-2 flex items-center justify-center text-primary"
+              aria-label="Scorri a destra"
+              data-testid="button-scroll-right"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+      )}
       <div
         ref={ref}
         className="w-full max-w-full overflow-x-auto"
@@ -66,34 +93,6 @@ export function ScrollableTable({
       >
         {children}
       </div>
-      {canLeft && (
-        <>
-          <div className="pointer-events-none absolute left-0 top-0 bottom-3 w-10 bg-gradient-to-r from-background via-background/80 to-transparent z-10" />
-          <button
-            type="button"
-            onClick={() => scroll(-1)}
-            className="absolute left-2 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-background border-2 border-primary/40 shadow-lg hover-elevate active-elevate-2 flex items-center justify-center text-primary"
-            aria-label="Scorri a sinistra"
-            data-testid="button-scroll-left"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-        </>
-      )}
-      {canRight && (
-        <>
-          <div className="pointer-events-none absolute right-0 top-0 bottom-3 w-12 bg-gradient-to-l from-background via-background/80 to-transparent z-10" />
-          <button
-            type="button"
-            onClick={() => scroll(1)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-background border-2 border-primary/40 shadow-lg hover-elevate active-elevate-2 flex items-center justify-center text-primary"
-            aria-label="Scorri a destra"
-            data-testid="button-scroll-right"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
-        </>
-      )}
     </div>
   );
 }
