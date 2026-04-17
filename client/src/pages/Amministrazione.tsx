@@ -282,6 +282,7 @@ export default function Amministrazione() {
   const [tab, setTab] = useState<TabKey>("contabile");
   const [escludiZero, setEscludiZero] = useState<boolean>(false);
   const [ivaCategoryFilter, setIvaCategoryFilter] = useState<IvaCategoria | "all">("all");
+  const [selectedRs, setSelectedRs] = useState<string>("all");
 
   const orgId = profile?.organizationId || "";
   const isAuthorized = !!profile && ["admin", "super_admin"].includes(profile.role);
@@ -494,6 +495,17 @@ export default function Amministrazione() {
       });
     return groups;
   }, [filteredSales, escludiZero, ivaCategoryFilter]);
+
+  const displayedRsGroups = useMemo(
+    () => (selectedRs === "all" ? rsGroups : rsGroups.filter((g) => g.rs === selectedRs)),
+    [rsGroups, selectedRs],
+  );
+
+  useEffect(() => {
+    if (selectedRs !== "all" && !rsGroups.some((g) => g.rs === selectedRs)) {
+      setSelectedRs("all");
+    }
+  }, [rsGroups, selectedRs]);
 
   const periodSuffix = `${year}_${String(month).padStart(2, "0")}`;
 
@@ -987,10 +999,47 @@ export default function Amministrazione() {
               )}
             </div>
 
+            {rsGroups.length > 1 && (
+              <div className="flex flex-wrap items-center gap-2 px-1" data-testid="rs-switcher">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground mr-1">Ragione Sociale:</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRs("all")}
+                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                    selectedRs === "all"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-border hover-elevate active-elevate-2"
+                  }`}
+                  data-testid="button-rs-all"
+                >
+                  Tutte <span className="opacity-70">({rsGroups.length})</span>
+                </button>
+                {rsGroups.map((g) => (
+                  <button
+                    key={g.rs}
+                    type="button"
+                    onClick={() => setSelectedRs(g.rs)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5 ${
+                      selectedRs === g.rs
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-foreground border-border hover-elevate active-elevate-2"
+                    }`}
+                    data-testid={`button-rs-${g.rs}`}
+                  >
+                    <Building2 className="h-3 w-3" />
+                    {g.rs}
+                    <span className="opacity-70">
+                      ({tab === "contabile" ? g.contabileRows.length : g.ivaRows.length})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <TabsContent value="contabile" className="space-y-6">
-              {rsGroups.length === 0 ? (
+              {displayedRsGroups.length === 0 ? (
                 <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Nessuno scontrino nel periodo selezionato</CardContent></Card>
-              ) : rsGroups.map((g) => (
+              ) : displayedRsGroups.map((g) => (
                 <div key={`contabile-${g.rs}`} className="space-y-3">
                   <div className="flex items-center gap-2 px-1">
                     <Building2 className="h-4 w-4 text-primary" />
@@ -1087,7 +1136,7 @@ export default function Amministrazione() {
                 </div>
               ))}
 
-              {rsGroups.length > 1 && (
+              {rsGroups.length > 1 && selectedRs === "all" && (
                 <Card className="border-primary/40 bg-primary/5">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm flex items-center justify-between">
@@ -1144,9 +1193,9 @@ export default function Amministrazione() {
                 </div>
               </div>
 
-              {rsGroups.length === 0 ? (
+              {displayedRsGroups.length === 0 ? (
                 <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Nessun articolo nel periodo selezionato</CardContent></Card>
-              ) : rsGroups.map((g) => {
+              ) : displayedRsGroups.map((g) => {
                 const isEmptyRiep =
                   g.ivaRiepilogo.standardArr.length === 0 &&
                   g.ivaRiepilogo.nonStandardArr.length === 0 &&
@@ -1329,7 +1378,7 @@ export default function Amministrazione() {
                 );
               })}
 
-              {rsGroups.length > 1 && (
+              {rsGroups.length > 1 && selectedRs === "all" && (
                 <Card className="border-primary/40 bg-primary/5">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm flex items-center justify-between">
