@@ -1252,8 +1252,8 @@ export default function Amministrazione() {
                   <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
                     <Table className="w-full table-fixed [&_th]:px-1.5 [&_td]:px-1.5 [&_th]:py-1.5 [&_td]:py-1 [&_th]:overflow-hidden [&_td]:overflow-hidden">
                       <colgroup>
-                        <col className="w-[72px]" />
-                        <col className="w-[110px]" />
+                        <col className="w-[84px]" />
+                        <col className="w-[150px]" />
                         <col className="w-[78px]" />
                         <col className="w-[96px]" />
                         <col />
