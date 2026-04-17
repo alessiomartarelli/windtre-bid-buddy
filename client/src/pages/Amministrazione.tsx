@@ -921,55 +921,7 @@ export default function Amministrazione() {
           </div>
         ) : (
           <>
-          {(ivaAlerts.nonStandard.scontrini > 0 || ivaAlerts.daVerificare.scontrini > 0) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Card
-                className={`cursor-pointer transition-colors hover-elevate active-elevate-2 ${
-                  ivaAlerts.nonStandard.scontrini > 0 ? "border-destructive/50" : "opacity-60"
-                }`}
-                onClick={() => ivaAlerts.nonStandard.scontrini > 0 && goToIvaCategory("non_standard")}
-                data-testid="card-alert-non-standard"
-              >
-                <CardContent className="pt-6 flex items-center gap-3">
-                  <div className="p-2 rounded-md bg-destructive/10 text-destructive">
-                    <AlertTriangle className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-muted-foreground">Aliquote non standard</div>
-                    <div className="text-lg font-semibold" data-testid="text-alert-non-standard-count">
-                      {ivaAlerts.nonStandard.scontrini} scontrini
-                    </div>
-                    <div className="text-xs text-muted-foreground" data-testid="text-alert-non-standard-lordo">
-                      Lordo: {fmtCurrency(ivaAlerts.nonStandard.lordo)}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card
-                className={`cursor-pointer transition-colors hover-elevate active-elevate-2 ${
-                  ivaAlerts.daVerificare.scontrini > 0 ? "border-destructive/50" : "opacity-60"
-                }`}
-                onClick={() => ivaAlerts.daVerificare.scontrini > 0 && goToIvaCategory("da_verificare")}
-                data-testid="card-alert-da-verificare"
-              >
-                <CardContent className="pt-6 flex items-center gap-3">
-                  <div className="p-2 rounded-md bg-destructive/10 text-destructive">
-                    <HelpCircle className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-muted-foreground">Da verificare</div>
-                    <div className="text-lg font-semibold" data-testid="text-alert-da-verificare-count">
-                      {ivaAlerts.daVerificare.scontrini} scontrini
-                    </div>
-                    <div className="text-xs text-muted-foreground" data-testid="text-alert-da-verificare-lordo">
-                      Lordo: {fmtCurrency(ivaAlerts.daVerificare.lordo)}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-          <Tabs
+<Tabs
             value={tab}
             onValueChange={(v) => { if (isTabKey(v)) setTab(v); }}
             className="space-y-4"
