@@ -65,9 +65,9 @@ const MONTH_LABELS = [
 
 function periodToDateRange(year: number, month: number) {
   const pad = (n: number) => String(n).padStart(2, "0");
-  const first = `${year}-${pad(month)}-01`;
+  const first = `${year}-${pad(month)}-01T00:00:00`;
   const last = new Date(year, month, 0);
-  const lastStr = `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}`;
+  const lastStr = `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}T23:59:59`;
   return { from: first, to: lastStr };
 }
 
