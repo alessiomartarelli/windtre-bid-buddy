@@ -19,6 +19,7 @@ import VenditeBiSuite from "@/pages/VenditeBiSuite";
 import MappaturaBiSuite from "@/pages/MappaturaBiSuite";
 import DashboardGaraReale from "@/pages/DashboardGaraReale";
 import ConfigurazioneGara from "@/pages/ConfigurazioneGara";
+import Amministrazione from "@/pages/Amministrazione";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -74,6 +75,9 @@ function Router() {
       </Route>
       <Route path="/configurazione-gara">
         {() => <ProtectedRoute component={ConfigurazioneGara} />}
+      </Route>
+      <Route path="/amministrazione">
+        {() => <ProtectedRoute component={Amministrazione} />}
       </Route>
       <Route component={NotFound} />
     </Switch>
