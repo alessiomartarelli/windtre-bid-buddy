@@ -30,6 +30,7 @@ import {
   Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { FilterBar, FilterField } from "@/components/ui/filter-bar";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
 import {
   BookOpen, Receipt, Loader2, Download, Search, AlertTriangle, HelpCircle, FileText,
   Calendar, CalendarDays, Store, Building2,
@@ -1019,7 +1020,7 @@ export default function Amministrazione() {
 
                   <Card className="overflow-hidden min-w-0 max-w-full">
                     <CardContent className="p-0 min-w-0">
-                      <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                      <ScrollableTable>
                         <Table className="min-w-[1200px]">
                           <TableHeader>
                             <TableRow>
@@ -1080,7 +1081,7 @@ export default function Amministrazione() {
                             </TableFooter>
                           )}
                         </Table>
-                      </div>
+                      </ScrollableTable>
                     </CardContent>
                   </Card>
                 </div>
@@ -1165,7 +1166,7 @@ export default function Amministrazione() {
                       <CardTitle className="text-sm">Riepilogo IVA per Aliquota</CardTitle>
                     </CardHeader>
                     <CardContent className="min-w-0">
-                      <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                      <ScrollableTable>
                       <Table className="min-w-[520px]">
                         <TableHeader>
                           <TableRow>
@@ -1228,13 +1229,13 @@ export default function Amministrazione() {
                           </TableRow>
                         </TableFooter>
                       </Table>
-                      </div>
+                      </ScrollableTable>
                     </CardContent>
                   </Card>
 
                   <Card className="overflow-hidden min-w-0 max-w-full">
                     <CardContent className="p-0 min-w-0">
-                      <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                      <ScrollableTable>
                         <Table className="w-full table-fixed [&_th]:px-1.5 [&_td]:px-1.5 [&_th]:py-1.5 [&_td]:py-1 [&_th]:overflow-hidden [&_td]:overflow-hidden">
                           <colgroup>
                             <col className="w-[84px]" />
@@ -1316,7 +1317,7 @@ export default function Amministrazione() {
                             )}
                           </TableBody>
                         </Table>
-                      </div>
+                      </ScrollableTable>
                       {g.ivaRows.length > 500 && (
                         <div className="p-3 text-center text-xs text-muted-foreground border-t">
                           Visualizzati i primi 500 articoli su {g.ivaRows.length}. Esporta in Excel per il dettaglio completo.
