@@ -1195,7 +1195,10 @@ export default function Amministrazione() {
                           <TableCell className="text-xs text-right font-semibold">{fmtCurrency(e.lordo)}</TableCell>
                         </TableRow>
                       ))}
-                      {ivaRiepilogo.nonStandardArr.map((e) => (
+                      {/* Le righe "Non standard" non sono mostrate nel riepilogo per pulizia visiva.
+                          Restano visibili tramite la card di alert in alto e il filtro categoria
+                          della tab Prima Nota IVA, e continuano a concorrere ai totali. */}
+                      {false && ivaRiepilogo.nonStandardArr.map((e) => (
                         <TableRow key={`nstd-${e.aliquota}`} data-testid={`row-non-standard-${e.aliquota}`}>
                           <TableCell className="text-xs">
                             <Badge variant="destructive" className="text-[10px]">
