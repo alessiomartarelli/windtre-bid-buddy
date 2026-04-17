@@ -827,7 +827,7 @@ export default function Amministrazione() {
   return (
     <div className="min-h-screen flex flex-col">
       <AppNavbar />
-      <main className="flex-1 container mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4">
+      <main className="flex-1 container mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 min-w-0 max-w-full">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
@@ -1024,21 +1024,22 @@ export default function Amministrazione() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardContent className="p-0 overflow-x-auto">
-                  <Table>
+              <Card className="overflow-hidden min-w-0 max-w-full">
+                <CardContent className="p-0 min-w-0">
+                  <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                  <Table className="min-w-[1200px]">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-xs">Data</TableHead>
-                        <TableHead className="text-xs">ID</TableHead>
-                        <TableHead className="text-xs">PDV</TableHead>
-                        <TableHead className="text-xs">Ragione Sociale</TableHead>
-                        <TableHead className="text-xs">Matricola</TableHead>
-                        <TableHead className="text-xs">Addetto</TableHead>
-                        <TableHead className="text-xs">Cliente</TableHead>
-                        <TableHead className="text-xs text-right">Totale</TableHead>
+                        <TableHead className="text-xs whitespace-nowrap min-w-[90px]">Data</TableHead>
+                        <TableHead className="text-xs whitespace-nowrap min-w-[70px]">ID</TableHead>
+                        <TableHead className="text-xs whitespace-nowrap min-w-[140px]">PDV</TableHead>
+                        <TableHead className="text-xs whitespace-nowrap min-w-[140px]">Ragione Sociale</TableHead>
+                        <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Matricola</TableHead>
+                        <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Addetto</TableHead>
+                        <TableHead className="text-xs whitespace-nowrap min-w-[140px]">Cliente</TableHead>
+                        <TableHead className="text-xs whitespace-nowrap text-right min-w-[100px]">Totale</TableHead>
                         {INCASSO_ITEMS_CONFIG.map((cfg) => (
-                          <TableHead key={cfg.key} className="text-xs text-right">{cfg.label}</TableHead>
+                          <TableHead key={cfg.key} className="text-xs whitespace-nowrap text-right min-w-[100px]">{cfg.label}</TableHead>
                         ))}
                       </TableRow>
                     </TableHeader>
@@ -1051,16 +1052,24 @@ export default function Amministrazione() {
                             <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.data)}</TableCell>
                             <TableCell className="text-xs font-mono">{r.bisuiteId}</TableCell>
                             <TableCell className="text-xs">
-                              <div className="font-medium truncate max-w-[160px]">{r.nomeNegozio}</div>
-                              <div className="text-muted-foreground font-mono text-[10px]">{r.codicePos}</div>
+                              <div className="font-medium truncate max-w-[180px]" title={r.nomeNegozio}>{r.nomeNegozio}</div>
+                              <div className="text-muted-foreground font-mono text-[10px] truncate max-w-[180px]" title={r.codicePos}>{r.codicePos}</div>
                             </TableCell>
-                            <TableCell className="text-xs truncate max-w-[140px]">{r.ragioneSociale}</TableCell>
-                            <TableCell className="text-xs font-mono truncate max-w-[120px]">{r.matricolaFiscale || "—"}</TableCell>
-                            <TableCell className="text-xs truncate max-w-[120px]">{r.nomeAddetto}</TableCell>
-                            <TableCell className="text-xs truncate max-w-[140px]">{r.nomeCliente}</TableCell>
-                            <TableCell className="text-xs text-right font-semibold">{fmtCurrency(r.totale)}</TableCell>
+                            <TableCell className="text-xs">
+                              <div className="truncate max-w-[160px]" title={r.ragioneSociale}>{r.ragioneSociale}</div>
+                            </TableCell>
+                            <TableCell className="text-xs font-mono">
+                              <div className="truncate max-w-[140px]" title={r.matricolaFiscale}>{r.matricolaFiscale || "—"}</div>
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              <div className="truncate max-w-[140px]" title={r.nomeAddetto}>{r.nomeAddetto}</div>
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              <div className="truncate max-w-[160px]" title={r.nomeCliente}>{r.nomeCliente}</div>
+                            </TableCell>
+                            <TableCell className="text-xs text-right font-semibold whitespace-nowrap">{fmtCurrency(r.totale)}</TableCell>
                             {INCASSO_ITEMS_CONFIG.map((cfg) => (
-                              <TableCell key={cfg.key} className={`text-xs text-right ${cfg.color}`}>
+                              <TableCell key={cfg.key} className={`text-xs text-right whitespace-nowrap ${cfg.color}`}>
                                 {r.incasso[cfg.key] > 0 ? fmtCurrency(r.incasso[cfg.key]) : "—"}
                               </TableCell>
                             ))}
@@ -1071,10 +1080,10 @@ export default function Amministrazione() {
                     {contabileRows.length > 0 && (
                       <TableFooter>
                         <TableRow data-testid="row-contabile-totals">
-                          <TableCell colSpan={7} className="text-xs font-bold">TOTALE</TableCell>
-                          <TableCell className="text-xs text-right font-bold">{fmtCurrency(contabileTotals.totale)}</TableCell>
+                          <TableCell colSpan={7} className="text-xs font-bold whitespace-nowrap">TOTALE</TableCell>
+                          <TableCell className="text-xs text-right font-bold whitespace-nowrap">{fmtCurrency(contabileTotals.totale)}</TableCell>
                           {INCASSO_ITEMS_CONFIG.map((cfg) => (
-                            <TableCell key={cfg.key} className={`text-xs text-right font-bold ${cfg.color}`}>
+                            <TableCell key={cfg.key} className={`text-xs text-right font-bold whitespace-nowrap ${cfg.color}`}>
                               {fmtCurrency(contabileTotals.incasso[cfg.key])}
                             </TableCell>
                           ))}
@@ -1082,6 +1091,7 @@ export default function Amministrazione() {
                       </TableFooter>
                     )}
                   </Table>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1133,15 +1143,16 @@ export default function Amministrazione() {
                     Esclude automaticamente gli articoli Canvass / Contratti.
                   </p>
                 </CardHeader>
-                <CardContent>
-                  <Table>
+                <CardContent className="min-w-0">
+                  <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                  <Table className="min-w-[520px]">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-xs">Gruppo</TableHead>
-                        <TableHead className="text-xs text-right">Pezzi</TableHead>
-                        <TableHead className="text-xs text-right">Imponibile</TableHead>
-                        <TableHead className="text-xs text-right">Imposta</TableHead>
-                        <TableHead className="text-xs text-right">Lordo</TableHead>
+                        <TableHead className="text-xs whitespace-nowrap min-w-[180px]">Gruppo</TableHead>
+                        <TableHead className="text-xs text-right whitespace-nowrap min-w-[70px]">Pezzi</TableHead>
+                        <TableHead className="text-xs text-right whitespace-nowrap min-w-[100px]">Imponibile</TableHead>
+                        <TableHead className="text-xs text-right whitespace-nowrap min-w-[100px]">Imposta</TableHead>
+                        <TableHead className="text-xs text-right whitespace-nowrap min-w-[100px]">Lordo</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1221,77 +1232,90 @@ export default function Amministrazione() {
                       </TableRow>
                     </TableFooter>
                   </Table>
+                  </div>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardContent className="p-0 overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Data</TableHead>
-                        <TableHead className="text-xs">ID</TableHead>
-                        <TableHead className="text-xs">PDV</TableHead>
-                        <TableHead className="text-xs">Ragione Sociale</TableHead>
-                        <TableHead className="text-xs">Cliente</TableHead>
-                        <TableHead className="text-xs">Cod. Art.</TableHead>
-                        <TableHead className="text-xs">Categoria</TableHead>
-                        <TableHead className="text-xs">Descrizione</TableHead>
-                        <TableHead className="text-xs">Cat. Fiscale</TableHead>
-                        <TableHead className="text-xs text-right">Aliquota</TableHead>
-                        <TableHead className="text-xs text-right">Imponibile</TableHead>
-                        <TableHead className="text-xs text-right">Imposta</TableHead>
-                        <TableHead className="text-xs text-right">Lordo</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ivaRows.length === 0 ? (
-                        <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">Nessun articolo nel periodo selezionato</TableCell></TableRow>
-                      ) : (
-                        ivaRows.slice(0, 500).map((r, idx) => {
-                          const isStd = r.fiscalCategory === "standard";
-                          const isNonStd = r.fiscalCategory === "non_standard";
-                          const isNatura = r.fiscalCategory === "natura";
-                          const isFuori = r.fiscalCategory === "fuori_scontrino";
-                          const aliquotaCell = isStd
-                            ? `${r.aliquota}%`
-                            : isNonStd
-                              ? `${r.aliquota.toFixed(2)}%`
-                              : isNatura
-                                ? (r.naturaCode || "—")
-                                : "—";
-                          return (
-                            <TableRow
-                              key={`${r.saleId}-${idx}`}
-                              className={isFuori ? "opacity-60" : ""}
-                              data-testid={`row-iva-${r.saleId}-${idx}`}
-                            >
-                              <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.data)}</TableCell>
-                              <TableCell className="text-xs font-mono">{r.bisuiteId}</TableCell>
-                              <TableCell className="text-xs">
-                                <div className="font-medium truncate max-w-[140px]">{r.nomeNegozio}</div>
-                                <div className="text-muted-foreground font-mono text-[10px]">{r.codicePos}</div>
-                              </TableCell>
-                              <TableCell className="text-xs truncate max-w-[140px]">{r.ragioneSociale}</TableCell>
-                              <TableCell className="text-xs truncate max-w-[140px]">{r.nomeCliente}</TableCell>
-                              <TableCell className="text-xs font-mono truncate max-w-[100px]">{r.codiceArticolo || "—"}</TableCell>
-                              <TableCell className="text-xs truncate max-w-[140px]">{r.categoria}</TableCell>
-                              <TableCell className="text-xs truncate max-w-[200px]">{r.descrizione}</TableCell>
-                              <TableCell className="text-xs">
-                                <Badge variant={FISCAL_CATEGORY_BADGE[r.fiscalCategory]} className="text-[10px]">
-                                  {FISCAL_CATEGORY_LABELS[r.fiscalCategory]}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-xs text-right">{aliquotaCell}</TableCell>
-                              <TableCell className="text-xs text-right">{(isStd || isNonStd || isNatura) ? fmtCurrency(r.imponibile) : "—"}</TableCell>
-                              <TableCell className="text-xs text-right">{(isStd || isNonStd) ? fmtCurrency(r.imposta) : "—"}</TableCell>
-                              <TableCell className="text-xs text-right font-semibold">{(isStd || isNonStd || isNatura) ? fmtCurrency(r.lordo) : "—"}</TableCell>
-                            </TableRow>
-                          );
-                        })
-                      )}
-                    </TableBody>
-                  </Table>
+              <Card className="overflow-hidden min-w-0 max-w-full">
+                <CardContent className="p-0 min-w-0">
+                  <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                    <Table className="min-w-[960px] [&_th]:px-2 [&_td]:px-2">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs whitespace-nowrap min-w-[80px]">Data</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap min-w-[60px]">ID</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap min-w-[100px]">PDV</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap min-w-[100px]">Ragione Sociale</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap min-w-[100px]">Cliente</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap min-w-[80px]">Cod. Art.</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap min-w-[100px]">Categoria</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap min-w-[140px]">Descrizione</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap min-w-[100px]">Cat. Fiscale</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap text-right min-w-[70px]">Aliquota</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap text-right min-w-[90px]">Imponibile</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap text-right min-w-[90px]">Imposta</TableHead>
+                          <TableHead className="text-xs whitespace-nowrap text-right min-w-[90px]">Lordo</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ivaRows.length === 0 ? (
+                          <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">Nessun articolo nel periodo selezionato</TableCell></TableRow>
+                        ) : (
+                          ivaRows.slice(0, 500).map((r, idx) => {
+                            const isStd = r.fiscalCategory === "standard";
+                            const isNonStd = r.fiscalCategory === "non_standard";
+                            const isNatura = r.fiscalCategory === "natura";
+                            const isFuori = r.fiscalCategory === "fuori_scontrino";
+                            const aliquotaCell = isStd
+                              ? `${r.aliquota}%`
+                              : isNonStd
+                                ? `${r.aliquota.toFixed(2)}%`
+                                : isNatura
+                                  ? (r.naturaCode || "—")
+                                  : "—";
+                            return (
+                              <TableRow
+                                key={`${r.saleId}-${idx}`}
+                                className={isFuori ? "opacity-60" : ""}
+                                data-testid={`row-iva-${r.saleId}-${idx}`}
+                              >
+                                <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.data)}</TableCell>
+                                <TableCell className="text-xs font-mono">{r.bisuiteId}</TableCell>
+                                <TableCell className="text-xs">
+                                  <div className="font-medium truncate max-w-[160px]" title={r.nomeNegozio}>{r.nomeNegozio}</div>
+                                  <div className="text-muted-foreground font-mono text-[10px] truncate max-w-[160px]" title={r.codicePos}>{r.codicePos}</div>
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                  <div className="truncate max-w-[160px]" title={r.ragioneSociale}>{r.ragioneSociale}</div>
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                  <div className="truncate max-w-[160px]" title={r.nomeCliente}>{r.nomeCliente}</div>
+                                </TableCell>
+                                <TableCell className="text-xs font-mono">
+                                  <div className="truncate max-w-[120px]" title={r.codiceArticolo || ""}>{r.codiceArticolo || "—"}</div>
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                  <div className="truncate max-w-[160px]" title={r.categoria}>{r.categoria}</div>
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                  <div className="truncate max-w-[260px]" title={r.descrizione}>{r.descrizione}</div>
+                                </TableCell>
+                                <TableCell className="text-xs">
+                                  <Badge variant={FISCAL_CATEGORY_BADGE[r.fiscalCategory]} className="text-[10px] whitespace-nowrap">
+                                    {FISCAL_CATEGORY_LABELS[r.fiscalCategory]}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs text-right whitespace-nowrap">{aliquotaCell}</TableCell>
+                                <TableCell className="text-xs text-right whitespace-nowrap">{(isStd || isNonStd || isNatura) ? fmtCurrency(r.imponibile) : "—"}</TableCell>
+                                <TableCell className="text-xs text-right whitespace-nowrap">{(isStd || isNonStd) ? fmtCurrency(r.imposta) : "—"}</TableCell>
+                                <TableCell className="text-xs text-right font-semibold whitespace-nowrap">{(isStd || isNonStd || isNatura) ? fmtCurrency(r.lordo) : "—"}</TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
                   {ivaRows.length > 500 && (
                     <div className="p-3 text-center text-xs text-muted-foreground border-t">
                       Visualizzati i primi 500 articoli su {ivaRows.length}. Esporta in Excel per il dettaglio completo.
