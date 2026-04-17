@@ -1,9 +1,19 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { apiUrl } from "@/lib/basePath";
 import { AppNavbar } from "@/components/AppNavbar";
+import {
+  computeIncassoTotals,
+  INCASSO_ITEMS_CONFIG,
+  toNum,
+  type IncassoTotals,
+  type RawSaleData,
+  type ArticoloRaw,
+  type DettaglioArticoloRaw,
+} from "@/lib/incassoUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -23,7 +33,6 @@ import {
 import * as XLSX from "xlsx";
 
 type TabKey = "contabile" | "iva";
-
 const TAB_KEYS: TabKey[] = ["contabile", "iva"];
 function isTabKey(v: string): v is TabKey {
   return (TAB_KEYS as string[]).includes(v);
@@ -41,7 +50,7 @@ interface BisuiteSale {
   nomeCliente: string | null;
   totale: string | null;
   stato: string | null;
-  rawData: any;
+  rawData: RawSaleData | null;
 }
 
 const MONTH_LABELS = [
@@ -55,11 +64,6 @@ function periodToDateRange(year: number, month: number) {
   const last = new Date(year, month, 0);
   const lastStr = `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}`;
   return { from: first, to: lastStr };
-}
-
-function num(v: any): number {
-  const n = parseFloat(v ?? "0");
-  return isNaN(n) ? 0 : n;
 }
 
 const fmtCurrency = (v: number) =>
@@ -84,17 +88,7 @@ interface ContabileRow {
   nomeCliente: string;
   matricolaFiscale: string;
   totale: number;
-  contanti: number;
-  pos: number;
-  finanziato: number;
-  varCredito: number;
-  nonScontrinato: number;
-  nonScontrinatoPos: number;
-  bonifici: number;
-  assegni: number;
-  buoni: number;
-  coupon: number;
-  altriPagamenti: number;
+  incasso: IncassoTotals;
 }
 
 interface IvaRow {
@@ -106,6 +100,7 @@ interface IvaRow {
   nomeNegozio: string;
   ragioneSociale: string;
   nomeCliente: string;
+  codiceArticolo: string;
   categoria: string;
   tipologia: string;
   descrizione: string;
@@ -118,22 +113,12 @@ interface IvaRow {
 
 function buildContabileRows(sales: BisuiteSale[]): ContabileRow[] {
   return sales.map((s) => {
-    const pag = s.rawData?.pagamento || {};
-    const articoli: any[] = Array.isArray(s.rawData?.articoli) ? s.rawData.articoli : [];
-    let finanziato = 0;
-    let varCredito = 0;
-    for (const art of articoli) {
-      const det = art?.dettaglio;
-      if (!det) continue;
-      finanziato += num(det.importoFinanziato);
-      varCredito += num(det.importoCredito);
-    }
     const matricolaFiscale =
-      s.rawData?.matricolaFiscale ||
-      s.rawData?.matricola_fiscale ||
-      s.rawData?.matricola ||
-      s.rawData?.negozio?.matricolaFiscale ||
-      s.rawData?.negozio?.matricola ||
+      s.rawData?.matricolaFiscale ??
+      s.rawData?.matricola_fiscale ??
+      s.rawData?.matricola ??
+      s.rawData?.negozio?.matricolaFiscale ??
+      s.rawData?.negozio?.matricola ??
       "";
     const dataMs = s.dataVendita ? new Date(s.dataVendita).getTime() : 0;
     return {
@@ -146,19 +131,9 @@ function buildContabileRows(sales: BisuiteSale[]): ContabileRow[] {
       ragioneSociale: s.ragioneSociale || "",
       nomeAddetto: s.nomeAddetto || "",
       nomeCliente: s.nomeCliente || "",
-      matricolaFiscale: String(matricolaFiscale || ""),
-      totale: num(s.totale),
-      contanti: num(pag.contanti),
-      pos: num(pag.pagamentiElettronici),
-      finanziato,
-      varCredito,
-      nonScontrinato: num(pag.nonScontrinato),
-      nonScontrinatoPos: num(pag.nonScontrinatoPos),
-      bonifici: num(pag.bonifici),
-      assegni: num(pag.assegni),
-      buoni: num(pag.buoni),
-      coupon: num(pag.coupon),
-      altriPagamenti: num(pag.altriPagamenti),
+      matricolaFiscale: String(matricolaFiscale ?? ""),
+      totale: toNum(s.totale),
+      incasso: computeIncassoTotals([s]),
     };
   }).sort((a, b) => a.dataMs - b.dataMs || a.bisuiteId - b.bisuiteId);
 }
@@ -166,13 +141,13 @@ function buildContabileRows(sales: BisuiteSale[]): ContabileRow[] {
 function buildIvaRows(sales: BisuiteSale[]): IvaRow[] {
   const rows: IvaRow[] = [];
   for (const s of sales) {
-    const articoli: any[] = Array.isArray(s.rawData?.articoli) ? s.rawData.articoli : [];
+    const articoli: ArticoloRaw[] = Array.isArray(s.rawData?.articoli) ? s.rawData!.articoli! : [];
     const dataMs = s.dataVendita ? new Date(s.dataVendita).getTime() : 0;
     for (const art of articoli) {
-      const det = art?.dettaglio || {};
-      const importoScontrino = num(det.importoScontrino);
-      const importoImponibile = num(det.importoImponibile);
-      const aliquota = num(det.aliquotaPrezzo);
+      const det: DettaglioArticoloRaw = art?.dettaglio || {};
+      const importoScontrino = toNum(det.importoScontrino);
+      const importoImponibile = toNum(det.importoImponibile);
+      const aliquota = toNum(det.aliquotaPrezzo);
       let imponibile = importoImponibile;
       let lordo = importoScontrino;
       let imposta = 0;
@@ -201,6 +176,7 @@ function buildIvaRows(sales: BisuiteSale[]): IvaRow[] {
         nomeNegozio: s.nomeNegozio || "",
         ragioneSociale: s.ragioneSociale || "",
         nomeCliente: s.nomeCliente || "",
+        codiceArticolo: String(art?.codiceArticolo ?? art?.codice ?? "").trim(),
         categoria: (art?.categoria?.nome || "").trim(),
         tipologia: (art?.tipologia?.nome || "").trim(),
         descrizione: (art?.descrizione || "").trim(),
@@ -215,9 +191,64 @@ function buildIvaRows(sales: BisuiteSale[]): IvaRow[] {
   return rows.sort((a, b) => a.dataMs - b.dataMs || a.bisuiteId - b.bisuiteId);
 }
 
+interface ContabileExportRow {
+  Data: string;
+  "ID Scontrino": number | string;
+  "Codice POS": string;
+  "Punto Vendita": string;
+  "Ragione Sociale": string;
+  "Matricola Fiscale": string;
+  Addetto: string;
+  Cliente: string;
+  Totale: number | string;
+  Contanti: number | string;
+  POS: number | string;
+  Finanziato: number | string;
+  "VAR/Credito": number | string;
+  "Non Scontr. Cont.": number | string;
+  "Non Scontr. POS": number | string;
+  Bonifici: number | string;
+  Assegni: number | string;
+  Buoni: number | string;
+  Coupon: number | string;
+  "Altri Pagamenti": number | string;
+}
+
+interface IvaExportRow {
+  Data: string;
+  "ID Scontrino": number;
+  "Codice POS": string;
+  "Punto Vendita": string;
+  "Ragione Sociale": string;
+  Cliente: string;
+  "Codice Articolo": string;
+  Categoria: string;
+  Tipologia: string;
+  Descrizione: string;
+  "Aliquota %": number | string;
+  Imponibile: number | string;
+  Imposta: number | string;
+  Lordo: number | string;
+  "Fuori Scontrino": string;
+}
+
+interface RiepilogoIvaRow {
+  "Aliquota %": number | string;
+  Pezzi: number;
+  Imponibile: number | string;
+  Imposta: number | string;
+  Lordo: number | string;
+}
+
+interface RiepilogoPagamentoRow {
+  "Metodo Pagamento": string;
+  Importo: number;
+}
+
 export default function Amministrazione() {
   const { profile, loading } = useAuth();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const now = new Date();
   const [year, setYear] = useState<number>(now.getFullYear());
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
@@ -229,6 +260,17 @@ export default function Amministrazione() {
 
   const orgId = profile?.organizationId || "";
   const isAuthorized = !!profile && ["admin", "super_admin"].includes(profile.role);
+
+  useEffect(() => {
+    if (!loading && profile && !isAuthorized) {
+      toast({
+        title: "Accesso non autorizzato",
+        description: "Solo amministratori possono accedere alla pagina Amministrazione.",
+        variant: "destructive",
+      });
+      setLocation("/");
+    }
+  }, [loading, profile, isAuthorized, toast, setLocation]);
 
   const { from: fromDate, to: toDate } = useMemo(
     () => periodToDateRange(year, month),
@@ -269,9 +311,9 @@ export default function Amministrazione() {
   }, [sales]);
 
   const yearOptions = useMemo(() => {
-    const cur = now.getFullYear();
+    const cur = new Date().getFullYear();
     return [cur - 2, cur - 1, cur, cur + 1];
-  }, [now]);
+  }, []);
 
   const filteredSales = useMemo(() => {
     return sales.filter((s) => {
@@ -296,25 +338,16 @@ export default function Amministrazione() {
     return ivaRowsAll.filter((r) => !r.fuoriScontrino && (r.imponibile !== 0 || r.imposta !== 0 || r.lordo !== 0));
   }, [ivaRowsAll, escludiZero]);
 
-  const contabileTotals = useMemo(() => {
-    const t = {
-      totale: 0, contanti: 0, pos: 0, finanziato: 0, varCredito: 0,
-      nonScontrinato: 0, nonScontrinatoPos: 0, bonifici: 0, assegni: 0,
-      buoni: 0, coupon: 0, altriPagamenti: 0,
+  const contabileTotals = useMemo<{ totale: number; incasso: IncassoTotals }>(() => {
+    return {
+      totale: contabileRows.reduce((s, r) => s + r.totale, 0),
+      incasso: computeIncassoTotals(filteredSales),
     };
-    for (const r of contabileRows) {
-      t.totale += r.totale; t.contanti += r.contanti; t.pos += r.pos;
-      t.finanziato += r.finanziato; t.varCredito += r.varCredito;
-      t.nonScontrinato += r.nonScontrinato; t.nonScontrinatoPos += r.nonScontrinatoPos;
-      t.bonifici += r.bonifici; t.assegni += r.assegni;
-      t.buoni += r.buoni; t.coupon += r.coupon; t.altriPagamenti += r.altriPagamenti;
-    }
-    return t;
-  }, [contabileRows]);
+  }, [contabileRows, filteredSales]);
 
   const ivaPerAliquota = useMemo(() => {
     const map = new Map<number, { imponibile: number; imposta: number; lordo: number; pezzi: number }>();
-    let fuori = { pezzi: 0 };
+    const fuori = { pezzi: 0 };
     for (const r of ivaRows) {
       if (r.fuoriScontrino) { fuori.pezzi++; continue; }
       const k = r.aliquota;
@@ -343,7 +376,7 @@ export default function Amministrazione() {
 
   const exportContabile = () => {
     const wb = XLSX.utils.book_new();
-    const dettaglio = contabileRows.map((r) => ({
+    const dettaglio: ContabileExportRow[] = contabileRows.map((r) => ({
       "Data": fmtDate(r.data),
       "ID Scontrino": r.bisuiteId,
       "Codice POS": r.codicePos,
@@ -353,21 +386,21 @@ export default function Amministrazione() {
       "Addetto": r.nomeAddetto,
       "Cliente": r.nomeCliente,
       "Totale": r.totale,
-      "Contanti": r.contanti,
-      "POS": r.pos,
-      "Finanziato": r.finanziato,
-      "VAR/Credito": r.varCredito,
-      "Non Scontr. Cont.": r.nonScontrinato,
-      "Non Scontr. POS": r.nonScontrinatoPos,
-      "Bonifici": r.bonifici,
-      "Assegni": r.assegni,
-      "Buoni": r.buoni,
-      "Coupon": r.coupon,
-      "Altri Pagamenti": r.altriPagamenti,
+      "Contanti": r.incasso.contanti,
+      "POS": r.incasso.pos,
+      "Finanziato": r.incasso.finanziato,
+      "VAR/Credito": r.incasso.var,
+      "Non Scontr. Cont.": r.incasso.nonScontrinato,
+      "Non Scontr. POS": r.incasso.nonScontrinatoPos,
+      "Bonifici": r.incasso.bonifici,
+      "Assegni": r.incasso.assegni,
+      "Buoni": r.incasso.buoni,
+      "Coupon": r.incasso.coupon,
+      "Altri Pagamenti": r.incasso.altriPagamenti,
     }));
-    dettaglio.push({
+    const totalsRow: ContabileExportRow = {
       "Data": "TOTALE",
-      "ID Scontrino": "" as any,
+      "ID Scontrino": "",
       "Codice POS": "",
       "Punto Vendita": "",
       "Ragione Sociale": "",
@@ -375,34 +408,26 @@ export default function Amministrazione() {
       "Addetto": "",
       "Cliente": "",
       "Totale": contabileTotals.totale,
-      "Contanti": contabileTotals.contanti,
-      "POS": contabileTotals.pos,
-      "Finanziato": contabileTotals.finanziato,
-      "VAR/Credito": contabileTotals.varCredito,
-      "Non Scontr. Cont.": contabileTotals.nonScontrinato,
-      "Non Scontr. POS": contabileTotals.nonScontrinatoPos,
-      "Bonifici": contabileTotals.bonifici,
-      "Assegni": contabileTotals.assegni,
-      "Buoni": contabileTotals.buoni,
-      "Coupon": contabileTotals.coupon,
-      "Altri Pagamenti": contabileTotals.altriPagamenti,
-    });
+      "Contanti": contabileTotals.incasso.contanti,
+      "POS": contabileTotals.incasso.pos,
+      "Finanziato": contabileTotals.incasso.finanziato,
+      "VAR/Credito": contabileTotals.incasso.var,
+      "Non Scontr. Cont.": contabileTotals.incasso.nonScontrinato,
+      "Non Scontr. POS": contabileTotals.incasso.nonScontrinatoPos,
+      "Bonifici": contabileTotals.incasso.bonifici,
+      "Assegni": contabileTotals.incasso.assegni,
+      "Buoni": contabileTotals.incasso.buoni,
+      "Coupon": contabileTotals.incasso.coupon,
+      "Altri Pagamenti": contabileTotals.incasso.altriPagamenti,
+    };
+    dettaglio.push(totalsRow);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dettaglio), "Prima Nota Contabile");
 
-    const summary = [
-      { "Metodo Pagamento": "Contanti", "Importo": contabileTotals.contanti },
-      { "Metodo Pagamento": "POS", "Importo": contabileTotals.pos },
-      { "Metodo Pagamento": "Finanziato", "Importo": contabileTotals.finanziato },
-      { "Metodo Pagamento": "VAR/Credito", "Importo": contabileTotals.varCredito },
-      { "Metodo Pagamento": "Non Scontrinato Contanti", "Importo": contabileTotals.nonScontrinato },
-      { "Metodo Pagamento": "Non Scontrinato POS", "Importo": contabileTotals.nonScontrinatoPos },
-      { "Metodo Pagamento": "Bonifici", "Importo": contabileTotals.bonifici },
-      { "Metodo Pagamento": "Assegni", "Importo": contabileTotals.assegni },
-      { "Metodo Pagamento": "Buoni", "Importo": contabileTotals.buoni },
-      { "Metodo Pagamento": "Coupon", "Importo": contabileTotals.coupon },
-      { "Metodo Pagamento": "Altri Pagamenti", "Importo": contabileTotals.altriPagamenti },
-      { "Metodo Pagamento": "TOTALE", "Importo": contabileTotals.totale },
-    ];
+    const summary: RiepilogoPagamentoRow[] = INCASSO_ITEMS_CONFIG.map((cfg) => ({
+      "Metodo Pagamento": cfg.label,
+      "Importo": contabileTotals.incasso[cfg.key],
+    }));
+    summary.push({ "Metodo Pagamento": "TOTALE", "Importo": contabileTotals.totale });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Riepilogo Pagamenti");
 
     XLSX.writeFile(wb, `prima_nota_contabile_${periodSuffix}.xlsx`);
@@ -410,13 +435,14 @@ export default function Amministrazione() {
 
   const exportIva = () => {
     const wb = XLSX.utils.book_new();
-    const dettaglio = ivaRows.map((r) => ({
+    const dettaglio: IvaExportRow[] = ivaRows.map((r) => ({
       "Data": fmtDate(r.data),
       "ID Scontrino": r.bisuiteId,
       "Codice POS": r.codicePos,
       "Punto Vendita": r.nomeNegozio,
       "Ragione Sociale": r.ragioneSociale,
       "Cliente": r.nomeCliente,
+      "Codice Articolo": r.codiceArticolo,
       "Categoria": r.categoria,
       "Tipologia": r.tipologia,
       "Descrizione": r.descrizione,
@@ -428,7 +454,7 @@ export default function Amministrazione() {
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dettaglio), "Prima Nota IVA");
 
-    const riepilogo: any[] = ivaPerAliquota.perAliquota.map((e) => ({
+    const riepilogo: RiepilogoIvaRow[] = ivaPerAliquota.perAliquota.map((e) => ({
       "Aliquota %": e.aliquota,
       "Pezzi": e.pezzi,
       "Imponibile": e.imponibile,
@@ -456,31 +482,10 @@ export default function Amministrazione() {
     XLSX.writeFile(wb, `prima_nota_iva_${periodSuffix}.xlsx`);
   };
 
-  if (loading) {
+  if (loading || !isAuthorized) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!isAuthorized) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <AppNavbar />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <Card className="max-w-md">
-            <CardHeader>
-              <CardTitle>Accesso non autorizzato</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Solo amministratori e super admin possono accedere a questa pagina.
-              </p>
-              <Button onClick={() => setLocation("/")} data-testid="button-go-home">Torna alla Home</Button>
-            </CardContent>
-          </Card>
-        </div>
       </div>
     );
   }
@@ -615,17 +620,12 @@ export default function Amministrazione() {
                 <CardContent>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
                     <div><div className="text-xs text-muted-foreground">Totale</div><div className="font-semibold" data-testid="totals-totale">{fmtCurrency(contabileTotals.totale)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">Contanti</div><div className="font-semibold text-green-600">{fmtCurrency(contabileTotals.contanti)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">POS</div><div className="font-semibold text-blue-600">{fmtCurrency(contabileTotals.pos)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">Finanziato</div><div className="font-semibold text-purple-600">{fmtCurrency(contabileTotals.finanziato)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">VAR/Credito</div><div className="font-semibold text-amber-600">{fmtCurrency(contabileTotals.varCredito)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">Non Scontr. Cont.</div><div className="font-semibold text-red-600">{fmtCurrency(contabileTotals.nonScontrinato)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">Non Scontr. POS</div><div className="font-semibold text-rose-600">{fmtCurrency(contabileTotals.nonScontrinatoPos)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">Bonifici</div><div className="font-semibold">{fmtCurrency(contabileTotals.bonifici)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">Assegni</div><div className="font-semibold">{fmtCurrency(contabileTotals.assegni)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">Buoni</div><div className="font-semibold">{fmtCurrency(contabileTotals.buoni)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">Coupon</div><div className="font-semibold">{fmtCurrency(contabileTotals.coupon)}</div></div>
-                    <div><div className="text-xs text-muted-foreground">Altri</div><div className="font-semibold">{fmtCurrency(contabileTotals.altriPagamenti)}</div></div>
+                    {INCASSO_ITEMS_CONFIG.map((cfg) => (
+                      <div key={cfg.key}>
+                        <div className="text-xs text-muted-foreground">{cfg.label}</div>
+                        <div className={`font-semibold ${cfg.color}`}>{fmtCurrency(contabileTotals.incasso[cfg.key])}</div>
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -643,22 +643,14 @@ export default function Amministrazione() {
                         <TableHead className="text-xs">Addetto</TableHead>
                         <TableHead className="text-xs">Cliente</TableHead>
                         <TableHead className="text-xs text-right">Totale</TableHead>
-                        <TableHead className="text-xs text-right">Contanti</TableHead>
-                        <TableHead className="text-xs text-right">POS</TableHead>
-                        <TableHead className="text-xs text-right">Finanz.</TableHead>
-                        <TableHead className="text-xs text-right">VAR</TableHead>
-                        <TableHead className="text-xs text-right">N.Sc. Cont.</TableHead>
-                        <TableHead className="text-xs text-right">N.Sc. POS</TableHead>
-                        <TableHead className="text-xs text-right">Bonifici</TableHead>
-                        <TableHead className="text-xs text-right">Assegni</TableHead>
-                        <TableHead className="text-xs text-right">Buoni</TableHead>
-                        <TableHead className="text-xs text-right">Coupon</TableHead>
-                        <TableHead className="text-xs text-right">Altri</TableHead>
+                        {INCASSO_ITEMS_CONFIG.map((cfg) => (
+                          <TableHead key={cfg.key} className="text-xs text-right">{cfg.label}</TableHead>
+                        ))}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {contabileRows.length === 0 ? (
-                        <TableRow><TableCell colSpan={19} className="text-center text-muted-foreground py-8">Nessuno scontrino nel periodo selezionato</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={8 + INCASSO_ITEMS_CONFIG.length} className="text-center text-muted-foreground py-8">Nessuno scontrino nel periodo selezionato</TableCell></TableRow>
                       ) : (
                         contabileRows.map((r) => (
                           <TableRow key={r.saleId} data-testid={`row-contabile-${r.saleId}`}>
@@ -673,17 +665,11 @@ export default function Amministrazione() {
                             <TableCell className="text-xs truncate max-w-[120px]">{r.nomeAddetto}</TableCell>
                             <TableCell className="text-xs truncate max-w-[140px]">{r.nomeCliente}</TableCell>
                             <TableCell className="text-xs text-right font-semibold">{fmtCurrency(r.totale)}</TableCell>
-                            <TableCell className="text-xs text-right text-green-600">{r.contanti > 0 ? fmtCurrency(r.contanti) : "—"}</TableCell>
-                            <TableCell className="text-xs text-right text-blue-600">{r.pos > 0 ? fmtCurrency(r.pos) : "—"}</TableCell>
-                            <TableCell className="text-xs text-right text-purple-600">{r.finanziato > 0 ? fmtCurrency(r.finanziato) : "—"}</TableCell>
-                            <TableCell className="text-xs text-right text-amber-600">{r.varCredito > 0 ? fmtCurrency(r.varCredito) : "—"}</TableCell>
-                            <TableCell className="text-xs text-right text-red-600">{r.nonScontrinato > 0 ? fmtCurrency(r.nonScontrinato) : "—"}</TableCell>
-                            <TableCell className="text-xs text-right text-rose-600">{r.nonScontrinatoPos > 0 ? fmtCurrency(r.nonScontrinatoPos) : "—"}</TableCell>
-                            <TableCell className="text-xs text-right">{r.bonifici > 0 ? fmtCurrency(r.bonifici) : "—"}</TableCell>
-                            <TableCell className="text-xs text-right">{r.assegni > 0 ? fmtCurrency(r.assegni) : "—"}</TableCell>
-                            <TableCell className="text-xs text-right">{r.buoni > 0 ? fmtCurrency(r.buoni) : "—"}</TableCell>
-                            <TableCell className="text-xs text-right">{r.coupon > 0 ? fmtCurrency(r.coupon) : "—"}</TableCell>
-                            <TableCell className="text-xs text-right">{r.altriPagamenti > 0 ? fmtCurrency(r.altriPagamenti) : "—"}</TableCell>
+                            {INCASSO_ITEMS_CONFIG.map((cfg) => (
+                              <TableCell key={cfg.key} className={`text-xs text-right ${cfg.color}`}>
+                                {r.incasso[cfg.key] > 0 ? fmtCurrency(r.incasso[cfg.key]) : "—"}
+                              </TableCell>
+                            ))}
                           </TableRow>
                         ))
                       )}
@@ -693,17 +679,11 @@ export default function Amministrazione() {
                         <TableRow data-testid="row-contabile-totals">
                           <TableCell colSpan={7} className="text-xs font-bold">TOTALE</TableCell>
                           <TableCell className="text-xs text-right font-bold">{fmtCurrency(contabileTotals.totale)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold text-green-600">{fmtCurrency(contabileTotals.contanti)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold text-blue-600">{fmtCurrency(contabileTotals.pos)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold text-purple-600">{fmtCurrency(contabileTotals.finanziato)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold text-amber-600">{fmtCurrency(contabileTotals.varCredito)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold text-red-600">{fmtCurrency(contabileTotals.nonScontrinato)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold text-rose-600">{fmtCurrency(contabileTotals.nonScontrinatoPos)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold">{fmtCurrency(contabileTotals.bonifici)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold">{fmtCurrency(contabileTotals.assegni)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold">{fmtCurrency(contabileTotals.buoni)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold">{fmtCurrency(contabileTotals.coupon)}</TableCell>
-                          <TableCell className="text-xs text-right font-bold">{fmtCurrency(contabileTotals.altriPagamenti)}</TableCell>
+                          {INCASSO_ITEMS_CONFIG.map((cfg) => (
+                            <TableCell key={cfg.key} className={`text-xs text-right font-bold ${cfg.color}`}>
+                              {fmtCurrency(contabileTotals.incasso[cfg.key])}
+                            </TableCell>
+                          ))}
                         </TableRow>
                       </TableFooter>
                     )}
@@ -784,6 +764,9 @@ export default function Amministrazione() {
                         <TableHead className="text-xs">Data</TableHead>
                         <TableHead className="text-xs">ID</TableHead>
                         <TableHead className="text-xs">PDV</TableHead>
+                        <TableHead className="text-xs">Ragione Sociale</TableHead>
+                        <TableHead className="text-xs">Cliente</TableHead>
+                        <TableHead className="text-xs">Cod. Art.</TableHead>
                         <TableHead className="text-xs">Categoria</TableHead>
                         <TableHead className="text-xs">Descrizione</TableHead>
                         <TableHead className="text-xs text-right">Aliquota</TableHead>
@@ -794,7 +777,7 @@ export default function Amministrazione() {
                     </TableHeader>
                     <TableBody>
                       {ivaRows.length === 0 ? (
-                        <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">Nessun articolo nel periodo selezionato</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">Nessun articolo nel periodo selezionato</TableCell></TableRow>
                       ) : (
                         ivaRows.slice(0, 500).map((r, idx) => (
                           <TableRow key={`${r.saleId}-${idx}`} className={r.fuoriScontrino ? "opacity-60" : ""} data-testid={`row-iva-${r.saleId}-${idx}`}>
@@ -804,6 +787,9 @@ export default function Amministrazione() {
                               <div className="font-medium truncate max-w-[140px]">{r.nomeNegozio}</div>
                               <div className="text-muted-foreground font-mono text-[10px]">{r.codicePos}</div>
                             </TableCell>
+                            <TableCell className="text-xs truncate max-w-[140px]">{r.ragioneSociale}</TableCell>
+                            <TableCell className="text-xs truncate max-w-[140px]">{r.nomeCliente}</TableCell>
+                            <TableCell className="text-xs font-mono truncate max-w-[100px]">{r.codiceArticolo || "—"}</TableCell>
                             <TableCell className="text-xs truncate max-w-[140px]">{r.categoria}</TableCell>
                             <TableCell className="text-xs truncate max-w-[200px]">{r.descrizione}</TableCell>
                             <TableCell className="text-xs text-right">{r.fuoriScontrino ? "—" : `${r.aliquota}%`}</TableCell>

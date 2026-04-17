@@ -4,6 +4,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiUrl } from "@/lib/basePath";
 import { useLocation } from "wouter";
 import * as XLSX from "xlsx";
+import {
+  computeIncassoTotals,
+  INCASSO_ITEMS_CONFIG,
+  type IncassoTotals,
+} from "@/lib/incassoUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -122,67 +127,6 @@ const PISTA_ICONS: Record<PistaCanvass, React.ReactNode> = {
   protecta: <Lock className="h-3.5 w-3.5" />,
   energia: <Zap className="h-3.5 w-3.5" />,
 };
-
-interface IncassoTotals {
-  contanti: number;
-  pos: number;
-  finanziato: number;
-  var: number;
-  nonScontrinato: number;
-  nonScontrinatoPos: number;
-  bonifici: number;
-  assegni: number;
-  buoni: number;
-  coupon: number;
-  altriPagamenti: number;
-}
-
-function computeIncassoTotals(salesList: BisuiteSale[]): IncassoTotals {
-  const t: IncassoTotals = {
-    contanti: 0, pos: 0, finanziato: 0, var: 0, nonScontrinato: 0, nonScontrinatoPos: 0,
-    bonifici: 0, assegni: 0, buoni: 0, coupon: 0, altriPagamenti: 0,
-  };
-  for (const sale of salesList) {
-    const pag = sale.rawData?.pagamento;
-    if (pag) {
-      t.contanti += parseFloat(pag.contanti || "0") || 0;
-      t.pos += parseFloat(pag.pagamentiElettronici || "0") || 0;
-      t.nonScontrinato += parseFloat(pag.nonScontrinato || "0") || 0;
-      t.nonScontrinatoPos += parseFloat(pag.nonScontrinatoPos || "0") || 0;
-      t.bonifici += parseFloat(pag.bonifici || "0") || 0;
-      t.assegni += parseFloat(pag.assegni || "0") || 0;
-      t.buoni += parseFloat(pag.buoni || "0") || 0;
-      t.coupon += parseFloat(pag.coupon || "0") || 0;
-      t.altriPagamenti += parseFloat(pag.altriPagamenti || "0") || 0;
-    }
-    const articoli = sale.rawData?.articoli;
-    if (Array.isArray(articoli)) {
-      for (const art of articoli) {
-        const det = art?.dettaglio;
-        if (!det) continue;
-        const impFinanziato = parseFloat(det.importoFinanziato || "0") || 0;
-        const impCredito = parseFloat(det.importoCredito || "0") || 0;
-        if (impFinanziato > 0) t.finanziato += impFinanziato;
-        if (impCredito > 0) t.var += impCredito;
-      }
-    }
-  }
-  return t;
-}
-
-const INCASSO_ITEMS_CONFIG: { key: keyof IncassoTotals; label: string; icon: string; color: string }[] = [
-  { key: "contanti", label: "Contanti", icon: "banknote", color: "text-green-600" },
-  { key: "pos", label: "POS", icon: "creditcard", color: "text-blue-600" },
-  { key: "finanziato", label: "Finanziato", icon: "landmark", color: "text-purple-600" },
-  { key: "var", label: "VAR", icon: "filetext", color: "text-amber-600" },
-  { key: "nonScontrinato", label: "Non scont. Cont.", icon: "banknote", color: "text-red-600" },
-  { key: "nonScontrinatoPos", label: "Non scont. POS", icon: "creditcard", color: "text-rose-600" },
-  { key: "bonifici", label: "Bonifici", icon: "landmark", color: "text-teal-600" },
-  { key: "assegni", label: "Assegni", icon: "filetext", color: "text-slate-600" },
-  { key: "buoni", label: "Buoni", icon: "wallet", color: "text-orange-600" },
-  { key: "coupon", label: "Coupon", icon: "tag", color: "text-pink-600" },
-  { key: "altriPagamenti", label: "Altri Pag.", icon: "wallet", color: "text-gray-600" },
-];
 
 const INCASSO_ICON_MAP: Record<string, React.ReactNode> = {
   banknote: <Banknote className="h-3.5 w-3.5" />,
