@@ -796,7 +796,7 @@ export default function Amministrazione() {
             <TabsContent value="iva" className="space-y-4">
               <div className="flex items-center justify-end gap-2">
                 <Label htmlFor="escludi-zero" className="text-xs cursor-pointer">
-                  Escludi righe a 0 (fuori scontrino)
+                  Nascondi righe a 0 nel dettaglio (totali sempre completi)
                 </Label>
                 <Switch
                   id="escludi-zero"
