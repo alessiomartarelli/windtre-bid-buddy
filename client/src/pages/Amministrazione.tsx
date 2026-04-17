@@ -389,13 +389,6 @@ export default function Amministrazione() {
     setTab("iva");
   };
 
-  const contabileTotals = useMemo<{ totale: number; incasso: IncassoTotals }>(() => {
-    return {
-      totale: contabileRows.reduce((s, r) => s + r.totale, 0),
-      incasso: computeIncassoTotals(filteredSales),
-    };
-  }, [contabileRows, filteredSales]);
-
   interface RiepilogoBucket {
     pezzi: number;
     imponibile: number;
@@ -403,7 +396,15 @@ export default function Amministrazione() {
     lordo: number;
   }
 
-  const ivaRiepilogo = useMemo(() => {
+  type IvaRiepilogo = {
+    standardArr: Array<{ aliquota: number } & RiepilogoBucket>;
+    nonStandardArr: Array<{ aliquota: number } & RiepilogoBucket>;
+    naturaArr: Array<{ code: string } & RiepilogoBucket>;
+    daVerificare: RiepilogoBucket;
+    fuoriScontrino: RiepilogoBucket;
+  };
+
+  const computeIvaRiepilogo = (rows: IvaRow[]): IvaRiepilogo => {
     const standard = new Map<number, RiepilogoBucket>();
     const natura = new Map<string, RiepilogoBucket>();
     const nonStandard = new Map<number, RiepilogoBucket>();
@@ -422,52 +423,76 @@ export default function Amministrazione() {
       return b;
     };
 
-    for (const r of ivaRowsAll) {
+    for (const r of rows) {
       switch (r.fiscalCategory) {
-        case "standard":
-          addTo(ensure(standard, r.aliquota), r);
-          break;
-        case "non_standard":
-          addTo(ensure(nonStandard, r.aliquota), r);
-          break;
-        case "natura":
-          addTo(ensure(natura, r.naturaCode || "N/D"), r);
-          break;
-        case "da_verificare":
-          addTo(daVerificare, r);
-          break;
-        case "fuori_scontrino":
-          addTo(fuoriScontrino, r);
-          break;
+        case "standard": addTo(ensure(standard, r.aliquota), r); break;
+        case "non_standard": addTo(ensure(nonStandard, r.aliquota), r); break;
+        case "natura": addTo(ensure(natura, r.naturaCode || "N/D"), r); break;
+        case "da_verificare": addTo(daVerificare, r); break;
+        case "fuori_scontrino": addTo(fuoriScontrino, r); break;
       }
     }
 
-    const standardArr = Array.from(standard.entries())
-      .map(([aliquota, b]) => ({ aliquota, ...b }))
-      .sort((a, b) => a.aliquota - b.aliquota);
-    const nonStandardArr = Array.from(nonStandard.entries())
-      .map(([aliquota, b]) => ({ aliquota, ...b }))
-      .sort((a, b) => a.aliquota - b.aliquota);
-    const naturaArr = Array.from(natura.entries())
-      .map(([code, b]) => ({ code, ...b }))
-      .sort((a, b) => a.code.localeCompare(b.code));
+    return {
+      standardArr: Array.from(standard.entries()).map(([aliquota, b]) => ({ aliquota, ...b })).sort((a, b) => a.aliquota - b.aliquota),
+      nonStandardArr: Array.from(nonStandard.entries()).map(([aliquota, b]) => ({ aliquota, ...b })).sort((a, b) => a.aliquota - b.aliquota),
+      naturaArr: Array.from(natura.entries()).map(([code, b]) => ({ code, ...b })).sort((a, b) => a.code.localeCompare(b.code)),
+      daVerificare,
+      fuoriScontrino,
+    };
+  };
 
-    return { standardArr, nonStandardArr, naturaArr, daVerificare, fuoriScontrino };
-  }, [ivaRowsAll]);
-
-  const ivaTotals = useMemo(() => {
+  const computeIvaTotals = (r: IvaRiepilogo) => {
     const t = { imponibile: 0, imposta: 0, lordo: 0, pezzi: 0 };
-    for (const e of ivaRiepilogo.standardArr) {
-      t.imponibile += e.imponibile; t.imposta += e.imposta; t.lordo += e.lordo; t.pezzi += e.pezzi;
-    }
-    for (const e of ivaRiepilogo.nonStandardArr) {
-      t.imponibile += e.imponibile; t.imposta += e.imposta; t.lordo += e.lordo; t.pezzi += e.pezzi;
-    }
-    for (const e of ivaRiepilogo.naturaArr) {
-      t.imponibile += e.imponibile; t.lordo += e.lordo; t.pezzi += e.pezzi;
-    }
+    for (const e of r.standardArr) { t.imponibile += e.imponibile; t.imposta += e.imposta; t.lordo += e.lordo; t.pezzi += e.pezzi; }
+    for (const e of r.nonStandardArr) { t.imponibile += e.imponibile; t.imposta += e.imposta; t.lordo += e.lordo; t.pezzi += e.pezzi; }
+    for (const e of r.naturaArr) { t.imponibile += e.imponibile; t.lordo += e.lordo; t.pezzi += e.pezzi; }
     return t;
-  }, [ivaRiepilogo]);
+  };
+
+  const contabileTotals = useMemo<{ totale: number; incasso: IncassoTotals }>(() => {
+    return {
+      totale: contabileRows.reduce((s, r) => s + r.totale, 0),
+      incasso: computeIncassoTotals(filteredSales),
+    };
+  }, [contabileRows, filteredSales]);
+
+  const ivaRiepilogo = useMemo(() => computeIvaRiepilogo(ivaRowsAll), [ivaRowsAll]);
+  const ivaTotals = useMemo(() => computeIvaTotals(ivaRiepilogo), [ivaRiepilogo]);
+
+  // Per-Ragione-Sociale grouping for sectioned views
+  const rsGroups = useMemo(() => {
+    const bySales = new Map<string, BisuiteSale[]>();
+    for (const s of filteredSales) {
+      const k = s.ragioneSociale || "— Senza Ragione Sociale —";
+      const arr = bySales.get(k);
+      if (arr) arr.push(s); else bySales.set(k, [s]);
+    }
+    const groups = Array.from(bySales.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([rs, gSales]) => {
+        const gContabileRows = buildContabileRows(gSales);
+        const gIvaRowsAll = buildIvaRows(gSales);
+        let gIvaRows = gIvaRowsAll;
+        if (escludiZero) gIvaRows = gIvaRows.filter((r) => r.fiscalCategory !== "fuori_scontrino");
+        if (ivaCategoryFilter !== "all") gIvaRows = gIvaRows.filter((r) => r.fiscalCategory === ivaCategoryFilter);
+        const gRiepilogo = computeIvaRiepilogo(gIvaRowsAll);
+        return {
+          rs,
+          sales: gSales,
+          contabileRows: gContabileRows,
+          contabileTotals: {
+            totale: gContabileRows.reduce((s, r) => s + r.totale, 0),
+            incasso: computeIncassoTotals(gSales),
+          },
+          ivaRowsAll: gIvaRowsAll,
+          ivaRows: gIvaRows,
+          ivaRiepilogo: gRiepilogo,
+          ivaTotals: computeIvaTotals(gRiepilogo),
+        };
+      });
+    return groups;
+  }, [filteredSales, escludiZero, ivaCategoryFilter]);
 
   const periodSuffix = `${year}_${String(month).padStart(2, "0")}`;
 
@@ -961,99 +986,127 @@ export default function Amministrazione() {
               )}
             </div>
 
-            <TabsContent value="contabile" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center justify-between">
-                    <span>Riepilogo per Metodo Pagamento</span>
-                    <Badge variant="outline" data-testid="badge-contabile-count">
-                      {contabileRows.length} scontrini
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
-                    <div><div className="text-xs text-muted-foreground">Totale</div><div className="font-semibold" data-testid="totals-totale">{fmtCurrency(contabileTotals.totale)}</div></div>
-                    {INCASSO_ITEMS_CONFIG.map((cfg) => (
-                      <div key={cfg.key}>
-                        <div className="text-xs text-muted-foreground">{cfg.label}</div>
-                        <div className={`font-semibold ${cfg.color}`}>{fmtCurrency(contabileTotals.incasso[cfg.key])}</div>
-                      </div>
-                    ))}
+            <TabsContent value="contabile" className="space-y-6">
+              {rsGroups.length === 0 ? (
+                <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Nessuno scontrino nel periodo selezionato</CardContent></Card>
+              ) : rsGroups.map((g) => (
+                <div key={`contabile-${g.rs}`} className="space-y-3">
+                  <div className="flex items-center gap-2 px-1">
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground/90" data-testid={`rs-header-${g.rs}`}>{g.rs}</h2>
+                    <Badge variant="secondary" className="text-[10px]">{g.contabileRows.length} scontrini</Badge>
                   </div>
-                </CardContent>
-              </Card>
 
-              <Card className="overflow-hidden min-w-0 max-w-full">
-                <CardContent className="p-0 min-w-0">
-                  <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
-                  <Table className="min-w-[1200px]">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs whitespace-nowrap min-w-[90px]">Data</TableHead>
-                        <TableHead className="text-xs whitespace-nowrap min-w-[70px]">ID</TableHead>
-                        <TableHead className="text-xs whitespace-nowrap min-w-[140px]">PDV</TableHead>
-                        <TableHead className="text-xs whitespace-nowrap min-w-[140px]">Ragione Sociale</TableHead>
-                        <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Matricola</TableHead>
-                        <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Addetto</TableHead>
-                        <TableHead className="text-xs whitespace-nowrap min-w-[140px]">Cliente</TableHead>
-                        <TableHead className="text-xs whitespace-nowrap text-right min-w-[100px]">Totale</TableHead>
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center justify-between">
+                        <span>Riepilogo per Metodo Pagamento</span>
+                        <span className="text-xs font-normal text-muted-foreground">Totale: <span className="font-semibold text-foreground">{fmtCurrency(g.contabileTotals.totale)}</span></span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
+                        <div><div className="text-xs text-muted-foreground">Totale</div><div className="font-semibold" data-testid={`totals-totale-${g.rs}`}>{fmtCurrency(g.contabileTotals.totale)}</div></div>
                         {INCASSO_ITEMS_CONFIG.map((cfg) => (
-                          <TableHead key={cfg.key} className="text-xs whitespace-nowrap text-right min-w-[100px]">{cfg.label}</TableHead>
+                          <div key={cfg.key}>
+                            <div className="text-xs text-muted-foreground">{cfg.label}</div>
+                            <div className={`font-semibold ${cfg.color}`}>{fmtCurrency(g.contabileTotals.incasso[cfg.key])}</div>
+                          </div>
                         ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {contabileRows.length === 0 ? (
-                        <TableRow><TableCell colSpan={8 + INCASSO_ITEMS_CONFIG.length} className="text-center text-muted-foreground py-8">Nessuno scontrino nel periodo selezionato</TableCell></TableRow>
-                      ) : (
-                        contabileRows.map((r) => (
-                          <TableRow key={r.saleId} data-testid={`row-contabile-${r.saleId}`}>
-                            <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.data)}</TableCell>
-                            <TableCell className="text-xs font-mono">{r.bisuiteId}</TableCell>
-                            <TableCell className="text-xs">
-                              <div className="font-medium truncate max-w-[180px]" title={r.nomeNegozio}>{r.nomeNegozio}</div>
-                              <div className="text-muted-foreground font-mono text-[10px] truncate max-w-[180px]" title={r.codicePos}>{r.codicePos}</div>
-                            </TableCell>
-                            <TableCell className="text-xs">
-                              <div className="truncate max-w-[160px]" title={r.ragioneSociale}>{r.ragioneSociale}</div>
-                            </TableCell>
-                            <TableCell className="text-xs font-mono">
-                              <div className="truncate max-w-[140px]" title={r.matricolaFiscale}>{r.matricolaFiscale || "—"}</div>
-                            </TableCell>
-                            <TableCell className="text-xs">
-                              <div className="truncate max-w-[140px]" title={r.nomeAddetto}>{r.nomeAddetto}</div>
-                            </TableCell>
-                            <TableCell className="text-xs">
-                              <div className="truncate max-w-[160px]" title={r.nomeCliente}>{r.nomeCliente}</div>
-                            </TableCell>
-                            <TableCell className="text-xs text-right font-semibold whitespace-nowrap">{fmtCurrency(r.totale)}</TableCell>
-                            {INCASSO_ITEMS_CONFIG.map((cfg) => (
-                              <TableCell key={cfg.key} className={`text-xs text-right whitespace-nowrap ${cfg.color}`}>
-                                {r.incasso[cfg.key] > 0 ? fmtCurrency(r.incasso[cfg.key]) : "—"}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                    {contabileRows.length > 0 && (
-                      <TableFooter>
-                        <TableRow data-testid="row-contabile-totals">
-                          <TableCell colSpan={7} className="text-xs font-bold whitespace-nowrap">TOTALE</TableCell>
-                          <TableCell className="text-xs text-right font-bold whitespace-nowrap">{fmtCurrency(contabileTotals.totale)}</TableCell>
-                          {INCASSO_ITEMS_CONFIG.map((cfg) => (
-                            <TableCell key={cfg.key} className={`text-xs text-right font-bold whitespace-nowrap ${cfg.color}`}>
-                              {fmtCurrency(contabileTotals.incasso[cfg.key])}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      </TableFooter>
-                    )}
-                  </Table>
-                  </div>
-                </CardContent>
-              </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="overflow-hidden min-w-0 max-w-full">
+                    <CardContent className="p-0 min-w-0">
+                      <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                        <Table className="min-w-[1200px]">
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs whitespace-nowrap min-w-[90px]">Data</TableHead>
+                              <TableHead className="text-xs whitespace-nowrap min-w-[70px]">ID</TableHead>
+                              <TableHead className="text-xs whitespace-nowrap min-w-[140px]">PDV</TableHead>
+                              <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Matricola</TableHead>
+                              <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Addetto</TableHead>
+                              <TableHead className="text-xs whitespace-nowrap min-w-[140px]">Cliente</TableHead>
+                              <TableHead className="text-xs whitespace-nowrap text-right min-w-[100px]">Totale</TableHead>
+                              {INCASSO_ITEMS_CONFIG.map((cfg) => (
+                                <TableHead key={cfg.key} className="text-xs whitespace-nowrap text-right min-w-[100px]">{cfg.label}</TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {g.contabileRows.length === 0 ? (
+                              <TableRow><TableCell colSpan={7 + INCASSO_ITEMS_CONFIG.length} className="text-center text-muted-foreground py-8">Nessuno scontrino</TableCell></TableRow>
+                            ) : (
+                              g.contabileRows.map((r) => (
+                                <TableRow key={r.saleId} data-testid={`row-contabile-${r.saleId}`}>
+                                  <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.data)}</TableCell>
+                                  <TableCell className="text-xs font-mono">{r.bisuiteId}</TableCell>
+                                  <TableCell className="text-xs">
+                                    <div className="font-medium truncate max-w-[180px]" title={r.nomeNegozio}>{r.nomeNegozio}</div>
+                                    <div className="text-muted-foreground font-mono text-[10px] truncate max-w-[180px]" title={r.codicePos}>{r.codicePos}</div>
+                                  </TableCell>
+                                  <TableCell className="text-xs font-mono">
+                                    <div className="truncate max-w-[140px]" title={r.matricolaFiscale}>{r.matricolaFiscale || "—"}</div>
+                                  </TableCell>
+                                  <TableCell className="text-xs">
+                                    <div className="truncate max-w-[140px]" title={r.nomeAddetto}>{r.nomeAddetto}</div>
+                                  </TableCell>
+                                  <TableCell className="text-xs">
+                                    <div className="truncate max-w-[160px]" title={r.nomeCliente}>{r.nomeCliente}</div>
+                                  </TableCell>
+                                  <TableCell className="text-xs text-right font-semibold whitespace-nowrap">{fmtCurrency(r.totale)}</TableCell>
+                                  {INCASSO_ITEMS_CONFIG.map((cfg) => (
+                                    <TableCell key={cfg.key} className={`text-xs text-right whitespace-nowrap ${cfg.color}`}>
+                                      {r.incasso[cfg.key] > 0 ? fmtCurrency(r.incasso[cfg.key]) : "—"}
+                                    </TableCell>
+                                  ))}
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                          {g.contabileRows.length > 0 && (
+                            <TableFooter>
+                              <TableRow data-testid={`row-contabile-totals-${g.rs}`}>
+                                <TableCell colSpan={6} className="text-xs font-bold whitespace-nowrap">TOTALE {g.rs}</TableCell>
+                                <TableCell className="text-xs text-right font-bold whitespace-nowrap">{fmtCurrency(g.contabileTotals.totale)}</TableCell>
+                                {INCASSO_ITEMS_CONFIG.map((cfg) => (
+                                  <TableCell key={cfg.key} className={`text-xs text-right font-bold whitespace-nowrap ${cfg.color}`}>
+                                    {fmtCurrency(g.contabileTotals.incasso[cfg.key])}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            </TableFooter>
+                          )}
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ))}
+
+              {rsGroups.length > 1 && (
+                <Card className="border-primary/40 bg-primary/5">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      <span className="flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" />Totale Generale (tutte le RS)</span>
+                      <Badge variant="outline" data-testid="badge-contabile-count">{contabileRows.length} scontrini</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
+                      <div><div className="text-xs text-muted-foreground">Totale</div><div className="font-bold" data-testid="totals-totale">{fmtCurrency(contabileTotals.totale)}</div></div>
+                      {INCASSO_ITEMS_CONFIG.map((cfg) => (
+                        <div key={cfg.key}>
+                          <div className="text-xs text-muted-foreground">{cfg.label}</div>
+                          <div className={`font-bold ${cfg.color}`}>{fmtCurrency(contabileTotals.incasso[cfg.key])}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="iva" className="space-y-4">
@@ -1090,212 +1143,209 @@ export default function Amministrazione() {
                 </div>
               </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center justify-between">
-                    <span>Riepilogo IVA per Aliquota</span>
-                    <Badge variant="outline" data-testid="badge-iva-count">
-                      {ivaRowsAll.length} articoli (solo Prodotti e Servizi)
-                    </Badge>
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Aliquote calcolate dagli importi (scontrino − imponibile) e snappate alle 4 aliquote IVA italiane standard.
-                    Esclude automaticamente gli articoli Canvass / Contratti.
-                  </p>
-                </CardHeader>
-                <CardContent className="min-w-0">
-                  <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
-                  <Table className="min-w-[520px]">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs whitespace-nowrap min-w-[180px]">Gruppo</TableHead>
-                        <TableHead className="text-xs text-right whitespace-nowrap min-w-[70px]">Pezzi</TableHead>
-                        <TableHead className="text-xs text-right whitespace-nowrap min-w-[100px]">Imponibile</TableHead>
-                        <TableHead className="text-xs text-right whitespace-nowrap min-w-[100px]">Imposta</TableHead>
-                        <TableHead className="text-xs text-right whitespace-nowrap min-w-[100px]">Lordo</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ivaRiepilogo.standardArr.length === 0 &&
-                        ivaRiepilogo.nonStandardArr.length === 0 &&
-                        ivaRiepilogo.naturaArr.length === 0 &&
-                        ivaRiepilogo.daVerificare.pezzi === 0 &&
-                        ivaRiepilogo.fuoriScontrino.pezzi === 0 && (
-                          <TableRow>
-                            <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
-                              Nessun articolo nel periodo selezionato
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      {ivaRiepilogo.standardArr.map((e) => (
-                        <TableRow key={`std-${e.aliquota}`} data-testid={`row-aliquota-${e.aliquota}`}>
-                          <TableCell className="text-xs font-semibold">IVA {e.aliquota}%</TableCell>
-                          <TableCell className="text-xs text-right">{e.pezzi}</TableCell>
-                          <TableCell className="text-xs text-right">{fmtCurrency(e.imponibile)}</TableCell>
-                          <TableCell className="text-xs text-right">{fmtCurrency(e.imposta)}</TableCell>
-                          <TableCell className="text-xs text-right font-semibold">{fmtCurrency(e.lordo)}</TableCell>
-                        </TableRow>
-                      ))}
-                      {ivaRiepilogo.naturaArr.map((e) => (
-                        <TableRow key={`nat-${e.code}`} data-testid={`row-natura-${e.code}`}>
-                          <TableCell className="text-xs">
-                            <Badge variant="secondary" className="text-[10px]">Non imponibile {e.code}</Badge>
-                          </TableCell>
-                          <TableCell className="text-xs text-right">{e.pezzi}</TableCell>
-                          <TableCell className="text-xs text-right">{fmtCurrency(e.imponibile)}</TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground">—</TableCell>
-                          <TableCell className="text-xs text-right font-semibold">{fmtCurrency(e.lordo)}</TableCell>
-                        </TableRow>
-                      ))}
-                      {/* Le righe "Non standard" non sono mostrate nel riepilogo per pulizia visiva.
-                          Restano visibili tramite la card di alert in alto e il filtro categoria
-                          della tab Prima Nota IVA, e continuano a concorrere ai totali. */}
-                      {false && ivaRiepilogo.nonStandardArr.map((e) => (
-                        <TableRow key={`nstd-${e.aliquota}`} data-testid={`row-non-standard-${e.aliquota}`}>
-                          <TableCell className="text-xs">
-                            <Badge variant="destructive" className="text-[10px]">
-                              Non standard {e.aliquota.toFixed(2)}%
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs text-right">{e.pezzi}</TableCell>
-                          <TableCell className="text-xs text-right">{fmtCurrency(e.imponibile)}</TableCell>
-                          <TableCell className="text-xs text-right">{fmtCurrency(e.imposta)}</TableCell>
-                          <TableCell className="text-xs text-right font-semibold">{fmtCurrency(e.lordo)}</TableCell>
-                        </TableRow>
-                      ))}
-                      {ivaRiepilogo.daVerificare.pezzi > 0 && (
-                        <TableRow data-testid="row-da-verificare">
-                          <TableCell className="text-xs">
-                            <Badge variant="destructive" className="text-[10px]">Da verificare</Badge>
-                            <span className="ml-2 text-muted-foreground text-[10px]">(scontrino senza imponibile)</span>
-                          </TableCell>
-                          <TableCell className="text-xs text-right">{ivaRiepilogo.daVerificare.pezzi}</TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground">—</TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground">—</TableCell>
-                          <TableCell className="text-xs text-right">{fmtCurrency(ivaRiepilogo.daVerificare.lordo)}</TableCell>
-                        </TableRow>
-                      )}
-                      {ivaRiepilogo.fuoriScontrino.pezzi > 0 && (
-                        <TableRow data-testid="row-fuori-scontrino">
-                          <TableCell className="text-xs text-muted-foreground italic">
-                            Fuori scontrino <span className="text-[10px]">(canoni/servizi fatturati a parte)</span>
-                          </TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground">{ivaRiepilogo.fuoriScontrino.pezzi}</TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground" colSpan={3}>—</TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                    <TableFooter>
-                      <TableRow>
-                        <TableCell className="text-xs font-bold">TOTALE IVA</TableCell>
-                        <TableCell className="text-xs text-right font-bold">{ivaTotals.pezzi}</TableCell>
-                        <TableCell className="text-xs text-right font-bold" data-testid="totals-imponibile">{fmtCurrency(ivaTotals.imponibile)}</TableCell>
-                        <TableCell className="text-xs text-right font-bold" data-testid="totals-imposta">{fmtCurrency(ivaTotals.imposta)}</TableCell>
-                        <TableCell className="text-xs text-right font-bold" data-testid="totals-lordo">{fmtCurrency(ivaTotals.lordo)}</TableCell>
-                      </TableRow>
-                    </TableFooter>
-                  </Table>
+              {rsGroups.length === 0 ? (
+                <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Nessun articolo nel periodo selezionato</CardContent></Card>
+              ) : rsGroups.map((g) => {
+                const isEmptyRiep =
+                  g.ivaRiepilogo.standardArr.length === 0 &&
+                  g.ivaRiepilogo.nonStandardArr.length === 0 &&
+                  g.ivaRiepilogo.naturaArr.length === 0 &&
+                  g.ivaRiepilogo.daVerificare.pezzi === 0 &&
+                  g.ivaRiepilogo.fuoriScontrino.pezzi === 0;
+                return (
+                <div key={`iva-${g.rs}`} className="space-y-3">
+                  <div className="flex items-center gap-2 px-1">
+                    <Building2 className="h-4 w-4 text-primary" />
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground/90" data-testid={`rs-iva-header-${g.rs}`}>{g.rs}</h2>
+                    <Badge variant="secondary" className="text-[10px]">{g.ivaRowsAll.length} articoli</Badge>
                   </div>
-                </CardContent>
-              </Card>
 
-              <Card className="overflow-hidden min-w-0 max-w-full">
-                <CardContent className="p-0 min-w-0">
-                  <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
-                    <Table className="w-full table-fixed [&_th]:px-1.5 [&_td]:px-1.5 [&_th]:py-1.5 [&_td]:py-1 [&_th]:overflow-hidden [&_td]:overflow-hidden">
-                      <colgroup>
-                        <col className="w-[84px]" />
-                        <col className="w-[150px]" />
-                        <col className="w-[78px]" />
-                        <col className="w-[96px]" />
-                        <col />
-                        <col className="w-[50px]" />
-                        <col className="w-[42px]" />
-                        <col className="w-[76px]" />
-                        <col className="w-[68px]" />
-                        <col className="w-[80px]" />
-                      </colgroup>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-[11px] whitespace-nowrap">Data</TableHead>
-                          <TableHead className="text-[11px] whitespace-nowrap">PDV</TableHead>
-                          <TableHead className="text-[11px] whitespace-nowrap">Ragione Sociale</TableHead>
-                          <TableHead className="text-[11px] whitespace-nowrap">Cliente</TableHead>
-                          <TableHead className="text-[11px] whitespace-nowrap">Articolo</TableHead>
-                          <TableHead className="text-[11px] whitespace-nowrap">Cat. Fiscale</TableHead>
-                          <TableHead className="text-[11px] whitespace-nowrap text-right">Aliq.</TableHead>
-                          <TableHead className="text-[11px] whitespace-nowrap text-right">Imponibile</TableHead>
-                          <TableHead className="text-[11px] whitespace-nowrap text-right">Imposta</TableHead>
-                          <TableHead className="text-[11px] whitespace-nowrap text-right">Lordo</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {ivaRows.length === 0 ? (
-                          <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">Nessun articolo nel periodo selezionato</TableCell></TableRow>
-                        ) : (
-                          ivaRows.slice(0, 500).map((r, idx) => {
-                            const isStd = r.fiscalCategory === "standard";
-                            const isNonStd = r.fiscalCategory === "non_standard";
-                            const isNatura = r.fiscalCategory === "natura";
-                            const isFuori = r.fiscalCategory === "fuori_scontrino";
-                            const aliquotaCell = isStd
-                              ? `${r.aliquota}%`
-                              : isNonStd
-                                ? `${r.aliquota.toFixed(2)}%`
-                                : isNatura
-                                  ? (r.naturaCode || "—")
-                                  : "—";
-                            const articoloTitle = [r.codiceArticolo, r.categoria, r.descrizione].filter(Boolean).join(" — ");
-                            return (
-                              <TableRow
-                                key={`${r.saleId}-${idx}`}
-                                className={isFuori ? "opacity-60" : ""}
-                                data-testid={`row-iva-${r.saleId}-${idx}`}
-                              >
-                                <TableCell className="text-[11px] align-top">
-                                  <div className="truncate">{fmtDate(r.data)}</div>
-                                  <div className="text-muted-foreground font-mono text-[10px] truncate">#{r.bisuiteId}</div>
-                                </TableCell>
-                                <TableCell className="text-[11px] align-top">
-                                  <div className="font-medium truncate" title={r.nomeNegozio}>{r.nomeNegozio}</div>
-                                  <div className="text-muted-foreground font-mono text-[10px] truncate" title={r.codicePos}>{r.codicePos}</div>
-                                </TableCell>
-                                <TableCell className="text-[11px] align-top">
-                                  <div className="truncate" title={r.ragioneSociale}>{r.ragioneSociale}</div>
-                                </TableCell>
-                                <TableCell className="text-[11px] align-top">
-                                  <div className="truncate" title={r.nomeCliente}>{r.nomeCliente}</div>
-                                </TableCell>
-                                <TableCell className="text-[11px] align-top" title={articoloTitle}>
-                                  <div className="truncate">{r.descrizione || r.categoria || "—"}</div>
-                                </TableCell>
-                                <TableCell className="text-[10px] align-top">
-                                  <Badge
-                                    variant={FISCAL_CATEGORY_BADGE[r.fiscalCategory]}
-                                    className="text-[9px] whitespace-nowrap px-1 py-0 leading-tight"
-                                    title={FISCAL_CATEGORY_LABELS[r.fiscalCategory]}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm">Riepilogo IVA per Aliquota</CardTitle>
+                    </CardHeader>
+                    <CardContent className="min-w-0">
+                      <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                      <Table className="min-w-[520px]">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs whitespace-nowrap min-w-[180px]">Gruppo</TableHead>
+                            <TableHead className="text-xs text-right whitespace-nowrap min-w-[70px]">Pezzi</TableHead>
+                            <TableHead className="text-xs text-right whitespace-nowrap min-w-[100px]">Imponibile</TableHead>
+                            <TableHead className="text-xs text-right whitespace-nowrap min-w-[100px]">Imposta</TableHead>
+                            <TableHead className="text-xs text-right whitespace-nowrap min-w-[100px]">Lordo</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {isEmptyRiep && (
+                            <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">Nessun articolo</TableCell></TableRow>
+                          )}
+                          {g.ivaRiepilogo.standardArr.map((e) => (
+                            <TableRow key={`std-${g.rs}-${e.aliquota}`}>
+                              <TableCell className="text-xs font-semibold">IVA {e.aliquota}%</TableCell>
+                              <TableCell className="text-xs text-right">{e.pezzi}</TableCell>
+                              <TableCell className="text-xs text-right">{fmtCurrency(e.imponibile)}</TableCell>
+                              <TableCell className="text-xs text-right">{fmtCurrency(e.imposta)}</TableCell>
+                              <TableCell className="text-xs text-right font-semibold">{fmtCurrency(e.lordo)}</TableCell>
+                            </TableRow>
+                          ))}
+                          {g.ivaRiepilogo.naturaArr.map((e) => (
+                            <TableRow key={`nat-${g.rs}-${e.code}`}>
+                              <TableCell className="text-xs"><Badge variant="secondary" className="text-[10px]">Non imponibile {e.code}</Badge></TableCell>
+                              <TableCell className="text-xs text-right">{e.pezzi}</TableCell>
+                              <TableCell className="text-xs text-right">{fmtCurrency(e.imponibile)}</TableCell>
+                              <TableCell className="text-xs text-right text-muted-foreground">—</TableCell>
+                              <TableCell className="text-xs text-right font-semibold">{fmtCurrency(e.lordo)}</TableCell>
+                            </TableRow>
+                          ))}
+                          {g.ivaRiepilogo.daVerificare.pezzi > 0 && (
+                            <TableRow>
+                              <TableCell className="text-xs">
+                                <Badge variant="destructive" className="text-[10px]">Da verificare</Badge>
+                                <span className="ml-2 text-muted-foreground text-[10px]">(scontrino senza imponibile)</span>
+                              </TableCell>
+                              <TableCell className="text-xs text-right">{g.ivaRiepilogo.daVerificare.pezzi}</TableCell>
+                              <TableCell className="text-xs text-right text-muted-foreground">—</TableCell>
+                              <TableCell className="text-xs text-right text-muted-foreground">—</TableCell>
+                              <TableCell className="text-xs text-right">{fmtCurrency(g.ivaRiepilogo.daVerificare.lordo)}</TableCell>
+                            </TableRow>
+                          )}
+                          {g.ivaRiepilogo.fuoriScontrino.pezzi > 0 && (
+                            <TableRow>
+                              <TableCell className="text-xs text-muted-foreground italic">Fuori scontrino <span className="text-[10px]">(canoni/servizi fatturati a parte)</span></TableCell>
+                              <TableCell className="text-xs text-right text-muted-foreground">{g.ivaRiepilogo.fuoriScontrino.pezzi}</TableCell>
+                              <TableCell className="text-xs text-right text-muted-foreground" colSpan={3}>—</TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow>
+                            <TableCell className="text-xs font-bold">TOTALE IVA {g.rs}</TableCell>
+                            <TableCell className="text-xs text-right font-bold">{g.ivaTotals.pezzi}</TableCell>
+                            <TableCell className="text-xs text-right font-bold">{fmtCurrency(g.ivaTotals.imponibile)}</TableCell>
+                            <TableCell className="text-xs text-right font-bold">{fmtCurrency(g.ivaTotals.imposta)}</TableCell>
+                            <TableCell className="text-xs text-right font-bold">{fmtCurrency(g.ivaTotals.lordo)}</TableCell>
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="overflow-hidden min-w-0 max-w-full">
+                    <CardContent className="p-0 min-w-0">
+                      <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+                        <Table className="w-full table-fixed [&_th]:px-1.5 [&_td]:px-1.5 [&_th]:py-1.5 [&_td]:py-1 [&_th]:overflow-hidden [&_td]:overflow-hidden">
+                          <colgroup>
+                            <col className="w-[84px]" />
+                            <col className="w-[150px]" />
+                            <col className="w-[110px]" />
+                            <col />
+                            <col className="w-[50px]" />
+                            <col className="w-[42px]" />
+                            <col className="w-[76px]" />
+                            <col className="w-[68px]" />
+                            <col className="w-[80px]" />
+                          </colgroup>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-[11px] whitespace-nowrap">Data</TableHead>
+                              <TableHead className="text-[11px] whitespace-nowrap">PDV</TableHead>
+                              <TableHead className="text-[11px] whitespace-nowrap">Cliente</TableHead>
+                              <TableHead className="text-[11px] whitespace-nowrap">Articolo</TableHead>
+                              <TableHead className="text-[11px] whitespace-nowrap">Cat. Fiscale</TableHead>
+                              <TableHead className="text-[11px] whitespace-nowrap text-right">Aliq.</TableHead>
+                              <TableHead className="text-[11px] whitespace-nowrap text-right">Imponibile</TableHead>
+                              <TableHead className="text-[11px] whitespace-nowrap text-right">Imposta</TableHead>
+                              <TableHead className="text-[11px] whitespace-nowrap text-right">Lordo</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {g.ivaRows.length === 0 ? (
+                              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">Nessun articolo</TableCell></TableRow>
+                            ) : (
+                              g.ivaRows.slice(0, 500).map((r, idx) => {
+                                const isStd = r.fiscalCategory === "standard";
+                                const isNonStd = r.fiscalCategory === "non_standard";
+                                const isNatura = r.fiscalCategory === "natura";
+                                const isFuori = r.fiscalCategory === "fuori_scontrino";
+                                const aliquotaCell = isStd
+                                  ? `${r.aliquota}%`
+                                  : isNonStd
+                                    ? `${r.aliquota.toFixed(2)}%`
+                                    : isNatura
+                                      ? (r.naturaCode || "—")
+                                      : "—";
+                                const articoloTitle = [r.codiceArticolo, r.categoria, r.descrizione].filter(Boolean).join(" — ");
+                                return (
+                                  <TableRow
+                                    key={`${r.saleId}-${idx}`}
+                                    className={isFuori ? "opacity-60" : ""}
+                                    data-testid={`row-iva-${r.saleId}-${idx}`}
                                   >
-                                    {FISCAL_CATEGORY_SHORT[r.fiscalCategory]}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-[11px] text-right whitespace-nowrap align-top">{aliquotaCell}</TableCell>
-                                <TableCell className="text-[11px] text-right whitespace-nowrap align-top">{(isStd || isNonStd || isNatura) ? fmtCurrency(r.imponibile) : "—"}</TableCell>
-                                <TableCell className="text-[11px] text-right whitespace-nowrap align-top">{(isStd || isNonStd) ? fmtCurrency(r.imposta) : "—"}</TableCell>
-                                <TableCell className="text-[11px] text-right font-semibold whitespace-nowrap align-top">{(isStd || isNonStd || isNatura) ? fmtCurrency(r.lordo) : "—"}</TableCell>
-                              </TableRow>
-                            );
-                          })
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  {ivaRows.length > 500 && (
-                    <div className="p-3 text-center text-xs text-muted-foreground border-t">
-                      Visualizzati i primi 500 articoli su {ivaRows.length}. Esporta in Excel per il dettaglio completo.
+                                    <TableCell className="text-[11px] align-top">
+                                      <div className="truncate">{fmtDate(r.data)}</div>
+                                      <div className="text-muted-foreground font-mono text-[10px] truncate">#{r.bisuiteId}</div>
+                                    </TableCell>
+                                    <TableCell className="text-[11px] align-top">
+                                      <div className="font-medium truncate" title={r.nomeNegozio}>{r.nomeNegozio}</div>
+                                      <div className="text-muted-foreground font-mono text-[10px] truncate" title={r.codicePos}>{r.codicePos}</div>
+                                    </TableCell>
+                                    <TableCell className="text-[11px] align-top">
+                                      <div className="truncate" title={r.nomeCliente}>{r.nomeCliente}</div>
+                                    </TableCell>
+                                    <TableCell className="text-[11px] align-top" title={articoloTitle}>
+                                      <div className="truncate">{r.descrizione || r.categoria || "—"}</div>
+                                    </TableCell>
+                                    <TableCell className="text-[10px] align-top">
+                                      <Badge
+                                        variant={FISCAL_CATEGORY_BADGE[r.fiscalCategory]}
+                                        className="text-[9px] whitespace-nowrap px-1 py-0 leading-tight"
+                                        title={FISCAL_CATEGORY_LABELS[r.fiscalCategory]}
+                                      >
+                                        {FISCAL_CATEGORY_SHORT[r.fiscalCategory]}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-[11px] text-right whitespace-nowrap align-top">{aliquotaCell}</TableCell>
+                                    <TableCell className="text-[11px] text-right whitespace-nowrap align-top">{(isStd || isNonStd || isNatura) ? fmtCurrency(r.imponibile) : "—"}</TableCell>
+                                    <TableCell className="text-[11px] text-right whitespace-nowrap align-top">{(isStd || isNonStd) ? fmtCurrency(r.imposta) : "—"}</TableCell>
+                                    <TableCell className="text-[11px] text-right font-semibold whitespace-nowrap align-top">{(isStd || isNonStd || isNatura) ? fmtCurrency(r.lordo) : "—"}</TableCell>
+                                  </TableRow>
+                                );
+                              })
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      {g.ivaRows.length > 500 && (
+                        <div className="p-3 text-center text-xs text-muted-foreground border-t">
+                          Visualizzati i primi 500 articoli su {g.ivaRows.length}. Esporta in Excel per il dettaglio completo.
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+                );
+              })}
+
+              {rsGroups.length > 1 && (
+                <Card className="border-primary/40 bg-primary/5">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      <span className="flex items-center gap-2"><Receipt className="h-4 w-4 text-primary" />Totale IVA Generale (tutte le RS)</span>
+                      <Badge variant="outline" data-testid="badge-iva-count">{ivaRowsAll.length} articoli</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div><div className="text-xs text-muted-foreground">Pezzi</div><div className="font-bold">{ivaTotals.pezzi}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Imponibile</div><div className="font-bold" data-testid="totals-imponibile">{fmtCurrency(ivaTotals.imponibile)}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Imposta</div><div className="font-bold" data-testid="totals-imposta">{fmtCurrency(ivaTotals.imposta)}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Lordo</div><div className="font-bold" data-testid="totals-lordo">{fmtCurrency(ivaTotals.lordo)}</div></div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
           </>
