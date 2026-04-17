@@ -1250,18 +1250,18 @@ export default function Amministrazione() {
               <Card className="overflow-hidden min-w-0 max-w-full">
                 <CardContent className="p-0 min-w-0">
                   <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
-                    <Table className="w-full table-fixed [&_th]:px-1 [&_td]:px-1 [&_th]:py-1.5 [&_td]:py-1">
+                    <Table className="w-full table-fixed [&_th]:px-1.5 [&_td]:px-1.5 [&_th]:py-1.5 [&_td]:py-1 [&_th]:overflow-hidden [&_td]:overflow-hidden">
                       <colgroup>
-                        <col className="w-[58px]" />
-                        <col className="w-[100px]" />
-                        <col className="w-[88px]" />
-                        <col className="w-[88px]" />
-                        <col />
-                        <col className="w-[58px]" />
-                        <col className="w-[44px]" />
+                        <col className="w-[72px]" />
+                        <col className="w-[110px]" />
                         <col className="w-[78px]" />
+                        <col className="w-[96px]" />
+                        <col />
+                        <col className="w-[50px]" />
+                        <col className="w-[42px]" />
+                        <col className="w-[76px]" />
                         <col className="w-[68px]" />
-                        <col className="w-[82px]" />
+                        <col className="w-[80px]" />
                       </colgroup>
                       <TableHeader>
                         <TableRow>
@@ -1300,9 +1300,9 @@ export default function Amministrazione() {
                                 className={isFuori ? "opacity-60" : ""}
                                 data-testid={`row-iva-${r.saleId}-${idx}`}
                               >
-                                <TableCell className="text-[11px] whitespace-nowrap align-top">
-                                  <div>{fmtDate(r.data)}</div>
-                                  <div className="text-muted-foreground font-mono text-[10px]">#{r.bisuiteId}</div>
+                                <TableCell className="text-[11px] align-top">
+                                  <div className="truncate">{fmtDate(r.data)}</div>
+                                  <div className="text-muted-foreground font-mono text-[10px] truncate">#{r.bisuiteId}</div>
                                 </TableCell>
                                 <TableCell className="text-[11px] align-top">
                                   <div className="font-medium truncate" title={r.nomeNegozio}>{r.nomeNegozio}</div>
