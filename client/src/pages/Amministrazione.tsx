@@ -30,7 +30,7 @@ import {
   Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  BookOpen, Receipt, Loader2, Download, Search, AlertTriangle, HelpCircle,
+  BookOpen, Receipt, Loader2, Download, Search, AlertTriangle, HelpCircle, FileText,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -611,6 +611,211 @@ export default function Amministrazione() {
     XLSX.writeFile(wb, `prima_nota_iva_${periodSuffix}.xlsx`);
   };
 
+  const exportRegistroCorrispettivi = () => {
+    const SEP = ";";
+    const fmtNum = (v: number) =>
+      (Math.round(v * 100) / 100).toLocaleString("it-IT", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+        useGrouping: false,
+      });
+    const csvCell = (v: string | number) => {
+      const s = String(v ?? "");
+      if (s.includes(SEP) || s.includes('"') || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const row = (...cells: (string | number)[]) =>
+      cells.map(csvCell).join(SEP);
+
+    interface AliquotaBucket {
+      pezzi: number;
+      imponibile: number;
+      imposta: number;
+      lordo: number;
+    }
+    interface NaturaBucket {
+      pezzi: number;
+      lordo: number;
+    }
+    interface DayBucket {
+      dataMs: number;
+      dataLabel: string;
+      aliquote: Map<number, AliquotaBucket>;
+      natura: Map<string, NaturaBucket>;
+    }
+
+    const days = new Map<string, DayBucket>();
+    const ensureDay = (r: IvaRow): DayBucket => {
+      const key = r.data ? r.data.slice(0, 10) : "N/D";
+      let d = days.get(key);
+      if (!d) {
+        d = {
+          dataMs: r.dataMs,
+          dataLabel: fmtDate(r.data),
+          aliquote: new Map(),
+          natura: new Map(),
+        };
+        days.set(key, d);
+      }
+      return d;
+    };
+    const ensureAliquota = (d: DayBucket, a: number): AliquotaBucket => {
+      let b = d.aliquote.get(a);
+      if (!b) { b = { pezzi: 0, imponibile: 0, imposta: 0, lordo: 0 }; d.aliquote.set(a, b); }
+      return b;
+    };
+    const ensureNatura = (d: DayBucket, code: string): NaturaBucket => {
+      let b = d.natura.get(code);
+      if (!b) { b = { pezzi: 0, lordo: 0 }; d.natura.set(code, b); }
+      return b;
+    };
+
+    for (const r of ivaRows) {
+      if (r.fiscalCategory === "standard" || r.fiscalCategory === "non_standard") {
+        const d = ensureDay(r);
+        const b = ensureAliquota(d, r.aliquota);
+        b.pezzi++;
+        b.imponibile += r.imponibile;
+        b.imposta += r.imposta;
+        b.lordo += r.lordo;
+      } else if (r.fiscalCategory === "natura") {
+        const d = ensureDay(r);
+        const b = ensureNatura(d, r.naturaCode || "N/D");
+        b.pezzi++;
+        b.lordo += r.lordo;
+      }
+    }
+
+    const sortedDays = Array.from(days.values()).sort((a, b) => a.dataMs - b.dataMs);
+
+    const lines: string[] = [];
+    lines.push(row("Registro Corrispettivi"));
+    lines.push(row(`Periodo: ${MONTH_LABELS[month - 1]} ${year}`));
+    if (filterPdv !== "all") {
+      const pdv = pdvOptions.find(([code]) => code === filterPdv);
+      lines.push(row(`Punto Vendita: ${pdv ? `${pdv[1]} (${pdv[0]})` : filterPdv}`));
+    }
+    if (filterRs !== "all") {
+      lines.push(row(`Ragione Sociale: ${filterRs}`));
+    }
+    lines.push("");
+
+    lines.push(row(
+      "Data", "Aliquota %", "Pezzi", "Imponibile", "Imposta", "Lordo",
+    ));
+
+    const totGen: AliquotaBucket = { pezzi: 0, imponibile: 0, imposta: 0, lordo: 0 };
+    const totPerAliquota = new Map<number, AliquotaBucket>();
+
+    for (const d of sortedDays) {
+      const aliquoteSorted = Array.from(d.aliquote.entries()).sort((a, b) => a[0] - b[0]);
+      if (aliquoteSorted.length === 0) continue;
+      const dayTot: AliquotaBucket = { pezzi: 0, imponibile: 0, imposta: 0, lordo: 0 };
+      for (const [aliquota, b] of aliquoteSorted) {
+        lines.push(row(
+          d.dataLabel,
+          fmtNum(aliquota),
+          b.pezzi,
+          fmtNum(b.imponibile),
+          fmtNum(b.imposta),
+          fmtNum(b.lordo),
+        ));
+        dayTot.pezzi += b.pezzi;
+        dayTot.imponibile += b.imponibile;
+        dayTot.imposta += b.imposta;
+        dayTot.lordo += b.lordo;
+        let tot = totPerAliquota.get(aliquota);
+        if (!tot) { tot = { pezzi: 0, imponibile: 0, imposta: 0, lordo: 0 }; totPerAliquota.set(aliquota, tot); }
+        tot.pezzi += b.pezzi;
+        tot.imponibile += b.imponibile;
+        tot.imposta += b.imposta;
+        tot.lordo += b.lordo;
+      }
+      lines.push(row(
+        `Totale ${d.dataLabel}`,
+        "",
+        dayTot.pezzi,
+        fmtNum(dayTot.imponibile),
+        fmtNum(dayTot.imposta),
+        fmtNum(dayTot.lordo),
+      ));
+      totGen.pezzi += dayTot.pezzi;
+      totGen.imponibile += dayTot.imponibile;
+      totGen.imposta += dayTot.imposta;
+      totGen.lordo += dayTot.lordo;
+    }
+
+    lines.push("");
+    lines.push(row("Riepilogo per Aliquota"));
+    lines.push(row("Aliquota %", "Pezzi", "Imponibile", "Imposta", "Lordo"));
+    const aliquoteAll = Array.from(totPerAliquota.entries()).sort((a, b) => a[0] - b[0]);
+    for (const [aliquota, b] of aliquoteAll) {
+      lines.push(row(
+        fmtNum(aliquota),
+        b.pezzi,
+        fmtNum(b.imponibile),
+        fmtNum(b.imposta),
+        fmtNum(b.lordo),
+      ));
+    }
+    lines.push(row(
+      "TOTALE",
+      totGen.pezzi,
+      fmtNum(totGen.imponibile),
+      fmtNum(totGen.imposta),
+      fmtNum(totGen.lordo),
+    ));
+
+    const naturaPerCode = new Map<string, NaturaBucket>();
+    const naturaDailyLines: string[] = [];
+    for (const d of sortedDays) {
+      const naturaSorted = Array.from(d.natura.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [code, b] of naturaSorted) {
+        naturaDailyLines.push(row(
+          d.dataLabel,
+          code,
+          b.pezzi,
+          fmtNum(b.lordo),
+        ));
+        let tot = naturaPerCode.get(code);
+        if (!tot) { tot = { pezzi: 0, lordo: 0 }; naturaPerCode.set(code, tot); }
+        tot.pezzi += b.pezzi;
+        tot.lordo += b.lordo;
+      }
+    }
+
+    if (naturaDailyLines.length > 0) {
+      lines.push("");
+      lines.push(row("Operazioni Non Imponibili / Esenti / Fuori Campo (Natura N1-N7)"));
+      lines.push(row("Data", "Natura", "Pezzi", "Lordo"));
+      for (const l of naturaDailyLines) lines.push(l);
+      lines.push("");
+      lines.push(row("Riepilogo per Natura"));
+      lines.push(row("Natura", "Pezzi", "Lordo"));
+      const naturaAll = Array.from(naturaPerCode.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+      let totNatura: NaturaBucket = { pezzi: 0, lordo: 0 };
+      for (const [code, b] of naturaAll) {
+        lines.push(row(code, b.pezzi, fmtNum(b.lordo)));
+        totNatura.pezzi += b.pezzi;
+        totNatura.lordo += b.lordo;
+      }
+      lines.push(row("TOTALE", totNatura.pezzi, fmtNum(totNatura.lordo)));
+    }
+
+    const csv = "\uFEFF" + lines.join("\r\n") + "\r\n";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `registro_corrispettivi_${periodSuffix}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   if (loading || !isAuthorized) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -778,10 +983,21 @@ export default function Amministrazione() {
                   Esporta Contabile
                 </Button>
               ) : (
-                <Button onClick={exportIva} disabled={ivaRows.length === 0} data-testid="button-export-iva">
-                  <Download className="h-4 w-4 mr-2" />
-                  Esporta IVA
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button onClick={exportIva} disabled={ivaRows.length === 0} data-testid="button-export-iva">
+                    <Download className="h-4 w-4 mr-2" />
+                    Esporta IVA
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={exportRegistroCorrispettivi}
+                    disabled={ivaRows.length === 0}
+                    data-testid="button-export-registro-corrispettivi"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Esporta Registro Corrispettivi
+                  </Button>
+                </div>
               )}
             </div>
 
