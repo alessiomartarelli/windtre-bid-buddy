@@ -29,8 +29,10 @@ import {
 import {
   Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { FilterBar, FilterField } from "@/components/ui/filter-bar";
 import {
   BookOpen, Receipt, Loader2, Download, Search, AlertTriangle, HelpCircle, FileText,
+  Calendar, CalendarDays, Store, Building2,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -848,72 +850,70 @@ export default function Amministrazione() {
           </div>
         </div>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              <div>
-                <Label className="text-xs">Mese</Label>
-                <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v, 10))}>
-                  <SelectTrigger data-testid="select-month"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MONTH_LABELS.map((label, idx) => (
-                      <SelectItem key={idx + 1} value={String(idx + 1)}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Anno</Label>
-                <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v, 10))}>
-                  <SelectTrigger data-testid="select-year"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {yearOptions.map((y) => (
-                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Punto Vendita</Label>
-                <Select value={filterPdv} onValueChange={setFilterPdv}>
-                  <SelectTrigger data-testid="select-pdv"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tutti i PDV</SelectItem>
-                    {pdvOptions.map(([code, name]) => (
-                      <SelectItem key={code} value={code}>{name} ({code})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs">Ragione Sociale</Label>
-                <Select value={filterRs} onValueChange={setFilterRs}>
-                  <SelectTrigger data-testid="select-rs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tutte le RS</SelectItem>
-                    {rsOptions.map((rs) => (
-                      <SelectItem key={rs} value={rs}>{rs}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="search" className="text-xs">Cerca</Label>
-                <div className="relative">
-                  <Search className="h-4 w-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="search"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="PDV, cliente, addetto..."
-                    className="pl-8"
-                    data-testid="input-search"
-                  />
-                </div>
-              </div>
+        <FilterBar
+          activeCount={
+            (filterPdv !== "all" ? 1 : 0) +
+            (filterRs !== "all" ? 1 : 0) +
+            (search.trim() ? 1 : 0)
+          }
+          onReset={() => { setFilterPdv("all"); setFilterRs("all"); setSearch(""); }}
+        >
+          <FilterField label="Mese" icon={Calendar}>
+            <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v, 10))}>
+              <SelectTrigger data-testid="select-month"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {MONTH_LABELS.map((label, idx) => (
+                  <SelectItem key={idx + 1} value={String(idx + 1)}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <FilterField label="Anno" icon={CalendarDays}>
+            <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v, 10))}>
+              <SelectTrigger data-testid="select-year"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {yearOptions.map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <FilterField label="Punto Vendita" icon={Store}>
+            <Select value={filterPdv} onValueChange={setFilterPdv}>
+              <SelectTrigger data-testid="select-pdv"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutti i PDV</SelectItem>
+                {pdvOptions.map(([code, name]) => (
+                  <SelectItem key={code} value={code}>{name} ({code})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <FilterField label="Ragione Sociale" icon={Building2}>
+            <Select value={filterRs} onValueChange={setFilterRs}>
+              <SelectTrigger data-testid="select-rs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutte le RS</SelectItem>
+                {rsOptions.map((rs) => (
+                  <SelectItem key={rs} value={rs}>{rs}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <FilterField label="Cerca" icon={Search} htmlFor="search">
+            <div className="relative">
+              <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                id="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="PDV, cliente, addetto..."
+                className="pl-8"
+                data-testid="input-search"
+              />
             </div>
-          </CardContent>
-        </Card>
+          </FilterField>
+        </FilterBar>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-12">

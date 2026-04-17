@@ -73,7 +73,12 @@ import {
   FileText,
   Wallet,
   Download,
+  CalendarRange,
+  Filter as FilterIcon,
+  Layers,
+  Route,
 } from "lucide-react";
+import { FilterBar, FilterField } from "@/components/ui/filter-bar";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { AppNavbar } from "@/components/AppNavbar";
@@ -592,63 +597,73 @@ export default function VenditeBiSuite() {
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2 sm:gap-4 items-end">
-          <div className="space-y-1">
-            <Label className="text-xs">Da</Label>
+        <FilterBar
+          activeCount={
+            (searchTerm.trim() ? 1 : 0) +
+            (filterType !== "all" ? 1 : 0) +
+            (filterPista !== "all" ? 1 : 0) +
+            (selectedPdv ? 1 : 0)
+          }
+          onReset={() => {
+            setSearchTerm("");
+            setFilterType("all");
+            setFilterPista("all");
+            setSelectedPdv(null);
+          }}
+          actions={
+            credStatus?.configured ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => fetchMutation.mutate()}
+                disabled={fetchMutation.isPending}
+                data-testid="button-fetch-bisuite"
+              >
+                {fetchMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                {fetchMutation.isPending ? "Importazione..." : "Aggiorna Vendite"}
+              </Button>
+            ) : credStatus && !credStatus.configured ? (
+              <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>Credenziali BiSuite non configurate</span>
+              </div>
+            ) : null
+          }
+        >
+          <FilterField label="Da" icon={CalendarRange}>
             <Input
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="w-[130px] sm:w-40"
               data-testid="input-from-date"
             />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">A</Label>
+          </FilterField>
+          <FilterField label="A" icon={CalendarRange}>
             <Input
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="w-[130px] sm:w-40"
               data-testid="input-to-date"
             />
-          </div>
-          {credStatus?.configured ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fetchMutation.mutate()}
-              disabled={fetchMutation.isPending}
-              data-testid="button-fetch-bisuite"
-            >
-              {fetchMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-1.5" />
-              )}
-              {fetchMutation.isPending ? "Importazione..." : "Aggiorna Vendite"}
-            </Button>
-          ) : credStatus && !credStatus.configured ? (
-            <div className="flex items-center gap-1.5 text-xs text-amber-600">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              <span>Credenziali BiSuite non configurate</span>
-            </div>
-          ) : null}
-          <div className="space-y-1 flex-1 min-w-[150px] sm:min-w-[200px]">
-            <Label className="text-xs">Cerca</Label>
+          </FilterField>
+          <FilterField label="Cerca" icon={Search} span={2}>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <Input
                 placeholder="Cliente, addetto, negozio, categoria..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
+                className="pl-8"
                 data-testid="input-search"
               />
             </div>
-          </div>
-          <div className="space-y-1 min-w-[120px] sm:min-w-[160px]">
-            <Label className="text-xs">Tipo</Label>
+          </FilterField>
+          <FilterField label="Tipo" icon={Layers}>
             <Select value={filterType} onValueChange={(v) => { setFilterType(v); if (v !== 'canvass') setFilterPista('all'); }}>
               <SelectTrigger data-testid="select-tipo">
                 <SelectValue placeholder="Tutti" />
@@ -660,10 +675,9 @@ export default function VenditeBiSuite() {
                 <SelectItem value="servizi">Servizi</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </FilterField>
           {(filterType === "canvass" || filterType === "all") && (
-            <div className="space-y-1 min-w-[130px] sm:min-w-[180px]">
-              <Label className="text-xs">Pista</Label>
+            <FilterField label="Pista" icon={Route}>
               <Select value={filterPista} onValueChange={setFilterPista}>
                 <SelectTrigger data-testid="select-pista">
                   <SelectValue placeholder="Tutte" />
@@ -677,20 +691,23 @@ export default function VenditeBiSuite() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </FilterField>
           )}
           {selectedPdv && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSelectedPdv(null)}
-              data-testid="button-clear-pdv"
-            >
-              <Filter className="h-4 w-4 mr-1" />
-              Rimuovi filtro PDV
-            </Button>
+            <FilterField label="PDV selezionato" icon={FilterIcon}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full h-9 justify-start"
+                onClick={() => setSelectedPdv(null)}
+                data-testid="button-clear-pdv"
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                Rimuovi filtro
+              </Button>
+            </FilterField>
           )}
-        </div>
+        </FilterBar>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
