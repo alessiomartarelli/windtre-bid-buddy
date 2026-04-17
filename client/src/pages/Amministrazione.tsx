@@ -134,6 +134,14 @@ const FISCAL_CATEGORY_BADGE: Record<IvaCategoria, "default" | "secondary" | "des
   fuori_scontrino: "outline",
 };
 
+const FISCAL_CATEGORY_SHORT: Record<IvaCategoria, string> = {
+  standard: "STD",
+  non_standard: "N-STD",
+  natura: "N.IMP",
+  da_verificare: "VRF",
+  fuori_scontrino: "F.SC",
+};
+
 function buildContabileRows(sales: BisuiteSale[]): ContabileRow[] {
   return sales.map((s) => {
     const matricolaFiscale =
@@ -1239,18 +1247,18 @@ export default function Amministrazione() {
               <Card className="overflow-hidden min-w-0 max-w-full">
                 <CardContent className="p-0 min-w-0">
                   <div className="w-full max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
-                    <Table className="w-full table-fixed [&_th]:px-1.5 [&_td]:px-1.5 [&_th]:py-2 [&_td]:py-1.5">
+                    <Table className="w-full table-fixed [&_th]:px-1 [&_td]:px-1 [&_th]:py-1.5 [&_td]:py-1">
                       <colgroup>
-                        <col className="w-[72px]" />
-                        <col className="w-[140px]" />
-                        <col className="w-[120px]" />
-                        <col className="w-[120px]" />
+                        <col className="w-[58px]" />
+                        <col className="w-[100px]" />
+                        <col className="w-[88px]" />
+                        <col className="w-[88px]" />
                         <col />
-                        <col className="w-[96px]" />
-                        <col className="w-[60px]" />
-                        <col className="w-[88px]" />
-                        <col className="w-[80px]" />
-                        <col className="w-[88px]" />
+                        <col className="w-[58px]" />
+                        <col className="w-[44px]" />
+                        <col className="w-[78px]" />
+                        <col className="w-[68px]" />
+                        <col className="w-[82px]" />
                       </colgroup>
                       <TableHeader>
                         <TableRow>
@@ -1304,14 +1312,15 @@ export default function Amministrazione() {
                                   <div className="truncate" title={r.nomeCliente}>{r.nomeCliente}</div>
                                 </TableCell>
                                 <TableCell className="text-[11px] align-top" title={articoloTitle}>
-                                  <div className="truncate">{r.descrizione || "—"}</div>
-                                  <div className="text-muted-foreground text-[10px] truncate">
-                                    {r.categoria}{r.codiceArticolo ? ` · ${r.codiceArticolo}` : ""}
-                                  </div>
+                                  <div className="truncate">{r.descrizione || r.categoria || "—"}</div>
                                 </TableCell>
-                                <TableCell className="text-[11px] align-top">
-                                  <Badge variant={FISCAL_CATEGORY_BADGE[r.fiscalCategory]} className="text-[10px] whitespace-nowrap">
-                                    {FISCAL_CATEGORY_LABELS[r.fiscalCategory]}
+                                <TableCell className="text-[10px] align-top">
+                                  <Badge
+                                    variant={FISCAL_CATEGORY_BADGE[r.fiscalCategory]}
+                                    className="text-[9px] whitespace-nowrap px-1 py-0 leading-tight"
+                                    title={FISCAL_CATEGORY_LABELS[r.fiscalCategory]}
+                                  >
+                                    {FISCAL_CATEGORY_SHORT[r.fiscalCategory]}
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-[11px] text-right whitespace-nowrap align-top">{aliquotaCell}</TableCell>
