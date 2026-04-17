@@ -9,10 +9,12 @@ import {
   computeIncassoTotals,
   INCASSO_ITEMS_CONFIG,
   toNum,
+  classifyIvaArticolo,
+  isArticoloFiscale,
   type IncassoTotals,
   type RawSaleData,
   type ArticoloRaw,
-  type DettaglioArticoloRaw,
+  type IvaCategoria,
 } from "@/lib/incassoUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -104,12 +106,33 @@ interface IvaRow {
   categoria: string;
   tipologia: string;
   descrizione: string;
+  tipo: string;
+  /** Aliquota normalizzata (4/5/10/22 se standard, valore esatto se non std). */
   aliquota: number;
+  /** Aliquota grezza calcolata dagli importi, prima dello snap. */
+  aliquotaCalcolata: number;
   imponibile: number;
   imposta: number;
   lordo: number;
-  fuoriScontrino: boolean;
+  fiscalCategory: IvaCategoria;
+  naturaCode: string | null;
 }
+
+const FISCAL_CATEGORY_LABELS: Record<IvaCategoria, string> = {
+  standard: "Standard",
+  non_standard: "Non standard",
+  natura: "Non imponibile",
+  da_verificare: "Da verificare",
+  fuori_scontrino: "Fuori scontrino",
+};
+
+const FISCAL_CATEGORY_BADGE: Record<IvaCategoria, "default" | "secondary" | "destructive" | "outline"> = {
+  standard: "default",
+  non_standard: "destructive",
+  natura: "secondary",
+  da_verificare: "destructive",
+  fuori_scontrino: "outline",
+};
 
 function buildContabileRows(sales: BisuiteSale[]): ContabileRow[] {
   return sales.map((s) => {
@@ -144,28 +167,12 @@ function buildIvaRows(sales: BisuiteSale[]): IvaRow[] {
     const articoli: ArticoloRaw[] = Array.isArray(s.rawData?.articoli) ? s.rawData!.articoli! : [];
     const dataMs = s.dataVendita ? new Date(s.dataVendita).getTime() : 0;
     for (const art of articoli) {
-      const det: DettaglioArticoloRaw = art?.dettaglio || {};
-      const importoScontrino = toNum(det.importoScontrino);
-      const importoImponibile = toNum(det.importoImponibile);
-      const aliquota = toNum(det.aliquotaPrezzo);
-      let imponibile = importoImponibile;
-      let lordo = importoScontrino;
-      let imposta = 0;
-      const fuoriScontrino = aliquota === 0 && importoScontrino === 0 && importoImponibile === 0;
+      // Filtro fiscale: solo Prodotti (P) e Servizi (S) producono importi nello scontrino.
+      // Gli articoli Canvass (tipo "C": MIA TIED, ENERGIA W3, FIBRA CF, ASSICURAZIONI...)
+      // sono procacciamenti / contratti e vengono fatturati a parte: NON entrano nella prima nota IVA.
+      if (!isArticoloFiscale(art)) continue;
 
-      if (fuoriScontrino) {
-        imponibile = 0;
-        lordo = 0;
-        imposta = 0;
-      } else if (importoScontrino > 0 && importoImponibile > 0) {
-        imposta = importoScontrino - importoImponibile;
-      } else if (importoImponibile > 0 && aliquota > 0) {
-        imposta = (importoImponibile * aliquota) / 100;
-        lordo = importoImponibile + imposta;
-      } else if (importoScontrino > 0 && aliquota > 0) {
-        imponibile = importoScontrino / (1 + aliquota / 100);
-        imposta = importoScontrino - imponibile;
-      }
+      const calc = classifyIvaArticolo(art?.dettaglio);
 
       rows.push({
         saleId: s.id,
@@ -180,11 +187,14 @@ function buildIvaRows(sales: BisuiteSale[]): IvaRow[] {
         categoria: (art?.categoria?.nome || "").trim(),
         tipologia: (art?.tipologia?.nome || "").trim(),
         descrizione: (art?.descrizione || "").trim(),
-        aliquota,
-        imponibile,
-        imposta,
-        lordo,
-        fuoriScontrino,
+        tipo: String(art?.tipo || "").toUpperCase(),
+        aliquota: calc.aliquotaNormalizzata,
+        aliquotaCalcolata: calc.aliquotaCalcolata,
+        imponibile: calc.imponibile,
+        imposta: calc.imposta,
+        lordo: calc.lordo,
+        fiscalCategory: calc.categoria,
+        naturaCode: calc.naturaCode,
       });
     }
   }
@@ -225,15 +235,18 @@ interface IvaExportRow {
   Categoria: string;
   Tipologia: string;
   Descrizione: string;
+  Tipo: string;
+  "Categoria Fiscale": string;
+  Natura: string;
   "Aliquota %": number | string;
+  "Aliquota Calcolata %": number | string;
   Imponibile: number | string;
   Imposta: number | string;
   Lordo: number | string;
-  "Fuori Scontrino": string;
 }
 
 interface RiepilogoIvaRow {
-  "Aliquota %": number | string;
+  Gruppo: string;
   Pezzi: number;
   Imponibile: number | string;
   Imposta: number | string;
@@ -335,7 +348,7 @@ export default function Amministrazione() {
   const ivaRowsAll = useMemo(() => buildIvaRows(filteredSales), [filteredSales]);
   const ivaRows = useMemo(() => {
     if (!escludiZero) return ivaRowsAll;
-    return ivaRowsAll.filter((r) => !r.fuoriScontrino && (r.imponibile !== 0 || r.imposta !== 0 || r.lordo !== 0));
+    return ivaRowsAll.filter((r) => r.fiscalCategory !== "fuori_scontrino");
   }, [ivaRowsAll, escludiZero]);
 
   const contabileTotals = useMemo<{ totale: number; incasso: IncassoTotals }>(() => {
@@ -345,32 +358,78 @@ export default function Amministrazione() {
     };
   }, [contabileRows, filteredSales]);
 
-  const ivaPerAliquota = useMemo(() => {
-    const map = new Map<number, { imponibile: number; imposta: number; lordo: number; pezzi: number }>();
-    const fuori = { pezzi: 0 };
-    for (const r of ivaRows) {
-      if (r.fuoriScontrino) { fuori.pezzi++; continue; }
-      const k = r.aliquota;
-      if (!map.has(k)) map.set(k, { imponibile: 0, imposta: 0, lordo: 0, pezzi: 0 });
-      const e = map.get(k)!;
-      e.imponibile += r.imponibile;
-      e.imposta += r.imposta;
-      e.lordo += r.lordo;
-      e.pezzi++;
+  interface RiepilogoBucket {
+    pezzi: number;
+    imponibile: number;
+    imposta: number;
+    lordo: number;
+  }
+
+  const ivaRiepilogo = useMemo(() => {
+    const standard = new Map<number, RiepilogoBucket>();
+    const natura = new Map<string, RiepilogoBucket>();
+    const nonStandard = new Map<number, RiepilogoBucket>();
+    const daVerificare: RiepilogoBucket = { pezzi: 0, imponibile: 0, imposta: 0, lordo: 0 };
+    const fuoriScontrino: RiepilogoBucket = { pezzi: 0, imponibile: 0, imposta: 0, lordo: 0 };
+
+    const addTo = (b: RiepilogoBucket, r: IvaRow) => {
+      b.pezzi++;
+      b.imponibile += r.imponibile;
+      b.imposta += r.imposta;
+      b.lordo += r.lordo;
+    };
+    const ensure = <K,>(map: Map<K, RiepilogoBucket>, k: K): RiepilogoBucket => {
+      let b = map.get(k);
+      if (!b) { b = { pezzi: 0, imponibile: 0, imposta: 0, lordo: 0 }; map.set(k, b); }
+      return b;
+    };
+
+    for (const r of ivaRowsAll) {
+      switch (r.fiscalCategory) {
+        case "standard":
+          addTo(ensure(standard, r.aliquota), r);
+          break;
+        case "non_standard":
+          addTo(ensure(nonStandard, r.aliquota), r);
+          break;
+        case "natura":
+          addTo(ensure(natura, r.naturaCode || "N/D"), r);
+          break;
+        case "da_verificare":
+          addTo(daVerificare, r);
+          break;
+        case "fuori_scontrino":
+          addTo(fuoriScontrino, r);
+          break;
+      }
     }
-    const arr = Array.from(map.entries())
-      .map(([aliquota, v]) => ({ aliquota, ...v }))
+
+    const standardArr = Array.from(standard.entries())
+      .map(([aliquota, b]) => ({ aliquota, ...b }))
       .sort((a, b) => a.aliquota - b.aliquota);
-    return { perAliquota: arr, fuori };
-  }, [ivaRows]);
+    const nonStandardArr = Array.from(nonStandard.entries())
+      .map(([aliquota, b]) => ({ aliquota, ...b }))
+      .sort((a, b) => a.aliquota - b.aliquota);
+    const naturaArr = Array.from(natura.entries())
+      .map(([code, b]) => ({ code, ...b }))
+      .sort((a, b) => a.code.localeCompare(b.code));
+
+    return { standardArr, nonStandardArr, naturaArr, daVerificare, fuoriScontrino };
+  }, [ivaRowsAll]);
 
   const ivaTotals = useMemo(() => {
-    const t = { imponibile: 0, imposta: 0, lordo: 0 };
-    for (const e of ivaPerAliquota.perAliquota) {
-      t.imponibile += e.imponibile; t.imposta += e.imposta; t.lordo += e.lordo;
+    const t = { imponibile: 0, imposta: 0, lordo: 0, pezzi: 0 };
+    for (const e of ivaRiepilogo.standardArr) {
+      t.imponibile += e.imponibile; t.imposta += e.imposta; t.lordo += e.lordo; t.pezzi += e.pezzi;
+    }
+    for (const e of ivaRiepilogo.nonStandardArr) {
+      t.imponibile += e.imponibile; t.imposta += e.imposta; t.lordo += e.lordo; t.pezzi += e.pezzi;
+    }
+    for (const e of ivaRiepilogo.naturaArr) {
+      t.imponibile += e.imponibile; t.lordo += e.lordo; t.pezzi += e.pezzi;
     }
     return t;
-  }, [ivaPerAliquota]);
+  }, [ivaRiepilogo]);
 
   const periodSuffix = `${year}_${String(month).padStart(2, "0")}`;
 
@@ -435,6 +494,9 @@ export default function Amministrazione() {
 
   const exportIva = () => {
     const wb = XLSX.utils.book_new();
+    const isFiscalAmount = (cat: IvaCategoria) =>
+      cat === "standard" || cat === "non_standard" || cat === "natura";
+
     const dettaglio: IvaExportRow[] = ivaRows.map((r) => ({
       "Data": fmtDate(r.data),
       "ID Scontrino": r.bisuiteId,
@@ -446,33 +508,72 @@ export default function Amministrazione() {
       "Categoria": r.categoria,
       "Tipologia": r.tipologia,
       "Descrizione": r.descrizione,
-      "Aliquota %": r.fuoriScontrino ? "" : r.aliquota,
-      "Imponibile": r.fuoriScontrino ? "" : r.imponibile,
-      "Imposta": r.fuoriScontrino ? "" : r.imposta,
-      "Lordo": r.fuoriScontrino ? "" : r.lordo,
-      "Fuori Scontrino": r.fuoriScontrino ? "SI" : "",
+      "Tipo": r.tipo,
+      "Categoria Fiscale": FISCAL_CATEGORY_LABELS[r.fiscalCategory],
+      "Natura": r.naturaCode || "",
+      "Aliquota %":
+        r.fiscalCategory === "standard" || r.fiscalCategory === "non_standard"
+          ? r.aliquota
+          : "",
+      "Aliquota Calcolata %":
+        r.fiscalCategory === "standard" || r.fiscalCategory === "non_standard"
+          ? Math.round(r.aliquotaCalcolata * 100) / 100
+          : "",
+      "Imponibile": isFiscalAmount(r.fiscalCategory) ? r.imponibile : "",
+      "Imposta": r.fiscalCategory === "standard" || r.fiscalCategory === "non_standard" ? r.imposta : "",
+      "Lordo": isFiscalAmount(r.fiscalCategory) ? r.lordo : "",
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dettaglio), "Prima Nota IVA");
 
-    const riepilogo: RiepilogoIvaRow[] = ivaPerAliquota.perAliquota.map((e) => ({
-      "Aliquota %": e.aliquota,
-      "Pezzi": e.pezzi,
-      "Imponibile": e.imponibile,
-      "Imposta": e.imposta,
-      "Lordo": e.lordo,
-    }));
-    if (ivaPerAliquota.fuori.pezzi > 0) {
+    const riepilogo: RiepilogoIvaRow[] = [];
+    for (const e of ivaRiepilogo.standardArr) {
       riepilogo.push({
-        "Aliquota %": "Fuori scontrino",
-        "Pezzi": ivaPerAliquota.fuori.pezzi,
+        "Gruppo": `IVA ${e.aliquota}%`,
+        "Pezzi": e.pezzi,
+        "Imponibile": e.imponibile,
+        "Imposta": e.imposta,
+        "Lordo": e.lordo,
+      });
+    }
+    for (const e of ivaRiepilogo.nonStandardArr) {
+      riepilogo.push({
+        "Gruppo": `Non standard ${e.aliquota}%`,
+        "Pezzi": e.pezzi,
+        "Imponibile": e.imponibile,
+        "Imposta": e.imposta,
+        "Lordo": e.lordo,
+      });
+    }
+    for (const e of ivaRiepilogo.naturaArr) {
+      riepilogo.push({
+        "Gruppo": `Non imponibile ${e.code}`,
+        "Pezzi": e.pezzi,
+        "Imponibile": e.imponibile,
+        "Imposta": 0,
+        "Lordo": e.lordo,
+      });
+    }
+    if (ivaRiepilogo.daVerificare.pezzi > 0) {
+      riepilogo.push({
+        "Gruppo": "Da verificare",
+        "Pezzi": ivaRiepilogo.daVerificare.pezzi,
+        "Imponibile": "",
+        "Imposta": "",
+        "Lordo": ivaRiepilogo.daVerificare.lordo,
+      });
+    }
+    if (ivaRiepilogo.fuoriScontrino.pezzi > 0) {
+      riepilogo.push({
+        "Gruppo": "Fuori scontrino",
+        "Pezzi": ivaRiepilogo.fuoriScontrino.pezzi,
         "Imponibile": "",
         "Imposta": "",
         "Lordo": "",
       });
     }
     riepilogo.push({
-      "Aliquota %": "TOTALE",
-      "Pezzi": ivaPerAliquota.perAliquota.reduce((s, e) => s + e.pezzi, 0),
+      "Gruppo": "TOTALE IVA",
+      "Pezzi": ivaTotals.pezzi,
       "Imponibile": ivaTotals.imponibile,
       "Imposta": ivaTotals.imposta,
       "Lordo": ivaTotals.lordo,
@@ -710,15 +811,19 @@ export default function Amministrazione() {
                   <CardTitle className="text-base flex items-center justify-between">
                     <span>Riepilogo IVA per Aliquota</span>
                     <Badge variant="outline" data-testid="badge-iva-count">
-                      {ivaRows.length} articoli
+                      {ivaRowsAll.length} articoli (solo Prodotti e Servizi)
                     </Badge>
                   </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Aliquote calcolate dagli importi (scontrino − imponibile) e snappate alle 4 aliquote IVA italiane standard.
+                    Esclude automaticamente gli articoli Canvass / Contratti.
+                  </p>
                 </CardHeader>
                 <CardContent>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-xs">Aliquota</TableHead>
+                        <TableHead className="text-xs">Gruppo</TableHead>
                         <TableHead className="text-xs text-right">Pezzi</TableHead>
                         <TableHead className="text-xs text-right">Imponibile</TableHead>
                         <TableHead className="text-xs text-right">Imposta</TableHead>
@@ -726,27 +831,76 @@ export default function Amministrazione() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {ivaPerAliquota.perAliquota.map((e) => (
-                        <TableRow key={e.aliquota} data-testid={`row-aliquota-${e.aliquota}`}>
-                          <TableCell className="text-xs font-semibold">{e.aliquota}%</TableCell>
+                      {ivaRiepilogo.standardArr.length === 0 &&
+                        ivaRiepilogo.nonStandardArr.length === 0 &&
+                        ivaRiepilogo.naturaArr.length === 0 &&
+                        ivaRiepilogo.daVerificare.pezzi === 0 &&
+                        ivaRiepilogo.fuoriScontrino.pezzi === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                              Nessun articolo nel periodo selezionato
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      {ivaRiepilogo.standardArr.map((e) => (
+                        <TableRow key={`std-${e.aliquota}`} data-testid={`row-aliquota-${e.aliquota}`}>
+                          <TableCell className="text-xs font-semibold">IVA {e.aliquota}%</TableCell>
                           <TableCell className="text-xs text-right">{e.pezzi}</TableCell>
                           <TableCell className="text-xs text-right">{fmtCurrency(e.imponibile)}</TableCell>
                           <TableCell className="text-xs text-right">{fmtCurrency(e.imposta)}</TableCell>
                           <TableCell className="text-xs text-right font-semibold">{fmtCurrency(e.lordo)}</TableCell>
                         </TableRow>
                       ))}
-                      {ivaPerAliquota.fuori.pezzi > 0 && (
+                      {ivaRiepilogo.naturaArr.map((e) => (
+                        <TableRow key={`nat-${e.code}`} data-testid={`row-natura-${e.code}`}>
+                          <TableCell className="text-xs">
+                            <Badge variant="secondary" className="text-[10px]">Non imponibile {e.code}</Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-right">{e.pezzi}</TableCell>
+                          <TableCell className="text-xs text-right">{fmtCurrency(e.imponibile)}</TableCell>
+                          <TableCell className="text-xs text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-xs text-right font-semibold">{fmtCurrency(e.lordo)}</TableCell>
+                        </TableRow>
+                      ))}
+                      {ivaRiepilogo.nonStandardArr.map((e) => (
+                        <TableRow key={`nstd-${e.aliquota}`} data-testid={`row-non-standard-${e.aliquota}`}>
+                          <TableCell className="text-xs">
+                            <Badge variant="destructive" className="text-[10px]">
+                              Non standard {e.aliquota.toFixed(2)}%
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-right">{e.pezzi}</TableCell>
+                          <TableCell className="text-xs text-right">{fmtCurrency(e.imponibile)}</TableCell>
+                          <TableCell className="text-xs text-right">{fmtCurrency(e.imposta)}</TableCell>
+                          <TableCell className="text-xs text-right font-semibold">{fmtCurrency(e.lordo)}</TableCell>
+                        </TableRow>
+                      ))}
+                      {ivaRiepilogo.daVerificare.pezzi > 0 && (
+                        <TableRow data-testid="row-da-verificare">
+                          <TableCell className="text-xs">
+                            <Badge variant="destructive" className="text-[10px]">Da verificare</Badge>
+                            <span className="ml-2 text-muted-foreground text-[10px]">(scontrino senza imponibile)</span>
+                          </TableCell>
+                          <TableCell className="text-xs text-right">{ivaRiepilogo.daVerificare.pezzi}</TableCell>
+                          <TableCell className="text-xs text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-xs text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="text-xs text-right">{fmtCurrency(ivaRiepilogo.daVerificare.lordo)}</TableCell>
+                        </TableRow>
+                      )}
+                      {ivaRiepilogo.fuoriScontrino.pezzi > 0 && (
                         <TableRow data-testid="row-fuori-scontrino">
-                          <TableCell className="text-xs text-muted-foreground italic">Fuori scontrino</TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground">{ivaPerAliquota.fuori.pezzi}</TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground" colSpan={3}>(canoni/servizi fatturati a parte)</TableCell>
+                          <TableCell className="text-xs text-muted-foreground italic">
+                            Fuori scontrino <span className="text-[10px]">(canoni/servizi fatturati a parte)</span>
+                          </TableCell>
+                          <TableCell className="text-xs text-right text-muted-foreground">{ivaRiepilogo.fuoriScontrino.pezzi}</TableCell>
+                          <TableCell className="text-xs text-right text-muted-foreground" colSpan={3}>—</TableCell>
                         </TableRow>
                       )}
                     </TableBody>
                     <TableFooter>
                       <TableRow>
-                        <TableCell className="text-xs font-bold">TOTALE</TableCell>
-                        <TableCell className="text-xs text-right font-bold">{ivaPerAliquota.perAliquota.reduce((s, e) => s + e.pezzi, 0)}</TableCell>
+                        <TableCell className="text-xs font-bold">TOTALE IVA</TableCell>
+                        <TableCell className="text-xs text-right font-bold">{ivaTotals.pezzi}</TableCell>
                         <TableCell className="text-xs text-right font-bold" data-testid="totals-imponibile">{fmtCurrency(ivaTotals.imponibile)}</TableCell>
                         <TableCell className="text-xs text-right font-bold" data-testid="totals-imposta">{fmtCurrency(ivaTotals.imposta)}</TableCell>
                         <TableCell className="text-xs text-right font-bold" data-testid="totals-lordo">{fmtCurrency(ivaTotals.lordo)}</TableCell>
@@ -769,6 +923,7 @@ export default function Amministrazione() {
                         <TableHead className="text-xs">Cod. Art.</TableHead>
                         <TableHead className="text-xs">Categoria</TableHead>
                         <TableHead className="text-xs">Descrizione</TableHead>
+                        <TableHead className="text-xs">Cat. Fiscale</TableHead>
                         <TableHead className="text-xs text-right">Aliquota</TableHead>
                         <TableHead className="text-xs text-right">Imponibile</TableHead>
                         <TableHead className="text-xs text-right">Imposta</TableHead>
@@ -777,27 +932,49 @@ export default function Amministrazione() {
                     </TableHeader>
                     <TableBody>
                       {ivaRows.length === 0 ? (
-                        <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-8">Nessun articolo nel periodo selezionato</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground py-8">Nessun articolo nel periodo selezionato</TableCell></TableRow>
                       ) : (
-                        ivaRows.slice(0, 500).map((r, idx) => (
-                          <TableRow key={`${r.saleId}-${idx}`} className={r.fuoriScontrino ? "opacity-60" : ""} data-testid={`row-iva-${r.saleId}-${idx}`}>
-                            <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.data)}</TableCell>
-                            <TableCell className="text-xs font-mono">{r.bisuiteId}</TableCell>
-                            <TableCell className="text-xs">
-                              <div className="font-medium truncate max-w-[140px]">{r.nomeNegozio}</div>
-                              <div className="text-muted-foreground font-mono text-[10px]">{r.codicePos}</div>
-                            </TableCell>
-                            <TableCell className="text-xs truncate max-w-[140px]">{r.ragioneSociale}</TableCell>
-                            <TableCell className="text-xs truncate max-w-[140px]">{r.nomeCliente}</TableCell>
-                            <TableCell className="text-xs font-mono truncate max-w-[100px]">{r.codiceArticolo || "—"}</TableCell>
-                            <TableCell className="text-xs truncate max-w-[140px]">{r.categoria}</TableCell>
-                            <TableCell className="text-xs truncate max-w-[200px]">{r.descrizione}</TableCell>
-                            <TableCell className="text-xs text-right">{r.fuoriScontrino ? "—" : `${r.aliquota}%`}</TableCell>
-                            <TableCell className="text-xs text-right">{r.fuoriScontrino ? "—" : fmtCurrency(r.imponibile)}</TableCell>
-                            <TableCell className="text-xs text-right">{r.fuoriScontrino ? "—" : fmtCurrency(r.imposta)}</TableCell>
-                            <TableCell className="text-xs text-right font-semibold">{r.fuoriScontrino ? "—" : fmtCurrency(r.lordo)}</TableCell>
-                          </TableRow>
-                        ))
+                        ivaRows.slice(0, 500).map((r, idx) => {
+                          const isStd = r.fiscalCategory === "standard";
+                          const isNonStd = r.fiscalCategory === "non_standard";
+                          const isNatura = r.fiscalCategory === "natura";
+                          const isFuori = r.fiscalCategory === "fuori_scontrino";
+                          const aliquotaCell = isStd
+                            ? `${r.aliquota}%`
+                            : isNonStd
+                              ? `${r.aliquota.toFixed(2)}%`
+                              : isNatura
+                                ? (r.naturaCode || "—")
+                                : "—";
+                          return (
+                            <TableRow
+                              key={`${r.saleId}-${idx}`}
+                              className={isFuori ? "opacity-60" : ""}
+                              data-testid={`row-iva-${r.saleId}-${idx}`}
+                            >
+                              <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.data)}</TableCell>
+                              <TableCell className="text-xs font-mono">{r.bisuiteId}</TableCell>
+                              <TableCell className="text-xs">
+                                <div className="font-medium truncate max-w-[140px]">{r.nomeNegozio}</div>
+                                <div className="text-muted-foreground font-mono text-[10px]">{r.codicePos}</div>
+                              </TableCell>
+                              <TableCell className="text-xs truncate max-w-[140px]">{r.ragioneSociale}</TableCell>
+                              <TableCell className="text-xs truncate max-w-[140px]">{r.nomeCliente}</TableCell>
+                              <TableCell className="text-xs font-mono truncate max-w-[100px]">{r.codiceArticolo || "—"}</TableCell>
+                              <TableCell className="text-xs truncate max-w-[140px]">{r.categoria}</TableCell>
+                              <TableCell className="text-xs truncate max-w-[200px]">{r.descrizione}</TableCell>
+                              <TableCell className="text-xs">
+                                <Badge variant={FISCAL_CATEGORY_BADGE[r.fiscalCategory]} className="text-[10px]">
+                                  {FISCAL_CATEGORY_LABELS[r.fiscalCategory]}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs text-right">{aliquotaCell}</TableCell>
+                              <TableCell className="text-xs text-right">{(isStd || isNonStd || isNatura) ? fmtCurrency(r.imponibile) : "—"}</TableCell>
+                              <TableCell className="text-xs text-right">{(isStd || isNonStd) ? fmtCurrency(r.imposta) : "—"}</TableCell>
+                              <TableCell className="text-xs text-right font-semibold">{(isStd || isNonStd || isNatura) ? fmtCurrency(r.lordo) : "—"}</TableCell>
+                            </TableRow>
+                          );
+                        })
                       )}
                     </TableBody>
                   </Table>

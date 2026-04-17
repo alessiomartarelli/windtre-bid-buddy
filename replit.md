@@ -39,6 +39,23 @@ Preferred communication style: Simple, everyday language.
 - Core calculation engines are located in `client/src/lib/`, handling product-specific point/premium calculations, thresholds, and bonuses (e.g., `calcoliMobile.ts`, `calcoloPistaFisso.ts`, `calcoloEnergia.ts`).
 - Centralized configuration for calculation parameters is managed via the "Tabelle Calcolo" UI, leveraging a hierarchy of system defaults and organization-specific overrides.
 
+### Prima Nota IVA (Amministrazione)
+The Amministrazione → Prima Nota IVA tab uses two key rules to derive a fiscally
+correct VAT register from BiSuite sales:
+- **Article filter**: only `art.tipo === "P"` (Prodotti) and `art.tipo === "S"`
+  (Servizi) are included. `tipo === "C"` (Canvass / Contracts: MIA TIED, ENERGIA
+  W3, FIBRA CF, ASSICURAZIONI, etc.) are procurement contracts billed separately
+  and are excluded from the receipt-based VAT register.
+- **Aliquota derivation**: the BiSuite `dettaglio.aliquotaPrezzo` field is NOT the
+  VAT percentage — it has variable semantics (sometimes an internal code, sometimes
+  the VAT amount in euros). The actual aliquota is computed as
+  `(importoScontrino − importoImponibile) / importoImponibile × 100`, then snapped
+  to the nearest Italian standard rate (4 / 5 / 10 / 22%) within ±0.5 pp.
+  See `classifyIvaArticolo` and `isArticoloFiscale` in `client/src/lib/incassoUtils.ts`.
+- Rows with `dettaglio.natura` (N1–N7) are grouped separately as non-imponibile /
+  esente / fuori campo IVA. Rows with scontrino > 0 but imponibile = 0 are
+  flagged "Da verificare" and excluded from VAT totals.
+
 ### Production Deployment
 - **Environment**: VPS with Nginx reverse proxy.
 - **Base Path**: `/incentivew3` for all production assets and API calls.

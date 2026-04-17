@@ -30,15 +30,152 @@ export interface DettaglioArticoloRaw {
   importoScontrino?: string | number | null;
   importoImponibile?: string | number | null;
   aliquotaPrezzo?: string | number | null;
+  natura?: string | null;
 }
 
 export interface ArticoloRaw {
+  tipo?: string | null;
   categoria?: { nome?: string } | null;
   tipologia?: { nome?: string } | null;
   descrizione?: string;
   codice?: string | number;
   codiceArticolo?: string | number;
   dettaglio?: DettaglioArticoloRaw | null;
+}
+
+/**
+ * Aliquote IVA italiane standard (in percentuale).
+ */
+export const ALIQUOTE_IVA_STANDARD = [4, 5, 10, 22] as const;
+
+/**
+ * Tolleranza in punti percentuali per l'arrotondamento alle aliquote standard.
+ * Compensa errori di arrotondamento centesimi sui piccoli importi.
+ */
+export const ALIQUOTA_TOLERANCE_PP = 0.5;
+
+export type IvaCategoria =
+  | "standard"
+  | "non_standard"
+  | "natura"
+  | "da_verificare"
+  | "fuori_scontrino";
+
+export interface IvaArticoloCalcolato {
+  categoria: IvaCategoria;
+  /** Aliquota calcolata grezza dagli importi (può essere qualsiasi valore). */
+  aliquotaCalcolata: number;
+  /** Aliquota normalizzata: snap a 4/5/10/22 se standard, valore esatto altrimenti. */
+  aliquotaNormalizzata: number;
+  /** Codice natura (N1-N7) se presente, altrimenti null. */
+  naturaCode: string | null;
+  imponibile: number;
+  imposta: number;
+  lordo: number;
+}
+
+/**
+ * Classifica una riga articolo IVA derivando l'aliquota dagli importi monetari.
+ *
+ * **Importante**: il campo BiSuite `aliquotaPrezzo` NON contiene la percentuale
+ * IVA — ha semantica variabile (a volte codice interno, a volte importo IVA in
+ * euro). L'aliquota va sempre calcolata da:
+ *   `(importoScontrino − importoImponibile) / importoImponibile × 100`
+ * e poi snappata all'aliquota italiana standard (4/5/10/22) se vicina.
+ *
+ * Categorie:
+ * - `fuori_scontrino`: scontrino e imponibile a 0 (canoni / servizi fatturati a parte)
+ * - `natura`: campo `natura` valorizzato (N1-N7 = non imponibile/esente/fuori campo IVA)
+ * - `da_verificare`: scontrino > 0 ma imponibile = 0 (caso degenere, NON concorre ai totali)
+ * - `standard`: aliquota calcolata vicina (±0.5pp) a 4/5/10/22%
+ * - `non_standard`: aliquota calcolata fuori fascia standard (anomalia segnalata)
+ */
+export function classifyIvaArticolo(det: DettaglioArticoloRaw | null | undefined): IvaArticoloCalcolato {
+  const d = det || {};
+  const importoScontrino = toNum(d.importoScontrino);
+  const importoImponibile = toNum(d.importoImponibile);
+  const natura = (d.natura ? String(d.natura) : "").trim();
+
+  if (importoScontrino === 0 && importoImponibile === 0) {
+    return {
+      categoria: "fuori_scontrino",
+      aliquotaCalcolata: 0,
+      aliquotaNormalizzata: 0,
+      naturaCode: natura || null,
+      imponibile: 0,
+      imposta: 0,
+      lordo: 0,
+    };
+  }
+
+  if (natura) {
+    const lordo = importoScontrino || importoImponibile;
+    const imp = importoImponibile || importoScontrino;
+    return {
+      categoria: "natura",
+      aliquotaCalcolata: 0,
+      aliquotaNormalizzata: 0,
+      naturaCode: natura,
+      imponibile: imp,
+      imposta: 0,
+      lordo,
+    };
+  }
+
+  if (importoScontrino > 0 && importoImponibile === 0) {
+    return {
+      categoria: "da_verificare",
+      aliquotaCalcolata: 0,
+      aliquotaNormalizzata: 0,
+      naturaCode: null,
+      imponibile: 0,
+      imposta: 0,
+      lordo: importoScontrino,
+    };
+  }
+
+  const aliquotaCalc = ((importoScontrino - importoImponibile) / importoImponibile) * 100;
+  const imposta = importoScontrino - importoImponibile;
+
+  let snapped = -1;
+  for (const a of ALIQUOTE_IVA_STANDARD) {
+    if (Math.abs(aliquotaCalc - a) <= ALIQUOTA_TOLERANCE_PP) {
+      snapped = a;
+      break;
+    }
+  }
+
+  if (snapped >= 0) {
+    return {
+      categoria: "standard",
+      aliquotaCalcolata: aliquotaCalc,
+      aliquotaNormalizzata: snapped,
+      naturaCode: null,
+      imponibile: importoImponibile,
+      imposta,
+      lordo: importoScontrino,
+    };
+  }
+
+  return {
+    categoria: "non_standard",
+    aliquotaCalcolata: aliquotaCalc,
+    aliquotaNormalizzata: Math.round(aliquotaCalc * 100) / 100,
+    naturaCode: null,
+    imponibile: importoImponibile,
+    imposta,
+    lordo: importoScontrino,
+  };
+}
+
+/**
+ * Indica se l'articolo BiSuite contribuisce alla Prima Nota IVA.
+ * Solo `P` (Prodotti) e `S` (Servizi) producono importi nello scontrino fiscale.
+ * `C` (Contratti / Canvass) sono procacciamenti fatturati a parte.
+ */
+export function isArticoloFiscale(art: ArticoloRaw | null | undefined): boolean {
+  const tipo = (art?.tipo || "").toUpperCase();
+  return tipo === "P" || tipo === "S";
 }
 
 export interface NegozioRaw {
