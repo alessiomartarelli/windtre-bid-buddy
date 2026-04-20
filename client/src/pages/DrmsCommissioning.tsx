@@ -247,6 +247,94 @@ function UploadCard({
 }
 
 // =============================================================================
+// PREVIEW CARD (review-and-confirm)
+// =============================================================================
+function PreviewCard({
+  preview, saving, onConfirm, onCancel,
+}: {
+  preview: {
+    fileName: string; month: number; year: number; period: string;
+    totale: number; righeCount: number;
+    capitoliCount: Array<{ key: string; label: string; color: string; count: number; importo: number }>;
+    altroCount: number; hasConflict: boolean;
+  };
+  saving: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const totalCapitoli = preview.capitoliCount.reduce((s, c) => s + c.count, 0);
+  return (
+    <div className="bg-white border border-neutral-200">
+      <div className="px-5 py-4 border-b-2 border-neutral-900 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-neutral-500 mb-1">Anteprima</div>
+          <div className="font-serif text-2xl text-neutral-900">Verifica i dati prima del salvataggio</div>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-neutral-600 font-mono">
+          <FileSpreadsheet size={14} className="text-emerald-600" />
+          <span className="truncate max-w-[260px]" title={preview.fileName}>{preview.fileName}</span>
+        </div>
+      </div>
+
+      <div className="p-5 space-y-5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KpiCard label="Periodo" value={preview.period} subvalue={`${MONTH_LABELS[preview.month - 1]} ${preview.year}`} accent="#f97316" icon={Activity} />
+          <KpiCard label="Righe totali" value={fmtInt(preview.righeCount)} subvalue={`${fmtInt(totalCapitoli)} classificate`} accent="#3b82f6" />
+          <KpiCard label="Totale importi" value={fmtEur(preview.totale)} accent="#10b981" icon={Target} />
+          <KpiCard label="Non classificate" value={fmtInt(preview.altroCount)}
+            subvalue={preview.altroCount > 0 ? "Verifica regole" : "OK"}
+            accent={preview.altroCount > 0 ? "#eab308" : "#10b981"}
+            icon={preview.altroCount > 0 ? AlertCircle : CheckCircle2} />
+        </div>
+
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-neutral-500 font-medium mb-2">Conteggio per capitolo</div>
+          <div className="border border-neutral-200">
+            {preview.capitoliCount.map(c => (
+              <div key={c.key} className={`px-4 py-2 flex items-center justify-between border-b border-neutral-100 last:border-b-0 ${c.key === 'ALTRO' ? 'bg-amber-50/50' : ''}`}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2 h-2 shrink-0" style={{ background: c.color }} />
+                  <span className="text-sm text-neutral-900 truncate">{c.label}</span>
+                  {c.key === 'ALTRO' && (
+                    <span className="text-[10px] uppercase tracking-wider text-amber-700 font-mono">non classificato</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-4 shrink-0">
+                  <span className="text-xs text-neutral-500 font-mono tabular-nums">{fmtInt(c.count)} righe</span>
+                  <span className={`font-mono text-sm font-semibold tabular-nums ${c.importo < 0 ? 'text-red-700' : 'text-neutral-900'}`}>{fmtEur(c.importo)}</span>
+                </div>
+              </div>
+            ))}
+            {preview.capitoliCount.length === 0 && (
+              <div className="px-4 py-6 text-sm text-neutral-500 text-center">Nessuna riga classificata</div>
+            )}
+          </div>
+        </div>
+
+        {preview.hasConflict && (
+          <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold">Esiste già un DRMS per questo periodo</div>
+              <div className="text-xs mt-0.5">Salvando, il precedente upload per {MONTH_LABELS[preview.month - 1]} {preview.year} verrà sovrascritto.</div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-3 pt-2 border-t border-neutral-200">
+          <Button variant="outline" onClick={onCancel} disabled={saving} data-testid="button-preview-cancel">
+            <X size={14} className="mr-2" /> Annulla
+          </Button>
+          <Button onClick={onConfirm} disabled={saving} data-testid="button-preview-confirm" className="bg-orange-600 hover:bg-orange-700 text-white">
+            {saving ? <><Loader2 size={14} className="mr-2 animate-spin" /> Salvataggio…</> : <><Save size={14} className="mr-2" /> {preview.hasConflict ? 'Sovrascrivi e apri' : 'Salva e apri'}</>}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
 // DASHBOARD
 // =============================================================================
 type TabKey = "overview" | "matrix" | "driver" | "pv";
@@ -988,6 +1076,19 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
 // =============================================================================
 // PAGINA PRINCIPALE
 // =============================================================================
+interface PendingPreview {
+  fileName: string;
+  month: number;
+  year: number;
+  period: string;
+  totale: number;
+  righeCount: number;
+  rows: DrmsRow[];
+  capitoliCount: Array<{ key: CapitoloKey; label: string; color: string; count: number; importo: number }>;
+  altroCount: number;
+  hasConflict: boolean;
+}
+
 export default function DrmsCommissioning() {
   const { profile, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -1001,6 +1102,7 @@ export default function DrmsCommissioning() {
   const [fileName, setFileName] = useState<string>("");
   const [parseLoading, setParseLoading] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<PendingPreview | null>(null);
 
   useEffect(() => {
     if (!authLoading && profile && !isAuthorized) {
@@ -1052,7 +1154,7 @@ export default function DrmsCommissioning() {
   });
 
   const handleFileChosen = useCallback(async (file: File) => {
-    setParseLoading(true); setParseError(null);
+    setParseLoading(true); setParseError(null); setPendingPreview(null);
     try {
       const rawRows = await parseExcelFile(file);
       if (rawRows.length === 0) throw new Error("Il file non contiene righe leggibili");
@@ -1063,27 +1165,29 @@ export default function DrmsCommissioning() {
       const normalized = classifyAndNormalize(rawRows, detectedPeriod);
       const totale = normalized.reduce((s, r) => s + (r.IMPORTO_NUM || 0), 0);
 
-      const payload = {
-        fileName: file.name, month: my.month, year: my.year, period: detectedPeriod,
-        totaleImporto: totale, righeCount: normalized.length, rows: normalized,
-      };
-
-      try {
-        await uploadMutation.mutateAsync(payload);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (msg.startsWith("__CONFLICT__:")) {
-          const ok = window.confirm(`Esiste già un DRMS per ${MONTH_LABELS[my.month - 1]} ${my.year}. Sovrascriverlo con il nuovo file?`);
-          if (!ok) { setParseLoading(false); return; }
-          await uploadMutation.mutateAsync({ ...payload, overwrite: true });
-        } else {
-          throw e;
-        }
+      const counts = new Map<CapitoloKey, { count: number; importo: number }>();
+      for (const r of normalized) {
+        const c = counts.get(r.CAPITOLO) || { count: 0, importo: 0 };
+        c.count += 1; c.importo += r.IMPORTO_NUM || 0;
+        counts.set(r.CAPITOLO, c);
       }
+      const capitoliCount = (Object.entries(CAPITOLI_CONFIG) as [CapitoloKey, typeof CAPITOLI_CONFIG[CapitoloKey]][])
+        .map(([key, cfg]) => {
+          const v = counts.get(key) || { count: 0, importo: 0 };
+          return { key, label: cfg.label, color: cfg.color, count: v.count, importo: v.importo };
+        })
+        .filter(c => c.count > 0)
+        .sort((a, b) => Math.abs(b.importo) - Math.abs(a.importo));
+      const altroCount = counts.get("ALTRO")?.count || 0;
 
-      setParsedData(normalized);
-      setPeriod(detectedPeriod);
-      setFileName(file.name);
+      const existingRes = await fetch(apiUrl(`/api/drms/by-period?month=${my.month}&year=${my.year}`), { credentials: "include" });
+      const existing = existingRes.ok ? await existingRes.json() : null;
+
+      setPendingPreview({
+        fileName: file.name, month: my.month, year: my.year, period: detectedPeriod,
+        totale, righeCount: normalized.length, rows: normalized,
+        capitoliCount, altroCount, hasConflict: !!existing,
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setParseError(msg);
@@ -1091,7 +1195,35 @@ export default function DrmsCommissioning() {
     } finally {
       setParseLoading(false);
     }
-  }, [uploadMutation, toast]);
+  }, [toast]);
+
+  const handleConfirmSave = useCallback(async (overwrite: boolean) => {
+    if (!pendingPreview) return;
+    const p = pendingPreview;
+    try {
+      await uploadMutation.mutateAsync({
+        fileName: p.fileName, month: p.month, year: p.year, period: p.period,
+        totaleImporto: p.totale, righeCount: p.righeCount, rows: p.rows, overwrite,
+      });
+      setParsedData(p.rows);
+      setPeriod(p.period);
+      setFileName(p.fileName);
+      setPendingPreview(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.startsWith("__CONFLICT__:")) {
+        const ok = window.confirm(`Esiste già un DRMS per ${MONTH_LABELS[p.month - 1]} ${p.year}. Sovrascriverlo con il nuovo file?`);
+        if (ok) return handleConfirmSave(true);
+        return;
+      }
+      toast({ title: "Errore salvataggio", description: msg, variant: "destructive" });
+    }
+  }, [pendingPreview, uploadMutation, toast]);
+
+  const handleCancelPreview = useCallback(() => {
+    setPendingPreview(null);
+    setParseError(null);
+  }, []);
 
   const handleLoadSaved = useCallback(async (id: string) => {
     setParseLoading(true); setParseError(null);
@@ -1150,17 +1282,26 @@ export default function DrmsCommissioning() {
               </h1>
               <p className="mt-4 text-neutral-700 max-w-2xl leading-relaxed">
                 Carica un file DRMS Excel per generare il prospetto dettagliato per capitolo, PV, soglie e driver.
-                I dati vengono salvati su database per organizzazione e mese.
+                Verifica i dati nell'anteprima prima di salvarli sul database (per organizzazione e mese).
               </p>
             </div>
-            <UploadCard
-              loading={parseLoading || uploadMutation.isPending}
-              error={parseError}
-              onFileChosen={handleFileChosen}
-              savedList={savedList}
-              onLoadSaved={handleLoadSaved}
-              onDeleteSaved={handleDeleteSaved}
-            />
+            {pendingPreview ? (
+              <PreviewCard
+                preview={pendingPreview}
+                saving={uploadMutation.isPending}
+                onConfirm={() => handleConfirmSave(pendingPreview.hasConflict)}
+                onCancel={handleCancelPreview}
+              />
+            ) : (
+              <UploadCard
+                loading={parseLoading || uploadMutation.isPending}
+                error={parseError}
+                onFileChosen={handleFileChosen}
+                savedList={savedList}
+                onLoadSaved={handleLoadSaved}
+                onDeleteSaved={handleDeleteSaved}
+              />
+            )}
           </div>
         </div>
       )}

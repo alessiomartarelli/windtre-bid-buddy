@@ -747,7 +747,7 @@ export async function registerRoutes(
         period,
         totaleImporto: totaleImporto !== undefined ? String(totaleImporto) : '0',
         righeCount,
-        rows: rows as unknown as never,
+        rows,
         uploadedBy: profile.id,
       });
       res.json({ id: result.id, month: result.month, year: result.year, period: result.period, righeCount: result.righeCount });
