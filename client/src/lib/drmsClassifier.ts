@@ -180,13 +180,32 @@ const MONTH_MAP: Record<string, number> = {
   LUG: 7, AGO: 8, SET: 9, OTT: 10, NOV: 11, DIC: 12,
 };
 
-/** Estrae mese/anno da period stile "MAR-26" o "Mar 26" */
+/** Estrae mese/anno da period stile "MAR-26", "Mar 26", "2026-02" o "02/2026". */
 export function parsePeriodToMonthYear(period: string): { month: number; year: number } | null {
-  const m = period.toUpperCase().match(/([A-Z]{3})[-\s/]?(\d{2,4})/);
-  if (!m) return null;
-  const month = MONTH_MAP[m[1]];
-  if (!month) return null;
-  let year = parseInt(m[2], 10);
-  if (year < 100) year = 2000 + year;
-  return { month, year };
+  const p = period.trim().toUpperCase();
+  const mAlpha = p.match(/([A-Z]{3})[-\s/.]?(\d{2,4})/);
+  if (mAlpha && MONTH_MAP[mAlpha[1]]) {
+    let year = parseInt(mAlpha[2], 10);
+    if (year < 100) year = 2000 + year;
+    return { month: MONTH_MAP[mAlpha[1]], year };
+  }
+  const mYM = p.match(/^(\d{4})[-/.](\d{1,2})$/);
+  if (mYM) {
+    const year = parseInt(mYM[1], 10);
+    const month = parseInt(mYM[2], 10);
+    if (month >= 1 && month <= 12) return { month, year };
+  }
+  const mMY = p.match(/^(\d{1,2})[-/.](\d{4})$/);
+  if (mMY) {
+    const month = parseInt(mMY[1], 10);
+    const year = parseInt(mMY[2], 10);
+    if (month >= 1 && month <= 12) return { month, year };
+  }
+  const mMYshort = p.match(/^(\d{1,2})[-/.](\d{2})$/);
+  if (mMYshort) {
+    const month = parseInt(mMYshort[1], 10);
+    const year = 2000 + parseInt(mMYshort[2], 10);
+    if (month >= 1 && month <= 12) return { month, year };
+  }
+  return null;
 }
