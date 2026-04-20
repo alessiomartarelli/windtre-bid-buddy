@@ -141,12 +141,30 @@ const MetricBox = ({ label, value, tone, highlight }: {
 // LANDING / UPLOAD CARD
 // =============================================================================
 function UploadCard({
-  loading, error, onFileChosen, savedList, onLoadSaved, onDeleteSaved,
+  loading, error, onFileChosen, savedList, onLoadSaved, onLoadMultiple, onDeleteSaved,
 }: {
   loading: boolean; error: string | null; onFileChosen: (f: File) => void;
-  savedList: DrmsListItem[]; onLoadSaved: (id: string) => void; onDeleteSaved: (id: string) => void;
+  savedList: DrmsListItem[];
+  onLoadSaved: (id: string) => void;
+  onLoadMultiple: (ids: string[]) => void;
+  onDeleteSaved: (id: string) => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSel = (id: string) => {
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+  const selectAll = () => setSelectedIds(new Set(savedList.map(s => s.id)));
+  const selectNone = () => setSelectedIds(new Set());
+  const handleOpenMulti = () => {
+    if (selectedIds.size === 0) return;
+    onLoadMultiple(Array.from(selectedIds));
+    setSelectedIds(new Set());
+  };
   return (
     <div className="space-y-6">
       <div className="relative group">
@@ -204,36 +222,75 @@ function UploadCard({
 
       {savedList.length > 0 && (
         <div className="bg-white border border-neutral-200">
-          <div className="px-5 py-3 border-b border-neutral-200">
-            <div className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 font-semibold">DRMS salvati</div>
+          <div className="px-5 py-3 border-b border-neutral-200 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 font-semibold">DRMS salvati</div>
+              <span className="text-[10px] text-neutral-500 font-mono">
+                {selectedIds.size > 0 ? `${selectedIds.size}/${savedList.length} selezionati` : `${savedList.length} totali`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {savedList.length > 1 && (
+                <>
+                  <button onClick={selectAll} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-select-all-drms">Tutti</button>
+                  <span className="text-neutral-300">·</span>
+                  <button onClick={selectNone} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-select-none-drms">Nessuno</button>
+                </>
+              )}
+              <Button
+                size="sm"
+                onClick={handleOpenMulti}
+                disabled={selectedIds.size === 0 || loading}
+                className="bg-orange-600 hover:bg-orange-700 text-white disabled:bg-neutral-300"
+                data-testid="button-open-selected-drms"
+              >
+                Apri selezionati ({selectedIds.size})
+              </Button>
+            </div>
           </div>
           <div className="divide-y divide-neutral-100">
-            {savedList.map((s) => (
-              <div key={s.id} className="px-5 py-3 flex items-center justify-between gap-3" data-testid={`row-drms-saved-${s.id}`}>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-sm font-medium text-neutral-900">
-                    <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
-                    <span className="truncate">{s.fileName}</span>
-                  </div>
-                  <div className="text-xs text-neutral-500 mt-0.5 font-mono">
-                    {s.period} · {MONTH_LABELS[s.month - 1]} {s.year} · {fmtInt(s.righeCount)} righe · {fmtEur(parseFloat(s.totaleImporto || '0'))}
-                  </div>
-                  {s.uploadedAt && (
-                    <div className="text-[10px] text-neutral-400 mt-0.5 font-mono">
-                      Caricato il {new Date(s.uploadedAt).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}
+            {savedList.map((s) => {
+              const checked = selectedIds.has(s.id);
+              return (
+                <div
+                  key={s.id}
+                  className={`px-5 py-3 flex items-center justify-between gap-3 ${checked ? 'bg-orange-50/50' : ''}`}
+                  data-testid={`row-drms-saved-${s.id}`}
+                >
+                  <label className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleSel(s.id)}
+                      className="w-4 h-4 accent-orange-600 shrink-0"
+                      data-testid={`checkbox-drms-${s.id}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-neutral-900">
+                        <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
+                        <span className="truncate">{s.fileName}</span>
+                      </div>
+                      <div className="text-xs text-neutral-500 mt-0.5 font-mono">
+                        {s.period} · {MONTH_LABELS[s.month - 1]} {s.year} · {fmtInt(s.righeCount)} righe · {fmtEur(parseFloat(s.totaleImporto || '0'))}
+                      </div>
+                      {s.uploadedAt && (
+                        <div className="text-[10px] text-neutral-400 mt-0.5 font-mono">
+                          Caricato il {new Date(s.uploadedAt).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => onLoadSaved(s.id)} data-testid={`button-load-drms-${s.id}`}>
+                      Apri
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => onDeleteSaved(s.id)} className="text-red-600 hover:text-red-700" data-testid={`button-delete-drms-${s.id}`}>
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" onClick={() => onLoadSaved(s.id)} data-testid={`button-load-drms-${s.id}`}>
-                    Apri
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => onDeleteSaved(s.id)} className="text-red-600 hover:text-red-700" data-testid={`button-delete-drms-${s.id}`}>
-                    <Trash2 size={14} />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -334,10 +391,31 @@ function PreviewCard({
 // =============================================================================
 type TabKey = "overview" | "matrix" | "driver" | "pv";
 
+export interface DrmsSource {
+  id: string;
+  period: string;
+  fileName: string;
+  month: number;
+  year: number;
+  righeCount: number;
+  totaleImporto: number;
+}
+
+/** Ordine cronologico di una stringa COMPETENZA tipo "MAR-26" o "2026-02" */
+function competenzaSortKey(c: string): number {
+  if (!c) return 0;
+  const my = parsePeriodToMonthYear(c);
+  if (my) return my.year * 12 + my.month;
+  return 0;
+}
+
 function Dashboard({
-  data, period, fileName, onReset,
+  data, sources, onReset, onRemoveSource,
 }: {
-  data: DrmsRow[]; period: string; fileName: string; onReset: () => void;
+  data: DrmsRow[];
+  sources: DrmsSource[];
+  onReset: () => void;
+  onRemoveSource: (id: string) => void;
 }) {
   const [selectedCapitoli, setSelectedCapitoli] = useState<Set<CapitoloKey>>(
     () => new Set(Object.keys(CAPITOLI_CONFIG) as CapitoloKey[])
@@ -346,27 +424,61 @@ function Dashboard({
   const [searchPV, setSearchPV] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
 
+  // Periodi DRMS (PERIOD = file di provenienza) e Competenze distinti nei dati
+  const periodOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of data) if (r.__PERIOD) s.add(r.__PERIOD);
+    return Array.from(s).sort((a, b) => competenzaSortKey(a) - competenzaSortKey(b));
+  }, [data]);
+
+  const competenzaOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of data) if (r.COMPETENZA) s.add(r.COMPETENZA);
+    return Array.from(s).sort((a, b) => competenzaSortKey(a) - competenzaSortKey(b));
+  }, [data]);
+
+  const [selectedPeriods, setSelectedPeriods] = useState<Set<string>>(new Set());
+  const [selectedComp, setSelectedComp] = useState<Set<string>>(new Set());
+
+  // Re-init filtri quando cambiano le sorgenti
+  useEffect(() => {
+    setSelectedPeriods(new Set(periodOptions));
+  }, [periodOptions]);
+  useEffect(() => {
+    setSelectedComp(new Set(competenzaOptions));
+  }, [competenzaOptions]);
+
+  const isMulti = sources.length > 1;
+  const period = sources.length === 1 ? sources[0].period : `${sources.length} DRMS`;
+
+  // Dataset filtrato senza vincolo sul PV selezionato (usato per liste/aggregazioni globali)
+  const baseFiltered = useMemo(() => {
+    return data.filter(r =>
+      selectedCapitoli.has(r.CAPITOLO) &&
+      (periodOptions.length === 0 || (r.__PERIOD ? selectedPeriods.has(r.__PERIOD) : false)) &&
+      (competenzaOptions.length === 0 || (r.COMPETENZA ? selectedComp.has(r.COMPETENZA) : false))
+    );
+  }, [data, selectedCapitoli, selectedPeriods, selectedComp, periodOptions.length, competenzaOptions.length]);
+
+  const filteredData = useMemo(() => {
+    if (selectedPV === null) return baseFiltered;
+    return baseFiltered.filter(r => r.CODICE_NEGOZIO_COSY === selectedPV);
+  }, [baseFiltered, selectedPV]);
+
   const listaPV = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of data) {
+    for (const r of baseFiltered) {
       if (!r.CODICE_NEGOZIO_COSY) continue;
       map.set(r.CODICE_NEGOZIO_COSY, (map.get(r.CODICE_NEGOZIO_COSY) || 0) + (r.IMPORTO_NUM || 0));
     }
     return Array.from(map.entries()).map(([neg, tot]) => ({ neg, tot })).sort((a, b) => b.tot - a.tot);
-  }, [data]);
+  }, [baseFiltered]);
 
   const filteredPVList = useMemo(() => {
     if (!searchPV) return listaPV;
     const q = searchPV.toLowerCase();
     return listaPV.filter(p => p.neg.toLowerCase().includes(q));
   }, [listaPV, searchPV]);
-
-  const filteredData = useMemo(() => {
-    return data.filter(r =>
-      selectedCapitoli.has(r.CAPITOLO) &&
-      (selectedPV === null || r.CODICE_NEGOZIO_COSY === selectedPV)
-    );
-  }, [data, selectedCapitoli, selectedPV]);
 
   const perCapitolo = useMemo(() => {
     const map: Record<string, { importo: number; righe: number; contratti: Set<string> }> = {};
@@ -418,6 +530,51 @@ function Dashboard({
       .map(([k]) => k);
   }, []);
 
+  // Aggregazione per COMPETENZA con ripartizione per PERIOD
+  const byCompetenza = useMemo(() => {
+    type Bucket = { importo: number; righe: number; contratti: Set<string>; perPeriod: Record<string, number> };
+    const map = new Map<string, Bucket>();
+    for (const r of filteredData) {
+      const c = r.COMPETENZA || "(n/d)";
+      let b = map.get(c);
+      if (!b) { b = { importo: 0, righe: 0, contratti: new Set(), perPeriod: {} }; map.set(c, b); }
+      b.importo += r.IMPORTO_NUM || 0;
+      b.righe += 1;
+      if (r.CODICE_CONTRATTO) b.contratti.add(r.CODICE_CONTRATTO);
+      const p = r.__PERIOD || "(?)";
+      b.perPeriod[p] = (b.perPeriod[p] || 0) + (r.IMPORTO_NUM || 0);
+    }
+    return Array.from(map.entries())
+      .map(([comp, b]) => ({
+        competenza: comp,
+        importo: b.importo,
+        righe: b.righe,
+        contratti: b.contratti.size,
+        perPeriod: b.perPeriod,
+      }))
+      .sort((a, b) => competenzaSortKey(a.competenza) - competenzaSortKey(b.competenza));
+  }, [filteredData]);
+
+  // Aggregazione per PERIOD (file DRMS sorgente)
+  const bySource = useMemo(() => {
+    const map = new Map<string, { period: string; importo: number; righe: number; contratti: Set<string> }>();
+    for (const s of sources) {
+      map.set(s.period, { period: s.period, importo: 0, righe: 0, contratti: new Set() });
+    }
+    for (const r of filteredData) {
+      const p = r.__PERIOD;
+      if (!p) continue;
+      let b = map.get(p);
+      if (!b) { b = { period: p, importo: 0, righe: 0, contratti: new Set() }; map.set(p, b); }
+      b.importo += r.IMPORTO_NUM || 0;
+      b.righe += 1;
+      if (r.CODICE_CONTRATTO) b.contratti.add(r.CODICE_CONTRATTO);
+    }
+    return Array.from(map.values())
+      .map(b => ({ period: b.period, importo: b.importo, righe: b.righe, contratti: b.contratti.size }))
+      .sort((a, b) => competenzaSortKey(a.period) - competenzaSortKey(b.period));
+  }, [filteredData, sources]);
+
   const toggleCapitolo = (c: CapitoloKey) => {
     const s = new Set(selectedCapitoli);
     if (s.has(c)) s.delete(c); else s.add(c);
@@ -447,12 +604,35 @@ function Dashboard({
             </div>
           </div>
         </div>
-        {fileName && (
-          <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-2 border-t border-neutral-200 bg-neutral-50/50 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
+        {sources.length > 0 && (
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-2 border-t border-neutral-200 bg-neutral-50/50 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
               <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
-              <span className="text-[10px] uppercase tracking-wider text-neutral-500 hidden sm:inline">File:</span>
-              <span className="text-xs font-mono text-neutral-900 truncate" data-testid="text-drms-filename">{fileName}</span>
+              <span className="text-[10px] uppercase tracking-wider text-neutral-500 hidden sm:inline">
+                {isMulti ? `${sources.length} DRMS:` : 'File:'}
+              </span>
+              {isMulti ? (
+                sources.map(s => (
+                  <span
+                    key={s.id}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-neutral-300 text-[10px] font-mono text-neutral-800"
+                    data-testid={`chip-source-${s.id}`}
+                    title={s.fileName}
+                  >
+                    {s.period}
+                    <button
+                      onClick={() => onRemoveSource(s.id)}
+                      className="text-neutral-400 hover:text-red-600 ml-0.5"
+                      data-testid={`button-remove-source-${s.id}`}
+                      aria-label={`Rimuovi ${s.period}`}
+                    >
+                      <X size={10} strokeWidth={2.5} />
+                    </button>
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs font-mono text-neutral-900 truncate" data-testid="text-drms-filename">{sources[0].fileName}</span>
+              )}
             </div>
             <button
               onClick={onReset}
@@ -504,21 +684,102 @@ function Dashboard({
               </FilterChip>
             ))}
           </div>
+          {periodOptions.length > 1 && (
+            <div className="border-t border-neutral-200">
+              <div className="px-5 py-2.5 border-b border-neutral-100 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 font-semibold">DRMS (PERIOD)</span>
+                  <span className="text-[11px] text-neutral-500 font-mono">({selectedPeriods.size}/{periodOptions.length})</span>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedPeriods(new Set(periodOptions))} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-period-all">Tutti</button>
+                  <span className="text-neutral-300">·</span>
+                  <button onClick={() => setSelectedPeriods(new Set())} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-period-none">Nessuno</button>
+                </div>
+              </div>
+              <div className="p-4 flex flex-wrap gap-2">
+                {periodOptions.map(p => {
+                  const active = selectedPeriods.has(p);
+                  return (
+                    <FilterChip
+                      key={p}
+                      active={active}
+                      onClick={() => {
+                        const n = new Set(selectedPeriods);
+                        if (n.has(p)) n.delete(p); else n.add(p);
+                        setSelectedPeriods(n);
+                      }}
+                      testId={`filter-period-${p}`}
+                    >
+                      {p}
+                    </FilterChip>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {competenzaOptions.length > 1 && (
+            <div className="border-t border-neutral-200">
+              <div className="px-5 py-2.5 border-b border-neutral-100 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 font-semibold">Competenza</span>
+                  <span className="text-[11px] text-neutral-500 font-mono">({selectedComp.size}/{competenzaOptions.length})</span>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedComp(new Set(competenzaOptions))} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-competenza-all">Tutti</button>
+                  <span className="text-neutral-300">·</span>
+                  <button onClick={() => setSelectedComp(new Set())} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-competenza-none">Nessuno</button>
+                </div>
+              </div>
+              <div className="p-4 flex flex-wrap gap-2">
+                {competenzaOptions.map(c => {
+                  const active = selectedComp.has(c);
+                  return (
+                    <FilterChip
+                      key={c}
+                      active={active}
+                      onClick={() => {
+                        const n = new Set(selectedComp);
+                        if (n.has(c)) n.delete(c); else n.add(c);
+                        setSelectedComp(n);
+                      }}
+                      testId={`filter-competenza-${c}`}
+                    >
+                      {c}
+                    </FilterChip>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {activeTab === "overview" && (
-          <OverviewTab totali={totali} perCapitolo={perCapitolo} matrix={matrix} period={period} />
+          <OverviewTab
+            totali={totali}
+            perCapitolo={perCapitolo}
+            matrix={matrix}
+            period={period}
+            byCompetenza={byCompetenza}
+            bySource={bySource}
+            isMulti={isMulti}
+          />
         )}
         {activeTab === "matrix" && (
-          <MatrixTab matrix={matrix} capitoliOrdinati={capitoliOrdinati.filter(c => selectedCapitoli.has(c))}
-            onSelectPV={(pv) => { setSelectedPV(pv); setActiveTab("pv"); }} />
+          <MatrixTab
+            matrix={matrix}
+            capitoliOrdinati={capitoliOrdinati.filter(c => selectedCapitoli.has(c))}
+            onSelectPV={(pv) => { setSelectedPV(pv); setActiveTab("pv"); }}
+            filteredData={filteredData}
+            includePeriod={isMulti}
+          />
         )}
         {activeTab === "driver" && (
           <DriverTab filteredData={filteredData} perCapitolo={perCapitolo} selectedCapitoli={selectedCapitoli} />
         )}
         {activeTab === "pv" && (
           <PvTab listaPV={filteredPVList} searchPV={searchPV} setSearchPV={setSearchPV}
-            selectedPV={selectedPV} setSelectedPV={setSelectedPV} data={data} period={period} selectedCapitoli={selectedCapitoli} />
+            selectedPV={selectedPV} setSelectedPV={setSelectedPV} data={data} period={period} selectedCapitoli={selectedCapitoli} selectedComp={selectedComp} />
         )}
       </div>
     </div>
@@ -528,12 +789,20 @@ function Dashboard({
 // =============================================================================
 // OVERVIEW
 // =============================================================================
-function OverviewTab({ totali, perCapitolo, matrix, period }: {
+function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySource, isMulti }: {
   totali: { imp: number; righe: number; pagati: number; stornati: number; nonAtt: number; contratti: number; pv: number };
   perCapitolo: Array<{ capitolo: CapitoloKey; importo: number; righe: number; contratti: number; config: { label: string; color: string; order: number } }>;
   matrix: Array<{ neg: string; byCap: Record<string, number>; tot: number }>;
   period: string;
+  byCompetenza: Array<{ competenza: string; importo: number; righe: number; contratti: number; perPeriod: Record<string, number> }>;
+  bySource: Array<{ period: string; importo: number; righe: number; contratti: number }>;
+  isMulti: boolean;
 }) {
+  // Palette stabile per i PERIOD (per la barra impilata in "Andamento per competenza")
+  const PERIOD_PALETTE = ["#f97316", "#3b82f6", "#10b981", "#8b5cf6", "#eab308", "#ef4444", "#06b6d4", "#a855f7", "#84cc16", "#f43f5e"];
+  const periodColor: Record<string, string> = {};
+  bySource.forEach((s, i) => { periodColor[s.period] = PERIOD_PALETTE[i % PERIOD_PALETTE.length]; });
+  const grandImp = bySource.reduce((s, b) => s + b.importo, 0) || totali.imp || 1;
   const TOP_N = Math.min(10, matrix.filter(r => r.tot > 0).length);
   const topPV = matrix.filter(r => r.tot > 0).slice(0, TOP_N);
   const bottomPV = matrix.filter(r => r.tot < 0);
@@ -584,6 +853,108 @@ function OverviewTab({ totali, perCapitolo, matrix, period }: {
         </div>
       </div>
 
+      {byCompetenza.length > 1 && (
+        <div>
+          <SectionHead
+            eyebrow={isMulti ? "Cross-DRMS" : "Mensilizzazione"}
+            title="Andamento per competenza"
+          />
+          <div className="bg-white border border-neutral-200 overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="border-b-2 border-neutral-900">
+                  <th className="text-left px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">Competenza</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 whitespace-nowrap">Righe</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 whitespace-nowrap">Contratti</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 whitespace-nowrap">Importo</th>
+                  {isMulti && (
+                    <th className="text-left px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 w-[280px]">Ripartizione per DRMS</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {byCompetenza.map(c => {
+                  const tot = Object.values(c.perPeriod).reduce((s, v) => s + v, 0);
+                  const absTot = Object.values(c.perPeriod).reduce((s, v) => s + Math.abs(v), 0) || 1;
+                  return (
+                    <tr key={c.competenza} className="border-b border-neutral-100 hover:bg-orange-50/30" data-testid={`row-competenza-${c.competenza}`}>
+                      <td className="px-4 py-2 font-mono text-neutral-900 font-semibold">{c.competenza}</td>
+                      <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(c.righe)}</td>
+                      <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(c.contratti)}</td>
+                      <td className={`px-4 py-2 text-right font-mono font-semibold tabular-nums ${tot < 0 ? 'text-red-700' : 'text-neutral-900'}`}>{fmtEur(tot)}</td>
+                      {isMulti && (
+                        <td className="px-4 py-2">
+                          <div className="flex h-3 w-full bg-neutral-100 overflow-hidden">
+                            {bySource.map(src => {
+                              const v = Math.abs(c.perPeriod[src.period] || 0);
+                              if (v === 0) return null;
+                              const w = (v / absTot) * 100;
+                              return (
+                                <div
+                                  key={src.period}
+                                  style={{ width: `${w}%`, background: periodColor[src.period] }}
+                                  title={`${src.period}: ${fmtEur(c.perPeriod[src.period] || 0)}`}
+                                />
+                              );
+                            })}
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {bySource.filter(s => (c.perPeriod[s.period] || 0) !== 0).map(s => (
+                              <span key={s.period} className="text-[9px] font-mono text-neutral-500 inline-flex items-center gap-1">
+                                <span className="w-1.5 h-1.5" style={{ background: periodColor[s.period] }} />
+                                {s.period}: {fmtEur(c.perPeriod[s.period] || 0)}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {isMulti && (
+            <div className="mt-2 text-[10px] uppercase tracking-wider text-neutral-500">
+              I colori indicano da quale DRMS (PERIOD) provengono gli importi di ogni mese di competenza. Utile per leggere gli arretrati.
+            </div>
+          )}
+        </div>
+      )}
+
+      {isMulti && bySource.length > 1 && (
+        <div>
+          <SectionHead eyebrow="Per file caricato" title="Subtotali per DRMS (PERIOD)" />
+          <div className="bg-white border border-neutral-200">
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="border-b-2 border-neutral-900">
+                  <th className="text-left px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">DRMS</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">Righe</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">Contratti</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">Importo</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">Quota</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bySource.map(s => (
+                  <tr key={s.period} className="border-b border-neutral-100" data-testid={`row-source-${s.period}`}>
+                    <td className="px-4 py-2 flex items-center gap-2 font-mono text-neutral-900 font-semibold">
+                      <span className="w-2 h-2" style={{ background: periodColor[s.period] }} />
+                      {s.period}
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(s.righe)}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(s.contratti)}</td>
+                    <td className={`px-4 py-2 text-right font-mono font-semibold tabular-nums ${s.importo < 0 ? 'text-red-700' : 'text-neutral-900'}`}>{fmtEur(s.importo)}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-500">{fmtPct(s.importo, grandImp)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <SectionHead eyebrow={`Top ${TOP_N}`} title="Migliori PV" />
@@ -619,10 +990,12 @@ function OverviewTab({ totali, perCapitolo, matrix, period }: {
 // =============================================================================
 // MATRIX
 // =============================================================================
-function MatrixTab({ matrix, capitoliOrdinati, onSelectPV }: {
+function MatrixTab({ matrix, capitoliOrdinati, onSelectPV, filteredData, includePeriod }: {
   matrix: Array<{ neg: string; byCap: Record<string, number>; tot: number }>;
   capitoliOrdinati: CapitoloKey[];
   onSelectPV: (pv: string) => void;
+  filteredData: DrmsRow[];
+  includePeriod: boolean;
 }) {
   const maxAbs = useMemo(() => {
     let m = 0;
@@ -637,6 +1010,33 @@ function MatrixTab({ matrix, capitoliOrdinati, onSelectPV }: {
   }, [matrix]);
 
   const handleDownload = () => {
+    if (includePeriod) {
+      // Esporta una riga per (PV × PERIOD), così l'utente vede l'origine DRMS
+      const map = new Map<string, Record<string, number>>();
+      for (const r of filteredData) {
+        if (!r.CODICE_NEGOZIO_COSY || !r.CAPITOLO) continue;
+        const key = `${r.__PERIOD || '(?)'}|${r.CODICE_NEGOZIO_COSY}`;
+        if (!map.has(key)) map.set(key, {});
+        const o = map.get(key)!;
+        o[r.CAPITOLO] = (o[r.CAPITOLO] || 0) + (r.IMPORTO_NUM || 0);
+      }
+      const rows: Array<Record<string, unknown>> = [];
+      for (const [key, byCap] of Array.from(map.entries())) {
+        const [period, neg] = key.split("|");
+        const o: Record<string, unknown> = { PERIOD: period, Negozio: neg };
+        let tot = 0;
+        for (const c of capitoliOrdinati) {
+          const v = byCap[c] || 0;
+          o[CAPITOLI_CONFIG[c].label] = v;
+          tot += v;
+        }
+        o.Totale = tot;
+        rows.push(o);
+      }
+      rows.sort((a, b) => String(a.PERIOD).localeCompare(String(b.PERIOD)) || String(a.Negozio).localeCompare(String(b.Negozio)));
+      downloadCSV(`matrice_pv_capitolo_per_drms_${Date.now()}.csv`, rows);
+      return;
+    }
     const rows = matrix.map(r => {
       const o: Record<string, unknown> = { Negozio: r.neg };
       for (const c of capitoliOrdinati) o[CAPITOLI_CONFIG[c].label] = r.byCap[c] || 0;
@@ -893,15 +1293,18 @@ function DetailTable({ title, data, showContratti }: {
 // =============================================================================
 // PV TAB
 // =============================================================================
-function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data, period, selectedCapitoli }: {
+function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data, period, selectedCapitoli, selectedComp }: {
   listaPV: Array<{ neg: string; tot: number }>;
   searchPV: string; setSearchPV: (s: string) => void;
   selectedPV: string | null; setSelectedPV: (s: string | null) => void;
   data: DrmsRow[]; period: string; selectedCapitoli: Set<CapitoloKey>;
+  selectedComp: Set<string>;
 }) {
+  // In multi-file la nozione di "in periodo" è data dai mesi di competenza selezionati
+  const inComp = (c: string) => selectedComp.size === 0 || selectedComp.has(c);
   const pvData = useMemo(() => {
     if (!selectedPV) return null;
-    const rows = data.filter(r => r.CODICE_NEGOZIO_COSY === selectedPV && selectedCapitoli.has(r.CAPITOLO));
+    const rows = data.filter(r => r.CODICE_NEGOZIO_COSY === selectedPV && selectedCapitoli.has(r.CAPITOLO) && (!r.COMPETENZA || inComp(r.COMPETENZA)));
     const byCap: Record<string, { righe: DrmsRow[]; importo: number; contratti: Set<string> }> = {};
     for (const r of rows) {
       const c = r.CAPITOLO;
@@ -915,7 +1318,7 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
     let metricheMobile: { nTot: number; nTied: number; nUntied: number; nMnp: number; nMib: number; nPagati: number; nStornati: number; nNonAtt: number; soglia: number } | null = null;
     const mobile = byCap.MOBILE;
     if (mobile) {
-      const contrattuali = mobile.righe.filter(r => r.NATURA === 'CONTRATTUALE' && r.DESCRIZIONE_EVENTO === 'Contrattuale Attivazioni Mobile' && r.COMPETENZA === period);
+      const contrattuali = mobile.righe.filter(r => r.NATURA === 'CONTRATTUALE' && r.DESCRIZIONE_EVENTO === 'Contrattuale Attivazioni Mobile' && inComp(r.COMPETENZA));
       const seen = new Set<string>(); const dedup: DrmsRow[] = [];
       for (const r of contrattuali) if (r.CODICE_CONTRATTO && !seen.has(r.CODICE_CONTRATTO)) { seen.add(r.CODICE_CONTRATTO); dedup.push(r); }
       const nTied = dedup.filter(r => r.TIPO_ATTIVAZIONE === 'TIED').length;
@@ -934,7 +1337,7 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
     let metricheFisso: { nTot: number; nFtth: number; nFwa: number; nLna: number; nLa: number; nMib: number; nConv: number; soglia: number } | null = null;
     const fisso = byCap.FISSO;
     if (fisso) {
-      const contrattuali = fisso.righe.filter(r => r.NATURA === 'CONTRATTUALE' && r.DESCRIZIONE_EVENTO === 'Attivazione Fonia Fissa GA' && r.COMPETENZA === period);
+      const contrattuali = fisso.righe.filter(r => r.NATURA === 'CONTRATTUALE' && r.DESCRIZIONE_EVENTO === 'Attivazione Fonia Fissa GA' && inComp(r.COMPETENZA));
       const seen = new Set<string>(); const dedup: DrmsRow[] = [];
       for (const r of contrattuali) if (r.CODICE_CONTRATTO && !seen.has(r.CODICE_CONTRATTO)) { seen.add(r.CODICE_CONTRATTO); dedup.push(r); }
       const nFtth = dedup.filter(r => r.TIPO_ACCESSO && /FTTH/i.test(r.TIPO_ACCESSO)).length;
@@ -1093,8 +1496,7 @@ export default function DrmsCommissioning() {
   const isAuthorized = !!profile && ["admin", "super_admin"].includes(profile.role);
 
   const [parsedData, setParsedData] = useState<DrmsRow[] | null>(null);
-  const [period, setPeriod] = useState<string>("");
-  const [fileName, setFileName] = useState<string>("");
+  const [sources, setSources] = useState<DrmsSource[]>([]);
   const [parseLoading, setParseLoading] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [pendingPreview, setPendingPreview] = useState<PendingPreview | null>(null);
@@ -1196,13 +1598,22 @@ export default function DrmsCommissioning() {
     if (!pendingPreview) return;
     const p = pendingPreview;
     try {
-      await uploadMutation.mutateAsync({
+      const saved = await uploadMutation.mutateAsync({
         fileName: p.fileName, month: p.month, year: p.year, period: p.period,
         totaleImporto: p.totale, righeCount: p.righeCount, rows: p.rows, overwrite,
       });
-      setParsedData(p.rows);
-      setPeriod(p.period);
-      setFileName(p.fileName);
+      const id: string = saved?.id || saved?.upload?.id || `tmp-${Date.now()}`;
+      const tagged: DrmsRow[] = p.rows.map(r => ({ ...r, __PERIOD: p.period, __UPLOAD_ID: id }));
+      setParsedData(tagged);
+      setSources([{
+        id,
+        period: p.period,
+        fileName: p.fileName,
+        month: p.month,
+        year: p.year,
+        righeCount: p.righeCount,
+        totaleImporto: p.totale,
+      }]);
       setPendingPreview(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -1226,9 +1637,17 @@ export default function DrmsCommissioning() {
       const res = await fetch(apiUrl(`/api/drms/${id}`), { credentials: "include" });
       if (!res.ok) throw new Error("Errore caricamento DRMS salvato");
       const upload: DrmsUploadFull = await res.json();
-      setParsedData(upload.rows);
-      setPeriod(upload.period);
-      setFileName(upload.fileName);
+      const tagged: DrmsRow[] = upload.rows.map(r => ({ ...r, __PERIOD: upload.period, __UPLOAD_ID: upload.id }));
+      setParsedData(tagged);
+      setSources([{
+        id: upload.id,
+        period: upload.period,
+        fileName: upload.fileName,
+        month: upload.month,
+        year: upload.year,
+        righeCount: upload.righeCount,
+        totaleImporto: parseFloat(upload.totaleImporto || "0") || 0,
+      }]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setParseError(msg);
@@ -1237,6 +1656,55 @@ export default function DrmsCommissioning() {
       setParseLoading(false);
     }
   }, [toast]);
+
+  const handleLoadMultiple = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    if (ids.length === 1) return handleLoadSaved(ids[0]);
+    setParseLoading(true); setParseError(null);
+    try {
+      const results = await Promise.all(ids.map(async id => {
+        const res = await fetch(apiUrl(`/api/drms/${id}`), { credentials: "include" });
+        if (!res.ok) throw new Error(`Errore caricamento DRMS ${id}`);
+        return res.json() as Promise<DrmsUploadFull>;
+      }));
+      const allRows: DrmsRow[] = [];
+      const newSources: DrmsSource[] = [];
+      for (const u of results) {
+        for (const r of u.rows) allRows.push({ ...r, __PERIOD: u.period, __UPLOAD_ID: u.id });
+        newSources.push({
+          id: u.id, period: u.period, fileName: u.fileName,
+          month: u.month, year: u.year,
+          righeCount: u.righeCount,
+          totaleImporto: parseFloat(u.totaleImporto || "0") || 0,
+        });
+      }
+      newSources.sort((a, b) => competenzaSortKey(a.period) - competenzaSortKey(b.period));
+      setParsedData(allRows);
+      setSources(newSources);
+      toast({
+        title: "DRMS consolidati",
+        description: `${newSources.length} file caricati (${allRows.length.toLocaleString('it-IT')} righe).`,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setParseError(msg);
+      toast({ title: "Errore", description: msg, variant: "destructive" });
+    } finally {
+      setParseLoading(false);
+    }
+  }, [toast, handleLoadSaved]);
+
+  const handleRemoveSource = useCallback((id: string) => {
+    setSources(prev => {
+      const next = prev.filter(s => s.id !== id);
+      if (next.length === 0) {
+        setParsedData(null);
+        return next;
+      }
+      setParsedData(curr => (curr ? curr.filter(r => r.__UPLOAD_ID !== id) : curr));
+      return next;
+    });
+  }, []);
 
   const handleDeleteSaved = useCallback(async (id: string) => {
     if (!window.confirm("Eliminare definitivamente questo DRMS?")) return;
@@ -1247,7 +1715,7 @@ export default function DrmsCommissioning() {
     }
   }, [deleteMutation, toast]);
 
-  const handleReset = () => { setParsedData(null); setPeriod(""); setFileName(""); };
+  const handleReset = () => { setParsedData(null); setSources([]); };
 
   if (authLoading || !profile) {
     return (
@@ -1264,7 +1732,7 @@ export default function DrmsCommissioning() {
     <>
       <AppNavbar title="DRMS Commissioning" />
       {parsedData ? (
-        <Dashboard data={parsedData} period={period} fileName={fileName} onReset={handleReset} />
+        <Dashboard data={parsedData} sources={sources} onReset={handleReset} onRemoveSource={handleRemoveSource} />
       ) : (
         <div className="bg-[#faf8f4] min-h-[calc(100vh-60px)]">
           <div className="max-w-5xl mx-auto px-4 sm:px-8 py-8">
@@ -1294,6 +1762,7 @@ export default function DrmsCommissioning() {
                 onFileChosen={handleFileChosen}
                 savedList={savedList}
                 onLoadSaved={handleLoadSaved}
+                onLoadMultiple={handleLoadMultiple}
                 onDeleteSaved={handleDeleteSaved}
               />
             )}

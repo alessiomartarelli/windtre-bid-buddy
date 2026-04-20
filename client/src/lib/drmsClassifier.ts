@@ -66,6 +66,10 @@ export interface DrmsRow {
   FLAG_SOGLIA_MOBILE: string;
   FLAG_SOGLIA_FISSA: string;
   IMPORTO_NUM: number;
+  /** PERIOD del file DRMS di provenienza (assegnato dopo classificazione, in caso di consolidato multi-file) */
+  __PERIOD?: string;
+  /** ID dell'upload DRMS di provenienza (debug / source tracking) */
+  __UPLOAD_ID?: string;
 }
 
 type RawRow = Record<string, unknown>;
