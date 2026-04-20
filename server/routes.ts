@@ -1675,10 +1675,48 @@ export async function registerRoutes(
 
       const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
       const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const inGaraOnly = req.query.inGaraOnly === 'true' || req.query.inGaraOnly === '1';
+      const garaConfigId = (req.query.garaConfigId as string) || undefined;
 
       const { from, to } = italianDateRange(new Date(year, month - 1, 1), new Date(year, month, 0, 23, 59, 59));
 
-      const sales = await storage.getBisuiteSales(orgId, from, to);
+      const allSales = await storage.getBisuiteSales(orgId, from, to);
+
+      type CalendarShape = {
+        weeklySchedule: { workingDays: number[] };
+        specialDays?: { date: string; isOpen: boolean }[];
+      };
+      const calendarByPos = new Map<string, CalendarShape>();
+      let calendarsAvailable = false;
+      if (inGaraOnly) {
+        const garaCfg = garaConfigId
+          ? await storage.getGaraConfigById(garaConfigId)
+          : await storage.getGaraConfig(orgId, month, year);
+        const pdvList = ((garaCfg?.config as { pdvList?: Array<{ codicePos?: string; calendar?: CalendarShape }> } | undefined)?.pdvList) || [];
+        for (const p of pdvList) {
+          if (p.codicePos && p.calendar?.weeklySchedule?.workingDays) {
+            calendarByPos.set(p.codicePos, p.calendar);
+            calendarsAvailable = true;
+          }
+        }
+      }
+
+      const isSaleInGara = (sale: typeof allSales[number]): boolean => {
+        if (!sale.dataVendita) return true;
+        const cal = sale.codicePos ? calendarByPos.get(sale.codicePos) : undefined;
+        if (!cal) return true; // Fallback: PDV senza calendario configurato
+        const d = new Date(sale.dataVendita);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const special = cal.specialDays?.find((s) => s.date === iso);
+        if (special) return special.isOpen;
+        return cal.weeklySchedule.workingDays.includes(d.getDay());
+      };
+
+      const sales = inGaraOnly && calendarsAvailable
+        ? allSales.filter(isSaleInGara)
+        : allSales;
+      const totalSalesUnfiltered = allSales.length;
+      const salesExcludedOutOfGara = inGaraOnly ? totalSalesUnfiltered - sales.length : 0;
 
       const sysMapping = await storage.getSystemConfig("bisuite_mapping");
       const mappingConfig = sysMapping?.config as { rules?: BiSuiteMappingRule[] } | null;
@@ -1858,6 +1896,10 @@ export async function registerRoutes(
         totaliPerPista,
         totaliAddonsPerPista,
         latestSaleDate: latestSaleDate ? latestSaleDate.toISOString() : null,
+        inGaraOnly,
+        totalSalesUnfiltered,
+        salesExcludedOutOfGara,
+        calendarsAvailable,
       });
     } catch (error: unknown) {
       console.error("BiSuite mapped sales error:", error);

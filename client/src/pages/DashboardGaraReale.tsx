@@ -144,6 +144,10 @@ interface MappedSalesResponse {
   totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number }>>;
   totaliAddonsPerPista?: Record<string, Record<string, { targetCategory: string; targetLabel: string; occorrenze: number; canone: number }>>;
   latestSaleDate: string | null;
+  inGaraOnly?: boolean;
+  totalSalesUnfiltered?: number;
+  salesExcludedOutOfGara?: number;
+  calendarsAvailable?: boolean;
 }
 
 interface OrgConfigPdv {
@@ -896,12 +900,19 @@ export default function DashboardGaraReale() {
   const effectiveConfigId = selectedConfigId || (configList && configList.length > 0 ? configList[0].id : "");
 
   const { data: mappedData, isLoading: loadingMapped } = useQuery<MappedSalesResponse>({
-    queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear],
+    queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear, effectiveConfigId, "inGara"],
     queryFn: async () => {
-      const res = await fetch(apiUrl(`/api/admin/bisuite-mapped-sales?month=${selMonth}&year=${selYear}`), { credentials: "include" });
+      const params = new URLSearchParams({
+        month: String(selMonth),
+        year: String(selYear),
+        inGaraOnly: "true",
+      });
+      if (effectiveConfigId) params.set("garaConfigId", effectiveConfigId);
+      const res = await fetch(apiUrl(`/api/admin/bisuite-mapped-sales?${params.toString()}`), { credentials: "include" });
       if (!res.ok) throw new Error("Errore nel caricamento dati");
       return res.json();
     },
+    enabled: !!configList,
   });
 
   const { data: garaConfig, isLoading: loadingConfig } = useQuery<GaraConfigRecord | null>({
@@ -2122,6 +2133,26 @@ export default function DashboardGaraReale() {
               <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5" data-testid="text-latest-sale-info">
                 <BarChart3 className="h-4 w-4" />
                 Dati aggiornati al: <span className="font-semibold text-gray-700 dark:text-gray-200">{new Date(mappedData.latestSaleDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+              </div>
+            )}
+            {mappedData.inGaraOnly && mappedData.calendarsAvailable && (
+              <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 -mt-1" data-testid="text-in-gara-info">
+                <Calendar className="h-3.5 w-3.5" />
+                <span>
+                  Solo vendite in giorni di gara: <span className="font-semibold text-gray-700 dark:text-gray-200">{mappedData.totalSales.toLocaleString('it-IT')}</span>
+                  {typeof mappedData.totalSalesUnfiltered === 'number' && (
+                    <> / {mappedData.totalSalesUnfiltered.toLocaleString('it-IT')}</>
+                  )}
+                  {(mappedData.salesExcludedOutOfGara ?? 0) > 0 && (
+                    <> — escluse <span className="font-semibold text-gray-700 dark:text-gray-200">{mappedData.salesExcludedOutOfGara!.toLocaleString('it-IT')}</span> fuori giornata gara</>
+                  )}
+                </span>
+              </div>
+            )}
+            {mappedData.inGaraOnly && !mappedData.calendarsAvailable && (
+              <div className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 -mt-1" data-testid="text-no-calendar-info">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>Nessun calendario PDV configurato in gara — vengono mostrate tutte le vendite del mese.</span>
               </div>
             )}
 
