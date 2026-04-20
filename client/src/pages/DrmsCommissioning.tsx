@@ -779,7 +779,7 @@ function Dashboard({
         )}
         {activeTab === "pv" && (
           <PvTab listaPV={filteredPVList} searchPV={searchPV} setSearchPV={setSearchPV}
-            selectedPV={selectedPV} setSelectedPV={setSelectedPV} data={data} period={period} selectedCapitoli={selectedCapitoli} selectedComp={selectedComp} />
+            selectedPV={selectedPV} setSelectedPV={setSelectedPV} data={baseFiltered} period={period} selectedCapitoli={selectedCapitoli} selectedComp={selectedComp} />
         )}
       </div>
     </div>
@@ -1353,7 +1353,7 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
     }
 
     return { rows, byCap, tot, metricheMobile, metricheFisso };
-  }, [selectedPV, data, period, selectedCapitoli]);
+  }, [selectedPV, data, period, selectedCapitoli, selectedComp]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
