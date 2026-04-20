@@ -123,7 +123,18 @@ export function classificaRiga(row: RawRow, periodComp: string): CapitoloKey | n
 function toNum(v: unknown): number {
   if (v === null || v === undefined) return 0;
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-  const s = String(v).trim().replace(/\./g, "").replace(",", ".");
+  let s = String(v).trim();
+  if (!s) return 0;
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+  if (hasComma && hasDot) {
+    // Formato italiano "1.234,56" → punto = migliaia, virgola = decimale
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (hasComma) {
+    // Solo virgola → decimale italiano
+    s = s.replace(",", ".");
+  }
+  // Solo punto (o nessuno) → punto = decimale (formato US/SheetJS)
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : 0;
 }
