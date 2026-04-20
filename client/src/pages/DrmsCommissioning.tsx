@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiUrl } from "@/lib/basePath";
 import { AppNavbar } from "@/components/AppNavbar";
-import * as XLSX from "xlsx";
+import { parseExcelFile } from "@/lib/drmsParser";
 import {
   Upload, Download, AlertCircle, CheckCircle2, TrendingUp, TrendingDown,
   Store, FileSpreadsheet, Filter, BarChart3, Search, X, ChevronRight,
@@ -18,8 +18,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-type RawXlsxRow = Record<string, unknown>;
 
 const fmtEur = (v: number | null | undefined) => {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
@@ -50,14 +48,6 @@ function downloadCSV(filename: string, rows: Array<Record<string, unknown>>) {
   const a = document.createElement("a");
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
-}
-
-async function parseExcelFile(file: File): Promise<RawXlsxRow[]> {
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array" });
-  const sheetName = wb.SheetNames.includes("Estratto conto") ? "Estratto conto" : wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json<RawXlsxRow>(ws, { defval: null, raw: false });
 }
 
 interface DrmsListItem {
@@ -228,6 +218,11 @@ function UploadCard({
                   <div className="text-xs text-neutral-500 mt-0.5 font-mono">
                     {s.period} · {MONTH_LABELS[s.month - 1]} {s.year} · {fmtInt(s.righeCount)} righe · {fmtEur(parseFloat(s.totaleImporto || '0'))}
                   </div>
+                  {s.uploadedAt && (
+                    <div className="text-[10px] text-neutral-400 mt-0.5 font-mono">
+                      Caricato il {new Date(s.uploadedAt).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button size="sm" variant="outline" onClick={() => onLoadSaved(s.id)} data-testid={`button-load-drms-${s.id}`}>
