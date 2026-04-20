@@ -117,6 +117,23 @@ export const garaConfig = pgTable("gara_config", {
   index("IDX_gara_config_org_month_year").on(table.organizationId, table.month, table.year),
 ]);
 
+// DRMS Uploads (DRMS Commissioning Excel uploads, per org+month)
+export const drmsUploads = pgTable("drms_uploads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  fileName: varchar("file_name").notNull(),
+  period: varchar("period").notNull(),
+  totaleImporto: varchar("totale_importo").default('0'),
+  righeCount: integer("righe_count").notNull().default(0),
+  rows: jsonb("rows").notNull().default([]),
+  uploadedBy: varchar("uploaded_by").references(() => profiles.id),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+}, (table) => [
+  index("IDX_drms_uploads_org_month_year").on(table.organizationId, table.month, table.year),
+]);
+
 // Password reset tokens
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -171,5 +188,8 @@ export type InsertBisuiteSale = typeof bisuiteSales.$inferInsert;
 
 export type GaraConfig = typeof garaConfig.$inferSelect;
 export type InsertGaraConfig = typeof garaConfig.$inferInsert;
+
+export type DrmsUpload = typeof drmsUploads.$inferSelect;
+export type InsertDrmsUpload = typeof drmsUploads.$inferInsert;
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];

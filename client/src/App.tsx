@@ -20,6 +20,7 @@ import MappaturaBiSuite from "@/pages/MappaturaBiSuite";
 import DashboardGaraReale from "@/pages/DashboardGaraReale";
 import ConfigurazioneGara from "@/pages/ConfigurazioneGara";
 import Amministrazione from "@/pages/Amministrazione";
+import DrmsCommissioning from "@/pages/DrmsCommissioning";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -78,6 +79,9 @@ function Router() {
       </Route>
       <Route path="/amministrazione">
         {() => <ProtectedRoute component={Amministrazione} />}
+      </Route>
+      <Route path="/drms-commissioning">
+        {() => <ProtectedRoute component={DrmsCommissioning} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

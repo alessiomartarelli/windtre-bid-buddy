@@ -664,6 +664,115 @@ export async function registerRoutes(
     }
   });
 
+  // === DRMS Commissioning Uploads ===
+  const drmsUploadSchema = z.object({
+    fileName: z.string().min(1).max(255),
+    month: z.number().int().min(1).max(12),
+    year: z.number().int().min(2020).max(2100),
+    period: z.string().min(1).max(20),
+    totaleImporto: z.number().or(z.string()).optional(),
+    righeCount: z.number().int().nonnegative(),
+    rows: z.array(z.record(z.unknown())),
+    overwrite: z.boolean().optional(),
+  });
+
+  app.get("/api/drms", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const list = await storage.listDrmsUploads(profile.organizationId!);
+      res.json(list);
+    } catch (e) {
+      console.error("Error listing DRMS uploads:", e);
+      res.status(500).json({ message: "Errore nel recupero degli upload DRMS" });
+    }
+  });
+
+  app.get("/api/drms/by-period", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const month = parseInt(req.query.month as string);
+      const year = parseInt(req.query.year as string);
+      if (isNaN(month) || isNaN(year) || month < 1 || month > 12) {
+        return res.status(400).json({ message: "Parametri month/year non validi" });
+      }
+      const upload = await storage.getDrmsUploadByPeriod(profile.organizationId!, month, year);
+      res.json(upload || null);
+    } catch (e) {
+      console.error("Error fetching DRMS by period:", e);
+      res.status(500).json({ message: "Errore nel recupero del DRMS per periodo" });
+    }
+  });
+
+  app.get("/api/drms/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const upload = await storage.getDrmsUpload(req.params.id);
+      if (!upload || upload.organizationId !== profile.organizationId) {
+        return res.status(404).json({ message: "Upload DRMS non trovato" });
+      }
+      res.json(upload);
+    } catch (e) {
+      console.error("Error fetching DRMS upload:", e);
+      res.status(500).json({ message: "Errore nel recupero dell'upload DRMS" });
+    }
+  });
+
+  app.post("/api/drms", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const parsed = drmsUploadSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Dati DRMS non validi", errors: parsed.error.flatten() });
+      }
+      const { fileName, month, year, period, totaleImporto, righeCount, rows, overwrite } = parsed.data;
+
+      if (overwrite) {
+        await storage.deleteDrmsUploadsByPeriod(profile.organizationId!, month, year);
+      } else {
+        const existing = await storage.getDrmsUploadByPeriod(profile.organizationId!, month, year);
+        if (existing) {
+          return res.status(409).json({ message: "Esiste già un DRMS per questo periodo. Usa overwrite=true per sovrascriverlo.", existingId: existing.id });
+        }
+      }
+
+      const result = await storage.createDrmsUpload({
+        organizationId: profile.organizationId!,
+        month,
+        year,
+        fileName,
+        period,
+        totaleImporto: totaleImporto !== undefined ? String(totaleImporto) : '0',
+        righeCount,
+        rows: rows as unknown as never,
+        uploadedBy: profile.id,
+      });
+      res.json({ id: result.id, month: result.month, year: result.year, period: result.period, righeCount: result.righeCount });
+    } catch (e) {
+      console.error("Error saving DRMS upload:", e);
+      res.status(500).json({ message: "Errore nel salvataggio dell'upload DRMS" });
+    }
+  });
+
+  app.delete("/api/drms/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const upload = await storage.getDrmsUpload(req.params.id);
+      if (!upload || upload.organizationId !== profile.organizationId) {
+        return res.status(404).json({ message: "Upload DRMS non trovato" });
+      }
+      await storage.deleteDrmsUpload(req.params.id);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("Error deleting DRMS upload:", e);
+      res.status(500).json({ message: "Errore nell'eliminazione dell'upload DRMS" });
+    }
+  });
+
   // === ADMIN: Import RS/PDV from BiSuite sales ===
   app.get("/api/admin/bisuite-rs-pdv", isAuthenticated, async (req: any, res) => {
     try {

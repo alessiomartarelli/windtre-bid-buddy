@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig } from "@shared/schema";
+import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload } from "@shared/schema";
 import { eq, desc, and, isNull, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -55,6 +55,14 @@ export interface IStorage {
   deleteGaraConfig(id: string): Promise<void>;
   listGaraConfigs(orgId: string, month: number, year: number): Promise<{ id: string; name: string | null; month: number; year: number; updatedAt: Date | null; createdAt: Date | null }[]>;
   listGaraConfigHistory(orgId: string): Promise<{ month: number; year: number; updatedAt: Date | null }[]>;
+
+  // DRMS Uploads
+  listDrmsUploads(orgId: string): Promise<Array<{ id: string; month: number; year: number; period: string; fileName: string; totaleImporto: string | null; righeCount: number; uploadedBy: string | null; uploadedAt: Date | null }>>;
+  getDrmsUpload(id: string): Promise<DrmsUpload | undefined>;
+  getDrmsUploadByPeriod(orgId: string, month: number, year: number): Promise<DrmsUpload | undefined>;
+  createDrmsUpload(upload: InsertDrmsUpload): Promise<DrmsUpload>;
+  deleteDrmsUploadsByPeriod(orgId: string, month: number, year: number): Promise<void>;
+  deleteDrmsUpload(id: string): Promise<void>;
 
   // Password Reset Tokens
   createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
@@ -340,6 +348,57 @@ export class DatabaseStorage implements IStorage {
       .where(eq(garaConfig.organizationId, orgId))
       .orderBy(desc(garaConfig.year), desc(garaConfig.month));
     return results;
+  }
+
+  // DRMS Uploads
+  async listDrmsUploads(orgId: string) {
+    return await db.select({
+      id: drmsUploads.id,
+      month: drmsUploads.month,
+      year: drmsUploads.year,
+      period: drmsUploads.period,
+      fileName: drmsUploads.fileName,
+      totaleImporto: drmsUploads.totaleImporto,
+      righeCount: drmsUploads.righeCount,
+      uploadedBy: drmsUploads.uploadedBy,
+      uploadedAt: drmsUploads.uploadedAt,
+    }).from(drmsUploads)
+      .where(eq(drmsUploads.organizationId, orgId))
+      .orderBy(desc(drmsUploads.year), desc(drmsUploads.month), desc(drmsUploads.uploadedAt));
+  }
+
+  async getDrmsUpload(id: string): Promise<DrmsUpload | undefined> {
+    const [r] = await db.select().from(drmsUploads).where(eq(drmsUploads.id, id));
+    return r;
+  }
+
+  async getDrmsUploadByPeriod(orgId: string, month: number, year: number): Promise<DrmsUpload | undefined> {
+    const [r] = await db.select().from(drmsUploads)
+      .where(and(
+        eq(drmsUploads.organizationId, orgId),
+        eq(drmsUploads.month, month),
+        eq(drmsUploads.year, year),
+      ))
+      .orderBy(desc(drmsUploads.uploadedAt))
+      .limit(1);
+    return r;
+  }
+
+  async createDrmsUpload(upload: InsertDrmsUpload): Promise<DrmsUpload> {
+    const [r] = await db.insert(drmsUploads).values(upload).returning();
+    return r;
+  }
+
+  async deleteDrmsUploadsByPeriod(orgId: string, month: number, year: number): Promise<void> {
+    await db.delete(drmsUploads).where(and(
+      eq(drmsUploads.organizationId, orgId),
+      eq(drmsUploads.month, month),
+      eq(drmsUploads.year, year),
+    ));
+  }
+
+  async deleteDrmsUpload(id: string): Promise<void> {
+    await db.delete(drmsUploads).where(eq(drmsUploads.id, id));
   }
 
   // Password Reset Tokens

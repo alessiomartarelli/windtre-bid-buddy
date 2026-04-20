@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield, Users,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
-  ChevronDown, Zap, BookOpen,
+  ChevronDown, Zap, BookOpen, BarChart3,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -60,6 +60,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
     ...(isSuperAdmin ? [{ path: '/super-admin', label: 'Super Admin', icon: Shield }] : []),
     ...(isAdminOrSuper ? [{ path: '/admin', label: 'Gestione Organizzazione', icon: Building2 }] : []),
     ...(isAdminOrSuper ? [{ path: '/amministrazione', label: 'Amministrazione', icon: BookOpen }] : []),
+    ...(isAdminOrSuper ? [{ path: '/drms-commissioning', label: 'DRMS Commissioning', icon: BarChart3 }] : []),
   ];
 
   const garaItems: Array<{ path: string; label: string; icon: typeof Shield }> = [

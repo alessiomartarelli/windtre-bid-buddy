@@ -56,6 +56,31 @@ correct VAT register from BiSuite sales:
   esente / fuori campo IVA. Rows with scontrino > 0 but imponibile = 0 are
   flagged "Da verificare" and excluded from VAT totals.
 
+### DRMS Commissioning Dashboard
+Admin-only section under `/drms-commissioning` for analyzing the WindTre DRMS
+(Estratto conto provvigionale) Excel exported monthly. Uploads are persisted in
+the `drms_uploads` table per organization+month (latest wins via overwrite
+confirm on conflict). Logic:
+- Excel parsing (SheetJS) is client-side: reads sheet `Estratto conto`, detects
+  the period from the most frequent `COMPETENZA` value (e.g. "MAR-26"), then
+  classifies every row across 13 capitoli (Energia, Mobile, Fisso, Partnership
+  Reward, CB, PR Assicurazioni, Extra PR Energia, Assicurazioni, Reload, SOS
+  Caring, PR Reload, Pinpad, Ass. Tecnica). Unmatched rows fall into "Altro".
+- Classification rules in `client/src/lib/drmsClassifier.ts`:
+  `classificaRiga(row, periodComp)` evaluates 9 ordered rules — ASSTTCN,
+  PR Reload set, PR Assicurazioni, SOS Caring, special PC ADJUSTMENT MANUALI
+  override (regex against DESCRIZIONE_ITEM), PR Customer Base set (in-period
+  → Partnership Reward, out-of-period → Extra PR Energia), Reload set,
+  CB attivazione for Mobile/Fisso non-PR, then base TIPO_FONIA mapping.
+- 4 dashboard tabs: Overview (KPI + ripartizione), Matrix (PV × capitolo
+  heatmap), Driver (drill-down per capitolo), PV (search + per-store metriche
+  Mobile incl. Tied/Untied/MNP/MIB/soglia and Fisso incl. FTTH/FWA/LNA/LA/
+  convergenti/soglia, deduplicato sui contratti contrattuali in periodo).
+- API: GET `/api/drms` (list), GET `/api/drms/by-period?month&year`, GET
+  `/api/drms/:id`, POST `/api/drms` (409 + `existingId` on conflict, accepts
+  `overwrite=true`), DELETE `/api/drms/:id`. All gated by `requireAdminRole`
+  with org-ownership check.
+
 ### Production Deployment
 - **Environment**: VPS with Nginx reverse proxy.
 - **Base Path**: `/incentivew3` for all production assets and API calls.
