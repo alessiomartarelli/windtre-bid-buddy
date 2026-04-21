@@ -142,12 +142,15 @@ const MetricBox = ({ label, value, tone, highlight }: {
 // =============================================================================
 function UploadCard({
   loading, error, onFileChosen, savedList, onLoadSaved, onLoadMultiple, onDeleteSaved,
+  hasPersistedSelection, onResetPersisted,
 }: {
   loading: boolean; error: string | null; onFileChosen: (f: File) => void;
   savedList: DrmsListItem[];
   onLoadSaved: (id: string) => void;
   onLoadMultiple: (ids: string[]) => void;
   onDeleteSaved: (id: string) => void;
+  hasPersistedSelection: boolean;
+  onResetPersisted: () => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -230,6 +233,12 @@ function UploadCard({
               </span>
             </div>
             <div className="flex items-center gap-2">
+              {hasPersistedSelection && (
+                <>
+                  <button onClick={onResetPersisted} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-red-700 underline" data-testid="button-reset-persisted-drms">Reset selezione salvata</button>
+                  <span className="text-neutral-300">·</span>
+                </>
+              )}
               {savedList.length > 1 && (
                 <>
                   <button onClick={selectAll} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-select-all-drms">Tutti</button>
@@ -1570,6 +1579,32 @@ export default function DrmsCommissioning() {
   const [parseLoading, setParseLoading] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [pendingPreview, setPendingPreview] = useState<PendingPreview | null>(null);
+  const [autoRestoreDone, setAutoRestoreDone] = useState(false);
+  const [hasPersistedSelection, setHasPersistedSelection] = useState(false);
+
+  const storageKey = useMemo(
+    () => (profile?.id ? `drms:last-selection:${profile.id}` : null),
+    [profile?.id],
+  );
+
+  const readPersistedIds = useCallback((): string[] => {
+    if (!storageKey) return [];
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : [];
+    } catch { return []; }
+  }, [storageKey]);
+
+  useEffect(() => {
+    setHasPersistedSelection(readPersistedIds().length > 0);
+  }, [readPersistedIds, sources, savedList]);
+
+  // Re-arma l'auto-restore se cambia l'utente nella stessa SPA
+  useEffect(() => {
+    setAutoRestoreDone(false);
+  }, [storageKey]);
 
   useEffect(() => {
     if (!authLoading && profile && !isAuthorized) {
@@ -1810,7 +1845,50 @@ export default function DrmsCommissioning() {
     }
   }, [deleteMutation, toast]);
 
-  const handleReset = () => { setParsedData(null); setSources([]); };
+  // Persiste la selezione corrente di sorgenti aperte
+  useEffect(() => {
+    if (!storageKey) return;
+    if (sources.length === 0) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(sources.map(s => s.id)));
+    } catch {}
+  }, [sources, storageKey]);
+
+  // Auto-restore della selezione persistita al primo caricamento utile
+  useEffect(() => {
+    if (autoRestoreDone) return;
+    if (!isAuthorized || !storageKey) return;
+    if (parsedData || pendingPreview) return;
+    if (parseLoading) return;
+    if (savedList.length === 0) return;
+    const stored = readPersistedIds();
+    if (stored.length === 0) { setAutoRestoreDone(true); return; }
+    const validIds = stored.filter(id => savedList.some(s => s.id === id));
+    setAutoRestoreDone(true);
+    if (validIds.length === 0) {
+      try { localStorage.removeItem(storageKey); } catch {}
+      setHasPersistedSelection(false);
+      return;
+    }
+    if (validIds.length === 1) handleLoadSaved(validIds[0]);
+    else handleLoadMultiple(validIds);
+  }, [autoRestoreDone, isAuthorized, storageKey, parsedData, pendingPreview, parseLoading, savedList, readPersistedIds, handleLoadSaved, handleLoadMultiple]);
+
+  const handleResetPersisted = useCallback(() => {
+    if (storageKey) {
+      try { localStorage.removeItem(storageKey); } catch {}
+    }
+    setHasPersistedSelection(false);
+    toast({
+      title: "Selezione azzerata",
+      description: "La prossima volta dovrai scegliere i DRMS manualmente.",
+    });
+  }, [storageKey, toast]);
+
+  const handleReset = () => {
+    setParsedData(null);
+    setSources([]);
+  };
 
   if (authLoading || !profile) {
     return (
@@ -1859,6 +1937,8 @@ export default function DrmsCommissioning() {
                 onLoadSaved={handleLoadSaved}
                 onLoadMultiple={handleLoadMultiple}
                 onDeleteSaved={handleDeleteSaved}
+                hasPersistedSelection={hasPersistedSelection}
+                onResetPersisted={handleResetPersisted}
               />
             )}
           </div>
