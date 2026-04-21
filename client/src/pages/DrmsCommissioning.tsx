@@ -555,6 +555,21 @@ function Dashboard({
       .sort((a, b) => competenzaSortKey(a.competenza) - competenzaSortKey(b.competenza));
   }, [filteredData]);
 
+  // Periodi (month-year) duplicati tra le sorgenti caricate
+  const duplicatePeriods = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of sources) {
+      const k = `${s.year}-${s.month}`;
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    const dup = new Set<string>();
+    for (const s of sources) {
+      const k = `${s.year}-${s.month}`;
+      if ((counts.get(k) || 0) > 1) dup.add(s.period);
+    }
+    return dup;
+  }, [sources]);
+
   // Aggregazione per PERIOD (file DRMS sorgente)
   const bySource = useMemo(() => {
     const map = new Map<string, { period: string; importo: number; righe: number; contratti: Set<string> }>();
@@ -762,6 +777,7 @@ function Dashboard({
             period={period}
             byCompetenza={byCompetenza}
             bySource={bySource}
+            duplicatePeriods={duplicatePeriods}
             isMulti={isMulti}
           />
         )}
@@ -789,13 +805,14 @@ function Dashboard({
 // =============================================================================
 // OVERVIEW
 // =============================================================================
-function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySource, isMulti }: {
+function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySource, duplicatePeriods, isMulti }: {
   totali: { imp: number; righe: number; pagati: number; stornati: number; nonAtt: number; contratti: number; pv: number };
   perCapitolo: Array<{ capitolo: CapitoloKey; importo: number; righe: number; contratti: number; config: { label: string; color: string; order: number } }>;
   matrix: Array<{ neg: string; byCap: Record<string, number>; tot: number }>;
   period: string;
   byCompetenza: Array<{ competenza: string; importo: number; righe: number; contratti: number; perPeriod: Record<string, number> }>;
   bySource: Array<{ period: string; importo: number; righe: number; contratti: number }>;
+  duplicatePeriods: Set<string>;
   isMulti: boolean;
 }) {
   // Palette stabile per i PERIOD (per la barra impilata in "Andamento per competenza")
@@ -922,9 +939,20 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
         </div>
       )}
 
-      {isMulti && bySource.length > 1 && (
+      {isMulti && (bySource.length > 1 || duplicatePeriods.size > 0) && (
         <div>
           <SectionHead eyebrow="Per file caricato" title="Subtotali per DRMS (PERIOD)" />
+          {duplicatePeriods.size > 0 && (
+            <div className="mb-3 flex items-start gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-800" data-testid="alert-duplicate-periods">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold">PERIOD sovrapposti rilevati</div>
+                <div className="text-xs mt-0.5">
+                  Hai caricato più DRMS che coprono lo stesso mese: gli importi delle righe sovrapposte vengono sommati e potrebbero risultare raddoppiati. Rimuovi una delle sorgenti dall'header per ottenere un consolidato corretto.
+                </div>
+              </div>
+            </div>
+          )}
           <div className="bg-white border border-neutral-200">
             <table className="min-w-full text-xs">
               <thead>
@@ -937,18 +965,32 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
                 </tr>
               </thead>
               <tbody>
-                {bySource.map(s => (
-                  <tr key={s.period} className="border-b border-neutral-100" data-testid={`row-source-${s.period}`}>
-                    <td className="px-4 py-2 flex items-center gap-2 font-mono text-neutral-900 font-semibold">
-                      <span className="w-2 h-2" style={{ background: periodColor[s.period] }} />
-                      {s.period}
+                {bySource.map(s => {
+                  const isDup = duplicatePeriods.has(s.period);
+                  return (
+                  <tr key={s.period} className={`border-b border-neutral-100 ${isDup ? 'bg-red-50/40' : ''}`} data-testid={`row-source-${s.period}`}>
+                    <td className="px-4 py-2 font-mono text-neutral-900 font-semibold">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="w-2 h-2" style={{ background: periodColor[s.period] }} />
+                        <span>{s.period}</span>
+                        {isDup && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-600 text-white text-[9px] uppercase tracking-wider font-semibold rounded"
+                            data-testid={`badge-duplicate-${s.period}`}
+                            title="PERIOD ripetuto: gli importi vengono sommati e potrebbero risultare raddoppiati"
+                          >
+                            <AlertCircle size={9} strokeWidth={2.5} /> Duplicato
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(s.righe)}</td>
                     <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(s.contratti)}</td>
                     <td className={`px-4 py-2 text-right font-mono font-semibold tabular-nums ${s.importo < 0 ? 'text-red-700' : 'text-neutral-900'}`}>{fmtEur(s.importo)}</td>
                     <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-500">{fmtPct(s.importo, grandImp)}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1667,6 +1709,31 @@ export default function DrmsCommissioning() {
         if (!res.ok) throw new Error(`Errore caricamento DRMS ${id}`);
         return res.json() as Promise<DrmsUploadFull>;
       }));
+      const groups = new Map<string, DrmsUploadFull[]>();
+      for (const u of results) {
+        const k = `${u.year}-${u.month}`;
+        const arr = groups.get(k) || [];
+        arr.push(u);
+        groups.set(k, arr);
+      }
+      const dupGroups = Array.from(groups.values()).filter(g => g.length > 1);
+      if (dupGroups.length > 0) {
+        const lines = dupGroups.map(g => {
+          const label = `${MONTH_LABELS[g[0].month - 1]} ${g[0].year}`;
+          const files = g.map(u => `  • ${u.period} — ${u.fileName}`).join("\n");
+          return `${label}:\n${files}`;
+        }).join("\n\n");
+        const ok = window.confirm(
+          `Attenzione: hai selezionato più DRMS che coprono lo stesso periodo.\n` +
+          `Gli importi delle righe sovrapposte verranno SOMMATI (rischio di raddoppio).\n\n` +
+          `${lines}\n\n` +
+          `Vuoi procedere comunque con il consolidato?`
+        );
+        if (!ok) {
+          setParseLoading(false);
+          return;
+        }
+      }
       const allRows: DrmsRow[] = [];
       const newSources: DrmsSource[] = [];
       for (const u of results) {
