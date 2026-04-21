@@ -875,6 +875,34 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
           <SectionHead
             eyebrow={isMulti ? "Cross-DRMS" : "Mensilizzazione"}
             title="Andamento per competenza"
+            right={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const periods = bySource.map(s => s.period);
+                  const rows = byCompetenza.map(c => {
+                    const tot = Object.values(c.perPeriod).reduce((s, v) => s + v, 0);
+                    const row: Record<string, unknown> = {
+                      Competenza: c.competenza,
+                      Righe: c.righe,
+                      Contratti: c.contratti,
+                      Importo: tot.toFixed(2).replace('.', ','),
+                    };
+                    for (const p of periods) {
+                      row[p] = (c.perPeriod[p] || 0).toFixed(2).replace('.', ',');
+                    }
+                    return row;
+                  });
+                  const stamp = new Date().toISOString().slice(0, 10);
+                  downloadCSV(`andamento-competenza-${stamp}.csv`, rows);
+                }}
+                data-testid="button-export-competenza-csv"
+              >
+                <Download size={14} className="mr-2" />
+                Esporta CSV
+              </Button>
+            }
           />
           <div className="bg-white border border-neutral-200 overflow-x-auto">
             <table className="min-w-full text-xs">
