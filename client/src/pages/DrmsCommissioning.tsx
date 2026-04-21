@@ -1597,6 +1597,11 @@ export default function DrmsCommissioning() {
     } catch { return []; }
   }, [storageKey]);
 
+  const { data: savedList = [] } = useQuery<DrmsListItem[]>({
+    queryKey: ["/api/drms"],
+    enabled: isAuthorized,
+  });
+
   useEffect(() => {
     setHasPersistedSelection(readPersistedIds().length > 0);
   }, [readPersistedIds, sources, savedList]);
@@ -1612,11 +1617,6 @@ export default function DrmsCommissioning() {
       setLocation("/");
     }
   }, [authLoading, profile, isAuthorized, toast, setLocation]);
-
-  const { data: savedList = [] } = useQuery<DrmsListItem[]>({
-    queryKey: ["/api/drms"],
-    enabled: isAuthorized,
-  });
 
   const uploadMutation = useMutation({
     mutationFn: async (payload: {
