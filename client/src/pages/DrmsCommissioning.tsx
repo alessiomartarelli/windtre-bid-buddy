@@ -373,11 +373,11 @@ function PreviewCard({
         </div>
 
         {preview.hasConflict && (
-          <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+          <div className="flex items-start gap-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-900">
             <AlertCircle size={16} className="shrink-0 mt-0.5" />
             <div>
               <div className="font-semibold">Esiste già un DRMS per questo periodo</div>
-              <div className="text-xs mt-0.5">Salvando, il precedente upload per {MONTH_LABELS[preview.month - 1]} {preview.year} verrà sovrascritto.</div>
+              <div className="text-xs mt-0.5">Le righe verranno unite per <span className="font-mono font-semibold">SEQ_ID</span>: nuove righe aggiunte, righe esistenti con stesso SEQ_ID aggiornate. Le altre righe già salvate vengono mantenute.</div>
             </div>
           </div>
         )}
@@ -387,7 +387,7 @@ function PreviewCard({
             <X size={14} className="mr-2" /> Annulla
           </Button>
           <Button onClick={onConfirm} disabled={saving} data-testid="button-preview-confirm" className="bg-orange-600 hover:bg-orange-700 text-white">
-            {saving ? <><Loader2 size={14} className="mr-2 animate-spin" /> Salvataggio…</> : <><Save size={14} className="mr-2" /> {preview.hasConflict ? 'Sovrascrivi e apri' : 'Salva e apri'}</>}
+            {saving ? <><Loader2 size={14} className="mr-2 animate-spin" /> Salvataggio…</> : <><Save size={14} className="mr-2" /> {preview.hasConflict ? 'Unisci e apri' : 'Salva e apri'}</>}
           </Button>
         </div>
       </div>
@@ -1699,16 +1699,71 @@ export default function DrmsCommissioning() {
     }
   }, [toast]);
 
-  const handleConfirmSave = useCallback(async (overwrite: boolean) => {
+  const handleConfirmSave = useCallback(async () => {
     if (!pendingPreview) return;
     const p = pendingPreview;
     try {
+      // Se esiste già un DRMS per lo stesso periodo: merge per SEQ_ID
+      // (no overwrite cieco). Le righe nuove con SEQ_ID già presente aggiornano
+      // quelle esistenti; SEQ_ID nuovi vengono aggiunti; le righe esistenti
+      // con SEQ_ID non presente nel nuovo file vengono mantenute.
+      let mergedRows: DrmsRow[] = p.rows;
+      let mergeStats: { added: number; updated: number; preserved: number; noSeq: number } | null = null;
+
+      if (p.hasConflict) {
+        const byPeriodRes = await fetch(
+          apiUrl(`/api/drms/by-period?month=${p.month}&year=${p.year}`),
+          { credentials: "include" },
+        );
+        const existingMeta = byPeriodRes.ok ? await byPeriodRes.json() : null;
+        if (existingMeta?.id) {
+          const fullRes = await fetch(apiUrl(`/api/drms/${existingMeta.id}`), { credentials: "include" });
+          if (fullRes.ok) {
+            const full = await fullRes.json();
+            const existingRows: DrmsRow[] = Array.isArray(full?.rows) ? full.rows : [];
+
+            const newBySeq = new Map<string, DrmsRow>();
+            const newNoSeq: DrmsRow[] = [];
+            for (const r of p.rows) {
+              const seq = (r.SEQ_ID || "").trim();
+              if (seq) newBySeq.set(seq, r);
+              else newNoSeq.push(r);
+            }
+
+            let updated = 0;
+            let preserved = 0;
+            const keptExisting: DrmsRow[] = [];
+            for (const r of existingRows) {
+              const seq = String((r as any).SEQ_ID || "").trim();
+              if (seq && newBySeq.has(seq)) {
+                updated += 1; // sarà rimpiazzata dalla nuova
+              } else {
+                keptExisting.push(r);
+                preserved += 1;
+              }
+            }
+            const added = newBySeq.size - updated;
+
+            mergedRows = [
+              ...keptExisting,
+              ...Array.from(newBySeq.values()),
+              ...newNoSeq, // righe del nuovo file senza SEQ_ID: append
+            ];
+            mergeStats = { added, updated, preserved, noSeq: newNoSeq.length };
+          }
+        }
+      }
+
+      const totale = mergedRows.reduce((s, r) => s + (r.IMPORTO_NUM || 0), 0);
+      const righeCount = mergedRows.length;
+
       const saved = await uploadMutation.mutateAsync({
         fileName: p.fileName, month: p.month, year: p.year, period: p.period,
-        totaleImporto: p.totale, righeCount: p.righeCount, rows: p.rows, overwrite,
+        totaleImporto: totale, righeCount, rows: mergedRows,
+        overwrite: p.hasConflict, // sostituiamo il record con il set unito
       });
       const id: string = saved?.id || saved?.upload?.id || `tmp-${Date.now()}`;
-      const tagged: DrmsRow[] = p.rows.map(r => ({ ...r, __PERIOD: p.period, __UPLOAD_ID: id }));
+      const tagged: DrmsRow[] = mergedRows.map(r => ({ ...r, __PERIOD: p.period, __UPLOAD_ID: id }));
       setParsedData(tagged);
       setSources([{
         id,
@@ -1716,17 +1771,25 @@ export default function DrmsCommissioning() {
         fileName: p.fileName,
         month: p.month,
         year: p.year,
-        righeCount: p.righeCount,
-        totaleImporto: p.totale,
+        righeCount,
+        totaleImporto: totale,
       }]);
       setPendingPreview(null);
+
+      if (mergeStats) {
+        const parts = [
+          `${mergeStats.added} nuove`,
+          `${mergeStats.updated} aggiornate`,
+          `${mergeStats.preserved} preservate`,
+        ];
+        if (mergeStats.noSeq > 0) parts.push(`${mergeStats.noSeq} senza SEQ_ID (append)`);
+        toast({
+          title: "DRMS unito per SEQ_ID",
+          description: parts.join(" · ") + ` — totale ${righeCount} righe`,
+        });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.startsWith("__CONFLICT__:")) {
-        const ok = window.confirm(`Esiste già un DRMS per ${MONTH_LABELS[p.month - 1]} ${p.year}. Sovrascriverlo con il nuovo file?`);
-        if (ok) return handleConfirmSave(true);
-        return;
-      }
       toast({ title: "Errore salvataggio", description: msg, variant: "destructive" });
     }
   }, [pendingPreview, uploadMutation, toast]);
@@ -1925,7 +1988,7 @@ export default function DrmsCommissioning() {
               <PreviewCard
                 preview={pendingPreview}
                 saving={uploadMutation.isPending}
-                onConfirm={() => handleConfirmSave(pendingPreview.hasConflict)}
+                onConfirm={() => handleConfirmSave()}
                 onCancel={handleCancelPreview}
               />
             ) : (

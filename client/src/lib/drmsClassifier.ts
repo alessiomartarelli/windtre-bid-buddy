@@ -48,6 +48,8 @@ const REGOLA_PC_ADJ = "PC ADJUSTMENT MANUALI  26";
 
 export interface DrmsRow {
   CAPITOLO: CapitoloKey;
+  /** Identificatore univoco di riga proveniente dal DRMS — chiave per merge tra upload dello stesso periodo */
+  SEQ_ID: string;
   CODICE_NEGOZIO_COSY: string;
   CODICE_CONTRATTO: string;
   COMPETENZA: string;
@@ -167,6 +169,7 @@ export function classifyAndNormalize(rawRows: RawRow[], period: string): DrmsRow
     const cap = classificaRiga(r, period) ?? "ALTRO";
     out.push({
       CAPITOLO: cap,
+      SEQ_ID: str(r.SEQ_ID).trim(),
       CODICE_NEGOZIO_COSY: str(r.CODICE_NEGOZIO_COSY).trim(),
       CODICE_CONTRATTO: str(r.CODICE_CONTRATTO).trim(),
       COMPETENZA: str(r.COMPETENZA),
