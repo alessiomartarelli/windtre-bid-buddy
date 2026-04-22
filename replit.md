@@ -82,8 +82,11 @@ confirm on conflict). Logic:
   with org-ownership check.
 
 ### Production Deployment
-- **Environment**: VPS with Nginx reverse proxy.
+- **Environment**: VPS 85.215.124.207 with Nginx reverse proxy, app on port 3001.
 - **Base Path**: `/incentivew3` for all production assets and API calls.
+- **VPS directory**: `/var/www/incentive-w3/` (con trattino!). NON `/var/www/incentivew3/`.
+- **PM2 process**: id 0 (`incentive-w3`). NEVER touch pm2 id 9 (easycashflows) o 10 (protecta).
+- **Deploy recipe**: `npm run build` → `tar czf /tmp/incentivew3-deploy.tgz -C dist public index.cjs` → `scp` su VPS → ssh: `cd /var/www/incentive-w3 && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart 0 --update-env`.
 - **Mechanism**: Client-side `BASE_PATH` constant and `apiUrl()` helper, server-side sub-app mounting, and base href injection for asset resolution.
 
 ## External Dependencies
