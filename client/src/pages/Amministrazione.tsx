@@ -1070,15 +1070,12 @@ export default function Amministrazione() {
                   <Card className="overflow-hidden min-w-0 max-w-full">
                     <CardContent className="p-0 min-w-0">
                       <ScrollableTable>
-                        <Table className="min-w-[1200px]">
+                        <Table className="min-w-[900px]">
                           <TableHeader>
                             <TableRow>
                               <TableHead className="text-xs whitespace-nowrap min-w-[90px]">Data</TableHead>
-                              <TableHead className="text-xs whitespace-nowrap min-w-[70px]">ID</TableHead>
-                              <TableHead className="text-xs whitespace-nowrap min-w-[140px]">PDV</TableHead>
-                              <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Matricola</TableHead>
-                              <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Addetto</TableHead>
-                              <TableHead className="text-xs whitespace-nowrap min-w-[140px]">Cliente</TableHead>
+                              <TableHead className="text-xs whitespace-nowrap min-w-[200px]">PDV</TableHead>
+                              <TableHead className="text-xs whitespace-nowrap text-right min-w-[80px]">Scontrini</TableHead>
                               <TableHead className="text-xs whitespace-nowrap text-right min-w-[100px]">Totale</TableHead>
                               {INCASSO_ITEMS_CONFIG.map((cfg) => (
                                 <TableHead key={cfg.key} className="text-xs whitespace-nowrap text-right min-w-[100px]">{cfg.label}</TableHead>
@@ -1086,40 +1083,71 @@ export default function Amministrazione() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {g.contabileRows.length === 0 ? (
-                              <TableRow><TableCell colSpan={7 + INCASSO_ITEMS_CONFIG.length} className="text-center text-muted-foreground py-8">Nessuno scontrino</TableCell></TableRow>
-                            ) : (
-                              g.contabileRows.map((r) => (
-                                <TableRow key={r.saleId} data-testid={`row-contabile-${r.saleId}`}>
-                                  <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.data)}</TableCell>
-                                  <TableCell className="text-xs font-mono">{r.bisuiteId}</TableCell>
+                            {(() => {
+                              // Aggrega per giorno + PDV (codicePos) all'interno della RS
+                              type Agg = {
+                                key: string;
+                                dataDay: string;
+                                dataMs: number;
+                                codicePos: string;
+                                nomeNegozio: string;
+                                scontrini: number;
+                                totale: number;
+                                incasso: ReturnType<typeof computeIncassoTotals>;
+                              };
+                              const map = new Map<string, Agg>();
+                              for (const r of g.contabileRows) {
+                                const dataDay = (r.data || "").slice(0, 10);
+                                const k = `${dataDay}|${r.codicePos}`;
+                                let a = map.get(k);
+                                if (!a) {
+                                  a = {
+                                    key: k, dataDay,
+                                    dataMs: r.dataMs,
+                                    codicePos: r.codicePos,
+                                    nomeNegozio: r.nomeNegozio,
+                                    scontrini: 0, totale: 0,
+                                    incasso: Object.fromEntries(INCASSO_ITEMS_CONFIG.map(c => [c.key, 0])) as any,
+                                  };
+                                  map.set(k, a);
+                                }
+                                a.scontrini += 1;
+                                a.totale += r.totale || 0;
+                                for (const cfg of INCASSO_ITEMS_CONFIG) {
+                                  a.incasso[cfg.key] = (a.incasso[cfg.key] || 0) + (r.incasso[cfg.key] || 0);
+                                }
+                              }
+                              const rows = Array.from(map.values()).sort(
+                                (a, b) => a.dataMs - b.dataMs || a.nomeNegozio.localeCompare(b.nomeNegozio),
+                              );
+                              if (rows.length === 0) {
+                                return (
+                                  <TableRow><TableCell colSpan={4 + INCASSO_ITEMS_CONFIG.length} className="text-center text-muted-foreground py-8">Nessuno scontrino</TableCell></TableRow>
+                                );
+                              }
+                              return rows.map((a) => (
+                                <TableRow key={a.key} data-testid={`row-contabile-${a.key}`}>
+                                  <TableCell className="text-xs whitespace-nowrap">{fmtDate(a.dataDay)}</TableCell>
                                   <TableCell className="text-xs">
-                                    <div className="font-medium truncate max-w-[180px]" title={r.nomeNegozio}>{r.nomeNegozio}</div>
-                                    <div className="text-muted-foreground font-mono text-[10px] truncate max-w-[180px]" title={r.codicePos}>{r.codicePos}</div>
+                                    <div className="font-medium truncate max-w-[260px]" title={a.nomeNegozio}>{a.nomeNegozio || "—"}</div>
+                                    <div className="text-muted-foreground font-mono text-[10px] truncate max-w-[260px]" title={a.codicePos}>{a.codicePos}</div>
                                   </TableCell>
-                                  <TableCell className="text-xs font-mono">
-                                    <div className="truncate max-w-[140px]" title={r.matricolaFiscale}>{r.matricolaFiscale || "—"}</div>
-                                  </TableCell>
-                                  <TableCell className="text-xs">
-                                    <div className="truncate max-w-[140px]" title={r.nomeAddetto}>{r.nomeAddetto}</div>
-                                  </TableCell>
-                                  <TableCell className="text-xs">
-                                    <div className="truncate max-w-[160px]" title={r.nomeCliente}>{r.nomeCliente}</div>
-                                  </TableCell>
-                                  <TableCell className="text-xs text-right font-semibold whitespace-nowrap">{fmtCurrency(r.totale)}</TableCell>
+                                  <TableCell className="text-xs text-right font-mono tabular-nums">{a.scontrini}</TableCell>
+                                  <TableCell className="text-xs text-right font-semibold whitespace-nowrap">{fmtCurrency(a.totale)}</TableCell>
                                   {INCASSO_ITEMS_CONFIG.map((cfg) => (
                                     <TableCell key={cfg.key} className={`text-xs text-right whitespace-nowrap ${cfg.color}`}>
-                                      {r.incasso[cfg.key] > 0 ? fmtCurrency(r.incasso[cfg.key]) : "—"}
+                                      {a.incasso[cfg.key] > 0 ? fmtCurrency(a.incasso[cfg.key]) : "—"}
                                     </TableCell>
                                   ))}
                                 </TableRow>
-                              ))
-                            )}
+                              ));
+                            })()}
                           </TableBody>
                           {g.contabileRows.length > 0 && (
                             <TableFooter>
                               <TableRow data-testid={`row-contabile-totals-${g.rs}`}>
-                                <TableCell colSpan={6} className="text-xs font-bold whitespace-nowrap">TOTALE {g.rs}</TableCell>
+                                <TableCell colSpan={2} className="text-xs font-bold whitespace-nowrap">TOTALE {g.rs}</TableCell>
+                                <TableCell className="text-xs text-right font-bold font-mono tabular-nums">{g.contabileRows.length}</TableCell>
                                 <TableCell className="text-xs text-right font-bold whitespace-nowrap">{fmtCurrency(g.contabileTotals.totale)}</TableCell>
                                 {INCASSO_ITEMS_CONFIG.map((cfg) => (
                                   <TableCell key={cfg.key} className={`text-xs text-right font-bold whitespace-nowrap ${cfg.color}`}>
