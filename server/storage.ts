@@ -44,6 +44,7 @@ export interface IStorage {
   // BiSuite Sales
   upsertBisuiteSales(sales: InsertBisuiteSale[]): Promise<number>;
   getBisuiteSales(orgId: string, from?: Date, to?: Date): Promise<BisuiteSale[]>;
+  getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number): Promise<BisuiteSale[]>;
   getBisuiteSale(id: string): Promise<BisuiteSale | undefined>;
   deleteBisuiteSalesByOrg(orgId: string): Promise<void>;
 
@@ -270,6 +271,22 @@ export class DatabaseStorage implements IStorage {
     if (to) conditions.push(lte(bisuiteSales.dataVendita, to));
     return await db.select().from(bisuiteSales)
       .where(and(...conditions))
+      .orderBy(desc(bisuiteSales.dataVendita));
+  }
+
+  /**
+   * Vendite filtrate per mese/anno italiano (Europe/Rome).
+   * Le date BiSuite sono salvate come wall-time italiano in colonna `timestamp`
+   * (senza fuso). Estraiamo anno/mese direttamente dalla colonna senza conversioni
+   * di fuso, evitando lo slittamento ±2h dell'approccio basato su from/to.
+   */
+  async getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number): Promise<BisuiteSale[]> {
+    return await db.select().from(bisuiteSales)
+      .where(and(
+        eq(bisuiteSales.organizationId, orgId),
+        sql`extract(year from ${bisuiteSales.dataVendita}) = ${year}`,
+        sql`extract(month from ${bisuiteSales.dataVendita}) = ${month}`,
+      ))
       .orderBy(desc(bisuiteSales.dataVendita));
   }
 

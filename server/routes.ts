@@ -1687,6 +1687,16 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Non puoi accedere ai dati di un'altra organizzazione" });
       }
 
+      // Filtro stretto per mese italiano: se il client invia year+month, usa
+      // EXTRACT(YEAR/MONTH) lato Postgres direttamente sulla colonna wall-time
+      // (Europe/Rome). Evita lo slittamento ±2h dell'approccio basato su from/to.
+      const yearParam = req.query.year ? parseInt(req.query.year as string, 10) : NaN;
+      const monthParam = req.query.month ? parseInt(req.query.month as string, 10) : NaN;
+      if (Number.isFinite(yearParam) && Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12) {
+        const sales = await storage.getBisuiteSalesByItalianMonth(orgId, yearParam, monthParam);
+        return res.json({ sales, count: sales.length });
+      }
+
       const fromRaw = req.query.from ? new Date(req.query.from as string) : undefined;
       const toRaw = req.query.to ? new Date(req.query.to as string) : undefined;
       let from = fromRaw;

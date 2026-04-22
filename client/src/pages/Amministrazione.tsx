@@ -89,6 +89,15 @@ const fmtDate = (s: string | null) => {
  */
 function italianYMD(dateStr: string | null | undefined): { year: number; month: number; day: number } | null {
   if (!dateStr) return null;
+  // Caso 1: stringa "naive" (senza Z né offset, es. "2026-04-01T00:15:00" o
+  // "2026-04-01 00:15:00"). I timestamp BiSuite sono wall-time italiani:
+  // estraiamo Y-M-D direttamente dalla stringa, senza far passare da Date()
+  // che li interpreterebbe nel fuso del browser/server.
+  const naive = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?)?$/.exec(dateStr);
+  if (naive) {
+    return { year: +naive[1], month: +naive[2], day: +naive[3] };
+  }
+  // Caso 2: ISO con TZ ("...Z" o "...+02:00"). Convertiamo in Europe/Rome.
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return null;
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -334,12 +343,14 @@ export default function Amministrazione() {
   );
 
   const { data, isLoading } = useQuery<{ sales: BisuiteSale[]; count: number }>({
-    queryKey: ["/api/bisuite-sales", orgId, fromDate, toDate],
+    queryKey: ["/api/bisuite-sales", orgId, year, month],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (orgId) params.set("organization_id", orgId);
-      params.set("from", fromDate);
-      params.set("to", toDate);
+      // Filtro per mese italiano lato server (EXTRACT YEAR/MONTH su colonna
+      // wall-time Europe/Rome). Evita lo slittamento ±2h del vecchio from/to.
+      params.set("year", String(year));
+      params.set("month", String(month));
       const res = await fetch(apiUrl(`/api/bisuite-sales?${params.toString()}`), {
         credentials: "include",
       });
