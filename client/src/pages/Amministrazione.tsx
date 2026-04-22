@@ -81,6 +81,36 @@ const fmtDate = (s: string | null) => {
   return d.toLocaleDateString("it-IT");
 };
 
+/**
+ * Estrae anno/mese/giorno della data nel fuso orario italiano (Europe/Rome),
+ * indipendentemente dal fuso del browser/server. Restituisce null se invalida.
+ * Necessario perché BiSuite invia timestamp wall-time italiani che, una volta
+ * passati per JS Date, possono ricadere nel giorno precedente in altri fusi.
+ */
+function italianYMD(dateStr: string | null | undefined): { year: number; month: number; day: number } | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(d);
+  const get = (t: string) => parseInt(parts.find(p => p.type === t)?.value || "0", 10);
+  const year = get("year");
+  const month = get("month");
+  const day = get("day");
+  if (!year || !month || !day) return null;
+  return { year, month, day };
+}
+
+/** "YYYY-MM-DD" della data nel fuso italiano (per group-by giornaliero). */
+function italianDayKey(dateStr: string | null | undefined): string {
+  const ymd = italianYMD(dateStr);
+  if (!ymd) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${ymd.year}-${pad(ymd.month)}-${pad(ymd.day)}`;
+}
+
 interface ContabileRow {
   saleId: string;
   bisuiteId: number;
@@ -319,7 +349,16 @@ export default function Amministrazione() {
     enabled: !!orgId && isAuthorized,
   });
 
-  const sales = data?.sales || [];
+  // Filtro stretto per fuso italiano: scarta scontrini il cui giorno (Europe/Rome)
+  // non ricade nel mese/anno selezionato. Compensa l'allargamento ±2h applicato
+  // dal backend ed eventuali differenze di fuso del browser.
+  const sales = useMemo(() => {
+    const all = data?.sales || [];
+    return all.filter(s => {
+      const ymd = italianYMD(s.dataVendita);
+      return !!ymd && ymd.year === year && ymd.month === month;
+    });
+  }, [data, year, month]);
 
   const pdvOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -1097,7 +1136,7 @@ export default function Amministrazione() {
                               };
                               const map = new Map<string, Agg>();
                               for (const r of g.contabileRows) {
-                                const dataDay = (r.data || "").slice(0, 10);
+                                const dataDay = italianDayKey(r.data) || (r.data || "").slice(0, 10);
                                 const k = `${dataDay}|${r.codicePos}`;
                                 let a = map.get(k);
                                 if (!a) {
