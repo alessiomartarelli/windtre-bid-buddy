@@ -119,9 +119,19 @@ export async function runBisuiteFetchForOrg(
   const tokenUrl = deriveTokenEndpoint(apiUrlStr);
   const token = await getBisuiteToken(tokenUrl, creds.client_id, creds.client_secret);
 
+  // L'API BiSuite richiede from/to obbligatori. Se non specificati,
+  // scarichiamo dall'inizio dell'anno corrente fino a domani (per
+  // sicurezza sui fusi/orari di chiusura).
+  const today = new Date();
+  const yyyymmdd = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const defaultFrom = `${today.getFullYear()}-01-01`;
+  const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000);
+  const defaultTo = yyyymmdd(tomorrow);
+
   const salesUrl = new URL(deriveSalesEndpoint(apiUrlStr));
-  if (opts?.startDate) salesUrl.searchParams.set("from", opts.startDate);
-  if (opts?.endDate) salesUrl.searchParams.set("to", opts.endDate);
+  salesUrl.searchParams.set("from", opts?.startDate || defaultFrom);
+  salesUrl.searchParams.set("to", opts?.endDate || defaultTo);
 
   const salesResp = await fetch(salesUrl.toString(), {
     method: "GET",
