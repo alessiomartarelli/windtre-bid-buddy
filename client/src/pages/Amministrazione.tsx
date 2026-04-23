@@ -58,17 +58,24 @@ interface BisuiteSale {
   rawData: RawSaleData | null;
 }
 
-const MONTH_LABELS = [
-  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
-  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
-];
+function pad2(n: number) { return String(n).padStart(2, "0"); }
 
-function periodToDateRange(year: number, month: number) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const first = `${year}-${pad(month)}-01T00:00:00`;
-  const last = new Date(year, month, 0);
-  const lastStr = `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}T23:59:59`;
-  return { from: first, to: lastStr };
+/** Primo/ultimo giorno del mese di una data, come YYYY-MM-DD. */
+function currentMonthRangeYMD(): { from: string; to: string } {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const first = `${y}-${pad2(m)}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const last = `${y}-${pad2(m)}-${pad2(lastDay)}`;
+  return { from: first, to: last };
+}
+
+/** "DD/MM/YYYY" da una stringa YYYY-MM-DD. */
+function ymdToItalian(ymd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) return ymd;
+  return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 const fmtCurrency = (v: number) =>
@@ -284,9 +291,9 @@ export default function Amministrazione() {
   const { profile, loading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const now = new Date();
-  const [year, setYear] = useState<number>(now.getFullYear());
-  const [month, setMonth] = useState<number>(now.getMonth() + 1);
+  const initialRange = useMemo(() => currentMonthRangeYMD(), []);
+  const [fromDate, setFromDate] = useState<string>(initialRange.from);
+  const [toDate, setToDate] = useState<string>(initialRange.to);
   const [filterPdv, setFilterPdv] = useState<string>("all");
   const [filterRs, setFilterRs] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -309,27 +316,23 @@ export default function Amministrazione() {
     }
   }, [loading, profile, isAuthorized, toast, setLocation]);
 
-  const { from: fromDate, to: toDate } = useMemo(
-    () => periodToDateRange(year, month),
-    [year, month],
-  );
-
   const { data, isLoading } = useQuery<{ sales: BisuiteSale[]; count: number }>({
-    queryKey: ["/api/bisuite-sales", orgId, year, month],
+    queryKey: ["/api/bisuite-sales", orgId, fromDate, toDate],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (orgId) params.set("organization_id", orgId);
-      // Filtro per mese italiano lato server (EXTRACT YEAR/MONTH su colonna
-      // wall-time Europe/Rome). Evita lo slittamento ±2h del vecchio from/to.
-      params.set("year", String(year));
-      params.set("month", String(month));
+      // Filtro per intervallo di date italiane (YYYY-MM-DD inclusi) lato server.
+      // Confronta direttamente la parte data della colonna wall-time italiano,
+      // senza widening ±2h.
+      params.set("from", fromDate);
+      params.set("to", toDate);
       const res = await fetch(apiUrl(`/api/bisuite-sales?${params.toString()}`), {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Errore nel caricamento vendite");
       return res.json();
     },
-    enabled: !!orgId && isAuthorized,
+    enabled: !!orgId && isAuthorized && !!fromDate && !!toDate,
   });
 
   // Il backend filtra già per mese italiano lato server (Task #54), quindi qui
@@ -350,11 +353,6 @@ export default function Amministrazione() {
     for (const s of sales) if (s.ragioneSociale) set.add(s.ragioneSociale);
     return Array.from(set).sort();
   }, [sales]);
-
-  const yearOptions = useMemo(() => {
-    const cur = new Date().getFullYear();
-    return [cur - 2, cur - 1, cur, cur + 1];
-  }, []);
 
   const filteredSales = useMemo(() => {
     return sales.filter((s) => {
@@ -522,7 +520,7 @@ export default function Amministrazione() {
     }
   }, [rsGroups, selectedRs]);
 
-  const periodSuffix = `${year}_${String(month).padStart(2, "0")}`;
+  const periodSuffix = `${fromDate}_${toDate}`;
 
   const buildContabileAggregato = () => {
     type AggExportRow = Record<string, string | number>;
@@ -864,7 +862,7 @@ export default function Amministrazione() {
 
     const lines: string[] = [];
     lines.push(row("Registro Corrispettivi"));
-    lines.push(row(`Periodo: ${MONTH_LABELS[month - 1]} ${year}`));
+    lines.push(row(`Periodo: dal ${ymdToItalian(fromDate)} al ${ymdToItalian(toDate)}`));
     if (filterPdv !== "all") {
       const pdv = pdvOptions.find(([code]) => code === filterPdv);
       lines.push(row(`Punto Vendita: ${pdv ? `${pdv[1]} (${pdv[0]})` : filterPdv}`));
@@ -1020,25 +1018,23 @@ export default function Amministrazione() {
           }
           onReset={() => { setFilterPdv("all"); setFilterRs("all"); setSearch(""); }}
         >
-          <FilterField label="Mese" icon={Calendar}>
-            <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v, 10))}>
-              <SelectTrigger data-testid="select-month"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {MONTH_LABELS.map((label, idx) => (
-                  <SelectItem key={idx + 1} value={String(idx + 1)}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <FilterField label="Dal" icon={Calendar}>
+            <Input
+              type="date"
+              value={fromDate}
+              max={toDate || undefined}
+              onChange={(e) => setFromDate(e.target.value)}
+              data-testid="input-from-date"
+            />
           </FilterField>
-          <FilterField label="Anno" icon={CalendarDays}>
-            <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v, 10))}>
-              <SelectTrigger data-testid="select-year"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {yearOptions.map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <FilterField label="Al" icon={CalendarDays}>
+            <Input
+              type="date"
+              value={toDate}
+              min={fromDate || undefined}
+              onChange={(e) => setToDate(e.target.value)}
+              data-testid="input-to-date"
+            />
           </FilterField>
           <FilterField label="Punto Vendita" icon={Store}>
             <Select value={filterPdv} onValueChange={setFilterPdv}>
