@@ -1182,7 +1182,11 @@ export default function Amministrazione() {
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center justify-between">
                         <span>Riepilogo per Metodo Pagamento</span>
-                        <span className="text-xs font-normal text-muted-foreground">Totale: <span className="font-semibold text-foreground">{fmtCurrency(g.contabileTotals.totale)}</span></span>
+                        <span className="text-xs font-normal text-muted-foreground">
+                          Scontrini: <span className="font-semibold text-foreground" data-testid={`header-scontrini-${g.rs}`}>{g.contabileRows.length.toLocaleString("it-IT")}</span>
+                          {" · "}
+                          Totale: <span className="font-semibold text-foreground">{fmtCurrency(g.contabileTotals.totale)}</span>
+                        </span>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
