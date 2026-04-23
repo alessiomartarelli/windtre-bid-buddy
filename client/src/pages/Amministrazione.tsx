@@ -1187,6 +1187,7 @@ export default function Amministrazione() {
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
+                        <div><div className="text-xs text-muted-foreground">Scontrini</div><div className="font-semibold" data-testid={`totals-scontrini-${g.rs}`}>{g.contabileRows.length.toLocaleString("it-IT")}</div></div>
                         <div><div className="text-xs text-muted-foreground">Totale</div><div className="font-semibold" data-testid={`totals-totale-${g.rs}`}>{fmtCurrency(g.contabileTotals.totale)}</div></div>
                         {INCASSO_ITEMS_CONFIG.map((cfg) => (
                           <div key={cfg.key}>
