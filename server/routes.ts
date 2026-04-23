@@ -1689,10 +1689,14 @@ export async function registerRoutes(
       // Filtro stretto sul giorno italiano (Europe/Rome). Niente widening ±2h:
       // la colonna data_vendita è un timestamp wall-time italiano (senza fuso),
       // quindi confrontiamo direttamente per anno/mese o per data (YYYY-MM-DD).
+      // Per default escludiamo le vendite ANNULLATA dai dati aggregati; il
+      // chiamante può passare includeAnnullate=true per includerle (usato dalla
+      // pagina VenditeBiSuite che mostra anche le righe annullate con badge).
+      const includeAnnullate = req.query.includeAnnullate === "true";
       const yearParam = req.query.year ? parseInt(req.query.year as string, 10) : NaN;
       const monthParam = req.query.month ? parseInt(req.query.month as string, 10) : NaN;
       if (Number.isFinite(yearParam) && Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12) {
-        const sales = await storage.getBisuiteSalesByItalianMonth(orgId, yearParam, monthParam);
+        const sales = await storage.getBisuiteSalesByItalianMonth(orgId, yearParam, monthParam, includeAnnullate);
         return res.json({ sales, count: sales.length });
       }
 
@@ -1701,7 +1705,7 @@ export async function registerRoutes(
       if (fromYMD === null || toYMD === null) {
         return res.status(400).json({ error: "Parametri from/to non validi (atteso YYYY-MM-DD)" });
       }
-      const sales = await storage.getBisuiteSalesByItalianDateRange(orgId, fromYMD, toYMD);
+      const sales = await storage.getBisuiteSalesByItalianDateRange(orgId, fromYMD, toYMD, includeAnnullate);
       res.json({ sales, count: sales.length });
     } catch (error: unknown) {
       console.error("BiSuite sales read error:", error);

@@ -220,12 +220,15 @@ export default function VenditeBiSuite() {
   });
 
   const { data, isLoading } = useQuery<{ sales: BisuiteSale[]; count: number }>({
-    queryKey: ["/api/bisuite-sales", orgId, fromDate, toDate],
+    queryKey: ["/api/bisuite-sales", orgId, fromDate, toDate, "includeAnnullate"],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (orgId) params.set("organization_id", orgId);
       if (fromDate) params.set("from", fromDate);
       if (toDate) params.set("to", toDate);
+      // La pagina vendite grezze deve mostrare anche le ANNULLATA con badge,
+      // quindi disattiva il filtro server-side che le esclude di default.
+      params.set("includeAnnullate", "true");
       const res = await fetch(apiUrl(`/api/bisuite-sales?${params.toString()}`), {
         credentials: "include",
       });

@@ -43,9 +43,9 @@ export interface IStorage {
 
   // BiSuite Sales
   upsertBisuiteSales(sales: InsertBisuiteSale[]): Promise<number>;
-  getBisuiteSales(orgId: string, from?: Date, to?: Date): Promise<BisuiteSale[]>;
-  getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number): Promise<BisuiteSale[]>;
-  getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string): Promise<BisuiteSale[]>;
+  getBisuiteSales(orgId: string, from?: Date, to?: Date, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
+  getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
+  getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
   getBisuiteSale(id: string): Promise<BisuiteSale | undefined>;
   deleteBisuiteSalesByOrg(orgId: string): Promise<void>;
 
@@ -266,10 +266,11 @@ export class DatabaseStorage implements IStorage {
     return inserted;
   }
 
-  async getBisuiteSales(orgId: string, from?: Date, to?: Date): Promise<BisuiteSale[]> {
+  async getBisuiteSales(orgId: string, from?: Date, to?: Date, includeAnnullate: boolean = false): Promise<BisuiteSale[]> {
     const conditions = [eq(bisuiteSales.organizationId, orgId)];
     if (from) conditions.push(gte(bisuiteSales.dataVendita, from));
     if (to) conditions.push(lte(bisuiteSales.dataVendita, to));
+    if (!includeAnnullate) conditions.push(sql`upper(coalesce(trim(${bisuiteSales.stato}), '')) <> 'ANNULLATA'`);
     return await db.select().from(bisuiteSales)
       .where(and(...conditions))
       .orderBy(desc(bisuiteSales.dataVendita));
@@ -281,13 +282,15 @@ export class DatabaseStorage implements IStorage {
    * (senza fuso). Estraiamo anno/mese direttamente dalla colonna senza conversioni
    * di fuso, evitando lo slittamento ±2h dell'approccio basato su from/to.
    */
-  async getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number): Promise<BisuiteSale[]> {
+  async getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number, includeAnnullate: boolean = false): Promise<BisuiteSale[]> {
+    const conditions = [
+      eq(bisuiteSales.organizationId, orgId),
+      sql`extract(year from ${bisuiteSales.dataVendita}) = ${year}`,
+      sql`extract(month from ${bisuiteSales.dataVendita}) = ${month}`,
+    ];
+    if (!includeAnnullate) conditions.push(sql`upper(coalesce(trim(${bisuiteSales.stato}), '')) <> 'ANNULLATA'`);
     return await db.select().from(bisuiteSales)
-      .where(and(
-        eq(bisuiteSales.organizationId, orgId),
-        sql`extract(year from ${bisuiteSales.dataVendita}) = ${year}`,
-        sql`extract(month from ${bisuiteSales.dataVendita}) = ${month}`,
-      ))
+      .where(and(...conditions))
       .orderBy(desc(bisuiteSales.dataVendita));
   }
 
@@ -296,10 +299,11 @@ export class DatabaseStorage implements IStorage {
    * Confronta direttamente la parte data della colonna wall-time italiano,
    * senza alcuna conversione di fuso orario o widening ±2h.
    */
-  async getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string): Promise<BisuiteSale[]> {
+  async getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string, includeAnnullate: boolean = false): Promise<BisuiteSale[]> {
     const conditions = [eq(bisuiteSales.organizationId, orgId)];
     if (fromYMD) conditions.push(sql`${bisuiteSales.dataVendita}::date >= ${fromYMD}::date`);
     if (toYMD) conditions.push(sql`${bisuiteSales.dataVendita}::date <= ${toYMD}::date`);
+    if (!includeAnnullate) conditions.push(sql`upper(coalesce(trim(${bisuiteSales.stato}), '')) <> 'ANNULLATA'`);
     return await db.select().from(bisuiteSales)
       .where(and(...conditions))
       .orderBy(desc(bisuiteSales.dataVendita));
