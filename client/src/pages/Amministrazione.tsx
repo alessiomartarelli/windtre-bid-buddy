@@ -524,7 +524,7 @@ export default function Amministrazione() {
 
   const periodSuffix = `${year}_${String(month).padStart(2, "0")}`;
 
-  const exportContabile = () => {
+  const buildContabileAggregato = () => {
     type AggExportRow = Record<string, string | number>;
 
     const COLUMNS = [
@@ -648,10 +648,48 @@ export default function Amministrazione() {
       sheet.push(tot);
     }
 
+    return { sheet, COLUMNS: COLUMNS as unknown as string[] };
+  };
+
+  const exportContabile = () => {
+    const { sheet, COLUMNS } = buildContabileAggregato();
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(sheet, { header: COLUMNS as unknown as string[] });
+    const ws = XLSX.utils.json_to_sheet(sheet, { header: COLUMNS });
     XLSX.utils.book_append_sheet(wb, ws, "Aggregato Giornaliero");
     XLSX.writeFile(wb, `prima_nota_contabile_aggregato_${periodSuffix}.xlsx`);
+  };
+
+  const exportContabileCsv = () => {
+    const { sheet, COLUMNS } = buildContabileAggregato();
+    const escapeCsv = (v: string | number) => {
+      let s: string;
+      if (typeof v === "number") {
+        if (!Number.isFinite(v)) s = "";
+        else if (Number.isInteger(v)) s = String(v);
+        else s = v.toFixed(2).replace(".", ",");
+      } else {
+        s = v ?? "";
+      }
+      if (/[";\n\r]/.test(s)) {
+        s = `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const lines: string[] = [];
+    lines.push(COLUMNS.map((c) => escapeCsv(c)).join(";"));
+    for (const row of sheet) {
+      lines.push(COLUMNS.map((c) => escapeCsv(row[c] ?? "")).join(";"));
+    }
+    const csv = "\uFEFF" + lines.join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `prima_nota_contabile_aggregato_${periodSuffix}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const exportIva = () => {
@@ -1062,10 +1100,21 @@ export default function Amministrazione() {
                 </TabsTrigger>
               </TabsList>
               {tab === "contabile" ? (
-                <Button onClick={exportContabile} disabled={contabileRows.length === 0} data-testid="button-export-contabile">
-                  <Download className="h-4 w-4 mr-2" />
-                  Esporta aggregato giornaliero
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button onClick={exportContabile} disabled={contabileRows.length === 0} data-testid="button-export-contabile">
+                    <Download className="h-4 w-4 mr-2" />
+                    Esporta aggregato giornaliero
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={exportContabileCsv}
+                    disabled={contabileRows.length === 0}
+                    data-testid="button-export-contabile-csv"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Esporta aggregato (CSV)
+                  </Button>
+                </div>
               ) : (
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Button onClick={exportIva} disabled={ivaRows.length === 0} data-testid="button-export-iva">
