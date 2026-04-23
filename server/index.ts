@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { startBisuiteDailyScheduler } from "./bisuiteScheduler";
 
 const isProduction = process.env.NODE_ENV === "production";
 const BASE_PATH = isProduction ? "/incentivew3" : "";
@@ -84,6 +85,7 @@ app.use((req, res, next) => {
     app.get("/", (_req, res) => {
       res.redirect(BASE_PATH + "/");
     });
+    startBisuiteDailyScheduler();
   } else {
     await registerRoutes(httpServer, app);
 
