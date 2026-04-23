@@ -251,29 +251,6 @@ function buildIvaRows(sales: BisuiteSale[]): IvaRow[] {
   return rows.sort((a, b) => a.dataMs - b.dataMs || a.bisuiteId - b.bisuiteId);
 }
 
-interface ContabileExportRow {
-  Data: string;
-  "ID Scontrino": number | string;
-  "Codice POS": string;
-  "Punto Vendita": string;
-  "Ragione Sociale": string;
-  "Matricola Fiscale": string;
-  Addetto: string;
-  Cliente: string;
-  Totale: number | string;
-  Contanti: number | string;
-  POS: number | string;
-  Finanziato: number | string;
-  "VAR/Credito": number | string;
-  "Non Scontr. Cont.": number | string;
-  "Non Scontr. POS": number | string;
-  Bonifici: number | string;
-  Assegni: number | string;
-  Buoni: number | string;
-  Coupon: number | string;
-  "Altri Pagamenti": number | string;
-}
-
 interface IvaExportRow {
   Data: string;
   "ID Scontrino": number;
@@ -301,11 +278,6 @@ interface RiepilogoIvaRow {
   Imponibile: number | string;
   Imposta: number | string;
   Lordo: number | string;
-}
-
-interface RiepilogoPagamentoRow {
-  "Metodo Pagamento": string;
-  Importo: number;
 }
 
 export default function Amministrazione() {
@@ -560,62 +532,133 @@ export default function Amministrazione() {
   const periodSuffix = `${year}_${String(month).padStart(2, "0")}`;
 
   const exportContabile = () => {
-    const wb = XLSX.utils.book_new();
-    const dettaglio: ContabileExportRow[] = contabileRows.map((r) => ({
-      "Data": fmtDate(r.data),
-      "ID Scontrino": r.bisuiteId,
-      "Codice POS": r.codicePos,
-      "Punto Vendita": r.nomeNegozio,
-      "Ragione Sociale": r.ragioneSociale,
-      "Matricola Fiscale": r.matricolaFiscale,
-      "Addetto": r.nomeAddetto,
-      "Cliente": r.nomeCliente,
-      "Totale": r.totale,
-      "Contanti": r.incasso.contanti,
-      "POS": r.incasso.pos,
-      "Finanziato": r.incasso.finanziato,
-      "VAR/Credito": r.incasso.var,
-      "Non Scontr. Cont.": r.incasso.nonScontrinato,
-      "Non Scontr. POS": r.incasso.nonScontrinatoPos,
-      "Bonifici": r.incasso.bonifici,
-      "Assegni": r.incasso.assegni,
-      "Buoni": r.incasso.buoni,
-      "Coupon": r.incasso.coupon,
-      "Altri Pagamenti": r.incasso.altriPagamenti,
-    }));
-    const totalsRow: ContabileExportRow = {
-      "Data": "TOTALE",
-      "ID Scontrino": "",
-      "Codice POS": "",
-      "Punto Vendita": "",
-      "Ragione Sociale": "",
-      "Matricola Fiscale": "",
-      "Addetto": "",
-      "Cliente": "",
-      "Totale": contabileTotals.totale,
-      "Contanti": contabileTotals.incasso.contanti,
-      "POS": contabileTotals.incasso.pos,
-      "Finanziato": contabileTotals.incasso.finanziato,
-      "VAR/Credito": contabileTotals.incasso.var,
-      "Non Scontr. Cont.": contabileTotals.incasso.nonScontrinato,
-      "Non Scontr. POS": contabileTotals.incasso.nonScontrinatoPos,
-      "Bonifici": contabileTotals.incasso.bonifici,
-      "Assegni": contabileTotals.incasso.assegni,
-      "Buoni": contabileTotals.incasso.buoni,
-      "Coupon": contabileTotals.incasso.coupon,
-      "Altri Pagamenti": contabileTotals.incasso.altriPagamenti,
+    type AggExportRow = Record<string, string | number>;
+
+    const COLUMNS = [
+      "Data", "Ragione Sociale", "PDV", "Codice POS", "Scontrini", "Totale",
+      "Contanti", "POS", "Finanziato", "VAR",
+      "Non scontrino Cont./POS",
+      "Bonifici", "Assegni", "Buoni", "Coupon", "Altri",
+    ] as const;
+
+    const emptyRow = (): AggExportRow =>
+      Object.fromEntries(COLUMNS.map((c) => [c, ""])) as AggExportRow;
+
+    const sheet: AggExportRow[] = [];
+
+    // Aggregato per giorno × PDV all'interno di ogni Ragione Sociale,
+    // più una riga subtotale per RS. Rispetta i filtri attivi (filteredSales).
+    const grandTotals = {
+      scontrini: 0,
+      totale: 0,
+      incasso: Object.fromEntries(INCASSO_ITEMS_CONFIG.map((c) => [c.key, 0])) as Record<keyof IncassoTotals, number>,
     };
-    dettaglio.push(totalsRow);
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dettaglio), "Prima Nota Contabile");
 
-    const summary: RiepilogoPagamentoRow[] = INCASSO_ITEMS_CONFIG.map((cfg) => ({
-      "Metodo Pagamento": cfg.label,
-      "Importo": contabileTotals.incasso[cfg.key],
-    }));
-    summary.push({ "Metodo Pagamento": "TOTALE", "Importo": contabileTotals.totale });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Riepilogo Pagamenti");
+    for (const g of rsGroups) {
+      type Agg = {
+        dataDay: string;
+        dataMs: number;
+        codicePos: string;
+        nomeNegozio: string;
+        scontrini: number;
+        totale: number;
+        incasso: Record<keyof IncassoTotals, number>;
+      };
+      const map = new Map<string, Agg>();
+      for (const r of g.contabileRows) {
+        const dataDay = italianDayKey(r.data) || (r.data || "").slice(0, 10);
+        const k = `${dataDay}|${r.codicePos}`;
+        let a = map.get(k);
+        if (!a) {
+          a = {
+            dataDay, dataMs: r.dataMs,
+            codicePos: r.codicePos, nomeNegozio: r.nomeNegozio,
+            scontrini: 0, totale: 0,
+            incasso: Object.fromEntries(INCASSO_ITEMS_CONFIG.map((c) => [c.key, 0])) as Record<keyof IncassoTotals, number>,
+          };
+          map.set(k, a);
+        }
+        a.scontrini += 1;
+        a.totale += r.totale || 0;
+        for (const cfg of INCASSO_ITEMS_CONFIG) {
+          a.incasso[cfg.key] = (a.incasso[cfg.key] || 0) + (r.incasso[cfg.key] || 0);
+        }
+      }
+      const aggRows = Array.from(map.values()).sort(
+        (a, b) => a.dataMs - b.dataMs || a.nomeNegozio.localeCompare(b.nomeNegozio),
+      );
 
-    XLSX.writeFile(wb, `prima_nota_contabile_${periodSuffix}.xlsx`);
+      for (const a of aggRows) {
+        const row = emptyRow();
+        row["Data"] = fmtDate(a.dataDay);
+        row["Ragione Sociale"] = g.rs;
+        row["PDV"] = a.nomeNegozio;
+        row["Codice POS"] = a.codicePos;
+        row["Scontrini"] = a.scontrini;
+        row["Totale"] = a.totale;
+        row["Contanti"] = a.incasso.contanti;
+        row["POS"] = a.incasso.pos;
+        row["Finanziato"] = a.incasso.finanziato;
+        row["VAR"] = a.incasso.var;
+        row["Non scontrino Cont./POS"] = (a.incasso.nonScontrinato || 0) + (a.incasso.nonScontrinatoPos || 0);
+        row["Bonifici"] = a.incasso.bonifici;
+        row["Assegni"] = a.incasso.assegni;
+        row["Buoni"] = a.incasso.buoni;
+        row["Coupon"] = a.incasso.coupon;
+        row["Altri"] = a.incasso.altriPagamenti;
+        sheet.push(row);
+      }
+
+      // Subtotale per Ragione Sociale
+      const sub = emptyRow();
+      sub["Data"] = "TOTALE RS";
+      sub["Ragione Sociale"] = g.rs;
+      sub["Scontrini"] = g.contabileRows.length;
+      sub["Totale"] = g.contabileTotals.totale;
+      sub["Contanti"] = g.contabileTotals.incasso.contanti;
+      sub["POS"] = g.contabileTotals.incasso.pos;
+      sub["Finanziato"] = g.contabileTotals.incasso.finanziato;
+      sub["VAR"] = g.contabileTotals.incasso.var;
+      sub["Non scontrino Cont./POS"] =
+        (g.contabileTotals.incasso.nonScontrinato || 0) + (g.contabileTotals.incasso.nonScontrinatoPos || 0);
+      sub["Bonifici"] = g.contabileTotals.incasso.bonifici;
+      sub["Assegni"] = g.contabileTotals.incasso.assegni;
+      sub["Buoni"] = g.contabileTotals.incasso.buoni;
+      sub["Coupon"] = g.contabileTotals.incasso.coupon;
+      sub["Altri"] = g.contabileTotals.incasso.altriPagamenti;
+      sheet.push(sub);
+
+      grandTotals.scontrini += g.contabileRows.length;
+      grandTotals.totale += g.contabileTotals.totale;
+      for (const cfg of INCASSO_ITEMS_CONFIG) {
+        grandTotals.incasso[cfg.key] += g.contabileTotals.incasso[cfg.key] || 0;
+      }
+    }
+
+    // Totale generale
+    if (rsGroups.length > 0) {
+      const tot = emptyRow();
+      tot["Data"] = "TOTALE GENERALE";
+      tot["Scontrini"] = grandTotals.scontrini;
+      tot["Totale"] = grandTotals.totale;
+      tot["Contanti"] = grandTotals.incasso.contanti;
+      tot["POS"] = grandTotals.incasso.pos;
+      tot["Finanziato"] = grandTotals.incasso.finanziato;
+      tot["VAR"] = grandTotals.incasso.var;
+      tot["Non scontrino Cont./POS"] =
+        (grandTotals.incasso.nonScontrinato || 0) + (grandTotals.incasso.nonScontrinatoPos || 0);
+      tot["Bonifici"] = grandTotals.incasso.bonifici;
+      tot["Assegni"] = grandTotals.incasso.assegni;
+      tot["Buoni"] = grandTotals.incasso.buoni;
+      tot["Coupon"] = grandTotals.incasso.coupon;
+      tot["Altri"] = grandTotals.incasso.altriPagamenti;
+      sheet.push(tot);
+    }
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(sheet, { header: COLUMNS as unknown as string[] });
+    XLSX.utils.book_append_sheet(wb, ws, "Aggregato Giornaliero");
+    XLSX.writeFile(wb, `prima_nota_contabile_aggregato_${periodSuffix}.xlsx`);
   };
 
   const exportIva = () => {
@@ -1028,7 +1071,7 @@ export default function Amministrazione() {
               {tab === "contabile" ? (
                 <Button onClick={exportContabile} disabled={contabileRows.length === 0} data-testid="button-export-contabile">
                   <Download className="h-4 w-4 mr-2" />
-                  Esporta Contabile
+                  Esporta aggregato giornaliero
                 </Button>
               ) : (
                 <div className="flex flex-col sm:flex-row gap-2">
