@@ -45,6 +45,7 @@ export interface IStorage {
   upsertBisuiteSales(sales: InsertBisuiteSale[]): Promise<number>;
   getBisuiteSales(orgId: string, from?: Date, to?: Date): Promise<BisuiteSale[]>;
   getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number): Promise<BisuiteSale[]>;
+  getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string): Promise<BisuiteSale[]>;
   getBisuiteSale(id: string): Promise<BisuiteSale | undefined>;
   deleteBisuiteSalesByOrg(orgId: string): Promise<void>;
 
@@ -287,6 +288,20 @@ export class DatabaseStorage implements IStorage {
         sql`extract(year from ${bisuiteSales.dataVendita}) = ${year}`,
         sql`extract(month from ${bisuiteSales.dataVendita}) = ${month}`,
       ))
+      .orderBy(desc(bisuiteSales.dataVendita));
+  }
+
+  /**
+   * Vendite filtrate per intervallo di date italiane (YYYY-MM-DD inclusi).
+   * Confronta direttamente la parte data della colonna wall-time italiano,
+   * senza alcuna conversione di fuso orario o widening ±2h.
+   */
+  async getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string): Promise<BisuiteSale[]> {
+    const conditions = [eq(bisuiteSales.organizationId, orgId)];
+    if (fromYMD) conditions.push(sql`${bisuiteSales.dataVendita}::date >= ${fromYMD}::date`);
+    if (toYMD) conditions.push(sql`${bisuiteSales.dataVendita}::date <= ${toYMD}::date`);
+    return await db.select().from(bisuiteSales)
+      .where(and(...conditions))
       .orderBy(desc(bisuiteSales.dataVendita));
   }
 

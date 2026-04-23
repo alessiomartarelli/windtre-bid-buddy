@@ -7,11 +7,11 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 
-function italianDateRange(from: Date, to: Date): { from: Date; to: Date } {
-  return {
-    from: new Date(from.getTime() - 2 * 60 * 60 * 1000),
-    to: new Date(to.getTime() + 2 * 60 * 60 * 1000),
-  };
+function toItalianYMD(input: string | undefined): string | undefined | null {
+  if (input === undefined || input === null || input === "") return undefined;
+  const sepIdx = input.search(/[T ]/);
+  const datePart = sepIdx >= 0 ? input.slice(0, sepIdx) : input;
+  return /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? datePart : null;
 }
 
 const loginSchema = z.object({
@@ -639,8 +639,7 @@ export async function registerRoutes(
       if (isNaN(month) || isNaN(year) || month < 1 || month > 12) {
         return res.status(400).json({ message: "Parametri month/year non validi" });
       }
-      const { from, to } = italianDateRange(new Date(year, month - 1, 1), new Date(year, month, 0, 23, 59, 59));
-      const sales = await storage.getBisuiteSales(profile.organizationId!, from, to);
+      const sales = await storage.getBisuiteSalesByItalianMonth(profile.organizationId!, year, month);
       const pdvMap = new Map<string, { codicePos: string; nomeNegozio: string; ragioneSociale: string; salesCount: number }>();
       for (const sale of sales) {
         const codicePos = sale.codicePos || "";
@@ -1687,9 +1686,9 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Non puoi accedere ai dati di un'altra organizzazione" });
       }
 
-      // Filtro stretto per mese italiano: se il client invia year+month, usa
-      // EXTRACT(YEAR/MONTH) lato Postgres direttamente sulla colonna wall-time
-      // (Europe/Rome). Evita lo slittamento ±2h dell'approccio basato su from/to.
+      // Filtro stretto sul giorno italiano (Europe/Rome). Niente widening ±2h:
+      // la colonna data_vendita è un timestamp wall-time italiano (senza fuso),
+      // quindi confrontiamo direttamente per anno/mese o per data (YYYY-MM-DD).
       const yearParam = req.query.year ? parseInt(req.query.year as string, 10) : NaN;
       const monthParam = req.query.month ? parseInt(req.query.month as string, 10) : NaN;
       if (Number.isFinite(yearParam) && Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12) {
@@ -1697,21 +1696,12 @@ export async function registerRoutes(
         return res.json({ sales, count: sales.length });
       }
 
-      const fromRaw = req.query.from ? new Date(req.query.from as string) : undefined;
-      const toRaw = req.query.to ? new Date(req.query.to as string) : undefined;
-      let from = fromRaw;
-      let to = toRaw;
-      if (fromRaw && toRaw) {
-        const adj = italianDateRange(fromRaw, toRaw);
-        from = adj.from;
-        to = adj.to;
-      } else if (fromRaw) {
-        from = new Date(fromRaw.getTime() - 2 * 60 * 60 * 1000);
-      } else if (toRaw) {
-        to = new Date(toRaw.getTime() + 2 * 60 * 60 * 1000);
+      const fromYMD = toItalianYMD(req.query.from as string | undefined);
+      const toYMD = toItalianYMD(req.query.to as string | undefined);
+      if (fromYMD === null || toYMD === null) {
+        return res.status(400).json({ error: "Parametri from/to non validi (atteso YYYY-MM-DD)" });
       }
-
-      const sales = await storage.getBisuiteSales(orgId, from, to);
+      const sales = await storage.getBisuiteSalesByItalianDateRange(orgId, fromYMD, toYMD);
       res.json({ sales, count: sales.length });
     } catch (error: unknown) {
       console.error("BiSuite sales read error:", error);
@@ -1797,9 +1787,7 @@ export async function registerRoutes(
       const inGaraOnly = req.query.inGaraOnly === 'true' || req.query.inGaraOnly === '1';
       const garaConfigId = (req.query.garaConfigId as string) || undefined;
 
-      const { from, to } = italianDateRange(new Date(year, month - 1, 1), new Date(year, month, 0, 23, 59, 59));
-
-      const allSales = await storage.getBisuiteSales(orgId, from, to);
+      const allSales = await storage.getBisuiteSalesByItalianMonth(orgId, year, month);
 
       type CalendarShape = {
         weeklySchedule: { workingDays: number[] };
@@ -2068,9 +2056,7 @@ export async function registerRoutes(
       const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
       const year = parseInt(req.query.year as string) || new Date().getFullYear();
 
-      const { from, to } = italianDateRange(new Date(year, month - 1, 1), new Date(year, month, 0, 23, 59, 59));
-
-      const sales = await storage.getBisuiteSales(orgId, from, to);
+      const sales = await storage.getBisuiteSalesByItalianMonth(orgId, year, month);
 
       const sysMapping = await storage.getSystemConfig("bisuite_mapping");
       const mappingConfig = sysMapping?.config as { rules?: BiSuiteMappingRule[] } | null;
