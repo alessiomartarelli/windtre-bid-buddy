@@ -240,6 +240,43 @@ export function computeIncassoTotals(salesList: SaleWithRaw[]): IncassoTotals {
   return t;
 }
 
+/**
+ * Conteggia quanti scontrini contribuiscono a ciascun metodo di pagamento
+ * (cioè per cui il relativo importo è > 0). Per finanziato/var basta che
+ * almeno un articolo dello scontrino abbia importoFinanziato/importoCredito > 0.
+ */
+export function computeIncassoCounts(salesList: SaleWithRaw[]): IncassoTotals {
+  const c = emptyIncassoTotals();
+  for (const sale of salesList) {
+    const pag = sale.rawData?.pagamento;
+    if (pag) {
+      if (toNum(pag.contanti) > 0) c.contanti += 1;
+      if (toNum(pag.pagamentiElettronici) > 0) c.pos += 1;
+      if (toNum(pag.nonScontrinato) > 0) c.nonScontrinato += 1;
+      if (toNum(pag.nonScontrinatoPos) > 0) c.nonScontrinatoPos += 1;
+      if (toNum(pag.bonifici) > 0) c.bonifici += 1;
+      if (toNum(pag.assegni) > 0) c.assegni += 1;
+      if (toNum(pag.buoni) > 0) c.buoni += 1;
+      if (toNum(pag.coupon) > 0) c.coupon += 1;
+      if (toNum(pag.altriPagamenti) > 0) c.altriPagamenti += 1;
+    }
+    const articoli = sale.rawData?.articoli;
+    if (Array.isArray(articoli)) {
+      let hasFin = false;
+      let hasVar = false;
+      for (const art of articoli) {
+        const det = art?.dettaglio;
+        if (!det) continue;
+        if (toNum(det.importoFinanziato) > 0) hasFin = true;
+        if (toNum(det.importoCredito) > 0) hasVar = true;
+      }
+      if (hasFin) c.finanziato += 1;
+      if (hasVar) c.var += 1;
+    }
+  }
+  return c;
+}
+
 export interface IncassoItemConfig {
   key: keyof IncassoTotals;
   label: string;

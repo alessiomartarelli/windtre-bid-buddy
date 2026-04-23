@@ -7,6 +7,7 @@ import { apiUrl } from "@/lib/basePath";
 import { AppNavbar } from "@/components/AppNavbar";
 import {
   computeIncassoTotals,
+  computeIncassoCounts,
   INCASSO_ITEMS_CONFIG,
   toNum,
   classifyIvaArticolo,
@@ -465,10 +466,11 @@ export default function Amministrazione() {
     return t;
   };
 
-  const contabileTotals = useMemo<{ totale: number; incasso: IncassoTotals }>(() => {
+  const contabileTotals = useMemo<{ totale: number; incasso: IncassoTotals; counts: IncassoTotals }>(() => {
     return {
       totale: contabileRows.reduce((s, r) => s + r.totale, 0),
       incasso: computeIncassoTotals(filteredSales),
+      counts: computeIncassoCounts(filteredSales),
     };
   }, [contabileRows, filteredSales]);
 
@@ -499,6 +501,7 @@ export default function Amministrazione() {
           contabileTotals: {
             totale: gContabileRows.reduce((s, r) => s + r.totale, 0),
             incasso: computeIncassoTotals(gSales),
+            counts: computeIncassoCounts(gSales),
           },
           ivaRowsAll: gIvaRowsAll,
           ivaRows: gIvaRows,
@@ -1195,7 +1198,10 @@ export default function Amministrazione() {
                         <div><div className="text-xs text-muted-foreground">Totale</div><div className="font-semibold" data-testid={`totals-totale-${g.rs}`}>{fmtCurrency(g.contabileTotals.totale)}</div></div>
                         {INCASSO_ITEMS_CONFIG.map((cfg) => (
                           <div key={cfg.key}>
-                            <div className="text-xs text-muted-foreground">{cfg.label}</div>
+                            <div className="text-xs text-muted-foreground flex items-baseline justify-between gap-2">
+                              <span>{cfg.label}</span>
+                              <span className="text-[10px] tabular-nums" data-testid={`count-${cfg.key}-${g.rs}`}>{g.contabileTotals.counts[cfg.key].toLocaleString("it-IT")}</span>
+                            </div>
                             <div className={`font-semibold ${cfg.color}`}>{fmtCurrency(g.contabileTotals.incasso[cfg.key])}</div>
                           </div>
                         ))}
