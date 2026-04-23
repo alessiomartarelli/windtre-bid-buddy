@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -34,7 +34,7 @@ import { FilterBar, FilterField } from "@/components/ui/filter-bar";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
 import {
   BookOpen, Receipt, Loader2, Download, Search, AlertTriangle, HelpCircle, FileText,
-  Calendar, CalendarDays, Store, Building2,
+  Calendar, CalendarDays, Store, Building2, RefreshCw,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -305,6 +305,35 @@ export default function Amministrazione() {
 
   const orgId = profile?.organizationId || "";
   const isAuthorized = !!profile && ["admin", "super_admin"].includes(profile.role);
+  const queryClient = useQueryClient();
+
+  const refreshMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(apiUrl("/api/bisuite-fetch"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ start_date: fromDate, end_date: toDate }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Errore durante l'aggiornamento");
+      return data as { count?: number; totalFromApi?: number; message?: string };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Dati aggiornati",
+        description: data.message || `Importate ${data.count ?? 0} vendite da BiSuite`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/bisuite-sales"] });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Errore aggiornamento",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     if (!loading && profile && !isAuthorized) {
@@ -1098,8 +1127,22 @@ export default function Amministrazione() {
                   Prima Nota IVA
                 </TabsTrigger>
               </TabsList>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  onClick={() => refreshMutation.mutate()}
+                  disabled={refreshMutation.isPending || !orgId}
+                  variant="default"
+                  data-testid="button-refresh-bisuite"
+                >
+                  {refreshMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  {refreshMutation.isPending ? "Aggiornamento..." : "Aggiorna Dati"}
+                </Button>
               {tab === "contabile" ? (
-                <div className="flex flex-col sm:flex-row gap-2">
+                <>
                   <Button onClick={exportContabile} disabled={contabileRows.length === 0} data-testid="button-export-contabile">
                     <Download className="h-4 w-4 mr-2" />
                     Esporta aggregato giornaliero
@@ -1113,9 +1156,9 @@ export default function Amministrazione() {
                     <FileText className="h-4 w-4 mr-2" />
                     Esporta aggregato (CSV)
                   </Button>
-                </div>
+                </>
               ) : (
-                <div className="flex flex-col sm:flex-row gap-2">
+                <>
                   <Button onClick={exportIva} disabled={ivaRows.length === 0} data-testid="button-export-iva">
                     <Download className="h-4 w-4 mr-2" />
                     Esporta IVA
@@ -1129,8 +1172,9 @@ export default function Amministrazione() {
                     <FileText className="h-4 w-4 mr-2" />
                     Esporta Registro Corrispettivi
                   </Button>
-                </div>
+                </>
               )}
+              </div>
             </div>
 
             {rsGroups.length > 1 && (
