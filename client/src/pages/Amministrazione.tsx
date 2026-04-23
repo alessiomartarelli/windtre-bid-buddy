@@ -332,16 +332,9 @@ export default function Amministrazione() {
     enabled: !!orgId && isAuthorized,
   });
 
-  // Filtro stretto per fuso italiano: scarta scontrini il cui giorno (Europe/Rome)
-  // non ricade nel mese/anno selezionato. Compensa l'allargamento ±2h applicato
-  // dal backend ed eventuali differenze di fuso del browser.
-  const sales = useMemo(() => {
-    const all = data?.sales || [];
-    return all.filter(s => {
-      const ymd = italianYMD(s.dataVendita);
-      return !!ymd && ymd.year === year && ymd.month === month;
-    });
-  }, [data, year, month]);
+  // Il backend filtra già per mese italiano lato server (Task #54), quindi qui
+  // basta usare i dati così come sono restituiti.
+  const sales = useMemo(() => data?.sales || [], [data]);
 
   const pdvOptions = useMemo(() => {
     const map = new Map<string, string>();
