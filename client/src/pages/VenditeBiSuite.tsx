@@ -238,7 +238,13 @@ export default function VenditeBiSuite() {
     enabled: !!orgId,
   });
 
-  const sales = data?.sales || [];
+  // rawSales include anche le ANNULLATA (visibili nella tabella grezza con badge),
+  // mentre `sales` viene usato per tutti i conteggi/aggregati e le esclude.
+  const rawSales = data?.sales || [];
+  const sales = useMemo(
+    () => rawSales.filter(s => (s.stato || "").trim().toUpperCase() !== "ANNULLATA"),
+    [rawSales],
+  );
 
   const saleClassifications = useMemo(() => {
     const map = new Map<string, SaleClassification>();
@@ -333,9 +339,12 @@ export default function VenditeBiSuite() {
   }, [sales, saleClassifications]);
 
   const filteredSales = useMemo(() => {
+    // Tabella vendite grezze: parte da rawSales per mantenere visibili anche
+    // le righe ANNULLATA (con il loro badge), che invece sono escluse dagli
+    // aggregati calcolati su `sales`.
     let filtered = selectedPdv
-      ? sales.filter((s) => (s.codicePos || "N/D") === selectedPdv)
-      : sales;
+      ? rawSales.filter((s) => (s.codicePos || "N/D") === selectedPdv)
+      : rawSales;
 
     if (filterType !== "all") {
       filtered = filtered.filter((s) => {
