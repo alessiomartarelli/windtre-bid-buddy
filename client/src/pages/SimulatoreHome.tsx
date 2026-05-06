@@ -36,6 +36,8 @@ interface PreventivoListItem {
   name: string;
   organizationId: string;
   createdBy: string;
+  createdByName?: string | null;
+  createdByEmail?: string | null;
   createdAt: string;
   updatedAt: string;
   data?: any;
@@ -201,6 +203,10 @@ export default function SimulatoreHome() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {sorted.map((p) => {
                   const isMine = profile?.id && p.createdBy === profile.id;
+                  const authorLabel =
+                    (p.createdByName && p.createdByName.trim()) ||
+                    (p.createdByEmail && p.createdByEmail.trim()) ||
+                    "Sconosciuto";
                   return (
                     <Card
                       key={p.id}
@@ -243,11 +249,24 @@ export default function SimulatoreHome() {
                             <Calendar className="h-3.5 w-3.5" />
                             <span>Creata: {formatDate(p.createdAt)}</span>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <UserIcon className="h-3.5 w-3.5" />
-                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4">
-                              {isMine ? "Tu" : "Altro utente"}
-                            </Badge>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <UserIcon className="h-3.5 w-3.5 shrink-0" />
+                            <span
+                              className="truncate"
+                              title={authorLabel}
+                              data-testid={`text-sim-author-${p.id}`}
+                            >
+                              {authorLabel}
+                            </span>
+                            {isMine && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] py-0 px-1.5 h-4 shrink-0"
+                                data-testid={`badge-sim-author-tu-${p.id}`}
+                              >
+                                Tu
+                              </Badge>
+                            )}
                           </div>
                         </div>
 

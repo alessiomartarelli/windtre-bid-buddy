@@ -19,7 +19,7 @@ export interface IStorage {
   deleteOrganization(id: string): Promise<void>;
 
   // Preventivi
-  getPreventivi(orgId: string): Promise<Preventivo[]>;
+  getPreventivi(orgId: string): Promise<(Preventivo & { createdByName: string | null; createdByEmail: string | null })[]>;
   getPreventivo(id: string): Promise<Preventivo | undefined>;
   createPreventivo(prev: InsertPreventivo): Promise<Preventivo>;
   updatePreventivo(id: string, name: string, data: any): Promise<Preventivo>;
@@ -149,10 +149,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Preventivi
-  async getPreventivi(orgId: string): Promise<Preventivo[]> {
-    return await db.select().from(preventivi)
+  async getPreventivi(orgId: string): Promise<(Preventivo & { createdByName: string | null; createdByEmail: string | null })[]> {
+    const rows = await db.select({
+      preventivo: preventivi,
+      createdByName: profiles.fullName,
+      createdByEmail: profiles.email,
+    }).from(preventivi)
+      .leftJoin(profiles, eq(profiles.id, preventivi.createdBy))
       .where(eq(preventivi.organizationId, orgId))
       .orderBy(desc(preventivi.updatedAt));
+    return rows.map((r) => ({
+      ...r.preventivo,
+      createdByName: r.createdByName,
+      createdByEmail: r.createdByEmail,
+    }));
   }
 
   async getPreventivo(id: string): Promise<Preventivo | undefined> {
