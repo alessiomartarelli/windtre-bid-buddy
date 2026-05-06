@@ -6,6 +6,7 @@ import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
+import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
 
 function toItalianYMD(input: string | undefined): string | undefined | null {
   if (input === undefined || input === null || input === "") return undefined;
@@ -64,6 +65,31 @@ const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   }
   return res.status(401).json({ message: "Unauthorized" });
 };
+
+// Blocca le route se il modulo non è abilitato per l'org dell'utente.
+// super_admin bypassa sempre. Richiede isAuthenticated prima.
+function requireModule(moduleKey: string): RequestHandler {
+  return async (req: any, res, next) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile) return res.status(401).json({ message: "Unauthorized" });
+      if (profile.role === "super_admin") return next();
+      if (!profile.organizationId) {
+        return res.status(403).json({ message: "Modulo non abilitato" });
+      }
+      const org = await storage.getOrganization(profile.organizationId);
+      if (!org) {
+        return res.status(403).json({ message: "Organizzazione non trovata" });
+      }
+      if (!isModuleEnabled(org.enabledModules as any, moduleKey)) {
+        return res.status(403).json({ message: "Modulo non abilitato per la tua organizzazione" });
+      }
+      next();
+    } catch (e) {
+      res.status(500).json({ message: "Errore controllo modulo" });
+    }
+  };
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -707,7 +733,7 @@ export async function registerRoutes(
     overwrite: z.boolean().optional(),
   });
 
-  app.get("/api/drms", isAuthenticated, async (req: any, res) => {
+  app.get("/api/drms", isAuthenticated, requireModule("drms_commissioning"), async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
@@ -719,7 +745,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/drms/by-period", isAuthenticated, async (req: any, res) => {
+  app.get("/api/drms/by-period", isAuthenticated, requireModule("drms_commissioning"), async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
@@ -736,7 +762,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/drms/:id", isAuthenticated, async (req: any, res) => {
+  app.get("/api/drms/:id", isAuthenticated, requireModule("drms_commissioning"), async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
@@ -751,7 +777,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/drms", isAuthenticated, async (req: any, res) => {
+  app.post("/api/drms", isAuthenticated, requireModule("drms_commissioning"), async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
@@ -788,7 +814,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/drms/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/drms/:id", isAuthenticated, requireModule("drms_commissioning"), async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
@@ -961,6 +987,47 @@ export async function registerRoutes(
       res.status(201).json(org);
     } catch (error) {
       res.status(500).json({ message: "Error creating organization" });
+    }
+  });
+
+  // GET enabled modules for an organization (super-admin only)
+  app.get("/api/super-admin/organizations/:id/modules", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const org = await storage.getOrganization(req.params.id);
+      if (!org) return res.status(404).json({ message: "Organizzazione non trovata" });
+      res.json({ enabledModules: org.enabledModules || {} });
+    } catch (e) {
+      res.status(500).json({ message: "Errore lettura moduli" });
+    }
+  });
+
+  // PUT enabled modules for an organization (super-admin only)
+  app.put("/api/super-admin/organizations/:id/modules", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const body = req.body?.enabledModules;
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return res.status(400).json({ message: "enabledModules deve essere un oggetto" });
+      }
+      // Sanitize: solo chiavi note e valori boolean
+      const sanitized: Record<string, boolean> = {};
+      for (const k of MODULE_KEYS) {
+        if (k in body) sanitized[k] = body[k] !== false;
+      }
+      const updated = await storage.updateOrganization(req.params.id, {
+        enabledModules: sanitized as any,
+      });
+      res.json({ enabledModules: updated.enabledModules || {} });
+    } catch (e) {
+      console.error("Error updating modules:", e);
+      res.status(500).json({ message: "Errore aggiornamento moduli" });
     }
   });
 

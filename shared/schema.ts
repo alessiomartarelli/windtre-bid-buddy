@@ -18,6 +18,7 @@ export const sessions = pgTable(
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name").notNull(),
+  enabledModules: jsonb("enabled_modules").$type<Record<string, boolean>>().default({}),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

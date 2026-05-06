@@ -81,6 +81,22 @@ confirm on conflict). Logic:
   `overwrite=true`), DELETE `/api/drms/:id`. All gated by `requireAdminRole`
   with org-ownership check.
 
+### Moduli per organizzazione
+Ogni `organizations.enabledModules` (jsonb) è un `Record<ModuleKey, boolean>`.
+Chiave assente o `true` = modulo abilitato; `false` = disabilitato. `super_admin`
+bypassa sempre i flag. Lista canonica delle chiavi (pagine + prodotti wizard) in
+`shared/modules.ts`. Helper: `isModuleEnabled(record, key)`.
+- API super-admin: `GET/PUT /api/super-admin/organizations/:id/modules`.
+- Backend: `requireModule(key)` middleware (es. applicato a `/api/drms*`).
+- Frontend: hook `useEnabledModules()`, componente `<ModuleRoute>` in
+  `App.tsx` (redirect → `/` + toast), filtro voci in `AppNavbar.tsx`,
+  dialog di gestione in `SuperAdminPanel.tsx` (`ModulesDialog`).
+- Wizard `Preventivatore.tsx`: `getProductModuleForStep(step, tipologia)`
+  mappa step → `prod_*`; un useEffect auto-skippa gli step prodotto disabilitati
+  rispettando la direzione di navigazione, e i premi disabilitati sono azzerati
+  nel `WizardSummaryCard` (variabili `effTot*`).
+- `/admin`, `/super-admin`, `/profile`, `/dashboard` (sim) restano sempre core.
+
 ### Production Deployment
 - **Environment**: VPS 85.215.124.207 with Nginx reverse proxy, app on port 3001.
 - **Base Path**: `/incentivew3` for all production assets and API calls.

@@ -52,9 +52,38 @@ import { WizardHeader } from "@/components/wizard/WizardHeader";
 import { WizardSummaryCard } from "@/components/wizard/WizardSummaryCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useEnabledModules } from "@/hooks/useEnabledModules";
+import { Ban } from "lucide-react";
 
 // TOTAL_STEPS è dinamico: 14 per gara_operatore_rs (include step selezione modalità), 13 altrimenti
 const getTotalSteps = (tipologiaGara: string) => tipologiaGara === "gara_operatore_rs" ? 14 : 13;
+
+// Mappa step → modulo prodotto (per tipologia di gara). null = step non legato a un prodotto disabilitabile.
+function getProductModuleForStep(step: number, tipologiaGara: string): string | null {
+  const isRS = tipologiaGara === "gara_operatore_rs";
+  if (isRS) {
+    switch (step) {
+      case 7: return "prod_mobile";
+      case 8: return "prod_fisso";
+      case 9: return "prod_partnership_reward";
+      case 10: return "prod_energia";
+      case 11: return "prod_assicurazioni";
+      case 12: return "prod_protecta";
+      case 13: return "prod_extra_gara_iva";
+      default: return null;
+    }
+  }
+  switch (step) {
+    case 6: return "prod_mobile";
+    case 7: return "prod_fisso";
+    case 8: return "prod_partnership_reward";
+    case 9: return "prod_energia";
+    case 10: return "prod_assicurazioni";
+    case 11: return "prod_protecta";
+    case 12: return "prod_extra_gara_iva";
+    default: return null;
+  }
+}
 
 let _preventivatoreInitialized = false;
 
@@ -1345,6 +1374,49 @@ const Preventivatore = () => {
 
   // Numero totale step (dinamico)
   const TOTAL_STEPS = getTotalSteps(configGara.tipologiaGara || "gara_operatore");
+
+  // Moduli prodotto abilitati per la org
+  const { isEnabled: isProdEnabled } = useEnabledModules();
+  const isStepDisabledByModule = (s: number): boolean => {
+    const key = getProductModuleForStep(s, configGara.tipologiaGara || "gara_operatore");
+    return key !== null && !isProdEnabled(key);
+  };
+  const currentStepDisabled = isStepDisabledByModule(step);
+  const lastStepRef = useRef<number>(step);
+
+  // Auto-skip degli step prodotti disabilitati, rispettando la direzione di navigazione
+  useEffect(() => {
+    if (!currentStepDisabled) {
+      lastStepRef.current = step;
+      return;
+    }
+    const goingForward = step >= lastStepRef.current;
+    if (goingForward) {
+      let next = step + 1;
+      while (next < TOTAL_STEPS && isStepDisabledByModule(next)) next++;
+      if (next < TOTAL_STEPS) { setStep(next); return; }
+      // tutti i successivi disabilitati → torna indietro
+      let prev = step - 1;
+      while (prev >= 0 && isStepDisabledByModule(prev)) prev--;
+      if (prev >= 0) setStep(prev);
+    } else {
+      let prev = step - 1;
+      while (prev >= 0 && isStepDisabledByModule(prev)) prev--;
+      if (prev >= 0) { setStep(prev); return; }
+      let next = step + 1;
+      while (next < TOTAL_STEPS && isStepDisabledByModule(next)) next++;
+      if (next < TOTAL_STEPS) setStep(next);
+    }
+  }, [step, currentStepDisabled, TOTAL_STEPS]);
+
+  // Totali effettivi (zero per i prodotti disabilitati) per riepilogo/sidebar
+  const effTotMobile = isProdEnabled('prod_mobile') ? totalePremioMobile : 0;
+  const effTotFisso = isProdEnabled('prod_fisso') ? totalePremioFisso : 0;
+  const effTotPartnership = isProdEnabled('prod_partnership_reward') ? totalePremioPartnershipPrevisto : 0;
+  const effTotEnergia = isProdEnabled('prod_energia') ? totalePremioEnergia : 0;
+  const effTotAssicurazioni = isProdEnabled('prod_assicurazioni') ? totalePremioAssicurazioni : 0;
+  const effTotProtecta = isProdEnabled('prod_protecta') ? totalePremioProtecta : 0;
+  const effTotExtraGaraIva = isProdEnabled('prod_extra_gara_iva') ? totalePremioExtraGaraIva : 0;
   
   // Validazione step corrente
   const isCurrentStepValid = (): boolean => {
@@ -1840,13 +1912,13 @@ const Preventivatore = () => {
           {/* Sidebar Summary (visible on larger screens) */}
           <div className="hidden lg:block space-y-4">
             <WizardSummaryCard
-              premioMobile={totalePremioMobile}
-              premioFisso={totalePremioFisso}
-              premioPartnership={totalePremioPartnershipPrevisto}
-              premioEnergia={totalePremioEnergia}
-              premioAssicurazioni={totalePremioAssicurazioni}
-              premioProtecta={totalePremioProtecta}
-              premioExtraGaraIva={totalePremioExtraGaraIva}
+              premioMobile={effTotMobile}
+              premioFisso={effTotFisso}
+              premioPartnership={effTotPartnership}
+              premioEnergia={effTotEnergia}
+              premioAssicurazioni={effTotAssicurazioni}
+              premioProtecta={effTotProtecta}
+              premioExtraGaraIva={effTotExtraGaraIva}
               currentStep={step}
               tipologiaGara={configGara.tipologiaGara}
               premiPerRS={premiPerRS}

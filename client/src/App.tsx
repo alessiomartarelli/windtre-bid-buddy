@@ -4,8 +4,11 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { BASE_PATH } from "@/lib/basePath";
 import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 import NotFound from "@/pages/not-found";
 import Index from "@/pages/Index";
 import Dashboard from "@/pages/Dashboard";
@@ -41,6 +44,37 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return <Component />;
 }
 
+function ModuleRoute({ component: Component, moduleKey }: { component: React.ComponentType; moduleKey: string }) {
+  const { user, loading } = useAuth();
+  const { isEnabled, loading: modLoading } = useEnabledModules();
+  const { toast } = useToast();
+
+  const blocked = !loading && !modLoading && !!user && !isEnabled(moduleKey);
+
+  useEffect(() => {
+    if (blocked) {
+      toast({
+        title: 'Modulo non abilitato',
+        description: 'Questo modulo non è attivo per la tua organizzazione.',
+        variant: 'destructive',
+      });
+    }
+  }, [blocked, toast]);
+
+  if (loading || modLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) return <Redirect to="/auth" />;
+  if (blocked) return <Redirect to="/" />;
+
+  return <Component />;
+}
+
 function Router() {
   return (
     <Switch>
@@ -52,10 +86,10 @@ function Router() {
         {() => <ProtectedRoute component={Dashboard} />}
       </Route>
       <Route path="/simulatore">
-        {() => <ProtectedRoute component={SimulatoreHome} />}
+        {() => <ModuleRoute component={SimulatoreHome} moduleKey="simulatore" />}
       </Route>
       <Route path="/preventivatore">
-        {() => <ProtectedRoute component={Preventivatore} />}
+        {() => <ModuleRoute component={Preventivatore} moduleKey="simulatore" />}
       </Route>
       <Route path="/profile">
         {() => <ProtectedRoute component={Profile} />}
@@ -67,25 +101,25 @@ function Router() {
         {() => <ProtectedRoute component={SuperAdminPanel} />}
       </Route>
       <Route path="/tabelle-calcolo">
-        {() => <ProtectedRoute component={TabelleCalcolo} />}
+        {() => <ModuleRoute component={TabelleCalcolo} moduleKey="tabelle_calcolo" />}
       </Route>
       <Route path="/vendite-bisuite">
-        {() => <ProtectedRoute component={VenditeBiSuite} />}
+        {() => <ModuleRoute component={VenditeBiSuite} moduleKey="vendite_bisuite" />}
       </Route>
       <Route path="/mappatura-bisuite">
-        {() => <ProtectedRoute component={MappaturaBiSuite} />}
+        {() => <ModuleRoute component={MappaturaBiSuite} moduleKey="mappatura_bisuite" />}
       </Route>
       <Route path="/dashboard-gara-reale">
-        {() => <ProtectedRoute component={DashboardGaraReale} />}
+        {() => <ModuleRoute component={DashboardGaraReale} moduleKey="gara_dashboard" />}
       </Route>
       <Route path="/configurazione-gara">
-        {() => <ProtectedRoute component={ConfigurazioneGara} />}
+        {() => <ModuleRoute component={ConfigurazioneGara} moduleKey="gara_configurazione" />}
       </Route>
       <Route path="/amministrazione">
-        {() => <ProtectedRoute component={Amministrazione} />}
+        {() => <ModuleRoute component={Amministrazione} moduleKey="amministrazione" />}
       </Route>
       <Route path="/drms-commissioning">
-        {() => <ProtectedRoute component={DrmsCommissioning} />}
+        {() => <ModuleRoute component={DrmsCommissioning} moduleKey="drms_commissioning" />}
       </Route>
       <Route component={NotFound} />
     </Switch>

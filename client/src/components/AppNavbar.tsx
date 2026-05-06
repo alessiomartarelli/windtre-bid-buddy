@@ -1,5 +1,6 @@
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
+import { useEnabledModules } from '@/hooks/useEnabledModules';
 import { BASE_PATH } from '@/lib/basePath';
 import { Button } from '@/components/ui/button';
 import {
@@ -55,25 +56,26 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
 
   const isAdminOrSuper = ['super_admin', 'admin'].includes(profile?.role || '');
   const isSuperAdmin = profile?.role === 'super_admin';
+  const { isEnabled } = useEnabledModules();
 
   const adminItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
     ...(isSuperAdmin ? [{ path: '/super-admin', label: 'Super Admin', icon: Shield }] : []),
     ...(isAdminOrSuper ? [{ path: '/admin', label: 'Gestione Organizzazione', icon: Building2 }] : []),
-    ...(isAdminOrSuper ? [{ path: '/amministrazione', label: 'Amministrazione', icon: BookOpen }] : []),
-    ...(isAdminOrSuper ? [{ path: '/drms-commissioning', label: 'DRMS Commissioning', icon: BarChart3 }] : []),
+    ...(isAdminOrSuper && isEnabled('amministrazione') ? [{ path: '/amministrazione', label: 'Amministrazione', icon: BookOpen }] : []),
+    ...(isAdminOrSuper && isEnabled('drms_commissioning') ? [{ path: '/drms-commissioning', label: 'DRMS Commissioning', icon: BarChart3 }] : []),
   ];
 
   const garaItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
-    { path: '/dashboard-gara-reale', label: 'Dashboard', icon: LayoutDashboard },
-    ...(isAdminOrSuper ? [{ path: '/configurazione-gara', label: 'Configurazione', icon: Trophy }] : []),
-    { path: '/vendite-bisuite', label: 'Vendite BiSuite', icon: ShoppingCart },
+    ...(isEnabled('gara_dashboard') ? [{ path: '/dashboard-gara-reale', label: 'Dashboard', icon: LayoutDashboard }] : []),
+    ...(isAdminOrSuper && isEnabled('gara_configurazione') ? [{ path: '/configurazione-gara', label: 'Configurazione', icon: Trophy }] : []),
+    ...(isEnabled('vendite_bisuite') ? [{ path: '/vendite-bisuite', label: 'Vendite BiSuite', icon: ShoppingCart }] : []),
     ...(isSuperAdmin ? [{ path: '/mappatura-bisuite', label: 'Mappatura', icon: MapPin }] : []),
   ];
 
   const simulatoreItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
-    { path: '/simulatore', label: 'Simulatore', icon: FileText },
-    { path: '/dashboard', label: 'Dashboard Sim.', icon: LayoutDashboard },
-    ...(isAdminOrSuper ? [{ path: '/tabelle-calcolo', label: 'Tabelle Calcolo', icon: Table2 }] : []),
+    ...(isEnabled('simulatore') ? [{ path: '/simulatore', label: 'Simulatore', icon: FileText }] : []),
+    ...(isEnabled('simulatore') ? [{ path: '/dashboard', label: 'Dashboard Sim.', icon: LayoutDashboard }] : []),
+    ...(isAdminOrSuper && isEnabled('tabelle_calcolo') ? [{ path: '/tabelle-calcolo', label: 'Tabelle Calcolo', icon: Table2 }] : []),
   ];
 
   return (

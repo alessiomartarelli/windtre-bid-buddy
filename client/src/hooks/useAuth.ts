@@ -15,6 +15,7 @@ interface Profile {
 interface Organization {
   id: string;
   name: string;
+  enabledModules?: Record<string, boolean> | null;
 }
 
 interface User {

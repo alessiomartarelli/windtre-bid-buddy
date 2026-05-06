@@ -9,8 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Users, Building2, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Users, Building2, Trash2, Settings2 } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
+import { ModulesDialog } from '@/components/ModulesDialog';
 import { BiSuiteConnectionForm } from '@/components/BiSuiteConnectionForm';
 import { BiSuiteSalesTest } from '@/components/BiSuiteSalesTest';
 import { z } from 'zod';
@@ -68,6 +69,7 @@ export default function SuperAdminPanel() {
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [modulesOrg, setModulesOrg] = useState<Organization | null>(null);
   
   // Form state
   const [email, setEmail] = useState('');
@@ -380,6 +382,17 @@ export default function SuperAdminPanel() {
                           {new Date(org.createdAt || org.created_at || '').toLocaleDateString('it-IT')}
                         </TableCell>
                         <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => setModulesOrg(org)}
+                              data-testid={`button-modules-${org.id}`}
+                              title="Gestisci moduli"
+                            >
+                              <Settings2 className="h-4 w-4" />
+                            </Button>
                           {!isMyOrganization(org.id) && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
@@ -417,6 +430,7 @@ export default function SuperAdminPanel() {
                               </AlertDialogContent>
                             </AlertDialog>
                           )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -529,6 +543,15 @@ export default function SuperAdminPanel() {
         {/* BiSuite Sales Test */}
         <BiSuiteSalesTest organizations={organizations} />
       </div>
+
+      {modulesOrg && (
+        <ModulesDialog
+          open={!!modulesOrg}
+          onOpenChange={(o) => { if (!o) setModulesOrg(null); }}
+          organizationId={modulesOrg.id}
+          organizationName={modulesOrg.name}
+        />
+      )}
     </div>
   );
 }
