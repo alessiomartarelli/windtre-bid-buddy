@@ -1461,6 +1461,8 @@ const Preventivatore = () => {
   
   // Validazione step corrente
   const isCurrentStepValid = (): boolean => {
+    // Gara addetto: tipologia non ancora disponibile, blocca l'avanzamento.
+    if (configGara.tipologiaGara === "gara_addetto") return false;
     if (step === 1) {
       // Step 2: verifica che ci sia almeno un PDV e che tutti abbiano i campi obbligatori
       if (numeroPdv === 0) return false;

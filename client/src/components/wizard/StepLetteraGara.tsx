@@ -10,7 +10,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { ConfigGaraBase, TipologiaGara, TIPOLOGIA_GARA_OPTIONS } from "@/types/preventivatore";
-import { FileText, Calendar, Clock, Target } from "lucide-react";
+import { FileText, Calendar, Clock, Target, Construction } from "lucide-react";
 
 interface StepLetteraProps {
   configGara: ConfigGaraBase;
@@ -65,14 +65,29 @@ export const StepLetteraGara: React.FC<StepLetteraProps> = ({
                 ))}
               </SelectContent>
             </Select>
-            {configGara.tipologiaGara === "gara_addetto" && (
-              <p className="text-xs text-muted-foreground mt-2 italic">
-                Questa tipologia sarà disponibile in futuro.
-              </p>
-            )}
           </CardContent>
         </Card>
 
+        {configGara.tipologiaGara === "gara_addetto" ? (
+          <Card className="border-warning/40 bg-warning/5">
+            <CardContent className="p-8">
+              <div className="flex flex-col items-center justify-center text-center" data-testid="gara-addetto-coming-soon">
+                <div className="w-16 h-16 rounded-full bg-warning/20 flex items-center justify-center mb-4">
+                  <Construction className="w-8 h-8 text-warning" />
+                </div>
+                <h3 className="text-xl font-semibold text-foreground mb-2">
+                  Gara addetto — non ancora disponibile
+                </h3>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Questa tipologia di gara sarà disponibile in una versione futura
+                  del simulatore. Seleziona <span className="font-medium text-foreground">Gara operatore</span> oppure
+                  <span className="font-medium text-foreground"> Gara operatore RS</span> per proseguire con la simulazione.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+        <div className="contents">
         {/* Nome Gara */}
         <Card className="border-border/50 shadow-sm">
           <CardContent className="p-4">
@@ -187,6 +202,8 @@ export const StepLetteraGara: React.FC<StepLetteraProps> = ({
             </CardContent>
           </Card>
         </div>
+        </div>
+        )}
       </div>
     </div>
   );
