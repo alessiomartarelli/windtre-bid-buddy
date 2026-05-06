@@ -105,6 +105,17 @@ on/off unico) in `shared/modules.ts`. Helper: `isModuleEnabled(record, key)`.
 - **Deploy recipe**: `npm run build` → `tar czf /tmp/incentivew3-deploy.tgz -C dist public index.cjs` → `scp` su VPS → ssh: `cd /var/www/incentive-w3 && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart 0 --update-env`.
 - **Mechanism**: Client-side `BASE_PATH` constant and `apiUrl()` helper, server-side sub-app mounting, and base href injection for asset resolution.
 
+### Wizard storage scoping (data leak fix)
+Le chiavi `localStorage` del wizard Preventivatore (`preventivatore-state`,
+`preventivatore-template`, `preventivatore-config`) sono scoped per
+`organizationId` (suffix `:${orgId}`). Il hook `usePreventivatoreStorage(orgId)`
+in `client/src/hooks/use-preventivatore-storage.ts` accetta orgId, è no-op
+finché auth non è caricata, e cancella in mount le vecchie chiavi globali
+legacy (purgeLegacyUnscopedKeys). `Preventivatore.tsx` passa
+`useAuth().profile.organizationId` e gate l'init effect su `storageReady`.
+Senza questo scoping, in browser usato da più organizzazioni TEST poteva
+caricare PDV/config di un'altra org (es. CMS S.R.L.) dal localStorage residuo.
+
 ## External Dependencies
 
 - **PostgreSQL**: Primary database.

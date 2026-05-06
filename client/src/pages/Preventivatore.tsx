@@ -53,6 +53,7 @@ import { WizardSummaryCard } from "@/components/wizard/WizardSummaryCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
+import { useAuth } from "@/hooks/useAuth";
 import { Ban } from "lucide-react";
 
 // TOTAL_STEPS è dinamico: 14 per gara_operatore_rs (include step selezione modalità), 13 altrimenti
@@ -85,13 +86,16 @@ function getProductModuleForStep(step: number, tipologiaGara: string): string | 
   }
 }
 
-let _preventivatoreInitialized = false;
-
 const Preventivatore = () => {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const searchParams = new URLSearchParams(searchString);
-  const { saveState, loadState, clearState, saveTemplate, loadTemplate, saveConfig, loadConfig } = usePreventivatoreStorage();
+  const { profile: authProfile } = useAuth();
+  const currentOrgId = authProfile?.organizationId ?? null;
+  const { saveState, loadState, clearState, saveTemplate, loadTemplate, saveConfig, loadConfig, isReady: storageReady } = usePreventivatoreStorage(currentOrgId);
+  // Tiene traccia dell'orgId per cui è stata caricata l'init: se cambia
+  // (cambio organizzazione senza remount), forziamo un reload.
+  const initializedForOrgRef = useRef<string | null>(null);
   const { loadRemoteConfig, saveRemoteConfigDebounced, saveRemoteConfigNow } = useOrganizationConfig();
   const { createPreventivo, updatePreventivo, loadPreventivo } = usePreventivi();
   const { toast } = useToast();
@@ -315,10 +319,28 @@ const Preventivatore = () => {
     }
   };
 
-  // Carica preventivo da URL o stato salvato al mount
+  // Carica preventivo da URL o stato salvato al mount.
+  // Aspetta che lo storage sia "ready" (organizationId disponibile) per evitare
+  // di leggere da chiavi non scoped (data leak tra organizzazioni).
+  // Se l'organizationId cambia durante la sessione (es. cambio org senza
+  // remount) ricarichiamo dallo storage corretto.
   useEffect(() => {
-    if (_preventivatoreInitialized) return;
-    _preventivatoreInitialized = true;
+    if (!storageReady || !currentOrgId) return;
+    if (initializedForOrgRef.current === currentOrgId) return;
+    const previousOrgId = initializedForOrgRef.current;
+    initializedForOrgRef.current = currentOrgId;
+    if (previousOrgId && previousOrgId !== currentOrgId) {
+      // Cambio organizzazione: resetta lo stato in-memory prima di ricaricare
+      setIsLoaded(false);
+      setStep(0);
+      setPuntiVendita([]);
+      setNumeroPdv(0);
+      setAttivatoMobileByPos({}); setAttivatoFissoByPos({}); setAttivatoCBByPos({});
+      setAttivatoEnergiaByPos({}); setAttivatoAssicurazioniByPos({}); setAttivatoProtectaByPos({});
+      setAttivatoMobileByRS({}); setAttivatoFissoByRS({}); setAttivatoCBByRS({});
+      setAttivatoEnergiaByRS({}); setAttivatoAssicurazioniByRS({}); setAttivatoProtectaByRS({});
+      setCurrentPreventivoId(null); setPreventivoName("");
+    }
     const loadFromUrl = async () => {
       const preventivoId = searchParams.get('id');
       const isNew = searchParams.get('new') === 'true';
@@ -546,11 +568,8 @@ const Preventivatore = () => {
     };
     
     loadFromUrl();
-    return () => {
-      _preventivatoreInitialized = false;
-    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [storageReady, currentOrgId]);
 
   // Salva automaticamente lo stato quando cambia
   useEffect(() => {
