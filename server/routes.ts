@@ -72,21 +72,21 @@ function requireModule(moduleKey: string): RequestHandler {
   return async (req: any, res, next) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
-      if (!profile) return res.status(401).json({ message: "Unauthorized" });
+      if (!profile) return res.status(401).json({ error: "Unauthorized" });
       if (profile.role === "super_admin") return next();
       if (!profile.organizationId) {
-        return res.status(403).json({ message: "Modulo non abilitato" });
+        return res.status(403).json({ error: "Modulo non abilitato" });
       }
       const org = await storage.getOrganization(profile.organizationId);
       if (!org) {
-        return res.status(403).json({ message: "Organizzazione non trovata" });
+        return res.status(403).json({ error: "Modulo non abilitato" });
       }
-      if (!isModuleEnabled(org.enabledModules as any, moduleKey)) {
-        return res.status(403).json({ message: "Modulo non abilitato per la tua organizzazione" });
+      if (!isModuleEnabled(org.enabledModules ?? null, moduleKey)) {
+        return res.status(403).json({ error: "Modulo non abilitato" });
       }
       next();
     } catch (e) {
-      res.status(500).json({ message: "Errore controllo modulo" });
+      res.status(500).json({ error: "Errore controllo modulo" });
     }
   };
 }
@@ -220,7 +220,7 @@ export async function registerRoutes(
   });
 
   // === PREVENTIVI ===
-  app.get("/api/preventivi", isAuthenticated, async (req: any, res) => {
+  app.get("/api/preventivi", isAuthenticated, requireModule("simulatore"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -234,7 +234,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/preventivi", isAuthenticated, async (req: any, res) => {
+  app.post("/api/preventivi", isAuthenticated, requireModule("simulatore"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -254,7 +254,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/preventivi/:id", isAuthenticated, async (req: any, res) => {
+  app.put("/api/preventivi/:id", isAuthenticated, requireModule("simulatore"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -276,7 +276,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/preventivi/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/preventivi/:id", isAuthenticated, requireModule("simulatore"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -297,7 +297,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/preventivi/:id", isAuthenticated, async (req: any, res) => {
+  app.get("/api/preventivi/:id", isAuthenticated, requireModule("simulatore"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -386,7 +386,7 @@ export async function registerRoutes(
   });
 
   // === PDV CONFIGURATIONS ===
-  app.get("/api/pdv-configurations", isAuthenticated, async (req: any, res) => {
+  app.get("/api/pdv-configurations", isAuthenticated, requireModule("simulatore"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -400,7 +400,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/pdv-configurations/:id", isAuthenticated, async (req: any, res) => {
+  app.get("/api/pdv-configurations/:id", isAuthenticated, requireModule("simulatore"), async (req: any, res) => {
     try {
       const config = await storage.getPdvConfiguration(req.params.id);
       if (!config) {
@@ -412,7 +412,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/pdv-configurations", isAuthenticated, async (req: any, res) => {
+  app.post("/api/pdv-configurations", isAuthenticated, requireModule("simulatore"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -436,7 +436,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/pdv-configurations/:id", isAuthenticated, async (req: any, res) => {
+  app.put("/api/pdv-configurations/:id", isAuthenticated, requireModule("simulatore"), async (req: any, res) => {
     try {
       const { name, config } = req.body;
       if (!name || !name.trim()) {
@@ -449,7 +449,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/pdv-configurations/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/pdv-configurations/:id", isAuthenticated, requireModule("simulatore"), async (req: any, res) => {
     try {
       await storage.deletePdvConfiguration(req.params.id);
       res.status(204).send();
@@ -473,7 +473,7 @@ export async function registerRoutes(
     return profile;
   };
 
-  app.get("/api/gara-config", isAuthenticated, async (req: any, res) => {
+  app.get("/api/gara-config", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -502,7 +502,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/gara-config/list", isAuthenticated, async (req: any, res) => {
+  app.get("/api/gara-config/list", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -522,7 +522,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/gara-config", isAuthenticated, async (req: any, res) => {
+  app.put("/api/gara-config", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
@@ -548,7 +548,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/gara-config/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/gara-config/:id", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
@@ -565,7 +565,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/gara-config/history", isAuthenticated, async (req: any, res) => {
+  app.get("/api/gara-config/history", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
@@ -612,7 +612,7 @@ export async function registerRoutes(
     }));
   }
 
-  app.post("/api/gara-config/import-from-simulator", isAuthenticated, async (req: any, res) => {
+  app.post("/api/gara-config/import-from-simulator", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
@@ -688,7 +688,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/gara-config/pdv-from-sales", isAuthenticated, async (req: any, res) => {
+  app.get("/api/gara-config/pdv-from-sales", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
@@ -1022,7 +1022,7 @@ export async function registerRoutes(
         if (k in body) sanitized[k] = body[k] !== false;
       }
       const updated = await storage.updateOrganization(req.params.id, {
-        enabledModules: sanitized as any,
+        enabledModules: sanitized,
       });
       res.json({ enabledModules: updated.enabledModules || {} });
     } catch (e) {
@@ -1385,7 +1385,7 @@ export async function registerRoutes(
   }
 
   // ── GET credentials ─────────────────────────────────────────────
-  app.get("/api/admin/bisuite-credentials", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/bisuite-credentials", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || profile.role !== "super_admin") {
@@ -1413,7 +1413,7 @@ export async function registerRoutes(
   });
 
   // ── POST credentials (create) ──────────────────────────────────
-  app.post("/api/admin/bisuite-credentials", isAuthenticated, async (req: any, res) => {
+  app.post("/api/admin/bisuite-credentials", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || profile.role !== "super_admin") {
@@ -1450,7 +1450,7 @@ export async function registerRoutes(
   });
 
   // ── PUT credentials (update) ────────────────────────────────────
-  app.put("/api/admin/bisuite-credentials", isAuthenticated, async (req: any, res) => {
+  app.put("/api/admin/bisuite-credentials", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || profile.role !== "super_admin") {
@@ -1686,7 +1686,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/bisuite-credentials-status", isAuthenticated, async (req: any, res) => {
+  app.get("/api/bisuite-credentials-status", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) {
@@ -1703,7 +1703,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/bisuite-fetch", isAuthenticated, async (req: any, res) => {
+  app.post("/api/bisuite-fetch", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) {
@@ -1772,7 +1772,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/bisuite-sales", isAuthenticated, async (req: any, res) => {
+  app.get("/api/bisuite-sales", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -1813,7 +1813,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/bisuite-mapping", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/bisuite-mapping", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || profile.role !== "super_admin") {
@@ -1829,7 +1829,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/admin/bisuite-mapping", isAuthenticated, async (req: any, res) => {
+  app.put("/api/admin/bisuite-mapping", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || profile.role !== "super_admin") {
@@ -1849,7 +1849,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/bisuite-sales/:id", isAuthenticated, async (req: any, res) => {
+  app.get("/api/bisuite-sales/:id", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -1870,7 +1870,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/bisuite-mapped-sales", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/bisuite-mapped-sales", isAuthenticated, requireModule("amministrazione"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -2141,7 +2141,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/bisuite-articles-summary", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/bisuite-articles-summary", isAuthenticated, requireModule("amministrazione"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);

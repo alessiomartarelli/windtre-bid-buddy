@@ -27,6 +27,7 @@ interface WizardHeaderProps {
   onStepClick?: (step: number) => void;
   isGaraOperatoreRS?: boolean;
   disabledStepsAfter?: number; // Steps after this index will be disabled
+  hiddenSteps?: number[]; // Step physical indexes to hide entirely (modulo disabilitato)
 }
 
 // Configuration steps count (0-5)
@@ -75,12 +76,18 @@ export function WizardHeader({
   currentPreventivoId,
   onStepClick,
   isGaraOperatoreRS = false,
-  disabledStepsAfter
+  disabledStepsAfter,
+  hiddenSteps,
 }: WizardHeaderProps) {
   // Choose step config based on mode
   const STEP_CONFIG = isGaraOperatoreRS ? STEP_CONFIG_RS : STEP_CONFIG_STANDARD;
-  const kpiStepsCount = STEP_CONFIG.length - CONFIG_STEPS_COUNT;
-  
+  const hiddenSet = new Set(hiddenSteps ?? []);
+  const visibleConfigSteps = Array.from({ length: CONFIG_STEPS_COUNT }, (_, i) => i).filter((i) => !hiddenSet.has(i));
+  const visibleKpiSteps = Array.from({ length: STEP_CONFIG.length - CONFIG_STEPS_COUNT }, (_, i) => i + CONFIG_STEPS_COUNT).filter((i) => !hiddenSet.has(i));
+  const visibleStepCount = visibleConfigSteps.length + visibleKpiSteps.length;
+  // Posizione visibile (1-based) dello step corrente, escludendo gli step hidden precedenti
+  const visiblePosition = [...visibleConfigSteps, ...visibleKpiSteps].indexOf(currentStep) + 1;
+
   const currentConfig = STEP_CONFIG[currentStep];
   const CurrentIcon = currentConfig?.icon || FileText;
 
@@ -97,7 +104,7 @@ export function WizardHeader({
               {currentConfig?.label || `Step ${currentStep + 1}`}
             </h2>
             <Badge variant="outline" className="text-xs font-normal shrink-0">
-              {currentStep + 1}/{totalSteps}
+              {(visiblePosition > 0 ? visiblePosition : currentStep + 1)}/{visibleStepCount || totalSteps}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground truncate">
@@ -115,9 +122,10 @@ export function WizardHeader({
           {/* Config steps group */}
           <div 
             className="grid gap-1 flex-1"
-            style={{ gridTemplateColumns: `repeat(${CONFIG_STEPS_COUNT}, minmax(0, 1fr))` }}
+            style={{ gridTemplateColumns: `repeat(${visibleConfigSteps.length || CONFIG_STEPS_COUNT}, minmax(0, 1fr))` }}
           >
-          {STEP_CONFIG.slice(0, CONFIG_STEPS_COUNT).map((step, index) => {
+          {visibleConfigSteps.map((index) => {
+              const step = STEP_CONFIG[index];
               const StepIcon = step.icon;
               const isCompleted = index < currentStep;
               const isCurrent = index === currentStep;
@@ -173,10 +181,10 @@ export function WizardHeader({
           {/* KPI steps group */}
           <div 
             className="grid gap-1 flex-1"
-            style={{ gridTemplateColumns: `repeat(${kpiStepsCount}, minmax(0, 1fr))` }}
+            style={{ gridTemplateColumns: `repeat(${visibleKpiSteps.length || (STEP_CONFIG.length - CONFIG_STEPS_COUNT)}, minmax(0, 1fr))` }}
           >
-          {STEP_CONFIG.slice(CONFIG_STEPS_COUNT).map((step, sliceIndex) => {
-              const index = sliceIndex + CONFIG_STEPS_COUNT;
+          {visibleKpiSteps.map((index) => {
+              const step = STEP_CONFIG[index];
               const StepIcon = step.icon;
               const isCompleted = index < currentStep;
               const isCurrent = index === currentStep;

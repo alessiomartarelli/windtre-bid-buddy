@@ -1280,6 +1280,9 @@ const Preventivatore = () => {
   });
   const totalePremioExtraGaraIva = calcolaTotaleExtraGaraIva(extraGaraIvaResults);
 
+  // Moduli prodotto abilitati per la org (dichiarato qui per essere usato da premiPerRS)
+  const { isEnabled: isProdEnabled } = useEnabledModules();
+
   const premiPerRS = useMemo(() => {
     if (modalitaInserimentoRS !== "per_rs") return undefined;
     const rsNames = Array.from(new Set(puntiVendita.map(p => p.ragioneSociale || "Senza RS")));
@@ -1356,60 +1359,78 @@ const Preventivatore = () => {
         .filter((r: any) => r.ragioneSociale === rs)
         .reduce((s: number, r: any) => s + r.premioTotaleRS, 0);
 
+      const m = isProdEnabled('prod_mobile') ? mobileRS : 0;
+      const f = isProdEnabled('prod_fisso') ? fissoRS : 0;
+      const p = isProdEnabled('prod_partnership_reward') ? partnershipRS : 0;
+      const e = isProdEnabled('prod_energia') ? energiaRS : 0;
+      const a = isProdEnabled('prod_assicurazioni') ? assicRS : 0;
+      const pr = isProdEnabled('prod_protecta') ? protectaRS : 0;
+      const ex = isProdEnabled('prod_extra_gara_iva') ? extraRS : 0;
       return {
         ragioneSociale: rs,
-        mobile: mobileRS,
-        fisso: fissoRS,
-        partnership: partnershipRS,
-        energia: energiaRS,
-        assicurazioni: assicRS,
-        protecta: protectaRS,
-        extra: extraRS,
-        totale: mobileRS + fissoRS + partnershipRS + energiaRS + assicRS + protectaRS + extraRS,
+        mobile: m,
+        fisso: f,
+        partnership: p,
+        energia: e,
+        assicurazioni: a,
+        protecta: pr,
+        extra: ex,
+        totale: m + f + p + e + a + pr + ex,
       };
     });
   }, [modalitaInserimentoRS, puntiVendita, mobileResults, fissoResults, partnershipResults, 
       energiaResults, attivatoEnergiaByRS, energiaConfig, attivatoAssicurazioniByRS, 
-      assicurazioniConfig, tabelleCalcoloConfig, protectaResults, extraGaraIvaResults]);
+      assicurazioniConfig, tabelleCalcoloConfig, protectaResults, extraGaraIvaResults, isProdEnabled]);
 
   // Numero totale step (dinamico)
   const TOTAL_STEPS = getTotalSteps(configGara.tipologiaGara || "gara_operatore");
 
-  // Moduli prodotto abilitati per la org
-  const { isEnabled: isProdEnabled } = useEnabledModules();
+  const tipologiaForSteps = configGara.tipologiaGara || "gara_operatore";
   const isStepDisabledByModule = (s: number): boolean => {
-    const key = getProductModuleForStep(s, configGara.tipologiaGara || "gara_operatore");
+    const key = getProductModuleForStep(s, tipologiaForSteps);
     return key !== null && !isProdEnabled(key);
   };
+  // Lista degli step fisici visibili (filtrati dai moduli disabilitati)
+  const visibleSteps = useMemo(() => {
+    const arr: number[] = [];
+    for (let i = 0; i < TOTAL_STEPS; i++) if (!isStepDisabledByModule(i)) arr.push(i);
+    return arr;
+  }, [TOTAL_STEPS, tipologiaForSteps, isProdEnabled]);
+  const hiddenSteps = useMemo(() => {
+    const arr: number[] = [];
+    for (let i = 0; i < TOTAL_STEPS; i++) if (isStepDisabledByModule(i)) arr.push(i);
+    return arr;
+  }, [TOTAL_STEPS, tipologiaForSteps, isProdEnabled]);
+  const lastVisibleStep = visibleSteps[visibleSteps.length - 1] ?? TOTAL_STEPS - 1;
+  const firstVisibleStep = visibleSteps[0] ?? 0;
+  const isLastVisibleStep = step === lastVisibleStep;
+  const goNextVisible = () => {
+    const idx = visibleSteps.indexOf(step);
+    if (idx >= 0 && idx + 1 < visibleSteps.length) setStep(visibleSteps[idx + 1]);
+  };
+  const goPrevVisible = () => {
+    const idx = visibleSteps.indexOf(step);
+    if (idx > 0) setStep(visibleSteps[idx - 1]);
+  };
+
+  // Auto-skip se l'utente atterra (es. via deep-link o load) su uno step disabilitato
   const currentStepDisabled = isStepDisabledByModule(step);
   const lastStepRef = useRef<number>(step);
-
-  // Auto-skip degli step prodotti disabilitati, rispettando la direzione di navigazione
   useEffect(() => {
     if (!currentStepDisabled) {
       lastStepRef.current = step;
       return;
     }
     const goingForward = step >= lastStepRef.current;
-    if (goingForward) {
-      let next = step + 1;
-      while (next < TOTAL_STEPS && isStepDisabledByModule(next)) next++;
-      if (next < TOTAL_STEPS) { setStep(next); return; }
-      // tutti i successivi disabilitati → torna indietro
-      let prev = step - 1;
-      while (prev >= 0 && isStepDisabledByModule(prev)) prev--;
-      if (prev >= 0) setStep(prev);
-    } else {
-      let prev = step - 1;
-      while (prev >= 0 && isStepDisabledByModule(prev)) prev--;
-      if (prev >= 0) { setStep(prev); return; }
-      let next = step + 1;
-      while (next < TOTAL_STEPS && isStepDisabledByModule(next)) next++;
-      if (next < TOTAL_STEPS) setStep(next);
-    }
-  }, [step, currentStepDisabled, TOTAL_STEPS]);
+    const candidatesForward = visibleSteps.filter((v) => v > step);
+    const candidatesBackward = [...visibleSteps].filter((v) => v < step).reverse();
+    const target = goingForward
+      ? (candidatesForward[0] ?? candidatesBackward[0])
+      : (candidatesBackward[0] ?? candidatesForward[0]);
+    if (target !== undefined) setStep(target);
+  }, [step, currentStepDisabled, visibleSteps]);
 
-  // Totali effettivi (zero per i prodotti disabilitati) per riepilogo/sidebar
+  // Totali effettivi (zero per i prodotti disabilitati): usati ovunque (sidebar, save dialog, payload)
   const effTotMobile = isProdEnabled('prod_mobile') ? totalePremioMobile : 0;
   const effTotFisso = isProdEnabled('prod_fisso') ? totalePremioFisso : 0;
   const effTotPartnership = isProdEnabled('prod_partnership_reward') ? totalePremioPartnershipPrevisto : 0;
@@ -1417,6 +1438,7 @@ const Preventivatore = () => {
   const effTotAssicurazioni = isProdEnabled('prod_assicurazioni') ? totalePremioAssicurazioni : 0;
   const effTotProtecta = isProdEnabled('prod_protecta') ? totalePremioProtecta : 0;
   const effTotExtraGaraIva = isProdEnabled('prod_extra_gara_iva') ? totalePremioExtraGaraIva : 0;
+  const effTotComplessivo = effTotMobile + effTotFisso + effTotPartnership + effTotEnergia + effTotAssicurazioni + effTotProtecta + effTotExtraGaraIva;
   
   // Validazione step corrente
   const isCurrentStepValid = (): boolean => {
@@ -1479,7 +1501,7 @@ const Preventivatore = () => {
     attivatoProtectaByRS,
     // Salva anche i risultati calcolati per la dashboard
     risultatoMobile: {
-      perPos: mobileResults.map(r => ({
+      perPos: isProdEnabled('prod_mobile') ? mobileResults.map(r => ({
         pdvCodice: r.pdv.codicePos,
         pdvNome: r.pdv.nome,
         posCode: r.pdv.codicePos,
@@ -1488,11 +1510,11 @@ const Preventivatore = () => {
         attivazioniTotali: r.righe.reduce((sum: number, riga: { pezzi?: number }) => sum + (riga.pezzi || 0), 0),
         soglia: r.result.soglia,
         runRateGiornalieroPunti: r.result.runRateGiornalieroPunti,
-      })),
-      totale: totalePremioMobile,
+      })) : [],
+      totale: effTotMobile,
     },
     risultatoFisso: {
-      perPos: fissoResults.map(r => ({
+      perPos: isProdEnabled('prod_fisso') ? fissoResults.map(r => ({
         pdvCodice: r.pdv.codicePos,
         pdvNome: r.pdv.nome,
         posCode: r.pdv.codicePos,
@@ -1501,29 +1523,29 @@ const Preventivatore = () => {
         attivazioniTotali: r.righe.reduce((sum: number, riga: { pezzi?: number }) => sum + (riga.pezzi || 0), 0),
         soglia: r.result.soglia,
         runRateGiornalieroPunti: r.result.runRateGiornalieroPunti,
-      })),
-      totale: totalePremioFisso,
+      })) : [],
+      totale: effTotFisso,
     },
     risultatoPartnership: {
-      totale: totalePremioPartnershipPrevisto,
+      totale: effTotPartnership,
     },
     risultatoEnergia: {
-      totale: totalePremioEnergia,
+      totale: effTotEnergia,
     },
     risultatoAssicurazioni: {
-      totalePremio: totalePremioAssicurazioni,
+      totalePremio: effTotAssicurazioni,
     },
     risultatoProtecta: {
-      totalePremio: totalePremioProtecta,
+      totalePremio: effTotProtecta,
     },
     risultatoExtraGaraIva: {
-      totalePremio: totalePremioExtraGaraIva,
-      perRs: extraGaraIvaResults.map(rs => ({
+      totalePremio: effTotExtraGaraIva,
+      perRs: isProdEnabled('prod_extra_gara_iva') ? extraGaraIvaResults.map(rs => ({
         ragioneSociale: rs.ragioneSociale,
         puntiTotali: rs.puntiTotaliRS,
         sogliaRaggiunta: rs.sogliaRaggiunta,
         premioTotale: rs.premioTotaleRS,
-      })),
+      })) : [],
     },
   });
 
@@ -1622,6 +1644,7 @@ const Preventivatore = () => {
               <WizardHeader 
                 currentStep={step}
                 totalSteps={TOTAL_STEPS}
+                hiddenSteps={hiddenSteps}
                 nomeGara={configGara.nomeGara}
                 preventivoName={preventivoName}
                 currentPreventivoId={currentPreventivoId}
@@ -1810,8 +1833,8 @@ const Preventivatore = () => {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => setStep(Math.max(step - 1, 0))} 
-                  disabled={step === 0}
+                  onClick={goPrevVisible} 
+                  disabled={step === firstVisibleStep}
                   className="gap-1 sm:gap-2"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -1888,7 +1911,7 @@ const Preventivatore = () => {
                     Salva
                   </Button>
                 )}
-                {step === TOTAL_STEPS - 1 ? (
+                {isLastVisibleStep ? (
                   <Button size="sm" onClick={handleFinish} className="gap-1 sm:gap-2 bg-gradient-to-r from-primary to-accent">
                     <Save className="h-4 w-4" />
                     <span className="hidden sm:inline">Salva Preventivo</span>
@@ -1897,7 +1920,7 @@ const Preventivatore = () => {
                 ) : (
                   <Button 
                     size="sm"
-                    onClick={() => setStep(Math.min(step + 1, TOTAL_STEPS - 1))}
+                    onClick={goNextVisible}
                     disabled={!isCurrentStepValid()}
                     className="gap-1 sm:gap-2"
                   >
@@ -1972,25 +1995,16 @@ const Preventivatore = () => {
             <div className="p-4 bg-muted/50 rounded-lg space-y-2">
               <p className="text-sm font-medium">Riepilogo premi:</p>
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <span className="text-muted-foreground">Mobile:</span>
-                <span className="font-medium">{formatCurrency(totalePremioMobile)}</span>
-                <span className="text-muted-foreground">Fisso:</span>
-                <span className="font-medium">{formatCurrency(totalePremioFisso)}</span>
-                <span className="text-muted-foreground">CB+ Partnership Reward:</span>
-                <span className="font-medium">{formatCurrency(totalePremioPartnershipPrevisto)}</span>
-                <span className="text-muted-foreground">Energia:</span>
-                <span className="font-medium">{formatCurrency(totalePremioEnergia)}</span>
-                <span className="text-muted-foreground">Assicurazioni:</span>
-                <span className="font-medium">{formatCurrency(totalePremioAssicurazioni)}</span>
-                <span className="text-muted-foreground">Protecta:</span>
-                <span className="font-medium">{formatCurrency(totalePremioProtecta)}</span>
-                <span className="text-muted-foreground">Extra Gara P.IVA:</span>
-                <span className="font-medium">{formatCurrency(totalePremioExtraGaraIva)}</span>
+                {isProdEnabled('prod_mobile') && (<><span className="text-muted-foreground">Mobile:</span><span className="font-medium">{formatCurrency(effTotMobile)}</span></>)}
+                {isProdEnabled('prod_fisso') && (<><span className="text-muted-foreground">Fisso:</span><span className="font-medium">{formatCurrency(effTotFisso)}</span></>)}
+                {isProdEnabled('prod_partnership_reward') && (<><span className="text-muted-foreground">CB+ Partnership Reward:</span><span className="font-medium">{formatCurrency(effTotPartnership)}</span></>)}
+                {isProdEnabled('prod_energia') && (<><span className="text-muted-foreground">Energia:</span><span className="font-medium">{formatCurrency(effTotEnergia)}</span></>)}
+                {isProdEnabled('prod_assicurazioni') && (<><span className="text-muted-foreground">Assicurazioni:</span><span className="font-medium">{formatCurrency(effTotAssicurazioni)}</span></>)}
+                {isProdEnabled('prod_protecta') && (<><span className="text-muted-foreground">Protecta:</span><span className="font-medium">{formatCurrency(effTotProtecta)}</span></>)}
+                {isProdEnabled('prod_extra_gara_iva') && (<><span className="text-muted-foreground">Extra Gara P.IVA:</span><span className="font-medium">{formatCurrency(effTotExtraGaraIva)}</span></>)}
                 <span className="text-muted-foreground font-semibold border-t pt-2">Totale:</span>
                 <span className="font-bold text-primary border-t pt-2">
-                  {formatCurrency(
-                    totalePremioMobile + totalePremioFisso + totalePremioPartnershipPrevisto + totalePremioEnergia + totalePremioAssicurazioni + totalePremioProtecta + totalePremioExtraGaraIva
-                  )}
+                  {formatCurrency(effTotComplessivo)}
                 </span>
               </div>
               {premiPerRS && premiPerRS.length > 1 && (
