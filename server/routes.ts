@@ -66,9 +66,11 @@ const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   return res.status(401).json({ message: "Unauthorized" });
 };
 
-// Blocca le route se il modulo non è abilitato per l'org dell'utente.
+// Blocca le route se nessuno dei moduli indicati è abilitato per l'org dell'utente.
+// Accetta una singola chiave o un array (semantica OR: basta che uno sia abilitato).
 // super_admin bypassa sempre. Richiede isAuthenticated prima.
-function requireModule(moduleKey: string): RequestHandler {
+function requireModule(moduleKey: string | string[]): RequestHandler {
+  const keys = Array.isArray(moduleKey) ? moduleKey : [moduleKey];
   return async (req: any, res, next) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
@@ -81,7 +83,9 @@ function requireModule(moduleKey: string): RequestHandler {
       if (!org) {
         return res.status(403).json({ error: "Modulo non abilitato" });
       }
-      if (!isModuleEnabled(org.enabledModules ?? null, moduleKey)) {
+      const enabled = org.enabledModules ?? null;
+      const anyEnabled = keys.some((k) => isModuleEnabled(enabled, k));
+      if (!anyEnabled) {
         return res.status(403).json({ error: "Modulo non abilitato" });
       }
       next();
@@ -318,7 +322,21 @@ export async function registerRoutes(
   });
 
   // === ORGANIZATION CONFIG ===
-  app.get("/api/organization-config", isAuthenticated, async (req: any, res) => {
+  // /api/organization-config è letta/scritta da molte pagine modulari
+  // (simulatore, tabelle_calcolo, amministrazione, gara_*, drms, AdminPanel).
+  // Basta che UNO di questi moduli sia abilitato per l'org per accedervi.
+  const ORG_CONFIG_MODULES = [
+    "simulatore",
+    "tabelle_calcolo",
+    "amministrazione",
+    "gara_configurazione",
+    "gara_dashboard",
+    "vendite_bisuite",
+    "mappatura_bisuite",
+    "drms_commissioning",
+  ];
+
+  app.get("/api/organization-config", isAuthenticated, requireModule(ORG_CONFIG_MODULES), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -332,7 +350,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/organization-config", isAuthenticated, async (req: any, res) => {
+  app.put("/api/organization-config", isAuthenticated, requireModule(ORG_CONFIG_MODULES), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -348,7 +366,7 @@ export async function registerRoutes(
   });
 
   // === SYSTEM CONFIG (super admin calculation defaults) ===
-  app.get("/api/system-config", isAuthenticated, async (req: any, res) => {
+  app.get("/api/system-config", isAuthenticated, requireModule(ORG_CONFIG_MODULES), async (req: any, res) => {
     try {
       const configs = await storage.getAllSystemConfigs();
       const result: Record<string, any> = {};
@@ -361,7 +379,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/system-config/:key", isAuthenticated, async (req: any, res) => {
+  app.get("/api/system-config/:key", isAuthenticated, requireModule(ORG_CONFIG_MODULES), async (req: any, res) => {
     try {
       const config = await storage.getSystemConfig(req.params.key);
       res.json(config?.config || null);
@@ -473,7 +491,7 @@ export async function registerRoutes(
     return profile;
   };
 
-  app.get("/api/gara-config", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
+  app.get("/api/gara-config", isAuthenticated, requireModule(["gara_configurazione", "gara_dashboard"]), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -502,7 +520,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/gara-config/list", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
+  app.get("/api/gara-config/list", isAuthenticated, requireModule(["gara_configurazione", "gara_dashboard"]), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -1708,7 +1726,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/bisuite-fetch", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+  app.post("/api/bisuite-fetch", isAuthenticated, requireModule(["vendite_bisuite", "amministrazione", "gara_dashboard"]), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) {
@@ -1777,7 +1795,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/bisuite-sales", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+  app.get("/api/bisuite-sales", isAuthenticated, requireModule(["vendite_bisuite", "amministrazione", "gara_dashboard"]), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -1875,7 +1893,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/bisuite-mapped-sales", isAuthenticated, requireModule("amministrazione"), async (req: any, res) => {
+  app.get("/api/admin/bisuite-mapped-sales", isAuthenticated, requireModule(["amministrazione", "gara_dashboard"]), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -2146,7 +2164,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/bisuite-articles-summary", isAuthenticated, requireModule("amministrazione"), async (req: any, res) => {
+  app.get("/api/admin/bisuite-articles-summary", isAuthenticated, requireModule(["amministrazione", "mappatura_bisuite"]), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
