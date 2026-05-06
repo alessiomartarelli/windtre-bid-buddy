@@ -115,51 +115,55 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
 
             {adminItems.length > 0 && <div className="w-px h-5 bg-border/60 mx-1.5" />}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant={garaItems.some(i => location === i.path) ? "secondary" : "ghost"}
-                  size="sm"
-                  className={`text-xs h-8 rounded-lg transition-all ${garaItems.some(i => location === i.path) ? 'shadow-sm' : ''}`}
-                  data-testid="nav-gara-menu"
-                >
-                  <Trophy className="h-3.5 w-3.5 mr-1" />
-                  Gara
-                  <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                {garaItems.map((item) => (
-                  <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)} data-testid={`nav-gara-${item.path.replace(/\//g, '')}`}>
-                    <item.icon className="mr-2 h-4 w-4" />
-                    <span>{item.label}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {garaItems.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant={garaItems.some(i => location === i.path) ? "secondary" : "ghost"}
+                    size="sm"
+                    className={`text-xs h-8 rounded-lg transition-all ${garaItems.some(i => location === i.path) ? 'shadow-sm' : ''}`}
+                    data-testid="nav-gara-menu"
+                  >
+                    <Trophy className="h-3.5 w-3.5 mr-1" />
+                    Gara
+                    <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {garaItems.map((item) => (
+                    <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)} data-testid={`nav-gara-${item.path.replace(/\//g, '')}`}>
+                      <item.icon className="mr-2 h-4 w-4" />
+                      <span>{item.label}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant={(simulatoreItems.some(i => location === i.path) || location === '/preventivatore') ? "secondary" : "ghost"}
-                  size="sm"
-                  className={`text-xs h-8 rounded-lg transition-all ${(simulatoreItems.some(i => location === i.path) || location === '/preventivatore') ? 'shadow-sm' : ''}`}
-                  data-testid="nav-simulatore-menu"
-                >
-                  <FileText className="h-3.5 w-3.5 mr-1" />
-                  Simulatore
-                  <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                {simulatoreItems.map((item) => (
-                  <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)} data-testid={`nav-sim-${item.path.replace(/\//g, '')}`}>
-                    <item.icon className="mr-2 h-4 w-4" />
-                    <span>{item.label}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {simulatoreItems.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant={(simulatoreItems.some(i => location === i.path) || location === '/preventivatore') ? "secondary" : "ghost"}
+                    size="sm"
+                    className={`text-xs h-8 rounded-lg transition-all ${(simulatoreItems.some(i => location === i.path) || location === '/preventivatore') ? 'shadow-sm' : ''}`}
+                    data-testid="nav-simulatore-menu"
+                  >
+                    <FileText className="h-3.5 w-3.5 mr-1" />
+                    Simulatore
+                    <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {simulatoreItems.map((item) => (
+                    <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)} data-testid={`nav-sim-${item.path.replace(/\//g, '')}`}>
+                      <item.icon className="mr-2 h-4 w-4" />
+                      <span>{item.label}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </nav>
         </div>
 
@@ -185,22 +189,30 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                     <DropdownMenuSeparator />
                   </>
                 )}
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Gara</DropdownMenuLabel>
-                {garaItems.map((item) => (
-                  <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)}>
-                    <item.icon className="mr-2 h-4 w-4" />
-                    <span>{item.label}</span>
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Simulatore</DropdownMenuLabel>
-                {simulatoreItems.map((item) => (
-                  <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)}>
-                    <item.icon className="mr-2 h-4 w-4" />
-                    <span>{item.label}</span>
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
+                {garaItems.length > 0 && (
+                  <>
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Gara</DropdownMenuLabel>
+                    {garaItems.map((item) => (
+                      <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)}>
+                        <item.icon className="mr-2 h-4 w-4" />
+                        <span>{item.label}</span>
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                {simulatoreItems.length > 0 && (
+                  <>
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Simulatore</DropdownMenuLabel>
+                    {simulatoreItems.map((item) => (
+                      <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)}>
+                        <item.icon className="mr-2 h-4 w-4" />
+                        <span>{item.label}</span>
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem onClick={() => setLocation('/profile')}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Impostazioni</span>
