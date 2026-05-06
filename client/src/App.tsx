@@ -83,7 +83,7 @@ function Router() {
         {() => <ProtectedRoute component={Index} />}
       </Route>
       <Route path="/dashboard">
-        {() => <ProtectedRoute component={Dashboard} />}
+        {() => <ModuleRoute component={Dashboard} moduleKey="simulatore" />}
       </Route>
       <Route path="/simulatore">
         {() => <ModuleRoute component={SimulatoreHome} moduleKey="simulatore" />}

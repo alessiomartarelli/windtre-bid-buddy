@@ -831,7 +831,7 @@ export async function registerRoutes(
   });
 
   // === ADMIN: Import RS/PDV from BiSuite sales ===
-  app.get("/api/admin/bisuite-rs-pdv", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/bisuite-rs-pdv", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -871,7 +871,7 @@ export async function registerRoutes(
   });
 
   // === ADMIN: Dipendenti from BiSuite sales ===
-  app.get("/api/admin/bisuite-dipendenti", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/bisuite-dipendenti", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -1487,7 +1487,7 @@ export async function registerRoutes(
   });
 
   // ── POST bisuite-api (proxy) ────────────────────────────────────
-  app.post("/api/admin/bisuite-api", isAuthenticated, async (req: any, res) => {
+  app.post("/api/admin/bisuite-api", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || profile.role !== "super_admin") {
@@ -1614,7 +1614,7 @@ export async function registerRoutes(
     };
   }
 
-  app.post("/api/admin/bisuite-import", isAuthenticated, async (req: any, res) => {
+  app.post("/api/admin/bisuite-import", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);

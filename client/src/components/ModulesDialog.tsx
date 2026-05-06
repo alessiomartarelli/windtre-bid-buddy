@@ -63,7 +63,7 @@ export function ModulesDialog({ open, onOpenChange, organizationId, organization
     }
   };
 
-  const pagine = MODULES.filter(m => m.group === 'pagine' && !m.superOnly);
+  const pagine = MODULES.filter(m => m.group === 'pagine');
   const prodotti = MODULES.filter(m => m.group === 'prodotti');
 
   return (
