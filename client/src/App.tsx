@@ -10,6 +10,7 @@ import NotFound from "@/pages/not-found";
 import Index from "@/pages/Index";
 import Dashboard from "@/pages/Dashboard";
 import Preventivatore from "@/pages/Preventivatore";
+import SimulatoreHome from "@/pages/SimulatoreHome";
 import Profile from "@/pages/Profile";
 import AdminPanel from "@/pages/AdminPanel";
 import SuperAdminPanel from "@/pages/SuperAdminPanel";
@@ -49,6 +50,9 @@ function Router() {
       </Route>
       <Route path="/dashboard">
         {() => <ProtectedRoute component={Dashboard} />}
+      </Route>
+      <Route path="/simulatore">
+        {() => <ProtectedRoute component={SimulatoreHome} />}
       </Route>
       <Route path="/preventivatore">
         {() => <ProtectedRoute component={Preventivatore} />}

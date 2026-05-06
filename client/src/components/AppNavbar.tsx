@@ -71,7 +71,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
   ];
 
   const simulatoreItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
-    { path: '/preventivatore', label: 'Simulatore', icon: FileText },
+    { path: '/simulatore', label: 'Simulatore', icon: FileText },
     { path: '/dashboard', label: 'Dashboard Sim.', icon: LayoutDashboard },
     ...(isAdminOrSuper ? [{ path: '/tabelle-calcolo', label: 'Tabelle Calcolo', icon: Table2 }] : []),
   ];
@@ -139,9 +139,9 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
-                  variant={simulatoreItems.some(i => location === i.path) ? "secondary" : "ghost"}
+                  variant={(simulatoreItems.some(i => location === i.path) || location === '/preventivatore') ? "secondary" : "ghost"}
                   size="sm"
-                  className={`text-xs h-8 rounded-lg transition-all ${simulatoreItems.some(i => location === i.path) ? 'shadow-sm' : ''}`}
+                  className={`text-xs h-8 rounded-lg transition-all ${(simulatoreItems.some(i => location === i.path) || location === '/preventivatore') ? 'shadow-sm' : ''}`}
                   data-testid="nav-simulatore-menu"
                 >
                   <FileText className="h-3.5 w-3.5 mr-1" />

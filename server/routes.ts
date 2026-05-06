@@ -230,6 +230,18 @@ export async function registerRoutes(
 
   app.put("/api/preventivi/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const existing = await storage.getPreventivo(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Not found" });
+      }
+      if (existing.organizationId !== profile.organizationId) {
+        return res.status(404).json({ message: "Not found" });
+      }
       const { name, data } = req.body;
       const preventivo = await storage.updatePreventivo(req.params.id, name, data);
       res.json(preventivo);
@@ -240,6 +252,18 @@ export async function registerRoutes(
 
   app.delete("/api/preventivi/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const existing = await storage.getPreventivo(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Not found" });
+      }
+      if (existing.organizationId !== profile.organizationId) {
+        return res.status(404).json({ message: "Not found" });
+      }
       await storage.deletePreventivo(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -249,8 +273,16 @@ export async function registerRoutes(
 
   app.get("/api/preventivi/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
       const preventivo = await storage.getPreventivo(req.params.id);
       if (!preventivo) {
+        return res.status(404).json({ message: "Not found" });
+      }
+      if (preventivo.organizationId !== profile.organizationId) {
         return res.status(404).json({ message: "Not found" });
       }
       res.json(preventivo);
