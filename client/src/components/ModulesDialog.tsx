@@ -64,7 +64,6 @@ export function ModulesDialog({ open, onOpenChange, organizationId, organization
   };
 
   const pagine = MODULES.filter(m => m.group === 'pagine');
-  const prodotti = MODULES.filter(m => m.group === 'prodotti');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -89,23 +88,6 @@ export function ModulesDialog({ open, onOpenChange, organizationId, organization
                       <Label htmlFor={`mod-${m.key}`} className="text-sm font-medium">{m.label}</Label>
                       {m.description && <p className="text-xs text-muted-foreground">{m.description}</p>}
                     </div>
-                    <Switch
-                      id={`mod-${m.key}`}
-                      checked={flags[m.key] !== false}
-                      onCheckedChange={(v) => handleToggle(m.key, v)}
-                      data-testid={`switch-module-${m.key}`}
-                    />
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section>
-              <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Prodotti del simulatore</h3>
-              <div className="space-y-3">
-                {prodotti.map(m => (
-                  <div key={m.key} className="flex items-center justify-between">
-                    <Label htmlFor={`mod-${m.key}`} className="text-sm font-medium">{m.label}</Label>
                     <Switch
                       id={`mod-${m.key}`}
                       checked={flags[m.key] !== false}

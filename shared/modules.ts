@@ -3,7 +3,7 @@
 // When a module is missing from the record it defaults to TRUE (retro-compat).
 // `super_admin` always bypasses these flags.
 
-export type ModuleGroup = "pagine" | "prodotti";
+export type ModuleGroup = "pagine";
 
 export interface ModuleDef {
   key: string;
@@ -23,15 +23,6 @@ export const MODULES: ModuleDef[] = [
   { key: "mappatura_bisuite", label: "Mappatura BiSuite", group: "pagine", superOnly: true },
   { key: "simulatore", label: "Simulatore Preventivi", group: "pagine" },
   { key: "tabelle_calcolo", label: "Tabelle Calcolo", group: "pagine" },
-
-  // === Prodotti del wizard simulatore ===
-  { key: "prod_mobile", label: "Mobile", group: "prodotti" },
-  { key: "prod_fisso", label: "Fisso", group: "prodotti" },
-  { key: "prod_partnership_reward", label: "Partnership Reward", group: "prodotti" },
-  { key: "prod_energia", label: "Energia", group: "prodotti" },
-  { key: "prod_assicurazioni", label: "Assicurazioni", group: "prodotti" },
-  { key: "prod_protecta", label: "Protecta", group: "prodotti" },
-  { key: "prod_extra_gara_iva", label: "Extra Gara P.IVA", group: "prodotti" },
 ];
 
 export type ModuleKey = (typeof MODULES)[number]["key"];
