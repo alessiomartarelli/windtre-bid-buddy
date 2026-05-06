@@ -298,10 +298,20 @@ const Preventivatore = () => {
       if (isNew) {
         const persistedConfig = loadConfig();
         if (persistedConfig && persistedConfig.configVersion === '2.0') {
-          // Carica configGara (nome, tipologia, anno, mese, periodo)
-          if (persistedConfig.configGara) {
-            setConfigGara(persistedConfig.configGara);
-          }
+          // Per una nuova simulazione: azzera nome gara e imposta sempre
+          // mese/anno corrente con periodo "mensile". Mantieni eventuale
+          // tipologia gara e flag lettera ufficiale dalla config persistente.
+          const oraDate = new Date();
+          const baseConfig = persistedConfig.configGara || {};
+          setConfigGara({
+            ...baseConfig,
+            nomeGara: "",
+            haLetteraUfficiale: false,
+            annoGara: oraDate.getFullYear(),
+            meseGara: oraDate.getMonth() + 1,
+            tipoPeriodo: "mensile",
+            tipologiaGara: baseConfig.tipologiaGara || "gara_operatore",
+          });
           setNumeroPdv(persistedConfig.numeroPdv);
           setPuntiVendita(persistedConfig.puntiVendita);
           setPistaMobileConfig(persistedConfig.pistaMobileConfig);
