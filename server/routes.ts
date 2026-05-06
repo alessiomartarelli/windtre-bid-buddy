@@ -991,7 +991,7 @@ export async function registerRoutes(
   });
 
   // GET enabled modules for an organization (super-admin only)
-  app.get("/api/super-admin/organizations/:id/modules", isAuthenticated, async (req: any, res) => {
+  const getOrgModulesHandler = async (req: any, res: any) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || profile.role !== "super_admin") {
@@ -1003,10 +1003,13 @@ export async function registerRoutes(
     } catch (e) {
       res.status(500).json({ message: "Errore lettura moduli" });
     }
-  });
+  };
+  app.get("/api/super-admin/organizations/:id/modules", isAuthenticated, getOrgModulesHandler);
+  // Alias per allineamento naming admin
+  app.get("/api/admin/organizations/:id/modules", isAuthenticated, getOrgModulesHandler);
 
   // PUT enabled modules for an organization (super-admin only)
-  app.put("/api/super-admin/organizations/:id/modules", isAuthenticated, async (req: any, res) => {
+  const putOrgModulesHandler = async (req: any, res: any) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || profile.role !== "super_admin") {
@@ -1029,7 +1032,9 @@ export async function registerRoutes(
       console.error("Error updating modules:", e);
       res.status(500).json({ message: "Errore aggiornamento moduli" });
     }
-  });
+  };
+  app.put("/api/super-admin/organizations/:id/modules", isAuthenticated, putOrgModulesHandler);
+  app.put("/api/admin/organizations/:id/modules", isAuthenticated, putOrgModulesHandler);
 
   app.get("/api/super-admin/profiles", isAuthenticated, async (req: any, res) => {
     try {
