@@ -324,7 +324,7 @@ export type TipologiaGara = "gara_operatore" | "gara_operatore_rs" | "gara_addet
 export const TIPOLOGIA_GARA_OPTIONS: { value: TipologiaGara; label: string }[] = [
   { value: "gara_operatore", label: "Gara operatore" },
   { value: "gara_operatore_rs", label: "Gara operatore RS" },
-  { value: "gara_addetto", label: "Gara addetto" },
+  { value: "gara_addetto", label: "Gara addetto (coming soon)" },
 ];
 
 export interface ConfigGaraBase {
