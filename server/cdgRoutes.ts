@@ -114,9 +114,9 @@ function computeImporti(imponibileStr: string, aliquotaStr: string): { imponibil
 // Back-fill una tantum:
 // 1) imponibile/iva (legacy pre-IVA): imponibile=importo, aliquotaIva=0, iva=0.
 // 2) ragioni_sociali (multi-RS migration): popola array da ragione_sociale legacy.
-// 3) pdv_codice (PDV-from-config migration): risolve cdg_spese.pdv_id legacy
-//    al codice PDV (cdg_pdv.codice o, in fallback, cdg_pdv.nome) per consentire
-//    la display lato client da organization_config.puntiVendita.
+// 3) pdv_codice remap → puntiVendita.codicePos: rimappa eventuali pdv_codice
+//    legacy (impostati pre Task #71 via join con la vecchia tabella cdg_pdv,
+//    ora droppata) al vero codicePos in organization_config.puntiVendita.
 // Backfill retry-safe: il flag viene impostato solo dopo il completamento di
 // tutti gli step. Se uno step fallisce transitoriamente (es. DB unreachable),
 // l'intera procedura verrà rieseguita al prossimo register/restart. I singoli
@@ -154,26 +154,14 @@ async function backfillCdg(): Promise<void> {
     allOk = false;
     console.error("[cdg] backfill ragioni_sociali failed:", e);
   }
-  try {
-    await db.execute(sql`
-      UPDATE cdg_spese sp
-         SET pdv_codice = COALESCE(p.codice, p.nome)
-        FROM cdg_pdv p
-       WHERE sp.pdv_id = p.id
-         AND sp.pdv_codice IS NULL
-    `);
-  } catch (e) {
-    allOk = false;
-    console.error("[cdg] backfill pdv_codice failed:", e);
-  }
-  // Step 4: rimappa pdv_codice ai veri puntiVendita.codicePos.
-  // Lo step 3 può aver scritto cdg_pdv.nome quando codice era null: questi
-  // valori NON corrispondono al codicePos in organization_config.puntiVendita,
-  // quindi non sarebbero risolvibili dal frontend (PDV invisibile in UI).
-  // Per ogni org, scorriamo le spese con pdv_codice non vuoto e proviamo a
-  // matcharle contro puntiVendita.codicePos. Se non matcha, proviamo per
-  // puntiVendita.nome (case-insensitive). Idempotente: se già corretto,
-  // l'UPDATE è no-op.
+  // Rimappa pdv_codice ai veri puntiVendita.codicePos. Le spese pre Task #71
+  // possono avere pdv_codice = nome PDV (impostato dal vecchio backfill che
+  // joinava la legacy cdg_pdv quando codicePos era null): questi valori non
+  // corrispondono al codicePos in organization_config.puntiVendita, quindi
+  // non sarebbero risolvibili dal frontend. Per ogni org, scorriamo le spese
+  // con pdv_codice non vuoto e proviamo a matcharle contro
+  // puntiVendita.codicePos; se non matcha, proviamo per puntiVendita.nome
+  // (case-insensitive). Idempotente: se già corretto, l'UPDATE è no-op.
   try {
     const orgs = await db.execute(sql`
       SELECT DISTINCT sp.organization_id
@@ -529,9 +517,6 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     }
     const r = await cdgStorage.createSpesa({
       ...rest,
-      // Nuovo modello: pdvCodice sostituisce pdvId (FK legacy). pdvId non
-      // viene mai valorizzato per le spese create dopo la migrazione.
-      pdvId: null,
       importo: rest.importo as string,
       organizationId: profile.organizationId!,
       createdBy: profile.id,
@@ -573,10 +558,6 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     }
 
     const updates: Record<string, unknown> = { ...rest };
-    // Quando l'utente tocca pdvCodice (anche per metterlo a null), azzera anche
-    // il legacy pdvId. pdvId non è esposto nello schema di input quindi il
-    // client non può comunque scriverlo direttamente.
-    if (rest.pdvCodice !== undefined) updates.pdvId = null;
     if (allegatoBase64 && allegatoNome) {
       try {
         const saved = await saveAllegato(profile.organizationId!, allegatoBase64, allegatoNome, allegatoMime);

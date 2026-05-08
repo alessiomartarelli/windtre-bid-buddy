@@ -93,13 +93,13 @@ container quando renderizzata dentro Amministrazione.
   `cdg_categorie` e `cdg_fornitori` (per `organizationId` + colonna
   `ragioniSociali text[]` **multi-RS**: ogni voce è riutilizzabile su più
   Ragioni Sociali; la vecchia colonna `ragioneSociale` è nullable solo per
-  back-compat). `cdg_pdv` legacy (non più gestita da UI: i PDV sono ereditati
-  read-only da `organization_config.puntiVendita`). `cdg_spese` (FK opzionali a
-  categoria/fornitore/PDV con onDelete set null; `pdvCodice` varchar = codice
-  PDV nuovo modello, `pdvId` legacy mantenuto solo per dati pre-migrazione;
-  `importo` numeric(14,2) = totale per back-compat; `imponibile` + `aliquotaIva`
-  + `iva` numeric nullable per la nuova logica IVA; `dataPagamento` date;
-  `meseCompetenza` varchar(7) "YYYY-MM").
+  back-compat). I PDV sono ereditati read-only da
+  `organization_config.puntiVendita` (la vecchia tabella `cdg_pdv` e la
+  colonna `cdg_spese.pdv_id` sono state droppate in Task #71). `cdg_spese`
+  (FK opzionali a categoria/fornitore con onDelete set null; `pdvCodice`
+  varchar = codice PDV; `importo` numeric(14,2) = totale per back-compat;
+  `imponibile` + `aliquotaIva` + `iva` numeric nullable per la nuova logica
+  IVA; `dataPagamento` date; `meseCompetenza` varchar(7) "YYYY-MM").
 - **RS unificate**: `GET /api/cdg/ragioni-sociali/unified` ritorna
   `[{nome, origine: "pdv"|"manuale", id?, partitaIva?, note?}]` mergiando
   `organization_config.puntiVendita.ragioneSociale` (read-only, badge "da PDV"

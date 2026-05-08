@@ -193,9 +193,8 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     return speseAll.filter(s => {
       if (filterCategoria !== "all" && s.categoriaId !== filterCategoria) return false;
       if (filterFornitore !== "all" && s.fornitoreId !== filterFornitore) return false;
-      // Filtro PDV per codice (modello nuovo). Le spese pre-migrazione potrebbero
-      // avere solo pdvId (legacy): non matchano il filtro per codice — comunque
-      // backfill ha popolato pdvCodice via join cdg_pdv quando disponibile.
+      // Filtro PDV per codice. Tutte le spese referenziano il PDV via
+      // pdvCodice (= organization_config.puntiVendita.codicePos).
       if (filterPdv !== "all" && (s.pdvCodice || "") !== filterPdv) return false;
       if (filterMesePagamento) {
         const mp = (s.dataPagamento || "").slice(0, 7);

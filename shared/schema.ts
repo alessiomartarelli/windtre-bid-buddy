@@ -180,35 +180,17 @@ export const cdgFornitori = pgTable("cdg_fornitori", {
   uniqueIndex("UQ_cdg_forn_org_nome").on(t.organizationId, t.nome),
 ]);
 
-// LEGACY: cdg_pdv non viene più utilizzata per CRUD. I PDV sono ereditati da
-// `organization_config.puntiVendita`. La tabella resta per back-compat read
-// (risoluzione `cdg_spese.pdv_id` legacy → codice PDV nel backfill).
-export const cdgPdv = pgTable("cdg_pdv", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
-  ragioneSociale: varchar("ragione_sociale").notNull(),
-  nome: varchar("nome").notNull(),
-  codice: varchar("codice"),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (t) => [
-  index("IDX_cdg_pdv_org_rs").on(t.organizationId, t.ragioneSociale),
-]);
-
 // Spese: doppia data (pagamento per cassa, competenza per accrual).
 // meseCompetenza è "YYYY-MM" per facilitare aggregazioni mensili.
+// Nota: la vecchia tabella `cdg_pdv` e la colonna `cdg_spese.pdv_id` sono
+// state droppate (Task #71). I PDV sono ereditati read-only da
+// `organization_config.puntiVendita` e referenziati via `pdvCodice`.
 export const cdgSpese = pgTable("cdg_spese", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
   ragioneSociale: varchar("ragione_sociale").notNull(),
   categoriaId: varchar("categoria_id").references(() => cdgCategorie.id, { onDelete: 'set null' }),
   fornitoreId: varchar("fornitore_id").references(() => cdgFornitori.id, { onDelete: 'set null' }),
-  // pdvId è legacy: i PDV sono ora ereditati da organization_config.puntiVendita
-  // e referenziati per `pdvCodice` (= puntiVendita.codicePos). pdvId resta
-  // intenzionalmente con FK su cdg_pdv (onDelete: 'set null') per consentire
-  // un eventuale rollback alla vecchia tabella prima del drop definitivo
-  // (vedi follow-up #71). Non viene più scritto: insertCdgSpesaSchema lo omette.
-  // per back-compat read e backfill, e viene risolto a pdvCodice una-tantum.
-  pdvId: varchar("pdv_id").references(() => cdgPdv.id, { onDelete: 'set null' }),
   pdvCodice: varchar("pdv_codice"),
   descrizione: varchar("descrizione").notNull(),
   // Imponibile (€) e aliquota IVA (% — 0/4/5/10/22 o custom). `iva` è derivata
@@ -301,8 +283,6 @@ export type CdgCategoria = typeof cdgCategorie.$inferSelect;
 export type InsertCdgCategoria = typeof cdgCategorie.$inferInsert;
 export type CdgFornitore = typeof cdgFornitori.$inferSelect;
 export type InsertCdgFornitore = typeof cdgFornitori.$inferInsert;
-export type CdgPdv = typeof cdgPdv.$inferSelect;
-export type InsertCdgPdv = typeof cdgPdv.$inferInsert;
 export type CdgSpesa = typeof cdgSpese.$inferSelect;
 export type InsertCdgSpesa = typeof cdgSpese.$inferInsert;
 
@@ -322,20 +302,14 @@ export const insertCdgFornitoreSchema = createInsertSchema(cdgFornitori)
     ragioneSociale: z.string().optional().nullable(),
     ragioniSociali: z.array(z.string().min(1)).min(1, "Seleziona almeno una Ragione Sociale"),
   });
-export const insertCdgPdvSchema = createInsertSchema(cdgPdv).omit({ id: true, createdAt: true, organizationId: true });
 // Importo, imponibile e iva sono accettati come string|number (front invia
 // string formattata). Server ricalcola sempre iva e importo da imponibile +
 // aliquotaIva quando entrambi sono presenti, per garantire coerenza.
 const numericString = z.union([z.string(), z.number()])
   .transform((v) => typeof v === 'number' ? v.toString() : v);
-// pdvId è legacy: il client deve usare solo `pdvCodice`. Lo omettiamo dallo
-// schema di input per impedire al client di scrivere riferimenti FK legacy
-// non più validati lato server (rischio di puntare a cdg_pdv di altra org
-// o di altra RS).
 export const insertCdgSpesaSchema = createInsertSchema(cdgSpese).omit({
   id: true, createdAt: true, updatedAt: true, organizationId: true, createdBy: true,
   allegatoPath: true, allegatoNome: true, allegatoMime: true,
-  pdvId: true,
 }).extend({
   importo: numericString.optional(),
   imponibile: numericString.optional().nullable(),

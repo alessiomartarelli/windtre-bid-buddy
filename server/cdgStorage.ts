@@ -1,11 +1,10 @@
 import { db } from "./db";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import {
-  cdgRagioniSociali, cdgCategorie, cdgFornitori, cdgPdv, cdgSpese,
+  cdgRagioniSociali, cdgCategorie, cdgFornitori, cdgSpese,
   type CdgRagioneSociale, type InsertCdgRagioneSociale,
   type CdgCategoria, type InsertCdgCategoria,
   type CdgFornitore, type InsertCdgFornitore,
-  type CdgPdv,
   type CdgSpesa, type InsertCdgSpesa,
 } from "@shared/schema";
 
@@ -23,8 +22,7 @@ export const cdgStorage = {
   async updateRagioneSociale(id: string, orgId: string, updates: Partial<InsertCdgRagioneSociale>): Promise<CdgRagioneSociale | null> {
     // Se cambia il nome, propaga il rename: per categorie/fornitori (multi-RS)
     // sostituisce il nome nell'array `ragioni_sociali` via array_replace; per
-    // spese (single-RS string) aggiorna `ragione_sociale`. cdg_pdv è legacy
-    // ma viene comunque aggiornata per coerenza dei dati storici.
+    // spese (single-RS string) aggiorna `ragione_sociale`.
     return await db.transaction(async (tx) => {
       const [existing] = await tx.select().from(cdgRagioniSociali)
         .where(and(eq(cdgRagioniSociali.id, id), eq(cdgRagioniSociali.organizationId, orgId)));
@@ -49,8 +47,6 @@ export const cdgStorage = {
            WHERE organization_id = ${orgId}
              AND ${oldName} = ANY(ragioni_sociali)
         `);
-        await tx.update(cdgPdv).set({ ragioneSociale: newName })
-          .where(and(eq(cdgPdv.organizationId, orgId), eq(cdgPdv.ragioneSociale, oldName)));
         await tx.update(cdgSpese).set({ ragioneSociale: newName })
           .where(and(eq(cdgSpese.organizationId, orgId), eq(cdgSpese.ragioneSociale, oldName)));
       }
@@ -93,8 +89,6 @@ export const cdgStorage = {
        WHERE organization_id = ${orgId}
          AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
     `);
-    await db.delete(cdgPdv)
-      .where(and(eq(cdgPdv.organizationId, orgId), eq(cdgPdv.ragioneSociale, rs.nome)));
     await db.delete(cdgRagioniSociali)
       .where(and(eq(cdgRagioniSociali.id, id), eq(cdgRagioniSociali.organizationId, orgId)));
   },
