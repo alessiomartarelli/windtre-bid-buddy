@@ -61,7 +61,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
   const adminItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
     ...(isSuperAdmin ? [{ path: '/super-admin', label: 'Super Admin', icon: Shield }] : []),
     ...(isAdminOrSuper ? [{ path: '/admin', label: 'Gestione Organizzazione', icon: Building2 }] : []),
-    ...(isAdminOrSuper && isEnabled('amministrazione') ? [{ path: '/amministrazione', label: 'Amministrazione', icon: BookOpen }] : []),
+    ...(isAdminOrSuper && (isEnabled('amministrazione') || isEnabled('controllo_gestione')) ? [{ path: '/amministrazione', label: 'Amministrazione', icon: BookOpen }] : []),
     ...(isAdminOrSuper && isEnabled('drms_commissioning') ? [{ path: '/drms-commissioning', label: 'DRMS Commissioning', icon: BarChart3 }] : []),
   ];
 

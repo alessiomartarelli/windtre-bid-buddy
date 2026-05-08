@@ -103,7 +103,7 @@ interface AnagraficaCrud {
 function computeImporti(imponibileStr: string, aliquotaStr: string): { imponibile: string; aliquotaIva: string; iva: string; importo: string } {
   const imp = Number.parseFloat(String(imponibileStr).replace(",", "."));
   const aliq = Number.parseFloat(String(aliquotaStr).replace(",", "."));
-  if (!Number.isFinite(imp) || imp < 0) throw new Error("Imponibile non valido");
+  if (!Number.isFinite(imp) || imp <= 0) throw new Error("Imponibile non valido");
   if (!Number.isFinite(aliq) || aliq < 0 || aliq > 100) throw new Error("Aliquota IVA non valida");
   const impCent = Math.round(imp * 100);
   const ivaCent = Math.round((impCent * aliq) / 100);
