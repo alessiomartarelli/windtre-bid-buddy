@@ -113,18 +113,25 @@ container quando renderizzata dentro Amministrazione.
   `importo = totale` (back-compat). Backfill one-shot al register imposta
   imponibile=importo, aliquotaIva=0, iva=0 per le spese pre-esistenti.
 - **Categorie / Fornitori multi-RS**: insert schemas richiedono
-  `ragioniSociali: string[]` (min 1). Backend `cdgStorage.ts` filtra le list
-  per RS via `${rs} = ANY(ragioniSociali)`; `updateRagioneSociale` rinomina con
-  `array_replace`; `deleteRagioneSociale` rimuove la RS via `array_remove` ed
-  elimina solo le righe rimaste senza RS (orfane). Cancellare una RS NON
-  cancella categorie/fornitori condivisi con altre RS.
+  `ragioniSociali: string[]` (min 1). DB unique index canonico
+  `UQ_cdg_cat_org_nome` / `UQ_cdg_forn_org_nome` su `(organization_id, nome)`:
+  una sola voce per nome per organizzazione, riusabile su più RS. Backend
+  `cdgStorage.ts` filtra le list per RS via `${rs} = ANY(ragioniSociali)`;
+  `updateRagioneSociale` rinomina con `array_replace`; `deleteRagioneSociale`
+  rimuove la RS via `array_remove` ed elimina solo le righe rimaste senza RS
+  (orfane). Cancellare una RS NON cancella categorie/fornitori condivisi con
+  altre RS. Pre-check friendly su POST/PUT (`findCategoriaOverlap` /
+  `findFornitoreOverlap`) allineato all'unique index: 409 se esiste già una
+  voce con stesso nome (case-insensitive) nella stessa org, indipendentemente
+  dalle RS.
 - **PDV ereditati read-only**: nessun CRUD su `cdg_pdv`. Tab PDV in
   Anagrafiche mostra l'elenco raggruppato per RS con link a `/admin`. Le spese
-  riferiscono il PDV via `pdvCodice` (chiave `puntiVendita.codicePos`); il
-  selettore PDV nel form spesa è popolato da `GET /api/cdg/pdv-by-rs?rs=...`
-  che legge `organization_config.puntiVendita`. Backfill al register imposta
-  `pdv_codice = COALESCE(p.codice, p.nome)` joinando la legacy `cdg_pdv` per
-  pdvId esistenti.
+  riferiscono il PDV via `pdvCodice` (chiave `puntiVendita.codicePos` con
+  fallback al `nome` se mancante); il selettore PDV nel form spesa è popolato
+  da `GET /api/cdg/pdv-by-rs?rs=...` che legge `organization_config.puntiVendita`
+  ed espone `codice = codicePos || nome`. `validateSpesaFks` accetta lo stesso
+  fallback. Backfill al register imposta `pdv_codice = COALESCE(p.codice, p.nome)`
+  joinando la legacy `cdg_pdv` per pdvId esistenti.
 - API: `/api/cdg/{ragioni-sociali|ragioni-sociali/unified|categorie|fornitori|spese}`
   CRUD + `GET /api/cdg/pdv-by-rs[?rs=...]` (PDV da org config, opz. filtrati
   per RS) + `GET /api/cdg/spese/:id/allegato` (download). Tutte gated

@@ -271,11 +271,15 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const pdvList = await getOrgPuntiVendita(profile.organizationId!);
     const out = pdvList
       .filter(p => !rs || String(p?.ragioneSociale || "").trim() === rs)
-      .map(p => ({
-        codice: String(p?.codicePos || "").trim(),
-        nome: String(p?.nome || "").trim(),
-        ragioneSociale: String(p?.ragioneSociale || "").trim(),
-      }))
+      .map(p => {
+        const codicePos = String(p?.codicePos || "").trim();
+        const nome = String(p?.nome || "").trim();
+        return {
+          codice: codicePos || nome,
+          nome,
+          ragioneSociale: String(p?.ragioneSociale || "").trim(),
+        };
+      })
       .filter(p => p.codice && p.nome);
     out.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
     res.json(out);
@@ -337,13 +341,13 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
   async function checkAnagraficaOverlap(
     base: string, orgId: string, nome: string, ragioniSociali: string[], excludeId?: string,
   ): Promise<string | null> {
-    if (!nome || !ragioniSociali.length) return null;
+    if (!nome) return null;
     const dup = base === "categorie"
       ? await cdgStorage.findCategoriaOverlap(orgId, nome, ragioniSociali, excludeId)
       : await cdgStorage.findFornitoreOverlap(orgId, nome, ragioniSociali, excludeId);
     if (!dup) return null;
-    const overlap = (dup.ragioniSociali || []).filter(rs => ragioniSociali.includes(rs));
-    return `Esiste già "${dup.nome}" associata a: ${overlap.join(", ")}`;
+    const rsList = (dup.ragioniSociali || []).join(", ") || "nessuna RS";
+    return `Esiste già una voce con nome "${dup.nome}" (RS: ${rsList}). Modifica quella esistente per aggiungere altre Ragioni Sociali.`;
   }
 
   function registerAnagrafica(cfg: AnagraficaCrud) {
@@ -458,10 +462,13 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     }
     if (pdvCodice) {
       const pdvList = await getOrgPuntiVendita(orgId);
-      const ok = pdvList.some(p =>
-        String(p?.codicePos || "").trim() === pdvCodice &&
-        String(p?.ragioneSociale || "").trim() === rs
-      );
+      const ok = pdvList.some(p => {
+        if (String(p?.ragioneSociale || "").trim() !== rs) return false;
+        const codicePos = String(p?.codicePos || "").trim();
+        const nome = String(p?.nome || "").trim();
+        const key = codicePos || nome;
+        return key === pdvCodice;
+      });
       if (!ok) return "Il PDV non è valido per la Ragione Sociale selezionata";
     }
     return null;

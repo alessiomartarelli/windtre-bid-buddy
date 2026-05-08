@@ -125,16 +125,14 @@ export const cdgStorage = {
     const [r] = await db.insert(cdgCategorie).values(data).returning();
     return r;
   },
-  // Overlap check multi-RS: ritorna la prima categoria con stesso nome
-  // (case-insensitive) che condivide almeno una RS con `ragioniSociali`,
-  // escludendo opzionalmente `excludeId` (per UPDATE).
-  async findCategoriaOverlap(orgId: string, nome: string, ragioniSociali: string[], excludeId?: string): Promise<CdgCategoria | null> {
-    if (!ragioniSociali.length) return null;
+  // Pre-check friendly allineato all'unique index (organization_id, nome):
+  // una categoria con lo stesso nome (case-insensitive) nella stessa org è
+  // un duplicato indipendentemente dalle RS associate.
+  async findCategoriaOverlap(orgId: string, nome: string, _ragioniSociali: string[], excludeId?: string): Promise<CdgCategoria | null> {
     const rows = await db.execute(sql`
       SELECT * FROM cdg_categorie
        WHERE organization_id = ${orgId}
          AND lower(nome) = lower(${nome})
-         AND ragioni_sociali && ${ragioniSociali}::text[]
          ${excludeId ? sql`AND id <> ${excludeId}` : sql``}
        LIMIT 1
     `);
@@ -162,13 +160,11 @@ export const cdgStorage = {
     const [r] = await db.insert(cdgFornitori).values(data).returning();
     return r;
   },
-  async findFornitoreOverlap(orgId: string, nome: string, ragioniSociali: string[], excludeId?: string): Promise<CdgFornitore | null> {
-    if (!ragioniSociali.length) return null;
+  async findFornitoreOverlap(orgId: string, nome: string, _ragioniSociali: string[], excludeId?: string): Promise<CdgFornitore | null> {
     const rows = await db.execute(sql`
       SELECT * FROM cdg_fornitori
        WHERE organization_id = ${orgId}
          AND lower(nome) = lower(${nome})
-         AND ragioni_sociali && ${ragioniSociali}::text[]
          ${excludeId ? sql`AND id <> ${excludeId}` : sql``}
        LIMIT 1
     `);

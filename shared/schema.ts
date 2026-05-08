@@ -163,6 +163,7 @@ export const cdgCategorie = pgTable("cdg_categorie", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [
   index("IDX_cdg_cat_org").on(t.organizationId),
+  uniqueIndex("UQ_cdg_cat_org_nome").on(t.organizationId, t.nome),
 ]);
 
 export const cdgFornitori = pgTable("cdg_fornitori", {
@@ -176,6 +177,7 @@ export const cdgFornitori = pgTable("cdg_fornitori", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [
   index("IDX_cdg_forn_org").on(t.organizationId),
+  uniqueIndex("UQ_cdg_forn_org_nome").on(t.organizationId, t.nome),
 ]);
 
 // LEGACY: cdg_pdv non viene più utilizzata per CRUD. I PDV sono ereditati da

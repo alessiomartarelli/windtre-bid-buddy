@@ -1041,7 +1041,7 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
       // invalida le cache per evitare UI stale dopo l'aggiornamento.
       qc.invalidateQueries({ queryKey: ["/api/cdg/categorie"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/fornitori"] });
-      qc.invalidateQueries({ queryKey: ["/api/cdg/pdv"] });
+      qc.invalidateQueries({ queryKey: ["/api/cdg/pdv-by-rs"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/spese"] });
       toast({ title: "Salvato" });
       setOpen(false);
@@ -1058,7 +1058,7 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
       qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali/unified"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/categorie"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/fornitori"] });
-      qc.invalidateQueries({ queryKey: ["/api/cdg/pdv"] });
+      qc.invalidateQueries({ queryKey: ["/api/cdg/pdv-by-rs"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/spese"] });
       toast({ title: "Eliminata" });
     } catch (e) {
