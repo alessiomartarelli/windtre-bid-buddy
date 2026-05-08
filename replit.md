@@ -162,6 +162,16 @@ container quando renderizzata dentro Amministrazione.
   CRUD + `GET /api/cdg/pdv-by-rs[?rs=...]` (mix config + manuali) +
   `GET /api/cdg/spese/:id/allegato` (download). Tutte gated
   `controllo_gestione` + admin/super_admin con scoping su `organizationId`.
+- **Spese ricorrenti mensili**: campi `ricorrente: boolean` +
+  `dataFineRicorrenza: date | null` su `cdg_spese`. In creazione (POST), se
+  `ricorrente=true` e `dataFineRicorrenza` è impostata, il backend genera
+  automaticamente N copie indipendenti — una per ogni mese tra `meseCompetenza`
+  esclusivo e il mese di scadenza incluso. La `dataPagamento` viene shiftata
+  preservando il giorno (clamp a fine mese se necessario, es. 31 gen → 28/29
+  feb). L'allegato NON viene duplicato (evita bloat). Le copie non sono
+  linkate alla master: edit/delete sono per riga singola. UI: checkbox
+  "Spesa ricorrente mensile" + DatePicker scadenza nel form spese; badge `↻`
+  in tabella elenco spese con tooltip "Ricorrenza fino a DD/MM/YYYY".
 - Allegati: upload base64 in JSON → disk in `uploads/cdg/<orgId>/` (env
   override `CDG_UPLOAD_DIR`), max 8MB, sanitized filename + path-traversal
   check sul download. **Produzione**: settare

@@ -612,7 +612,21 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                             <TableCell>{cat?.nome || <span className="text-muted-foreground">—</span>}</TableCell>
                             <TableCell>{forn?.nome || <span className="text-muted-foreground">—</span>}</TableCell>
                             <TableCell>{pdv ? pdv.nome : (s.pdvCodice ? <span className="text-amber-600" title="PDV legacy non risolvibile in puntiVendita">{pdvLabel}</span> : <span className="text-muted-foreground">—</span>)}</TableCell>
-                            <TableCell className="max-w-[200px] truncate" title={s.descrizione}>{s.descrizione}</TableCell>
+                            <TableCell className="max-w-[220px] truncate" title={s.descrizione}>
+                              <div className="flex items-center gap-1">
+                                <span className="truncate">{s.descrizione}</span>
+                                {s.ricorrente && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[10px] px-1 py-0"
+                                    title={s.dataFineRicorrenza ? `Ricorrenza fino a ${fmtDateIt(s.dataFineRicorrenza)}` : "Ricorrente"}
+                                    data-testid={`badge-ricorrente-${s.id}`}
+                                  >
+                                    ↻
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell className="text-xs">{s.metodoPagamento || ""}</TableCell>
                             <TableCell className="text-right font-mono">{fmtEur(parseImporto(s.importo))}</TableCell>
                             <TableCell>
@@ -733,6 +747,8 @@ function SpesaDialog({
   const [note, setNote] = useState<string>(editing?.note || "");
   const [file, setFile] = useState<File | null>(null);
   const [removeAllegato, setRemoveAllegato] = useState<boolean>(false);
+  const [ricorrente, setRicorrente] = useState<boolean>(!!editing?.ricorrente);
+  const [dataFineRicorrenza, setDataFineRicorrenza] = useState<string>(editing?.dataFineRicorrenza || "");
   const [submitting, setSubmitting] = useState(false);
 
   const [quickAdd, setQuickAdd] = useState<{ kind: "categoria" | "fornitore"; nome: string } | null>(null);
@@ -808,10 +824,22 @@ function SpesaDialog({
         body.allegatoMime = file.type || "application/octet-stream";
       }
       if (editing && removeAllegato && !file) body.removeAllegato = true;
-      if (editing) await apiJson("PUT", `/api/cdg/spese/${editing.id}`, body);
-      else await apiJson("POST", `/api/cdg/spese`, body);
+      body.ricorrente = !!ricorrente;
+      body.dataFineRicorrenza = ricorrente && dataFineRicorrenza ? dataFineRicorrenza : null;
+      if (ricorrente && !editing && (!dataFineRicorrenza || dataFineRicorrenza < dataPagamento)) {
+        toast({ title: "Imposta una data scadenza posteriore alla data pagamento", variant: "destructive" });
+        setSubmitting(false);
+        return;
+      }
+      let resp: any;
+      if (editing) resp = await apiJson("PUT", `/api/cdg/spese/${editing.id}`, body);
+      else resp = await apiJson<{ ricorrenzaGenerati?: number }>("POST", `/api/cdg/spese`, body);
       qc.invalidateQueries({ queryKey: ["/api/cdg/spese"] });
-      toast({ title: editing ? "Spesa aggiornata" : "Spesa creata" });
+      const generati = (resp as any)?.ricorrenzaGenerati || 0;
+      toast({
+        title: editing ? "Spesa aggiornata" : "Spesa creata",
+        description: !editing && generati > 0 ? `+${generati} occorrenze mensili generate fino a ${dataFineRicorrenza}` : undefined,
+      });
       onClose();
     } catch (e) {
       toast({ title: "Errore", description: (e as Error).message, variant: "destructive" });
@@ -958,6 +986,44 @@ function SpesaDialog({
             <div>
               <Label>Mese competenza *</Label>
               <Input type="month" value={meseCompetenza} onChange={(e) => setMeseCompetenza(e.target.value)} data-testid="input-spesa-competenza" />
+            </div>
+
+            <div className="md:col-span-2 rounded-md border p-3 space-y-2">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={ricorrente}
+                  onChange={(e) => setRicorrente(e.target.checked)}
+                  data-testid="checkbox-spesa-ricorrente"
+                />
+                <span className="font-medium">Spesa ricorrente mensile</span>
+                <span className="text-xs text-muted-foreground">— genera automaticamente una spesa per ogni mese fino alla scadenza</span>
+              </label>
+              {ricorrente && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-6">
+                  <div>
+                    <Label>Data scadenza ricorrenza *</Label>
+                    <Input
+                      type="date"
+                      value={dataFineRicorrenza}
+                      min={dataPagamento || undefined}
+                      onChange={(e) => setDataFineRicorrenza(e.target.value)}
+                      data-testid="input-spesa-data-fine-ricorrenza"
+                    />
+                  </div>
+                  {!editing && (
+                    <p className="text-xs text-muted-foreground self-end pb-2">
+                      Verranno create copie indipendenti per ogni mese tra il mese di competenza e la scadenza.
+                      L'allegato non viene duplicato.
+                    </p>
+                  )}
+                  {editing && (
+                    <p className="text-xs text-amber-600 self-end pb-2">
+                      In modifica i flag aggiornano solo questa riga: le occorrenze già create restano invariate.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="md:col-span-2">

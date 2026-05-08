@@ -926,7 +926,7 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
         return res.status(400).json({ error: e instanceof Error ? e.message : "Errore upload" });
       }
     }
-    const r = await cdgStorage.createSpesa({
+    const baseSpesa = {
       ...rest,
       importo: rest.importo as string,
       organizationId: profile.organizationId!,
@@ -934,8 +934,55 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       allegatoPath,
       allegatoNome: allegatoPath ? allegatoNome ?? null : null,
       allegatoMime: allegatoPath ? safeMime : null,
-    });
-    res.status(201).json(r);
+    };
+    const r = await cdgStorage.createSpesa(baseSpesa);
+
+    // Ricorrenza mensile: genera N copie indipendenti per i mesi successivi
+    // fino a `dataFineRicorrenza` (inclusa). Ogni copia mantiene flag e
+    // scadenza. L'allegato NON viene duplicato per evitare bloat di storage.
+    let generati = 0;
+    if (rest.ricorrente && rest.dataFineRicorrenza) {
+      try {
+        const [cy, cm] = String(rest.meseCompetenza).split("-").map(Number);
+        const fineParts = String(rest.dataFineRicorrenza).split("-").map(Number);
+        const fineY = fineParts[0]; const fineM = fineParts[1];
+        const dataPag = String(rest.dataPagamento);
+        const [py, pm, pd] = dataPag.split("-").map(Number);
+        const baseDayMs = Date.UTC(py, pm - 1, pd);
+        const fineCompMs = Date.UTC(fineY, fineM - 1, 1);
+        let cursorY = cy, cursorM = cm;
+        while (true) {
+          // Avanza di un mese
+          cursorM += 1;
+          if (cursorM > 12) { cursorM = 1; cursorY += 1; }
+          const curMs = Date.UTC(cursorY, cursorM - 1, 1);
+          if (curMs > fineCompMs) break;
+          const monthsDelta = (cursorY - cy) * 12 + (cursorM - cm);
+          // Stima la nuova data pagamento: stesso giorno del mese, clamp se
+          // il mese non lo contiene (es. 31 gen -> 28/29 feb).
+          const targetDate = new Date(baseDayMs);
+          targetDate.setUTCMonth(targetDate.getUTCMonth() + monthsDelta);
+          // Verifica clamp: se setUTCMonth è "rimbalzato" oltre, riporta a fine mese
+          if (targetDate.getUTCMonth() !== (cursorM - 1)) {
+            targetDate.setUTCDate(0); // ultimo giorno del mese precedente
+          }
+          const newPagYmd = targetDate.toISOString().slice(0, 10);
+          const newComp = `${cursorY}-${String(cursorM).padStart(2, "0")}`;
+          await cdgStorage.createSpesa({
+            ...baseSpesa,
+            allegatoPath: null,
+            allegatoNome: null,
+            allegatoMime: null,
+            dataPagamento: newPagYmd,
+            meseCompetenza: newComp,
+          });
+          generati += 1;
+        }
+      } catch (e) {
+        console.error("[cdg] ricorrenza generation failed:", e);
+      }
+    }
+    res.status(201).json({ ...r, ricorrenzaGenerati: generati });
   });
 
   app.put("/api/cdg/spese/:id", ...gate, async (req: any, res) => {
