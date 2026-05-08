@@ -195,9 +195,13 @@ export default function ControlloGestione() {
   const pdvById = useMemo(() => new Map(pdvList.map(p => [p.id, p])), [pdvList]);
 
   // === Dashboard data ===
+  // I KPI di mese e il grafico per categoria sono scoped sul mese selezionato
+  // (`dashboardMese`); la serie mensile usa gli ultimi 12 mesi; il riepilogo
+  // categoria × RS aggrega tutte le spese filtrate.
   const dashboard = useMemo(() => {
     let totaleCassaMese = 0;
     let totaleCompetenzaMese = 0;
+    let conteggioMese = 0;
     const months = last12Months();
     const monthSet = new Set(months);
     const byMese = new Map<string, { competenza: number; cassa: number }>();
@@ -205,29 +209,37 @@ export default function ControlloGestione() {
 
     type CatRsAgg = { categoria: string; rs: string; importo: number; conteggio: number };
     const catRsMap = new Map<string, CatRsAgg>();
-    const catTot = new Map<string, number>();
+    // Categoria del mese selezionato (per il grafico per categoria) — usa la
+    // competenza per coerenza con il KPI "Top categoria" e con il significato
+    // contabile della dashboard.
+    const catTotMese = new Map<string, number>();
 
     for (const s of spese) {
       const imp = parseImporto(s.importo);
       const mPag = (s.dataPagamento || "").slice(0, 7);
       const mComp = s.meseCompetenza || mPag;
+      const inMese = mPag === dashboardMese || mComp === dashboardMese;
       if (mPag === dashboardMese) totaleCassaMese += imp;
       if (mComp === dashboardMese) totaleCompetenzaMese += imp;
-      if (monthSet.has(mPag)) {
-        const e = byMese.get(mPag)!; e.cassa += imp;
-      }
-      if (monthSet.has(mComp)) {
-        const e = byMese.get(mComp)!; e.competenza += imp;
-      }
+      if (inMese) conteggioMese += 1;
+      if (monthSet.has(mPag)) byMese.get(mPag)!.cassa += imp;
+      if (monthSet.has(mComp)) byMese.get(mComp)!.competenza += imp;
+
       const catNome = (s.categoriaId && catById.get(s.categoriaId)?.nome) || "— Senza categoria —";
+
+      // Riepilogo cat × RS: tutte le spese filtrate
       const key = `${s.ragioneSociale}|${catNome}`;
       const cur = catRsMap.get(key) || { categoria: catNome, rs: s.ragioneSociale, importo: 0, conteggio: 0 };
       cur.importo += imp; cur.conteggio += 1;
       catRsMap.set(key, cur);
-      catTot.set(catNome, (catTot.get(catNome) || 0) + imp);
+
+      // Grafico per categoria: solo competenza del mese selezionato
+      if (mComp === dashboardMese) {
+        catTotMese.set(catNome, (catTotMese.get(catNome) || 0) + imp);
+      }
     }
 
-    const categoryBar = Array.from(catTot.entries())
+    const categoryBar = Array.from(catTotMese.entries())
       .map(([categoria, importo]) => ({ categoria, importo }))
       .sort((a, b) => b.importo - a.importo);
 
@@ -240,8 +252,10 @@ export default function ControlloGestione() {
     const summaryRows = Array.from(catRsMap.values()).sort((a, b) => b.importo - a.importo);
 
     return {
-      totaleCassaMese, totaleCompetenzaMese,
-      delta: totaleCompetenzaMese - totaleCassaMese,
+      totaleCassaMese, totaleCompetenzaMese, conteggioMese,
+      // Delta = cassa − competenza (positivo = pagato in anticipo,
+      // negativo = costi competenza non ancora pagati).
+      delta: totaleCassaMese - totaleCompetenzaMese,
       topCategoria,
       categoryBar,
       meseSerie,
@@ -404,7 +418,7 @@ export default function ControlloGestione() {
               </div>
               <p className="text-xs text-muted-foreground pb-2">I KPI sono calcolati sul mese selezionato (sui dati attualmente filtrati).</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <Card>
                 <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Totale cassa ({monthLabel(dashboardMese)})</CardTitle></CardHeader>
                 <CardContent><div className="text-2xl font-bold" data-testid="kpi-cassa">{fmtEur(dashboard.totaleCassaMese)}</div><p className="text-xs text-muted-foreground mt-1">Pagato nel mese</p></CardContent>
@@ -414,16 +428,23 @@ export default function ControlloGestione() {
                 <CardContent><div className="text-2xl font-bold" data-testid="kpi-competenza">{fmtEur(dashboard.totaleCompetenzaMese)}</div><p className="text-xs text-muted-foreground mt-1">Costo di competenza</p></CardContent>
               </Card>
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Delta competenza − cassa</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Delta cassa − competenza</CardTitle></CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold ${dashboard.delta >= 0 ? "text-orange-600" : "text-green-600"}`} data-testid="kpi-delta">
+                  <div className={`text-2xl font-bold ${dashboard.delta >= 0 ? "text-green-600" : "text-orange-600"}`} data-testid="kpi-delta">
                     {dashboard.delta >= 0 ? "+" : ""}{fmtEur(dashboard.delta)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">{dashboard.delta >= 0 ? "Costi non ancora pagati" : "Pagato in anticipo"}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{dashboard.delta >= 0 ? "Pagato in anticipo" : "Costi non ancora pagati"}</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Top categoria</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">N. voci ({monthLabel(dashboardMese)})</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold" data-testid="kpi-conteggio">{dashboard.conteggioMese}</div>
+                  <p className="text-xs text-muted-foreground mt-1">Spese pagate o di competenza nel mese</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Top categoria ({monthLabel(dashboardMese)})</CardTitle></CardHeader>
                 <CardContent>
                   {dashboard.topCategoria ? (
                     <>
@@ -439,10 +460,10 @@ export default function ControlloGestione() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <Card>
-                <CardHeader><CardTitle className="text-base">Spese per categoria</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base">Spese per categoria — competenza {monthLabel(dashboardMese)}</CardTitle></CardHeader>
                 <CardContent>
                   {dashboard.categoryBar.length === 0 ? (
-                    <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Nessuna spesa</div>
+                    <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Nessuna spesa nel mese</div>
                   ) : (
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={dashboard.categoryBar} layout="vertical" margin={{ left: 24 }}>

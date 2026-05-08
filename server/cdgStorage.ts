@@ -21,10 +21,27 @@ export const cdgStorage = {
     return r;
   },
   async updateRagioneSociale(id: string, orgId: string, updates: Partial<InsertCdgRagioneSociale>): Promise<CdgRagioneSociale | null> {
-    const [r] = await db.update(cdgRagioniSociali).set(updates)
-      .where(and(eq(cdgRagioniSociali.id, id), eq(cdgRagioniSociali.organizationId, orgId)))
-      .returning();
-    return r || null;
+    // Se cambia il nome, propaga il rename a tutte le tabelle scoped per nome RS
+    // in modo transazionale per mantenere l'integrità dei link logici.
+    return await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(cdgRagioniSociali)
+        .where(and(eq(cdgRagioniSociali.id, id), eq(cdgRagioniSociali.organizationId, orgId)));
+      if (!existing) return null;
+      const [r] = await tx.update(cdgRagioniSociali).set(updates)
+        .where(and(eq(cdgRagioniSociali.id, id), eq(cdgRagioniSociali.organizationId, orgId)))
+        .returning();
+      if (r && updates.nome && updates.nome !== existing.nome) {
+        await tx.update(cdgCategorie).set({ ragioneSociale: updates.nome })
+          .where(and(eq(cdgCategorie.organizationId, orgId), eq(cdgCategorie.ragioneSociale, existing.nome)));
+        await tx.update(cdgFornitori).set({ ragioneSociale: updates.nome })
+          .where(and(eq(cdgFornitori.organizationId, orgId), eq(cdgFornitori.ragioneSociale, existing.nome)));
+        await tx.update(cdgPdv).set({ ragioneSociale: updates.nome })
+          .where(and(eq(cdgPdv.organizationId, orgId), eq(cdgPdv.ragioneSociale, existing.nome)));
+        await tx.update(cdgSpese).set({ ragioneSociale: updates.nome })
+          .where(and(eq(cdgSpese.organizationId, orgId), eq(cdgSpese.ragioneSociale, existing.nome)));
+      }
+      return r || null;
+    });
   },
   async deleteRagioneSociale(id: string, orgId: string): Promise<void> {
     // Pulisci anagrafiche e spese collegate per nome RS (relazione "by-name")
