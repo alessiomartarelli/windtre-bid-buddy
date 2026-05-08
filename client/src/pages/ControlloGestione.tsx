@@ -153,6 +153,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const [annoMeseSel, setAnnoMeseSel] = useState<number>(new Date().getMonth() + 1);
   const [annoVista, setAnnoVista] = useState<"competenza" | "cassa">("competenza");
   const [speseSort, setSpeseSort] = useState<{ key: "dataPagamento" | "meseCompetenza" | "importo"; dir: "asc" | "desc" }>({ key: "dataPagamento", dir: "desc" });
+  const [rsSelezionata, setRsSelezionata] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && profile && !isAuthorized) {
@@ -332,6 +333,49 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     const totaleMeseSel = pieData.reduce((s, r) => s + r.importo, 0);
     return { perMese, pieData, totaleMeseSel, totCassaAnno, totCompAnno };
   }, [spese, dashboardAnno, annoMeseSel, annoVista, catById]);
+
+  // === Dashboard per Ragione Sociale + drill-down PDV ===
+  // Aggregati sull'anno selezionato (`dashboardAnno`) e sulla vista
+  // selezionata (competenza vs cassa). Cliccando una RS si apre il dettaglio
+  // PDV (con tabella + grafico).
+  const dashboardRs = useMemo(() => {
+    const rsTot = new Map<string, { rs: string; importo: number; conteggio: number }>();
+    const pdvTot = new Map<string, { codice: string; nome: string; importo: number; conteggio: number }>();
+    const pdvSpese: { id: string; data: string; meseComp: string; categoria: string; descrizione: string; importo: number; pdvCodice: string | null }[] = [];
+    for (const s of spese) {
+      const imp = parseImporto(s.importo);
+      const mPag = (s.dataPagamento || "").slice(0, 7);
+      const mComp = s.meseCompetenza || mPag;
+      const ym = annoVista === "competenza" ? mComp : mPag;
+      const [yy] = ym.split("-").map(Number);
+      if (yy !== dashboardAnno) continue;
+      const cur = rsTot.get(s.ragioneSociale) || { rs: s.ragioneSociale, importo: 0, conteggio: 0 };
+      cur.importo += imp; cur.conteggio += 1;
+      rsTot.set(s.ragioneSociale, cur);
+      if (rsSelezionata && s.ragioneSociale === rsSelezionata) {
+        const pdvKey = s.pdvCodice || "__nessuno__";
+        const pdvNome = s.pdvCodice ? (pdvByCodice.get(s.pdvCodice)?.nome || `${s.pdvCodice} (?)`) : "— Senza PDV —";
+        const pcur = pdvTot.get(pdvKey) || { codice: pdvKey, nome: pdvNome, importo: 0, conteggio: 0 };
+        pcur.importo += imp; pcur.conteggio += 1;
+        pdvTot.set(pdvKey, pcur);
+        pdvSpese.push({
+          id: s.id,
+          data: s.dataPagamento,
+          meseComp: s.meseCompetenza,
+          categoria: (s.categoriaId && catById.get(s.categoriaId)?.nome) || "—",
+          descrizione: s.descrizione,
+          importo: imp,
+          pdvCodice: s.pdvCodice,
+        });
+      }
+    }
+    const rsBar = Array.from(rsTot.values()).sort((a, b) => b.importo - a.importo);
+    const pdvBar = Array.from(pdvTot.values()).sort((a, b) => b.importo - a.importo);
+    pdvSpese.sort((a, b) => (b.data || "").localeCompare(a.data || ""));
+    const totaleRs = rsBar.reduce((s, r) => s + r.importo, 0);
+    const totalePdv = pdvBar.reduce((s, r) => s + r.importo, 0);
+    return { rsBar, pdvBar, pdvSpese, totaleRs, totalePdv };
+  }, [spese, dashboardAnno, annoVista, rsSelezionata, catById, pdvByCodice]);
 
   const deleteSpesaMut = useMutation({
     mutationFn: (id: string) => apiJson("DELETE", `/api/cdg/spese/${id}`),
@@ -706,6 +750,111 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         <span className="font-mono">{fmtEur(r.importo)}</span>
                       </div>
                     ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* === Dashboard per Ragione Sociale + drill-down PDV === */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <CardTitle className="text-base">
+                      Spese per Ragione Sociale — anno {dashboardAnno} ({annoVista})
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Totale: <strong>{fmtEur(dashboardRs.totaleRs)}</strong> · {dashboardRs.rsBar.length} RS · clicca una barra per il dettaglio PDV
+                    </p>
+                  </div>
+                  {rsSelezionata && (
+                    <Button variant="outline" size="sm" onClick={() => setRsSelezionata(null)} data-testid="btn-clear-rs">
+                      Chiudi dettaglio PDV
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {dashboardRs.rsBar.length === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">
+                    Nessuna spesa nell'anno selezionato.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={Math.max(220, dashboardRs.rsBar.length * 38)}>
+                    <BarChart
+                      data={dashboardRs.rsBar}
+                      layout="vertical"
+                      margin={{ left: 24 }}
+                      onClick={(e: any) => {
+                        const idx = e?.activeTooltipIndex;
+                        if (typeof idx === "number") {
+                          const rs = dashboardRs.rsBar[idx]?.rs;
+                          if (rs) setRsSelezionata(rs === rsSelezionata ? null : rs);
+                        }
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
+                      <YAxis type="category" dataKey="rs" width={180} tick={{ fontSize: 11 }} />
+                      <Tooltip formatter={(v: number) => fmtEur(v)} />
+                      <Bar dataKey="importo" name="Importo">
+                        {dashboardRs.rsBar.map((r, i) => (
+                          <Cell key={i} fill={r.rs === rsSelezionata ? "#1e40af" : (annoVista === "competenza" ? "#f97316" : "#3b82f6")} cursor="pointer" />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+
+                {rsSelezionata && (
+                  <div className="mt-6 border-t pt-4 space-y-4">
+                    <div>
+                      <h3 className="text-sm font-semibold">Dettaglio PDV — {rsSelezionata}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Totale: <strong>{fmtEur(dashboardRs.totalePdv)}</strong> · {dashboardRs.pdvBar.length} PDV · {dashboardRs.pdvSpese.length} spese
+                      </p>
+                    </div>
+
+                    {dashboardRs.pdvBar.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Nessun PDV per questa RS nell'anno selezionato.</p>
+                    ) : (
+                      <>
+                        <ResponsiveContainer width="100%" height={Math.max(180, dashboardRs.pdvBar.length * 34)}>
+                          <BarChart data={dashboardRs.pdvBar} layout="vertical" margin={{ left: 24 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
+                            <YAxis type="category" dataKey="nome" width={180} tick={{ fontSize: 11 }} />
+                            <Tooltip formatter={(v: number) => fmtEur(v)} />
+                            <Bar dataKey="importo" fill={annoVista === "competenza" ? "#f97316" : "#3b82f6"} name="Importo" />
+                          </BarChart>
+                        </ResponsiveContainer>
+
+                        <div className="rounded-md border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>PDV</TableHead>
+                                <TableHead className="text-right">N. spese</TableHead>
+                                <TableHead className="text-right">Totale</TableHead>
+                                <TableHead className="text-right">% sul totale RS</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {dashboardRs.pdvBar.map((p) => (
+                                <TableRow key={p.codice} data-testid={`row-pdv-detail-${p.codice}`}>
+                                  <TableCell className="font-medium">{p.nome}</TableCell>
+                                  <TableCell className="text-right">{p.conteggio}</TableCell>
+                                  <TableCell className="text-right font-mono">{fmtEur(p.importo)}</TableCell>
+                                  <TableCell className="text-right text-muted-foreground">
+                                    {dashboardRs.totalePdv > 0 ? `${((p.importo / dashboardRs.totalePdv) * 100).toFixed(1)}%` : "—"}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </CardContent>
