@@ -90,12 +90,16 @@ La vecchia rotta top-level `/controllo-gestione` redirect al tab.
 `ControlloGestione.tsx` accetta una prop `embedded` che salta AppNavbar/header
 container quando renderizzata dentro Amministrazione.
 - Tabelle DB: `cdg_ragioni_sociali` (per organizzazione, RS **manuali**),
-  `cdg_categorie`, `cdg_fornitori`, `cdg_pdv` (scoped per `organizationId` +
-  `ragioneSociale` come stringa), `cdg_spese` (FK opzionali a
-  categoria/fornitore/PDV con onDelete set null; `importo` numeric(14,2) =
-  totale per back-compat; `imponibile` + `aliquotaIva` + `iva` numeric nullable
-  per la nuova logica IVA; `dataPagamento` date; `meseCompetenza` varchar(7)
-  "YYYY-MM").
+  `cdg_categorie` e `cdg_fornitori` (per `organizationId` + colonna
+  `ragioniSociali text[]` **multi-RS**: ogni voce è riutilizzabile su più
+  Ragioni Sociali; la vecchia colonna `ragioneSociale` è nullable solo per
+  back-compat). `cdg_pdv` legacy (non più gestita da UI: i PDV sono ereditati
+  read-only da `organization_config.puntiVendita`). `cdg_spese` (FK opzionali a
+  categoria/fornitore/PDV con onDelete set null; `pdvCodice` varchar = codice
+  PDV nuovo modello, `pdvId` legacy mantenuto solo per dati pre-migrazione;
+  `importo` numeric(14,2) = totale per back-compat; `imponibile` + `aliquotaIva`
+  + `iva` numeric nullable per la nuova logica IVA; `dataPagamento` date;
+  `meseCompetenza` varchar(7) "YYYY-MM").
 - **RS unificate**: `GET /api/cdg/ragioni-sociali/unified` ritorna
   `[{nome, origine: "pdv"|"manuale", id?, partitaIva?, note?}]` mergiando
   `organization_config.puntiVendita.ragioneSociale` (read-only, badge "da PDV"
@@ -108,8 +112,22 @@ container quando renderizzata dentro Amministrazione.
   autoritariamente lato server e persiste imponibile/aliquotaIva/iva +
   `importo = totale` (back-compat). Backfill one-shot al register imposta
   imponibile=importo, aliquotaIva=0, iva=0 per le spese pre-esistenti.
-- API: `/api/cdg/{ragioni-sociali|ragioni-sociali/unified|categorie|fornitori|pdv|spese}`
-  CRUD + GET `/api/cdg/spese/:id/allegato` (download). Tutte gated
+- **Categorie / Fornitori multi-RS**: insert schemas richiedono
+  `ragioniSociali: string[]` (min 1). Backend `cdgStorage.ts` filtra le list
+  per RS via `${rs} = ANY(ragioniSociali)`; `updateRagioneSociale` rinomina con
+  `array_replace`; `deleteRagioneSociale` rimuove la RS via `array_remove` ed
+  elimina solo le righe rimaste senza RS (orfane). Cancellare una RS NON
+  cancella categorie/fornitori condivisi con altre RS.
+- **PDV ereditati read-only**: nessun CRUD su `cdg_pdv`. Tab PDV in
+  Anagrafiche mostra l'elenco raggruppato per RS con link a `/admin`. Le spese
+  riferiscono il PDV via `pdvCodice` (chiave `puntiVendita.codicePos`); il
+  selettore PDV nel form spesa è popolato da `GET /api/cdg/pdv-by-rs?rs=...`
+  che legge `organization_config.puntiVendita`. Backfill al register imposta
+  `pdv_codice = COALESCE(p.codice, p.nome)` joinando la legacy `cdg_pdv` per
+  pdvId esistenti.
+- API: `/api/cdg/{ragioni-sociali|ragioni-sociali/unified|categorie|fornitori|spese}`
+  CRUD + `GET /api/cdg/pdv-by-rs[?rs=...]` (PDV da org config, opz. filtrati
+  per RS) + `GET /api/cdg/spese/:id/allegato` (download). Tutte gated
   `controllo_gestione` + admin/super_admin con scoping su `organizationId`.
 - Allegati: upload base64 in JSON → disk in `uploads/cdg/<orgId>/` (env
   override `CDG_UPLOAD_DIR`), max 8MB, sanitized filename + path-traversal
@@ -118,9 +136,12 @@ container quando renderizzata dentro Amministrazione.
 - Frontend (`client/src/pages/ControlloGestione.tsx`): 3 tab Dashboard
   (KPI totale + mese corrente + categorie, PieChart per categoria, BarChart
   cassa vs competenza per mese), Spese (tabella + dialog form con allegato e
-  blocco IVA), Anagrafiche (RS card unificata con badge "da PDV" e sub-tab
-  RS-scoped categorie/fornitori/PDV via `SimpleAnagraficaCrud` generico).
-  Export Excel include colonne Imponibile / Aliquota IVA (%) / IVA / Totale.
+  blocco IVA; il selettore PDV usa `pdvCodice`), Anagrafiche (RS card
+  unificata con badge "da PDV"; tab Categorie/Fornitori via
+  `MultiRsAnagraficaCrud` con multiselect Checkbox per le RS associate e
+  badge RS in tabella + filtro "RS"; tab PDV via `PdvReadOnlyView`
+  raggruppato per RS, read-only, con link a `/admin`). Export Excel include
+  colonne Imponibile / Aliquota IVA (%) / IVA / Totale.
 
 ### Moduli per organizzazione
 Ogni `organizations.enabledModules` (jsonb) è un `Record<ModuleKey, boolean>`.

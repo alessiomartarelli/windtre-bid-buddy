@@ -26,16 +26,20 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Wallet, Plus, Pencil, Trash2, Loader2, Building2, Tag, Truck, Store, Download,
-  TrendingUp, FileText, Paperclip,
+  TrendingUp, FileText, Paperclip, ExternalLink, Info,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts";
 import type {
-  CdgRagioneSociale, CdgCategoria, CdgFornitore, CdgPdv, CdgSpesa,
+  CdgRagioneSociale, CdgCategoria, CdgFornitore, CdgSpesa,
 } from "@shared/schema";
+
+// PDV ereditati da organization_config.puntiVendita (read-only).
+type PdvFromConfig = { codice: string; nome: string; ragioneSociale: string };
 
 const fmtEur = (v: number) =>
   v.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
@@ -161,8 +165,11 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   });
   const fornitori = fornitoriQ.data || [];
 
-  const pdvQ = useQuery<CdgPdv[]>({
-    queryKey: ["/api/cdg/pdv"],
+  // PDV ereditati da org_config.puntiVendita (read-only). Senza filtro `rs`
+  // ritorna tutti i PDV dell'organizzazione, gestiti in Amministrazione.
+  const pdvQ = useQuery<PdvFromConfig[]>({
+    queryKey: ["/api/cdg/pdv-by-rs", "all"],
+    queryFn: () => apiJson<PdvFromConfig[]>("GET", `/api/cdg/pdv-by-rs`),
     enabled: !!orgId && isAuthorized,
   });
   const pdvList = pdvQ.data || [];
@@ -186,7 +193,10 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     return speseAll.filter(s => {
       if (filterCategoria !== "all" && s.categoriaId !== filterCategoria) return false;
       if (filterFornitore !== "all" && s.fornitoreId !== filterFornitore) return false;
-      if (filterPdv !== "all" && s.pdvId !== filterPdv) return false;
+      // Filtro PDV per codice (modello nuovo). Le spese pre-migrazione potrebbero
+      // avere solo pdvId (legacy): non matchano il filtro per codice — comunque
+      // backfill ha popolato pdvCodice via join cdg_pdv quando disponibile.
+      if (filterPdv !== "all" && (s.pdvCodice || "") !== filterPdv) return false;
       if (filterMesePagamento) {
         const mp = (s.dataPagamento || "").slice(0, 7);
         if (mp !== filterMesePagamento) return false;
@@ -200,7 +210,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
 
   const catById = useMemo(() => new Map(categorie.map(c => [c.id, c])), [categorie]);
   const fornById = useMemo(() => new Map(fornitori.map(f => [f.id, f])), [fornitori]);
-  const pdvById = useMemo(() => new Map(pdvList.map(p => [p.id, p])), [pdvList]);
+  const pdvByCodice = useMemo(() => new Map(pdvList.map(p => [p.codice, p])), [pdvList]);
 
   // === Dashboard data ===
   // I KPI di mese e il grafico per categoria sono scoped sul mese selezionato
@@ -295,7 +305,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
         "Ragione Sociale": s.ragioneSociale,
         "Categoria": (s.categoriaId && catById.get(s.categoriaId)?.nome) || "",
         "Fornitore": (s.fornitoreId && fornById.get(s.fornitoreId)?.nome) || "",
-        "PDV": (s.pdvId && pdvById.get(s.pdvId)?.nome) || "",
+        "PDV": (s.pdvCodice && pdvByCodice.get(s.pdvCodice)?.nome) || "",
         "Descrizione": s.descrizione,
         "Metodo Pagamento": s.metodoPagamento || "",
         "Imponibile": imponibile,
@@ -376,7 +386,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                   <SelectTrigger data-testid="select-filter-categoria"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tutte</SelectItem>
-                    {categorie.filter(c => filterRs === "all" || c.ragioneSociale === filterRs).map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                    {categorie.filter(c => filterRs === "all" || (c.ragioniSociali || []).includes(filterRs)).map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -386,7 +396,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                   <SelectTrigger data-testid="select-filter-fornitore"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tutti</SelectItem>
-                    {fornitori.filter(f => filterRs === "all" || f.ragioneSociale === filterRs).map(f => <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>)}
+                    {fornitori.filter(f => filterRs === "all" || (f.ragioniSociali || []).includes(filterRs)).map(f => <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -396,7 +406,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                   <SelectTrigger data-testid="select-filter-pdv"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tutti</SelectItem>
-                    {pdvList.filter(p => filterRs === "all" || p.ragioneSociale === filterRs).map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                    {pdvList.filter(p => filterRs === "all" || p.ragioneSociale === filterRs).map(p => <SelectItem key={p.codice} value={p.codice}>{p.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -581,7 +591,11 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                       {spese.map(s => {
                         const cat = s.categoriaId ? catById.get(s.categoriaId) : null;
                         const forn = s.fornitoreId ? fornById.get(s.fornitoreId) : null;
-                        const pdv = s.pdvId ? pdvById.get(s.pdvId) : null;
+                        // Fallback: se pdvCodice esiste ma non è risolvibile in
+                        // puntiVendita (legacy non rimappato), mostra comunque
+                        // il codice grezzo invece di "—" silenzioso.
+                        const pdv = s.pdvCodice ? pdvByCodice.get(s.pdvCodice) : null;
+                        const pdvLabel = pdv ? pdv.nome : (s.pdvCodice ? `${s.pdvCodice} (?)` : "—");
                         return (
                           <TableRow key={s.id} data-testid={`row-spesa-${s.id}`}>
                             <TableCell>{fmtDateIt(s.dataPagamento)}</TableCell>
@@ -589,7 +603,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                             <TableCell className="text-xs">{s.ragioneSociale}</TableCell>
                             <TableCell>{cat?.nome || <span className="text-muted-foreground">—</span>}</TableCell>
                             <TableCell>{forn?.nome || <span className="text-muted-foreground">—</span>}</TableCell>
-                            <TableCell>{pdv?.nome || <span className="text-muted-foreground">—</span>}</TableCell>
+                            <TableCell>{pdv ? pdv.nome : (s.pdvCodice ? <span className="text-amber-600" title="PDV legacy non risolvibile in puntiVendita">{pdvLabel}</span> : <span className="text-muted-foreground">—</span>)}</TableCell>
                             <TableCell className="max-w-[200px] truncate" title={s.descrizione}>{s.descrizione}</TableCell>
                             <TableCell className="text-xs">{s.metodoPagamento || ""}</TableCell>
                             <TableCell className="text-right font-mono">{fmtEur(parseImporto(s.importo))}</TableCell>
@@ -681,7 +695,7 @@ function SpesaDialog({
   ragioniSociali: UnifiedRagioneSociale[];
   categorie: CdgCategoria[];
   fornitori: CdgFornitore[];
-  pdvList: CdgPdv[];
+  pdvList: PdvFromConfig[];
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -689,7 +703,7 @@ function SpesaDialog({
   const [rs, setRs] = useState<string>(editing?.ragioneSociale || ragioniSociali[0]?.nome || "");
   const [categoriaId, setCategoriaId] = useState<string>(editing?.categoriaId || "");
   const [fornitoreId, setFornitoreId] = useState<string>(editing?.fornitoreId || "");
-  const [pdvId, setPdvId] = useState<string>(editing?.pdvId || "");
+  const [pdvCodice, setPdvCodice] = useState<string>(editing?.pdvCodice || "");
   const [descrizione, setDescrizione] = useState<string>(editing?.descrizione || "");
   const initialImponibile = editing?.imponibile != null
     ? String(editing.imponibile)
@@ -716,14 +730,14 @@ function SpesaDialog({
   const [quickAdd, setQuickAdd] = useState<{ kind: "categoria" | "fornitore"; nome: string } | null>(null);
   const [quickSaving, setQuickSaving] = useState(false);
 
-  const catFiltrate = categorie.filter(c => c.ragioneSociale === rs);
-  const fornFiltrati = fornitori.filter(f => f.ragioneSociale === rs);
+  const catFiltrate = categorie.filter(c => (c.ragioniSociali || []).includes(rs));
+  const fornFiltrati = fornitori.filter(f => (f.ragioniSociali || []).includes(rs));
   const pdvFiltrati = pdvList.filter(p => p.ragioneSociale === rs);
 
   useEffect(() => {
     if (categoriaId && !catFiltrate.find(c => c.id === categoriaId)) setCategoriaId("");
     if (fornitoreId && !fornFiltrati.find(f => f.id === fornitoreId)) setFornitoreId("");
-    if (pdvId && !pdvFiltrati.find(p => p.id === pdvId)) setPdvId("");
+    if (pdvCodice && !pdvFiltrati.find(p => p.codice === pdvCodice)) setPdvCodice("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rs]);
 
@@ -732,7 +746,9 @@ function SpesaDialog({
     if (!rs) { toast({ title: "Seleziona prima una Ragione Sociale", variant: "destructive" }); return; }
     setQuickSaving(true);
     try {
-      const body = { ragioneSociale: rs, nome: quickAdd.nome.trim() };
+      // Multi-RS: la nuova voce nasce con la sola RS corrente. L'utente potrà
+      // poi associarla ad altre RS dalla tab Anagrafiche.
+      const body = { ragioniSociali: [rs], nome: quickAdd.nome.trim() };
       const base = quickAdd.kind === "categoria" ? "categorie" : "fornitori";
       const created = await apiJson<CdgCategoria | CdgFornitore>("POST", `/api/cdg/${base}`, body);
       qc.invalidateQueries({ queryKey: [`/api/cdg/${base}`] });
@@ -769,7 +785,7 @@ function SpesaDialog({
         ragioneSociale: rs,
         categoriaId: categoriaId || null,
         fornitoreId: fornitoreId || null,
-        pdvId: pdvId || null,
+        pdvCodice: pdvCodice || null,
         descrizione: descrizione.trim(),
         imponibile: imponibileNum.toFixed(2),
         aliquotaIva: aliquotaNum.toFixed(2),
@@ -849,13 +865,16 @@ function SpesaDialog({
 
             <div>
               <Label>PDV</Label>
-              <Select value={pdvId || "__none__"} onValueChange={(v) => setPdvId(v === "__none__" ? "" : v)}>
+              <Select value={pdvCodice || "__none__"} onValueChange={(v) => setPdvCodice(v === "__none__" ? "" : v)}>
                 <SelectTrigger data-testid="select-spesa-pdv"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">— Nessuno —</SelectItem>
-                  {pdvFiltrati.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.codice ? ` (${p.codice})` : ""}</SelectItem>)}
+                  {pdvFiltrati.map(p => <SelectItem key={p.codice} value={p.codice}>{p.nome} ({p.codice})</SelectItem>)}
                 </SelectContent>
               </Select>
+              {rs && pdvFiltrati.length === 0 && (
+                <p className="text-[11px] text-muted-foreground mt-1">Nessun PDV configurato per questa RS. Gestiscili in Amministrazione.</p>
+              )}
             </div>
 
             <div>
@@ -968,6 +987,7 @@ function SpesaDialog({
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Nuova {quickAdd.kind === "categoria" ? "categoria" : "fornitore"} per {rs}</DialogTitle>
+              <DialogDescription>La voce verrà creata associata a "{rs}". Potrai associarla ad altre Ragioni Sociali dalla tab Anagrafiche.</DialogDescription>
             </DialogHeader>
             <div className="py-2">
               <Label>Nome *</Label>
@@ -1087,7 +1107,7 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
                           <AlertDialogContent>
                             <AlertDialogHeader>
                               <AlertDialogTitle>Eliminare {rs.nome}?</AlertDialogTitle>
-                              <AlertDialogDescription>Verranno eliminate anche tutte le anagrafiche (categorie, fornitori, PDV) e le spese collegate.</AlertDialogDescription>
+                              <AlertDialogDescription>Verranno eliminate tutte le spese collegate. Categorie e fornitori condivisi con altre Ragioni Sociali NON vengono cancellati: viene rimossa solo l'associazione a "{rs.nome}". Le voci associate solo a questa RS vengono eliminate.</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Annulla</AlertDialogCancel>
@@ -1124,51 +1144,36 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
   );
 }
 
+// Anagrafiche multi-RS:
+// - Categorie e Fornitori sono riutilizzabili su più Ragioni Sociali (multi-select).
+// - PDV sono ereditati read-only da organization_config.puntiVendita
+//   (gestione in Amministrazione → Gestione Organizzazione).
 function AnagraficheRsScopedCard({
   ragioniSociali, categorie, fornitori, pdvList,
 }: {
   ragioniSociali: UnifiedRagioneSociale[];
   categorie: CdgCategoria[];
   fornitori: CdgFornitore[];
-  pdvList: CdgPdv[];
+  pdvList: PdvFromConfig[];
 }) {
-  const [selectedRs, setSelectedRs] = useState<string>(ragioniSociali[0]?.nome || "");
-
-  useEffect(() => {
-    if (!selectedRs && ragioniSociali[0]) setSelectedRs(ragioniSociali[0].nome);
-  }, [ragioniSociali, selectedRs]);
-
-  if (ragioniSociali.length === 0) {
-    return <Card><CardContent className="py-6 text-sm text-muted-foreground text-center">Crea prima una Ragione Sociale per gestire categorie, fornitori e PDV.</CardContent></Card>;
-  }
-
+  const [, setLocation] = useLocation();
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <CardTitle className="text-base">Anagrafiche per Ragione Sociale</CardTitle>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs">RS:</Label>
-            <Select value={selectedRs} onValueChange={setSelectedRs}>
-              <SelectTrigger className="w-[260px]" data-testid="select-anag-rs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ragioniSociali.map(rs => <SelectItem key={`${rs.origine}-${rs.nome}`} value={rs.nome}>{rs.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <CardTitle className="text-base">Anagrafiche</CardTitle>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="categorie">
           <TabsList>
-            <TabsTrigger value="categorie"><Tag className="h-4 w-4 mr-1" />Categorie</TabsTrigger>
-            <TabsTrigger value="fornitori"><Truck className="h-4 w-4 mr-1" />Fornitori</TabsTrigger>
-            <TabsTrigger value="pdv"><Store className="h-4 w-4 mr-1" />PDV</TabsTrigger>
+            <TabsTrigger value="categorie" data-testid="tab-anag-categorie"><Tag className="h-4 w-4 mr-1" />Categorie</TabsTrigger>
+            <TabsTrigger value="fornitori" data-testid="tab-anag-fornitori"><Truck className="h-4 w-4 mr-1" />Fornitori</TabsTrigger>
+            <TabsTrigger value="pdv" data-testid="tab-anag-pdv"><Store className="h-4 w-4 mr-1" />PDV</TabsTrigger>
           </TabsList>
           <TabsContent value="categorie">
-            <SimpleAnagraficaCrud
-              base="categorie" rs={selectedRs}
-              items={categorie.filter(c => c.ragioneSociale === selectedRs)}
+            <MultiRsAnagraficaCrud
+              base="categorie"
+              ragioniSociali={ragioniSociali}
+              items={categorie}
               fields={[
                 { key: "nome", label: "Nome", required: true },
                 { key: "colore", label: "Colore (HEX)", placeholder: "#3b82f6" },
@@ -1177,9 +1182,10 @@ function AnagraficheRsScopedCard({
             />
           </TabsContent>
           <TabsContent value="fornitori">
-            <SimpleAnagraficaCrud
-              base="fornitori" rs={selectedRs}
-              items={fornitori.filter(f => f.ragioneSociale === selectedRs)}
+            <MultiRsAnagraficaCrud
+              base="fornitori"
+              ragioniSociali={ragioniSociali}
+              items={fornitori}
               fields={[
                 { key: "nome", label: "Nome", required: true },
                 { key: "partitaIva", label: "P.IVA / CF" },
@@ -1189,15 +1195,7 @@ function AnagraficheRsScopedCard({
             />
           </TabsContent>
           <TabsContent value="pdv">
-            <SimpleAnagraficaCrud
-              base="pdv" rs={selectedRs}
-              items={pdvList.filter(p => p.ragioneSociale === selectedRs)}
-              fields={[
-                { key: "nome", label: "Nome", required: true },
-                { key: "codice", label: "Codice" },
-              ]}
-              testidPrefix="pdv"
-            />
+            <PdvReadOnlyView pdvList={pdvList} ragioniSociali={ragioniSociali} onGoToAdmin={() => setLocation("/admin")} />
           </TabsContent>
         </Tabs>
       </CardContent>
@@ -1207,11 +1205,13 @@ function AnagraficheRsScopedCard({
 
 interface FieldDef { key: string; label: string; required?: boolean; placeholder?: string; textarea?: boolean }
 
-function SimpleAnagraficaCrud<T extends { id: string; nome: string; ragioneSociale: string } & Record<string, unknown>>({
-  base, rs, items, fields, testidPrefix,
+// CRUD multi-RS per categorie/fornitori. Una voce ha una lista di RS (min 1)
+// ed è visibile/utilizzabile in tutte le RS associate.
+function MultiRsAnagraficaCrud<T extends { id: string; nome: string; ragioniSociali: string[] | null } & Record<string, unknown>>({
+  base, ragioniSociali, items, fields, testidPrefix,
 }: {
   base: string;
-  rs: string;
+  ragioniSociali: UnifiedRagioneSociale[];
   items: T[];
   fields: FieldDef[];
   testidPrefix: string;
@@ -1221,14 +1221,27 @@ function SimpleAnagraficaCrud<T extends { id: string; nome: string; ragioneSocia
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<T | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [selectedRs, setSelectedRs] = useState<string[]>([]);
+  const [filterRs, setFilterRs] = useState<string>("all");
 
-  const openNew = () => { setEditing(null); setValues({}); setOpen(true); };
+  const openNew = () => {
+    setEditing(null);
+    setValues({});
+    // Default: nessuna RS pre-selezionata; obbligatorio sceglierne almeno una.
+    setSelectedRs([]);
+    setOpen(true);
+  };
   const openEdit = (it: T) => {
     setEditing(it);
     const v: Record<string, string> = {};
     for (const f of fields) v[f.key] = (it[f.key] as string | null | undefined) || "";
     setValues(v);
+    setSelectedRs(Array.isArray(it.ragioniSociali) ? [...it.ragioniSociali] : []);
     setOpen(true);
+  };
+
+  const toggleRs = (nome: string, checked: boolean) => {
+    setSelectedRs(prev => checked ? Array.from(new Set([...prev, nome])) : prev.filter(n => n !== nome));
   };
 
   const save = async () => {
@@ -1238,7 +1251,11 @@ function SimpleAnagraficaCrud<T extends { id: string; nome: string; ragioneSocia
         return;
       }
     }
-    const body: Record<string, unknown> = { ragioneSociale: rs };
+    if (selectedRs.length === 0) {
+      toast({ title: "Seleziona almeno una Ragione Sociale", variant: "destructive" });
+      return;
+    }
+    const body: Record<string, unknown> = { ragioniSociali: selectedRs };
     for (const f of fields) body[f.key] = (values[f.key] || "").trim() || null;
     try {
       if (editing) await apiJson("PUT", `/api/cdg/${base}/${editing.id}`, body);
@@ -1261,20 +1278,49 @@ function SimpleAnagraficaCrud<T extends { id: string; nome: string; ragioneSocia
     }
   };
 
+  const filtered = filterRs === "all"
+    ? items
+    : items.filter(it => (it.ragioniSociali || []).includes(filterRs));
+
   return (
     <div className="space-y-3 pt-3">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={openNew} data-testid={`button-new-${testidPrefix}`}><Plus className="h-4 w-4 mr-1" />Nuovo</Button>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Label className="text-xs">Filtra per RS:</Label>
+          <Select value={filterRs} onValueChange={setFilterRs}>
+            <SelectTrigger className="w-[260px]" data-testid={`select-filter-${testidPrefix}-rs`}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tutte</SelectItem>
+              {ragioniSociali.map(rs => <SelectItem key={`${rs.origine}-${rs.nome}`} value={rs.nome}>{rs.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button size="sm" onClick={openNew} disabled={ragioniSociali.length === 0} data-testid={`button-new-${testidPrefix}`}>
+          <Plus className="h-4 w-4 mr-1" />Nuovo
+        </Button>
       </div>
-      {items.length === 0 ? (
+      {ragioniSociali.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">Crea prima una Ragione Sociale (manuale o da PDV).</p>
+      ) : filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4 text-center">Nessuna voce.</p>
       ) : (
         <Table>
-          <TableHeader><TableRow>{fields.map(f => <TableHead key={f.key}>{f.label}</TableHead>)}<TableHead></TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow>
+            {fields.map(f => <TableHead key={f.key}>{f.label}</TableHead>)}
+            <TableHead>Ragioni Sociali</TableHead>
+            <TableHead></TableHead>
+          </TableRow></TableHeader>
           <TableBody>
-            {items.map(it => (
+            {filtered.map(it => (
               <TableRow key={it.id} data-testid={`row-${testidPrefix}-${it.id}`}>
                 {fields.map(f => <TableCell key={f.key}>{(it[f.key] as string) || "—"}</TableCell>)}
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {(it.ragioniSociali || []).map(rs => (
+                      <Badge key={rs} variant="secondary" className="text-[10px]" data-testid={`badge-${testidPrefix}-rs-${it.id}-${rs}`}>{rs}</Badge>
+                    ))}
+                  </div>
+                </TableCell>
                 <TableCell className="text-right">
                   <Button size="icon" variant="ghost" onClick={() => openEdit(it)} data-testid={`button-edit-${testidPrefix}-${it.id}`}><Pencil className="h-4 w-4" /></Button>
                   <AlertDialog>
@@ -1282,7 +1328,10 @@ function SimpleAnagraficaCrud<T extends { id: string; nome: string; ragioneSocia
                       <Button size="icon" variant="ghost" data-testid={`button-delete-${testidPrefix}-${it.id}`}><Trash2 className="h-4 w-4 text-red-600" /></Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
-                      <AlertDialogHeader><AlertDialogTitle>Eliminare {it.nome}?</AlertDialogTitle></AlertDialogHeader>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Eliminare {it.nome}?</AlertDialogTitle>
+                        <AlertDialogDescription>La voce verrà rimossa da tutte le Ragioni Sociali associate.</AlertDialogDescription>
+                      </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Annulla</AlertDialogCancel>
                         <AlertDialogAction onClick={() => del(it)}>Elimina</AlertDialogAction>
@@ -1297,19 +1346,42 @@ function SimpleAnagraficaCrud<T extends { id: string; nome: string; ragioneSocia
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>{editing ? "Modifica" : "Nuovo"}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Modifica" : "Nuovo"}</DialogTitle>
+            <DialogDescription>Seleziona una o più Ragioni Sociali a cui associare la voce.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-3 py-2">
             {fields.map(f => (
               <div key={f.key}>
                 <Label>{f.label}{f.required ? " *" : ""}</Label>
                 {f.textarea ? (
-                  <Textarea value={values[f.key] || ""} onChange={(e) => setValues(v => ({ ...v, [f.key]: e.target.value }))} rows={2} />
+                  <Textarea value={values[f.key] || ""} onChange={(e) => setValues(v => ({ ...v, [f.key]: e.target.value }))} rows={2} data-testid={`input-${testidPrefix}-${f.key}`} />
                 ) : (
                   <Input value={values[f.key] || ""} onChange={(e) => setValues(v => ({ ...v, [f.key]: e.target.value }))} placeholder={f.placeholder} data-testid={`input-${testidPrefix}-${f.key}`} />
                 )}
               </div>
             ))}
+            <div>
+              <Label>Ragioni Sociali *</Label>
+              <div className="rounded-md border p-2 max-h-48 overflow-y-auto space-y-1" data-testid={`rs-multiselect-${testidPrefix}`}>
+                {ragioniSociali.map(rs => {
+                  const checked = selectedRs.includes(rs.nome);
+                  return (
+                    <label key={`${rs.origine}-${rs.nome}`} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-muted cursor-pointer text-sm">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => toggleRs(rs.nome, v === true)}
+                        data-testid={`checkbox-${testidPrefix}-rs-${rs.nome}`}
+                      />
+                      <span className="flex-1">{rs.nome}</span>
+                      {rs.origine === "pdv" && <Badge variant="outline" className="text-[10px]">da PDV</Badge>}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">{selectedRs.length} selezionata/e</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Annulla</Button>
@@ -1317,6 +1389,66 @@ function SimpleAnagraficaCrud<T extends { id: string; nome: string; ragioneSocia
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// PDV: vista read-only raggruppata per Ragione Sociale. La gestione PDV è
+// nella sezione Amministrazione → Gestione Organizzazione.
+function PdvReadOnlyView({
+  pdvList, ragioniSociali, onGoToAdmin,
+}: {
+  pdvList: PdvFromConfig[];
+  ragioniSociali: UnifiedRagioneSociale[];
+  onGoToAdmin: () => void;
+}) {
+  const grouped = useMemo(() => {
+    const map = new Map<string, PdvFromConfig[]>();
+    for (const p of pdvList) {
+      const key = p.ragioneSociale || "—";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(p);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], "it"));
+  }, [pdvList]);
+
+  return (
+    <div className="space-y-3 pt-3">
+      <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm">
+        <Info className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+        <div className="flex-1">
+          <p>I PDV sono ereditati dalla configurazione organizzazione (Amministrazione → Gestione Organizzazione). Sono di sola lettura qui.</p>
+          <p className="text-xs text-muted-foreground mt-1">Totale PDV configurati: <strong>{pdvList.length}</strong> su <strong>{ragioniSociali.length}</strong> RS.</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={onGoToAdmin} data-testid="button-go-admin-pdv">
+          <ExternalLink className="h-4 w-4 mr-1" /> Gestisci
+        </Button>
+      </div>
+      {pdvList.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">Nessun PDV configurato.</p>
+      ) : (
+        <div className="space-y-3">
+          {grouped.map(([rs, items]) => (
+            <div key={rs} className="rounded-md border" data-testid={`pdv-group-${rs}`}>
+              <div className="px-3 py-2 bg-muted/50 border-b font-medium text-sm flex items-center gap-2">
+                <Building2 className="h-4 w-4" /> {rs}
+                <Badge variant="outline" className="ml-auto">{items.length}</Badge>
+              </div>
+              <Table>
+                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Codice</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {items.map(p => (
+                    <TableRow key={p.codice} data-testid={`row-pdv-${p.codice}`}>
+                      <TableCell>{p.nome}</TableCell>
+                      <TableCell className="font-mono text-xs">{p.codice}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

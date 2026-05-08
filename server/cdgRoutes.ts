@@ -10,7 +10,6 @@ import {
   insertCdgRagioneSocialeSchema,
   insertCdgCategoriaSchema,
   insertCdgFornitoreSchema,
-  insertCdgPdvSchema,
   insertCdgSpesaSchema,
   type Profile,
 } from "@shared/schema";
@@ -112,10 +111,14 @@ function computeImporti(imponibileStr: string, aliquotaStr: string): { imponibil
   return { imponibile: fmt(impCent), aliquotaIva: aliq.toFixed(2), iva: fmt(ivaCent), importo: fmt(totCent) };
 }
 
-// Back-fill una tantum: per spese pre-revisione (importo presente, imponibile NULL)
-// imposta imponibile=importo, aliquotaIva=0, iva=0. Idempotente (WHERE imponibile IS NULL).
+// Back-fill una tantum:
+// 1) imponibile/iva (legacy pre-IVA): imponibile=importo, aliquotaIva=0, iva=0.
+// 2) ragioni_sociali (multi-RS migration): popola array da ragione_sociale legacy.
+// 3) pdv_codice (PDV-from-config migration): risolve cdg_spese.pdv_id legacy
+//    al codice PDV (cdg_pdv.codice o, in fallback, cdg_pdv.nome) per consentire
+//    la display lato client da organization_config.puntiVendita.
 let cdgBackfillDone = false;
-async function backfillCdgSpeseImponibile(): Promise<void> {
+async function backfillCdg(): Promise<void> {
   if (cdgBackfillDone) return;
   cdgBackfillDone = true;
   try {
@@ -127,11 +130,89 @@ async function backfillCdgSpeseImponibile(): Promise<void> {
   } catch (e) {
     console.error("[cdg] backfill imponibile failed:", e);
   }
+  try {
+    await db.execute(sql`
+      UPDATE cdg_categorie
+         SET ragioni_sociali = ARRAY[ragione_sociale]
+       WHERE ragione_sociale IS NOT NULL
+         AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
+    `);
+    await db.execute(sql`
+      UPDATE cdg_fornitori
+         SET ragioni_sociali = ARRAY[ragione_sociale]
+       WHERE ragione_sociale IS NOT NULL
+         AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
+    `);
+  } catch (e) {
+    console.error("[cdg] backfill ragioni_sociali failed:", e);
+  }
+  try {
+    await db.execute(sql`
+      UPDATE cdg_spese sp
+         SET pdv_codice = COALESCE(p.codice, p.nome)
+        FROM cdg_pdv p
+       WHERE sp.pdv_id = p.id
+         AND sp.pdv_codice IS NULL
+    `);
+  } catch (e) {
+    console.error("[cdg] backfill pdv_codice failed:", e);
+  }
+  // Step 4: rimappa pdv_codice ai veri puntiVendita.codicePos.
+  // Lo step 3 può aver scritto cdg_pdv.nome quando codice era null: questi
+  // valori NON corrispondono al codicePos in organization_config.puntiVendita,
+  // quindi non sarebbero risolvibili dal frontend (PDV invisibile in UI).
+  // Per ogni org, scorriamo le spese con pdv_codice non vuoto e proviamo a
+  // matcharle contro puntiVendita.codicePos. Se non matcha, proviamo per
+  // puntiVendita.nome (case-insensitive). Idempotente: se già corretto,
+  // l'UPDATE è no-op.
+  try {
+    const orgs = await db.execute(sql`
+      SELECT DISTINCT sp.organization_id
+        FROM cdg_spese sp
+       WHERE sp.pdv_codice IS NOT NULL AND sp.pdv_codice <> ''
+    `);
+    const orgRows = (orgs as unknown as { rows: Array<{ organization_id: string }> }).rows || [];
+    for (const { organization_id: orgId } of orgRows) {
+      const cfg = await storage.getOrgConfig(orgId);
+      const pv = ((cfg?.config as Record<string, unknown> | null)?.puntiVendita || []) as PuntoVendita[];
+      if (!pv.length) continue;
+      const codiciValidi = new Set<string>();
+      const byNome = new Map<string, string>();
+      for (const p of pv) {
+        const codice = String(p?.codicePos || "").trim();
+        const nome = String(p?.nome || "").trim();
+        if (codice) codiciValidi.add(codice);
+        if (codice && nome) byNome.set(nome.toLowerCase(), codice);
+      }
+      const speseRows = await db.execute(sql`
+        SELECT id, pdv_codice FROM cdg_spese
+         WHERE organization_id = ${orgId}
+           AND pdv_codice IS NOT NULL AND pdv_codice <> ''
+      `);
+      const items = (speseRows as unknown as { rows: Array<{ id: string; pdv_codice: string }> }).rows || [];
+      for (const it of items) {
+        if (codiciValidi.has(it.pdv_codice)) continue;
+        const remap = byNome.get(it.pdv_codice.toLowerCase());
+        if (remap) {
+          await db.execute(sql`UPDATE cdg_spese SET pdv_codice = ${remap} WHERE id = ${it.id}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[cdg] remap pdv_codice → codicePos failed:", e);
+  }
+}
+
+interface PuntoVendita { codicePos?: unknown; nome?: unknown; ragioneSociale?: unknown }
+
+async function getOrgPuntiVendita(orgId: string): Promise<PuntoVendita[]> {
+  const cfg = await storage.getOrgConfig(orgId);
+  return ((cfg?.config as Record<string, unknown> | null)?.puntiVendita || []) as PuntoVendita[];
 }
 
 export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler, requireModule: (k: string) => RequestHandler) {
   void ensureUploadDir().catch(() => { /* will retry per-write */ });
-  void backfillCdgSpeseImponibile();
+  void backfillCdg();
 
   const requireOrgAdmin = async (req: { session: { userId: string } }, res: { status: (c: number) => { json: (d: unknown) => void } }): Promise<Profile | null> => {
     const profile = await storage.getProfile(req.session.userId);
@@ -163,8 +244,7 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     if (!profile) return;
     const orgId = profile.organizationId!;
     const manuali = await cdgStorage.listRagioniSociali(orgId);
-    const cfg = await storage.getOrgConfig(orgId);
-    const pdvList = ((cfg?.config as Record<string, unknown> | null)?.puntiVendita || []) as Array<{ ragioneSociale?: unknown }>;
+    const pdvList = await getOrgPuntiVendita(orgId);
     const pdvNames = new Set<string>();
     for (const p of pdvList) {
       const nome = String(p?.ragioneSociale || "").trim();
@@ -172,17 +252,35 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     }
     const manualiByNome = new Map(manuali.map(r => [r.nome, r] as const));
     const out: Array<{ nome: string; origine: "pdv" | "manuale"; id?: string; partitaIva?: string | null; note?: string | null }> = [];
-    // Aggiungi manuali (anche se il nome esiste tra i PDV: prevale "manuale")
     for (const r of manuali) {
       out.push({ nome: r.nome, origine: "manuale", id: r.id, partitaIva: r.partitaIva, note: r.note });
     }
-    // Aggiungi PDV non già presenti come manuali
     for (const nome of Array.from(pdvNames).sort((a, b) => a.localeCompare(b, "it"))) {
       if (!manualiByNome.has(nome)) out.push({ nome, origine: "pdv" });
     }
     out.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
     res.json(out);
   });
+
+  // PDV ereditati da organization_config.puntiVendita, filtrati per RS.
+  // Read-only: la gestione PDV resta in Amministrazione organizzazione.
+  app.get("/api/cdg/pdv-by-rs", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const rs = typeof req.query.rs === "string" ? req.query.rs.trim() : "";
+    const pdvList = await getOrgPuntiVendita(profile.organizationId!);
+    const out = pdvList
+      .filter(p => !rs || String(p?.ragioneSociale || "").trim() === rs)
+      .map(p => ({
+        codice: String(p?.codicePos || "").trim(),
+        nome: String(p?.nome || "").trim(),
+        ragioneSociale: String(p?.ragioneSociale || "").trim(),
+      }))
+      .filter(p => p.codice && p.nome);
+    out.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+    res.json(out);
+  });
+
   app.post("/api/cdg/ragioni-sociali", ...gate, async (req: any, res) => {
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
@@ -210,8 +308,6 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
   app.delete("/api/cdg/ragioni-sociali/:id", ...gate, async (req: any, res) => {
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
-    // Pulisci anche gli allegati su disco delle spese che verranno eliminate
-    // a cascata, per evitare file orfani in uploads/cdg/<orgId>/.
     const rs = await cdgStorage.getRagioneSociale(req.params.id, profile.organizationId!);
     if (rs) {
       const speseRs = await cdgStorage.listSpese(profile.organizationId!, { rs: rs.nome });
@@ -220,6 +316,35 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     await cdgStorage.deleteRagioneSociale(req.params.id, profile.organizationId!);
     res.json({ success: true });
   });
+
+  // Validazione RS contro la lista unificata (manuali + PDV ereditate).
+  // Ritorna l'insieme dei nomi RS validi per l'organizzazione.
+  async function getValidRsNames(orgId: string): Promise<Set<string>> {
+    const manuali = await cdgStorage.listRagioniSociali(orgId);
+    const pdvList = await getOrgPuntiVendita(orgId);
+    const out = new Set<string>(manuali.map(r => r.nome));
+    for (const p of pdvList) {
+      const n = String(p?.ragioneSociale || "").trim();
+      if (n) out.add(n);
+    }
+    return out;
+  }
+
+  // Overlap check multi-RS per categorie/fornitori. Le vecchie unique index
+  // (organization_id, ragione_sociale, lower(nome)) sono state droppate per la
+  // migrazione multi-RS: senza questo controllo si potrebbero creare voci
+  // duplicate (stesso nome, RS sovrapposte) ambigue nel selettore spese.
+  async function checkAnagraficaOverlap(
+    base: string, orgId: string, nome: string, ragioniSociali: string[], excludeId?: string,
+  ): Promise<string | null> {
+    if (!nome || !ragioniSociali.length) return null;
+    const dup = base === "categorie"
+      ? await cdgStorage.findCategoriaOverlap(orgId, nome, ragioniSociali, excludeId)
+      : await cdgStorage.findFornitoreOverlap(orgId, nome, ragioniSociali, excludeId);
+    if (!dup) return null;
+    const overlap = (dup.ragioniSociali || []).filter(rs => ragioniSociali.includes(rs));
+    return `Esiste già "${dup.nome}" associata a: ${overlap.join(", ")}`;
+  }
 
   function registerAnagrafica(cfg: AnagraficaCrud) {
     const { base, schema } = cfg;
@@ -234,12 +359,22 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       if (!profile) return;
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+      const data = parsed.data as Record<string, unknown>;
+      const rsArr = Array.isArray(data.ragioniSociali) ? (data.ragioniSociali as string[]) : [];
+      if (rsArr.length > 0) {
+        const valid = await getValidRsNames(profile.organizationId!);
+        const bad = rsArr.find(n => !valid.has(n));
+        if (bad) return res.status(400).json({ error: `Ragione Sociale "${bad}" non valida` });
+      }
+      const nome = String(data.nome || "").trim();
+      const overlapErr = await checkAnagraficaOverlap(base, profile.organizationId!, nome, rsArr);
+      if (overlapErr) return res.status(409).json({ error: overlapErr });
       try {
-        const r = await cfg.create({ ...parsed.data, organizationId: profile.organizationId! });
+        const r = await cfg.create({ ...data, organizationId: profile.organizationId! });
         res.status(201).json(r);
       } catch (e: unknown) {
         if (typeof e === "object" && e && "code" in e && String((e as { code: unknown }).code) === "23505") {
-          return res.status(409).json({ error: "Voce già esistente per questa Ragione Sociale" });
+          return res.status(409).json({ error: "Voce già esistente" });
         }
         res.status(500).json({ error: "Errore creazione" });
       }
@@ -250,7 +385,28 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       const partial = (schema as unknown as { partial: () => ZodType<Record<string, unknown>> }).partial();
       const parsed = partial.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-      const r = await cfg.update(req.params.id, profile.organizationId!, parsed.data);
+      const data = parsed.data as Record<string, unknown>;
+      if (Array.isArray(data.ragioniSociali)) {
+        const rsArr = data.ragioniSociali as string[];
+        if (rsArr.length === 0) return res.status(400).json({ error: "Seleziona almeno una Ragione Sociale" });
+        const valid = await getValidRsNames(profile.organizationId!);
+        const bad = rsArr.find(n => !valid.has(n));
+        if (bad) return res.status(400).json({ error: `Ragione Sociale "${bad}" non valida` });
+      }
+      // Overlap check su PUT: se sto cambiando nome o RS, verifico che non
+      // esista già un'altra voce con stesso nome e RS sovrapposte.
+      if (data.nome !== undefined || Array.isArray(data.ragioniSociali)) {
+        const existing = base === "categorie"
+          ? await cdgStorage.getCategoria(req.params.id, profile.organizationId!)
+          : await cdgStorage.getFornitore(req.params.id, profile.organizationId!);
+        if (existing) {
+          const newNome = data.nome !== undefined ? String(data.nome).trim() : existing.nome;
+          const newRs = Array.isArray(data.ragioniSociali) ? (data.ragioniSociali as string[]) : (existing.ragioniSociali || []);
+          const overlapErr = await checkAnagraficaOverlap(base, profile.organizationId!, newNome, newRs, req.params.id);
+          if (overlapErr) return res.status(409).json({ error: overlapErr });
+        }
+      }
+      const r = await cfg.update(req.params.id, profile.organizationId!, data);
       if (!r) return res.status(404).json({ error: "Non trovato" });
       res.json(r);
     });
@@ -278,39 +434,35 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     update: (id, orgId, updates) => cdgStorage.updateFornitore(id, orgId, updates),
     del: cdgStorage.deleteFornitore,
   });
-  registerAnagrafica({
-    base: "pdv",
-    schema: insertCdgPdvSchema as unknown as ZodType<Record<string, unknown>>,
-    list: (orgId, rs) => cdgStorage.listPdv(orgId, rs),
-    create: (data) => cdgStorage.createPdv(data as Parameters<typeof cdgStorage.createPdv>[0]),
-    update: (id, orgId, updates) => cdgStorage.updatePdv(id, orgId, updates),
-    del: cdgStorage.deletePdv,
-  });
 
   // === Spese ===
-  // Verifica che ogni FK appartenga all'org dell'utente e (se presente) alla
-  // stessa Ragione Sociale della spesa, per evitare cross-tenant / cross-RS leakage.
+  // Verifica che ogni FK appartenga all'org dell'utente e (se presente) sia
+  // compatibile con la Ragione Sociale della spesa (cat/forn: rs ∈ array;
+  // pdv: codice presente in puntiVendita per quella RS).
   async function validateSpesaFks(
     orgId: string,
     rs: string,
     categoriaId: string | null | undefined,
     fornitoreId: string | null | undefined,
-    pdvId: string | null | undefined,
+    pdvCodice: string | null | undefined,
   ): Promise<string | null> {
     if (categoriaId) {
       const cat = await cdgStorage.getCategoria(categoriaId, orgId);
       if (!cat) return "Categoria non trovata o non appartiene a questa organizzazione";
-      if (cat.ragioneSociale !== rs) return "La categoria non appartiene alla Ragione Sociale selezionata";
+      if (!(cat.ragioniSociali || []).includes(rs)) return "La categoria non è associata alla Ragione Sociale selezionata";
     }
     if (fornitoreId) {
       const f = await cdgStorage.getFornitore(fornitoreId, orgId);
       if (!f) return "Fornitore non trovato o non appartiene a questa organizzazione";
-      if (f.ragioneSociale !== rs) return "Il fornitore non appartiene alla Ragione Sociale selezionata";
+      if (!(f.ragioniSociali || []).includes(rs)) return "Il fornitore non è associato alla Ragione Sociale selezionata";
     }
-    if (pdvId) {
-      const p = await cdgStorage.getPdvOne(pdvId, orgId);
-      if (!p) return "PDV non trovato o non appartiene a questa organizzazione";
-      if (p.ragioneSociale !== rs) return "Il PDV non appartiene alla Ragione Sociale selezionata";
+    if (pdvCodice) {
+      const pdvList = await getOrgPuntiVendita(orgId);
+      const ok = pdvList.some(p =>
+        String(p?.codicePos || "").trim() === pdvCodice &&
+        String(p?.ragioneSociale || "").trim() === rs
+      );
+      if (!ok) return "Il PDV non è valido per la Ragione Sociale selezionata";
     }
     return null;
   }
@@ -333,9 +485,8 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const parsed = insertCdgSpesaSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const { allegatoBase64, allegatoNome, allegatoMime, ...rest } = parsed.data;
-    const fkErr = await validateSpesaFks(profile.organizationId!, rest.ragioneSociale, rest.categoriaId, rest.fornitoreId, rest.pdvId);
+    const fkErr = await validateSpesaFks(profile.organizationId!, rest.ragioneSociale, rest.categoriaId, rest.fornitoreId, rest.pdvCodice);
     if (fkErr) return res.status(400).json({ error: fkErr });
-    // Calcolo coerente importo/iva da imponibile + aliquota.
     if (rest.imponibile === undefined || rest.imponibile === null || rest.aliquotaIva === undefined || rest.aliquotaIva === null) {
       return res.status(400).json({ error: "Imponibile e aliquota IVA sono obbligatori" });
     }
@@ -359,6 +510,9 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     }
     const r = await cdgStorage.createSpesa({
       ...rest,
+      // Nuovo modello: pdvCodice sostituisce pdvId (FK legacy). pdvId non
+      // viene mai valorizzato per le spese create dopo la migrazione.
+      pdvId: null,
       importo: rest.importo as string,
       organizationId: profile.organizationId!,
       createdBy: profile.id,
@@ -381,11 +535,10 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const targetRs = rest.ragioneSociale ?? existing.ragioneSociale;
     const targetCat = rest.categoriaId !== undefined ? rest.categoriaId : existing.categoriaId;
     const targetForn = rest.fornitoreId !== undefined ? rest.fornitoreId : existing.fornitoreId;
-    const targetPdv = rest.pdvId !== undefined ? rest.pdvId : existing.pdvId;
-    const fkErr = await validateSpesaFks(profile.organizationId!, targetRs, targetCat, targetForn, targetPdv);
+    const targetPdvCod = rest.pdvCodice !== undefined ? rest.pdvCodice : existing.pdvCodice;
+    const fkErr = await validateSpesaFks(profile.organizationId!, targetRs, targetCat, targetForn, targetPdvCod);
     if (fkErr) return res.status(400).json({ error: fkErr });
 
-    // Se imponibile o aliquota cambiano, ricalcola coerentemente.
     const hasImpUpd = rest.imponibile !== undefined && rest.imponibile !== null;
     const hasAliqUpd = rest.aliquotaIva !== undefined && rest.aliquotaIva !== null;
     if (hasImpUpd || hasAliqUpd) {
@@ -401,6 +554,10 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     }
 
     const updates: Record<string, unknown> = { ...rest };
+    // Quando l'utente tocca pdvCodice (anche per metterlo a null), azzera anche
+    // il legacy pdvId. pdvId non è esposto nello schema di input quindi il
+    // client non può comunque scriverlo direttamente.
+    if (rest.pdvCodice !== undefined) updates.pdvId = null;
     if (allegatoBase64 && allegatoNome) {
       try {
         const saved = await saveAllegato(profile.organizationId!, allegatoBase64, allegatoNome, allegatoMime);
@@ -440,7 +597,6 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const root = path.resolve(UPLOAD_DIR) + path.sep;
     if (!(resolved + path.sep).startsWith(root)) return res.status(403).json({ error: "Path non consentito" });
     const mime = sp.allegatoMime && ALLOWED_MIMES.has(sp.allegatoMime) ? sp.allegatoMime : "application/octet-stream";
-    // Inline solo per MIME whitelisted (PDF/immagini); altrimenti force attachment.
     const disposition = ALLOWED_MIMES.has(mime) ? "inline" : "attachment";
     const safeFileName = (sp.allegatoNome || "allegato").replace(/[\r\n"]/g, "_");
     res.setHeader("Content-Type", mime);

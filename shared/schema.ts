@@ -150,31 +150,37 @@ export const cdgRagioniSociali = pgTable("cdg_ragioni_sociali", {
   uniqueIndex("UQ_cdg_rs_org_nome").on(t.organizationId, t.nome),
 ]);
 
+// Categorie multi-RS: una categoria può essere associata a più Ragioni Sociali.
+// `ragioneSociale` è la colonna legacy (back-compat), `ragioniSociali` è la
+// lista canonica (validata server-side: min 1 elemento per insert).
 export const cdgCategorie = pgTable("cdg_categorie", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
-  ragioneSociale: varchar("ragione_sociale").notNull(),
+  ragioneSociale: varchar("ragione_sociale"),
+  ragioniSociali: text("ragioni_sociali").array().notNull().default(sql`ARRAY[]::text[]`),
   nome: varchar("nome").notNull(),
   colore: varchar("colore"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [
-  index("IDX_cdg_cat_org_rs").on(t.organizationId, t.ragioneSociale),
-  uniqueIndex("UQ_cdg_cat_org_rs_nome").on(t.organizationId, t.ragioneSociale, t.nome),
+  index("IDX_cdg_cat_org").on(t.organizationId),
 ]);
 
 export const cdgFornitori = pgTable("cdg_fornitori", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
-  ragioneSociale: varchar("ragione_sociale").notNull(),
+  ragioneSociale: varchar("ragione_sociale"),
+  ragioniSociali: text("ragioni_sociali").array().notNull().default(sql`ARRAY[]::text[]`),
   nome: varchar("nome").notNull(),
   partitaIva: varchar("partita_iva"),
   note: text("note"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [
-  index("IDX_cdg_forn_org_rs").on(t.organizationId, t.ragioneSociale),
-  uniqueIndex("UQ_cdg_forn_org_rs_nome").on(t.organizationId, t.ragioneSociale, t.nome),
+  index("IDX_cdg_forn_org").on(t.organizationId),
 ]);
 
+// LEGACY: cdg_pdv non viene più utilizzata per CRUD. I PDV sono ereditati da
+// `organization_config.puntiVendita`. La tabella resta per back-compat read
+// (risoluzione `cdg_spese.pdv_id` legacy → codice PDV nel backfill).
 export const cdgPdv = pgTable("cdg_pdv", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
@@ -184,7 +190,6 @@ export const cdgPdv = pgTable("cdg_pdv", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [
   index("IDX_cdg_pdv_org_rs").on(t.organizationId, t.ragioneSociale),
-  uniqueIndex("UQ_cdg_pdv_org_rs_nome").on(t.organizationId, t.ragioneSociale, t.nome),
 ]);
 
 // Spese: doppia data (pagamento per cassa, competenza per accrual).
@@ -195,7 +200,11 @@ export const cdgSpese = pgTable("cdg_spese", {
   ragioneSociale: varchar("ragione_sociale").notNull(),
   categoriaId: varchar("categoria_id").references(() => cdgCategorie.id, { onDelete: 'set null' }),
   fornitoreId: varchar("fornitore_id").references(() => cdgFornitori.id, { onDelete: 'set null' }),
+  // pdvId è legacy: i PDV sono ora ereditati da organization_config.puntiVendita
+  // e referenziati per `pdvCodice` (= puntiVendita.codicePos). pdvId resta
+  // per back-compat read e backfill, e viene risolto a pdvCodice una-tantum.
   pdvId: varchar("pdv_id").references(() => cdgPdv.id, { onDelete: 'set null' }),
+  pdvCodice: varchar("pdv_codice"),
   descrizione: varchar("descrizione").notNull(),
   // Imponibile (€) e aliquota IVA (% — 0/4/5/10/22 o custom). `iva` è derivata
   // server-side da imponibile*aliquota/100. `importo` resta = imponibile+iva
@@ -293,17 +302,35 @@ export type CdgSpesa = typeof cdgSpese.$inferSelect;
 export type InsertCdgSpesa = typeof cdgSpese.$inferInsert;
 
 export const insertCdgRagioneSocialeSchema = createInsertSchema(cdgRagioniSociali).omit({ id: true, createdAt: true, organizationId: true });
-export const insertCdgCategoriaSchema = createInsertSchema(cdgCategorie).omit({ id: true, createdAt: true, organizationId: true });
-export const insertCdgFornitoreSchema = createInsertSchema(cdgFornitori).omit({ id: true, createdAt: true, organizationId: true });
+// Categorie/Fornitori sono multi-RS: `ragioniSociali` è obbligatorio (min 1).
+// `ragioneSociale` legacy resta opzionale per back-compat in lettura/insert ma
+// è ignorato in scrittura dalla UI nuova.
+export const insertCdgCategoriaSchema = createInsertSchema(cdgCategorie)
+  .omit({ id: true, createdAt: true, organizationId: true })
+  .extend({
+    ragioneSociale: z.string().optional().nullable(),
+    ragioniSociali: z.array(z.string().min(1)).min(1, "Seleziona almeno una Ragione Sociale"),
+  });
+export const insertCdgFornitoreSchema = createInsertSchema(cdgFornitori)
+  .omit({ id: true, createdAt: true, organizationId: true })
+  .extend({
+    ragioneSociale: z.string().optional().nullable(),
+    ragioniSociali: z.array(z.string().min(1)).min(1, "Seleziona almeno una Ragione Sociale"),
+  });
 export const insertCdgPdvSchema = createInsertSchema(cdgPdv).omit({ id: true, createdAt: true, organizationId: true });
 // Importo, imponibile e iva sono accettati come string|number (front invia
 // string formattata). Server ricalcola sempre iva e importo da imponibile +
 // aliquotaIva quando entrambi sono presenti, per garantire coerenza.
 const numericString = z.union([z.string(), z.number()])
   .transform((v) => typeof v === 'number' ? v.toString() : v);
+// pdvId è legacy: il client deve usare solo `pdvCodice`. Lo omettiamo dallo
+// schema di input per impedire al client di scrivere riferimenti FK legacy
+// non più validati lato server (rischio di puntare a cdg_pdv di altra org
+// o di altra RS).
 export const insertCdgSpesaSchema = createInsertSchema(cdgSpese).omit({
   id: true, createdAt: true, updatedAt: true, organizationId: true, createdBy: true,
   allegatoPath: true, allegatoNome: true, allegatoMime: true,
+  pdvId: true,
 }).extend({
   importo: numericString.optional(),
   imponibile: numericString.optional().nullable(),
