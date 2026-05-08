@@ -908,6 +908,18 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     if (rest.imponibile === undefined || rest.imponibile === null || rest.aliquotaIva === undefined || rest.aliquotaIva === null) {
       return res.status(400).json({ error: "Imponibile e aliquota IVA sono obbligatori" });
     }
+    // Ricorrenza: validazione date e override dataPagamento/meseCompetenza
+    if (rest.ricorrente) {
+      if (!rest.dataInizioRicorrenza || !rest.dataFineRicorrenza) {
+        return res.status(400).json({ error: "Data inizio e data fine ricorrenza sono obbligatorie" });
+      }
+      if (rest.dataFineRicorrenza < rest.dataInizioRicorrenza) {
+        return res.status(400).json({ error: "Data fine ricorrenza deve essere >= data inizio" });
+      }
+      // La master parte dalla data inizio
+      rest.dataPagamento = rest.dataInizioRicorrenza;
+      rest.meseCompetenza = rest.dataInizioRicorrenza.slice(0, 7);
+    }
     try {
       const c = computeImporti(String(rest.imponibile), String(rest.aliquotaIva));
       rest.imponibile = c.imponibile; rest.aliquotaIva = c.aliquotaIva;

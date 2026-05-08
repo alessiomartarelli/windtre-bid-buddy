@@ -748,6 +748,7 @@ function SpesaDialog({
   const [file, setFile] = useState<File | null>(null);
   const [removeAllegato, setRemoveAllegato] = useState<boolean>(false);
   const [ricorrente, setRicorrente] = useState<boolean>(!!editing?.ricorrente);
+  const [dataInizioRicorrenza, setDataInizioRicorrenza] = useState<string>(editing?.dataInizioRicorrenza || editing?.dataPagamento || "");
   const [dataFineRicorrenza, setDataFineRicorrenza] = useState<string>(editing?.dataFineRicorrenza || "");
   const [submitting, setSubmitting] = useState(false);
 
@@ -825,11 +826,23 @@ function SpesaDialog({
       }
       if (editing && removeAllegato && !file) body.removeAllegato = true;
       body.ricorrente = !!ricorrente;
+      body.dataInizioRicorrenza = ricorrente && dataInizioRicorrenza ? dataInizioRicorrenza : null;
       body.dataFineRicorrenza = ricorrente && dataFineRicorrenza ? dataFineRicorrenza : null;
-      if (ricorrente && !editing && (!dataFineRicorrenza || dataFineRicorrenza < dataPagamento)) {
-        toast({ title: "Imposta una data scadenza posteriore alla data pagamento", variant: "destructive" });
-        setSubmitting(false);
-        return;
+      if (ricorrente) {
+        if (!dataInizioRicorrenza || !dataFineRicorrenza) {
+          toast({ title: "Imposta data inizio e data fine ricorrenza", variant: "destructive" });
+          setSubmitting(false);
+          return;
+        }
+        if (dataFineRicorrenza < dataInizioRicorrenza) {
+          toast({ title: "La data fine deve essere >= della data inizio", variant: "destructive" });
+          setSubmitting(false);
+          return;
+        }
+        // Quando ricorrente, la master parte da data inizio: forziamo anche
+        // qui per coerenza (il backend ricalcolerà comunque).
+        body.dataPagamento = dataInizioRicorrenza;
+        body.meseCompetenza = dataInizioRicorrenza.slice(0, 7);
       }
       let resp: any;
       if (editing) resp = await apiJson("PUT", `/api/cdg/spese/${editing.id}`, body);
@@ -1000,25 +1013,37 @@ function SpesaDialog({
                 <span className="text-xs text-muted-foreground">— genera automaticamente una spesa per ogni mese fino alla scadenza</span>
               </label>
               {ricorrente && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-6">
-                  <div>
-                    <Label>Data scadenza ricorrenza *</Label>
-                    <Input
-                      type="date"
-                      value={dataFineRicorrenza}
-                      min={dataPagamento || undefined}
-                      onChange={(e) => setDataFineRicorrenza(e.target.value)}
-                      data-testid="input-spesa-data-fine-ricorrenza"
-                    />
+                <div className="space-y-2 pl-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <Label>Data inizio *</Label>
+                      <Input
+                        type="date"
+                        value={dataInizioRicorrenza}
+                        onChange={(e) => setDataInizioRicorrenza(e.target.value)}
+                        data-testid="input-spesa-data-inizio-ricorrenza"
+                      />
+                    </div>
+                    <div>
+                      <Label>Data fine *</Label>
+                      <Input
+                        type="date"
+                        value={dataFineRicorrenza}
+                        min={dataInizioRicorrenza || undefined}
+                        onChange={(e) => setDataFineRicorrenza(e.target.value)}
+                        data-testid="input-spesa-data-fine-ricorrenza"
+                      />
+                    </div>
                   </div>
                   {!editing && (
-                    <p className="text-xs text-muted-foreground self-end pb-2">
-                      Verranno create copie indipendenti per ogni mese tra il mese di competenza e la scadenza.
+                    <p className="text-xs text-muted-foreground">
+                      Quando attivo, "Data pagamento" e "Mese competenza" vengono allineati alla data inizio.
+                      Verranno create copie indipendenti per ogni mese tra inizio e fine (incluse).
                       L'allegato non viene duplicato.
                     </p>
                   )}
                   {editing && (
-                    <p className="text-xs text-amber-600 self-end pb-2">
+                    <p className="text-xs text-amber-600">
                       In modifica i flag aggiornano solo questa riga: le occorrenze già create restano invariate.
                     </p>
                   )}

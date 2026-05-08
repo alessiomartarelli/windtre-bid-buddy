@@ -230,6 +230,7 @@ export const cdgSpese = pgTable("cdg_spese", {
   // evidenza in UI; le copie non sono "linkate" alla master (modifiche e
   // delete sono per riga singola).
   ricorrente: boolean("ricorrente").notNull().default(false),
+  dataInizioRicorrenza: date("data_inizio_ricorrenza"),
   dataFineRicorrenza: date("data_fine_ricorrenza"),
   allegatoPath: varchar("allegato_path"),
   allegatoNome: varchar("allegato_nome"),
@@ -356,6 +357,7 @@ export const insertCdgSpesaSchema = createInsertSchema(cdgSpese).omit({
   iva: numericString.optional().nullable(),
   meseCompetenza: z.string().regex(/^\d{4}-\d{2}$/, "Formato YYYY-MM richiesto"),
   ricorrente: z.boolean().optional(),
+  dataInizioRicorrenza: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD richiesto").optional().nullable(),
   dataFineRicorrenza: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD richiesto").optional().nullable(),
   allegatoBase64: z.string().optional(),
   allegatoNome: z.string().optional(),
