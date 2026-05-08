@@ -117,10 +117,16 @@ function computeImporti(imponibileStr: string, aliquotaStr: string): { imponibil
 // 3) pdv_codice (PDV-from-config migration): risolve cdg_spese.pdv_id legacy
 //    al codice PDV (cdg_pdv.codice o, in fallback, cdg_pdv.nome) per consentire
 //    la display lato client da organization_config.puntiVendita.
+// Backfill retry-safe: il flag viene impostato solo dopo il completamento di
+// tutti gli step. Se uno step fallisce transitoriamente (es. DB unreachable),
+// l'intera procedura verrà rieseguita al prossimo register/restart. I singoli
+// step sono già idempotenti (WHERE clauses che escludono righe già migrate).
 let cdgBackfillDone = false;
+let cdgBackfillRunning = false;
 async function backfillCdg(): Promise<void> {
-  if (cdgBackfillDone) return;
-  cdgBackfillDone = true;
+  if (cdgBackfillDone || cdgBackfillRunning) return;
+  cdgBackfillRunning = true;
+  let allOk = true;
   try {
     await db.execute(sql`
       UPDATE cdg_spese
@@ -128,6 +134,7 @@ async function backfillCdg(): Promise<void> {
        WHERE imponibile IS NULL
     `);
   } catch (e) {
+    allOk = false;
     console.error("[cdg] backfill imponibile failed:", e);
   }
   try {
@@ -144,6 +151,7 @@ async function backfillCdg(): Promise<void> {
          AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
     `);
   } catch (e) {
+    allOk = false;
     console.error("[cdg] backfill ragioni_sociali failed:", e);
   }
   try {
@@ -155,6 +163,7 @@ async function backfillCdg(): Promise<void> {
          AND sp.pdv_codice IS NULL
     `);
   } catch (e) {
+    allOk = false;
     console.error("[cdg] backfill pdv_codice failed:", e);
   }
   // Step 4: rimappa pdv_codice ai veri puntiVendita.codicePos.
@@ -199,8 +208,11 @@ async function backfillCdg(): Promise<void> {
       }
     }
   } catch (e) {
+    allOk = false;
     console.error("[cdg] remap pdv_codice → codicePos failed:", e);
   }
+  cdgBackfillRunning = false;
+  if (allOk) cdgBackfillDone = true;
 }
 
 interface PuntoVendita { codicePos?: unknown; nome?: unknown; ragioneSociale?: unknown }

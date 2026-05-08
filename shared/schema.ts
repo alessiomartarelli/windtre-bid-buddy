@@ -204,6 +204,9 @@ export const cdgSpese = pgTable("cdg_spese", {
   fornitoreId: varchar("fornitore_id").references(() => cdgFornitori.id, { onDelete: 'set null' }),
   // pdvId è legacy: i PDV sono ora ereditati da organization_config.puntiVendita
   // e referenziati per `pdvCodice` (= puntiVendita.codicePos). pdvId resta
+  // intenzionalmente con FK su cdg_pdv (onDelete: 'set null') per consentire
+  // un eventuale rollback alla vecchia tabella prima del drop definitivo
+  // (vedi follow-up #71). Non viene più scritto: insertCdgSpesaSchema lo omette.
   // per back-compat read e backfill, e viene risolto a pdvCodice una-tantum.
   pdvId: varchar("pdv_id").references(() => cdgPdv.id, { onDelete: 'set null' }),
   pdvCodice: varchar("pdv_codice"),
