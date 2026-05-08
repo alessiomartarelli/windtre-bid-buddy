@@ -354,7 +354,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
       rsTot.set(s.ragioneSociale, cur);
       if (rsSelezionata && s.ragioneSociale === rsSelezionata) {
         const pdvKey = s.pdvCodice || "__nessuno__";
-        const pdvNome = s.pdvCodice ? (pdvByCodice.get(s.pdvCodice)?.nome || `${s.pdvCodice} (?)`) : "— Senza PDV —";
+        const pdvNome = s.pdvCodice ? (pdvByCodice.get(s.pdvCodice)?.nome || `${s.pdvCodice} (?)`) : "Costi generali";
         const pcur = pdvTot.get(pdvKey) || { codice: pdvKey, nome: pdvNome, importo: 0, conteggio: 0 };
         pcur.importo += imp; pcur.conteggio += 1;
         pdvTot.set(pdvKey, pcur);
