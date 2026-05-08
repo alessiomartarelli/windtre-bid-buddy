@@ -155,6 +155,8 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const [speseSort, setSpeseSort] = useState<{ key: "dataPagamento" | "meseCompetenza" | "importo"; dir: "asc" | "desc" }>({ key: "dataPagamento", dir: "desc" });
   const [rsSelezionata, setRsSelezionata] = useState<string | null>(null);
   const [pivotRaggr, setPivotRaggr] = useState<"rs" | "pdv">("rs");
+  const [pivotPeriodo, setPivotPeriodo] = useState<"anno" | "mese">("anno");
+  const [pivotMese, setPivotMese] = useState<number>(new Date().getMonth() + 1);
 
   useEffect(() => {
     if (!loading && profile && !isAuthorized) {
@@ -386,6 +388,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     const colTot = new Map<string, number>();
     let totaleGenerale = 0;
 
+    const ymTarget = `${dashboardAnno}-${String(pivotMese).padStart(2, "0")}`;
     for (const s of spese) {
       const imp = parseImporto(s.importo);
       const mPag = (s.dataPagamento || "").slice(0, 7);
@@ -393,6 +396,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
       const ym = annoVista === "competenza" ? mComp : mPag;
       const [yy] = ym.split("-").map(Number);
       if (yy !== dashboardAnno) continue;
+      if (pivotPeriodo === "mese" && ym !== ymTarget) continue;
 
       const cat = (s.categoriaId && catById.get(s.categoriaId)?.nome) || "— Senza categoria —";
       colonne.add(cat);
@@ -420,7 +424,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     const colonneArr = Array.from(colonne).sort((a, b) => (colTot.get(b) || 0) - (colTot.get(a) || 0));
     const righeArr = Array.from(righe.values()).sort((a, b) => b.totale - a.totale);
     return { colonne: colonneArr, righe: righeArr, colTot, totaleGenerale };
-  }, [spese, dashboardAnno, annoVista, pivotRaggr, catById, pdvByCodice]);
+  }, [spese, dashboardAnno, annoVista, pivotRaggr, pivotPeriodo, pivotMese, catById, pdvByCodice]);
 
   const deleteSpesaMut = useMutation({
     mutationFn: (id: string) => apiJson("DELETE", `/api/cdg/spese/${id}`),
@@ -911,27 +915,61 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
                     <CardTitle className="text-base">
-                      Pivot voci di costo — anno {dashboardAnno} ({annoVista})
+                      Pivot voci di costo — {pivotPeriodo === "anno"
+                        ? `anno ${dashboardAnno}`
+                        : `${["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"][pivotMese - 1]} ${dashboardAnno}`} ({annoVista})
                     </CardTitle>
                     <p className="text-xs text-muted-foreground mt-1">
                       Una colonna per categoria · totale per riga e per colonna · raggruppato per {pivotRaggr === "rs" ? "Ragione Sociale" : "Punto Vendita"}
                     </p>
                   </div>
-                  <div>
-                    <Label className="text-xs">Raggruppa per</Label>
-                    <div className="flex rounded-md border overflow-hidden h-9" data-testid="toggle-pivot-raggr">
-                      <button
-                        type="button"
-                        onClick={() => setPivotRaggr("rs")}
-                        className={`px-3 text-xs font-medium ${pivotRaggr === "rs" ? "bg-orange-500 text-white" : "bg-background hover:bg-muted"}`}
-                        data-testid="btn-pivot-rs"
-                      >Ragione Sociale</button>
-                      <button
-                        type="button"
-                        onClick={() => setPivotRaggr("pdv")}
-                        className={`px-3 text-xs font-medium border-l ${pivotRaggr === "pdv" ? "bg-orange-500 text-white" : "bg-background hover:bg-muted"}`}
-                        data-testid="btn-pivot-pdv"
-                      >Punto Vendita</button>
+                  <div className="flex items-end gap-3 flex-wrap">
+                    <div>
+                      <Label className="text-xs">Periodo</Label>
+                      <div className="flex rounded-md border overflow-hidden h-9" data-testid="toggle-pivot-periodo">
+                        <button
+                          type="button"
+                          onClick={() => setPivotPeriodo("anno")}
+                          className={`px-3 text-xs font-medium ${pivotPeriodo === "anno" ? "bg-slate-700 text-white" : "bg-background hover:bg-muted"}`}
+                          data-testid="btn-pivot-anno"
+                        >Anno</button>
+                        <button
+                          type="button"
+                          onClick={() => setPivotPeriodo("mese")}
+                          className={`px-3 text-xs font-medium border-l ${pivotPeriodo === "mese" ? "bg-slate-700 text-white" : "bg-background hover:bg-muted"}`}
+                          data-testid="btn-pivot-mese"
+                        >Mese</button>
+                      </div>
+                    </div>
+                    {pivotPeriodo === "mese" && (
+                      <div>
+                        <Label className="text-xs">Mese</Label>
+                        <Select value={String(pivotMese)} onValueChange={(v) => setPivotMese(Number(v))}>
+                          <SelectTrigger className="w-[140px]" data-testid="select-pivot-mese"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"].map((m, i) => (
+                              <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div>
+                      <Label className="text-xs">Raggruppa per</Label>
+                      <div className="flex rounded-md border overflow-hidden h-9" data-testid="toggle-pivot-raggr">
+                        <button
+                          type="button"
+                          onClick={() => setPivotRaggr("rs")}
+                          className={`px-3 text-xs font-medium ${pivotRaggr === "rs" ? "bg-orange-500 text-white" : "bg-background hover:bg-muted"}`}
+                          data-testid="btn-pivot-rs"
+                        >Ragione Sociale</button>
+                        <button
+                          type="button"
+                          onClick={() => setPivotRaggr("pdv")}
+                          className={`px-3 text-xs font-medium border-l ${pivotRaggr === "pdv" ? "bg-orange-500 text-white" : "bg-background hover:bg-muted"}`}
+                          data-testid="btn-pivot-pdv"
+                        >Punto Vendita</button>
+                      </div>
                     </div>
                   </div>
                 </div>
