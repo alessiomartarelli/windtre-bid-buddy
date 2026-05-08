@@ -438,6 +438,279 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     res.json({ success: true });
   });
 
+  // ===== Inherited (org_config.puntiVendita) write-through =====
+  // Helper: legge la config corrente, applica il mutator sull'array puntiVendita
+  // e fa upsert preservando configVersion.
+  async function mutateOrgPuntiVendita(
+    orgId: string,
+    mutator: (pv: Array<Record<string, unknown>>) => Array<Record<string, unknown>>,
+  ): Promise<void> {
+    const cfg = await storage.getOrgConfig(orgId);
+    const config = (cfg?.config as Record<string, unknown> | null) || {};
+    const pv = (config.puntiVendita as Array<Record<string, unknown>> | undefined) || [];
+    const next = mutator(pv.map(p => ({ ...p })));
+    const newConfig = { ...config, puntiVendita: next };
+    const version = cfg?.configVersion || "2.0";
+    await storage.upsertOrgConfig(orgId, newConfig, version);
+  }
+
+  // Rinomina/Modifica una RS ereditata (presente in puntiVendita).
+  // - Se cambia il nome: rinomina ragioneSociale in TUTTE le voci puntiVendita,
+  //   nei manuali (cat/forn arrays, pdv manuali, spese) e nella RS manuale
+  //   eventualmente esistente con vecchio nome.
+  // - partitaIva/note non sono campi della config: vengono persistiti come
+  //   override in cdg_ragioni_sociali (upsert sul nome attuale).
+  app.put("/api/cdg/ragioni-sociali/inherited/:nome", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const oldName = decodeURIComponent(req.params.nome).trim();
+    const parsed = z.object({
+      nome: z.string().trim().min(1).optional(),
+      partitaIva: z.string().nullable().optional(),
+      note: z.string().nullable().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const newName = (parsed.data.nome || oldName).trim();
+    if (!newName) return res.status(400).json({ error: "Nome obbligatorio" });
+
+    // Verifica che oldName esista come RS ereditata
+    const cfgPv = await getOrgPuntiVendita(orgId);
+    const exists = cfgPv.some(p => String(p?.ragioneSociale || "").trim() === oldName);
+    if (!exists) return res.status(404).json({ error: "RS ereditata non trovata" });
+
+    // Conflitto su rename: il nuovo nome non deve già esistere in altre RS
+    if (newName !== oldName) {
+      const valid = await getValidRsNames(orgId);
+      if (valid.has(newName)) return res.status(409).json({ error: `Esiste già una Ragione Sociale "${newName}"` });
+    }
+
+    try {
+      if (newName !== oldName) {
+        // 1) puntiVendita: rinomina ragioneSociale
+        await mutateOrgPuntiVendita(orgId, (pv) => pv.map(p =>
+          String(p?.ragioneSociale || "").trim() === oldName
+            ? { ...p, ragioneSociale: newName }
+            : p
+        ));
+        // 2) cat/forn arrays
+        await db.execute(sql`
+          UPDATE cdg_categorie
+             SET ragioni_sociali = array_replace(ragioni_sociali, ${oldName}, ${newName}),
+                 ragione_sociale = CASE WHEN ragione_sociale = ${oldName} THEN ${newName} ELSE ragione_sociale END
+           WHERE organization_id = ${orgId}
+             AND ${oldName} = ANY(ragioni_sociali)
+        `);
+        await db.execute(sql`
+          UPDATE cdg_fornitori
+             SET ragioni_sociali = array_replace(ragioni_sociali, ${oldName}, ${newName}),
+                 ragione_sociale = CASE WHEN ragione_sociale = ${oldName} THEN ${newName} ELSE ragione_sociale END
+           WHERE organization_id = ${orgId}
+             AND ${oldName} = ANY(ragioni_sociali)
+        `);
+        // 3) pdv manuali
+        await db.execute(sql`
+          UPDATE cdg_pdv_manuali SET ragione_sociale = ${newName}
+           WHERE organization_id = ${orgId} AND ragione_sociale = ${oldName}
+        `);
+        // 4) spese
+        await db.execute(sql`
+          UPDATE cdg_spese SET ragione_sociale = ${newName}
+           WHERE organization_id = ${orgId} AND ragione_sociale = ${oldName}
+        `);
+        // 5) eventuale RS manuale con vecchio nome → rinomina
+        await db.execute(sql`
+          UPDATE cdg_ragioni_sociali SET nome = ${newName}
+           WHERE organization_id = ${orgId} AND nome = ${oldName}
+        `);
+      }
+
+      // Upsert override partitaIva/note in cdg_ragioni_sociali sul nome attuale
+      const piva = parsed.data.partitaIva ?? null;
+      const note = parsed.data.note ?? null;
+      const allManuali = await cdgStorage.listRagioniSociali(orgId);
+      const existingManual = allManuali.find(r => r.nome === newName);
+      if (existingManual) {
+        await cdgStorage.updateRagioneSociale(existingManual.id, orgId, { partitaIva: piva, note });
+      } else if (piva || note) {
+        await cdgStorage.createRagioneSociale({ organizationId: orgId, nome: newName, partitaIva: piva, note });
+      }
+      res.json({ success: true, nome: newName });
+    } catch (e) {
+      console.error("[cdg] update inherited RS failed:", e);
+      res.status(500).json({ error: "Errore aggiornamento RS ereditata" });
+    }
+  });
+
+  // Elimina una RS ereditata: rimuove TUTTE le voci puntiVendita con quella RS,
+  // cascade su pdv manuali, spese (con allegati), categorie/fornitori (array
+  // remove + delete orfani), e RS manuale eventualmente omonima.
+  // ATTENZIONE: impatta anche la Gestione Organizzazione (puntiVendita).
+  app.delete("/api/cdg/ragioni-sociali/inherited/:nome", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const nome = decodeURIComponent(req.params.nome).trim();
+    if (!nome) return res.status(400).json({ error: "Nome mancante" });
+    try {
+      // Cancella allegati spese
+      const speseRs = await cdgStorage.listSpese(orgId, { rs: nome });
+      await Promise.all(speseRs.map(s => deleteAllegato(s.allegatoPath)));
+      // Rimuove dalle puntiVendita
+      await mutateOrgPuntiVendita(orgId, (pv) => pv.filter(p =>
+        String(p?.ragioneSociale || "").trim() !== nome
+      ));
+      // Cascade
+      await db.execute(sql`DELETE FROM cdg_spese WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
+      await db.execute(sql`DELETE FROM cdg_pdv_manuali WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
+      await db.execute(sql`
+        UPDATE cdg_categorie SET ragioni_sociali = array_remove(ragioni_sociali, ${nome})
+         WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)
+      `);
+      await db.execute(sql`
+        DELETE FROM cdg_categorie WHERE organization_id = ${orgId}
+           AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
+      `);
+      await db.execute(sql`
+        UPDATE cdg_fornitori SET ragioni_sociali = array_remove(ragioni_sociali, ${nome})
+         WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)
+      `);
+      await db.execute(sql`
+        DELETE FROM cdg_fornitori WHERE organization_id = ${orgId}
+           AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
+      `);
+      await db.execute(sql`DELETE FROM cdg_ragioni_sociali WHERE organization_id = ${orgId} AND nome = ${nome}`);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[cdg] delete inherited RS failed:", e);
+      res.status(500).json({ error: "Errore eliminazione RS ereditata" });
+    }
+  });
+
+  // Modifica un PDV ereditato (in puntiVendita). Identifica per (rs, codice)
+  // dove codice = codicePos || nome. Permette rename di RS/codice/nome.
+  // I campi extra (canale, cluster*, tipoPosizione) vengono preservati.
+  app.put("/api/cdg/pdv-inherited", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const parsed = z.object({
+      ragioneSociale: z.string().trim().min(1),
+      codice: z.string().trim().min(1),
+      newRagioneSociale: z.string().trim().min(1).optional(),
+      newCodice: z.string().trim().min(1).optional(),
+      newNome: z.string().trim().min(1).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const { ragioneSociale: oldRs, codice: oldCod } = parsed.data;
+    const newRs = parsed.data.newRagioneSociale || oldRs;
+    const newCod = parsed.data.newCodice || oldCod;
+
+    // Validazione RS destinazione (deve esistere o essere uguale)
+    if (newRs !== oldRs) {
+      const valid = await getValidRsNames(orgId);
+      if (!valid.has(newRs)) return res.status(400).json({ error: `Ragione Sociale "${newRs}" non valida` });
+    }
+
+    // Helper: codice logico effettivo (codicePos || nome). Usato sia per il
+    // matching dell'entry che per propagare il rename alle spese quando cambia
+    // solo `nome` su una entry priva di `codicePos`.
+    const effCode = (p: Record<string, unknown>) => {
+      const codicePos = String(p?.codicePos || "").trim();
+      const nomePdv = String(p?.nome || "").trim();
+      return codicePos || nomePdv;
+    };
+
+    const cfgPv = await getOrgPuntiVendita(orgId);
+    const sourceEntry = cfgPv.find(p =>
+      String(p?.ragioneSociale || "").trim() === oldRs && effCode(p) === oldCod
+    );
+    if (!sourceEntry) return res.status(404).json({ error: "PDV ereditato non trovato" });
+
+    // Calcola il codice effettivo destinazione: se l'entry usa fallback su
+    // `nome` (no codicePos) e cambia `newNome`, anche il codice cambia.
+    const sourceHasCodicePos = !!String(sourceEntry?.codicePos || "").trim();
+    const finalNome = parsed.data.newNome ?? String(sourceEntry?.nome || "");
+    const effNewCod = parsed.data.newCodice
+      ? newCod
+      : (sourceHasCodicePos ? oldCod : finalNome.trim());
+
+    // Conflitto: (newRs, effNewCod) non deve già esistere su un altro entry
+    if (newRs !== oldRs || effNewCod !== oldCod) {
+      const dup = cfgPv.some(p => {
+        if (p === sourceEntry) return false;
+        return String(p?.ragioneSociale || "").trim() === newRs && effCode(p) === effNewCod;
+      });
+      if (dup) return res.status(409).json({ error: `Esiste già un PDV con codice "${effNewCod}" in "${newRs}"` });
+      // E non deve collidere con un manuale
+      const pdvMan = await cdgStorage.listPdvManuali(orgId, newRs);
+      if (pdvMan.some(m => m.codice === effNewCod)) {
+        return res.status(409).json({ error: `Esiste già un PDV manuale con codice "${effNewCod}" in "${newRs}"` });
+      }
+    }
+
+    try {
+      // Match per chiave stabile (oldRs, oldCod) DENTRO il mutator per evitare
+      // race se la config cambia tra la read e la write.
+      let applied = false;
+      await mutateOrgPuntiVendita(orgId, (pv) => pv.map(p => {
+        if (applied) return p;
+        const rsName = String(p?.ragioneSociale || "").trim();
+        if (rsName !== oldRs || effCode(p) !== oldCod) return p;
+        applied = true;
+        const updated: Record<string, unknown> = { ...p };
+        if (parsed.data.newRagioneSociale) updated.ragioneSociale = newRs;
+        if (parsed.data.newCodice) updated.codicePos = newCod;
+        if (parsed.data.newNome) updated.nome = parsed.data.newNome;
+        return updated;
+      }));
+      if (!applied) return res.status(409).json({ error: "PDV ereditato modificato concorrentemente, ricarica e riprova" });
+      // Propaga rename codice/RS sulle spese collegate (incluso il caso in cui
+      // il codice effettivo cambi a causa del rename del solo nome).
+      if (effNewCod !== oldCod || newRs !== oldRs) {
+        await db.execute(sql`
+          UPDATE cdg_spese
+             SET pdv_codice = ${effNewCod}, ragione_sociale = ${newRs}
+           WHERE organization_id = ${orgId}
+             AND ragione_sociale = ${oldRs}
+             AND pdv_codice = ${oldCod}
+        `);
+      }
+      res.json({ success: true, ragioneSociale: newRs, codice: effNewCod });
+    } catch (e) {
+      console.error("[cdg] update inherited PDV failed:", e);
+      res.status(500).json({ error: "Errore aggiornamento PDV ereditato" });
+    }
+  });
+
+  // Elimina un PDV ereditato dalla puntiVendita (impatta Gestione Organizzazione).
+  // Le spese collegate restano (mantengono il codice salvato).
+  app.delete("/api/cdg/pdv-inherited", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const rs = String(req.query.rs || "").trim();
+    const codice = String(req.query.codice || "").trim();
+    if (!rs || !codice) return res.status(400).json({ error: "Parametri rs e codice obbligatori" });
+    try {
+      let removed = false;
+      await mutateOrgPuntiVendita(orgId, (pv) => pv.filter(p => {
+        const rsName = String(p?.ragioneSociale || "").trim();
+        const codicePos = String(p?.codicePos || "").trim();
+        const nomePdv = String(p?.nome || "").trim();
+        const code = codicePos || nomePdv;
+        const match = rsName === rs && code === codice;
+        if (match) removed = true;
+        return !match;
+      }));
+      if (!removed) return res.status(404).json({ error: "PDV ereditato non trovato" });
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[cdg] delete inherited PDV failed:", e);
+      res.status(500).json({ error: "Errore eliminazione PDV ereditato" });
+    }
+  });
+
   // Validazione RS contro la lista unificata (manuali + PDV ereditate).
   // Ritorna l'insieme dei nomi RS validi per l'organizzazione.
   async function getValidRsNames(orgId: string): Promise<Set<string>> {

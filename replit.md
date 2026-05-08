@@ -140,6 +140,24 @@ container quando renderizzata dentro Amministrazione.
   di codice o RS, le spese collegate vengono propagate automaticamente.
   `validateSpesaFks` accetta `pdvCodice` se valido in **una** delle due
   fonti per la RS della spesa.
+- **Modifica/cancellazione ereditati (write-through su org config)**: gli RS
+  e PDV ereditati (origine `pdv` / `config`) sono editabili e cancellabili
+  direttamente dal CdG. Endpoint dedicati:
+  `PUT/DELETE /api/cdg/ragioni-sociali/inherited/:nome` e
+  `PUT/DELETE /api/cdg/pdv-inherited?rs=&codice=`. Lato server
+  `mutateOrgPuntiVendita` legge la config corrente, applica il mutator e
+  upsert preservando `configVersion`. Su rename RS: rinomina
+  `puntiVendita.ragioneSociale` in tutte le voci, propaga su
+  `cdg_categorie/fornitori.ragioniSociali` (array_replace),
+  `cdg_pdv_manuali`, `cdg_spese`, e RS manuale omonima. Su delete RS:
+  rimuove tutte le voci puntiVendita di quella RS + cascade come la delete
+  manuale. Su PDV ereditato: edit aggiorna `(codicePos|nome|ragioneSociale)`
+  preservando i campi extra (canale, cluster*, tipoPosizione) e propaga
+  rename a `cdg_spese`; delete rimuove la voce dalla config. PartitaIVA/Note
+  per RS ereditate vengono materializzate come override in
+  `cdg_ragioni_sociali`. UI: dialog Modifica con avviso "scrive su Gestione
+  Organizzazione"; AlertDialog di delete avvisa esplicitamente l'impatto
+  cross-app.
 - API: `/api/cdg/{ragioni-sociali|ragioni-sociali/unified|categorie|fornitori|spese|pdv-manuali}`
   CRUD + `GET /api/cdg/pdv-by-rs[?rs=...]` (mix config + manuali) +
   `GET /api/cdg/spese/:id/allegato` (download). Tutte gated

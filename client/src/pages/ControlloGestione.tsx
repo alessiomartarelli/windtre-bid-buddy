@@ -1041,8 +1041,13 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
     if (!nome.trim()) { toast({ title: "Nome obbligatorio", variant: "destructive" }); return; }
     try {
       const body = { nome: nome.trim(), partitaIva: partitaIva.trim() || null, note: note.trim() || null };
-      if (editing && editing.id) await apiJson("PUT", `/api/cdg/ragioni-sociali/${editing.id}`, body);
-      else await apiJson("POST", `/api/cdg/ragioni-sociali`, body);
+      if (editing && editing.origine === "pdv") {
+        await apiJson("PUT", `/api/cdg/ragioni-sociali/inherited/${encodeURIComponent(editing.nome)}`, body);
+      } else if (editing && editing.id) {
+        await apiJson("PUT", `/api/cdg/ragioni-sociali/${editing.id}`, body);
+      } else {
+        await apiJson("POST", `/api/cdg/ragioni-sociali`, body);
+      }
       qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali/unified"] });
       // Il rename RS propaga il nuovo nome a categorie/fornitori/pdv/spese:
@@ -1059,9 +1064,12 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
   };
 
   const del = async (rs: UnifiedRagioneSociale) => {
-    if (!rs.id) return;
     try {
-      await apiJson("DELETE", `/api/cdg/ragioni-sociali/${rs.id}`);
+      if (rs.origine === "pdv") {
+        await apiJson("DELETE", `/api/cdg/ragioni-sociali/inherited/${encodeURIComponent(rs.nome)}`);
+      } else if (rs.id) {
+        await apiJson("DELETE", `/api/cdg/ragioni-sociali/${rs.id}`);
+      } else { return; }
       qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali/unified"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/categorie"] });
@@ -1103,28 +1111,30 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
                   <TableCell>{rs.partitaIva || "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-md truncate">{rs.note || ""}</TableCell>
                   <TableCell className="text-right">
-                    {fromPdv ? (
-                      <span className="text-xs text-muted-foreground italic pr-2">Solo lettura (gestita nei PDV)</span>
-                    ) : (
-                      <>
-                        <Button size="icon" variant="ghost" onClick={() => openEdit(rs)} data-testid={`button-edit-rs-${rowKey}`}><Pencil className="h-4 w-4" /></Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" data-testid={`button-delete-rs-${rowKey}`}><Trash2 className="h-4 w-4 text-red-600" /></Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Eliminare {rs.nome}?</AlertDialogTitle>
-                              <AlertDialogDescription>Verranno eliminate tutte le spese collegate. Categorie e fornitori condivisi con altre Ragioni Sociali NON vengono cancellati: viene rimossa solo l'associazione a "{rs.nome}". Le voci associate solo a questa RS vengono eliminate.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Annulla</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => del(rs)}>Elimina</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </>
-                    )}
+                    <Button size="icon" variant="ghost" onClick={() => openEdit(rs)} data-testid={`button-edit-rs-${rowKey}`}><Pencil className="h-4 w-4" /></Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="icon" variant="ghost" data-testid={`button-delete-rs-${rowKey}`}><Trash2 className="h-4 w-4 text-red-600" /></Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Eliminare {rs.nome}?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {fromPdv ? (
+                              <>
+                                <strong>Attenzione:</strong> "{rs.nome}" è ereditata dalla Gestione Organizzazione. L'eliminazione rimuoverà <strong>tutti i Punti Vendita</strong> collegati a questa Ragione Sociale anche dalla Gestione Organizzazione, oltre alle spese, ai PDV manuali e all'associazione con categorie/fornitori per questa RS.
+                              </>
+                            ) : (
+                              <>Verranno eliminate tutte le spese collegate. Categorie e fornitori condivisi con altre Ragioni Sociali NON vengono cancellati: viene rimossa solo l'associazione a "{rs.nome}". Le voci associate solo a questa RS vengono eliminate.</>
+                            )}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Annulla</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => del(rs)}>Elimina</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </TableCell>
                 </TableRow>
                 );
@@ -1468,14 +1478,23 @@ function PdvCrudView({
 
   const onSaved = () => {
     qc.invalidateQueries({ queryKey: ["/api/cdg/pdv-by-rs"] });
+    // Le modifiche su PDV ereditati possono propagare rename su cdg_spese.
+    qc.invalidateQueries({ queryKey: ["/api/cdg/spese"] });
   };
 
   const del = async (p: PdvFromConfig) => {
-    if (!p.id) return;
     try {
-      await apiJson("DELETE", `/api/cdg/pdv-manuali/${p.id}`);
+      if (p.origine === "manuale" && p.id) {
+        await apiJson("DELETE", `/api/cdg/pdv-manuali/${p.id}`);
+      } else if (p.origine === "config") {
+        const qs = `?rs=${encodeURIComponent(p.ragioneSociale)}&codice=${encodeURIComponent(p.codice)}`;
+        await apiJson("DELETE", `/api/cdg/pdv-inherited${qs}`);
+      } else {
+        return;
+      }
       toast({ title: "PDV eliminato" });
       onSaved();
+      qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali/unified"] });
     } catch (e) {
       toast({ title: "Errore", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
@@ -1533,18 +1552,14 @@ function PdvCrudView({
                             : <Badge variant="outline" data-testid={`badge-pdv-origine-config-${p.codice}`}>da config</Badge>}
                         </TableCell>
                         <TableCell className="text-right">
-                          {isManual ? (
-                            <div className="flex justify-end gap-1">
-                              <Button size="sm" variant="ghost" onClick={() => { setEditing(p); setDialogOpen(true); }} data-testid={`button-edit-pdv-${p.codice}`}>
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button size="sm" variant="ghost" onClick={() => setConfirmDel(p)} data-testid={`button-delete-pdv-${p.codice}`}>
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
+                          <div className="flex justify-end gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => { setEditing(p); setDialogOpen(true); }} data-testid={`button-edit-pdv-${p.codice}`}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setConfirmDel(p)} data-testid={`button-delete-pdv-${p.codice}`}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -1569,7 +1584,13 @@ function PdvCrudView({
           <AlertDialogHeader>
             <AlertDialogTitle>Eliminare il PDV?</AlertDialogTitle>
             <AlertDialogDescription>
-              Stai per eliminare il PDV manuale <strong>{confirmDel?.nome}</strong> ({confirmDel?.codice}). Le spese che lo riferiscono manterranno il codice salvato ma il PDV non sarà più selezionabile.
+              {confirmDel?.origine === "config" ? (
+                <>
+                  <strong>Attenzione:</strong> stai eliminando il PDV ereditato <strong>{confirmDel?.nome}</strong> ({confirmDel?.codice}) anche dalla Gestione Organizzazione. Le spese collegate manterranno il codice salvato ma il PDV non sarà più selezionabile.
+                </>
+              ) : (
+                <>Stai per eliminare il PDV manuale <strong>{confirmDel?.nome}</strong> ({confirmDel?.codice}). Le spese che lo riferiscono manterranno il codice salvato ma il PDV non sarà più selezionabile.</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1592,7 +1613,8 @@ function PdvManualeDialog({
   onSaved: () => void;
 }) {
   const { toast } = useToast();
-  const isEdit = !!(editing && editing.id);
+  const isInherited = editing?.origine === "config";
+  const isEdit = !!editing && (isInherited || !!editing.id);
   const [rs, setRs] = useState<string>(editing?.ragioneSociale || ragioniSociali[0]?.nome || "");
   const [codice, setCodice] = useState<string>(editing?.codice || "");
   const [nome, setNome] = useState<string>(editing?.nome || "");
@@ -1617,19 +1639,33 @@ function PdvManualeDialog({
     }
     setSubmitting(true);
     try {
-      const body = {
-        ragioneSociale: rs.trim(),
-        codice: codice.trim(),
-        nome: nome.trim(),
-        indirizzo: indirizzo.trim() || null,
-        note: note.trim() || null,
-      };
-      if (isEdit && editing?.id) {
-        await apiJson<CdgPdvManuale>("PUT", `/api/cdg/pdv-manuali/${editing.id}`, body);
+      if (isEdit && isInherited && editing) {
+        // PDV ereditato: write-through su organization_config.puntiVendita.
+        // Indirizzo/Note non vivono in config, vengono ignorati.
+        const body: Record<string, string> = {
+          ragioneSociale: editing.ragioneSociale,
+          codice: editing.codice,
+        };
+        if (rs.trim() !== editing.ragioneSociale) body.newRagioneSociale = rs.trim();
+        if (codice.trim() !== editing.codice) body.newCodice = codice.trim();
+        if (nome.trim() !== editing.nome) body.newNome = nome.trim();
+        await apiJson("PUT", `/api/cdg/pdv-inherited`, body);
         toast({ title: "PDV aggiornato" });
       } else {
-        await apiJson<CdgPdvManuale>("POST", `/api/cdg/pdv-manuali`, body);
-        toast({ title: "PDV creato" });
+        const body = {
+          ragioneSociale: rs.trim(),
+          codice: codice.trim(),
+          nome: nome.trim(),
+          indirizzo: indirizzo.trim() || null,
+          note: note.trim() || null,
+        };
+        if (isEdit && editing?.id) {
+          await apiJson<CdgPdvManuale>("PUT", `/api/cdg/pdv-manuali/${editing.id}`, body);
+          toast({ title: "PDV aggiornato" });
+        } else {
+          await apiJson<CdgPdvManuale>("POST", `/api/cdg/pdv-manuali`, body);
+          toast({ title: "PDV creato" });
+        }
       }
       onSaved();
       onClose();
@@ -1644,9 +1680,11 @@ function PdvManualeDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Modifica PDV" : "Nuovo PDV manuale"}</DialogTitle>
+          <DialogTitle>{isEdit ? (isInherited ? "Modifica PDV ereditato" : "Modifica PDV") : "Nuovo PDV manuale"}</DialogTitle>
           <DialogDescription>
-            {isEdit ? "Aggiorna i dati del punto vendita manuale." : "Crea un PDV manuale visibile solo nel Controllo di Gestione."}
+            {isInherited
+              ? "Le modifiche scrivono direttamente sulla Gestione Organizzazione (puntiVendita). Indirizzo e Note non sono memorizzati per i PDV ereditati."
+              : isEdit ? "Aggiorna i dati del punto vendita manuale." : "Crea un PDV manuale visibile solo nel Controllo di Gestione."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -1671,14 +1709,18 @@ function PdvManualeDialog({
               <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="es. Negozio Centro" data-testid="input-pdv-manuale-nome" />
             </div>
           </div>
-          <div>
-            <Label>Indirizzo</Label>
-            <Input value={indirizzo} onChange={(e) => setIndirizzo(e.target.value)} data-testid="input-pdv-manuale-indirizzo" />
-          </div>
-          <div>
-            <Label>Note</Label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} data-testid="input-pdv-manuale-note" />
-          </div>
+          {!isInherited && (
+            <>
+              <div>
+                <Label>Indirizzo</Label>
+                <Input value={indirizzo} onChange={(e) => setIndirizzo(e.target.value)} data-testid="input-pdv-manuale-indirizzo" />
+              </div>
+              <div>
+                <Label>Note</Label>
+                <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} data-testid="input-pdv-manuale-note" />
+              </div>
+            </>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} data-testid="button-cancel-pdv-manuale">Annulla</Button>
