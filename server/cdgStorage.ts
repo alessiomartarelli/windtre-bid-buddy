@@ -43,6 +43,22 @@ export const cdgStorage = {
       .where(and(eq(cdgRagioniSociali.id, id), eq(cdgRagioniSociali.organizationId, orgId)));
   },
 
+  async getCategoria(id: string, orgId: string): Promise<CdgCategoria | undefined> {
+    const [r] = await db.select().from(cdgCategorie)
+      .where(and(eq(cdgCategorie.id, id), eq(cdgCategorie.organizationId, orgId)));
+    return r;
+  },
+  async getFornitore(id: string, orgId: string): Promise<CdgFornitore | undefined> {
+    const [r] = await db.select().from(cdgFornitori)
+      .where(and(eq(cdgFornitori.id, id), eq(cdgFornitori.organizationId, orgId)));
+    return r;
+  },
+  async getPdvOne(id: string, orgId: string): Promise<CdgPdv | undefined> {
+    const [r] = await db.select().from(cdgPdv)
+      .where(and(eq(cdgPdv.id, id), eq(cdgPdv.organizationId, orgId)));
+    return r;
+  },
+
   // Categorie
   async listCategorie(orgId: string, rs?: string): Promise<CdgCategoria[]> {
     const conds = [eq(cdgCategorie.organizationId, orgId)];

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import * as XLSX from "xlsx";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiUrl } from "@/lib/basePath";
@@ -19,7 +20,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -27,11 +28,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Wallet, Plus, Pencil, Trash2, Loader2, Building2, Tag, Truck, Store, Download,
-  TrendingUp, Calendar, FileText, Paperclip,
+  TrendingUp, FileText, Paperclip,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
-  PieChart, Pie, Cell,
 } from "recharts";
 import type {
   CdgRagioneSociale, CdgCategoria, CdgFornitore, CdgPdv, CdgSpesa,
@@ -64,14 +64,22 @@ const todayYMD = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-const PIE_COLORS = [
-  "#f97316", "#3b82f6", "#10b981", "#a855f7", "#ef4444", "#eab308",
-  "#06b6d4", "#ec4899", "#84cc16", "#6366f1", "#f59e0b", "#14b8a6",
-];
+const last12Months = (): string[] => {
+  const out: string[] = [];
+  const d = new Date();
+  d.setDate(1);
+  for (let i = 11; i >= 0; i--) {
+    const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    out.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+};
 
 const METODI_PAGAMENTO = [
   "Bonifico", "Contanti", "POS", "Assegno", "Carta credito", "RID/SDD", "Altro",
 ];
+
+const parseImporto = (s: CdgSpesa["importo"]): number => parseFloat(s as unknown as string) || 0;
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -86,16 +94,16 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-async function apiJson(method: string, url: string, body?: unknown) {
+async function apiJson<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(apiUrl(url), {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
     credentials: "include",
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json().catch(() => ({}));
+  const data = (await res.json().catch(() => ({}))) as { error?: string } & T;
   if (!res.ok) throw new Error(data?.error || `Errore ${res.status}`);
-  return data;
+  return data as T;
 }
 
 type TabKey = "dashboard" | "spese" | "anagrafiche";
@@ -111,8 +119,14 @@ export default function ControlloGestione() {
 
   const [tab, setTab] = useState<TabKey>("dashboard");
   const [filterRs, setFilterRs] = useState<string>("all");
-  const [filterCompetenza, setFilterCompetenza] = useState<string>(""); // YYYY-MM o ""
+  const [filterCompetenza, setFilterCompetenza] = useState<string>("");
+  const [filterMesePagamento, setFilterMesePagamento] = useState<string>("");
   const [filterCategoria, setFilterCategoria] = useState<string>("all");
+  const [filterFornitore, setFilterFornitore] = useState<string>("all");
+  const [filterPdv, setFilterPdv] = useState<string>("all");
+  const [filterImportoMin, setFilterImportoMin] = useState<string>("");
+  const [filterImportoMax, setFilterImportoMax] = useState<string>("");
+  const [dashboardMese, setDashboardMese] = useState<string>(currentMonthYYYYMM());
 
   useEffect(() => {
     if (!loading && profile && !isAuthorized) {
@@ -121,7 +135,6 @@ export default function ControlloGestione() {
     }
   }, [loading, profile, isAuthorized, toast, setLocation]);
 
-  // Queries
   const ragioniSocialiQ = useQuery<CdgRagioneSociale[]>({
     queryKey: ["/api/cdg/ragioni-sociali"],
     enabled: !!orgId && isAuthorized,
@@ -152,56 +165,90 @@ export default function ControlloGestione() {
       const p = new URLSearchParams();
       if (filterRs !== "all") p.set("rs", filterRs);
       if (filterCompetenza) p.set("competenza", filterCompetenza);
-      return apiJson("GET", `/api/cdg/spese?${p}`);
+      return apiJson<CdgSpesa[]>("GET", `/api/cdg/spese?${p}`);
     },
     enabled: !!orgId && isAuthorized,
   });
   const speseAll = speseQ.data || [];
 
+  // Filtri client-side aggiuntivi
   const spese = useMemo(() => {
-    if (filterCategoria === "all") return speseAll;
-    return speseAll.filter(s => s.categoriaId === filterCategoria);
-  }, [speseAll, filterCategoria]);
+    const min = filterImportoMin.trim() ? parseFloat(filterImportoMin.replace(",", ".")) : null;
+    const max = filterImportoMax.trim() ? parseFloat(filterImportoMax.replace(",", ".")) : null;
+    return speseAll.filter(s => {
+      if (filterCategoria !== "all" && s.categoriaId !== filterCategoria) return false;
+      if (filterFornitore !== "all" && s.fornitoreId !== filterFornitore) return false;
+      if (filterPdv !== "all" && s.pdvId !== filterPdv) return false;
+      if (filterMesePagamento) {
+        const mp = (s.dataPagamento || "").slice(0, 7);
+        if (mp !== filterMesePagamento) return false;
+      }
+      const imp = parseImporto(s.importo);
+      if (min !== null && isFinite(min) && imp < min) return false;
+      if (max !== null && isFinite(max) && imp > max) return false;
+      return true;
+    });
+  }, [speseAll, filterCategoria, filterFornitore, filterPdv, filterMesePagamento, filterImportoMin, filterImportoMax]);
 
-  // Lookup helpers
   const catById = useMemo(() => new Map(categorie.map(c => [c.id, c])), [categorie]);
   const fornById = useMemo(() => new Map(fornitori.map(f => [f.id, f])), [fornitori]);
   const pdvById = useMemo(() => new Map(pdvList.map(p => [p.id, p])), [pdvList]);
 
-  // KPI / chart data
-  const kpi = useMemo(() => {
-    let totale = 0;
-    const byCat = new Map<string, number>();
+  // === Dashboard data ===
+  const dashboard = useMemo(() => {
+    let totaleCassaMese = 0;
+    let totaleCompetenzaMese = 0;
+    const months = last12Months();
+    const monthSet = new Set(months);
     const byMese = new Map<string, { competenza: number; cassa: number }>();
-    const meseAttuale = currentMonthYYYYMM();
-    let totaleMeseCorrente = 0;
+    months.forEach(m => byMese.set(m, { competenza: 0, cassa: 0 }));
+
+    type CatRsAgg = { categoria: string; rs: string; importo: number; conteggio: number };
+    const catRsMap = new Map<string, CatRsAgg>();
+    const catTot = new Map<string, number>();
+
     for (const s of spese) {
-      const imp = parseFloat(s.importo as unknown as string) || 0;
-      totale += imp;
-      const catNome = (s.categoriaId && catById.get(s.categoriaId)?.nome) || "— Senza categoria —";
-      byCat.set(catNome, (byCat.get(catNome) || 0) + imp);
+      const imp = parseImporto(s.importo);
       const mPag = (s.dataPagamento || "").slice(0, 7);
       const mComp = s.meseCompetenza || mPag;
-      if (mComp === meseAttuale) totaleMeseCorrente += imp;
-      const allMonths = Array.from(new Set<string>([mPag, mComp]));
-      for (const m of allMonths) {
-        if (!m) continue;
-        const cur = byMese.get(m) || { competenza: 0, cassa: 0 };
-        if (m === mComp) cur.competenza += imp;
-        if (m === mPag) cur.cassa += imp;
-        byMese.set(m, cur);
+      if (mPag === dashboardMese) totaleCassaMese += imp;
+      if (mComp === dashboardMese) totaleCompetenzaMese += imp;
+      if (monthSet.has(mPag)) {
+        const e = byMese.get(mPag)!; e.cassa += imp;
       }
+      if (monthSet.has(mComp)) {
+        const e = byMese.get(mComp)!; e.competenza += imp;
+      }
+      const catNome = (s.categoriaId && catById.get(s.categoriaId)?.nome) || "— Senza categoria —";
+      const key = `${s.ragioneSociale}|${catNome}`;
+      const cur = catRsMap.get(key) || { categoria: catNome, rs: s.ragioneSociale, importo: 0, conteggio: 0 };
+      cur.importo += imp; cur.conteggio += 1;
+      catRsMap.set(key, cur);
+      catTot.set(catNome, (catTot.get(catNome) || 0) + imp);
     }
-    const catData = Array.from(byCat.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-    const meseData = Array.from(byMese.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([mese, v]) => ({ mese: monthLabel(mese), meseRaw: mese, ...v }));
-    return { totale, totaleMeseCorrente, catData, meseData, count: spese.length };
-  }, [spese, catById]);
 
-  // Mutations - delete spesa
+    const categoryBar = Array.from(catTot.entries())
+      .map(([categoria, importo]) => ({ categoria, importo }))
+      .sort((a, b) => b.importo - a.importo);
+
+    const meseSerie = months.map(m => {
+      const v = byMese.get(m)!;
+      return { mese: monthLabel(m), meseRaw: m, ...v };
+    });
+
+    const topCategoria = categoryBar[0];
+    const summaryRows = Array.from(catRsMap.values()).sort((a, b) => b.importo - a.importo);
+
+    return {
+      totaleCassaMese, totaleCompetenzaMese,
+      delta: totaleCompetenzaMese - totaleCassaMese,
+      topCategoria,
+      categoryBar,
+      meseSerie,
+      summaryRows,
+    };
+  }, [spese, dashboardMese, catById]);
+
   const deleteSpesaMut = useMutation({
     mutationFn: (id: string) => apiJson("DELETE", `/api/cdg/spese/${id}`),
     onSuccess: () => {
@@ -211,41 +258,39 @@ export default function ControlloGestione() {
     onError: (e: Error) => toast({ title: "Errore", description: e.message, variant: "destructive" }),
   });
 
-  // Spesa form dialog state
   const [spesaDialog, setSpesaDialog] = useState<{ open: boolean; editing?: CdgSpesa }>({ open: false });
 
-  const exportCsv = () => {
-    const lines: string[] = [];
-    const cols = [
-      "Data Pagamento", "Mese Competenza", "Ragione Sociale", "Categoria",
-      "Fornitore", "PDV", "Descrizione", "Metodo", "Importo", "Note", "Allegato",
-    ];
-    lines.push(cols.join(";"));
-    const escape = (v: string | number | null | undefined) => {
-      const s = String(v ?? "");
-      if (/[";\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-      return s;
-    };
-    for (const s of spese) {
-      const cat = (s.categoriaId && catById.get(s.categoriaId)?.nome) || "";
-      const forn = (s.fornitoreId && fornById.get(s.fornitoreId)?.nome) || "";
-      const pdv = (s.pdvId && pdvById.get(s.pdvId)?.nome) || "";
-      const imp = (parseFloat(s.importo as unknown as string) || 0).toFixed(2).replace(".", ",");
-      lines.push([
-        fmtDateIt(s.dataPagamento), s.meseCompetenza, s.ragioneSociale, cat, forn, pdv,
-        s.descrizione, s.metodoPagamento || "", imp, s.note || "", s.allegatoNome || "",
-      ].map(escape).join(";"));
-    }
-    const csv = "\uFEFF" + lines.join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `controllo_gestione_${filterCompetenza || "tutto"}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const exportXlsx = () => {
+    const wb = XLSX.utils.book_new();
+    const rows = spese.map(s => ({
+      "Data Pagamento": fmtDateIt(s.dataPagamento),
+      "Mese Competenza": s.meseCompetenza,
+      "Ragione Sociale": s.ragioneSociale,
+      "Categoria": (s.categoriaId && catById.get(s.categoriaId)?.nome) || "",
+      "Fornitore": (s.fornitoreId && fornById.get(s.fornitoreId)?.nome) || "",
+      "PDV": (s.pdvId && pdvById.get(s.pdvId)?.nome) || "",
+      "Descrizione": s.descrizione,
+      "Metodo Pagamento": s.metodoPagamento || "",
+      "Importo": parseImporto(s.importo),
+      "Note": s.note || "",
+      "Allegato": s.allegatoNome || "",
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Spese");
+
+    const summary = dashboard.summaryRows.map(r => ({
+      "Categoria": r.categoria,
+      "Ragione Sociale": r.rs,
+      "Numero spese": r.conteggio,
+      "Totale": r.importo,
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), "Riepilogo");
+
+    const monthly = dashboard.meseSerie.map(m => ({
+      "Mese": m.mese, "Cassa": m.cassa, "Competenza": m.competenza,
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthly), "Andamento mensile");
+
+    XLSX.writeFile(wb, `controllo_gestione_${filterCompetenza || filterMesePagamento || "tutto"}.xlsx`);
   };
 
   if (loading || !isAuthorized) {
@@ -272,30 +317,26 @@ export default function ControlloGestione() {
           </div>
         </div>
 
-        {/* Filtri globali */}
         <Card>
           <CardContent className="pt-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               <div>
                 <Label className="text-xs">Ragione Sociale</Label>
                 <Select value={filterRs} onValueChange={setFilterRs}>
                   <SelectTrigger data-testid="select-filter-rs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tutte</SelectItem>
-                    {ragioniSociali.map(rs => (
-                      <SelectItem key={rs.id} value={rs.nome}>{rs.nome}</SelectItem>
-                    ))}
+                    {ragioniSociali.map(rs => <SelectItem key={rs.id} value={rs.nome}>{rs.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Mese di competenza</Label>
-                <Input
-                  type="month"
-                  value={filterCompetenza}
-                  onChange={(e) => setFilterCompetenza(e.target.value)}
-                  data-testid="input-filter-competenza"
-                />
+                <Label className="text-xs">Competenza</Label>
+                <Input type="month" value={filterCompetenza} onChange={(e) => setFilterCompetenza(e.target.value)} data-testid="input-filter-competenza" />
+              </div>
+              <div>
+                <Label className="text-xs">Mese pagamento</Label>
+                <Input type="month" value={filterMesePagamento} onChange={(e) => setFilterMesePagamento(e.target.value)} data-testid="input-filter-pagamento" />
               </div>
               <div>
                 <Label className="text-xs">Categoria</Label>
@@ -303,20 +344,47 @@ export default function ControlloGestione() {
                   <SelectTrigger data-testid="select-filter-categoria"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tutte</SelectItem>
-                    {categorie
-                      .filter(c => filterRs === "all" || c.ragioneSociale === filterRs)
-                      .map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                    {categorie.filter(c => filterRs === "all" || c.ragioneSociale === filterRs).map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => { setFilterRs("all"); setFilterCompetenza(""); setFilterCategoria("all"); }} data-testid="button-reset-filters">
-                  Reset
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv">
-                  <Download className="h-4 w-4 mr-1" /> CSV
-                </Button>
+              <div>
+                <Label className="text-xs">Fornitore</Label>
+                <Select value={filterFornitore} onValueChange={setFilterFornitore}>
+                  <SelectTrigger data-testid="select-filter-fornitore"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tutti</SelectItem>
+                    {fornitori.filter(f => filterRs === "all" || f.ragioneSociale === filterRs).map(f => <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
+              <div>
+                <Label className="text-xs">PDV</Label>
+                <Select value={filterPdv} onValueChange={setFilterPdv}>
+                  <SelectTrigger data-testid="select-filter-pdv"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tutti</SelectItem>
+                    {pdvList.filter(p => filterRs === "all" || p.ragioneSociale === filterRs).map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Importo (min - max)</Label>
+                <div className="flex gap-1">
+                  <Input type="text" inputMode="decimal" value={filterImportoMin} onChange={(e) => setFilterImportoMin(e.target.value)} placeholder="min" data-testid="input-filter-min" />
+                  <Input type="text" inputMode="decimal" value={filterImportoMax} onChange={(e) => setFilterImportoMax(e.target.value)} placeholder="max" data-testid="input-filter-max" />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-3">
+              <Button variant="outline" size="sm" onClick={() => {
+                setFilterRs("all"); setFilterCompetenza(""); setFilterMesePagamento("");
+                setFilterCategoria("all"); setFilterFornitore("all"); setFilterPdv("all");
+                setFilterImportoMin(""); setFilterImportoMax("");
+              }} data-testid="button-reset-filters">Reset</Button>
+              <Button variant="outline" size="sm" onClick={exportXlsx} data-testid="button-export-xlsx">
+                <Download className="h-4 w-4 mr-1" /> Excel
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -328,20 +396,44 @@ export default function ControlloGestione() {
             <TabsTrigger value="anagrafiche" data-testid="tab-anagrafiche"><Building2 className="h-4 w-4 mr-1" />Anagrafiche</TabsTrigger>
           </TabsList>
 
-          {/* === DASHBOARD === */}
           <TabsContent value="dashboard" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-end gap-3">
+              <div>
+                <Label className="text-xs">Mese di riferimento (KPI)</Label>
+                <Input type="month" value={dashboardMese} onChange={(e) => setDashboardMese(e.target.value)} className="w-[180px]" data-testid="input-dashboard-mese" />
+              </div>
+              <p className="text-xs text-muted-foreground pb-2">I KPI sono calcolati sul mese selezionato (sui dati attualmente filtrati).</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Totale spese (filtrato)</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold" data-testid="kpi-totale">{fmtEur(kpi.totale)}</div><p className="text-xs text-muted-foreground mt-1">{kpi.count} voci</p></CardContent>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Totale cassa ({monthLabel(dashboardMese)})</CardTitle></CardHeader>
+                <CardContent><div className="text-2xl font-bold" data-testid="kpi-cassa">{fmtEur(dashboard.totaleCassaMese)}</div><p className="text-xs text-muted-foreground mt-1">Pagato nel mese</p></CardContent>
               </Card>
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Mese corrente (competenza)</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold" data-testid="kpi-mese-corrente">{fmtEur(kpi.totaleMeseCorrente)}</div><p className="text-xs text-muted-foreground mt-1">{monthLabel(currentMonthYYYYMM())}</p></CardContent>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Totale competenza ({monthLabel(dashboardMese)})</CardTitle></CardHeader>
+                <CardContent><div className="text-2xl font-bold" data-testid="kpi-competenza">{fmtEur(dashboard.totaleCompetenzaMese)}</div><p className="text-xs text-muted-foreground mt-1">Costo di competenza</p></CardContent>
               </Card>
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Categorie utilizzate</CardTitle></CardHeader>
-                <CardContent><div className="text-2xl font-bold" data-testid="kpi-categorie">{kpi.catData.length}</div><p className="text-xs text-muted-foreground mt-1">Distribuzione spese</p></CardContent>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Delta competenza − cassa</CardTitle></CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${dashboard.delta >= 0 ? "text-orange-600" : "text-green-600"}`} data-testid="kpi-delta">
+                    {dashboard.delta >= 0 ? "+" : ""}{fmtEur(dashboard.delta)}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{dashboard.delta >= 0 ? "Costi non ancora pagati" : "Pagato in anticipo"}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Top categoria</CardTitle></CardHeader>
+                <CardContent>
+                  {dashboard.topCategoria ? (
+                    <>
+                      <div className="text-lg font-bold truncate" data-testid="kpi-top-categoria">{dashboard.topCategoria.categoria}</div>
+                      <p className="text-xs text-muted-foreground mt-1">{fmtEur(dashboard.topCategoria.importo)}</p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">—</p>
+                  )}
+                </CardContent>
               </Card>
             </div>
 
@@ -349,45 +441,71 @@ export default function ControlloGestione() {
               <Card>
                 <CardHeader><CardTitle className="text-base">Spese per categoria</CardTitle></CardHeader>
                 <CardContent>
-                  {kpi.catData.length === 0 ? (
-                    <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Nessuna spesa nel periodo selezionato</div>
+                  {dashboard.categoryBar.length === 0 ? (
+                    <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Nessuna spesa</div>
                   ) : (
                     <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie data={kpi.catData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={(e) => `${e.name}: ${fmtEur(e.value as number)}`}>
-                          {kpi.catData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                        </Pie>
+                      <BarChart data={dashboard.categoryBar} layout="vertical" margin={{ left: 24 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
+                        <YAxis type="category" dataKey="categoria" width={140} />
                         <Tooltip formatter={(v: number) => fmtEur(v)} />
-                      </PieChart>
+                        <Bar dataKey="importo" fill="#f97316" name="Importo" />
+                      </BarChart>
                     </ResponsiveContainer>
                   )}
                 </CardContent>
               </Card>
 
               <Card>
-                <CardHeader><CardTitle className="text-base">Cassa vs Competenza per mese</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base">Cassa vs Competenza (ultimi 12 mesi)</CardTitle></CardHeader>
                 <CardContent>
-                  {kpi.meseData.length === 0 ? (
-                    <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Nessun dato</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={kpi.meseData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="mese" />
-                        <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
-                        <Tooltip formatter={(v: number) => fmtEur(v)} />
-                        <Legend />
-                        <Bar dataKey="cassa" fill="#3b82f6" name="Pagato (cassa)" />
-                        <Bar dataKey="competenza" fill="#f97316" name="Competenza" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={dashboard.meseSerie}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="mese" />
+                      <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip formatter={(v: number) => fmtEur(v)} />
+                      <Legend />
+                      <Bar dataKey="cassa" fill="#3b82f6" name="Pagato (cassa)" />
+                      <Bar dataKey="competenza" fill="#f97316" name="Competenza" />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </CardContent>
               </Card>
             </div>
+
+            <Card>
+              <CardHeader><CardTitle className="text-base">Riepilogo per categoria × Ragione Sociale</CardTitle></CardHeader>
+              <CardContent>
+                {dashboard.summaryRows.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4">Nessun dato.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Ragione Sociale</TableHead>
+                        <TableHead className="text-right">Numero spese</TableHead>
+                        <TableHead className="text-right">Totale</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dashboard.summaryRows.map((r, i) => (
+                        <TableRow key={i} data-testid={`row-summary-${i}`}>
+                          <TableCell className="font-medium">{r.categoria}</TableCell>
+                          <TableCell className="text-xs">{r.rs}</TableCell>
+                          <TableCell className="text-right">{r.conteggio}</TableCell>
+                          <TableCell className="text-right font-mono">{fmtEur(r.importo)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          {/* === SPESE === */}
           <TabsContent value="spese" className="space-y-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -401,7 +519,7 @@ export default function ControlloGestione() {
                   <div className="py-8 flex justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
                 ) : spese.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground text-sm">
-                    {ragioniSociali.length === 0 ? "Crea prima una Ragione Sociale nella tab Anagrafiche." : "Nessuna spesa registrata. Clicca \"Nuova spesa\" per iniziare."}
+                    {ragioniSociali.length === 0 ? "Crea prima una Ragione Sociale nella tab Anagrafiche." : "Nessuna spesa per i filtri attivi."}
                   </div>
                 ) : (
                   <Table>
@@ -435,7 +553,7 @@ export default function ControlloGestione() {
                             <TableCell>{pdv?.nome || <span className="text-muted-foreground">—</span>}</TableCell>
                             <TableCell className="max-w-[200px] truncate" title={s.descrizione}>{s.descrizione}</TableCell>
                             <TableCell className="text-xs">{s.metodoPagamento || ""}</TableCell>
-                            <TableCell className="text-right font-mono">{fmtEur(parseFloat(s.importo as unknown as string) || 0)}</TableCell>
+                            <TableCell className="text-right font-mono">{fmtEur(parseImporto(s.importo))}</TableCell>
                             <TableCell>
                               {s.allegatoPath && (
                                 <a href={apiUrl(`/api/cdg/spese/${s.id}/allegato`)} target="_blank" rel="noreferrer" title={s.allegatoNome || "Allegato"} data-testid={`link-allegato-${s.id}`}>
@@ -455,7 +573,7 @@ export default function ControlloGestione() {
                                   <AlertDialogContent>
                                     <AlertDialogHeader>
                                       <AlertDialogTitle>Eliminare la spesa?</AlertDialogTitle>
-                                      <AlertDialogDescription>{s.descrizione} — {fmtEur(parseFloat(s.importo as unknown as string) || 0)}</AlertDialogDescription>
+                                      <AlertDialogDescription>{s.descrizione} — {fmtEur(parseImporto(s.importo))}</AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                       <AlertDialogCancel>Annulla</AlertDialogCancel>
@@ -475,7 +593,6 @@ export default function ControlloGestione() {
             </Card>
           </TabsContent>
 
-          {/* === ANAGRAFICHE === */}
           <TabsContent value="anagrafiche" className="space-y-4">
             <RagioniSocialiCard ragioniSociali={ragioniSociali} />
             <AnagraficheRsScopedCard
@@ -532,17 +649,39 @@ function SpesaDialog({
   const [removeAllegato, setRemoveAllegato] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const [quickAdd, setQuickAdd] = useState<{ kind: "categoria" | "fornitore"; nome: string } | null>(null);
+  const [quickSaving, setQuickSaving] = useState(false);
+
   const catFiltrate = categorie.filter(c => c.ragioneSociale === rs);
   const fornFiltrati = fornitori.filter(f => f.ragioneSociale === rs);
   const pdvFiltrati = pdvList.filter(p => p.ragioneSociale === rs);
 
-  // Reset RS-scoped selections quando cambia rs
   useEffect(() => {
     if (categoriaId && !catFiltrate.find(c => c.id === categoriaId)) setCategoriaId("");
     if (fornitoreId && !fornFiltrati.find(f => f.id === fornitoreId)) setFornitoreId("");
     if (pdvId && !pdvFiltrati.find(p => p.id === pdvId)) setPdvId("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rs]);
+
+  const handleQuickAdd = async () => {
+    if (!quickAdd || !quickAdd.nome.trim()) return;
+    if (!rs) { toast({ title: "Seleziona prima una Ragione Sociale", variant: "destructive" }); return; }
+    setQuickSaving(true);
+    try {
+      const body = { ragioneSociale: rs, nome: quickAdd.nome.trim() };
+      const base = quickAdd.kind === "categoria" ? "categorie" : "fornitori";
+      const created = await apiJson<CdgCategoria | CdgFornitore>("POST", `/api/cdg/${base}`, body);
+      qc.invalidateQueries({ queryKey: [`/api/cdg/${base}`] });
+      if (quickAdd.kind === "categoria") setCategoriaId(created.id);
+      else setFornitoreId(created.id);
+      toast({ title: `${quickAdd.kind === "categoria" ? "Categoria" : "Fornitore"} creata` });
+      setQuickAdd(null);
+    } catch (e) {
+      toast({ title: "Errore", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setQuickSaving(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!rs) { toast({ title: "Ragione Sociale obbligatoria", variant: "destructive" }); return; }
@@ -570,14 +709,9 @@ function SpesaDialog({
         body.allegatoNome = file.name;
         body.allegatoMime = file.type || "application/octet-stream";
       }
-      if (editing && removeAllegato && !file) {
-        body.removeAllegato = true;
-      }
-      if (editing) {
-        await apiJson("PUT", `/api/cdg/spese/${editing.id}`, body);
-      } else {
-        await apiJson("POST", `/api/cdg/spese`, body);
-      }
+      if (editing && removeAllegato && !file) body.removeAllegato = true;
+      if (editing) await apiJson("PUT", `/api/cdg/spese/${editing.id}`, body);
+      else await apiJson("POST", `/api/cdg/spese`, body);
       qc.invalidateQueries({ queryKey: ["/api/cdg/spese"] });
       toast({ title: editing ? "Spesa aggiornata" : "Spesa creata" });
       onClose();
@@ -589,124 +723,159 @@ function SpesaDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{editing ? "Modifica spesa" : "Nuova spesa"}</DialogTitle>
-          <DialogDescription>Inserisci dati spesa, doppia data pagamento + competenza.</DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Modifica spesa" : "Nuova spesa"}</DialogTitle>
+            <DialogDescription>Doppia data: pagamento (cassa) + mese di competenza (accrual).</DialogDescription>
+          </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
-          <div className="md:col-span-2">
-            <Label>Ragione Sociale *</Label>
-            <Select value={rs} onValueChange={setRs}>
-              <SelectTrigger data-testid="select-spesa-rs"><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-              <SelectContent>
-                {ragioniSociali.map(r => <SelectItem key={r.id} value={r.nome}>{r.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {ragioniSociali.length === 0 && (
-              <p className="text-xs text-amber-600 mt-1">Nessuna RS — creane una in Anagrafiche.</p>
-            )}
-          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
+            <div className="md:col-span-2">
+              <Label>Ragione Sociale *</Label>
+              <Select value={rs} onValueChange={setRs}>
+                <SelectTrigger data-testid="select-spesa-rs"><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                <SelectContent>
+                  {ragioniSociali.map(r => <SelectItem key={r.id} value={r.nome}>{r.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {ragioniSociali.length === 0 && <p className="text-xs text-amber-600 mt-1">Nessuna RS — creane una in Anagrafiche.</p>}
+            </div>
 
-          <div>
-            <Label>Categoria</Label>
-            <Select value={categoriaId || "__none__"} onValueChange={(v) => setCategoriaId(v === "__none__" ? "" : v)}>
-              <SelectTrigger data-testid="select-spesa-categoria"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">— Nessuna —</SelectItem>
-                {catFiltrate.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Fornitore</Label>
-            <Select value={fornitoreId || "__none__"} onValueChange={(v) => setFornitoreId(v === "__none__" ? "" : v)}>
-              <SelectTrigger data-testid="select-spesa-fornitore"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">— Nessuno —</SelectItem>
-                {fornFiltrati.map(f => <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>PDV</Label>
-            <Select value={pdvId || "__none__"} onValueChange={(v) => setPdvId(v === "__none__" ? "" : v)}>
-              <SelectTrigger data-testid="select-spesa-pdv"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">— Nessuno —</SelectItem>
-                {pdvFiltrati.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.codice ? ` (${p.codice})` : ""}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Metodo pagamento</Label>
-            <Select value={metodoPagamento || "__none__"} onValueChange={(v) => setMetodoPagamento(v === "__none__" ? "" : v)}>
-              <SelectTrigger data-testid="select-spesa-metodo"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">— Nessuno —</SelectItem>
-                {METODI_PAGAMENTO.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="md:col-span-2">
-            <Label>Descrizione *</Label>
-            <Input value={descrizione} onChange={(e) => setDescrizione(e.target.value)} data-testid="input-spesa-descrizione" />
-          </div>
-
-          <div>
-            <Label>Importo (€) *</Label>
-            <Input type="text" inputMode="decimal" value={importo} onChange={(e) => setImporto(e.target.value)} placeholder="0,00" data-testid="input-spesa-importo" />
-          </div>
-
-          <div>
-            <Label>Data pagamento *</Label>
-            <Input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} data-testid="input-spesa-data-pagamento" />
-          </div>
-
-          <div>
-            <Label>Mese competenza *</Label>
-            <Input type="month" value={meseCompetenza} onChange={(e) => setMeseCompetenza(e.target.value)} data-testid="input-spesa-competenza" />
-          </div>
-
-          <div className="md:col-span-2">
-            <Label>Allegato (PDF, max 8MB)</Label>
-            <Input type="file" accept="application/pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} data-testid="input-spesa-allegato" />
-            {editing?.allegatoNome && !file && (
-              <div className="flex items-center gap-2 mt-2 text-xs">
-                <span className="text-muted-foreground">Allegato attuale: <strong>{editing.allegatoNome}</strong></span>
-                <label className="inline-flex items-center gap-1">
-                  <input type="checkbox" checked={removeAllegato} onChange={(e) => setRemoveAllegato(e.target.checked)} />
-                  Rimuovi
-                </label>
+            <div>
+              <div className="flex items-center justify-between"><Label>Categoria</Label>
+                <Button type="button" size="sm" variant="ghost" className="h-6 px-2" onClick={() => setQuickAdd({ kind: "categoria", nome: "" })} disabled={!rs} data-testid="button-quick-add-categoria">
+                  <Plus className="h-3 w-3 mr-1" /> Crea
+                </Button>
               </div>
-            )}
+              <Select value={categoriaId || "__none__"} onValueChange={(v) => setCategoriaId(v === "__none__" ? "" : v)}>
+                <SelectTrigger data-testid="select-spesa-categoria"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Nessuna —</SelectItem>
+                  {catFiltrate.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between"><Label>Fornitore</Label>
+                <Button type="button" size="sm" variant="ghost" className="h-6 px-2" onClick={() => setQuickAdd({ kind: "fornitore", nome: "" })} disabled={!rs} data-testid="button-quick-add-fornitore">
+                  <Plus className="h-3 w-3 mr-1" /> Crea
+                </Button>
+              </div>
+              <Select value={fornitoreId || "__none__"} onValueChange={(v) => setFornitoreId(v === "__none__" ? "" : v)}>
+                <SelectTrigger data-testid="select-spesa-fornitore"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Nessuno —</SelectItem>
+                  {fornFiltrati.map(f => <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>PDV</Label>
+              <Select value={pdvId || "__none__"} onValueChange={(v) => setPdvId(v === "__none__" ? "" : v)}>
+                <SelectTrigger data-testid="select-spesa-pdv"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Nessuno —</SelectItem>
+                  {pdvFiltrati.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}{p.codice ? ` (${p.codice})` : ""}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Metodo pagamento</Label>
+              <Select value={metodoPagamento || "__none__"} onValueChange={(v) => setMetodoPagamento(v === "__none__" ? "" : v)}>
+                <SelectTrigger data-testid="select-spesa-metodo"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Nessuno —</SelectItem>
+                  {METODI_PAGAMENTO.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="md:col-span-2">
+              <Label>Descrizione *</Label>
+              <Input value={descrizione} onChange={(e) => setDescrizione(e.target.value)} data-testid="input-spesa-descrizione" />
+            </div>
+
+            <div>
+              <Label>Importo (€) *</Label>
+              <Input type="text" inputMode="decimal" value={importo} onChange={(e) => setImporto(e.target.value)} placeholder="0,00" data-testid="input-spesa-importo" />
+            </div>
+
+            <div>
+              <Label>Data pagamento *</Label>
+              <Input type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} data-testid="input-spesa-data-pagamento" />
+            </div>
+
+            <div>
+              <Label>Mese competenza *</Label>
+              <Input type="month" value={meseCompetenza} onChange={(e) => setMeseCompetenza(e.target.value)} data-testid="input-spesa-competenza" />
+            </div>
+
+            <div className="md:col-span-2">
+              <Label>Allegato (PDF/img, max 8MB)</Label>
+              <Input type="file" accept="application/pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} data-testid="input-spesa-allegato" />
+              {editing?.allegatoNome && !file && (
+                <div className="flex items-center gap-2 mt-2 text-xs">
+                  <span className="text-muted-foreground">Allegato attuale: <strong>{editing.allegatoNome}</strong></span>
+                  <label className="inline-flex items-center gap-1">
+                    <input type="checkbox" checked={removeAllegato} onChange={(e) => setRemoveAllegato(e.target.checked)} />
+                    Rimuovi
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="md:col-span-2">
+              <Label>Note</Label>
+              <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} data-testid="textarea-spesa-note" />
+            </div>
           </div>
 
-          <div className="md:col-span-2">
-            <Label>Note</Label>
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} data-testid="textarea-spesa-note" />
-          </div>
-        </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose} disabled={submitting}>Annulla</Button>
+            <Button onClick={handleSubmit} disabled={submitting} data-testid="button-save-spesa">
+              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Salva
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={submitting}>Annulla</Button>
-          <Button onClick={handleSubmit} disabled={submitting} data-testid="button-save-spesa">
-            {submitting && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-            Salva
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {quickAdd && (
+        <Dialog open onOpenChange={(v) => { if (!v) setQuickAdd(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Nuova {quickAdd.kind === "categoria" ? "categoria" : "fornitore"} per {rs}</DialogTitle>
+            </DialogHeader>
+            <div className="py-2">
+              <Label>Nome *</Label>
+              <Input
+                autoFocus
+                value={quickAdd.nome}
+                onChange={(e) => setQuickAdd({ ...quickAdd, nome: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") void handleQuickAdd(); }}
+                data-testid="input-quick-add-nome"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setQuickAdd(null)} disabled={quickSaving}>Annulla</Button>
+              <Button onClick={handleQuickAdd} disabled={quickSaving || !quickAdd.nome.trim()} data-testid="button-quick-add-save">
+                {quickSaving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                Crea
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
 
-// ============ Anagrafiche: Ragioni Sociali ============
+// ============ Anagrafiche ============
 function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: CdgRagioneSociale[] }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -717,7 +886,6 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: CdgRagioneSoci
   const [note, setNote] = useState("");
 
   const reset = () => { setEditing(null); setNome(""); setPartitaIva(""); setNote(""); };
-
   const openNew = () => { reset(); setOpen(true); };
   const openEdit = (rs: CdgRagioneSociale) => {
     setEditing(rs); setNome(rs.nome); setPartitaIva(rs.partitaIva || ""); setNote(rs.note || ""); setOpen(true);
@@ -778,7 +946,7 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: CdgRagioneSoci
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Eliminare {rs.nome}?</AlertDialogTitle>
-                          <AlertDialogDescription>Verranno eliminate anche tutte le anagrafiche (categorie, fornitori, PDV) e le spese collegate a questa Ragione Sociale.</AlertDialogDescription>
+                          <AlertDialogDescription>Verranno eliminate anche tutte le anagrafiche (categorie, fornitori, PDV) e le spese collegate.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Annulla</AlertDialogCancel>
@@ -812,7 +980,6 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: CdgRagioneSoci
   );
 }
 
-// ============ Anagrafiche RS-scoped (categorie / fornitori / PDV) ============
 function AnagraficheRsScopedCard({
   ragioniSociali, categorie, fornitori, pdvList,
 }: {
@@ -828,9 +995,7 @@ function AnagraficheRsScopedCard({
   }, [ragioniSociali, selectedRs]);
 
   if (ragioniSociali.length === 0) {
-    return (
-      <Card><CardContent className="py-6 text-sm text-muted-foreground text-center">Crea prima una Ragione Sociale per gestire categorie, fornitori e PDV.</CardContent></Card>
-    );
+    return <Card><CardContent className="py-6 text-sm text-muted-foreground text-center">Crea prima una Ragione Sociale per gestire categorie, fornitori e PDV.</CardContent></Card>;
   }
 
   return (
