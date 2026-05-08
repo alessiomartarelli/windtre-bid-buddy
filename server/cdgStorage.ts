@@ -137,6 +137,17 @@ export const cdgStorage = {
     await db.delete(cdgCategorie)
       .where(and(eq(cdgCategorie.id, id), eq(cdgCategorie.organizationId, orgId)));
   },
+  async getCategoriaUsage(id: string, orgId: string): Promise<{ speseCount: number; ragioniSocialiUsate: string[] }> {
+    const rows = await db.execute(sql`
+      SELECT COUNT(*)::int AS cnt,
+             COALESCE(ARRAY_AGG(DISTINCT ragione_sociale) FILTER (WHERE ragione_sociale IS NOT NULL), ARRAY[]::text[]) AS rs
+        FROM cdg_spese
+       WHERE organization_id = ${orgId}
+         AND categoria_id = ${id}
+    `);
+    const r = (rows as unknown as { rows: Array<{ cnt: number; rs: string[] }> }).rows?.[0];
+    return { speseCount: Number(r?.cnt || 0), ragioniSocialiUsate: r?.rs || [] };
+  },
 
   // Fornitori (multi-RS). Stessa logica delle categorie.
   async listFornitori(orgId: string, rs?: string): Promise<CdgFornitore[]> {
@@ -168,6 +179,17 @@ export const cdgStorage = {
   async deleteFornitore(id: string, orgId: string): Promise<void> {
     await db.delete(cdgFornitori)
       .where(and(eq(cdgFornitori.id, id), eq(cdgFornitori.organizationId, orgId)));
+  },
+  async getFornitoreUsage(id: string, orgId: string): Promise<{ speseCount: number; ragioniSocialiUsate: string[] }> {
+    const rows = await db.execute(sql`
+      SELECT COUNT(*)::int AS cnt,
+             COALESCE(ARRAY_AGG(DISTINCT ragione_sociale) FILTER (WHERE ragione_sociale IS NOT NULL), ARRAY[]::text[]) AS rs
+        FROM cdg_spese
+       WHERE organization_id = ${orgId}
+         AND fornitore_id = ${id}
+    `);
+    const r = (rows as unknown as { rows: Array<{ cnt: number; rs: string[] }> }).rows?.[0];
+    return { speseCount: Number(r?.cnt || 0), ragioniSocialiUsate: r?.rs || [] };
   },
 
   // Spese

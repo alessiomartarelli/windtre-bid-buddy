@@ -422,6 +422,23 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     });
   }
 
+  // Usage report: in quante spese è usata una categoria/fornitore.
+  // Usato dal dialog di conferma cancellazione per mostrare l'impatto.
+  app.get("/api/cdg/categorie/:id/usage", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const cat = await cdgStorage.getCategoria(req.params.id, profile.organizationId!);
+    if (!cat) return res.status(404).json({ error: "Non trovato" });
+    res.json(await cdgStorage.getCategoriaUsage(req.params.id, profile.organizationId!));
+  });
+  app.get("/api/cdg/fornitori/:id/usage", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const f = await cdgStorage.getFornitore(req.params.id, profile.organizationId!);
+    if (!f) return res.status(404).json({ error: "Non trovato" });
+    res.json(await cdgStorage.getFornitoreUsage(req.params.id, profile.organizationId!));
+  });
+
   registerAnagrafica({
     base: "categorie",
     schema: insertCdgCategoriaSchema as unknown as ZodType<Record<string, unknown>>,

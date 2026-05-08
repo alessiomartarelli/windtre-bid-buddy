@@ -1271,9 +1271,22 @@ function MultiRsAnagraficaCrud<T extends { id: string; nome: string; ragioniSoci
     try {
       await apiJson("DELETE", `/api/cdg/${base}/${it.id}`);
       qc.invalidateQueries({ queryKey: [`/api/cdg/${base}`] });
+      qc.invalidateQueries({ queryKey: ["/api/cdg/spese"] });
       toast({ title: "Eliminata" });
     } catch (e) {
       toast({ title: "Errore", description: (e as Error).message, variant: "destructive" });
+    }
+  };
+
+  // Conteggio impatto cancellazione: caricato lazy quando l'utente apre il dialog.
+  const [usageById, setUsageById] = useState<Record<string, { speseCount: number; ragioniSocialiUsate: string[] } | "loading" | "error">>({});
+  const loadUsage = async (id: string) => {
+    setUsageById(prev => ({ ...prev, [id]: "loading" }));
+    try {
+      const u = await apiJson<{ speseCount: number; ragioniSocialiUsate: string[] }>("GET", `/api/cdg/${base}/${id}/usage`);
+      setUsageById(prev => ({ ...prev, [id]: u }));
+    } catch {
+      setUsageById(prev => ({ ...prev, [id]: "error" }));
     }
   };
 
@@ -1322,18 +1335,38 @@ function MultiRsAnagraficaCrud<T extends { id: string; nome: string; ragioniSoci
                 </TableCell>
                 <TableCell className="text-right">
                   <Button size="icon" variant="ghost" onClick={() => openEdit(it)} data-testid={`button-edit-${testidPrefix}-${it.id}`}><Pencil className="h-4 w-4" /></Button>
-                  <AlertDialog>
+                  <AlertDialog onOpenChange={(o) => { if (o) loadUsage(it.id); }}>
                     <AlertDialogTrigger asChild>
                       <Button size="icon" variant="ghost" data-testid={`button-delete-${testidPrefix}-${it.id}`}><Trash2 className="h-4 w-4 text-red-600" /></Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Eliminare {it.nome}?</AlertDialogTitle>
-                        <AlertDialogDescription>La voce verrà rimossa da tutte le Ragioni Sociali associate.</AlertDialogDescription>
+                        <AlertDialogDescription asChild>
+                          <div className="space-y-2">
+                            <p>La voce verrà rimossa da tutte le Ragioni Sociali associate.</p>
+                            {(() => {
+                              const u = usageById[it.id];
+                              if (u === "loading") return <p className="text-xs text-muted-foreground" data-testid={`text-usage-loading-${testidPrefix}-${it.id}`}>Verifico utilizzo…</p>;
+                              if (u === "error") return <p className="text-xs text-destructive">Impossibile verificare l'utilizzo.</p>;
+                              if (!u) return null;
+                              if (u.speseCount === 0) {
+                                return <p className="text-xs text-muted-foreground" data-testid={`text-usage-${testidPrefix}-${it.id}`}>Non è usata in nessuna spesa.</p>;
+                              }
+                              return (
+                                <p className="text-xs text-amber-700 dark:text-amber-400" data-testid={`text-usage-${testidPrefix}-${it.id}`}>
+                                  Usata in <strong>{u.speseCount}</strong> {u.speseCount === 1 ? "spesa" : "spese"}
+                                  {u.ragioniSocialiUsate.length > 0 ? <> su {u.ragioniSocialiUsate.length} {u.ragioniSocialiUsate.length === 1 ? "Ragione Sociale" : "Ragioni Sociali"} ({u.ragioniSocialiUsate.join(", ")})</> : null}.
+                                  {" "}Le spese verranno mantenute ma il riferimento sarà azzerato.
+                                </p>
+                              );
+                            })()}
+                          </div>
+                        </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Annulla</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => del(it)}>Elimina</AlertDialogAction>
+                        <AlertDialogAction onClick={() => del(it)} data-testid={`button-confirm-delete-${testidPrefix}-${it.id}`}>Elimina</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
