@@ -124,17 +124,25 @@ container quando renderizzata dentro Amministrazione.
   `findFornitoreOverlap`) allineato all'unique index: 409 se esiste già una
   voce con stesso nome (confronto case-sensitive, identico al DB unique
   constraint) nella stessa org, indipendentemente dalle RS.
-- **PDV ereditati read-only**: nessun CRUD su `cdg_pdv`. Tab PDV in
-  Anagrafiche mostra l'elenco raggruppato per RS con link a `/admin`. Le spese
-  riferiscono il PDV via `pdvCodice` (chiave `puntiVendita.codicePos` con
-  fallback al `nome` se mancante); il selettore PDV nel form spesa è popolato
-  da `GET /api/cdg/pdv-by-rs?rs=...` che legge `organization_config.puntiVendita`
-  ed espone `codice = codicePos || nome`. `validateSpesaFks` accetta lo stesso
-  fallback. Backfill al register imposta `pdv_codice = COALESCE(p.codice, p.nome)`
-  joinando la legacy `cdg_pdv` per pdvId esistenti.
-- API: `/api/cdg/{ragioni-sociali|ragioni-sociali/unified|categorie|fornitori|spese}`
-  CRUD + `GET /api/cdg/pdv-by-rs[?rs=...]` (PDV da org config, opz. filtrati
-  per RS) + `GET /api/cdg/spese/:id/allegato` (download). Tutte gated
+- **PDV misti (ereditati + manuali)**: i PDV in CdG sono ora un mix di due
+  fonti, entrambe referenziate dalle spese via `pdvCodice`:
+  1. **Ereditati** (origine `"config"`, read-only): da
+     `organization_config.puntiVendita`, `codice = codicePos || nome`.
+     Gestione resta in `/admin`.
+  2. **Manuali** (origine `"manuale"`, CRUD locale al CdG): tabella
+     `cdg_pdv_manuali` `(id, organizationId, ragioneSociale, codice, nome,
+     indirizzo?, note?)` con unique index `UQ_cdg_pdv_manuali_org_rs_codice`
+     su `(org, rs, codice)`. Creati e modificati da Anagrafiche → PDV.
+  Endpoint `GET /api/cdg/pdv-by-rs[?rs=...]` ritorna l'unione mergiata
+  `[{codice, nome, ragioneSociale, origine, id?, indirizzo?, note?}]`. Su
+  POST/PUT manuale: rifiuta 409 se il `(rs, codice)` collide con un PDV
+  ereditato; il manuale può però usare lo stesso codice cross-RS. Su rename
+  di codice o RS, le spese collegate vengono propagate automaticamente.
+  `validateSpesaFks` accetta `pdvCodice` se valido in **una** delle due
+  fonti per la RS della spesa.
+- API: `/api/cdg/{ragioni-sociali|ragioni-sociali/unified|categorie|fornitori|spese|pdv-manuali}`
+  CRUD + `GET /api/cdg/pdv-by-rs[?rs=...]` (mix config + manuali) +
+  `GET /api/cdg/spese/:id/allegato` (download). Tutte gated
   `controllo_gestione` + admin/super_admin con scoping su `organizationId`.
 - Allegati: upload base64 in JSON → disk in `uploads/cdg/<orgId>/` (env
   override `CDG_UPLOAD_DIR`), max 8MB, sanitized filename + path-traversal

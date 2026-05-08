@@ -180,11 +180,32 @@ export const cdgFornitori = pgTable("cdg_fornitori", {
   uniqueIndex("UQ_cdg_forn_org_nome").on(t.organizationId, t.nome),
 ]);
 
+// PDV manuali per Controllo di Gestione: tabella separata dai PDV ereditati
+// da `organization_config.puntiVendita`. Permettono di registrare punti
+// vendita ad-hoc usati solo per imputare spese (es. magazzini, sedi, PDV non
+// ancora configurati a livello org). `codice` è univoco per (org, rs) e
+// viene usato come `cdgSpese.pdvCodice` esattamente come quelli ereditati.
+export const cdgPdvManuali = pgTable("cdg_pdv_manuali", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  ragioneSociale: varchar("ragione_sociale").notNull(),
+  codice: varchar("codice").notNull(),
+  nome: varchar("nome").notNull(),
+  indirizzo: text("indirizzo"),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [
+  index("IDX_cdg_pdv_manuali_org_rs").on(t.organizationId, t.ragioneSociale),
+  uniqueIndex("UQ_cdg_pdv_manuali_org_rs_codice").on(t.organizationId, t.ragioneSociale, t.codice),
+]);
+
 // Spese: doppia data (pagamento per cassa, competenza per accrual).
 // meseCompetenza è "YYYY-MM" per facilitare aggregazioni mensili.
 // Nota: la vecchia tabella `cdg_pdv` e la colonna `cdg_spese.pdv_id` sono
-// state droppate (Task #71). I PDV sono ereditati read-only da
-// `organization_config.puntiVendita` e referenziati via `pdvCodice`.
+// state droppate (Task #71). I PDV sono ora un mix:
+//  - ereditati read-only da `organization_config.puntiVendita`
+//  - manuali in `cdg_pdv_manuali` (CRUD da Anagrafiche → PDV)
+// Entrambi referenziati da `pdvCodice`.
 export const cdgSpese = pgTable("cdg_spese", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
@@ -285,8 +306,19 @@ export type CdgFornitore = typeof cdgFornitori.$inferSelect;
 export type InsertCdgFornitore = typeof cdgFornitori.$inferInsert;
 export type CdgSpesa = typeof cdgSpese.$inferSelect;
 export type InsertCdgSpesa = typeof cdgSpese.$inferInsert;
+export type CdgPdvManuale = typeof cdgPdvManuali.$inferSelect;
+export type InsertCdgPdvManuale = typeof cdgPdvManuali.$inferInsert;
 
 export const insertCdgRagioneSocialeSchema = createInsertSchema(cdgRagioniSociali).omit({ id: true, createdAt: true, organizationId: true });
+export const insertCdgPdvManualeSchema = createInsertSchema(cdgPdvManuali)
+  .omit({ id: true, createdAt: true, organizationId: true })
+  .extend({
+    ragioneSociale: z.string().trim().min(1, "Ragione Sociale obbligatoria"),
+    codice: z.string().trim().min(1, "Codice obbligatorio"),
+    nome: z.string().trim().min(1, "Nome obbligatorio"),
+    indirizzo: z.string().optional().nullable(),
+    note: z.string().optional().nullable(),
+  });
 // Categorie/Fornitori sono multi-RS: `ragioniSociali` è obbligatorio (min 1).
 // `ragioneSociale` legacy resta opzionale per back-compat in lettura/insert ma
 // è ignorato in scrittura dalla UI nuova.

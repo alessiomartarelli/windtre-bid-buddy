@@ -35,11 +35,20 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts";
 import type {
-  CdgRagioneSociale, CdgCategoria, CdgFornitore, CdgSpesa,
+  CdgRagioneSociale, CdgCategoria, CdgFornitore, CdgSpesa, CdgPdvManuale,
 } from "@shared/schema";
 
-// PDV ereditati da organization_config.puntiVendita (read-only).
-type PdvFromConfig = { codice: string; nome: string; ragioneSociale: string };
+// PDV unificati: ereditati (origine="config", read-only) + manuali
+// (origine="manuale", CRUD locale al CdG).
+type PdvFromConfig = {
+  codice: string;
+  nome: string;
+  ragioneSociale: string;
+  origine?: "config" | "manuale";
+  id?: string;
+  indirizzo?: string | null;
+  note?: string | null;
+};
 
 const fmtEur = (v: number) =>
   v.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
@@ -1194,7 +1203,7 @@ function AnagraficheRsScopedCard({
             />
           </TabsContent>
           <TabsContent value="pdv">
-            <PdvReadOnlyView pdvList={pdvList} ragioniSociali={ragioniSociali} onGoToAdmin={() => setLocation("/admin")} />
+            <PdvCrudView pdvList={pdvList} ragioniSociali={ragioniSociali} onGoToAdmin={() => setLocation("/admin")} />
           </TabsContent>
         </Tabs>
       </CardContent>
@@ -1425,15 +1434,22 @@ function MultiRsAnagraficaCrud<T extends { id: string; nome: string; ragioniSoci
   );
 }
 
-// PDV: vista read-only raggruppata per Ragione Sociale. La gestione PDV è
-// nella sezione Amministrazione → Gestione Organizzazione.
-function PdvReadOnlyView({
+// PDV: vista mista. Inherited (origine="config") sono read-only e gestiti in
+// Amministrazione → Gestione Organizzazione. Manuali (origine="manuale") sono
+// CRUD locali alla CdG e referenziati dalle spese via pdvCodice.
+function PdvCrudView({
   pdvList, ragioniSociali, onGoToAdmin,
 }: {
   pdvList: PdvFromConfig[];
   ragioniSociali: UnifiedRagioneSociale[];
   onGoToAdmin: () => void;
 }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<PdvFromConfig | null>(null);
+  const [confirmDel, setConfirmDel] = useState<PdvFromConfig | null>(null);
+
   const grouped = useMemo(() => {
     const map = new Map<string, PdvFromConfig[]>();
     for (const p of pdvList) {
@@ -1444,17 +1460,46 @@ function PdvReadOnlyView({
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], "it"));
   }, [pdvList]);
 
+  const counts = useMemo(() => {
+    let cfg = 0, man = 0;
+    for (const p of pdvList) (p.origine === "manuale" ? man++ : cfg++);
+    return { cfg, man };
+  }, [pdvList]);
+
+  const onSaved = () => {
+    qc.invalidateQueries({ queryKey: ["/api/cdg/pdv-by-rs"] });
+  };
+
+  const del = async (p: PdvFromConfig) => {
+    if (!p.id) return;
+    try {
+      await apiJson("DELETE", `/api/cdg/pdv-manuali/${p.id}`);
+      toast({ title: "PDV eliminato" });
+      onSaved();
+    } catch (e) {
+      toast({ title: "Errore", description: e instanceof Error ? e.message : "", variant: "destructive" });
+    }
+    setConfirmDel(null);
+  };
+
   return (
     <div className="space-y-3 pt-3">
       <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm">
         <Info className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
         <div className="flex-1">
-          <p>I PDV sono ereditati dalla configurazione organizzazione (Amministrazione → Gestione Organizzazione). Sono di sola lettura qui.</p>
-          <p className="text-xs text-muted-foreground mt-1">Totale PDV configurati: <strong>{pdvList.length}</strong> su <strong>{ragioniSociali.length}</strong> RS.</p>
+          <p>I PDV ereditati (badge <strong>da config</strong>) provengono dalla Gestione Organizzazione e sono di sola lettura. I PDV <strong>manuali</strong> sono creati qui e usati solo per imputare spese in Controllo di Gestione.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Totale: <strong>{pdvList.length}</strong> ({counts.cfg} ereditati + {counts.man} manuali) su <strong>{ragioniSociali.length}</strong> RS.
+          </p>
         </div>
-        <Button size="sm" variant="outline" onClick={onGoToAdmin} data-testid="button-go-admin-pdv">
-          <ExternalLink className="h-4 w-4 mr-1" /> Gestisci
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button size="sm" onClick={() => { setEditing(null); setDialogOpen(true); }} data-testid="button-add-pdv-manuale">
+            <Plus className="h-4 w-4 mr-1" /> Nuovo PDV
+          </Button>
+          <Button size="sm" variant="outline" onClick={onGoToAdmin} data-testid="button-go-admin-pdv">
+            <ExternalLink className="h-4 w-4 mr-1" /> Gestisci ereditati
+          </Button>
+        </div>
       </div>
       {pdvList.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4 text-center">Nessun PDV configurato.</p>
@@ -1467,20 +1512,182 @@ function PdvReadOnlyView({
                 <Badge variant="outline" className="ml-auto">{items.length}</Badge>
               </div>
               <Table>
-                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Codice</TableHead></TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Codice</TableHead>
+                    <TableHead>Origine</TableHead>
+                    <TableHead className="text-right">Azioni</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
-                  {items.map(p => (
-                    <TableRow key={p.codice} data-testid={`row-pdv-${p.codice}`}>
-                      <TableCell>{p.nome}</TableCell>
-                      <TableCell className="font-mono text-xs">{p.codice}</TableCell>
-                    </TableRow>
-                  ))}
+                  {items.map(p => {
+                    const isManual = p.origine === "manuale";
+                    return (
+                      <TableRow key={`${p.origine}-${p.codice}`} data-testid={`row-pdv-${p.codice}`}>
+                        <TableCell>{p.nome}</TableCell>
+                        <TableCell className="font-mono text-xs">{p.codice}</TableCell>
+                        <TableCell>
+                          {isManual
+                            ? <Badge variant="secondary" data-testid={`badge-pdv-origine-manuale-${p.codice}`}>manuale</Badge>
+                            : <Badge variant="outline" data-testid={`badge-pdv-origine-config-${p.codice}`}>da config</Badge>}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {isManual ? (
+                            <div className="flex justify-end gap-1">
+                              <Button size="sm" variant="ghost" onClick={() => { setEditing(p); setDialogOpen(true); }} data-testid={`button-edit-pdv-${p.codice}`}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setConfirmDel(p)} data-testid={`button-delete-pdv-${p.codice}`}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
           ))}
         </div>
       )}
+
+      <PdvManualeDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        editing={editing}
+        ragioniSociali={ragioniSociali}
+        onSaved={onSaved}
+      />
+
+      <AlertDialog open={!!confirmDel} onOpenChange={(o) => !o && setConfirmDel(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare il PDV?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Stai per eliminare il PDV manuale <strong>{confirmDel?.nome}</strong> ({confirmDel?.codice}). Le spese che lo riferiscono manterranno il codice salvato ma il PDV non sarà più selezionabile.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-pdv">Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmDel && del(confirmDel)} data-testid="button-confirm-delete-pdv">Elimina</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+function PdvManualeDialog({
+  open, onClose, editing, ragioniSociali, onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  editing: PdvFromConfig | null;
+  ragioniSociali: UnifiedRagioneSociale[];
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const isEdit = !!(editing && editing.id);
+  const [rs, setRs] = useState<string>(editing?.ragioneSociale || ragioniSociali[0]?.nome || "");
+  const [codice, setCodice] = useState<string>(editing?.codice || "");
+  const [nome, setNome] = useState<string>(editing?.nome || "");
+  const [indirizzo, setIndirizzo] = useState<string>(editing?.indirizzo || "");
+  const [note, setNote] = useState<string>(editing?.note || "");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setRs(editing?.ragioneSociale || ragioniSociali[0]?.nome || "");
+      setCodice(editing?.codice || "");
+      setNome(editing?.nome || "");
+      setIndirizzo(editing?.indirizzo || "");
+      setNote(editing?.note || "");
+    }
+  }, [open, editing, ragioniSociali]);
+
+  const save = async () => {
+    if (!rs.trim() || !codice.trim() || !nome.trim()) {
+      toast({ title: "Compila Ragione Sociale, Codice e Nome", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const body = {
+        ragioneSociale: rs.trim(),
+        codice: codice.trim(),
+        nome: nome.trim(),
+        indirizzo: indirizzo.trim() || null,
+        note: note.trim() || null,
+      };
+      if (isEdit && editing?.id) {
+        await apiJson<CdgPdvManuale>("PUT", `/api/cdg/pdv-manuali/${editing.id}`, body);
+        toast({ title: "PDV aggiornato" });
+      } else {
+        await apiJson<CdgPdvManuale>("POST", `/api/cdg/pdv-manuali`, body);
+        toast({ title: "PDV creato" });
+      }
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast({ title: "Errore", description: e instanceof Error ? e.message : "", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? "Modifica PDV" : "Nuovo PDV manuale"}</DialogTitle>
+          <DialogDescription>
+            {isEdit ? "Aggiorna i dati del punto vendita manuale." : "Crea un PDV manuale visibile solo nel Controllo di Gestione."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Ragione Sociale *</Label>
+            <Select value={rs} onValueChange={setRs}>
+              <SelectTrigger data-testid="select-pdv-manuale-rs"><SelectValue placeholder="Seleziona RS" /></SelectTrigger>
+              <SelectContent>
+                {ragioniSociali.map(r => (
+                  <SelectItem key={r.nome} value={r.nome}>{r.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label>Codice *</Label>
+              <Input value={codice} onChange={(e) => setCodice(e.target.value)} placeholder="es. PDV001" data-testid="input-pdv-manuale-codice" />
+            </div>
+            <div>
+              <Label>Nome *</Label>
+              <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="es. Negozio Centro" data-testid="input-pdv-manuale-nome" />
+            </div>
+          </div>
+          <div>
+            <Label>Indirizzo</Label>
+            <Input value={indirizzo} onChange={(e) => setIndirizzo(e.target.value)} data-testid="input-pdv-manuale-indirizzo" />
+          </div>
+          <div>
+            <Label>Note</Label>
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} data-testid="input-pdv-manuale-note" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} data-testid="button-cancel-pdv-manuale">Annulla</Button>
+          <Button onClick={save} disabled={submitting} data-testid="button-save-pdv-manuale">
+            {submitting && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+            Salva
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

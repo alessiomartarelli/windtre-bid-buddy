@@ -1,11 +1,12 @@
 import { db } from "./db";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import {
-  cdgRagioniSociali, cdgCategorie, cdgFornitori, cdgSpese,
+  cdgRagioniSociali, cdgCategorie, cdgFornitori, cdgSpese, cdgPdvManuali,
   type CdgRagioneSociale, type InsertCdgRagioneSociale,
   type CdgCategoria, type InsertCdgCategoria,
   type CdgFornitore, type InsertCdgFornitore,
   type CdgSpesa, type InsertCdgSpesa,
+  type CdgPdvManuale, type InsertCdgPdvManuale,
 } from "@shared/schema";
 
 export const cdgStorage = {
@@ -220,5 +221,31 @@ export const cdgStorage = {
   async deleteSpesa(id: string, orgId: string): Promise<void> {
     await db.delete(cdgSpese)
       .where(and(eq(cdgSpese.id, id), eq(cdgSpese.organizationId, orgId)));
+  },
+
+  // PDV manuali (separati dai PDV ereditati da organization_config.puntiVendita)
+  async listPdvManuali(orgId: string, rs?: string): Promise<CdgPdvManuale[]> {
+    const conds = [eq(cdgPdvManuali.organizationId, orgId)];
+    if (rs) conds.push(eq(cdgPdvManuali.ragioneSociale, rs));
+    return db.select().from(cdgPdvManuali).where(and(...conds)).orderBy(cdgPdvManuali.nome);
+  },
+  async getPdvManuale(id: string, orgId: string): Promise<CdgPdvManuale | undefined> {
+    const [r] = await db.select().from(cdgPdvManuali)
+      .where(and(eq(cdgPdvManuali.id, id), eq(cdgPdvManuali.organizationId, orgId)));
+    return r;
+  },
+  async createPdvManuale(data: InsertCdgPdvManuale): Promise<CdgPdvManuale> {
+    const [r] = await db.insert(cdgPdvManuali).values(data).returning();
+    return r;
+  },
+  async updatePdvManuale(id: string, orgId: string, updates: Partial<InsertCdgPdvManuale>): Promise<CdgPdvManuale | null> {
+    const [r] = await db.update(cdgPdvManuali).set(updates)
+      .where(and(eq(cdgPdvManuali.id, id), eq(cdgPdvManuali.organizationId, orgId)))
+      .returning();
+    return r || null;
+  },
+  async deletePdvManuale(id: string, orgId: string): Promise<void> {
+    await db.delete(cdgPdvManuali)
+      .where(and(eq(cdgPdvManuali.id, id), eq(cdgPdvManuali.organizationId, orgId)));
   },
 };

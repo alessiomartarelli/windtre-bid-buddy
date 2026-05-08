@@ -11,6 +11,7 @@ import {
   insertCdgCategoriaSchema,
   insertCdgFornitoreSchema,
   insertCdgSpesaSchema,
+  insertCdgPdvManualeSchema,
   type Profile,
 } from "@shared/schema";
 
@@ -262,27 +263,143 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     res.json(out);
   });
 
-  // PDV ereditati da organization_config.puntiVendita, filtrati per RS.
-  // Read-only: la gestione PDV resta in Amministrazione organizzazione.
+  // PDV unificati: ereditati da organization_config.puntiVendita
+  // (origine="config", read-only) + manuali da cdg_pdv_manuali
+  // (origine="manuale", CRUD via Anagrafiche → PDV). Filtrabili per RS.
+  // In caso di collisione su codice all'interno della stessa RS, il PDV
+  // manuale è preferito ma viene comunque marcato `dup` per la UI.
   app.get("/api/cdg/pdv-by-rs", ...gate, async (req: any, res) => {
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
+    const orgId = profile.organizationId!;
     const rs = typeof req.query.rs === "string" ? req.query.rs.trim() : "";
-    const pdvList = await getOrgPuntiVendita(profile.organizationId!);
-    const out = pdvList
-      .filter(p => !rs || String(p?.ragioneSociale || "").trim() === rs)
-      .map(p => {
+    const [pdvCfg, pdvMan] = await Promise.all([
+      getOrgPuntiVendita(orgId),
+      cdgStorage.listPdvManuali(orgId, rs || undefined),
+    ]);
+    type Out = { codice: string; nome: string; ragioneSociale: string;
+      origine: "config" | "manuale"; id?: string; indirizzo?: string | null; note?: string | null };
+    const seen = new Map<string, Out>();
+    const keyOf = (rsName: string, codice: string) => `${rsName}\u0000${codice}`;
+    for (const m of pdvMan) {
+      const k = keyOf(m.ragioneSociale, m.codice);
+      seen.set(k, {
+        codice: m.codice, nome: m.nome, ragioneSociale: m.ragioneSociale,
+        origine: "manuale", id: m.id, indirizzo: m.indirizzo, note: m.note,
+      });
+    }
+    for (const p of pdvCfg) {
+      const rsName = String(p?.ragioneSociale || "").trim();
+      if (rs && rsName !== rs) continue;
+      const codicePos = String(p?.codicePos || "").trim();
+      const nome = String(p?.nome || "").trim();
+      const codice = codicePos || nome;
+      if (!codice || !nome) continue;
+      const k = keyOf(rsName, codice);
+      if (seen.has(k)) continue;
+      seen.set(k, { codice, nome, ragioneSociale: rsName, origine: "config" });
+    }
+    const out = Array.from(seen.values()).sort((a, b) =>
+      a.ragioneSociale.localeCompare(b.ragioneSociale, "it") || a.nome.localeCompare(b.nome, "it"));
+    res.json(out);
+  });
+
+  // === PDV Manuali (CRUD) ===
+  app.get("/api/cdg/pdv-manuali", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const rs = typeof req.query.rs === "string" ? req.query.rs : undefined;
+    res.json(await cdgStorage.listPdvManuali(profile.organizationId!, rs));
+  });
+  app.post("/api/cdg/pdv-manuali", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const parsed = insertCdgPdvManualeSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const orgId = profile.organizationId!;
+    const valid = await getValidRsNames(orgId);
+    if (!valid.has(parsed.data.ragioneSociale)) {
+      return res.status(400).json({ error: `Ragione Sociale "${parsed.data.ragioneSociale}" non valida` });
+    }
+    // Collisione con un PDV ereditato (stesso codice nella stessa RS)
+    const cfg = await getOrgPuntiVendita(orgId);
+    const cfgClash = cfg.some(p => {
+      const rsName = String(p?.ragioneSociale || "").trim();
+      const codicePos = String(p?.codicePos || "").trim();
+      const nome = String(p?.nome || "").trim();
+      const code = codicePos || nome;
+      return rsName === parsed.data.ragioneSociale && code === parsed.data.codice;
+    });
+    if (cfgClash) return res.status(409).json({ error: `Esiste già un PDV ereditato con codice "${parsed.data.codice}" in questa RS. Scegli un codice diverso.` });
+    try {
+      const r = await cdgStorage.createPdvManuale({ ...parsed.data, organizationId: orgId });
+      res.status(201).json(r);
+    } catch (e: unknown) {
+      if (typeof e === "object" && e && "code" in e && String((e as { code: unknown }).code) === "23505") {
+        return res.status(409).json({ error: "Esiste già un PDV manuale con questo codice in questa RS" });
+      }
+      res.status(500).json({ error: "Errore creazione PDV" });
+    }
+  });
+  app.put("/api/cdg/pdv-manuali/:id", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const parsed = insertCdgPdvManualeSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const orgId = profile.organizationId!;
+    const existing = await cdgStorage.getPdvManuale(req.params.id, orgId);
+    if (!existing) return res.status(404).json({ error: "Non trovato" });
+    const newRs = parsed.data.ragioneSociale ?? existing.ragioneSociale;
+    const newCod = parsed.data.codice ?? existing.codice;
+    if (parsed.data.ragioneSociale && parsed.data.ragioneSociale !== existing.ragioneSociale) {
+      const valid = await getValidRsNames(orgId);
+      if (!valid.has(newRs)) return res.status(400).json({ error: `Ragione Sociale "${newRs}" non valida` });
+    }
+    if (newRs !== existing.ragioneSociale || newCod !== existing.codice) {
+      const cfg = await getOrgPuntiVendita(orgId);
+      const cfgClash = cfg.some(p => {
+        const rsName = String(p?.ragioneSociale || "").trim();
         const codicePos = String(p?.codicePos || "").trim();
         const nome = String(p?.nome || "").trim();
-        return {
-          codice: codicePos || nome,
-          nome,
-          ragioneSociale: String(p?.ragioneSociale || "").trim(),
-        };
-      })
-      .filter(p => p.codice && p.nome);
-    out.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
-    res.json(out);
+        const code = codicePos || nome;
+        return rsName === newRs && code === newCod;
+      });
+      if (cfgClash) return res.status(409).json({ error: `Esiste già un PDV ereditato con codice "${newCod}" in questa RS.` });
+    }
+    try {
+      const r = await cdgStorage.updatePdvManuale(req.params.id, orgId, parsed.data);
+      if (!r) return res.status(404).json({ error: "Non trovato" });
+      // Se è cambiato il codice, propaga sulle spese che lo riferiscono
+      if (parsed.data.codice && parsed.data.codice !== existing.codice) {
+        await db.execute(sql`
+          UPDATE cdg_spese SET pdv_codice = ${parsed.data.codice}
+           WHERE organization_id = ${orgId}
+             AND ragione_sociale = ${existing.ragioneSociale}
+             AND pdv_codice = ${existing.codice}
+        `);
+      }
+      // Se è cambiata la RS, propaga sulle spese (mantenendo codice)
+      if (parsed.data.ragioneSociale && parsed.data.ragioneSociale !== existing.ragioneSociale) {
+        await db.execute(sql`
+          UPDATE cdg_spese SET ragione_sociale = ${parsed.data.ragioneSociale}
+           WHERE organization_id = ${orgId}
+             AND ragione_sociale = ${existing.ragioneSociale}
+             AND pdv_codice = ${parsed.data.codice ?? existing.codice}
+        `);
+      }
+      res.json(r);
+    } catch (e: unknown) {
+      if (typeof e === "object" && e && "code" in e && String((e as { code: unknown }).code) === "23505") {
+        return res.status(409).json({ error: "Esiste già un PDV manuale con questo codice in questa RS" });
+      }
+      res.status(500).json({ error: "Errore aggiornamento PDV" });
+    }
+  });
+  app.delete("/api/cdg/pdv-manuali/:id", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    await cdgStorage.deletePdvManuale(req.params.id, profile.organizationId!);
+    res.json({ success: true });
   });
 
   app.post("/api/cdg/ragioni-sociali", ...gate, async (req: any, res) => {
@@ -478,15 +595,19 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       if (!(f.ragioniSociali || []).includes(rs)) return "Il fornitore non è associato alla Ragione Sociale selezionata";
     }
     if (pdvCodice) {
-      const pdvList = await getOrgPuntiVendita(orgId);
-      const ok = pdvList.some(p => {
+      const [pdvList, pdvMan] = await Promise.all([
+        getOrgPuntiVendita(orgId),
+        cdgStorage.listPdvManuali(orgId, rs),
+      ]);
+      const okCfg = pdvList.some(p => {
         if (String(p?.ragioneSociale || "").trim() !== rs) return false;
         const codicePos = String(p?.codicePos || "").trim();
         const nome = String(p?.nome || "").trim();
         const key = codicePos || nome;
         return key === pdvCodice;
       });
-      if (!ok) return "Il PDV non è valido per la Ragione Sociale selezionata";
+      const okMan = pdvMan.some(m => m.codice === pdvCodice);
+      if (!okCfg && !okMan) return "Il PDV non è valido per la Ragione Sociale selezionata";
     }
     return null;
   }
