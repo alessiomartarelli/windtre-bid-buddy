@@ -122,8 +122,8 @@ container quando renderizzata dentro Amministrazione.
   (orfane). Cancellare una RS NON cancella categorie/fornitori condivisi con
   altre RS. Pre-check friendly su POST/PUT (`findCategoriaOverlap` /
   `findFornitoreOverlap`) allineato all'unique index: 409 se esiste già una
-  voce con stesso nome (case-insensitive) nella stessa org, indipendentemente
-  dalle RS.
+  voce con stesso nome (confronto case-sensitive, identico al DB unique
+  constraint) nella stessa org, indipendentemente dalle RS.
 - **PDV ereditati read-only**: nessun CRUD su `cdg_pdv`. Tab PDV in
   Anagrafiche mostra l'elenco raggruppato per RS con link a `/admin`. Le spese
   riferiscono il PDV via `pdvCodice` (chiave `puntiVendita.codicePos` con

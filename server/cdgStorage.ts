@@ -109,12 +109,6 @@ export const cdgStorage = {
       .where(and(eq(cdgFornitori.id, id), eq(cdgFornitori.organizationId, orgId)));
     return r;
   },
-  async getPdvOne(id: string, orgId: string): Promise<CdgPdv | undefined> {
-    const [r] = await db.select().from(cdgPdv)
-      .where(and(eq(cdgPdv.id, id), eq(cdgPdv.organizationId, orgId)));
-    return r;
-  },
-
   // Categorie (multi-RS). Filtro `rs`: ritorna voci la cui lista contiene rs.
   async listCategorie(orgId: string, rs?: string): Promise<CdgCategoria[]> {
     const conds = [eq(cdgCategorie.organizationId, orgId)];
@@ -126,13 +120,13 @@ export const cdgStorage = {
     return r;
   },
   // Pre-check friendly allineato all'unique index (organization_id, nome):
-  // una categoria con lo stesso nome (case-insensitive) nella stessa org è
-  // un duplicato indipendentemente dalle RS associate.
+  // confronto case-sensitive (stesso comportamento del DB unique constraint)
+  // indipendente dalle RS associate.
   async findCategoriaOverlap(orgId: string, nome: string, _ragioniSociali: string[], excludeId?: string): Promise<CdgCategoria | null> {
     const rows = await db.execute(sql`
       SELECT * FROM cdg_categorie
        WHERE organization_id = ${orgId}
-         AND lower(nome) = lower(${nome})
+         AND nome = ${nome}
          ${excludeId ? sql`AND id <> ${excludeId}` : sql``}
        LIMIT 1
     `);
@@ -164,7 +158,7 @@ export const cdgStorage = {
     const rows = await db.execute(sql`
       SELECT * FROM cdg_fornitori
        WHERE organization_id = ${orgId}
-         AND lower(nome) = lower(${nome})
+         AND nome = ${nome}
          ${excludeId ? sql`AND id <> ${excludeId}` : sql``}
        LIMIT 1
     `);
