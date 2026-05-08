@@ -230,6 +230,11 @@ export const cdgSpese = pgTable("cdg_spese", {
   // evidenza in UI; le copie non sono "linkate" alla master (modifiche e
   // delete sono per riga singola).
   ricorrente: boolean("ricorrente").notNull().default(false),
+  // 'mensile' | 'annuale' (null se una tantum)
+  periodicita: varchar("periodicita", { length: 16 }),
+  // Sfasamento cassa vs competenza in MESI (0..3): la dataPagamento di
+  // ogni occorrenza viene calcolata come (meseCompetenza + offset, giornoPagamento).
+  cashFlowOffsetMesi: integer("cash_flow_offset_mesi").notNull().default(0),
   dataInizioRicorrenza: date("data_inizio_ricorrenza"),
   dataFineRicorrenza: date("data_fine_ricorrenza"),
   allegatoPath: varchar("allegato_path"),
@@ -357,6 +362,8 @@ export const insertCdgSpesaSchema = createInsertSchema(cdgSpese).omit({
   iva: numericString.optional().nullable(),
   meseCompetenza: z.string().regex(/^\d{4}-\d{2}$/, "Formato YYYY-MM richiesto"),
   ricorrente: z.boolean().optional(),
+  periodicita: z.enum(["mensile", "annuale"]).optional().nullable(),
+  cashFlowOffsetMesi: z.number().int().min(0).max(3).optional(),
   dataInizioRicorrenza: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD richiesto").optional().nullable(),
   dataFineRicorrenza: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato YYYY-MM-DD richiesto").optional().nullable(),
   allegatoBase64: z.string().optional(),

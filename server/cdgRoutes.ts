@@ -908,7 +908,14 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     if (rest.imponibile === undefined || rest.imponibile === null || rest.aliquotaIva === undefined || rest.aliquotaIva === null) {
       return res.status(400).json({ error: "Imponibile e aliquota IVA sono obbligatori" });
     }
-    // Ricorrenza: validazione date e override dataPagamento/meseCompetenza
+    // Ricorrenza: validazione date + calcolo occorrenze (master + cloni).
+    // Una tantum = 1 occorrenza (campi periodicita/offset ignorati per cassa).
+    // Ricorrente = N occorrenze in base a periodicita (mensile/annuale) tra
+    // dataInizio e dataFine inclusi. Per ogni occorrenza la dataPagamento è
+    // calcolata come (meseCompetenza + cashFlowOffsetMesi, giornoPagamento clamped).
+    type Occ = { dataPagamento: string; meseCompetenza: string };
+    let occorrenze: Occ[] = [{ dataPagamento: String(rest.dataPagamento), meseCompetenza: String(rest.meseCompetenza) }];
+    const offset = Math.max(0, Math.min(3, Number(rest.cashFlowOffsetMesi || 0)));
     if (rest.ricorrente) {
       if (!rest.dataInizioRicorrenza || !rest.dataFineRicorrenza) {
         return res.status(400).json({ error: "Data inizio e data fine ricorrenza sono obbligatorie" });
@@ -916,10 +923,39 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       if (rest.dataFineRicorrenza < rest.dataInizioRicorrenza) {
         return res.status(400).json({ error: "Data fine ricorrenza deve essere >= data inizio" });
       }
-      // La master parte dalla data inizio
-      rest.dataPagamento = rest.dataInizioRicorrenza;
-      rest.meseCompetenza = rest.dataInizioRicorrenza.slice(0, 7);
+      const periodicita = (rest.periodicita as "mensile" | "annuale" | null | undefined) || "mensile";
+      rest.periodicita = periodicita;
+      const stepMonths = periodicita === "annuale" ? 12 : 1;
+      const [siy, sim, sid] = String(rest.dataInizioRicorrenza).split("-").map(Number);
+      const [fy, fm] = String(rest.dataFineRicorrenza).split("-").map(Number);
+      const endMs = Date.UTC(fy, fm - 1, 1);
+      occorrenze = [];
+      for (let i = 0; i < 600; i++) {
+        let cy = siy; let cm = sim + i * stepMonths;
+        while (cm > 12) { cm -= 12; cy += 1; }
+        const cMs = Date.UTC(cy, cm - 1, 1);
+        if (cMs > endMs) break;
+        let py = cy; let pm = cm + offset;
+        while (pm > 12) { pm -= 12; py += 1; }
+        const lastDay = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+        const pd = Math.min(sid, lastDay);
+        const newPag = `${py}-${String(pm).padStart(2, "0")}-${String(pd).padStart(2, "0")}`;
+        const newComp = `${cy}-${String(cm).padStart(2, "0")}`;
+        occorrenze.push({ dataPagamento: newPag, meseCompetenza: newComp });
+      }
+      if (occorrenze.length === 0) {
+        return res.status(400).json({ error: "Nessuna occorrenza generata: verifica date inizio/fine" });
+      }
+      // La master usa la prima occorrenza
+      rest.dataPagamento = occorrenze[0].dataPagamento;
+      rest.meseCompetenza = occorrenze[0].meseCompetenza;
+    } else {
+      // Una tantum: nessun campo ricorrenza persistito
+      rest.periodicita = null;
+      rest.dataInizioRicorrenza = null;
+      rest.dataFineRicorrenza = null;
     }
+    rest.cashFlowOffsetMesi = offset;
     try {
       const c = computeImporti(String(rest.imponibile), String(rest.aliquotaIva));
       rest.imponibile = c.imponibile; rest.aliquotaIva = c.aliquotaIva;
@@ -949,50 +985,22 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     };
     const r = await cdgStorage.createSpesa(baseSpesa);
 
-    // Ricorrenza mensile: genera N copie indipendenti per i mesi successivi
-    // fino a `dataFineRicorrenza` (inclusa). Ogni copia mantiene flag e
-    // scadenza. L'allegato NON viene duplicato per evitare bloat di storage.
+    // Cloni per le occorrenze successive (i>=1). L'allegato NON è duplicato.
     let generati = 0;
-    if (rest.ricorrente && rest.dataFineRicorrenza) {
-      try {
-        const [cy, cm] = String(rest.meseCompetenza).split("-").map(Number);
-        const fineParts = String(rest.dataFineRicorrenza).split("-").map(Number);
-        const fineY = fineParts[0]; const fineM = fineParts[1];
-        const dataPag = String(rest.dataPagamento);
-        const [py, pm, pd] = dataPag.split("-").map(Number);
-        const baseDayMs = Date.UTC(py, pm - 1, pd);
-        const fineCompMs = Date.UTC(fineY, fineM - 1, 1);
-        let cursorY = cy, cursorM = cm;
-        while (true) {
-          // Avanza di un mese
-          cursorM += 1;
-          if (cursorM > 12) { cursorM = 1; cursorY += 1; }
-          const curMs = Date.UTC(cursorY, cursorM - 1, 1);
-          if (curMs > fineCompMs) break;
-          const monthsDelta = (cursorY - cy) * 12 + (cursorM - cm);
-          // Stima la nuova data pagamento: stesso giorno del mese, clamp se
-          // il mese non lo contiene (es. 31 gen -> 28/29 feb).
-          const targetDate = new Date(baseDayMs);
-          targetDate.setUTCMonth(targetDate.getUTCMonth() + monthsDelta);
-          // Verifica clamp: se setUTCMonth è "rimbalzato" oltre, riporta a fine mese
-          if (targetDate.getUTCMonth() !== (cursorM - 1)) {
-            targetDate.setUTCDate(0); // ultimo giorno del mese precedente
-          }
-          const newPagYmd = targetDate.toISOString().slice(0, 10);
-          const newComp = `${cursorY}-${String(cursorM).padStart(2, "0")}`;
-          await cdgStorage.createSpesa({
-            ...baseSpesa,
-            allegatoPath: null,
-            allegatoNome: null,
-            allegatoMime: null,
-            dataPagamento: newPagYmd,
-            meseCompetenza: newComp,
-          });
-          generati += 1;
-        }
-      } catch (e) {
-        console.error("[cdg] ricorrenza generation failed:", e);
+    try {
+      for (let i = 1; i < occorrenze.length; i++) {
+        await cdgStorage.createSpesa({
+          ...baseSpesa,
+          allegatoPath: null,
+          allegatoNome: null,
+          allegatoMime: null,
+          dataPagamento: occorrenze[i].dataPagamento,
+          meseCompetenza: occorrenze[i].meseCompetenza,
+        });
+        generati += 1;
       }
+    } catch (e) {
+      console.error("[cdg] ricorrenza generation failed:", e);
     }
     res.status(201).json({ ...r, ricorrenzaGenerati: generati });
   });

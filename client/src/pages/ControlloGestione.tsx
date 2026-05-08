@@ -748,6 +748,12 @@ function SpesaDialog({
   const [file, setFile] = useState<File | null>(null);
   const [removeAllegato, setRemoveAllegato] = useState<boolean>(false);
   const [ricorrente, setRicorrente] = useState<boolean>(!!editing?.ricorrente);
+  const [periodicita, setPeriodicita] = useState<"mensile" | "annuale">(
+    (editing?.periodicita as "mensile" | "annuale") || "mensile"
+  );
+  const [cashFlowOffsetMesi, setCashFlowOffsetMesi] = useState<number>(
+    Number(editing?.cashFlowOffsetMesi ?? 0)
+  );
   const [dataInizioRicorrenza, setDataInizioRicorrenza] = useState<string>(editing?.dataInizioRicorrenza || editing?.dataPagamento || "");
   const [dataFineRicorrenza, setDataFineRicorrenza] = useState<string>(editing?.dataFineRicorrenza || "");
   const [submitting, setSubmitting] = useState(false);
@@ -826,6 +832,8 @@ function SpesaDialog({
       }
       if (editing && removeAllegato && !file) body.removeAllegato = true;
       body.ricorrente = !!ricorrente;
+      body.cashFlowOffsetMesi = cashFlowOffsetMesi;
+      body.periodicita = ricorrente ? periodicita : null;
       body.dataInizioRicorrenza = ricorrente && dataInizioRicorrenza ? dataInizioRicorrenza : null;
       body.dataFineRicorrenza = ricorrente && dataFineRicorrenza ? dataFineRicorrenza : null;
       if (ricorrente) {
@@ -1001,20 +1009,42 @@ function SpesaDialog({
               <Input type="month" value={meseCompetenza} onChange={(e) => setMeseCompetenza(e.target.value)} data-testid="input-spesa-competenza" />
             </div>
 
-            <div className="md:col-span-2 rounded-md border p-3 space-y-2">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={ricorrente}
-                  onChange={(e) => setRicorrente(e.target.checked)}
-                  data-testid="checkbox-spesa-ricorrente"
-                />
-                <span className="font-medium">Spesa ricorrente mensile</span>
-                <span className="text-xs text-muted-foreground">— genera automaticamente una spesa per ogni mese fino alla scadenza</span>
-              </label>
+            <div className="md:col-span-2 rounded-md border p-3 space-y-3">
+              <div>
+                <Label className="text-sm">Tipo spesa</Label>
+                <div className="flex gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setRicorrente(false)}
+                    className={`px-3 py-1.5 rounded-md border text-sm transition-colors ${!ricorrente ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
+                    data-testid="btn-tipo-una-tantum"
+                  >
+                    Una tantum
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRicorrente(true)}
+                    className={`px-3 py-1.5 rounded-md border text-sm transition-colors ${ricorrente ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
+                    data-testid="btn-tipo-ricorrente"
+                  >
+                    Ricorrente
+                  </button>
+                </div>
+              </div>
+
               {ricorrente && (
-                <div className="space-y-2 pl-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <Label>Periodicità *</Label>
+                      <Select value={periodicita} onValueChange={(v) => setPeriodicita(v as "mensile" | "annuale")}>
+                        <SelectTrigger data-testid="select-spesa-periodicita"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mensile">Mensile</SelectItem>
+                          <SelectItem value="annuale">Annuale</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div>
                       <Label>Data inizio *</Label>
                       <Input
@@ -1035,19 +1065,37 @@ function SpesaDialog({
                       />
                     </div>
                   </div>
-                  {!editing && (
-                    <p className="text-xs text-muted-foreground">
-                      Quando attivo, "Data pagamento" e "Mese competenza" vengono allineati alla data inizio.
-                      Verranno create copie indipendenti per ogni mese tra inizio e fine (incluse).
-                      L'allegato non viene duplicato.
-                    </p>
-                  )}
-                  {editing && (
-                    <p className="text-xs text-amber-600">
-                      In modifica i flag aggiornano solo questa riga: le occorrenze già create restano invariate.
-                    </p>
-                  )}
                 </div>
+              )}
+
+              <div>
+                <Label>Sfasamento cassa vs competenza</Label>
+                <Select value={String(cashFlowOffsetMesi)} onValueChange={(v) => setCashFlowOffsetMesi(Number(v))}>
+                  <SelectTrigger className="w-full md:w-[260px]" data-testid="select-spesa-cashflow-offset"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">M (stesso mese)</SelectItem>
+                    <SelectItem value="1">M+1 (mese successivo)</SelectItem>
+                    <SelectItem value="2">M+2 (due mesi dopo)</SelectItem>
+                    <SelectItem value="3">M+3 (tre mesi dopo)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {ricorrente && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Per ogni occorrenza la data pagamento sarà calcolata come (mese competenza + {cashFlowOffsetMesi} mesi).
+                  </p>
+                )}
+              </div>
+
+              {ricorrente && !editing && (
+                <p className="text-xs text-muted-foreground">
+                  Verranno create copie indipendenti {periodicita === "annuale" ? "annue" : "mensili"} tra data inizio e data fine (incluse).
+                  L'allegato non viene duplicato.
+                </p>
+              )}
+              {ricorrente && editing && (
+                <p className="text-xs text-amber-600">
+                  In modifica i flag aggiornano solo questa riga: le occorrenze già create restano invariate.
+                </p>
               )}
             </div>
 
