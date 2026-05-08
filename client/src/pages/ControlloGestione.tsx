@@ -152,6 +152,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const [dashboardAnno, setDashboardAnno] = useState<number>(new Date().getFullYear());
   const [annoMeseSel, setAnnoMeseSel] = useState<number>(new Date().getMonth() + 1);
   const [annoVista, setAnnoVista] = useState<"competenza" | "cassa">("competenza");
+  const [speseSort, setSpeseSort] = useState<{ key: "dataPagamento" | "meseCompetenza" | "importo"; dir: "asc" | "desc" }>({ key: "dataPagamento", dir: "desc" });
 
   useEffect(() => {
     if (!loading && profile && !isAuthorized) {
@@ -760,21 +761,56 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Data pag.</TableHead>
-                        <TableHead>Comp.</TableHead>
+                        <TableHead>
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 hover:text-foreground"
+                            onClick={() => setSpeseSort(s => ({ key: "dataPagamento", dir: s.key === "dataPagamento" && s.dir === "desc" ? "asc" : "desc" }))}
+                            data-testid="sort-data-pag"
+                          >
+                            Data pag. {speseSort.key === "dataPagamento" ? (speseSort.dir === "desc" ? "▼" : "▲") : "↕"}
+                          </button>
+                        </TableHead>
+                        <TableHead>
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 hover:text-foreground"
+                            onClick={() => setSpeseSort(s => ({ key: "meseCompetenza", dir: s.key === "meseCompetenza" && s.dir === "desc" ? "asc" : "desc" }))}
+                            data-testid="sort-comp"
+                          >
+                            Comp. {speseSort.key === "meseCompetenza" ? (speseSort.dir === "desc" ? "▼" : "▲") : "↕"}
+                          </button>
+                        </TableHead>
                         <TableHead>RS</TableHead>
                         <TableHead>Categoria</TableHead>
                         <TableHead>Fornitore</TableHead>
                         <TableHead>PDV</TableHead>
                         <TableHead>Descrizione</TableHead>
                         <TableHead>Metodo</TableHead>
-                        <TableHead className="text-right">Importo</TableHead>
+                        <TableHead className="text-right">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1 hover:text-foreground ml-auto"
+                            onClick={() => setSpeseSort(s => ({ key: "importo", dir: s.key === "importo" && s.dir === "desc" ? "asc" : "desc" }))}
+                            data-testid="sort-importo"
+                          >
+                            Importo {speseSort.key === "importo" ? (speseSort.dir === "desc" ? "▼" : "▲") : "↕"}
+                          </button>
+                        </TableHead>
                         <TableHead></TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {spese.map(s => {
+                      {[...spese].sort((a, b) => {
+                        const dir = speseSort.dir === "asc" ? 1 : -1;
+                        if (speseSort.key === "importo") {
+                          return (parseImporto(a.importo) - parseImporto(b.importo)) * dir;
+                        }
+                        const va = (a[speseSort.key] || "") as string;
+                        const vb = (b[speseSort.key] || "") as string;
+                        return va.localeCompare(vb) * dir;
+                      }).map(s => {
                         const cat = s.categoriaId ? catById.get(s.categoriaId) : null;
                         const forn = s.fornitoreId ? fornById.get(s.fornitoreId) : null;
                         // Fallback: se pdvCodice esiste ma non è risolvibile in
