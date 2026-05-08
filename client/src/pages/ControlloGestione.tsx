@@ -154,6 +154,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const [annoVista, setAnnoVista] = useState<"competenza" | "cassa">("competenza");
   const [speseSort, setSpeseSort] = useState<{ key: "dataPagamento" | "meseCompetenza" | "importo"; dir: "asc" | "desc" }>({ key: "dataPagamento", dir: "desc" });
   const [rsSelezionata, setRsSelezionata] = useState<string | null>(null);
+  const [pivotRaggr, setPivotRaggr] = useState<"rs" | "pdv">("rs");
 
   useEffect(() => {
     if (!loading && profile && !isAuthorized) {
@@ -376,6 +377,50 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     const totalePdv = pdvBar.reduce((s, r) => s + r.importo, 0);
     return { rsBar, pdvBar, pdvSpese, totaleRs, totalePdv };
   }, [spese, dashboardAnno, annoVista, rsSelezionata, catById, pdvByCodice]);
+
+  // === Pivot table: righe (RS o PDV) × colonne (categorie/voci di costo) ===
+  // Filtrata sull'anno selezionato + vista (competenza/cassa).
+  const pivotData = useMemo(() => {
+    const colonne = new Set<string>();
+    const righe = new Map<string, { label: string; rs: string; values: Map<string, number>; totale: number }>();
+    const colTot = new Map<string, number>();
+    let totaleGenerale = 0;
+
+    for (const s of spese) {
+      const imp = parseImporto(s.importo);
+      const mPag = (s.dataPagamento || "").slice(0, 7);
+      const mComp = s.meseCompetenza || mPag;
+      const ym = annoVista === "competenza" ? mComp : mPag;
+      const [yy] = ym.split("-").map(Number);
+      if (yy !== dashboardAnno) continue;
+
+      const cat = (s.categoriaId && catById.get(s.categoriaId)?.nome) || "— Senza categoria —";
+      colonne.add(cat);
+
+      let rowKey: string;
+      let rowLabel: string;
+      if (pivotRaggr === "rs") {
+        rowKey = s.ragioneSociale;
+        rowLabel = s.ragioneSociale;
+      } else {
+        const code = s.pdvCodice || "__nessuno__";
+        rowKey = `${s.ragioneSociale}|${code}`;
+        const pdvNome = s.pdvCodice ? (pdvByCodice.get(s.pdvCodice)?.nome || `${s.pdvCodice} (?)`) : "Costi generali";
+        rowLabel = `${pdvNome} · ${s.ragioneSociale}`;
+      }
+      const r = righe.get(rowKey) || { label: rowLabel, rs: s.ragioneSociale, values: new Map<string, number>(), totale: 0 };
+      r.values.set(cat, (r.values.get(cat) || 0) + imp);
+      r.totale += imp;
+      righe.set(rowKey, r);
+
+      colTot.set(cat, (colTot.get(cat) || 0) + imp);
+      totaleGenerale += imp;
+    }
+
+    const colonneArr = Array.from(colonne).sort((a, b) => (colTot.get(b) || 0) - (colTot.get(a) || 0));
+    const righeArr = Array.from(righe.values()).sort((a, b) => b.totale - a.totale);
+    return { colonne: colonneArr, righe: righeArr, colTot, totaleGenerale };
+  }, [spese, dashboardAnno, annoVista, pivotRaggr, catById, pdvByCodice]);
 
   const deleteSpesaMut = useMutation({
     mutationFn: (id: string) => apiJson("DELETE", `/api/cdg/spese/${id}`),
@@ -855,6 +900,83 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         </div>
                       </>
                     )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* === Pivot voci di costo × RS / PDV === */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <CardTitle className="text-base">
+                      Pivot voci di costo — anno {dashboardAnno} ({annoVista})
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Una colonna per categoria · totale per riga e per colonna · raggruppato per {pivotRaggr === "rs" ? "Ragione Sociale" : "Punto Vendita"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Raggruppa per</Label>
+                    <div className="flex rounded-md border overflow-hidden h-9" data-testid="toggle-pivot-raggr">
+                      <button
+                        type="button"
+                        onClick={() => setPivotRaggr("rs")}
+                        className={`px-3 text-xs font-medium ${pivotRaggr === "rs" ? "bg-orange-500 text-white" : "bg-background hover:bg-muted"}`}
+                        data-testid="btn-pivot-rs"
+                      >Ragione Sociale</button>
+                      <button
+                        type="button"
+                        onClick={() => setPivotRaggr("pdv")}
+                        className={`px-3 text-xs font-medium border-l ${pivotRaggr === "pdv" ? "bg-orange-500 text-white" : "bg-background hover:bg-muted"}`}
+                        data-testid="btn-pivot-pdv"
+                      >Punto Vendita</button>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {pivotData.righe.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4">Nessuna spesa nell'anno selezionato.</p>
+                ) : (
+                  <div className="rounded-md border overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="sticky left-0 bg-background z-10 min-w-[200px]">
+                            {pivotRaggr === "rs" ? "Ragione Sociale" : "Punto Vendita"}
+                          </TableHead>
+                          {pivotData.colonne.map(c => (
+                            <TableHead key={c} className="text-right whitespace-nowrap">{c}</TableHead>
+                          ))}
+                          <TableHead className="text-right font-bold whitespace-nowrap">Totale</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pivotData.righe.map((r, i) => (
+                          <TableRow key={i} data-testid={`row-pivot-${i}`}>
+                            <TableCell className="sticky left-0 bg-background z-10 font-medium text-xs">{r.label}</TableCell>
+                            {pivotData.colonne.map(c => {
+                              const v = r.values.get(c) || 0;
+                              return (
+                                <TableCell key={c} className={`text-right font-mono text-xs ${v === 0 ? "text-muted-foreground/40" : ""}`}>
+                                  {v === 0 ? "—" : fmtEur(v)}
+                                </TableCell>
+                              );
+                            })}
+                            <TableCell className="text-right font-mono font-bold text-xs">{fmtEur(r.totale)}</TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="bg-muted/50 font-bold">
+                          <TableCell className="sticky left-0 bg-muted z-10">Totale</TableCell>
+                          {pivotData.colonne.map(c => (
+                            <TableCell key={c} className="text-right font-mono text-xs">{fmtEur(pivotData.colTot.get(c) || 0)}</TableCell>
+                          ))}
+                          <TableCell className="text-right font-mono text-xs">{fmtEur(pivotData.totaleGenerale)}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
               </CardContent>
