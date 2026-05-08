@@ -151,6 +151,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const [dashboardMese, setDashboardMese] = useState<string>(currentMonthYYYYMM());
   const [dashboardAnno, setDashboardAnno] = useState<number>(new Date().getFullYear());
   const [annoMeseSel, setAnnoMeseSel] = useState<number>(new Date().getMonth() + 1);
+  const [annoVista, setAnnoVista] = useState<"competenza" | "cassa">("competenza");
 
   useEffect(() => {
     if (!loading && profile && !isAuthorized) {
@@ -318,7 +319,8 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
         perMese[cM - 1].conteggio += 1;
         totCompAnno += imp;
       }
-      if (mComp === ymTarget) {
+      const matchPie = annoVista === "competenza" ? (mComp === ymTarget) : (mPag === ymTarget);
+      if (matchPie) {
         const catNome = (s.categoriaId && catById.get(s.categoriaId)?.nome) || "— Senza categoria —";
         catTotMese.set(catNome, (catTotMese.get(catNome) || 0) + imp);
       }
@@ -328,7 +330,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
       .sort((a, b) => b.importo - a.importo);
     const totaleMeseSel = pieData.reduce((s, r) => s + r.importo, 0);
     return { perMese, pieData, totaleMeseSel, totCassaAnno, totCompAnno };
-  }, [spese, dashboardAnno, annoMeseSel, catById]);
+  }, [spese, dashboardAnno, annoMeseSel, annoVista, catById]);
 
   const deleteSpesaMut = useMutation({
     mutationFn: (id: string) => apiJson("DELETE", `/api/cdg/spese/${id}`),
@@ -583,7 +585,24 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                       Totale competenza anno: <strong>{fmtEur(dashboardAnnuale.totCompAnno)}</strong> · Totale cassa anno: <strong>{fmtEur(dashboardAnnuale.totCassaAnno)}</strong>
                     </p>
                   </div>
-                  <div className="flex items-end gap-3">
+                  <div className="flex items-end gap-3 flex-wrap">
+                    <div>
+                      <Label className="text-xs">Vista</Label>
+                      <div className="flex rounded-md border overflow-hidden h-9" data-testid="toggle-anno-vista">
+                        <button
+                          type="button"
+                          onClick={() => setAnnoVista("competenza")}
+                          className={`px-3 text-xs font-medium ${annoVista === "competenza" ? "bg-orange-500 text-white" : "bg-background hover:bg-muted"}`}
+                          data-testid="btn-vista-competenza"
+                        >Competenza</button>
+                        <button
+                          type="button"
+                          onClick={() => setAnnoVista("cassa")}
+                          className={`px-3 text-xs font-medium border-l ${annoVista === "cassa" ? "bg-blue-500 text-white" : "bg-background hover:bg-muted"}`}
+                          data-testid="btn-vista-cassa"
+                        >Cassa</button>
+                      </div>
+                    </div>
                     <div>
                       <Label className="text-xs">Anno</Label>
                       <Select value={String(dashboardAnno)} onValueChange={(v) => setDashboardAnno(Number(v))}>
@@ -612,7 +631,9 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   <div className="lg:col-span-2">
-                    <p className="text-sm font-medium mb-2">Istogramma mensile {dashboardAnno} — cassa vs competenza</p>
+                    <p className="text-sm font-medium mb-2">
+                      Istogramma mensile {dashboardAnno} — {annoVista === "competenza" ? "Competenza" : "Cassa"}
+                    </p>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={dashboardAnnuale.perMese} onClick={(e: any) => {
                         const idx = e?.activeTooltipIndex;
@@ -623,15 +644,18 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
                         <Tooltip formatter={(v: number) => fmtEur(v)} />
                         <Legend />
-                        <Bar dataKey="competenza" fill="#f97316" name="Competenza" />
-                        <Bar dataKey="cassa" fill="#3b82f6" name="Cassa" />
+                        {annoVista === "competenza" ? (
+                          <Bar dataKey="competenza" fill="#f97316" name="Competenza" />
+                        ) : (
+                          <Bar dataKey="cassa" fill="#3b82f6" name="Cassa" />
+                        )}
                       </BarChart>
                     </ResponsiveContainer>
                     <p className="text-xs text-muted-foreground mt-1">Suggerimento: clicca una barra per cambiare il mese della torta.</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium mb-2">
-                      Torta categorie — {["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"][annoMeseSel - 1]} {dashboardAnno}
+                      Torta categorie — {["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"][annoMeseSel - 1]} {dashboardAnno} ({annoVista})
                     </p>
                     {dashboardAnnuale.pieData.length === 0 ? (
                       <div className="h-[260px] flex items-center justify-center text-muted-foreground text-sm border rounded-md">
