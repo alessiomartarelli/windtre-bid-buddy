@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
+  PieChart, Pie, Cell,
 } from "recharts";
 import type {
   CdgRagioneSociale, CdgCategoria, CdgFornitore, CdgSpesa, CdgPdvManuale,
@@ -148,6 +149,8 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const [filterImportoMin, setFilterImportoMin] = useState<string>("");
   const [filterImportoMax, setFilterImportoMax] = useState<string>("");
   const [dashboardMese, setDashboardMese] = useState<string>(currentMonthYYYYMM());
+  const [dashboardAnno, setDashboardAnno] = useState<number>(new Date().getFullYear());
+  const [annoMeseSel, setAnnoMeseSel] = useState<number>(new Date().getMonth() + 1);
 
   useEffect(() => {
     if (!loading && profile && !isAuthorized) {
@@ -288,6 +291,44 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
       summaryRows,
     };
   }, [spese, dashboardMese, catById]);
+
+  // === Dashboard ANNUALE ===
+  // Spese aggregate per i 12 mesi dell'anno selezionato (cassa + competenza),
+  // più breakdown per categoria del mese selezionato all'interno dell'anno.
+  const dashboardAnnuale = useMemo(() => {
+    const meseLabels = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+    const perMese: { mese: string; meseNum: number; cassa: number; competenza: number; conteggio: number }[] =
+      Array.from({ length: 12 }, (_, i) => ({ mese: meseLabels[i], meseNum: i + 1, cassa: 0, competenza: 0, conteggio: 0 }));
+    const ymTarget = `${dashboardAnno}-${String(annoMeseSel).padStart(2, "0")}`;
+    const catTotMese = new Map<string, number>();
+    let totCassaAnno = 0;
+    let totCompAnno = 0;
+    for (const s of spese) {
+      const imp = parseImporto(s.importo);
+      const mPag = (s.dataPagamento || "").slice(0, 7);
+      const mComp = s.meseCompetenza || mPag;
+      const [pY, pM] = mPag.split("-").map(Number);
+      const [cY, cM] = mComp.split("-").map(Number);
+      if (pY === dashboardAnno && pM >= 1 && pM <= 12) {
+        perMese[pM - 1].cassa += imp;
+        totCassaAnno += imp;
+      }
+      if (cY === dashboardAnno && cM >= 1 && cM <= 12) {
+        perMese[cM - 1].competenza += imp;
+        perMese[cM - 1].conteggio += 1;
+        totCompAnno += imp;
+      }
+      if (mComp === ymTarget) {
+        const catNome = (s.categoriaId && catById.get(s.categoriaId)?.nome) || "— Senza categoria —";
+        catTotMese.set(catNome, (catTotMese.get(catNome) || 0) + imp);
+      }
+    }
+    const pieData = Array.from(catTotMese.entries())
+      .map(([categoria, importo]) => ({ categoria, importo }))
+      .sort((a, b) => b.importo - a.importo);
+    const totaleMeseSel = pieData.reduce((s, r) => s + r.importo, 0);
+    return { perMese, pieData, totaleMeseSel, totCassaAnno, totCompAnno };
+  }, [spese, dashboardAnno, annoMeseSel, catById]);
 
   const deleteSpesaMut = useMutation({
     mutationFn: (id: string) => apiJson("DELETE", `/api/cdg/spese/${id}`),
@@ -531,6 +572,119 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                 </CardContent>
               </Card>
             </div>
+
+            {/* === Dashboard ANNUALE === */}
+            <Card className="border-orange-200 dark:border-orange-900/40">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <CardTitle className="text-base">Spese annuali — anno {dashboardAnno}</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Totale competenza anno: <strong>{fmtEur(dashboardAnnuale.totCompAnno)}</strong> · Totale cassa anno: <strong>{fmtEur(dashboardAnnuale.totCassaAnno)}</strong>
+                    </p>
+                  </div>
+                  <div className="flex items-end gap-3">
+                    <div>
+                      <Label className="text-xs">Anno</Label>
+                      <Select value={String(dashboardAnno)} onValueChange={(v) => setDashboardAnno(Number(v))}>
+                        <SelectTrigger className="w-[110px]" data-testid="select-dashboard-anno"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 3 + i).map(y => (
+                            <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Mese (per torta)</Label>
+                      <Select value={String(annoMeseSel)} onValueChange={(v) => setAnnoMeseSel(Number(v))}>
+                        <SelectTrigger className="w-[140px]" data-testid="select-dashboard-mese-anno"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"].map((m, i) => (
+                            <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="lg:col-span-2">
+                    <p className="text-sm font-medium mb-2">Istogramma mensile {dashboardAnno} — cassa vs competenza</p>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={dashboardAnnuale.perMese} onClick={(e: any) => {
+                        const idx = e?.activeTooltipIndex;
+                        if (typeof idx === "number") setAnnoMeseSel(idx + 1);
+                      }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="mese" />
+                        <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
+                        <Tooltip formatter={(v: number) => fmtEur(v)} />
+                        <Legend />
+                        <Bar dataKey="competenza" fill="#f97316" name="Competenza" />
+                        <Bar dataKey="cassa" fill="#3b82f6" name="Cassa" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <p className="text-xs text-muted-foreground mt-1">Suggerimento: clicca una barra per cambiare il mese della torta.</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-2">
+                      Torta categorie — {["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"][annoMeseSel - 1]} {dashboardAnno}
+                    </p>
+                    {dashboardAnnuale.pieData.length === 0 ? (
+                      <div className="h-[260px] flex items-center justify-center text-muted-foreground text-sm border rounded-md">
+                        Nessuna spesa nel mese
+                      </div>
+                    ) : (
+                      <>
+                        <ResponsiveContainer width="100%" height={260}>
+                          <PieChart>
+                            <Pie
+                              data={dashboardAnnuale.pieData}
+                              dataKey="importo"
+                              nameKey="categoria"
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={90}
+                              innerRadius={45}
+                              label={(e: any) => {
+                                const pct = dashboardAnnuale.totaleMeseSel > 0
+                                  ? Math.round((e.importo / dashboardAnnuale.totaleMeseSel) * 100)
+                                  : 0;
+                                return pct >= 6 ? `${pct}%` : "";
+                              }}
+                              labelLine={false}
+                            >
+                              {dashboardAnnuale.pieData.map((_, i) => (
+                                <Cell key={i} fill={["#f97316", "#3b82f6", "#10b981", "#a855f7", "#ef4444", "#eab308", "#06b6d4", "#ec4899", "#84cc16", "#6366f1", "#14b8a6", "#f59e0b"][i % 12]} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(v: number) => fmtEur(v)} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <p className="text-xs text-center text-muted-foreground mt-1">
+                          Totale: <strong>{fmtEur(dashboardAnnuale.totaleMeseSel)}</strong>
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {dashboardAnnuale.pieData.length > 0 && (
+                  <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
+                    {dashboardAnnuale.pieData.map((r, i) => (
+                      <div key={r.categoria} className="flex items-center gap-2">
+                        <span className="inline-block h-3 w-3 rounded-sm" style={{ background: ["#f97316", "#3b82f6", "#10b981", "#a855f7", "#ef4444", "#eab308", "#06b6d4", "#ec4899", "#84cc16", "#6366f1", "#14b8a6", "#f59e0b"][i % 12] }} />
+                        <span className="truncate flex-1" title={r.categoria}>{r.categoria}</span>
+                        <span className="font-mono">{fmtEur(r.importo)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             <Card>
               <CardHeader><CardTitle className="text-base">Riepilogo per categoria × Ragione Sociale</CardTitle></CardHeader>
