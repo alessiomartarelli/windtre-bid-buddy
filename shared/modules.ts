@@ -16,6 +16,7 @@ export interface ModuleDef {
 export const MODULES: ModuleDef[] = [
   // === Pagine ===
   { key: "amministrazione", label: "Amministrazione", group: "pagine", description: "Prima Nota IVA, BiSuite admin" },
+  { key: "controllo_gestione", label: "Controllo di Gestione", group: "pagine", description: "Spese mensili, anagrafiche per Ragione Sociale, KPI" },
   { key: "drms_commissioning", label: "DRMS Commissioning", group: "pagine", description: "Dashboard estratto conto provvigionale" },
   { key: "gara_dashboard", label: "Dashboard Gara", group: "pagine", description: "Dashboard gara reale" },
   { key: "gara_configurazione", label: "Configurazione Gara", group: "pagine" },

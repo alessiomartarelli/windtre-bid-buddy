@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
+import { registerCdgRoutes } from "./cdgRoutes";
 
 function toItalianYMD(input: string | undefined): string | undefined | null {
   if (input === undefined || input === null || input === "") return undefined;
@@ -2247,6 +2248,9 @@ export async function registerRoutes(
       res.status(500).json({ error: "Errore nel riepilogo articoli", details: msg });
     }
   });
+
+  // === Controllo di Gestione ===
+  registerCdgRoutes(app, isAuthenticated, requireModule);
 
   return httpServer;
 }

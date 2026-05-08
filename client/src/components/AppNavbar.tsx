@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield, Users,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
-  ChevronDown, Zap, BookOpen, BarChart3,
+  ChevronDown, Zap, BookOpen, BarChart3, Wallet,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -62,6 +62,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
     ...(isSuperAdmin ? [{ path: '/super-admin', label: 'Super Admin', icon: Shield }] : []),
     ...(isAdminOrSuper ? [{ path: '/admin', label: 'Gestione Organizzazione', icon: Building2 }] : []),
     ...(isAdminOrSuper && isEnabled('amministrazione') ? [{ path: '/amministrazione', label: 'Amministrazione', icon: BookOpen }] : []),
+    ...(isAdminOrSuper && isEnabled('controllo_gestione') ? [{ path: '/controllo-gestione', label: 'Controllo di Gestione', icon: Wallet }] : []),
     ...(isAdminOrSuper && isEnabled('drms_commissioning') ? [{ path: '/drms-commissioning', label: 'DRMS Commissioning', icon: BarChart3 }] : []),
   ];
 

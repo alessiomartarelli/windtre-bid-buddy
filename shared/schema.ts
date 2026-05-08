@@ -1,4 +1,4 @@
-import { pgTable, text, serial, varchar, timestamp, jsonb, index, boolean, integer, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, varchar, timestamp, jsonb, index, boolean, integer, uniqueIndex, numeric, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations, sql } from "drizzle-orm";
@@ -135,6 +135,85 @@ export const drmsUploads = pgTable("drms_uploads", {
   index("IDX_drms_uploads_org_month_year").on(table.organizationId, table.month, table.year),
 ]);
 
+// === Controllo di Gestione ===
+// Anagrafica Ragioni Sociali (per organizzazione). Le altre anagrafiche
+// (categorie, fornitori, PDV) sono scoped per (organizationId, ragioneSociale).
+export const cdgRagioniSociali = pgTable("cdg_ragioni_sociali", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  nome: varchar("nome").notNull(),
+  partitaIva: varchar("partita_iva"),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [
+  index("IDX_cdg_rs_org").on(t.organizationId),
+  uniqueIndex("UQ_cdg_rs_org_nome").on(t.organizationId, t.nome),
+]);
+
+export const cdgCategorie = pgTable("cdg_categorie", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  ragioneSociale: varchar("ragione_sociale").notNull(),
+  nome: varchar("nome").notNull(),
+  colore: varchar("colore"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [
+  index("IDX_cdg_cat_org_rs").on(t.organizationId, t.ragioneSociale),
+  uniqueIndex("UQ_cdg_cat_org_rs_nome").on(t.organizationId, t.ragioneSociale, t.nome),
+]);
+
+export const cdgFornitori = pgTable("cdg_fornitori", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  ragioneSociale: varchar("ragione_sociale").notNull(),
+  nome: varchar("nome").notNull(),
+  partitaIva: varchar("partita_iva"),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [
+  index("IDX_cdg_forn_org_rs").on(t.organizationId, t.ragioneSociale),
+  uniqueIndex("UQ_cdg_forn_org_rs_nome").on(t.organizationId, t.ragioneSociale, t.nome),
+]);
+
+export const cdgPdv = pgTable("cdg_pdv", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  ragioneSociale: varchar("ragione_sociale").notNull(),
+  nome: varchar("nome").notNull(),
+  codice: varchar("codice"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => [
+  index("IDX_cdg_pdv_org_rs").on(t.organizationId, t.ragioneSociale),
+  uniqueIndex("UQ_cdg_pdv_org_rs_nome").on(t.organizationId, t.ragioneSociale, t.nome),
+]);
+
+// Spese: doppia data (pagamento per cassa, competenza per accrual).
+// meseCompetenza è "YYYY-MM" per facilitare aggregazioni mensili.
+export const cdgSpese = pgTable("cdg_spese", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  ragioneSociale: varchar("ragione_sociale").notNull(),
+  categoriaId: varchar("categoria_id").references(() => cdgCategorie.id, { onDelete: 'set null' }),
+  fornitoreId: varchar("fornitore_id").references(() => cdgFornitori.id, { onDelete: 'set null' }),
+  pdvId: varchar("pdv_id").references(() => cdgPdv.id, { onDelete: 'set null' }),
+  descrizione: varchar("descrizione").notNull(),
+  importo: numeric("importo", { precision: 14, scale: 2 }).notNull(),
+  dataPagamento: date("data_pagamento").notNull(),
+  meseCompetenza: varchar("mese_competenza", { length: 7 }).notNull(),
+  metodoPagamento: varchar("metodo_pagamento"),
+  allegatoPath: varchar("allegato_path"),
+  allegatoNome: varchar("allegato_nome"),
+  allegatoMime: varchar("allegato_mime"),
+  note: text("note"),
+  createdBy: varchar("created_by").references(() => profiles.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => [
+  index("IDX_cdg_spese_org_rs").on(t.organizationId, t.ragioneSociale),
+  index("IDX_cdg_spese_competenza").on(t.organizationId, t.meseCompetenza),
+  index("IDX_cdg_spese_pagamento").on(t.organizationId, t.dataPagamento),
+]);
+
 // Password reset tokens
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -194,3 +273,30 @@ export type DrmsUpload = typeof drmsUploads.$inferSelect;
 export type InsertDrmsUpload = typeof drmsUploads.$inferInsert;
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+
+// === Controllo di Gestione types ===
+export type CdgRagioneSociale = typeof cdgRagioniSociali.$inferSelect;
+export type InsertCdgRagioneSociale = typeof cdgRagioniSociali.$inferInsert;
+export type CdgCategoria = typeof cdgCategorie.$inferSelect;
+export type InsertCdgCategoria = typeof cdgCategorie.$inferInsert;
+export type CdgFornitore = typeof cdgFornitori.$inferSelect;
+export type InsertCdgFornitore = typeof cdgFornitori.$inferInsert;
+export type CdgPdv = typeof cdgPdv.$inferSelect;
+export type InsertCdgPdv = typeof cdgPdv.$inferInsert;
+export type CdgSpesa = typeof cdgSpese.$inferSelect;
+export type InsertCdgSpesa = typeof cdgSpese.$inferInsert;
+
+export const insertCdgRagioneSocialeSchema = createInsertSchema(cdgRagioniSociali).omit({ id: true, createdAt: true, organizationId: true });
+export const insertCdgCategoriaSchema = createInsertSchema(cdgCategorie).omit({ id: true, createdAt: true, organizationId: true });
+export const insertCdgFornitoreSchema = createInsertSchema(cdgFornitori).omit({ id: true, createdAt: true, organizationId: true });
+export const insertCdgPdvSchema = createInsertSchema(cdgPdv).omit({ id: true, createdAt: true, organizationId: true });
+export const insertCdgSpesaSchema = createInsertSchema(cdgSpese).omit({
+  id: true, createdAt: true, updatedAt: true, organizationId: true, createdBy: true,
+  allegatoPath: true, allegatoNome: true, allegatoMime: true,
+}).extend({
+  importo: z.union([z.string(), z.number()]).transform((v) => typeof v === 'number' ? v.toString() : v),
+  meseCompetenza: z.string().regex(/^\d{4}-\d{2}$/, "Formato YYYY-MM richiesto"),
+  allegatoBase64: z.string().optional(),
+  allegatoNome: z.string().optional(),
+  allegatoMime: z.string().optional(),
+});

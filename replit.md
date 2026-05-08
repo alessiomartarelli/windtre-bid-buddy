@@ -81,6 +81,28 @@ confirm on conflict). Logic:
   `overwrite=true`), DELETE `/api/drms/:id`. All gated by `requireAdminRole`
   with org-ownership check.
 
+### Controllo di Gestione
+Sezione admin (`/controllo-gestione`) per tracciare spese mensili con doppia data
+(pagamento per cassa + competenza per accrual). Modulo `controllo_gestione` in
+`shared/modules.ts`, gated da `requireModule` + ruolo `admin`/`super_admin`.
+- Tabelle DB: `cdg_ragioni_sociali` (per organizzazione), `cdg_categorie`,
+  `cdg_fornitori`, `cdg_pdv` (scoped per `organizationId` + `ragioneSociale` come
+  stringa), `cdg_spese` (FK opzionali a categoria/fornitore/PDV con onDelete
+  set null; `importo` numeric(14,2); `dataPagamento` date; `meseCompetenza`
+  varchar(7) "YYYY-MM").
+- API: `/api/cdg/{ragioni-sociali|categorie|fornitori|pdv|spese}` CRUD + GET
+  `/api/cdg/spese/:id/allegato` (download). Tutte gated `controllo_gestione` +
+  admin/super_admin con scoping su `organizationId`.
+- Allegati: upload base64 in JSON → disk in `uploads/cdg/<orgId>/` (env
+  override `CDG_UPLOAD_DIR`), max 8MB, sanitized filename + path-traversal
+  check sul download. **Produzione**: settare
+  `CDG_UPLOAD_DIR=/var/www/incentive-w3/uploads/cdg` per persistenza tra deploy.
+- Frontend (`client/src/pages/ControlloGestione.tsx`): 3 tab Dashboard
+  (KPI totale + mese corrente + categorie, PieChart per categoria, BarChart
+  cassa vs competenza per mese), Spese (tabella + dialog form con allegato),
+  Anagrafiche (RS card + sub-tab RS-scoped categorie/fornitori/PDV via
+  `SimpleAnagraficaCrud` generico).
+
 ### Moduli per organizzazione
 Ogni `organizations.enabledModules` (jsonb) è un `Record<ModuleKey, boolean>`.
 Chiave assente o `true` = modulo abilitato; `false` = disabilitato. `super_admin`
