@@ -82,26 +82,45 @@ confirm on conflict). Logic:
   with org-ownership check.
 
 ### Controllo di Gestione
-Sezione admin (`/controllo-gestione`) per tracciare spese mensili con doppia data
-(pagamento per cassa + competenza per accrual). Modulo `controllo_gestione` in
-`shared/modules.ts`, gated da `requireModule` + ruolo `admin`/`super_admin`.
-- Tabelle DB: `cdg_ragioni_sociali` (per organizzazione), `cdg_categorie`,
-  `cdg_fornitori`, `cdg_pdv` (scoped per `organizationId` + `ragioneSociale` come
-  stringa), `cdg_spese` (FK opzionali a categoria/fornitore/PDV con onDelete
-  set null; `importo` numeric(14,2); `dataPagamento` date; `meseCompetenza`
-  varchar(7) "YYYY-MM").
-- API: `/api/cdg/{ragioni-sociali|categorie|fornitori|pdv|spese}` CRUD + GET
-  `/api/cdg/spese/:id/allegato` (download). Tutte gated `controllo_gestione` +
-  admin/super_admin con scoping su `organizationId`.
+Sezione admin per tracciare spese mensili con doppia data (pagamento per cassa
++ competenza per accrual). Modulo `controllo_gestione` in `shared/modules.ts`,
+gated da `requireModule` + ruolo `admin`/`super_admin`. **Accesso**: tab
+"Controllo di Gestione" dentro Amministrazione (`/amministrazione#controllo`).
+La vecchia rotta top-level `/controllo-gestione` redirect al tab.
+`ControlloGestione.tsx` accetta una prop `embedded` che salta AppNavbar/header
+container quando renderizzata dentro Amministrazione.
+- Tabelle DB: `cdg_ragioni_sociali` (per organizzazione, RS **manuali**),
+  `cdg_categorie`, `cdg_fornitori`, `cdg_pdv` (scoped per `organizationId` +
+  `ragioneSociale` come stringa), `cdg_spese` (FK opzionali a
+  categoria/fornitore/PDV con onDelete set null; `importo` numeric(14,2) =
+  totale per back-compat; `imponibile` + `aliquotaIva` + `iva` numeric nullable
+  per la nuova logica IVA; `dataPagamento` date; `meseCompetenza` varchar(7)
+  "YYYY-MM").
+- **RS unificate**: `GET /api/cdg/ragioni-sociali/unified` ritorna
+  `[{nome, origine: "pdv"|"manuale", id?, partitaIva?, note?}]` mergiando
+  `organization_config.puntiVendita.ragioneSociale` (read-only, badge "da PDV"
+  in UI) e RS manuali da `cdg_ragioni_sociali` (manuali prevalgono per nome).
+  La gestione PDV resta in Amministrazione organizzazione.
+- **Spese — IVA**: il dialog richiede Imponibile (€) + Aliquota IVA (%, preset
+  0/4/5/10/22 + "Altro" custom). IVA = round(imponibile × aliquota / 100, 2 dec
+  in centesimi) e Totale = imponibile + IVA sono calcolati e mostrati read-only;
+  il backend (`computeImporti` in `server/cdgRoutes.ts`) ricalcola
+  autoritariamente lato server e persiste imponibile/aliquotaIva/iva +
+  `importo = totale` (back-compat). Backfill one-shot al register imposta
+  imponibile=importo, aliquotaIva=0, iva=0 per le spese pre-esistenti.
+- API: `/api/cdg/{ragioni-sociali|ragioni-sociali/unified|categorie|fornitori|pdv|spese}`
+  CRUD + GET `/api/cdg/spese/:id/allegato` (download). Tutte gated
+  `controllo_gestione` + admin/super_admin con scoping su `organizationId`.
 - Allegati: upload base64 in JSON → disk in `uploads/cdg/<orgId>/` (env
   override `CDG_UPLOAD_DIR`), max 8MB, sanitized filename + path-traversal
   check sul download. **Produzione**: settare
   `CDG_UPLOAD_DIR=/var/www/incentive-w3/uploads/cdg` per persistenza tra deploy.
 - Frontend (`client/src/pages/ControlloGestione.tsx`): 3 tab Dashboard
   (KPI totale + mese corrente + categorie, PieChart per categoria, BarChart
-  cassa vs competenza per mese), Spese (tabella + dialog form con allegato),
-  Anagrafiche (RS card + sub-tab RS-scoped categorie/fornitori/PDV via
-  `SimpleAnagraficaCrud` generico).
+  cassa vs competenza per mese), Spese (tabella + dialog form con allegato e
+  blocco IVA), Anagrafiche (RS card unificata con badge "da PDV" e sub-tab
+  RS-scoped categorie/fornitori/PDV via `SimpleAnagraficaCrud` generico).
+  Export Excel include colonne Imponibile / Aliquota IVA (%) / IVA / Totale.
 
 ### Moduli per organizzazione
 Ogni `organizations.enabledModules` (jsonb) è un `Record<ModuleKey, boolean>`.

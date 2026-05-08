@@ -34,12 +34,14 @@ import { FilterBar, FilterField } from "@/components/ui/filter-bar";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
 import {
   BookOpen, Receipt, Loader2, Download, Search, AlertTriangle, HelpCircle, FileText,
-  Calendar, CalendarDays, Store, Building2, RefreshCw,
+  Calendar, CalendarDays, Store, Building2, RefreshCw, Wallet,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import ControlloGestione from "@/pages/ControlloGestione";
+import { useEnabledModules } from "@/hooks/useEnabledModules";
 
-type TabKey = "contabile" | "iva";
-const TAB_KEYS: TabKey[] = ["contabile", "iva"];
+type TabKey = "contabile" | "iva" | "controllo";
+const TAB_KEYS: TabKey[] = ["contabile", "iva", "controllo"];
 function isTabKey(v: string): v is TabKey {
   return (TAB_KEYS as string[]).includes(v);
 }
@@ -298,7 +300,26 @@ export default function Amministrazione() {
   const [filterPdv, setFilterPdv] = useState<string>("all");
   const [filterRs, setFilterRs] = useState<string>("all");
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<TabKey>("contabile");
+  const [tab, setTab] = useState<TabKey>(() => {
+    if (typeof window !== "undefined") {
+      const h = window.location.hash.replace(/^#/, "");
+      if (isTabKey(h)) return h as TabKey;
+    }
+    return "contabile";
+  });
+  const { isEnabled: isModEnabled } = useEnabledModules();
+  const cdgEnabled = isModEnabled('controllo_gestione');
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const newHash = tab === "contabile" ? "" : `#${tab}`;
+    if (window.location.hash !== newHash) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search + newHash);
+    }
+  }, [tab]);
+  // Se l'utente atterra su #controllo ma il modulo è disabilitato, ripiega su contabile.
+  useEffect(() => {
+    if (tab === "controllo" && !cdgEnabled) setTab("contabile");
+  }, [tab, cdgEnabled]);
   const [escludiZero, setEscludiZero] = useState<boolean>(false);
   const [ivaCategoryFilter, setIvaCategoryFilter] = useState<IvaCategoria | "all">("all");
   const [selectedRs, setSelectedRs] = useState<string>("all");
@@ -1042,6 +1063,7 @@ export default function Amministrazione() {
           </div>
         </div>
 
+        {!(tab === "controllo" && cdgEnabled) && (
         <FilterBar
           activeCount={
             (filterPdv !== "all" ? 1 : 0) +
@@ -1104,8 +1126,20 @@ export default function Amministrazione() {
             </div>
           </FilterField>
         </FilterBar>
+        )}
 
-        {isLoading ? (
+        {tab === "controllo" && cdgEnabled ? (
+          <Tabs value={tab} onValueChange={(v) => { if (isTabKey(v)) setTab(v); }} className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="contabile" data-testid="tab-contabile-top"><BookOpen className="h-4 w-4 mr-2" />Prima Nota Contabile</TabsTrigger>
+              <TabsTrigger value="iva" data-testid="tab-iva-top"><Receipt className="h-4 w-4 mr-2" />Prima Nota IVA</TabsTrigger>
+              <TabsTrigger value="controllo" data-testid="tab-controllo-top"><Wallet className="h-4 w-4 mr-2" />Controllo di Gestione</TabsTrigger>
+            </TabsList>
+            <TabsContent value="controllo" className="space-y-4">
+              <ControlloGestione embedded />
+            </TabsContent>
+          </Tabs>
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
@@ -1126,6 +1160,12 @@ export default function Amministrazione() {
                   <Receipt className="h-4 w-4 mr-2" />
                   Prima Nota IVA
                 </TabsTrigger>
+                {cdgEnabled && (
+                  <TabsTrigger value="controllo" data-testid="tab-controllo">
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Controllo di Gestione
+                  </TabsTrigger>
+                )}
               </TabsList>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button

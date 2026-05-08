@@ -197,6 +197,12 @@ export const cdgSpese = pgTable("cdg_spese", {
   fornitoreId: varchar("fornitore_id").references(() => cdgFornitori.id, { onDelete: 'set null' }),
   pdvId: varchar("pdv_id").references(() => cdgPdv.id, { onDelete: 'set null' }),
   descrizione: varchar("descrizione").notNull(),
+  // Imponibile (€) e aliquota IVA (% — 0/4/5/10/22 o custom). `iva` è derivata
+  // server-side da imponibile*aliquota/100. `importo` resta = imponibile+iva
+  // (totale fattura) per backward compat con dashboard, filtri e export.
+  imponibile: numeric("imponibile", { precision: 14, scale: 2 }),
+  aliquotaIva: numeric("aliquota_iva", { precision: 5, scale: 2 }),
+  iva: numeric("iva", { precision: 14, scale: 2 }),
   importo: numeric("importo", { precision: 14, scale: 2 }).notNull(),
   dataPagamento: date("data_pagamento").notNull(),
   meseCompetenza: varchar("mese_competenza", { length: 7 }).notNull(),
@@ -290,11 +296,19 @@ export const insertCdgRagioneSocialeSchema = createInsertSchema(cdgRagioniSocial
 export const insertCdgCategoriaSchema = createInsertSchema(cdgCategorie).omit({ id: true, createdAt: true, organizationId: true });
 export const insertCdgFornitoreSchema = createInsertSchema(cdgFornitori).omit({ id: true, createdAt: true, organizationId: true });
 export const insertCdgPdvSchema = createInsertSchema(cdgPdv).omit({ id: true, createdAt: true, organizationId: true });
+// Importo, imponibile e iva sono accettati come string|number (front invia
+// string formattata). Server ricalcola sempre iva e importo da imponibile +
+// aliquotaIva quando entrambi sono presenti, per garantire coerenza.
+const numericString = z.union([z.string(), z.number()])
+  .transform((v) => typeof v === 'number' ? v.toString() : v);
 export const insertCdgSpesaSchema = createInsertSchema(cdgSpese).omit({
   id: true, createdAt: true, updatedAt: true, organizationId: true, createdBy: true,
   allegatoPath: true, allegatoNome: true, allegatoMime: true,
 }).extend({
-  importo: z.union([z.string(), z.number()]).transform((v) => typeof v === 'number' ? v.toString() : v),
+  importo: numericString.optional(),
+  imponibile: numericString.optional().nullable(),
+  aliquotaIva: numericString.optional().nullable(),
+  iva: numericString.optional().nullable(),
   meseCompetenza: z.string().regex(/^\d{4}-\d{2}$/, "Formato YYYY-MM richiesto"),
   allegatoBase64: z.string().optional(),
   allegatoNome: z.string().optional(),

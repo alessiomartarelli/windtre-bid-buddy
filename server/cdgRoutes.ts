@@ -2,6 +2,8 @@ import type { Express, RequestHandler } from "express";
 import path from "path";
 import fs from "fs/promises";
 import { z, type ZodType } from "zod";
+import { sql } from "drizzle-orm";
+import { db } from "./db";
 import { storage } from "./storage";
 import { cdgStorage } from "./cdgStorage";
 import {
@@ -95,8 +97,41 @@ interface AnagraficaCrud {
   del: (id: string, orgId: string) => Promise<void>;
 }
 
+// Calcolo coerente di iva e totale (importo) da imponibile + aliquota.
+// Lavora in centesimi per evitare errori di floating point e arrotonda al
+// centesimo. Restituisce stringhe pronte per le colonne numeric.
+function computeImporti(imponibileStr: string, aliquotaStr: string): { imponibile: string; aliquotaIva: string; iva: string; importo: string } {
+  const imp = Number.parseFloat(String(imponibileStr).replace(",", "."));
+  const aliq = Number.parseFloat(String(aliquotaStr).replace(",", "."));
+  if (!Number.isFinite(imp) || imp < 0) throw new Error("Imponibile non valido");
+  if (!Number.isFinite(aliq) || aliq < 0 || aliq > 100) throw new Error("Aliquota IVA non valida");
+  const impCent = Math.round(imp * 100);
+  const ivaCent = Math.round((impCent * aliq) / 100);
+  const totCent = impCent + ivaCent;
+  const fmt = (c: number) => (c / 100).toFixed(2);
+  return { imponibile: fmt(impCent), aliquotaIva: aliq.toFixed(2), iva: fmt(ivaCent), importo: fmt(totCent) };
+}
+
+// Back-fill una tantum: per spese pre-revisione (importo presente, imponibile NULL)
+// imposta imponibile=importo, aliquotaIva=0, iva=0. Idempotente (WHERE imponibile IS NULL).
+let cdgBackfillDone = false;
+async function backfillCdgSpeseImponibile(): Promise<void> {
+  if (cdgBackfillDone) return;
+  cdgBackfillDone = true;
+  try {
+    await db.execute(sql`
+      UPDATE cdg_spese
+         SET imponibile = importo, aliquota_iva = 0, iva = 0
+       WHERE imponibile IS NULL
+    `);
+  } catch (e) {
+    console.error("[cdg] backfill imponibile failed:", e);
+  }
+}
+
 export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler, requireModule: (k: string) => RequestHandler) {
   void ensureUploadDir().catch(() => { /* will retry per-write */ });
+  void backfillCdgSpeseImponibile();
 
   const requireOrgAdmin = async (req: { session: { userId: string } }, res: { status: (c: number) => { json: (d: unknown) => void } }): Promise<Profile | null> => {
     const profile = await storage.getProfile(req.session.userId);
@@ -118,6 +153,35 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
     res.json(await cdgStorage.listRagioniSociali(profile.organizationId!));
+  });
+
+  // Lista RS unificata: PDV (da organization_config.puntiVendita, read-only)
+  // + manuali (CRUD su cdg_ragioni_sociali). Le manuali con stesso nome di
+  // una PDV mantengono origine "manuale" (sono editabili dall'utente).
+  app.get("/api/cdg/ragioni-sociali/unified", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const manuali = await cdgStorage.listRagioniSociali(orgId);
+    const cfg = await storage.getOrgConfig(orgId);
+    const pdvList = ((cfg?.config as Record<string, unknown> | null)?.puntiVendita || []) as Array<{ ragioneSociale?: unknown }>;
+    const pdvNames = new Set<string>();
+    for (const p of pdvList) {
+      const nome = String(p?.ragioneSociale || "").trim();
+      if (nome) pdvNames.add(nome);
+    }
+    const manualiByNome = new Map(manuali.map(r => [r.nome, r] as const));
+    const out: Array<{ nome: string; origine: "pdv" | "manuale"; id?: string; partitaIva?: string | null; note?: string | null }> = [];
+    // Aggiungi manuali (anche se il nome esiste tra i PDV: prevale "manuale")
+    for (const r of manuali) {
+      out.push({ nome: r.nome, origine: "manuale", id: r.id, partitaIva: r.partitaIva, note: r.note });
+    }
+    // Aggiungi PDV non già presenti come manuali
+    for (const nome of Array.from(pdvNames).sort((a, b) => a.localeCompare(b, "it"))) {
+      if (!manualiByNome.has(nome)) out.push({ nome, origine: "pdv" });
+    }
+    out.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+    res.json(out);
   });
   app.post("/api/cdg/ragioni-sociali", ...gate, async (req: any, res) => {
     const profile = await requireOrgAdmin(req, res);
@@ -271,6 +335,17 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const { allegatoBase64, allegatoNome, allegatoMime, ...rest } = parsed.data;
     const fkErr = await validateSpesaFks(profile.organizationId!, rest.ragioneSociale, rest.categoriaId, rest.fornitoreId, rest.pdvId);
     if (fkErr) return res.status(400).json({ error: fkErr });
+    // Calcolo coerente importo/iva da imponibile + aliquota.
+    if (rest.imponibile === undefined || rest.imponibile === null || rest.aliquotaIva === undefined || rest.aliquotaIva === null) {
+      return res.status(400).json({ error: "Imponibile e aliquota IVA sono obbligatori" });
+    }
+    try {
+      const c = computeImporti(String(rest.imponibile), String(rest.aliquotaIva));
+      rest.imponibile = c.imponibile; rest.aliquotaIva = c.aliquotaIva;
+      rest.iva = c.iva; rest.importo = c.importo;
+    } catch (e) {
+      return res.status(400).json({ error: e instanceof Error ? e.message : "Calcolo IVA non valido" });
+    }
     let allegatoPath: string | null = null;
     let safeMime: string | null = null;
     if (allegatoBase64 && allegatoNome) {
@@ -284,6 +359,7 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     }
     const r = await cdgStorage.createSpesa({
       ...rest,
+      importo: rest.importo as string,
       organizationId: profile.organizationId!,
       createdBy: profile.id,
       allegatoPath,
@@ -308,6 +384,21 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const targetPdv = rest.pdvId !== undefined ? rest.pdvId : existing.pdvId;
     const fkErr = await validateSpesaFks(profile.organizationId!, targetRs, targetCat, targetForn, targetPdv);
     if (fkErr) return res.status(400).json({ error: fkErr });
+
+    // Se imponibile o aliquota cambiano, ricalcola coerentemente.
+    const hasImpUpd = rest.imponibile !== undefined && rest.imponibile !== null;
+    const hasAliqUpd = rest.aliquotaIva !== undefined && rest.aliquotaIva !== null;
+    if (hasImpUpd || hasAliqUpd) {
+      const imp = hasImpUpd ? String(rest.imponibile) : String(existing.imponibile ?? existing.importo ?? "0");
+      const aliq = hasAliqUpd ? String(rest.aliquotaIva) : String(existing.aliquotaIva ?? "0");
+      try {
+        const c = computeImporti(imp, aliq);
+        rest.imponibile = c.imponibile; rest.aliquotaIva = c.aliquotaIva;
+        rest.iva = c.iva; rest.importo = c.importo;
+      } catch (e) {
+        return res.status(400).json({ error: e instanceof Error ? e.message : "Calcolo IVA non valido" });
+      }
+    }
 
     const updates: Record<string, unknown> = { ...rest };
     if (allegatoBase64 && allegatoNome) {

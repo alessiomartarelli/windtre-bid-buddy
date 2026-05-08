@@ -108,7 +108,15 @@ async function apiJson<T = unknown>(method: string, url: string, body?: unknown)
 
 type TabKey = "dashboard" | "spese" | "anagrafiche";
 
-export default function ControlloGestione() {
+type UnifiedRagioneSociale = {
+  nome: string;
+  origine: "pdv" | "manuale";
+  id?: string;
+  partitaIva?: string | null;
+  note?: string | null;
+};
+
+export default function ControlloGestione({ embedded = false }: { embedded?: boolean } = {}) {
   const { profile, loading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -135,8 +143,8 @@ export default function ControlloGestione() {
     }
   }, [loading, profile, isAuthorized, toast, setLocation]);
 
-  const ragioniSocialiQ = useQuery<CdgRagioneSociale[]>({
-    queryKey: ["/api/cdg/ragioni-sociali"],
+  const ragioniSocialiQ = useQuery<UnifiedRagioneSociale[]>({
+    queryKey: ["/api/cdg/ragioni-sociali/unified"],
     enabled: !!orgId && isAuthorized,
   });
   const ragioniSociali = ragioniSocialiQ.data || [];
@@ -276,19 +284,28 @@ export default function ControlloGestione() {
 
   const exportXlsx = () => {
     const wb = XLSX.utils.book_new();
-    const rows = spese.map(s => ({
-      "Data Pagamento": fmtDateIt(s.dataPagamento),
-      "Mese Competenza": s.meseCompetenza,
-      "Ragione Sociale": s.ragioneSociale,
-      "Categoria": (s.categoriaId && catById.get(s.categoriaId)?.nome) || "",
-      "Fornitore": (s.fornitoreId && fornById.get(s.fornitoreId)?.nome) || "",
-      "PDV": (s.pdvId && pdvById.get(s.pdvId)?.nome) || "",
-      "Descrizione": s.descrizione,
-      "Metodo Pagamento": s.metodoPagamento || "",
-      "Importo": parseImporto(s.importo),
-      "Note": s.note || "",
-      "Allegato": s.allegatoNome || "",
-    }));
+    const rows = spese.map(s => {
+      const totale = parseImporto(s.importo);
+      const imponibile = s.imponibile != null ? parseFloat(s.imponibile as unknown as string) : totale;
+      const aliquota = s.aliquotaIva != null ? parseFloat(s.aliquotaIva as unknown as string) : 0;
+      const iva = s.iva != null ? parseFloat(s.iva as unknown as string) : 0;
+      return {
+        "Data Pagamento": fmtDateIt(s.dataPagamento),
+        "Mese Competenza": s.meseCompetenza,
+        "Ragione Sociale": s.ragioneSociale,
+        "Categoria": (s.categoriaId && catById.get(s.categoriaId)?.nome) || "",
+        "Fornitore": (s.fornitoreId && fornById.get(s.fornitoreId)?.nome) || "",
+        "PDV": (s.pdvId && pdvById.get(s.pdvId)?.nome) || "",
+        "Descrizione": s.descrizione,
+        "Metodo Pagamento": s.metodoPagamento || "",
+        "Imponibile": imponibile,
+        "Aliquota IVA (%)": aliquota,
+        "IVA": iva,
+        "Totale": totale,
+        "Note": s.note || "",
+        "Allegato": s.allegatoNome || "",
+      };
+    });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Spese");
 
     const summary = dashboard.summaryRows.map(r => ({
@@ -309,27 +326,27 @@ export default function ControlloGestione() {
 
   if (loading || !isAuthorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className={embedded ? "flex items-center justify-center py-12" : "min-h-screen flex items-center justify-center"}>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-background">
-      <AppNavbar title="Incentive W3" />
-      <div className="container mx-auto px-3 sm:px-6 py-6 space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-sm">
-              <Wallet className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">Controllo di Gestione</h1>
-              <p className="text-sm text-muted-foreground">Spese mensili (cassa + competenza), anagrafiche per Ragione Sociale</p>
+  const inner = (
+    <>
+        {!embedded && (
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-sm">
+                <Wallet className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold tracking-tight">Controllo di Gestione</h1>
+                <p className="text-sm text-muted-foreground">Spese mensili (cassa + competenza), anagrafiche per Ragione Sociale</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <Card>
           <CardContent className="pt-4">
@@ -340,7 +357,7 @@ export default function ControlloGestione() {
                   <SelectTrigger data-testid="select-filter-rs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tutte</SelectItem>
-                    {ragioniSociali.map(rs => <SelectItem key={rs.id} value={rs.nome}>{rs.nome}</SelectItem>)}
+                    {ragioniSociali.map(rs => <SelectItem key={`${rs.origine}-${rs.nome}`} value={rs.nome}>{rs.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -624,7 +641,6 @@ export default function ControlloGestione() {
             />
           </TabsContent>
         </Tabs>
-      </div>
 
       {spesaDialog.open && (
         <SpesaDialog
@@ -637,6 +653,19 @@ export default function ControlloGestione() {
           pdvList={pdvList}
         />
       )}
+    </>
+  );
+
+  if (embedded) {
+    return <div className="space-y-6">{inner}</div>;
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <AppNavbar title="Incentive W3" />
+      <div className="container mx-auto px-3 sm:px-6 py-6 space-y-6">
+        {inner}
+      </div>
     </div>
   );
 }
@@ -648,7 +677,7 @@ function SpesaDialog({
   open: boolean;
   onClose: () => void;
   editing?: CdgSpesa;
-  ragioniSociali: CdgRagioneSociale[];
+  ragioniSociali: UnifiedRagioneSociale[];
   categorie: CdgCategoria[];
   fornitori: CdgFornitore[];
   pdvList: CdgPdv[];
@@ -661,7 +690,20 @@ function SpesaDialog({
   const [fornitoreId, setFornitoreId] = useState<string>(editing?.fornitoreId || "");
   const [pdvId, setPdvId] = useState<string>(editing?.pdvId || "");
   const [descrizione, setDescrizione] = useState<string>(editing?.descrizione || "");
-  const [importo, setImporto] = useState<string>(editing ? String(editing.importo) : "");
+  const initialImponibile = editing?.imponibile != null
+    ? String(editing.imponibile)
+    : (editing ? String(editing.importo) : "");
+  const initialAliquota = editing?.aliquotaIva != null
+    ? String(parseFloat(editing.aliquotaIva as unknown as string))
+    : "0";
+  const ALIQUOTA_PRESETS = ["0", "4", "5", "10", "22"];
+  const [imponibile, setImponibile] = useState<string>(initialImponibile);
+  const [aliquotaSel, setAliquotaSel] = useState<string>(
+    ALIQUOTA_PRESETS.includes(initialAliquota) ? initialAliquota : "custom"
+  );
+  const [aliquotaCustom, setAliquotaCustom] = useState<string>(
+    ALIQUOTA_PRESETS.includes(initialAliquota) ? "" : initialAliquota
+  );
   const [dataPagamento, setDataPagamento] = useState<string>(editing?.dataPagamento || todayYMD());
   const [meseCompetenza, setMeseCompetenza] = useState<string>(editing?.meseCompetenza || currentMonthYYYYMM());
   const [metodoPagamento, setMetodoPagamento] = useState<string>(editing?.metodoPagamento || "");
@@ -704,11 +746,20 @@ function SpesaDialog({
     }
   };
 
+  const aliquotaNum = aliquotaSel === "custom"
+    ? parseFloat((aliquotaCustom || "").replace(",", "."))
+    : parseFloat(aliquotaSel);
+  const imponibileNum = parseFloat((imponibile || "").replace(",", "."));
+  const ivaCalc = (isFinite(imponibileNum) && isFinite(aliquotaNum))
+    ? Math.round(imponibileNum * aliquotaNum) / 100
+    : 0;
+  const totaleCalc = (isFinite(imponibileNum) ? imponibileNum : 0) + ivaCalc;
+
   const handleSubmit = async () => {
     if (!rs) { toast({ title: "Ragione Sociale obbligatoria", variant: "destructive" }); return; }
     if (!descrizione.trim()) { toast({ title: "Descrizione obbligatoria", variant: "destructive" }); return; }
-    const impNum = parseFloat(importo.replace(",", "."));
-    if (!isFinite(impNum) || impNum <= 0) { toast({ title: "Importo non valido", variant: "destructive" }); return; }
+    if (!isFinite(imponibileNum) || imponibileNum <= 0) { toast({ title: "Imponibile non valido", variant: "destructive" }); return; }
+    if (!isFinite(aliquotaNum) || aliquotaNum < 0 || aliquotaNum > 100) { toast({ title: "Aliquota IVA non valida", variant: "destructive" }); return; }
     if (!dataPagamento) { toast({ title: "Data pagamento obbligatoria", variant: "destructive" }); return; }
     if (!/^\d{4}-\d{2}$/.test(meseCompetenza)) { toast({ title: "Mese competenza non valido", variant: "destructive" }); return; }
     setSubmitting(true);
@@ -719,7 +770,8 @@ function SpesaDialog({
         fornitoreId: fornitoreId || null,
         pdvId: pdvId || null,
         descrizione: descrizione.trim(),
-        importo: impNum.toFixed(2),
+        imponibile: imponibileNum.toFixed(2),
+        aliquotaIva: aliquotaNum.toFixed(2),
         dataPagamento,
         meseCompetenza,
         metodoPagamento: metodoPagamento || null,
@@ -758,7 +810,7 @@ function SpesaDialog({
               <Select value={rs} onValueChange={setRs}>
                 <SelectTrigger data-testid="select-spesa-rs"><SelectValue placeholder="Seleziona..." /></SelectTrigger>
                 <SelectContent>
-                  {ragioniSociali.map(r => <SelectItem key={r.id} value={r.nome}>{r.nome}</SelectItem>)}
+                  {ragioniSociali.map(r => <SelectItem key={`${r.origine}-${r.nome}`} value={r.nome}>{r.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
               {ragioniSociali.length === 0 && <p className="text-xs text-amber-600 mt-1">Nessuna RS — creane una in Anagrafiche.</p>}
@@ -822,8 +874,52 @@ function SpesaDialog({
             </div>
 
             <div>
-              <Label>Importo (€) *</Label>
-              <Input type="text" inputMode="decimal" value={importo} onChange={(e) => setImporto(e.target.value)} placeholder="0,00" data-testid="input-spesa-importo" />
+              <Label>Imponibile (€) *</Label>
+              <Input type="text" inputMode="decimal" value={imponibile} onChange={(e) => setImponibile(e.target.value)} placeholder="0,00" data-testid="input-spesa-imponibile" />
+            </div>
+
+            <div>
+              <Label>Aliquota IVA *</Label>
+              <div className="flex gap-2">
+                <Select value={aliquotaSel} onValueChange={setAliquotaSel}>
+                  <SelectTrigger className="w-[110px]" data-testid="select-spesa-aliquota"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">0%</SelectItem>
+                    <SelectItem value="4">4%</SelectItem>
+                    <SelectItem value="5">5%</SelectItem>
+                    <SelectItem value="10">10%</SelectItem>
+                    <SelectItem value="22">22%</SelectItem>
+                    <SelectItem value="custom">Altro…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {aliquotaSel === "custom" && (
+                  <Input
+                    type="text"
+                    inputMode="decimal"
+                    value={aliquotaCustom}
+                    onChange={(e) => setAliquotaCustom(e.target.value)}
+                    placeholder="es. 7,5"
+                    data-testid="input-spesa-aliquota-custom"
+                    className="flex-1"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="md:col-span-2">
+              <div className="rounded-md border bg-muted/40 p-3 grid grid-cols-3 gap-3 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground">IVA calcolata</div>
+                  <div className="font-mono font-semibold" data-testid="text-spesa-iva-calc">{fmtEur(isFinite(ivaCalc) ? ivaCalc : 0)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Totale</div>
+                  <div className="font-mono font-semibold" data-testid="text-spesa-totale-calc">{fmtEur(isFinite(totaleCalc) ? totaleCalc : 0)}</div>
+                </div>
+                <div className="text-right text-xs text-muted-foreground self-center">
+                  Imponibile × ({isFinite(aliquotaNum) ? aliquotaNum : 0}%) = IVA
+                </div>
+              </div>
             </div>
 
             <div>
@@ -897,18 +993,18 @@ function SpesaDialog({
 }
 
 // ============ Anagrafiche ============
-function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: CdgRagioneSociale[] }) {
+function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagioneSociale[] }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<CdgRagioneSociale | null>(null);
+  const [editing, setEditing] = useState<UnifiedRagioneSociale | null>(null);
   const [nome, setNome] = useState("");
   const [partitaIva, setPartitaIva] = useState("");
   const [note, setNote] = useState("");
 
   const reset = () => { setEditing(null); setNome(""); setPartitaIva(""); setNote(""); };
   const openNew = () => { reset(); setOpen(true); };
-  const openEdit = (rs: CdgRagioneSociale) => {
+  const openEdit = (rs: UnifiedRagioneSociale) => {
     setEditing(rs); setNome(rs.nome); setPartitaIva(rs.partitaIva || ""); setNote(rs.note || ""); setOpen(true);
   };
 
@@ -916,9 +1012,10 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: CdgRagioneSoci
     if (!nome.trim()) { toast({ title: "Nome obbligatorio", variant: "destructive" }); return; }
     try {
       const body = { nome: nome.trim(), partitaIva: partitaIva.trim() || null, note: note.trim() || null };
-      if (editing) await apiJson("PUT", `/api/cdg/ragioni-sociali/${editing.id}`, body);
+      if (editing && editing.id) await apiJson("PUT", `/api/cdg/ragioni-sociali/${editing.id}`, body);
       else await apiJson("POST", `/api/cdg/ragioni-sociali`, body);
       qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali"] });
+      qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali/unified"] });
       // Il rename RS propaga il nuovo nome a categorie/fornitori/pdv/spese:
       // invalida le cache per evitare UI stale dopo l'aggiornamento.
       qc.invalidateQueries({ queryKey: ["/api/cdg/categorie"] });
@@ -932,10 +1029,12 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: CdgRagioneSoci
     }
   };
 
-  const del = async (rs: CdgRagioneSociale) => {
+  const del = async (rs: UnifiedRagioneSociale) => {
+    if (!rs.id) return;
     try {
       await apiJson("DELETE", `/api/cdg/ragioni-sociali/${rs.id}`);
       qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali"] });
+      qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali/unified"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/categorie"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/fornitori"] });
       qc.invalidateQueries({ queryKey: ["/api/cdg/pdv"] });
@@ -959,31 +1058,48 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: CdgRagioneSoci
           <Table>
             <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>P.IVA</TableHead><TableHead>Note</TableHead><TableHead></TableHead></TableRow></TableHeader>
             <TableBody>
-              {ragioniSociali.map(rs => (
-                <TableRow key={rs.id} data-testid={`row-rs-${rs.id}`}>
-                  <TableCell className="font-medium">{rs.nome}</TableCell>
+              {ragioniSociali.map(rs => {
+                const fromPdv = rs.origine === "pdv";
+                const rowKey = rs.id || `pdv-${rs.nome}`;
+                return (
+                <TableRow key={rowKey} data-testid={`row-rs-${rowKey}`}>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      {rs.nome}
+                      {fromPdv && (
+                        <Badge variant="secondary" className="text-[10px]" data-testid={`badge-rs-pdv-${rs.nome}`}>da PDV</Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>{rs.partitaIva || "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-md truncate">{rs.note || ""}</TableCell>
                   <TableCell className="text-right">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(rs)} data-testid={`button-edit-rs-${rs.id}`}><Pencil className="h-4 w-4" /></Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="icon" variant="ghost" data-testid={`button-delete-rs-${rs.id}`}><Trash2 className="h-4 w-4 text-red-600" /></Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Eliminare {rs.nome}?</AlertDialogTitle>
-                          <AlertDialogDescription>Verranno eliminate anche tutte le anagrafiche (categorie, fornitori, PDV) e le spese collegate.</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Annulla</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => del(rs)}>Elimina</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    {fromPdv ? (
+                      <span className="text-xs text-muted-foreground italic pr-2">Solo lettura (gestita nei PDV)</span>
+                    ) : (
+                      <>
+                        <Button size="icon" variant="ghost" onClick={() => openEdit(rs)} data-testid={`button-edit-rs-${rowKey}`}><Pencil className="h-4 w-4" /></Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" data-testid={`button-delete-rs-${rowKey}`}><Trash2 className="h-4 w-4 text-red-600" /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Eliminare {rs.nome}?</AlertDialogTitle>
+                              <AlertDialogDescription>Verranno eliminate anche tutte le anagrafiche (categorie, fornitori, PDV) e le spese collegate.</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Annulla</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => del(rs)}>Elimina</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         )}
@@ -1010,7 +1126,7 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: CdgRagioneSoci
 function AnagraficheRsScopedCard({
   ragioniSociali, categorie, fornitori, pdvList,
 }: {
-  ragioniSociali: CdgRagioneSociale[];
+  ragioniSociali: UnifiedRagioneSociale[];
   categorie: CdgCategoria[];
   fornitori: CdgFornitore[];
   pdvList: CdgPdv[];
@@ -1035,7 +1151,7 @@ function AnagraficheRsScopedCard({
             <Select value={selectedRs} onValueChange={setSelectedRs}>
               <SelectTrigger className="w-[260px]" data-testid="select-anag-rs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ragioniSociali.map(rs => <SelectItem key={rs.id} value={rs.nome}>{rs.nome}</SelectItem>)}
+                {ragioniSociali.map(rs => <SelectItem key={`${rs.origine}-${rs.nome}`} value={rs.nome}>{rs.nome}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
