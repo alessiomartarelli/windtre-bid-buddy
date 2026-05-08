@@ -22,18 +22,59 @@ async function ensureUploadDir() {
 
 const MAX_ALLEGATO_BYTES = 8 * 1024 * 1024;
 
-async function saveAllegato(orgId: string, base64: string, originalName: string): Promise<{ filePath: string; size: number }> {
+const ALLOWED_MIMES = new Set<string>([
+  "application/pdf",
+  "image/jpeg", "image/png", "image/gif", "image/webp", "image/heic", "image/heif",
+]);
+const ALLOWED_EXTS = new Set<string>([".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif"]);
+
+// Sniff signature minimo per evitare upload mascherati (HTML/script con MIME PDF).
+function sniffMime(buf: Buffer): string | null {
+  if (buf.length >= 4 && buf.slice(0, 4).toString("ascii") === "%PDF") return "application/pdf";
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (buf.length >= 8 && buf.slice(0, 8).toString("hex") === "89504e470d0a1a0a") return "image/png";
+  if (buf.length >= 6) {
+    const h = buf.slice(0, 6).toString("ascii");
+    if (h === "GIF87a" || h === "GIF89a") return "image/gif";
+  }
+  if (buf.length >= 12) {
+    const riff = buf.slice(0, 4).toString("ascii");
+    const webp = buf.slice(8, 12).toString("ascii");
+    if (riff === "RIFF" && webp === "WEBP") return "image/webp";
+  }
+  if (buf.length >= 12) {
+    const ftyp = buf.slice(4, 8).toString("ascii");
+    if (ftyp === "ftyp") {
+      const brand = buf.slice(8, 12).toString("ascii");
+      if (brand.startsWith("heic") || brand.startsWith("heix") || brand.startsWith("mif1") || brand.startsWith("heif")) return "image/heic";
+    }
+  }
+  return null;
+}
+
+async function saveAllegato(orgId: string, base64: string, originalName: string, declaredMime?: string): Promise<{ filePath: string; size: number; mime: string }> {
   await ensureUploadDir();
   const buf = Buffer.from(base64, "base64");
   if (buf.length === 0) throw new Error("File vuoto");
   if (buf.length > MAX_ALLEGATO_BYTES) throw new Error("File troppo grande (max 8MB)");
+
+  const ext = path.extname(originalName).toLowerCase();
+  if (!ALLOWED_EXTS.has(ext)) throw new Error("Estensione non consentita (solo PDF e immagini)");
+
+  const sniffed = sniffMime(buf);
+  if (!sniffed) throw new Error("Contenuto non riconosciuto come PDF o immagine");
+  if (!ALLOWED_MIMES.has(sniffed)) throw new Error("Tipo file non consentito");
+  if (declaredMime && declaredMime !== sniffed && !(declaredMime.startsWith("image/") && sniffed.startsWith("image/"))) {
+    throw new Error("MIME dichiarato incoerente con il contenuto");
+  }
+
   const orgDir = path.join(UPLOAD_DIR, orgId);
   await fs.mkdir(orgDir, { recursive: true });
   const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
   const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safeName}`;
   const filePath = path.join(orgDir, fileName);
   await fs.writeFile(filePath, buf);
-  return { filePath: path.relative(process.cwd(), filePath), size: buf.length };
+  return { filePath: path.relative(process.cwd(), filePath), size: buf.length, mime: sniffed };
 }
 
 async function deleteAllegato(relPath: string | null | undefined) {
@@ -231,10 +272,12 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const fkErr = await validateSpesaFks(profile.organizationId!, rest.ragioneSociale, rest.categoriaId, rest.fornitoreId, rest.pdvId);
     if (fkErr) return res.status(400).json({ error: fkErr });
     let allegatoPath: string | null = null;
+    let safeMime: string | null = null;
     if (allegatoBase64 && allegatoNome) {
       try {
-        const saved = await saveAllegato(profile.organizationId!, allegatoBase64, allegatoNome);
+        const saved = await saveAllegato(profile.organizationId!, allegatoBase64, allegatoNome, allegatoMime);
         allegatoPath = saved.filePath;
+        safeMime = saved.mime;
       } catch (e: unknown) {
         return res.status(400).json({ error: e instanceof Error ? e.message : "Errore upload" });
       }
@@ -245,7 +288,7 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       createdBy: profile.id,
       allegatoPath,
       allegatoNome: allegatoPath ? allegatoNome ?? null : null,
-      allegatoMime: allegatoPath ? allegatoMime ?? null : null,
+      allegatoMime: allegatoPath ? safeMime : null,
     });
     res.status(201).json(r);
   });
@@ -269,11 +312,11 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const updates: Record<string, unknown> = { ...rest };
     if (allegatoBase64 && allegatoNome) {
       try {
-        const saved = await saveAllegato(profile.organizationId!, allegatoBase64, allegatoNome);
+        const saved = await saveAllegato(profile.organizationId!, allegatoBase64, allegatoNome, allegatoMime);
         await deleteAllegato(existing.allegatoPath);
         updates.allegatoPath = saved.filePath;
         updates.allegatoNome = allegatoNome;
-        updates.allegatoMime = allegatoMime ?? null;
+        updates.allegatoMime = saved.mime;
       } catch (e: unknown) {
         return res.status(400).json({ error: e instanceof Error ? e.message : "Errore upload" });
       }
@@ -303,10 +346,15 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     if (!sp || !sp.allegatoPath) return res.status(404).json({ error: "Allegato non presente" });
     const abs = path.isAbsolute(sp.allegatoPath) ? sp.allegatoPath : path.join(process.cwd(), sp.allegatoPath);
     const resolved = path.resolve(abs);
-    const root = path.resolve(UPLOAD_DIR);
-    if (!resolved.startsWith(root)) return res.status(403).json({ error: "Path non consentito" });
-    res.setHeader("Content-Type", sp.allegatoMime || "application/octet-stream");
-    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(sp.allegatoNome || "allegato")}"`);
+    const root = path.resolve(UPLOAD_DIR) + path.sep;
+    if (!(resolved + path.sep).startsWith(root)) return res.status(403).json({ error: "Path non consentito" });
+    const mime = sp.allegatoMime && ALLOWED_MIMES.has(sp.allegatoMime) ? sp.allegatoMime : "application/octet-stream";
+    // Inline solo per MIME whitelisted (PDF/immagini); altrimenti force attachment.
+    const disposition = ALLOWED_MIMES.has(mime) ? "inline" : "attachment";
+    const safeFileName = (sp.allegatoNome || "allegato").replace(/[\r\n"]/g, "_");
+    res.setHeader("Content-Type", mime);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${encodeURIComponent(safeFileName)}"`);
     res.sendFile(resolved);
   });
 }
