@@ -43,6 +43,11 @@ export const cdgStorage = {
       return r || null;
     });
   },
+  async getRagioneSociale(id: string, orgId: string): Promise<CdgRagioneSociale | undefined> {
+    const [r] = await db.select().from(cdgRagioniSociali)
+      .where(and(eq(cdgRagioniSociali.id, id), eq(cdgRagioniSociali.organizationId, orgId)));
+    return r;
+  },
   async deleteRagioneSociale(id: string, orgId: string): Promise<void> {
     // Pulisci anagrafiche e spese collegate per nome RS (relazione "by-name")
     const [rs] = await db.select().from(cdgRagioniSociali)

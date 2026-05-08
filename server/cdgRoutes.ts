@@ -105,6 +105,13 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
   app.delete("/api/cdg/ragioni-sociali/:id", ...gate, async (req: any, res) => {
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
+    // Pulisci anche gli allegati su disco delle spese che verranno eliminate
+    // a cascata, per evitare file orfani in uploads/cdg/<orgId>/.
+    const rs = await cdgStorage.getRagioneSociale(req.params.id, profile.organizationId!);
+    if (rs) {
+      const speseRs = await cdgStorage.listSpese(profile.organizationId!, { rs: rs.nome });
+      await Promise.all(speseRs.map(s => deleteAllegato(s.allegatoPath)));
+    }
     await cdgStorage.deleteRagioneSociale(req.params.id, profile.organizationId!);
     res.json({ success: true });
   });
