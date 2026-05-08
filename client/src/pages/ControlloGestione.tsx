@@ -302,6 +302,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
         "Aliquota IVA (%)": aliquota,
         "IVA": iva,
         "Totale": totale,
+        "Importo": totale,
         "Note": s.note || "",
         "Allegato": s.allegatoNome || "",
       };
@@ -695,7 +696,7 @@ function SpesaDialog({
     : (editing ? String(editing.importo) : "");
   const initialAliquota = editing?.aliquotaIva != null
     ? String(parseFloat(editing.aliquotaIva as unknown as string))
-    : "0";
+    : "22";
   const ALIQUOTA_PRESETS = ["0", "4", "5", "10", "22"];
   const [imponibile, setImponibile] = useState<string>(initialImponibile);
   const [aliquotaSel, setAliquotaSel] = useState<string>(

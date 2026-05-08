@@ -44,12 +44,16 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return <Component />;
 }
 
-function ModuleRoute({ component: Component, moduleKey }: { component: React.ComponentType; moduleKey: string }) {
+function ModuleRoute({ component: Component, moduleKey }: { component: React.ComponentType; moduleKey: string | string[] }) {
   const { user, loading } = useAuth();
   const { isEnabled, loading: modLoading } = useEnabledModules();
   const { toast } = useToast();
 
-  const blocked = !loading && !modLoading && !!user && !isEnabled(moduleKey);
+  // moduleKey può essere singola chiave o array (any-of). Esempio: la pagina
+  // /amministrazione è accessibile se è attivo `amministrazione` OPPURE
+  // `controllo_gestione` (CdG vive come tab dentro Amministrazione).
+  const keys = Array.isArray(moduleKey) ? moduleKey : [moduleKey];
+  const blocked = !loading && !modLoading && !!user && !keys.some(k => isEnabled(k));
 
   useEffect(() => {
     if (blocked) {
@@ -116,7 +120,7 @@ function Router() {
         {() => <ModuleRoute component={ConfigurazioneGara} moduleKey="gara_configurazione" />}
       </Route>
       <Route path="/amministrazione">
-        {() => <ModuleRoute component={Amministrazione} moduleKey="amministrazione" />}
+        {() => <ModuleRoute component={Amministrazione} moduleKey={["amministrazione", "controllo_gestione"]} />}
       </Route>
       <Route path="/controllo-gestione">
         {() => { window.location.replace(`${BASE_PATH}/amministrazione#controllo`); return null; }}

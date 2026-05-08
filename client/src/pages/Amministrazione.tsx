@@ -309,6 +309,7 @@ export default function Amministrazione() {
   });
   const { isEnabled: isModEnabled } = useEnabledModules();
   const cdgEnabled = isModEnabled('controllo_gestione');
+  const amministrazioneEnabled = isModEnabled('amministrazione');
   useEffect(() => {
     if (typeof window === "undefined") return;
     const newHash = tab === "contabile" ? "" : `#${tab}`;
@@ -317,9 +318,12 @@ export default function Amministrazione() {
     }
   }, [tab]);
   // Se l'utente atterra su #controllo ma il modulo è disabilitato, ripiega su contabile.
+  // Viceversa, se è abilitato solo controllo_gestione (non amministrazione),
+  // forza il tab a "controllo" così l'utente vede CdG senza tab BiSuite vuote.
   useEffect(() => {
     if (tab === "controllo" && !cdgEnabled) setTab("contabile");
-  }, [tab, cdgEnabled]);
+    else if (!amministrazioneEnabled && cdgEnabled && tab !== "controllo") setTab("controllo");
+  }, [tab, cdgEnabled, amministrazioneEnabled]);
   const [escludiZero, setEscludiZero] = useState<boolean>(false);
   const [ivaCategoryFilter, setIvaCategoryFilter] = useState<IvaCategoria | "all">("all");
   const [selectedRs, setSelectedRs] = useState<string>("all");
@@ -1131,8 +1135,12 @@ export default function Amministrazione() {
         {tab === "controllo" && cdgEnabled ? (
           <Tabs value={tab} onValueChange={(v) => { if (isTabKey(v)) setTab(v); }} className="space-y-4">
             <TabsList>
-              <TabsTrigger value="contabile" data-testid="tab-contabile-top"><BookOpen className="h-4 w-4 mr-2" />Prima Nota Contabile</TabsTrigger>
-              <TabsTrigger value="iva" data-testid="tab-iva-top"><Receipt className="h-4 w-4 mr-2" />Prima Nota IVA</TabsTrigger>
+              {amministrazioneEnabled && (
+                <>
+                  <TabsTrigger value="contabile" data-testid="tab-contabile-top"><BookOpen className="h-4 w-4 mr-2" />Prima Nota Contabile</TabsTrigger>
+                  <TabsTrigger value="iva" data-testid="tab-iva-top"><Receipt className="h-4 w-4 mr-2" />Prima Nota IVA</TabsTrigger>
+                </>
+              )}
               <TabsTrigger value="controllo" data-testid="tab-controllo-top"><Wallet className="h-4 w-4 mr-2" />Controllo di Gestione</TabsTrigger>
             </TabsList>
             <TabsContent value="controllo" className="space-y-4">
@@ -1152,14 +1160,18 @@ export default function Amministrazione() {
           >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <TabsList>
-                <TabsTrigger value="contabile" data-testid="tab-contabile">
-                  <BookOpen className="h-4 w-4 mr-2" />
-                  Prima Nota Contabile
-                </TabsTrigger>
-                <TabsTrigger value="iva" data-testid="tab-iva">
-                  <Receipt className="h-4 w-4 mr-2" />
-                  Prima Nota IVA
-                </TabsTrigger>
+                {amministrazioneEnabled && (
+                  <>
+                    <TabsTrigger value="contabile" data-testid="tab-contabile">
+                      <BookOpen className="h-4 w-4 mr-2" />
+                      Prima Nota Contabile
+                    </TabsTrigger>
+                    <TabsTrigger value="iva" data-testid="tab-iva">
+                      <Receipt className="h-4 w-4 mr-2" />
+                      Prima Nota IVA
+                    </TabsTrigger>
+                  </>
+                )}
                 {cdgEnabled && (
                   <TabsTrigger value="controllo" data-testid="tab-controllo">
                     <Wallet className="h-4 w-4 mr-2" />
