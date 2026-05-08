@@ -919,6 +919,12 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: CdgRagioneSoci
       if (editing) await apiJson("PUT", `/api/cdg/ragioni-sociali/${editing.id}`, body);
       else await apiJson("POST", `/api/cdg/ragioni-sociali`, body);
       qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali"] });
+      // Il rename RS propaga il nuovo nome a categorie/fornitori/pdv/spese:
+      // invalida le cache per evitare UI stale dopo l'aggiornamento.
+      qc.invalidateQueries({ queryKey: ["/api/cdg/categorie"] });
+      qc.invalidateQueries({ queryKey: ["/api/cdg/fornitori"] });
+      qc.invalidateQueries({ queryKey: ["/api/cdg/pdv"] });
+      qc.invalidateQueries({ queryKey: ["/api/cdg/spese"] });
       toast({ title: "Salvato" });
       setOpen(false);
     } catch (e) {
