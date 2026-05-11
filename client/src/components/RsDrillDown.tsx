@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Preventivo } from '@/hooks/usePreventivi';
+import { isMobileSimCore } from '@/lib/mobileCategories';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -190,11 +191,6 @@ interface RsDrillDownProps {
   forceExpandAll?: boolean;
 }
 
-const MOBILE_SIM_TYPES = [
-  'TIED', 'UNTIED', 'TOURIST_FULL', 'TOURIST_PASS', 'TOURIST_XXL',
-  'SIM_IVA', 'PROFESSIONAL_FLEX', 'PROFESSIONAL_DATA_10', 'PROFESSIONAL_SPECIAL',
-  'PROFESSIONAL_STAFF', 'PROFESSIONAL_WORLD', 'ALTRE_SIM_IVA',
-];
 const FISSO_PEZZI_CATEGORIE = ['FISSO_FTTC', 'FISSO_FTTH', 'FISSO_FWA_OUT', 'FISSO_FWA_IND_2P'];
 
 const EXTRA_GARA_MOBILE_TYPES = [
@@ -287,7 +283,7 @@ export function RsDrillDown({ preventivo, forceExpandAll = false }: RsDrillDownP
       /* ── Mobile ── */
       const mobileRaw = attivatoMobileByRS?.[rsName] || [];
       const volumiMobile = mobileRaw
-        .filter((r) => MOBILE_SIM_TYPES.includes(r.type || ''))
+        .filter((r) => isMobileSimCore(r.type))
         .reduce((sum, r) => sum + (r.pezzi || 0), 0);
 
       let premioMobile = 0;

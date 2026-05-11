@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Preventivo } from '@/hooks/usePreventivi';
+import { isMobileSimCore } from '@/lib/mobileCategories';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -288,11 +289,9 @@ export function PdvDrillDown({ preventivo, forceExpandAll = false }: PdvDrillDow
         /* ── Mobile ── */
         const mobileRes = mobileByCode[code];
         const mobileRaw = attivatoMobileByPos?.[pdvId] || attivatoMobileByPos?.[code] || [];
-        // Pezzi Mobile = solo SIM Consumer (TIED, UNTIED, TOURIST_*) + SIM IVA (PROFESSIONAL_*, ALTRE_SIM_IVA)
-        const MOBILE_SIM_TYPES = ['TIED', 'UNTIED', 'TOURIST_FULL', 'TOURIST_PASS', 'TOURIST_XXL',
-          'SIM_IVA', 'PROFESSIONAL_FLEX', 'PROFESSIONAL_DATA_10', 'PROFESSIONAL_SPECIAL', 'PROFESSIONAL_STAFF', 'PROFESSIONAL_WORLD', 'ALTRE_SIM_IVA'];
+        // Pezzi Mobile = solo SIM Consumer + SIM IVA (vedi @/lib/mobileCategories)
         const volumiMobile = mobileRaw
-          .filter((r) => MOBILE_SIM_TYPES.includes(r.type || ''))
+          .filter((r) => isMobileSimCore(r.type))
           .reduce((sum, r) => sum + (r.pezzi || 0), 0);
         const premioMobile = mobileRes ? ((mobileRes.premio as number) || 0) : 0;
         const puntiMobile = mobileRes ? ((mobileRes.punti as number) || 0) : 0;

@@ -35,6 +35,7 @@ import {
   Users,
 } from "lucide-react";
 import { apiUrl } from "@/lib/basePath";
+import { SIM_CONSUMER_CORE, SIM_PIVA_CORE } from "@/lib/mobileCategories";
 import { AppNavbar } from "@/components/AppNavbar";
 import { type GaraConfigRecord, type GaraConfigPdv, type GaraConfigListItem } from "@/hooks/useGaraConfig";
 import {
@@ -201,35 +202,6 @@ const DEFAULT_CALENDAR: StoreCalendar = {
   specialDays: [],
 };
 
-const SIM_IVA_CATEGORIES = new Set<string>([
-  MobileActivationType.SIM_IVA,
-  MobileActivationType.PROFESSIONAL_FLEX,
-  MobileActivationType.PROFESSIONAL_DATA_10,
-  MobileActivationType.PROFESSIONAL_SPECIAL,
-  MobileActivationType.PROFESSIONAL_STAFF,
-  MobileActivationType.PROFESSIONAL_WORLD,
-  MobileActivationType.ALTRE_SIM_IVA,
-]);
-
-const SIM_CONSUMER_CORE = new Set<string>([
-  MobileActivationType.TIED,
-  MobileActivationType.UNTIED,
-  MobileActivationType.TOURIST_FULL,
-  MobileActivationType.TOURIST_PASS,
-  MobileActivationType.TOURIST_XXL,
-  MobileActivationType.SIM_ALLARME,
-]);
-
-const SIM_PIVA_CORE = new Set<string>([
-  MobileActivationType.SIM_IVA,
-  MobileActivationType.PROFESSIONAL_FLEX,
-  MobileActivationType.PROFESSIONAL_DATA_10,
-  MobileActivationType.PROFESSIONAL_SPECIAL,
-  MobileActivationType.PROFESSIONAL_STAFF,
-  MobileActivationType.PROFESSIONAL_WORLD,
-  MobileActivationType.ALTRE_SIM_IVA,
-]);
-
 const FISSO_CONSUMER_CORE = new Set<string>([
   "FISSO_FTTC", "FISSO_FTTH", "FISSO_FWA_OUT", "FISSO_FWA_IND_2P", "FISSO_VOCE",
 ]);
@@ -263,7 +235,7 @@ function groupMobileCategories(
   const ivaChildren: typeof categories = [];
 
   for (const cat of categories) {
-    if (SIM_IVA_CATEGORIES.has(cat.category)) {
+    if (SIM_PIVA_CORE.has(cat.category)) {
       ivaChildren.push(cat);
     } else {
       consumerChildren.push(cat);

@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Preventivo } from '@/hooks/usePreventivi';
+import { isMobileSimCore } from '@/lib/mobileCategories';
 import {
   BarChart,
   Bar,
@@ -139,10 +140,8 @@ export function PdvDataTable({ preventivo }: PdvDataTableProps) {
       // Mobile - Pezzi = solo SIM Consumer + SIM IVA
       const mobile = mobileByCode[code] || {};
       const mobileRaw = attivatoMobileByPos?.[pdvId] || attivatoMobileByPos?.[code] || [];
-      const MOBILE_SIM_TYPES = ['TIED', 'UNTIED', 'TOURIST_FULL', 'TOURIST_PASS', 'TOURIST_XXL',
-        'SIM_IVA', 'PROFESSIONAL_FLEX', 'PROFESSIONAL_DATA_10', 'PROFESSIONAL_SPECIAL', 'PROFESSIONAL_STAFF', 'PROFESSIONAL_WORLD', 'ALTRE_SIM_IVA'];
       const volumiMobile = mobileRaw
-        .filter((r) => MOBILE_SIM_TYPES.includes(r.type || ''))
+        .filter((r) => isMobileSimCore(r.type))
         .reduce((s, r) => s + (r.pezzi || 0), 0);
       const premioMobile = (mobile.premio as number) || (mobile.premioPrevistoFineMese as number) || (mobile.premioAttuale as number) || 0;
       const puntiMobile = (mobile.punti as number) || (mobile.puntiPrevistiFineMese as number) || (mobile.puntiAttuali as number) || 0;
