@@ -45,8 +45,10 @@ export const calcolaPartnershipRewardPerPos = (
     premioTarget = config.config.premio80 || 0;
   }
   
-  // Premio totale = premio target + gettoni
-  const premioMaturato = premioTarget + totaleGettoni;
+  // Premio Partnership = SOLO premio sbloccato dalle soglie di punti.
+  // I gettoni sono conteggiati separatamente nella pista CB e NON vanno
+  // sommati qui (eviterebbe doppio conteggio rispetto alla pista CB).
+  const premioMaturato = premioTarget;
   
   // Run rate giornaliero
   const runRateGiornalieroPezzi = giorniLavorativi > 0 ? totalePezzi / giorniLavorativi : 0;

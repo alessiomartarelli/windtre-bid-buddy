@@ -661,11 +661,13 @@ function calcPartnershipPerPdv(
   });
 
   if (!partnershipConfig) {
-    let totaleGettoni = 0;
-    for (const a of attivato) totaleGettoni += a.pezzi * a.gettoni;
+    // Senza config soglie partnership non c'e' premio sbloccabile.
+    // I gettoni NON sono conteggiati nella pista Partnership (sono CB).
+    let puntiTotali = 0;
+    for (const a of attivato) puntiTotali += a.pezzi * a.puntiPartnership;
     return {
-      premioStimato: totaleGettoni,
-      puntiTotali: 0,
+      premioStimato: 0,
+      puntiTotali,
       sogliaRaggiunta: 0,
       sogliaLabel: "N/A",
     };
