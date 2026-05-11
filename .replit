@@ -10,10 +10,6 @@ packages = ["sshpass"]
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 15432
-externalPort = 3000
-exposeLocalhost = true
 
 [env]
 PORT = "5000"
