@@ -3071,12 +3071,15 @@ export default function DashboardGaraReale() {
                                                   {children.length > 0 && (
                                                     <div className="pl-3 space-y-0.5">
                                                       <div className="text-[11px] text-gray-500 italic">di cui:</div>
-                                                      {children.map((item) => (
-                                                        <div key={item.targetCategory} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
-                                                          <span className="truncate max-w-[70%]">{item.targetLabel}</span>
-                                                          <span className="font-medium">{item.pezzi}</span>
-                                                        </div>
-                                                      ))}
+                                                      {children.map((item) => {
+                                                        const displayLabel = item.targetCategory === "SIM_IVA" ? "Altre SIM IVA" : item.targetLabel;
+                                                        return (
+                                                          <div key={item.targetCategory} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
+                                                            <span className="truncate max-w-[70%]">{displayLabel}</span>
+                                                            <span className="font-medium">{item.pezzi}</span>
+                                                          </div>
+                                                        );
+                                                      })}
                                                     </div>
                                                   )}
                                                 </div>
