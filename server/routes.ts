@@ -2112,15 +2112,25 @@ export async function registerRoutes(
               if (existing) {
                 existing.pezzi++;
                 existing.canone += canoneForThis;
+                if (m.targetCategory === 'SIM_IVA') {
+                  const desc = ((art.descrizione || '').trim()) || '(senza descrizione)';
+                  if (!existing.descriptions) existing.descriptions = {};
+                  existing.descriptions[desc] = (existing.descriptions[desc] || 0) + 1;
+                }
               } else {
-                byPdv[codicePos].items.push({
+                const newItem: any = {
                   pista: m.pista,
                   targetCategory: m.targetCategory,
                   targetLabel: m.targetLabel,
                   pezzi: 1,
                   canone: canoneForThis,
                   ruleType: 'base',
-                });
+                };
+                if (m.targetCategory === 'SIM_IVA') {
+                  const desc = ((art.descrizione || '').trim()) || '(senza descrizione)';
+                  newItem.descriptions = { [desc]: 1 };
+                }
+                byPdv[codicePos].items.push(newItem);
               }
             }
           }

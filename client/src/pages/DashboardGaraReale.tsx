@@ -114,6 +114,7 @@ interface AggregatedItem {
   pezzi: number;
   canone: number;
   ruleType?: 'base' | 'additional';
+  descriptions?: Record<string, number>;
 }
 
 interface AddonItem {
@@ -3071,14 +3072,24 @@ export default function DashboardGaraReale() {
                                                   {children.length > 0 && (
                                                     <div className="pl-3 space-y-0.5">
                                                       <div className="text-[11px] text-gray-500 italic">di cui:</div>
-                                                      {children.map((item) => {
+                                                      {children.flatMap((item) => {
+                                                        if (item.targetCategory === "SIM_IVA" && item.descriptions && Object.keys(item.descriptions).length > 0) {
+                                                          return Object.entries(item.descriptions)
+                                                            .sort(([, a], [, b]) => b - a)
+                                                            .map(([desc, count]) => (
+                                                              <div key={`SIM_IVA-${desc}`} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
+                                                                <span className="truncate max-w-[70%]" title={desc}>{desc}</span>
+                                                                <span className="font-medium">{count}</span>
+                                                              </div>
+                                                            ));
+                                                        }
                                                         const displayLabel = item.targetCategory === "SIM_IVA" ? "Altre SIM IVA" : item.targetLabel;
-                                                        return (
+                                                        return [(
                                                           <div key={item.targetCategory} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
                                                             <span className="truncate max-w-[70%]">{displayLabel}</span>
                                                             <span className="font-medium">{item.pezzi}</span>
                                                           </div>
-                                                        );
+                                                        )];
                                                       })}
                                                     </div>
                                                   )}
