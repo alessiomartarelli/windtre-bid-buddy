@@ -95,23 +95,31 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
             </h1>
           </div>
 
-          <nav className="hidden md:flex items-center gap-0.5 ml-1">
-            {adminItems.map((item) => {
-              const isActive = location === item.path;
-              return (
-                <Button
-                  key={item.path}
-                  variant={isActive ? "secondary" : "ghost"}
-                  size="sm"
-                  className={`text-xs h-8 rounded-lg transition-all ${isActive ? 'shadow-sm' : ''}`}
-                  onClick={() => setLocation(item.path)}
-                  data-testid={`nav-${item.path.replace(/\//g, '')}`}
-                >
-                  <item.icon className="h-3.5 w-3.5 mr-1" />
-                  {item.label}
-                </Button>
-              );
-            })}
+          <nav className="hidden lg:flex items-center gap-0.5 ml-1 min-w-0">
+            {adminItems.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant={adminItems.some(i => location === i.path) ? "secondary" : "ghost"}
+                    size="sm"
+                    className={`text-xs h-8 rounded-lg transition-all ${adminItems.some(i => location === i.path) ? 'shadow-sm' : ''}`}
+                    data-testid="nav-admin-menu"
+                  >
+                    <Shield className="h-3.5 w-3.5 mr-1" />
+                    Admin
+                    <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {adminItems.map((item) => (
+                    <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)} data-testid={`nav-${item.path.replace(/\//g, '')}`}>
+                      <item.icon className="mr-2 h-4 w-4" />
+                      <span>{item.label}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
             {adminItems.length > 0 && <div className="w-px h-5 bg-border/60 mx-1.5" />}
 
@@ -170,7 +178,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
         <div className="flex items-center gap-2">
           {children}
 
-          <div className="md:hidden">
+          <div className="lg:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="rounded-lg" data-testid="button-mobile-menu">
