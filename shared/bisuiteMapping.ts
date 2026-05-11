@@ -572,23 +572,59 @@ function ruleFingerprint(r: BiSuiteMappingRule): string {
 
 const CB_TARGET_CATEGORIES = new Set(CB_TARGETS.map(t => t.value));
 
-function migratePartnershipToCB(rules: BiSuiteMappingRule[]): BiSuiteMappingRule[] {
-  return rules.map(r => {
-    if (r.pista === 'partnership' && CB_TARGET_CATEGORIES.has(r.targetCategory)) {
-      return { ...r, pista: 'cb' as GaraPista };
-    }
-    return r;
-  });
+function fullFingerprint(r: BiSuiteMappingRule): string {
+  const c = r.conditions;
+  return [
+    r.pista,
+    r.targetCategory,
+    r.ruleType || '',
+    c.categoriaBiSuite || '',
+    c.tipologiaBiSuite || '',
+    c.descrizioneBiSuite || '',
+    c.descrizioneEscludi || '',
+    c.clienteTipo || '',
+    c.domandaTesto || '',
+    c.rispostaContiene || '',
+    c.rispostaDiversaDa || '',
+    c.rispostaEsatta || '',
+    c.rispostaNumericaUguale ?? '',
+    c.rispostaNumericaMaggiore ?? '',
+    c.canoneMinimo ?? '',
+  ].join('|');
+}
+
+function synthesizePartnershipTwins(rules: BiSuiteMappingRule[]): BiSuiteMappingRule[] {
+  // Twins are forced to ruleType='additional' so they bypass the base-rule
+  // `break` in mapBiSuiteArticle and can co-exist with the original CB rule
+  // for the same article (different pista, so dedup key pista:targetCategory
+  // does not collide).
+  const existingKeys = new Set(rules.map(fullFingerprint));
+  const twins: BiSuiteMappingRule[] = [];
+  for (const r of rules) {
+    if (r.pista !== 'cb') continue;
+    if (!CB_TARGET_CATEGORIES.has(r.targetCategory)) continue;
+    const twin: BiSuiteMappingRule = {
+      ...r,
+      id: `${r.id}-partnership`,
+      pista: 'partnership' as GaraPista,
+      ruleType: 'additional',
+    };
+    const fp = fullFingerprint(twin);
+    if (existingKeys.has(fp)) continue;
+    existingKeys.add(fp);
+    twins.push(twin);
+  }
+  return twins;
 }
 
 export function mergeWithDefaultRules(
   savedRules: BiSuiteMappingRule[],
   defaultRules?: BiSuiteMappingRule[],
 ): BiSuiteMappingRule[] {
-  const migrated = migratePartnershipToCB(savedRules);
   const defaults = defaultRules || getDefaultMappingRules();
-  const existingKeys = new Set(migrated.map(ruleFingerprint));
+  const existingKeys = new Set(savedRules.map(ruleFingerprint));
   const missing = defaults.filter(d => !existingKeys.has(ruleFingerprint(d)));
-  if (missing.length === 0) return migrated;
-  return [...migrated, ...missing];
+  const merged = missing.length === 0 ? savedRules : [...savedRules, ...missing];
+  const partnershipTwins = synthesizePartnershipTwins(merged);
+  return partnershipTwins.length === 0 ? merged : [...merged, ...partnershipTwins];
 }

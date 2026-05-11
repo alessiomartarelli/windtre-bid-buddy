@@ -13,6 +13,7 @@ import { ASSICURAZIONI_POINTS, ASSICURAZIONI_PREMIUMS, ASSICURAZIONI_LABELS } fr
 import { FISSO_CATEGORIE_DEFAULT } from '@/lib/calcoloPistaFisso';
 import { PROTECTA_GETTONI, PROTECTA_LABELS, ProtectaProduct } from '@/types/protecta';
 import { PUNTI_EXTRA_GARA, SOGLIE_BASE_EXTRA_GARA, PREMI_EXTRA_GARA, calcolaSoglieRS, type ExtraGaraSogliePerRS } from '@/lib/calcoloExtraGaraIva';
+import { PARTNERSHIP_DEFAULTS, CAMBIO_OFFERTA_UNTIED_CLUSTERS, CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS, TELEFONO_INCLUSO_OPTIONS } from '@/types/partnership-cb-events';
 import type { GaraConfigPdv } from '@/hooks/useGaraConfig';
 
 export interface TabelleCalcoloConfig {
@@ -44,6 +45,12 @@ export interface TabelleCalcoloConfig {
     soglieMultipos?: Record<string, Record<string, number>>;
     soglieMonopos?: Record<string, Record<string, number>>;
     premiPerSoglia?: Record<string, number[]>;
+  };
+  partnership?: {
+    puntiPartnership?: Record<string, number>;
+    gettoniEvento?: Record<string, number>;
+    clusterGettoniUntied?: Record<string, number>;
+    clusterGettoniRivincoli?: Record<string, number>;
   };
 }
 
@@ -344,6 +351,7 @@ export function TabelleCalcoloGara({ config, onChange, baseDefaults, pdvList, ex
             <TabsTrigger value="assicurazioni" className="text-xs sm:text-sm" data-testid="tab-gara-tc-assicurazioni">Assicurazioni</TabsTrigger>
             <TabsTrigger value="protecta" className="text-xs sm:text-sm" data-testid="tab-gara-tc-protecta">Protecta</TabsTrigger>
             <TabsTrigger value="extraGara" className="text-xs sm:text-sm" data-testid="tab-gara-tc-extra-gara">Extra Gara</TabsTrigger>
+            <TabsTrigger value="partnership" className="text-xs sm:text-sm" data-testid="tab-gara-tc-partnership">Partnership</TabsTrigger>
           </TabsList>
         </div>
 
@@ -364,6 +372,9 @@ export function TabelleCalcoloGara({ config, onChange, baseDefaults, pdvList, ex
         </TabsContent>
         <TabsContent value="extraGara" className="space-y-6">
           <ExtraGaraSubTab config={config} baseDefaults={baseDefaults} isOverridden={isOverridden} isArrayOverridden={isArrayOverridden} updateValue={updateValue} updateArrayValue={updateArrayValue} resetValue={resetValue} resetArrayValue={resetArrayValue} pdvList={pdvList} extraGaraIvaSogliePerRS={extraGaraIvaSogliePerRS} onExtraGaraIvaSogliePerRSChange={onExtraGaraIvaSogliePerRSChange} />
+        </TabsContent>
+        <TabsContent value="partnership" className="space-y-6">
+          <PartnershipSubTab config={config} baseDefaults={baseDefaults} isOverridden={isOverridden} updateValue={updateValue} resetValue={resetValue} />
         </TabsContent>
       </Tabs>
     </div>
@@ -1142,6 +1153,193 @@ function ExtraGaraSubTab({ config, baseDefaults, isOverridden, isArrayOverridden
           </CardContent>
         </Card>
       )}
+    </>
+  );
+}
+
+const PARTNERSHIP_EVENT_KEYS = Object.keys(PARTNERSHIP_DEFAULTS);
+
+function PartnershipSubTab({ config, baseDefaults, isOverridden, updateValue, resetValue }: SimpleSubTabProps) {
+  return (
+    <>
+      <CalcInfoBox title="Come funziona il calcolo Partnership Reward">
+        <p>La pista <strong>Partnership Reward</strong> usa gli eventi Customer Base (CB) per calcolare punti partnership e gettoni.</p>
+        <p>I <strong>punti partnership</strong> determinano il raggiungimento del target bimestrale (80% / 100%) e il relativo premio configurato nella tab Soglie.</p>
+        <p>I <strong>gettoni</strong> sono valori fissi per evento e si sommano al premio target.</p>
+        <p>Per Cambio Offerta Untied / Rivincoli i gettoni dipendono dal cluster del PDV (vedi tabelle sotto).</p>
+      </CalcInfoBox>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Punti e Gettoni per Evento CB</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-2 font-medium text-muted-foreground">Evento</th>
+                  <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Punti Partnership</th>
+                  <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Gettoni (€)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {PARTNERSHIP_EVENT_KEYS.map((key) => {
+                  const defaults = PARTNERSHIP_DEFAULTS[key];
+                  if (!defaults) return null;
+                  const label = defaults.label;
+                  const puntiPath = `partnership.puntiPartnership.${key}`;
+                  const gettoniPath = `partnership.gettoniEvento.${key}`;
+                  const puntiVal = getNestedValue(config, puntiPath) ?? defaults.puntiPartnership;
+                  const gettoniVal = getNestedValue(config, gettoniPath) ?? defaults.gettoni;
+                  const puntiDef = getNestedValue(baseDefaults, puntiPath) ?? defaults.puntiPartnership;
+                  const gettoniDef = getNestedValue(baseDefaults, gettoniPath) ?? defaults.gettoni;
+                  const isClusterDep = !!defaults.clusterDependent;
+                  return (
+                    <tr key={key} className={`border-b hover:bg-muted/30 ${isClusterDep ? 'bg-muted/10' : ''}`}>
+                      <td className="p-2 text-sm">
+                        {label}
+                        {isClusterDep && (
+                          <span className="ml-1 text-xs text-muted-foreground">(gettoni da cluster, vedi tabella sotto)</span>
+                        )}
+                      </td>
+                      <EditableCell
+                        value={puntiVal}
+                        defaultValue={puntiDef}
+                        isOverridden={isOverridden(puntiPath)}
+                        onChange={v => updateValue(puntiPath, v)}
+                        onReset={() => resetValue(puntiPath)}
+                        testId={`input-gara-partnership-punti-${key}`}
+                        step="0.5"
+                      />
+                      {isClusterDep ? (
+                        <td className="p-2 text-center text-sm text-muted-foreground italic">da cluster</td>
+                      ) : (
+                        <EditableCell
+                          value={gettoniVal}
+                          defaultValue={gettoniDef}
+                          isOverridden={isOverridden(gettoniPath)}
+                          onChange={v => updateValue(gettoniPath, v)}
+                          onReset={() => resetValue(gettoniPath)}
+                          testId={`input-gara-partnership-gettoni-${key}`}
+                          step="0.5"
+                        />
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Gettoni per Cluster — Cambio Offerta Untied</CardTitle>
+          <p className="text-xs text-muted-foreground">Punti partnership: 2 per tutti i cluster. Gettoni configurabili per livello cluster.</p>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-2 font-medium text-muted-foreground">Cluster</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Gettoni (€)</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Punti</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CAMBIO_OFFERTA_UNTIED_CLUSTERS.map((c) => {
+                const gPath = `partnership.clusterGettoniUntied.${c.cluster}`;
+                const gVal = getNestedValue(config, gPath) ?? c.gettoni;
+                const gDef = getNestedValue(baseDefaults, gPath) ?? c.gettoni;
+                return (
+                  <tr key={c.cluster} className="border-b hover:bg-muted/30">
+                    <td className="p-2 text-sm font-medium">{c.cluster}</td>
+                    <EditableCell
+                      value={gVal}
+                      defaultValue={gDef}
+                      isOverridden={isOverridden(gPath)}
+                      onChange={v => updateValue(gPath, v)}
+                      onReset={() => resetValue(gPath)}
+                      testId={`input-gara-partnership-untied-${c.cluster}`}
+                      step="1"
+                    />
+                    <td className="p-2 text-center text-sm">{c.puntiPartnership}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Gettoni per Cluster — Cambio Offerta Rivincoli</CardTitle>
+          <p className="text-xs text-muted-foreground">Punti partnership: 4 per tutti i cluster. Gettoni configurabili per livello cluster.</p>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-2 font-medium text-muted-foreground">Cluster</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Gettoni (€)</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Punti</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CAMBIO_OFFERTA_RIVINCOLI_CLUSTERS.map((c) => {
+                const gPath = `partnership.clusterGettoniRivincoli.${c.cluster}`;
+                const gVal = getNestedValue(config, gPath) ?? c.gettoni;
+                const gDef = getNestedValue(baseDefaults, gPath) ?? c.gettoni;
+                return (
+                  <tr key={c.cluster} className="border-b hover:bg-muted/30">
+                    <td className="p-2 text-sm font-medium">{c.cluster}</td>
+                    <EditableCell
+                      value={gVal}
+                      defaultValue={gDef}
+                      isOverridden={isOverridden(gPath)}
+                      onChange={v => updateValue(gPath, v)}
+                      onReset={() => resetValue(gPath)}
+                      testId={`input-gara-partnership-rivincoli-${c.cluster}`}
+                      step="1"
+                    />
+                    <td className="p-2 text-center text-sm">{c.puntiPartnership}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Telefono Incluso — Opzioni</CardTitle>
+          <p className="text-xs text-muted-foreground">Sotto-eventi telefono incluso mappati a IMP_AGG_* targetCategory. Configurabili nella tabella eventi sopra.</p>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-2 font-medium text-muted-foreground">Opzione</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Gettoni (€)</th>
+                <th className="text-center p-2 font-medium text-muted-foreground w-[120px]">Punti Partnership</th>
+              </tr>
+            </thead>
+            <tbody>
+              {TELEFONO_INCLUSO_OPTIONS.map((o) => (
+                <tr key={o.option} className="border-b hover:bg-muted/30">
+                  <td className="p-2 text-sm">{o.label}</td>
+                  <td className="p-2 text-center text-sm">{o.gettoni}€</td>
+                  <td className="p-2 text-center text-sm">{o.puntiPartnership}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
     </>
   );
 }
