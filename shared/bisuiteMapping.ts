@@ -507,8 +507,15 @@ export function mapBiSuiteArticle(
 
   const results: MappedArticle[] = [];
   const addedCategories = new Set<string>();
+  const matchedPistas = new Set<GaraPista>();
 
+  // Per-pista base matching: each pista picks at most one base rule (highest
+  // priority match). This lets CB and Partnership co-exist on the same article
+  // without one blocking the other, while preserving the "exactly one base
+  // category per pista" invariant (no double-counting between overlapping base
+  // rules like addon_ricorrenti_mensile_high vs _low).
   for (const rule of baseRules) {
+    if (matchedPistas.has(rule.pista)) continue;
     if (matchesCondition(rule.conditions, articolo, clienteTipo)) {
       const key = `${rule.pista}:${rule.targetCategory}`;
       if (!addedCategories.has(key)) {
@@ -521,7 +528,7 @@ export function mapBiSuiteArticle(
           ruleType: 'base',
         });
       }
-      break;
+      matchedPistas.add(rule.pista);
     }
   }
 
@@ -594,10 +601,11 @@ function fullFingerprint(r: BiSuiteMappingRule): string {
 }
 
 function synthesizePartnershipTwins(rules: BiSuiteMappingRule[]): BiSuiteMappingRule[] {
-  // Twins are forced to ruleType='additional' so they bypass the base-rule
-  // `break` in mapBiSuiteArticle and can co-exist with the original CB rule
-  // for the same article (different pista, so dedup key pista:targetCategory
-  // does not collide).
+  // Each CB rule (base or additional) gets a partnership twin with the same
+  // conditions/priority/ruleType. mapBiSuiteArticle does per-pista base
+  // matching, so base twins compete only with other partnership base rules
+  // (no double-counting of overlapping CB base rules). Additional twins
+  // accumulate independently per pista (dedup key is pista:targetCategory).
   const existingKeys = new Set(rules.map(fullFingerprint));
   const twins: BiSuiteMappingRule[] = [];
   for (const r of rules) {
@@ -607,7 +615,6 @@ function synthesizePartnershipTwins(rules: BiSuiteMappingRule[]): BiSuiteMapping
       ...r,
       id: `${r.id}-partnership`,
       pista: 'partnership' as GaraPista,
-      ruleType: 'additional',
     };
     const fp = fullFingerprint(twin);
     if (existingKeys.has(fp)) continue;
