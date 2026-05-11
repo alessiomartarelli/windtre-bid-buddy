@@ -209,6 +209,18 @@ function ruleId(): string {
   return `rule-${++_ruleIdCounter}`;
 }
 
+/**
+ * Returns the canonical default mapping rules (raw, no synthesized twins).
+ *
+ * NOTE: Partnership rules for CB target categories are NOT included here as
+ * literal defaults. They are synthesized at runtime by
+ * `synthesizePartnershipTwins` inside `mergeWithDefaultRules`. Any consumer
+ * that needs the effective rule set used by the calculation engines (CB +
+ * Partnership co-existing on the same article) MUST pipe these defaults
+ * through `mergeWithDefaultRules`. The mapping editor UI
+ * (`MappaturaBiSuite.tsx`) intentionally consumes the raw defaults so the
+ * user only sees/edits the source rules; twins are derived automatically.
+ */
 export function getDefaultMappingRules(): BiSuiteMappingRule[] {
   return [
     // ═══════════════ MOBILE — BASE (da categoria+tipologia) ═══════════════
