@@ -290,7 +290,7 @@ export function PdvDrillDown({ preventivo, forceExpandAll = false }: PdvDrillDow
         const mobileRaw = attivatoMobileByPos?.[pdvId] || attivatoMobileByPos?.[code] || [];
         // Pezzi Mobile = solo SIM Consumer (TIED, UNTIED, TOURIST_*) + SIM IVA (PROFESSIONAL_*, ALTRE_SIM_IVA)
         const MOBILE_SIM_TYPES = ['TIED', 'UNTIED', 'TOURIST_FULL', 'TOURIST_PASS', 'TOURIST_XXL',
-          'PROFESSIONAL_FLEX', 'PROFESSIONAL_DATA_10', 'PROFESSIONAL_SPECIAL', 'PROFESSIONAL_STAFF', 'PROFESSIONAL_WORLD', 'ALTRE_SIM_IVA'];
+          'SIM_IVA', 'PROFESSIONAL_FLEX', 'PROFESSIONAL_DATA_10', 'PROFESSIONAL_SPECIAL', 'PROFESSIONAL_STAFF', 'PROFESSIONAL_WORLD', 'ALTRE_SIM_IVA'];
         const volumiMobile = mobileRaw
           .filter((r) => MOBILE_SIM_TYPES.includes(r.type || ''))
           .reduce((sum, r) => sum + (r.pezzi || 0), 0);

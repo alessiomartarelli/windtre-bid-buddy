@@ -140,7 +140,7 @@ export function PdvDataTable({ preventivo }: PdvDataTableProps) {
       const mobile = mobileByCode[code] || {};
       const mobileRaw = attivatoMobileByPos?.[pdvId] || attivatoMobileByPos?.[code] || [];
       const MOBILE_SIM_TYPES = ['TIED', 'UNTIED', 'TOURIST_FULL', 'TOURIST_PASS', 'TOURIST_XXL',
-        'PROFESSIONAL_FLEX', 'PROFESSIONAL_DATA_10', 'PROFESSIONAL_SPECIAL', 'PROFESSIONAL_STAFF', 'PROFESSIONAL_WORLD', 'ALTRE_SIM_IVA'];
+        'SIM_IVA', 'PROFESSIONAL_FLEX', 'PROFESSIONAL_DATA_10', 'PROFESSIONAL_SPECIAL', 'PROFESSIONAL_STAFF', 'PROFESSIONAL_WORLD', 'ALTRE_SIM_IVA'];
       const volumiMobile = mobileRaw
         .filter((r) => MOBILE_SIM_TYPES.includes(r.type || ''))
         .reduce((s, r) => s + (r.pezzi || 0), 0);
