@@ -3036,12 +3036,53 @@ export default function DashboardGaraReale() {
                                           </div>
                                         )}
                                         <div className="space-y-1">
-                                          {pistaData.items.sort((a, b) => b.pezzi - a.pezzi).map((item) => (
-                                            <div key={item.targetCategory} className="flex justify-between text-sm">
-                                              <span className="truncate max-w-[70%]">{item.targetLabel}</span>
-                                              <span className="font-medium">{item.pezzi}</span>
-                                            </div>
-                                          ))}
+                                          {(() => {
+                                            const sortedItems = [...pistaData.items].sort((a, b) => b.pezzi - a.pezzi);
+                                            let groupsConfig: { label: string; isMember: (cat: string) => boolean }[] | null = null;
+                                            if (pistaKey === "mobile") {
+                                              groupsConfig = [
+                                                { label: "SIM Consumer", isMember: (cat) => !SIM_PIVA_CORE.has(cat) },
+                                                { label: "SIM IVA", isMember: (cat) => SIM_PIVA_CORE.has(cat) },
+                                              ];
+                                            } else if (pistaKey === "fisso") {
+                                              groupsConfig = [
+                                                { label: "Consumer", isMember: (cat) => !FISSO_BUSINESS_CATEGORIES.has(cat) },
+                                                { label: "Business", isMember: (cat) => FISSO_BUSINESS_CATEGORIES.has(cat) },
+                                              ];
+                                            }
+                                            if (!groupsConfig) {
+                                              return sortedItems.map((item) => (
+                                                <div key={item.targetCategory} className="flex justify-between text-sm">
+                                                  <span className="truncate max-w-[70%]">{item.targetLabel}</span>
+                                                  <span className="font-medium">{item.pezzi}</span>
+                                                </div>
+                                              ));
+                                            }
+                                            return groupsConfig.map((g) => {
+                                              const children = sortedItems.filter((it) => g.isMember(it.targetCategory));
+                                              if (children.length === 0) return null;
+                                              const total = children.reduce((s, c) => s + c.pezzi, 0);
+                                              return (
+                                                <div key={g.label} className="space-y-0.5">
+                                                  <div className="flex justify-between text-sm font-semibold" data-testid={`group-header-${pistaKey}-${g.label}`}>
+                                                    <span className="truncate max-w-[70%]">{g.label}</span>
+                                                    <span>{total}</span>
+                                                  </div>
+                                                  {children.length > 0 && (
+                                                    <div className="pl-3 space-y-0.5">
+                                                      <div className="text-[11px] text-gray-500 italic">di cui:</div>
+                                                      {children.map((item) => (
+                                                        <div key={item.targetCategory} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
+                                                          <span className="truncate max-w-[70%]">{item.targetLabel}</span>
+                                                          <span className="font-medium">{item.pezzi}</span>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            });
+                                          })()}
                                         </div>
                                       </div>
                                     );
