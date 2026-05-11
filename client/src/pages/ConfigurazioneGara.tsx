@@ -510,6 +510,12 @@ export default function ConfigurazioneGara() {
       assicurazioni: { puntiProdotto: { ...orgTabelleConfig.assicurazioni.puntiProdotto }, premiProdotto: { ...orgTabelleConfig.assicurazioni.premiProdotto } },
       protecta: { gettoniProdotto: { ...orgTabelleConfig.protecta.gettoniProdotto } },
       extraGara: { puntiAttivazione: { ...orgTabelleConfig.extraGara.puntiAttivazione }, soglieMultipos: JSON.parse(JSON.stringify(orgTabelleConfig.extraGara.soglieMultipos)), soglieMonopos: JSON.parse(JSON.stringify(orgTabelleConfig.extraGara.soglieMonopos)), premiPerSoglia: JSON.parse(JSON.stringify(orgTabelleConfig.extraGara.premiPerSoglia)) },
+      partnership: {
+        puntiPartnership: { ...orgTabelleConfig.partnership.puntiPartnership },
+        gettoniEvento: { ...orgTabelleConfig.partnership.gettoniEvento },
+        clusterGettoniUntied: { ...orgTabelleConfig.partnership.clusterGettoniUntied },
+        clusterGettoniRivincoli: { ...orgTabelleConfig.partnership.clusterGettoniRivincoli },
+      },
     };
   }, [orgTabelleConfig]);
   const [tabelleCalcolo, setTabelleCalcolo] = useState<TabelleCalcoloConfig>(tabelleCalcoloDefaults);
