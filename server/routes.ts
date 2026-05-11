@@ -1979,7 +1979,7 @@ export async function registerRoutes(
       const mappingConfig = sysMapping?.config as { rules?: BiSuiteMappingRule[] } | null;
       const { getDefaultMappingRules, mergeWithDefaultRules } = await import("../shared/bisuiteMapping");
       const rawRules = mappingConfig?.rules || getDefaultMappingRules();
-      const rules = mappingConfig?.rules ? mergeWithDefaultRules(rawRules) : rawRules;
+      const rules = mergeWithDefaultRules(rawRules);
 
       type AggregatedItem = {
         pista: string;
@@ -2189,7 +2189,7 @@ export async function registerRoutes(
       const mappingConfig = sysMapping?.config as { rules?: BiSuiteMappingRule[] } | null;
       const { getDefaultMappingRules, mapBiSuiteArticle, mergeWithDefaultRules } = await import("../shared/bisuiteMapping");
       const rawRules = mappingConfig?.rules || getDefaultMappingRules();
-      const rules = mappingConfig?.rules ? mergeWithDefaultRules(rawRules) : rawRules;
+      const rules = mergeWithDefaultRules(rawRules);
 
       const PRODOTTI_CATS = new Set([
         'TELEFONIA', 'MODEM/ROUTER', 'SMART DEVICE', 'INTERNET DEVICE', 'SIM', 'RICARICHE',
