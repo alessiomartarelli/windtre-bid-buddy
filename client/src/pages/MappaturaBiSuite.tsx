@@ -58,6 +58,7 @@ import {
   PISTA_TARGETS,
   PISTA_LABELS,
   getDefaultMappingRules,
+  getEffectiveRulesForEditor,
 } from '@shared/bisuiteMapping';
 
 const PISTA_ICONS: Record<GaraPista, React.ReactNode> = {
@@ -115,6 +116,7 @@ export default function MappaturaBiSuite() {
   const { toast } = useToast();
 
   const [rules, setRules] = useState<BiSuiteMappingRule[]>([]);
+  const [serverEffectiveRules, setServerEffectiveRules] = useState<BiSuiteMappingRule[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
@@ -159,6 +161,11 @@ export default function MappaturaBiSuite() {
       const res = await fetch(apiUrl('/api/admin/bisuite-mapping'), { credentials: 'include' });
       if (!res.ok) throw new Error('Errore nel caricamento');
       const data = await res.json();
+      if (data && Array.isArray(data.effectiveRules)) {
+        setServerEffectiveRules(data.effectiveRules as BiSuiteMappingRule[]);
+      } else {
+        setServerEffectiveRules(null);
+      }
       if (data && data.rules) {
         setRules(data.rules);
       } else {
@@ -167,6 +174,7 @@ export default function MappaturaBiSuite() {
       }
     } catch (err) {
       console.error('Error loading mapping:', err);
+      setServerEffectiveRules(null);
       setRules(getDefaultMappingRules());
       setHasChanges(true);
     } finally {
@@ -189,6 +197,20 @@ export default function MappaturaBiSuite() {
         body: JSON.stringify({ mapping }),
       });
       if (!res.ok) throw new Error('Errore nel salvataggio');
+      // Refresh effective rules from the saved snapshot so the editor stays
+      // in sync with the runtime engine immediately (no page reload needed).
+      const responseBody = await res.json().catch(() => null);
+      const savedMapping = responseBody?.mapping as
+        | { rules?: BiSuiteMappingRule[]; effectiveRules?: BiSuiteMappingRule[] }
+        | undefined;
+      const nextSavedRules = Array.isArray(savedMapping?.rules)
+        ? (savedMapping!.rules as BiSuiteMappingRule[])
+        : rules;
+      const nextEffective = Array.isArray(savedMapping?.effectiveRules)
+        ? (savedMapping!.effectiveRules as BiSuiteMappingRule[])
+        : getEffectiveRulesForEditor(nextSavedRules);
+      setRules(nextSavedRules);
+      setServerEffectiveRules(nextEffective);
       setHasChanges(false);
       toast({ title: 'Mappatura salvata', description: 'Le regole di mappatura sono state salvate.' });
       if (isExtraTab) {
@@ -232,7 +254,15 @@ export default function MappaturaBiSuite() {
     setHasChanges(true);
   };
 
-  const pistaRules = isExtraTab ? [] : rules.filter((r) => r.pista === activePista);
+  // displayRules = saved rules + synthesized partnership twins (read-only).
+  // When the user has pending unsaved edits, recompute twins locally so the
+  // partnership tab stays in sync with current CB rules. Otherwise use the
+  // server-computed effectiveRules for parity with the runtime engine.
+  const displayRules = hasChanges
+    ? getEffectiveRulesForEditor(rules)
+    : (serverEffectiveRules ?? getEffectiveRulesForEditor(rules));
+
+  const pistaRules = isExtraTab ? [] : displayRules.filter((r) => r.pista === activePista);
 
   const changeMonth = (delta: number) => {
     let m = summaryMonth + delta;
@@ -302,7 +332,7 @@ export default function MappaturaBiSuite() {
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             <TabsList className="grid w-max sm:w-full grid-cols-9 mb-6">
               {ALL_PISTE.map((pista) => {
-                const count = rules.filter((r) => r.pista === pista).length;
+                const count = displayRules.filter((r) => r.pista === pista).length;
                 return (
                   <TabsTrigger key={pista} value={pista} className="gap-1.5 text-xs sm:text-sm" data-testid={`tab-${pista}`}>
                     {PISTA_ICONS[pista]}
@@ -333,12 +363,20 @@ export default function MappaturaBiSuite() {
             </TabsList>
             </div>
 
-            {ALL_PISTE.map((pista) => (
+            {ALL_PISTE.map((pista) => {
+              const pistaList = displayRules.filter((r) => r.pista === pista);
+              const syntheticCount = pistaList.filter((r) => r.synthetic).length;
+              return (
               <TabsContent key={pista} value={pista}>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium text-muted-foreground">
-                      {rules.filter((r) => r.pista === pista).length} regole per {PISTA_LABELS[pista]}
+                      {pistaList.length} regole per {PISTA_LABELS[pista]}
+                      {syntheticCount > 0 && (
+                        <span className="ml-1 text-xs">
+                          ({syntheticCount} auto-generate da CB)
+                        </span>
+                      )}
                     </h3>
                     <Button size="sm" onClick={() => addRule(pista)} data-testid={`btn-add-rule-${pista}`}>
                       <Plus className="h-4 w-4 mr-2" />
@@ -346,7 +384,7 @@ export default function MappaturaBiSuite() {
                     </Button>
                   </div>
 
-                  {rules.filter((r) => r.pista === pista).length === 0 ? (
+                  {pistaList.length === 0 ? (
                     <Card>
                       <CardContent className="py-8 text-center text-muted-foreground">
                         Nessuna regola configurata per {PISTA_LABELS[pista]}.
@@ -354,8 +392,8 @@ export default function MappaturaBiSuite() {
                       </CardContent>
                     </Card>
                   ) : (
-                    rules
-                      .filter((r) => r.pista === pista)
+                    pistaList
+                      .slice()
                       .sort((a, b) => b.priority - a.priority)
                       .map((rule) => (
                         <RuleCard
@@ -369,7 +407,8 @@ export default function MappaturaBiSuite() {
                   )}
                 </div>
               </TabsContent>
-            ))}
+              );
+            })}
 
             {(['prodotti', 'servizi', 'non_mappati'] as ExtraTab[]).map((tab) => (
               <TabsContent key={tab} value={tab}>
@@ -576,20 +615,35 @@ function RuleCard({
     }
   }
 
+  const isSynthetic = !!rule.synthetic;
+
   return (
-    <Card className={`transition-opacity ${!rule.enabled ? 'opacity-50' : ''}`} data-testid={`rule-card-${rule.id}`}>
+    <Card
+      className={`transition-opacity ${!rule.enabled ? 'opacity-50' : ''} ${isSynthetic ? 'border-dashed bg-muted/20' : ''}`}
+      data-testid={`rule-card-${rule.id}`}
+    >
       <CardContent className="py-3 px-3 sm:px-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
           <GripVertical className="h-4 w-4 text-muted-foreground/40 flex-shrink-0 hidden sm:block" />
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <Badge variant="default" className="text-xs">
                 → {rule.targetLabel}
               </Badge>
               <Badge variant="outline" className="text-[10px]">
                 P: {rule.priority}
               </Badge>
+              {isSynthetic && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] border-amber-400 text-amber-700 bg-amber-50"
+                  title="Regola sintetizzata automaticamente dalla regola CB equivalente. Non modificabile: edita la regola CB per cambiarla."
+                  data-testid={`badge-synthetic-${rule.id}`}
+                >
+                  Auto-generata da CB
+                </Badge>
+              )}
             </div>
             <div className="flex flex-wrap gap-1">
               {conditionParts.length > 0 ? (
@@ -608,12 +662,27 @@ function RuleCard({
             <Switch
               checked={rule.enabled}
               onCheckedChange={onToggle}
+              disabled={isSynthetic}
               data-testid={`switch-rule-${rule.id}`}
             />
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit} data-testid={`btn-edit-rule-${rule.id}`}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onEdit}
+              disabled={isSynthetic}
+              data-testid={`btn-edit-rule-${rule.id}`}
+            >
               <Pencil className="h-3.5 w-3.5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={onDelete} data-testid={`btn-delete-rule-${rule.id}`}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              onClick={onDelete}
+              disabled={isSynthetic}
+              data-testid={`btn-delete-rule-${rule.id}`}
+            >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>

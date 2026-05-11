@@ -24,6 +24,12 @@ export interface BiSuiteMappingRule {
   priority: number;
   enabled: boolean;
   ruleType?: 'base' | 'additional';
+  /**
+   * True only on rules synthesized at runtime (e.g. partnership twins
+   * derived from CB rules). Synthetic rules are read-only in the editor
+   * and are NEVER persisted by the save endpoint.
+   */
+  synthetic?: boolean;
 }
 
 export interface BiSuiteMappingConfig {
@@ -627,6 +633,7 @@ function synthesizePartnershipTwins(rules: BiSuiteMappingRule[]): BiSuiteMapping
       ...r,
       id: `${r.id}-partnership`,
       pista: 'partnership' as GaraPista,
+      synthetic: true,
     };
     const fp = fullFingerprint(twin);
     if (existingKeys.has(fp)) continue;
@@ -646,4 +653,19 @@ export function mergeWithDefaultRules(
   const merged = missing.length === 0 ? savedRules : [...savedRules, ...missing];
   const partnershipTwins = synthesizePartnershipTwins(merged);
   return partnershipTwins.length === 0 ? merged : [...merged, ...partnershipTwins];
+}
+
+/**
+ * Returns the saved rules plus the partnership twins synthesized from any
+ * CB rules in the saved set. Unlike `mergeWithDefaultRules` this does NOT
+ * inject any missing default rules — it is intended for the editor UI
+ * (`MappaturaBiSuite.tsx`) which must show exactly what the user has
+ * saved + the auto-derived twins (with `synthetic: true`) so that admins
+ * can see the full set of rules used by the runtime calculation engines.
+ */
+export function getEffectiveRulesForEditor(
+  savedRules: BiSuiteMappingRule[],
+): BiSuiteMappingRule[] {
+  const twins = synthesizePartnershipTwins(savedRules);
+  return twins.length === 0 ? savedRules : [...savedRules, ...twins];
 }

@@ -6,6 +6,7 @@ import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
+import { getEffectiveRulesForEditor } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
 import { registerCdgRoutes } from "./cdgRoutes";
 
@@ -1845,8 +1846,18 @@ export async function registerRoutes(
       }
 
       const sysConfig = await storage.getSystemConfig("bisuite_mapping");
-      const mapping = sysConfig?.config || null;
-      res.json(mapping);
+      const mapping = (sysConfig?.config ?? null) as
+        | { rules?: BiSuiteMappingRule[]; version?: string }
+        | null;
+      const savedRules: BiSuiteMappingRule[] = Array.isArray(mapping?.rules)
+        ? (mapping!.rules as BiSuiteMappingRule[])
+        : [];
+      const effectiveRules = getEffectiveRulesForEditor(savedRules);
+      if (mapping) {
+        res.json({ ...mapping, effectiveRules });
+      } else {
+        res.json({ effectiveRules });
+      }
     } catch (error) {
       console.error("Error loading BiSuite mapping:", error);
       res.status(500).json({ error: "Errore nel caricamento della mappatura" });
@@ -1860,13 +1871,27 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Accesso non autorizzato" });
       }
 
-      const { mapping } = req.body;
+      const mapping = req.body?.mapping as
+        | { rules?: unknown; version?: string }
+        | undefined;
       if (!mapping || !Array.isArray(mapping.rules)) {
         return res.status(400).json({ error: "mapping con rules è obbligatorio" });
       }
 
-      await storage.upsertSystemConfig("bisuite_mapping", mapping, profile.id);
-      res.json({ success: true, mapping });
+      // Defense in depth: never persist synthesized twins. Drop any rule
+      // marked synthetic and strip the flag from the rest.
+      const sanitizedRules: BiSuiteMappingRule[] = (mapping.rules as BiSuiteMappingRule[])
+        .filter((r): r is BiSuiteMappingRule => !!r && !r.synthetic)
+        .map((r) => {
+          const { synthetic, ...rest } = r;
+          void synthetic;
+          return rest;
+        });
+      const sanitizedMapping = { ...mapping, rules: sanitizedRules };
+      const effectiveRules = getEffectiveRulesForEditor(sanitizedRules);
+
+      await storage.upsertSystemConfig("bisuite_mapping", sanitizedMapping, profile.id);
+      res.json({ success: true, mapping: { ...sanitizedMapping, effectiveRules } });
     } catch (error) {
       console.error("Error saving BiSuite mapping:", error);
       res.status(500).json({ error: "Errore nel salvataggio della mappatura" });
