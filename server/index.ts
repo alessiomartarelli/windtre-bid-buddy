@@ -54,7 +54,13 @@ app.use((req, res, next) => {
     if (path.includes("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        const redacted = JSON.stringify(capturedJsonResponse, (key, value) => {
+          if (typeof value === "string" && value.length > 200 && /^data:image\//i.test(value)) {
+            return `[dataURL ${value.length} bytes redacted]`;
+          }
+          return value;
+        });
+        logLine += ` :: ${redacted.length > 2000 ? redacted.slice(0, 2000) + "…[truncated]" : redacted}`;
       }
 
       log(logLine);

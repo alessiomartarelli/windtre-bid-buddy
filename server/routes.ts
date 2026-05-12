@@ -1302,6 +1302,64 @@ export async function registerRoutes(
     }
   });
 
+  // === ORGANIZATION BRANDING (logo per PDF) ===
+  // Logo is stored as a base64 dataURL inside `organization_config.config.brandingLogoDataUrl`.
+  // GET is available to any authenticated user belonging to an org so PDFs can
+  // be auto-stamped. PUT is admin/super_admin only.
+  app.get("/api/organization-branding/logo", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) {
+        return res.json({ logoDataUrl: null });
+      }
+      const cfg = await storage.getOrgConfig(profile.organizationId);
+      const data = (cfg?.config as Record<string, unknown> | null) || {};
+      const logo = typeof data.brandingLogoDataUrl === "string" ? data.brandingLogoDataUrl : null;
+      res.json({ logoDataUrl: logo });
+    } catch (e) {
+      res.status(500).json({ message: "Errore nel recupero del logo" });
+    }
+  });
+
+  app.put("/api/organization-branding/logo", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Solo admin/super_admin possono modificare il logo" });
+      }
+      if (!profile.organizationId) {
+        return res.status(400).json({ message: "Utente senza organizzazione" });
+      }
+      const { logoDataUrl } = req.body ?? {};
+      let value: string | null = null;
+      if (logoDataUrl !== null && logoDataUrl !== undefined && logoDataUrl !== "") {
+        if (typeof logoDataUrl !== "string") {
+          return res.status(400).json({ message: "logoDataUrl non valido" });
+        }
+        const m = logoDataUrl.match(/^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/=]+)$/);
+        if (!m) {
+          return res.status(400).json({ message: "Formato logo non valido (solo PNG o JPEG, dataURL base64)" });
+        }
+        // Approx decoded size in bytes ≈ base64 length * 3/4. Limit ~2 MB raw.
+        const approxBytes = Math.floor((m[2].length * 3) / 4);
+        if (approxBytes > 2 * 1024 * 1024) {
+          return res.status(413).json({ message: "Logo troppo grande (max 2 MB)" });
+        }
+        value = logoDataUrl;
+      }
+      const cur = await storage.getOrgConfig(profile.organizationId);
+      const curCfg = (cur?.config as Record<string, unknown> | null) || {};
+      const nextCfg: Record<string, unknown> = { ...curCfg };
+      if (value === null) delete nextCfg.brandingLogoDataUrl;
+      else nextCfg.brandingLogoDataUrl = value;
+      const result = await storage.upsertOrgConfig(profile.organizationId, nextCfg, cur?.configVersion || "2.0");
+      const out = (result.config as Record<string, unknown> | null) || {};
+      res.json({ logoDataUrl: typeof out.brandingLogoDataUrl === "string" ? out.brandingLogoDataUrl : null });
+    } catch (e) {
+      res.status(500).json({ message: "Errore nel salvataggio del logo" });
+    }
+  });
+
   app.post("/api/admin/delete-entity", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.userId;

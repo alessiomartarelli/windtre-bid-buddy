@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
 import { apiUrl } from "@/lib/basePath";
+import { queryClient } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, Store, Building2, ChevronRight, UserCheck, Edit2 } from 'lucide-react';
+import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, Store, Building2, ChevronRight, UserCheck, Edit2, Image as ImageIcon } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
 import { z } from 'zod';
 import {
@@ -108,6 +109,10 @@ export default function AdminPanel() {
   const [dipendenti, setDipendenti] = useState<Dipendente[]>([]);
   const [dipendentiLoading, setDipendentiLoading] = useState(false);
   const [expandedDip, setExpandedDip] = useState<Set<string>>(new Set());
+
+  const [brandingLogo, setBrandingLogo] = useState<string | null>(null);
+  const [brandingLoading, setBrandingLoading] = useState(false);
+  const [brandingSaving, setBrandingSaving] = useState(false);
 
   // === Struttura: dialogs CRUD ===
   const emptyPdvForm: ConfigPdv = { codicePos: '', nome: '', ragioneSociale: '', canale: '', clusterMobile: '', clusterFisso: '', clusterCB: '', tipoPosizione: '' };
@@ -251,8 +256,61 @@ export default function AdminPanel() {
       fetchTeamMembers();
       fetchOrgConfig();
       fetchDipendenti();
+      fetchBrandingLogo();
     }
   }, [profile]);
+
+  const fetchBrandingLogo = async () => {
+    setBrandingLoading(true);
+    try {
+      const res = await fetch(apiUrl('/api/organization-branding/logo'), { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setBrandingLogo(typeof data?.logoDataUrl === 'string' ? data.logoDataUrl : null);
+      }
+    } catch (err) {
+      console.error('Error fetching branding logo:', err);
+    }
+    setBrandingLoading(false);
+  };
+
+  const saveBrandingLogo = async (logoDataUrl: string | null) => {
+    setBrandingSaving(true);
+    try {
+      const res = await fetch(apiUrl('/api/organization-branding/logo'), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ logoDataUrl }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: 'Errore', description: data?.message || 'Salvataggio logo fallito', variant: 'destructive' });
+      } else {
+        setBrandingLogo(typeof data?.logoDataUrl === 'string' ? data.logoDataUrl : null);
+        queryClient.invalidateQueries({ queryKey: ['/api/organization-branding/logo'] });
+        toast({ title: logoDataUrl ? 'Logo aggiornato' : 'Logo rimosso' });
+      }
+    } finally {
+      setBrandingSaving(false);
+    }
+  };
+
+  const handleBrandingFile = (file: File | null) => {
+    if (!file) return;
+    if (!/^image\/(png|jpeg|jpg)$/i.test(file.type)) {
+      toast({ title: 'Formato non valido', description: 'Carica un PNG o JPEG', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: 'File troppo grande', description: 'Massimo 2 MB', variant: 'destructive' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : null;
+      if (dataUrl) saveBrandingLogo(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const fetchTeamMembers = async () => {
     setLoading(true);
@@ -619,7 +677,7 @@ export default function AdminPanel() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3" data-testid="tabs-org">
+          <TabsList className="grid w-full grid-cols-4" data-testid="tabs-org">
             <TabsTrigger value="struttura" data-testid="tab-struttura">
               <Building2 className="h-4 w-4 mr-1.5 hidden sm:block" />
               Struttura
@@ -631,6 +689,10 @@ export default function AdminPanel() {
             <TabsTrigger value="utenti" data-testid="tab-utenti">
               <Users className="h-4 w-4 mr-1.5 hidden sm:block" />
               Utenti
+            </TabsTrigger>
+            <TabsTrigger value="branding" data-testid="tab-branding">
+              <ImageIcon className="h-4 w-4 mr-1.5 hidden sm:block" />
+              Branding
             </TabsTrigger>
           </TabsList>
 
@@ -1097,6 +1159,71 @@ export default function AdminPanel() {
                         })}
                       </TableBody>
                     </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="branding">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ImageIcon className="h-5 w-5" />
+                  Logo organizzazione
+                </CardTitle>
+                <CardDescription>
+                  Carica una volta il logo dell'organizzazione: verrà usato in automatico negli export PDF
+                  (es. tabella PDV × Pista) per tutti gli utenti, senza dover ricaricare il file ogni volta.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {brandingLoading ? (
+                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div className="flex items-center justify-center h-24 w-40 rounded border bg-white" data-testid="container-branding-preview">
+                        {brandingLogo ? (
+                          <img
+                            src={brandingLogo}
+                            alt="Logo organizzazione"
+                            className="max-h-full max-w-full object-contain"
+                            data-testid="img-branding-logo"
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Nessun logo</span>
+                        )}
+                      </div>
+                      <div className="space-y-2 flex-1 min-w-[220px]">
+                        <Label htmlFor="branding-logo-input">Carica nuovo logo</Label>
+                        <Input
+                          id="branding-logo-input"
+                          type="file"
+                          accept="image/png,image/jpeg"
+                          disabled={brandingSaving}
+                          onChange={(e) => {
+                            handleBrandingFile(e.target.files?.[0] ?? null);
+                            e.target.value = '';
+                          }}
+                          data-testid="input-branding-logo"
+                        />
+                        <p className="text-xs text-muted-foreground">PNG o JPEG, massimo 2 MB.</p>
+                      </div>
+                    </div>
+                    {brandingLogo && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={brandingSaving}
+                        onClick={() => saveBrandingLogo(null)}
+                        data-testid="button-branding-remove"
+                      >
+                        {brandingSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                        Rimuovi logo
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardContent>

@@ -1126,6 +1126,7 @@ function TabellaPdfExportDialog({
   prefs,
   onPrefsChange,
   onConfirm,
+  orgLogoDataUrl,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -1133,6 +1134,7 @@ function TabellaPdfExportDialog({
   prefs: TabellaPdfPrefs;
   onPrefsChange: (next: TabellaPdfPrefs) => void;
   onConfirm: (prefs: TabellaPdfPrefs) => void;
+  orgLogoDataUrl: string | null;
 }) {
   const availableKeys = pisteAttive.map(p => p.pista as string);
   const selectedSet = new Set(
@@ -1216,7 +1218,7 @@ function TabellaPdfExportDialog({
           </div>
 
           <div>
-            <Label className="text-sm font-medium">Logo organizzazione (opzionale)</Label>
+            <Label className="text-sm font-medium">Logo (opzionale)</Label>
             <div className="mt-1 flex items-center gap-3">
               <input
                 type="file"
@@ -1225,26 +1227,34 @@ function TabellaPdfExportDialog({
                 className="text-sm flex-1"
                 data-testid="input-pdf-logo"
               />
-              {prefs.logoDataUrl && (
+              {(prefs.logoDataUrl || orgLogoDataUrl) && (
                 <>
                   <img
-                    src={prefs.logoDataUrl}
+                    src={prefs.logoDataUrl || orgLogoDataUrl || ''}
                     alt="Logo preview"
                     className="h-10 w-auto max-w-[80px] border rounded bg-white object-contain"
                     data-testid="img-pdf-logo-preview"
                   />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7"
-                    onClick={() => onPrefsChange({ ...prefs, logoDataUrl: null })}
-                    data-testid="btn-pdf-logo-remove"
-                  >Rimuovi</Button>
+                  {prefs.logoDataUrl && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7"
+                      onClick={() => onPrefsChange({ ...prefs, logoDataUrl: null })}
+                      data-testid="btn-pdf-logo-remove"
+                    >{orgLogoDataUrl ? 'Usa logo org' : 'Rimuovi logo locale'}</Button>
+                  )}
                 </>
               )}
             </div>
-            <p className="text-[11px] text-gray-500 mt-1">PNG o JPEG, max 1 MB. Apparirà in alto a destra del PDF.</p>
+            <p className="text-[11px] text-gray-500 mt-1">
+              {prefs.logoDataUrl
+                ? 'Logo locale caricato solo per questo PDF. Rimuovi per tornare al logo dell\'organizzazione.'
+                : orgLogoDataUrl
+                  ? 'Verrà usato il logo dell\'organizzazione. Carica un file per sovrascriverlo solo per questo PDF.'
+                  : 'Nessun logo configurato. Imposta il logo organizzazione da Admin → Branding, oppure carica un file qui (PNG/JPEG, max 1 MB).'}
+            </p>
           </div>
         </div>
         <DialogFooter>
@@ -1272,6 +1282,13 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfPrefs, setPdfPrefs] = useState<TabellaPdfPrefs>({ selectedPiste: null, nota: "", logoDataUrl: null });
   const [pdfPrefsHydratedOrg, setPdfPrefsHydratedOrg] = useState<string | null>(null);
+
+  const { data: orgBranding } = useQuery<{ logoDataUrl: string | null }>({
+    queryKey: ['/api/organization-branding/logo'],
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const orgLogoDataUrl = orgBranding?.logoDataUrl ?? null;
 
   useEffect(() => {
     if (!orgId) return;
@@ -1624,6 +1641,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
         onOpenChange={setPdfDialogOpen}
         pisteAttive={pisteAttive}
         prefs={pdfPrefs}
+        orgLogoDataUrl={orgLogoDataUrl}
         onPrefsChange={(next) => {
           setPdfPrefs(next);
           savePdfPrefs(orgId, next);
@@ -1632,7 +1650,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
           exportPdf({
             selectedPiste: prefs.selectedPiste,
             nota: prefs.nota,
-            logoDataUrl: prefs.logoDataUrl,
+            logoDataUrl: prefs.logoDataUrl ?? orgLogoDataUrl,
           });
           setPdfDialogOpen(false);
         }}
