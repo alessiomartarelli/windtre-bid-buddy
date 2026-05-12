@@ -33,6 +33,8 @@ import {
   RefreshCw,
   Briefcase,
   Users,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { apiUrl } from "@/lib/basePath";
 import { SIM_CONSUMER_CORE, SIM_PIVA_CORE } from "@/lib/mobileCategories";
@@ -987,6 +989,14 @@ export default function DashboardGaraReale() {
   const now = new Date();
   const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
   const [expandedPistaCategories, setExpandedPistaCategories] = useState<Set<string>>(new Set());
+  const [expandedRsRows, setExpandedRsRows] = useState<Set<string>>(new Set());
+  const toggleRsRow = useCallback((key: string) => {
+    setExpandedRsRows(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
   const [expandedMobileGroups, setExpandedMobileGroups] = useState<Set<string>>(new Set());
   const [expandedFissoGroups, setExpandedFissoGroups] = useState<Set<string>>(new Set());
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
@@ -2498,30 +2508,62 @@ export default function DashboardGaraReale() {
                       {pista.pista === "cb" && pista.totalePezzi > 0 ? (
                         <div className="space-y-2">
                           {pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 && (
-                            <div className="space-y-2">
-                              {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
-                                <div key={rsKey} className="rounded-lg border p-2.5 space-y-1.5">
-                                  <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</div>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div className="text-center">
-                                      <div className="text-xs text-gray-500">Pezzi</div>
-                                      <span className="text-lg font-bold">{rsData.pezziAttuali}</span>
-                                      {rsData.pezziProiezione > rsData.pezziAttuali && (
-                                        <div className="text-xs text-blue-500">→ {rsData.pezziProiezione}</div>
-                                      )}
-                                    </div>
-                                    <div className="text-center">
-                                      <div className="text-xs text-gray-500">Gettoni €</div>
-                                      <span className="text-lg font-bold text-orange-700 dark:text-orange-400">{formatEuro(rsData.premioAttuale)}</span>
-                                      {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
-                                        <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5">
-                                          <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
+                            <div className="space-y-1.5">
+                              {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => {
+                                const rowKey = `${pista.pista}::${rsKey}`;
+                                const isExp = expandedRsRows.has(rowKey);
+                                return (
+                                  <div key={rsKey} className="rounded-lg border" data-testid={`row-pista-${pista.pista}-${rsKey}`}>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleRsRow(rowKey)}
+                                      aria-expanded={isExp}
+                                      className="w-full flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg"
+                                      data-testid={`btn-expand-row-${pista.pista}-${rsKey}`}
+                                    >
+                                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                        {isExp ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
+                                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</span>
+                                      </div>
+                                      <div className="flex items-center gap-3 shrink-0 text-xs">
+                                        <span className="font-medium">
+                                          {rsData.pezziAttuali}
+                                          {rsData.pezziProiezione > rsData.pezziAttuali && <span className="text-blue-500"> → {rsData.pezziProiezione}</span>}
+                                          <span className="text-gray-400 ml-1">pz</span>
+                                        </span>
+                                        <span className="font-bold text-orange-700 dark:text-orange-400">
+                                          {formatEuro(rsData.premioAttuale)}
+                                          {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                            <span className="text-blue-600 ml-1">→ {formatEuro(rsData.premioProiettato)}</span>
+                                          )}
+                                        </span>
+                                      </div>
+                                    </button>
+                                    {isExp && (
+                                      <div className="px-2.5 pb-2.5 pt-2 border-t space-y-1.5">
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <div className="text-center">
+                                            <div className="text-xs text-gray-500">Pezzi</div>
+                                            <span className="text-lg font-bold">{rsData.pezziAttuali}</span>
+                                            {rsData.pezziProiezione > rsData.pezziAttuali && (
+                                              <div className="text-xs text-blue-500">→ {rsData.pezziProiezione}</div>
+                                            )}
+                                          </div>
+                                          <div className="text-center">
+                                            <div className="text-xs text-gray-500">Gettoni €</div>
+                                            <span className="text-lg font-bold text-orange-700 dark:text-orange-400">{formatEuro(rsData.premioAttuale)}</span>
+                                            {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                              <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5">
+                                                <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
+                                              </div>
+                                            )}
+                                          </div>
                                         </div>
-                                      )}
-                                    </div>
+                                      </div>
+                                    )}
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                           <div className="rounded-lg border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20 px-3 py-2.5 space-y-1.5">
@@ -2551,45 +2593,77 @@ export default function DashboardGaraReale() {
                       ) : pista.pista === "partnership" && pista.totalePezzi > 0 ? (
                         <div className="space-y-2">
                           {pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 && (
-                            <div className="space-y-2">
-                              {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
-                                <div key={rsKey} className="rounded-lg border p-2.5 space-y-1.5">
-                                  <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</div>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div className="text-center">
-                                      <div className="text-xs text-gray-500">Punti</div>
-                                      <span className="text-lg font-bold">{rsData.puntiAttuali.toFixed(0)}</span>
-                                      {rsData.puntiProiezione > rsData.puntiAttuali && (
-                                        <div className="text-xs text-blue-500">→ {rsData.puntiProiezione.toFixed(0)}</div>
-                                      )}
-                                    </div>
-                                    <div className="text-center">
-                                      <div className="text-xs text-gray-500">Premio €</div>
-                                      <span className="text-lg font-bold text-green-700 dark:text-green-400">{formatEuro(rsData.premioAttuale)}</span>
-                                      {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
-                                        <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5">
-                                          <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
-                                    <div className="space-y-1">
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
-                                        <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
+                            <div className="space-y-1.5">
+                              {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => {
+                                const rowKey = `${pista.pista}::${rsKey}`;
+                                const isExp = expandedRsRows.has(rowKey);
+                                return (
+                                  <div key={rsKey} className="rounded-lg border" data-testid={`row-pista-${pista.pista}-${rsKey}`}>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleRsRow(rowKey)}
+                                      aria-expanded={isExp}
+                                      className="w-full flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg"
+                                      data-testid={`btn-expand-row-${pista.pista}-${rsKey}`}
+                                    >
+                                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                        {isExp ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
+                                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</span>
                                       </div>
-                                      <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
-                                          {(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(0)} pt
+                                      <div className="flex items-center gap-3 shrink-0 text-xs">
+                                        <span className="font-medium">
+                                          {rsData.puntiAttuali.toFixed(0)}
+                                          {rsData.puntiProiezione > rsData.puntiAttuali && <span className="text-blue-500"> → {rsData.puntiProiezione.toFixed(0)}</span>}
+                                          <span className="text-gray-400 ml-1">pt</span>
                                         </span>
-                                        <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                        <span className="font-bold text-green-700 dark:text-green-400">
+                                          {formatEuro(rsData.premioAttuale)}
+                                          {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                            <span className="text-blue-600 ml-1">→ {formatEuro(rsData.premioProiettato)}</span>
+                                          )}
+                                        </span>
                                       </div>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
+                                    </button>
+                                    {isExp && (
+                                      <div className="px-2.5 pb-2.5 pt-2 border-t space-y-1.5">
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <div className="text-center">
+                                            <div className="text-xs text-gray-500">Punti</div>
+                                            <span className="text-lg font-bold">{rsData.puntiAttuali.toFixed(0)}</span>
+                                            {rsData.puntiProiezione > rsData.puntiAttuali && (
+                                              <div className="text-xs text-blue-500">→ {rsData.puntiProiezione.toFixed(0)}</div>
+                                            )}
+                                          </div>
+                                          <div className="text-center">
+                                            <div className="text-xs text-gray-500">Premio €</div>
+                                            <span className="text-lg font-bold text-green-700 dark:text-green-400">{formatEuro(rsData.premioAttuale)}</span>
+                                            {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                              <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5">
+                                                <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
+                                          <div className="space-y-1">
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
+                                              <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
+                                            </div>
+                                            <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                                {(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(0)} pt
+                                              </span>
+                                              <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
 
@@ -2637,64 +2711,105 @@ export default function DashboardGaraReale() {
                           </div>
                         </div>
                       ) : pista.totalePezzi > 0 && pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 ? (
-                        <div className="space-y-2">
-                          {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
-                            <div key={rsKey} className="rounded-lg border p-2.5 space-y-1.5">
-                              <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="text-center">
-                                  <div className="text-xs text-gray-500">Soglia Att.</div>
-                                  <Badge className={`text-sm ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
-                                  {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiAttuali.toFixed(1)} pt</div>}
-                                </div>
-                                <div className="text-center">
-                                  <div className="text-xs text-gray-500">Proiezione</div>
-                                  <Badge className={`text-sm ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
-                                  {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiProiezione.toFixed(1)} pt</div>}
-                                </div>
+                        <div className="space-y-1.5">
+                          {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => {
+                            const rowKey = `${pista.pista}::${rsKey}`;
+                            const isExp = expandedRsRows.has(rowKey);
+                            const projDiffers = rsData.puntiProiezione > rsData.puntiAttuali || rsData.sogliaProiezione !== rsData.sogliaAttuale;
+                            return (
+                              <div key={rsKey} className="rounded-lg border" data-testid={`row-pista-${pista.pista}-${rsKey}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRsRow(rowKey)}
+                                  aria-expanded={isExp}
+                                  className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
+                                  data-testid={`btn-expand-row-${pista.pista}-${rsKey}`}
+                                >
+                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                    {isExp ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
+                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs flex-wrap justify-end pl-5 sm:pl-0">
+                                    <span className="flex items-center gap-1">
+                                      <span className="font-medium">{rsData.puntiAttuali.toFixed(1)} pt</span>
+                                      <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
+                                    </span>
+                                    {projDiffers && (
+                                      <span className="flex items-center gap-1 text-blue-600">
+                                        <TrendingUp className="h-3 w-3" />
+                                        <span className="font-medium">{rsData.puntiProiezione.toFixed(1)} pt</span>
+                                        <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
+                                      </span>
+                                    )}
+                                    {(rsData.premioAttuale > 0 || rsData.premioProiettato > 0) && (
+                                      <span className="font-bold text-green-700 dark:text-green-400">
+                                        {formatEuro(rsData.premioAttuale)}
+                                        {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                          <span className="text-blue-600 ml-1">→ {formatEuro(rsData.premioProiettato)}</span>
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+                                {isExp && (
+                                  <div className="px-2.5 pb-2.5 pt-2 border-t space-y-1.5">
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div className="text-center">
+                                        <div className="text-xs text-gray-500">Soglia Att.</div>
+                                        <Badge className={`text-sm ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
+                                        {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiAttuali.toFixed(1)} pt</div>}
+                                      </div>
+                                      <div className="text-center">
+                                        <div className="text-xs text-gray-500">Proiezione</div>
+                                        <Badge className={`text-sm ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
+                                        {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiProiezione.toFixed(1)} pt</div>}
+                                      </div>
+                                    </div>
+                                    {rsData.soglieRef && (
+                                      <div className="flex flex-wrap gap-1 justify-center mt-1">
+                                        {[
+                                          { label: "S1", value: rsData.soglieRef.s1 },
+                                          { label: "S2", value: rsData.soglieRef.s2 },
+                                          { label: "S3", value: rsData.soglieRef.s3 },
+                                          ...(rsData.soglieRef.s4 != null && rsData.soglieRef.s4 > 0 ? [{ label: "S4", value: rsData.soglieRef.s4 }] : []),
+                                          ...(rsData.soglieRef.s5 != null && rsData.soglieRef.s5 > 0 ? [{ label: "S5", value: rsData.soglieRef.s5 }] : []),
+                                        ].map((s) => (
+                                          <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">
+                                            {s.label}:{s.value}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                          <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
+                                        </div>
+                                        <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                            {(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(1)} pt
+                                          </span>
+                                          <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {(rsData.premioAttuale > 0 || rsData.premioProiettato > 0) && (
+                                      <div className="flex items-center justify-between text-xs border-t pt-1">
+                                        <span className="text-green-700 font-semibold">{formatEuro(rsData.premioAttuale)}</span>
+                                        {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                          <span className="text-blue-600 font-semibold flex items-center gap-0.5">
+                                            <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                              {rsData.soglieRef && (
-                                <div className="flex flex-wrap gap-1 justify-center mt-1">
-                                  {[
-                                    { label: "S1", value: rsData.soglieRef.s1 },
-                                    { label: "S2", value: rsData.soglieRef.s2 },
-                                    { label: "S3", value: rsData.soglieRef.s3 },
-                                    ...(rsData.soglieRef.s4 != null && rsData.soglieRef.s4 > 0 ? [{ label: "S4", value: rsData.soglieRef.s4 }] : []),
-                                    ...(rsData.soglieRef.s5 != null && rsData.soglieRef.s5 > 0 ? [{ label: "S5", value: rsData.soglieRef.s5 }] : []),
-                                  ].map((s) => (
-                                    <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">
-                                      {s.label}:{s.value}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
-                                    <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
-                                  </div>
-                                  <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
-                                      {(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(1)} pt
-                                    </span>
-                                    <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
-                                  </div>
-                                </div>
-                              )}
-                              {(rsData.premioAttuale > 0 || rsData.premioProiettato > 0) && (
-                                <div className="flex items-center justify-between text-xs border-t pt-1">
-                                  <span className="text-green-700 font-semibold">{formatEuro(rsData.premioAttuale)}</span>
-                                  {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
-                                    <span className="text-blue-600 font-semibold flex items-center gap-0.5">
-                                      <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                            );
+                          })}
                           <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2 flex items-center justify-between">
                             <span className="text-sm font-medium text-gray-600">Totale Premio</span>
                             <div className="flex items-center gap-3">
