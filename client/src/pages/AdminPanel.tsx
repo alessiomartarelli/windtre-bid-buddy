@@ -100,6 +100,7 @@ export default function AdminPanel() {
   const [showCurrentPasswordSelf, setShowCurrentPasswordSelf] = useState(false);
 
   const [puntiVendita, setPuntiVendita] = useState<ConfigPdv[]>([]);
+  const [emptyRsList, setEmptyRsList] = useState<string[]>([]);
   const [configLoading, setConfigLoading] = useState(false);
 
   const [expandedRS, setExpandedRS] = useState<Set<string>>(new Set());
@@ -272,6 +273,8 @@ export default function AdminPanel() {
       const res = await fetch(apiUrl('/api/organization-config'), { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
+        const rsArr = Array.isArray(data?.config?.ragioniSociali) ? (data.config.ragioniSociali as string[]).map(r => String(r).trim()).filter(Boolean) : [];
+        setEmptyRsList(rsArr);
         if (data?.config?.puntiVendita) {
           setPuntiVendita(data.config.puntiVendita.map((p: Record<string, string>) => ({
             id: String(p.id || ''),
@@ -312,8 +315,13 @@ export default function AdminPanel() {
       if (!map.has(rs)) map.set(rs, []);
       map.get(rs)!.push(pdv);
     }
+    // Unione con RS canoniche vuote (senza PDV figli) da config.ragioniSociali[]
+    for (const rs of emptyRsList) {
+      const exists = Array.from(map.keys()).some(k => k.toLowerCase() === rs.toLowerCase());
+      if (!exists) map.set(rs, []);
+    }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'it'));
-  }, [puntiVendita]);
+  }, [puntiVendita, emptyRsList]);
 
   const toggleRS = (rs: string) => {
     setExpandedRS(prev => {

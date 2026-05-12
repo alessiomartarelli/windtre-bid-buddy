@@ -2459,6 +2459,11 @@ export async function registerRoutes(
     const arr = ((cfg?.config as Record<string, unknown> | null)?.puntiVendita || []) as StructPdv[];
     return Array.isArray(arr) ? arr : [];
   }
+  async function readRsList(orgId: string): Promise<string[]> {
+    const cfg = await storage.getOrgConfig(orgId);
+    const arr = ((cfg?.config as Record<string, unknown> | null)?.ragioniSociali || []) as string[];
+    return Array.isArray(arr) ? arr.map(s => String(s).trim()).filter(Boolean) : [];
+  }
   async function writePv(orgId: string, mutator: (pv: StructPdv[]) => StructPdv[]): Promise<void> {
     const cfg = await storage.getOrgConfig(orgId);
     const config = (cfg?.config as Record<string, unknown> | null) || {};
@@ -2466,6 +2471,12 @@ export async function registerRoutes(
     const next = mutator(pv);
     const newConfig = { ...config, puntiVendita: next };
     await storage.upsertOrgConfig(orgId, newConfig, cfg?.configVersion || "2.0");
+  }
+  async function writeConfigKeys(orgId: string, mutator: (cfg: Record<string, unknown>) => Record<string, unknown>): Promise<void> {
+    const cfg = await storage.getOrgConfig(orgId);
+    const config = (cfg?.config as Record<string, unknown> | null) || {};
+    const next = mutator({ ...config });
+    await storage.upsertOrgConfig(orgId, next, cfg?.configVersion || "2.0");
   }
   const norm = (s: unknown) => String(s ?? "").trim();
   const normLow = (s: unknown) => norm(s).toLowerCase();
@@ -2583,14 +2594,22 @@ export async function registerRoutes(
              AND ragione_sociale = ${oldRagioneSociale}
              AND codice = ${oldCodicePos}
         `);
-      } catch (e) { console.error("[struttura] propagate cdg_spese/manuali failed", e); }
+        // bisuite_sales: rinomina codicePos sulle vendite storiche dell'org
+        if (normLow(newCodice) !== normLow(oldCodicePos)) {
+          await db.execute(sql`
+            UPDATE bisuite_sales SET codice_pos = ${newCodice}
+             WHERE organization_id = ${orgId} AND codice_pos = ${oldCodicePos}
+          `);
+        }
+      } catch (e) { console.error("[struttura] propagate cdg_spese/manuali/bisuite failed", e); }
     }
     res.json({ success: true });
   });
 
   // POST /api/admin/struttura/ragione-sociale → crea RS vuota (name-only)
-  // Requisito Task #87: la RS deve poter essere creata in modo esplicito,
-  // non solo come effetto collaterale della creazione di un PDV.
+  // Persistenza: aggiunge la RS in `organization_config.config.ragioniSociali[]`
+  // (lista canonica delle RS senza PDV figli). Materializza anche in
+  // `cdg_ragioni_sociali` per visibilità immediata nel CdG.
   app.post("/api/admin/struttura/ragione-sociale", isAuthenticated, async (req: any, res) => {
     const profile = await requireAdminRole(req, res);
     if (!profile) return;
@@ -2599,17 +2618,13 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const nome = parsed.data.nome;
     const cur = await readPv(orgId);
-    if (cur.some(p => normLow(p.ragioneSociale) === normLow(nome))) {
+    const rsList = await readRsList(orgId);
+    if (cur.some(p => normLow(p.ragioneSociale) === normLow(nome)) || rsList.some(r => normLow(r) === normLow(nome))) {
       return res.status(409).json({ error: `Ragione Sociale "${nome}" già esistente` });
     }
-    // Materializza la RS in cdg_ragioni_sociali (override) per renderla
-    // visibile anche in CdG e nelle liste unified, anche senza PDV figli.
+    await writeConfigKeys(orgId, (c) => ({ ...c, ragioniSociali: [...rsList, nome] }));
     try {
-      await db.execute(sql`
-        INSERT INTO cdg_ragioni_sociali (organization_id, nome)
-        VALUES (${orgId}, ${nome})
-        ON CONFLICT DO NOTHING
-      `);
+      await db.execute(sql`INSERT INTO cdg_ragioni_sociali (organization_id, nome) VALUES (${orgId}, ${nome}) ON CONFLICT DO NOTHING`);
     } catch (e) { console.error("[struttura] create RS cdg insert failed", e); }
     res.status(201).json({ success: true, nome });
   });
@@ -2636,6 +2651,7 @@ export async function registerRoutes(
   });
 
   // PUT /api/admin/struttura/ragione-sociale/:nome → rinomina RS
+  // (sia nei puntiVendita figli, sia nella lista canonica ragioniSociali[])
   app.put("/api/admin/struttura/ragione-sociale/:nome", isAuthenticated, async (req: any, res) => {
     const profile = await requireAdminRole(req, res);
     if (!profile) return;
@@ -2645,15 +2661,23 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const newName = parsed.data.nome;
     const cur = await readPv(orgId);
-    const exists = cur.some(p => normLow(p.ragioneSociale) === normLow(oldName));
-    if (!exists) return res.status(404).json({ error: "Ragione Sociale non trovata" });
+    const rsList = await readRsList(orgId);
+    const existsInPv = cur.some(p => normLow(p.ragioneSociale) === normLow(oldName));
+    const existsInRs = rsList.some(r => normLow(r) === normLow(oldName));
+    if (!existsInPv && !existsInRs) return res.status(404).json({ error: "Ragione Sociale non trovata" });
     if (normLow(newName) !== normLow(oldName)) {
-      const dup = cur.some(p => normLow(p.ragioneSociale) === normLow(newName));
+      const dup = cur.some(p => normLow(p.ragioneSociale) === normLow(newName)) ||
+                  rsList.some(r => normLow(r) === normLow(newName));
       if (dup) return res.status(409).json({ error: `Ragione Sociale "${newName}" già esistente` });
     }
-    await writePv(orgId, (pv) => pv.map(p =>
-      normLow(p.ragioneSociale) === normLow(oldName) ? { ...p, ragioneSociale: newName } : p
-    ));
+    await writeConfigKeys(orgId, (c) => {
+      const pv = ((c.puntiVendita as StructPdv[] | undefined) || []).map(p =>
+        normLow(p.ragioneSociale) === normLow(oldName) ? { ...p, ragioneSociale: newName } : p
+      );
+      const rs = (((c.ragioniSociali as string[] | undefined) || [])
+        .map(r => normLow(r) === normLow(oldName) ? newName : r));
+      return { ...c, puntiVendita: pv, ragioniSociali: rs };
+    });
     if (normLow(newName) !== normLow(oldName)) {
       try {
         await db.execute(sql`
@@ -2683,7 +2707,11 @@ export async function registerRoutes(
     const orgId = profile.organizationId!;
     const nome = decodeURIComponent(req.params.nome).trim();
     if (!nome) return res.status(400).json({ error: "Nome obbligatorio" });
-    await writePv(orgId, (pv) => pv.filter(p => normLow(p.ragioneSociale) !== normLow(nome)));
+    await writeConfigKeys(orgId, (c) => {
+      const pv = ((c.puntiVendita as StructPdv[] | undefined) || []).filter(p => normLow(p.ragioneSociale) !== normLow(nome));
+      const rs = ((c.ragioniSociali as string[] | undefined) || []).filter(r => normLow(r) !== normLow(nome));
+      return { ...c, puntiVendita: pv, ragioniSociali: rs };
+    });
     try {
       await db.execute(sql`DELETE FROM cdg_spese WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
       await db.execute(sql`DELETE FROM cdg_pdv_manuali WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);

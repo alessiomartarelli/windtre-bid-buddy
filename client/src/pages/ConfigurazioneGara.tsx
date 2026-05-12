@@ -437,10 +437,24 @@ export default function ConfigurazioneGara() {
   const [pdfData, setPdfData] = useState<PdfGaraData | null>(null);
   // Sync struttura: dialog di conferma per aggiungere PDV mancanti dal PDF.
   // L'admin può deselezionare singole righe e impostare la RS per PDV.
+  // Le incongruenze sono calcolate vs `organization_config.puntiVendita`
+  // (struttura canonica), NON vs il config locale di gara.
   type SyncRow = { codicePos: string; clusterMobile: string; clusterFisso: string; ragioneSociale: string; include: boolean };
   const [syncStrutturaOpen, setSyncStrutturaOpen] = useState(false);
   const [syncStrutturaRows, setSyncStrutturaRows] = useState<SyncRow[]>([]);
   const [syncStrutturaSaving, setSyncStrutturaSaving] = useState(false);
+  const [canonicalCodes, setCanonicalCodes] = useState<Set<string>>(new Set());
+  const reloadCanonicalStruttura = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl('/api/organization-config'), { credentials: 'include' });
+      if (!res.ok) { setCanonicalCodes(new Set()); return; }
+      const data = await res.json();
+      const codes = new Set<string>(((data?.config?.puntiVendita || []) as Array<{ codicePos?: string; nome?: string }>).
+        map(p => String(p.codicePos || p.nome || '').trim().toLowerCase()).filter(Boolean));
+      setCanonicalCodes(codes);
+    } catch { setCanonicalCodes(new Set()); }
+  }, []);
+  useEffect(() => { void reloadCanonicalStruttura(); }, [reloadCanonicalStruttura]);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
   const [importedFiles, setImportedFiles] = useState<Array<{ label: string; type: PdfType; fileName: string }>>([]);
@@ -2284,10 +2298,10 @@ export default function ConfigurazioneGara() {
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-xs font-semibold">PDV trovati nel PDF ({pdfData.pdvList.length})</Label>
-                      {isAdminOrSuper && pdfData.pdvList.some(p => !pdvList.some(pdv => pdv.codicePos === p.codicePos)) && (
+                      {isAdminOrSuper && pdfData.pdvList.some(p => !canonicalCodes.has(String(p.codicePos).trim().toLowerCase())) && (
                         <Button size="sm" variant="outline" type="button" data-testid="button-bulk-add-pdv-struttura" className="h-7 text-xs"
                           onClick={() => {
-                            const unmatched = pdfData.pdvList.filter(p => !pdvList.some(pdv => pdv.codicePos === p.codicePos));
+                            const unmatched = pdfData.pdvList.filter(p => !canonicalCodes.has(String(p.codicePos).trim().toLowerCase()));
                             const defaultRs = pdfData.nomeRS?.trim() || (pdfData.codiciDealer[0] || '').trim() || '';
                             setSyncStrutturaRows(unmatched.map(p => ({
                               codicePos: p.codicePos,
@@ -2300,7 +2314,7 @@ export default function ConfigurazioneGara() {
                           }}
                         >
                           <Plus className="h-3 w-3 mr-1" />
-                          Aggiungi {pdfData.pdvList.filter(p => !pdvList.some(pdv => pdv.codicePos === p.codicePos)).length} alla struttura
+                          Incongruenze: aggiungi {pdfData.pdvList.filter(p => !canonicalCodes.has(String(p.codicePos).trim().toLowerCase())).length} alla struttura canonica
                         </Button>
                       )}
                     </div>
@@ -2739,6 +2753,7 @@ export default function ConfigurazioneGara() {
                     } else {
                       toast({ title: 'Struttura aggiornata', description: `${(data.added || []).length} PDV aggiunti, ${(data.skipped || []).length} duplicati ignorati.` });
                       setSyncStrutturaOpen(false);
+                      await reloadCanonicalStruttura();
                     }
                   } finally {
                     setSyncStrutturaSaving(false);
