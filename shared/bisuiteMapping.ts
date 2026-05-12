@@ -676,3 +676,49 @@ export function getEffectiveRulesForEditor(
   const twins = synthesizePartnershipTwins(savedRules);
   return twins.length === 0 ? savedRules : [...savedRules, ...twins];
 }
+
+/**
+ * Deterministic, stable hash of the canonical default mapping rules.
+ * Excludes the auto-incremented `id` (which is not semantically meaningful)
+ * and serializes only the fields that affect mapping behavior. Used by the
+ * `/api/bisuite-mapping-version` endpoint so that, when a deploy ships
+ * with new defaults in `getDefaultMappingRules()`, all clients see a
+ * different `rulesUpdatedAt` token even if no super_admin has saved the
+ * mapping since the last deploy. This makes React Query refetch the
+ * mapped-sales aggregation automatically without a manual reload.
+ */
+export function getDefaultRulesHash(): string {
+  const rules = getDefaultMappingRules();
+  const serializable = rules.map((r) => {
+    const c = r.conditions || {};
+    return [
+      r.pista,
+      r.targetCategory,
+      r.targetLabel,
+      r.priority,
+      r.enabled ? 1 : 0,
+      r.ruleType || 'base',
+      c.categoriaBiSuite || '',
+      c.tipologiaBiSuite || '',
+      c.descrizioneBiSuite || '',
+      c.descrizioneEscludi || '',
+      c.clienteTipo || '',
+      c.domandaTesto || '',
+      c.rispostaContiene || '',
+      c.rispostaDiversaDa || '',
+      c.rispostaEsatta || '',
+      c.rispostaNumericaUguale ?? '',
+      c.rispostaNumericaMaggiore ?? '',
+      c.canoneMinimo ?? '',
+    ].join('\u001f');
+  }).join('\u001e');
+  // FNV-1a 32-bit hash → base36. Stable, deterministic, no crypto dep needed
+  // (this hash is non-cryptographic; it just needs to change when defaults
+  // change).
+  let h = 0x811c9dc5;
+  for (let i = 0; i < serializable.length; i++) {
+    h ^= serializable.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h.toString(36);
+}

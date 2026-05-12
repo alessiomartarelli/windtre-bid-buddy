@@ -6,7 +6,7 @@ import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
-import { getEffectiveRulesForEditor } from "../shared/bisuiteMapping";
+import { getEffectiveRulesForEditor, getDefaultRulesHash } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
 import { registerCdgRoutes } from "./cdgRoutes";
 
@@ -1932,9 +1932,13 @@ export async function registerRoutes(
       const profile = await storage.getProfile(userId);
       if (!profile) return res.status(403).json({ error: "Accesso non autorizzato" });
       const sysMapping = await storage.getSystemConfig("bisuite_mapping");
-      const rulesUpdatedAt = sysMapping?.updatedAt
+      const savedAt = sysMapping?.updatedAt
         ? new Date(sysMapping.updatedAt).toISOString()
-        : null;
+        : "none";
+      // Combine the persisted mapping timestamp with a hash of the in-code
+      // defaults so deploys that ship new defaults bust client caches even
+      // when no super_admin has saved the mapping since the last deploy.
+      const rulesUpdatedAt = `${savedAt}|${getDefaultRulesHash()}`;
       res.json({ rulesUpdatedAt });
     } catch (error) {
       console.error("BiSuite mapping version error:", error);
@@ -2028,9 +2032,10 @@ export async function registerRoutes(
       const { getDefaultMappingRules, mergeWithDefaultRules } = await import("../shared/bisuiteMapping");
       const rawRules = mappingConfig?.rules || getDefaultMappingRules();
       const rules = mergeWithDefaultRules(rawRules);
-      const rulesUpdatedAt = sysMapping?.updatedAt
+      const savedAt = sysMapping?.updatedAt
         ? new Date(sysMapping.updatedAt).toISOString()
-        : null;
+        : "none";
+      const rulesUpdatedAt = `${savedAt}|${getDefaultRulesHash()}`;
 
       type AggregatedItem = {
         pista: string;
@@ -2252,9 +2257,10 @@ export async function registerRoutes(
       const { getDefaultMappingRules, mapBiSuiteArticle, mergeWithDefaultRules } = await import("../shared/bisuiteMapping");
       const rawRules = mappingConfig?.rules || getDefaultMappingRules();
       const rules = mergeWithDefaultRules(rawRules);
-      const rulesUpdatedAt = sysMapping?.updatedAt
+      const savedAt = sysMapping?.updatedAt
         ? new Date(sysMapping.updatedAt).toISOString()
-        : null;
+        : "none";
+      const rulesUpdatedAt = `${savedAt}|${getDefaultRulesHash()}`;
 
       const PRODOTTI_CATS = new Set([
         'TELEFONIA', 'MODEM/ROUTER', 'SMART DEVICE', 'INTERNET DEVICE', 'SIM', 'RICARICHE',
