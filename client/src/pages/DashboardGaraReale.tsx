@@ -1116,7 +1116,7 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const { pisteAttive, rsRows } = useMemo(() => {
-    const piste = (pistaStats || []).filter(p => !!(PISTA_CONFIG as any)[p.pista] && ((p.pdvBreakdown && p.pdvBreakdown.length > 0) || (p.rsCalcBreakdown && p.rsCalcBreakdown.size > 0)));
+    const piste = (pistaStats || []).filter(p => !!(PISTA_CONFIG as any)[p.pista]);
 
     type PdvRow = { codicePos: string; nomeNegozio: string };
     type RsEntry = {
@@ -1199,7 +1199,7 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
     return { pisteAttive: piste, rsRows };
   }, [pistaStats]);
 
-  if (rsRows.length === 0) return null;
+  if (pisteAttive.length === 0) return null;
 
   const toggleRs = (rsKey: string) => {
     setExpanded(prev => {
@@ -1247,6 +1247,13 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
               </tr>
             </thead>
             <tbody>
+              {rsRows.length === 0 && (
+                <tr data-testid="row-table-empty">
+                  <td colSpan={1 + pisteAttive.length} className="px-3 py-6 text-center text-sm text-gray-500">
+                    Nessun dato disponibile per i punti vendita.
+                  </td>
+                </tr>
+              )}
               {rsRows.map(rs => {
                 const isExpanded = expanded.has(rs.rsKey);
                 return (
