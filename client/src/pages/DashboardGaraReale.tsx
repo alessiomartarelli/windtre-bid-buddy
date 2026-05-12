@@ -1511,6 +1511,7 @@ export default function DashboardGaraReale() {
         categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
       }>;
       rsCalcBreakdown?: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }>;
+      pdvProjCalcMap?: Map<string, PistaCalcResult>;
       soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number };
     }> = [];
 
@@ -1739,6 +1740,7 @@ export default function DashboardGaraReale() {
 
       let aggregateCalc: PistaCalcResult = EMPTY_CALC;
       let aggregateCalcProiezione: PistaCalcResult = EMPTY_CALC;
+      let pdvProjCalcMap: Map<string, PistaCalcResult> | undefined;
 
       const pdvBreakdown = mappedData.pdvList
         .map((pdv) => {
@@ -2138,6 +2140,7 @@ export default function DashboardGaraReale() {
           let totalPremioProj = 0;
           let totalPuntiProj = 0;
           let bestSogliaProj = 0;
+          const pdvProjCalcLocal = new Map<string, PistaCalcResult>();
           for (const pdv of projItems) {
             const pdvConfig3 = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
             const pdvCalendar3 = pdvConfig3?.calendar || DEFAULT_CALENDAR;
@@ -2167,7 +2170,9 @@ export default function DashboardGaraReale() {
             totalPremioProj += projCalc.premioStimato;
             totalPuntiProj += projCalc.puntiTotali;
             if (projCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = projCalc.sogliaRaggiunta;
+            pdvProjCalcLocal.set(pdv.codicePos, projCalc);
           }
+          pdvProjCalcMap = pdvProjCalcLocal;
 
           if (pista === "energia" && energiaConfig) {
             let aggSogliaProj = 0;
@@ -2238,6 +2243,7 @@ export default function DashboardGaraReale() {
         categories,
         pdvBreakdown,
         rsCalcBreakdown,
+        pdvProjCalcMap,
         soglieRef: pistaSoglieRef,
       });
     }
@@ -2683,16 +2689,13 @@ export default function DashboardGaraReale() {
                             rows.push({ key: rsKey, testIdSuffix: rsKey, name: rsData.displayName, metrics, detail });
                           }
                         } else if (usePdv) {
-                          const aggPezzi = pista.totalePezzi || 1;
-                          const aggPremioAtt = pista.calc.premioStimato;
-                          const aggPremioProi = pista.calcProiezione.premioStimato;
                           for (const p of pdvList) {
                             const sogliaAtt = p.pdvCalc.sogliaLabel;
-                            const ratio = p.pezzi > 0 ? p.proiezione / p.pezzi : 1;
-                            const puntiProi = p.pdvCalc.puntiTotali * ratio;
-                            const aggRatio = aggPezzi > 0 ? p.pezzi / aggPezzi : 0;
-                            const premioProi = aggPremioAtt > 0 ? p.pdvCalc.premioStimato * (aggPremioProi / aggPremioAtt) : (aggPremioProi * aggRatio);
-                            const metrics: CompactRowMetrics = { pezziAtt: p.pezzi, pezziProi: p.proiezione, puntiAtt: p.pdvCalc.puntiTotali, puntiProi, sogliaAtt, premioAtt: p.pdvCalc.premioStimato, premioProi };
+                            const projCalc = pista.pdvProjCalcMap?.get(p.codicePos);
+                            const puntiProi = projCalc?.puntiTotali ?? p.pdvCalc.puntiTotali;
+                            const sogliaProi = projCalc?.sogliaLabel ?? sogliaAtt;
+                            const premioProi = projCalc?.premioStimato ?? p.pdvCalc.premioStimato;
+                            const metrics: CompactRowMetrics = { pezziAtt: p.pezzi, pezziProi: p.proiezione, puntiAtt: p.pdvCalc.puntiTotali, puntiProi, sogliaAtt, sogliaProi, premioAtt: p.pdvCalc.premioStimato, premioProi };
                             const detail = (
                               <>
                                 <div className="grid grid-cols-2 gap-2">
