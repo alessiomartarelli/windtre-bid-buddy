@@ -2870,6 +2870,95 @@ export default function DashboardGaraReale() {
             </div>
 
             {(() => {
+              const kinds: { key: 'smartphone' | 'smartDevice' | 'internetDevice'; label: string }[] = [
+                { key: 'smartphone', label: 'Smartphone' },
+                { key: 'smartDevice', label: 'Smart Device' },
+                { key: 'internetDevice', label: 'Internet Device' },
+              ];
+              type ModelloAgg = { totale: number; finanziato: number; rate: number; altro: number };
+              const aggByKind: Record<'smartphone' | 'smartDevice' | 'internetDevice', Map<string, ModelloAgg>> = {
+                smartphone: new Map(),
+                smartDevice: new Map(),
+                internetDevice: new Map(),
+              };
+              for (const pdv of mappedData.pdvList) {
+                const dev = pdv.devices;
+                if (!dev) continue;
+                for (const kk of kinds) {
+                  const k = dev[kk.key];
+                  if (!k) continue;
+                  const map = aggByKind[kk.key];
+                  for (const modal of ['finanziato', 'rate', 'altro'] as const) {
+                    for (const [desc, n] of Object.entries(k[modal].descriptions || {})) {
+                      const cur = map.get(desc) || { totale: 0, finanziato: 0, rate: 0, altro: 0 };
+                      cur.totale += n;
+                      cur[modal] += n;
+                      map.set(desc, cur);
+                    }
+                  }
+                }
+              }
+              const totGlobal = kinds.reduce((s, kk) => {
+                let t = 0;
+                aggByKind[kk.key].forEach((v) => { t += v.totale; });
+                return s + t;
+              }, 0);
+              if (totGlobal <= 0) return null;
+              return (
+                <Card data-testid="card-device-per-modello">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Smartphone className="h-5 w-5" />
+                      Device per modello
+                      <span className="text-sm text-gray-500 font-normal">({totGlobal} pezzi totali)</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {kinds.map((kk) => {
+                        const map = aggByKind[kk.key];
+                        const rows = Array.from(map.entries())
+                          .map(([desc, agg]) => ({ desc, ...agg }))
+                          .sort((a, b) => b.totale - a.totale);
+                        const totKind = rows.reduce((s, r) => s + r.totale, 0);
+                        return (
+                          <div key={kk.key} className="rounded-lg border bg-violet-50/40 dark:bg-violet-900/10 border-violet-200 dark:border-violet-800 p-3" data-testid={`device-modello-kind-${kk.key}`}>
+                            <div className="flex items-center justify-between mb-2 text-sm">
+                              <span className="font-semibold text-violet-800 dark:text-violet-200">{kk.label}</span>
+                              <span className="font-bold text-violet-800 dark:text-violet-200">{totKind}</span>
+                            </div>
+                            {rows.length === 0 ? (
+                              <div className="text-xs text-gray-500 italic">Nessun pezzo</div>
+                            ) : (
+                              <div className="max-h-72 overflow-y-auto pr-1 space-y-1">
+                                {rows.map((r) => {
+                                  const tags: string[] = [];
+                                  if (r.finanziato > 0) tags.push(`F:${r.finanziato}`);
+                                  if (r.rate > 0) tags.push(`R:${r.rate}`);
+                                  if (r.altro > 0) tags.push(`A:${r.altro}`);
+                                  return (
+                                    <div key={r.desc} className="flex items-center justify-between gap-2 text-xs text-gray-700 dark:text-gray-200" data-testid={`device-modello-row-${kk.key}-${r.desc}`}>
+                                      <span className="truncate" title={r.desc}>{r.desc}</span>
+                                      <span className="shrink-0 font-medium">
+                                        {r.totale}
+                                        {tags.length > 0 && <span className="ml-1 text-gray-400">({tags.join(' · ')})</span>}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-2 italic">F = Finanziato · R = Rate · A = Altro</div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {(() => {
               const PDV_CHART_COLORS = [
                 "#f97316", "#3b82f6", "#22c55e", "#a855f7", "#ec4899",
                 "#14b8a6", "#eab308", "#6366f1", "#f43f5e", "#0ea5e9",
