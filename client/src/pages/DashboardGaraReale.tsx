@@ -2565,33 +2565,13 @@ export default function DashboardGaraReale() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 ? (
-                        <div className="space-y-1">
-                          {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
-                            <div key={rsKey} className="flex items-baseline justify-between">
-                              <span className="text-sm text-gray-600 truncate mr-2">{rsData.displayName}</span>
-                              <div className="flex items-baseline gap-1.5">
-                                <span className="text-xl font-bold" data-testid={`text-pezzi-${pista.pista}-${rsKey}`}>{rsData.pezziAttuali}</span>
-                                {rsData.pezziProiezione > rsData.pezziAttuali && (
-                                  <span className="text-xs text-blue-500">→ {rsData.pezziProiezione}</span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                          <div className="flex items-baseline justify-between border-t pt-1 mt-1">
-                            <span className="text-sm font-medium text-gray-700">Totale</span>
-                            <div className="flex items-baseline gap-1.5">
-                              <span className="text-2xl font-bold" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
-                              <span className="text-xs text-gray-500">pezzi</span>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-3xl font-bold" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
-                          <span className="text-sm text-gray-500">pezzi attuali</span>
-                        </div>
-                      )}
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-bold" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
+                        <span className="text-sm text-gray-500">pezzi attuali</span>
+                        {pista.rsCalcBreakdown && Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
+                          <span key={rsKey} className="hidden" data-testid={`text-pezzi-${pista.pista}-${rsKey}`}>{rsData.pezziAttuali}</span>
+                        ))}
+                      </div>
 
                       {(() => {
                         if (pista.totalePezzi === 0) return null;
@@ -2703,9 +2683,16 @@ export default function DashboardGaraReale() {
                             rows.push({ key: rsKey, testIdSuffix: rsKey, name: rsData.displayName, metrics, detail });
                           }
                         } else if (usePdv) {
+                          const aggPezzi = pista.totalePezzi || 1;
+                          const aggPremioAtt = pista.calc.premioStimato;
+                          const aggPremioProi = pista.calcProiezione.premioStimato;
                           for (const p of pdvList) {
                             const sogliaAtt = p.pdvCalc.sogliaLabel;
-                            const metrics: CompactRowMetrics = { pezziAtt: p.pezzi, pezziProi: p.proiezione, puntiAtt: p.pdvCalc.puntiTotali, sogliaAtt, premioAtt: p.pdvCalc.premioStimato };
+                            const ratio = p.pezzi > 0 ? p.proiezione / p.pezzi : 1;
+                            const puntiProi = p.pdvCalc.puntiTotali * ratio;
+                            const aggRatio = aggPezzi > 0 ? p.pezzi / aggPezzi : 0;
+                            const premioProi = aggPremioAtt > 0 ? p.pdvCalc.premioStimato * (aggPremioProi / aggPremioAtt) : (aggPremioProi * aggRatio);
+                            const metrics: CompactRowMetrics = { pezziAtt: p.pezzi, pezziProi: p.proiezione, puntiAtt: p.pdvCalc.puntiTotali, puntiProi, sogliaAtt, premioAtt: p.pdvCalc.premioStimato, premioProi };
                             const detail = (
                               <>
                                 <div className="grid grid-cols-2 gap-2">
@@ -2825,26 +2812,18 @@ export default function DashboardGaraReale() {
                                 </PistaCompactRow>
                               );
                             })}
-                            {/* Footer aggregate Totale Premio */}
-                            {rows.length > 1 && (
-                              <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3 py-2 flex items-center justify-between flex-wrap gap-2`}>
-                                <span className="text-sm font-medium text-gray-600">Totale Premio</span>
-                                <div className="flex items-center gap-3 flex-wrap">
-                                  <span className={`font-bold ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`} data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
-                                  {pista.calcProiezione.premioStimato > 0 && (
-                                    <span className="font-bold text-blue-600 flex items-center gap-0.5" data-testid={`text-premio-proiezione-${pista.pista}`}>
-                                      <TrendingUp className="h-3 w-3" /> {formatEuro(pista.calcProiezione.premioStimato)}
-                                    </span>
-                                  )}
-                                </div>
+                            {/* Footer aggregate Totale Premio (always visible) */}
+                            <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3 py-2 flex items-center justify-between flex-wrap gap-2`}>
+                              <span className="text-sm font-medium text-gray-600">Totale Premio</span>
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <span className={`font-bold ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`} data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
+                                {pista.calcProiezione.premioStimato > 0 && (
+                                  <span className="font-bold text-blue-600 flex items-center gap-0.5" data-testid={`text-premio-proiezione-${pista.pista}`}>
+                                    <TrendingUp className="h-3 w-3" /> {formatEuro(pista.calcProiezione.premioStimato)}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                            {rows.length === 1 && (
-                              <>
-                                <span className="hidden" data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
-                                {pista.calcProiezione.premioStimato > 0 && <span className="hidden" data-testid={`text-premio-proiezione-${pista.pista}`}>{formatEuro(pista.calcProiezione.premioStimato)}</span>}
-                              </>
-                            )}
+                            </div>
                           </div>
                         );
                       })()}
