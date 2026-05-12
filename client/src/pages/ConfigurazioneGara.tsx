@@ -435,6 +435,12 @@ export default function ConfigurazioneGara() {
   const [pdfImportDialogOpen, setPdfImportDialogOpen] = useState(false);
   const [pdfParsing, setPdfParsing] = useState(false);
   const [pdfData, setPdfData] = useState<PdfGaraData | null>(null);
+  // Sync struttura: dialog di conferma per aggiungere PDV mancanti dal PDF.
+  // L'admin può deselezionare singole righe e impostare la RS per PDV.
+  type SyncRow = { codicePos: string; clusterMobile: string; clusterFisso: string; ragioneSociale: string; include: boolean };
+  const [syncStrutturaOpen, setSyncStrutturaOpen] = useState(false);
+  const [syncStrutturaRows, setSyncStrutturaRows] = useState<SyncRow[]>([]);
+  const [syncStrutturaSaving, setSyncStrutturaSaving] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
   const [importedFiles, setImportedFiles] = useState<Array<{ label: string; type: PdfType; fileName: string }>>([]);
@@ -2280,29 +2286,17 @@ export default function ConfigurazioneGara() {
                       <Label className="text-xs font-semibold">PDV trovati nel PDF ({pdfData.pdvList.length})</Label>
                       {isAdminOrSuper && pdfData.pdvList.some(p => !pdvList.some(pdv => pdv.codicePos === p.codicePos)) && (
                         <Button size="sm" variant="outline" type="button" data-testid="button-bulk-add-pdv-struttura" className="h-7 text-xs"
-                          onClick={async () => {
-                            const unmatchedFromPdf = pdfData.pdvList.filter(p => !pdvList.some(pdv => pdv.codicePos === p.codicePos));
-                            const rsTarget = pdfData.nomeRS?.trim() || (pdfData.codiciDealer[0] || '').trim() || 'Da assegnare';
-                            const payload = { pdvs: unmatchedFromPdf.map(p => ({
+                          onClick={() => {
+                            const unmatched = pdfData.pdvList.filter(p => !pdvList.some(pdv => pdv.codicePos === p.codicePos));
+                            const defaultRs = pdfData.nomeRS?.trim() || (pdfData.codiciDealer[0] || '').trim() || '';
+                            setSyncStrutturaRows(unmatched.map(p => ({
                               codicePos: p.codicePos,
-                              nome: p.codicePos,
-                              ragioneSociale: rsTarget,
                               clusterMobile: p.clusterMobile > 0 ? `strada_${p.clusterMobile}` : '',
                               clusterFisso: p.clusterFisso > 0 ? `strada_${p.clusterFisso}` : '',
-                            })) };
-                            const res = await fetch(apiUrl('/api/admin/struttura/pdv/bulk'), {
-                              method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-                              body: JSON.stringify(payload),
-                            });
-                            const data = await res.json().catch(() => ({}));
-                            if (!res.ok) {
-                              toast({ title: 'Errore', description: data?.error || 'Operazione fallita', variant: 'destructive' });
-                            } else {
-                              toast({
-                                title: 'Struttura aggiornata',
-                                description: `${(data.added || []).length} PDV aggiunti, ${(data.skipped || []).length} duplicati ignorati. RS: "${rsTarget}".`,
-                              });
-                            }
+                              ragioneSociale: defaultRs,
+                              include: true,
+                            })));
+                            setSyncStrutturaOpen(true);
                           }}
                         >
                           <Plus className="h-3 w-3 mr-1" />
@@ -2663,6 +2657,97 @@ export default function ConfigurazioneGara() {
                 ))
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog: conferma sync struttura — admin imposta RS per ogni PDV
+            mancante e può deselezionare righe prima del bulk-add. */}
+        <Dialog open={syncStrutturaOpen} onOpenChange={setSyncStrutturaOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Aggiungi PDV alla struttura</DialogTitle>
+              <DialogDescription>
+                Conferma quali PDV vuoi aggiungere alla struttura canonica e assegna la Ragione Sociale.
+                I cluster Mobile/Fisso vengono importati dal PDF.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[50vh] overflow-y-auto border rounded-lg">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left w-8"></th>
+                    <th className="px-2 py-1.5 text-left">Codice POS</th>
+                    <th className="px-2 py-1.5 text-left">Ragione Sociale</th>
+                    <th className="px-2 py-1.5 text-center">M</th>
+                    <th className="px-2 py-1.5 text-center">F</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncStrutturaRows.map((row, idx) => (
+                    <tr key={row.codicePos} className="border-t">
+                      <td className="px-2 py-1.5">
+                        <Checkbox
+                          checked={row.include}
+                          onCheckedChange={(v) => setSyncStrutturaRows(rs => rs.map((r, i) => i === idx ? { ...r, include: !!v } : r))}
+                          data-testid={`checkbox-sync-${row.codicePos}`}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5 font-mono text-xs">{row.codicePos}</td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          value={row.ragioneSociale}
+                          onChange={(e) => setSyncStrutturaRows(rs => rs.map((r, i) => i === idx ? { ...r, ragioneSociale: e.target.value } : r))}
+                          placeholder="Ragione Sociale"
+                          className="h-7 text-xs"
+                          disabled={!row.include}
+                          data-testid={`input-sync-rs-${row.codicePos}`}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5 text-center text-xs text-muted-foreground">{row.clusterMobile || '-'}</td>
+                      <td className="px-2 py-1.5 text-center text-xs text-muted-foreground">{row.clusterFisso || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSyncStrutturaOpen(false)} disabled={syncStrutturaSaving} data-testid="button-sync-cancel">
+                Annulla
+              </Button>
+              <Button
+                disabled={syncStrutturaSaving || syncStrutturaRows.filter(r => r.include && r.ragioneSociale.trim()).length === 0}
+                data-testid="button-sync-confirm"
+                onClick={async () => {
+                  const selected = syncStrutturaRows.filter(r => r.include && r.ragioneSociale.trim());
+                  if (selected.length === 0) return;
+                  setSyncStrutturaSaving(true);
+                  try {
+                    const payload = { pdvs: selected.map(r => ({
+                      codicePos: r.codicePos,
+                      nome: r.codicePos,
+                      ragioneSociale: r.ragioneSociale.trim(),
+                      clusterMobile: r.clusterMobile,
+                      clusterFisso: r.clusterFisso,
+                    })) };
+                    const res = await fetch(apiUrl('/api/admin/struttura/pdv/bulk'), {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                      body: JSON.stringify(payload),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                      toast({ title: 'Errore', description: data?.error || 'Operazione fallita', variant: 'destructive' });
+                    } else {
+                      toast({ title: 'Struttura aggiornata', description: `${(data.added || []).length} PDV aggiunti, ${(data.skipped || []).length} duplicati ignorati.` });
+                      setSyncStrutturaOpen(false);
+                    }
+                  } finally {
+                    setSyncStrutturaSaving(false);
+                  }
+                }}
+              >
+                Conferma e aggiungi {syncStrutturaRows.filter(r => r.include && r.ragioneSociale.trim()).length}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

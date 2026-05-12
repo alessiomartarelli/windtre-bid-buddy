@@ -220,7 +220,13 @@ on/off unico) in `shared/modules.ts`. Helper: `isModuleEnabled(record, key)`.
 La tab `/admin → Struttura` è ora editabile per `admin`/`super_admin` (sempre
 read-only per `operatore`). Tutte le mutazioni persistono in
 `organization_config.puntiVendita` e propagano cross-modulo.
+- **Authz hardening** su `PUT /api/organization-config`: il legacy write path
+  ora rifiuta `403` se un utente non admin tenta di modificare le chiavi
+  protette `puntiVendita`/`ragioniSociali` (diff vs config corrente; le altre
+  parti della config restano scrivibili da operatore).
 - Endpoint (gated `requireAdminRole` + scoping su `organizationId`):
+  - `POST /api/admin/struttura/ragione-sociale` — crea RS vuota (name-only).
+    Materializza in `cdg_ragioni_sociali` per visibilità immediata in CdG.
   - `POST /api/admin/struttura/pdv` — crea PDV (codicePos univoco
     case-insensitive nell'org).
   - `PUT /api/admin/struttura/pdv` — modifica PDV (match per `(rs, codicePos)`

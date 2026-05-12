@@ -392,6 +392,21 @@ export async function registerRoutes(
         return res.status(400).json({ message: "User has no organization" });
       }
       const { config, configVersion } = req.body;
+      // Struttura canonica (puntiVendita, ragioniSociali) è write-protected:
+      // solo admin/super_admin possono modificarla. Operatore può ancora salvare
+      // le altre parti della config (es. preferenze UI). Diff vs config corrente.
+      if (!['admin', 'super_admin'].includes(profile.role)) {
+        const cur = await storage.getOrgConfig(profile.organizationId);
+        const curCfg = (cur?.config as Record<string, unknown> | null) || {};
+        const newCfg = (config as Record<string, unknown> | null) || {};
+        const ser = (v: unknown) => JSON.stringify(v ?? null);
+        const protectedKeys = ["puntiVendita", "ragioniSociali"];
+        for (const k of protectedKeys) {
+          if (k in newCfg && ser((newCfg as any)[k]) !== ser((curCfg as any)[k])) {
+            return res.status(403).json({ message: `Solo admin/super_admin possono modificare ${k}` });
+          }
+        }
+      }
       const result = await storage.upsertOrgConfig(profile.organizationId, config, configVersion || "2.0");
       res.json(result);
     } catch (error) {
@@ -2560,9 +2575,43 @@ export async function registerRoutes(
              AND ragione_sociale = ${oldRagioneSociale}
              AND pdv_codice = ${oldCodicePos}
         `);
-      } catch (e) { console.error("[struttura] propagate cdg_spese failed", e); }
+        // cdg_pdv_manuali: stesso (org, rs, codice) → aggiorna a nuovi valori
+        await db.execute(sql`
+          UPDATE cdg_pdv_manuali
+             SET codice = ${newCodice}, ragione_sociale = ${newRs}
+           WHERE organization_id = ${orgId}
+             AND ragione_sociale = ${oldRagioneSociale}
+             AND codice = ${oldCodicePos}
+        `);
+      } catch (e) { console.error("[struttura] propagate cdg_spese/manuali failed", e); }
     }
     res.json({ success: true });
+  });
+
+  // POST /api/admin/struttura/ragione-sociale → crea RS vuota (name-only)
+  // Requisito Task #87: la RS deve poter essere creata in modo esplicito,
+  // non solo come effetto collaterale della creazione di un PDV.
+  app.post("/api/admin/struttura/ragione-sociale", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const parsed = z.object({ nome: z.string().trim().min(1, "Nome obbligatorio") }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const nome = parsed.data.nome;
+    const cur = await readPv(orgId);
+    if (cur.some(p => normLow(p.ragioneSociale) === normLow(nome))) {
+      return res.status(409).json({ error: `Ragione Sociale "${nome}" già esistente` });
+    }
+    // Materializza la RS in cdg_ragioni_sociali (override) per renderla
+    // visibile anche in CdG e nelle liste unified, anche senza PDV figli.
+    try {
+      await db.execute(sql`
+        INSERT INTO cdg_ragioni_sociali (organization_id, nome)
+        VALUES (${orgId}, ${nome})
+        ON CONFLICT DO NOTHING
+      `);
+    } catch (e) { console.error("[struttura] create RS cdg insert failed", e); }
+    res.status(201).json({ success: true, nome });
   });
 
   // DELETE /api/admin/struttura/pdv?ragioneSociale=&codicePos=

@@ -188,6 +188,22 @@ export default function AdminPanel() {
     setRsRenameDialogOpen(true);
   };
 
+  const handleCreateRs = async () => {
+    const nome = window.prompt('Nome della nuova Ragione Sociale:');
+    if (!nome || !nome.trim()) return;
+    const res = await fetch(apiUrl('/api/admin/struttura/ragione-sociale'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ nome: nome.trim() }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast({ title: 'Errore', description: data?.error || 'Creazione fallita', variant: 'destructive' });
+    } else {
+      toast({ title: 'Ragione Sociale creata', description: `"${data.nome}". Ora puoi aggiungere PDV.` });
+      await fetchOrgConfig();
+    }
+  };
+
   const submitRenameRs = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rsRenameNew.trim()) return;
@@ -622,9 +638,14 @@ export default function AdminPanel() {
                     {rsGrouped.length} ragion{rsGrouped.length === 1 ? 'e sociale' : 'i sociali'}, {puntiVendita.length} punt{puntiVendita.length === 1 ? 'o' : 'i'} vendita
                   </CardDescription>
                 </div>
-                <Button size="sm" onClick={() => openCreatePdv()} data-testid="button-add-pdv">
-                  <Plus className="mr-2 h-4 w-4" /> Nuovo PDV
-                </Button>
+                <div className="flex gap-2 shrink-0">
+                  <Button size="sm" variant="outline" onClick={handleCreateRs} data-testid="button-add-rs">
+                    <Plus className="mr-2 h-4 w-4" /> Nuova RS
+                  </Button>
+                  <Button size="sm" onClick={() => openCreatePdv()} data-testid="button-add-pdv">
+                    <Plus className="mr-2 h-4 w-4" /> Nuovo PDV
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {configLoading ? (
