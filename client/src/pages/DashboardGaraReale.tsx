@@ -983,6 +983,94 @@ function ProjectionBadge({ current, projected, label }: { current: number; proje
   );
 }
 
+type CompactRowMetrics = {
+  pezziAtt?: number;
+  pezziProi?: number;
+  puntiAtt?: number;
+  puntiProi?: number;
+  sogliaAtt?: string;
+  sogliaProi?: string;
+  premioAtt?: number;
+  premioProi?: number;
+};
+
+function PistaCompactRow({
+  testId, expanded, onToggle, name, subtitle, metrics, premioColor, children,
+}: {
+  testId: string;
+  expanded: boolean;
+  onToggle: () => void;
+  name: string;
+  subtitle?: string;
+  metrics: CompactRowMetrics;
+  premioColor?: 'green' | 'orange';
+  children?: React.ReactNode;
+}) {
+  const m = metrics;
+  const showSoglia = !!m.sogliaAtt && m.sogliaAtt !== "N/A";
+  const showProiSoglia = !!m.sogliaProi && m.sogliaProi !== "N/A";
+  const projDiffersPezzi = m.pezziAtt !== undefined && m.pezziProi !== undefined && m.pezziProi > m.pezziAtt;
+  const projDiffersPunti = m.puntiAtt !== undefined && m.puntiProi !== undefined && (m.puntiProi > m.puntiAtt + 0.05 || (showProiSoglia && m.sogliaProi !== m.sogliaAtt));
+  const projDiffersPremio = m.premioAtt !== undefined && m.premioProi !== undefined && m.premioProi > m.premioAtt + 0.005;
+  const premioCls = premioColor === 'orange' ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400';
+  return (
+    <div className="rounded-lg border" data-testid={`row-pista-${testId}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
+        data-testid={`btn-expand-row-${testId}`}
+      >
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{name}</div>
+            {subtitle && <div className="text-[11px] text-gray-500 truncate">{subtitle}</div>}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs flex-wrap justify-end pl-5 sm:pl-0">
+          {m.pezziAtt !== undefined && (
+            <span className="font-medium whitespace-nowrap">
+              {m.pezziAtt}
+              {projDiffersPezzi && <span className="text-blue-500"> → {m.pezziProi}</span>}
+              <span className="text-gray-400 ml-1">pz</span>
+            </span>
+          )}
+          {m.puntiAtt !== undefined && (
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <span className="font-medium">{m.puntiAtt.toFixed(1)} pt</span>
+              {showSoglia && (
+                <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaAtt!)}`} variant="outline">{m.sogliaAtt}</Badge>
+              )}
+            </span>
+          )}
+          {projDiffersPunti && m.puntiProi !== undefined && (
+            <span className="flex items-center gap-1 text-blue-600 whitespace-nowrap">
+              <TrendingUp className="h-3 w-3" />
+              <span className="font-medium">{m.puntiProi.toFixed(1)} pt</span>
+              {showProiSoglia && (
+                <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaProi!)}`} variant="outline">{m.sogliaProi}</Badge>
+              )}
+            </span>
+          )}
+          {m.premioAtt !== undefined && (m.premioAtt > 0 || (m.premioProi ?? 0) > 0) && (
+            <span className={`font-bold whitespace-nowrap ${premioCls}`}>
+              {formatEuro(m.premioAtt)}
+              {projDiffersPremio && (
+                <span className="text-blue-600 ml-1">→ {formatEuro(m.premioProi!)}</span>
+              )}
+            </span>
+          )}
+        </div>
+      </button>
+      {expanded && children && (
+        <div className="px-2.5 pb-2.5 pt-2 border-t space-y-1.5">{children}</div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardGaraReale() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -2505,508 +2593,261 @@ export default function DashboardGaraReale() {
                         </div>
                       )}
 
-                      {pista.pista === "cb" && pista.totalePezzi > 0 ? (
-                        <div className="space-y-2">
-                          {pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 && (
-                            <div className="space-y-1.5">
-                              {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => {
-                                const rowKey = `${pista.pista}::${rsKey}`;
-                                const isExp = expandedRsRows.has(rowKey);
-                                return (
-                                  <div key={rsKey} className="rounded-lg border" data-testid={`row-pista-${pista.pista}-${rsKey}`}>
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleRsRow(rowKey)}
-                                      aria-expanded={isExp}
-                                      className="w-full flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg"
-                                      data-testid={`btn-expand-row-${pista.pista}-${rsKey}`}
-                                    >
-                                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                        {isExp ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
-                                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</span>
-                                      </div>
-                                      <div className="flex items-center gap-3 shrink-0 text-xs">
-                                        <span className="font-medium">
-                                          {rsData.pezziAttuali}
-                                          {rsData.pezziProiezione > rsData.pezziAttuali && <span className="text-blue-500"> → {rsData.pezziProiezione}</span>}
-                                          <span className="text-gray-400 ml-1">pz</span>
-                                        </span>
-                                        <span className="font-bold text-orange-700 dark:text-orange-400">
-                                          {formatEuro(rsData.premioAttuale)}
-                                          {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
-                                            <span className="text-blue-600 ml-1">→ {formatEuro(rsData.premioProiettato)}</span>
-                                          )}
-                                        </span>
-                                      </div>
-                                    </button>
-                                    {isExp && (
-                                      <div className="px-2.5 pb-2.5 pt-2 border-t space-y-1.5">
-                                        <div className="grid grid-cols-2 gap-2">
-                                          <div className="text-center">
-                                            <div className="text-xs text-gray-500">Pezzi</div>
-                                            <span className="text-lg font-bold">{rsData.pezziAttuali}</span>
-                                            {rsData.pezziProiezione > rsData.pezziAttuali && (
-                                              <div className="text-xs text-blue-500">→ {rsData.pezziProiezione}</div>
-                                            )}
-                                          </div>
-                                          <div className="text-center">
-                                            <div className="text-xs text-gray-500">Gettoni €</div>
-                                            <span className="text-lg font-bold text-orange-700 dark:text-orange-400">{formatEuro(rsData.premioAttuale)}</span>
-                                            {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
-                                              <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5">
-                                                <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                          <div className="rounded-lg border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20 px-3 py-2.5 space-y-1.5">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-500 dark:text-gray-400">Pezzi</span>
-                              <span className="font-bold" data-testid={`text-pezzi-cb-total`}>{pista.totalePezzi}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-500 dark:text-gray-400">Gettoni Attuali</span>
-                              <span className="font-bold text-orange-700 dark:text-orange-400" data-testid={`text-premio-${pista.pista}`}>
-                                {formatEuro(pista.calc.premioStimato)}
-                              </span>
-                            </div>
-                            {pista.calcProiezione.premioStimato > 0 && (
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                  <TrendingUp className="h-3 w-3 text-blue-500" />
-                                  Proiezione
-                                </span>
-                                <span className="font-bold text-blue-600 dark:text-blue-400 text-base" data-testid={`text-premio-proiezione-${pista.pista}`}>
-                                  {formatEuro(pista.calcProiezione.premioStimato)}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : pista.pista === "partnership" && pista.totalePezzi > 0 ? (
-                        <div className="space-y-2">
-                          {pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 && (
-                            <div className="space-y-1.5">
-                              {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => {
-                                const rowKey = `${pista.pista}::${rsKey}`;
-                                const isExp = expandedRsRows.has(rowKey);
-                                return (
-                                  <div key={rsKey} className="rounded-lg border" data-testid={`row-pista-${pista.pista}-${rsKey}`}>
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleRsRow(rowKey)}
-                                      aria-expanded={isExp}
-                                      className="w-full flex items-center justify-between gap-2 px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg"
-                                      data-testid={`btn-expand-row-${pista.pista}-${rsKey}`}
-                                    >
-                                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                        {isExp ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
-                                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</span>
-                                      </div>
-                                      <div className="flex items-center gap-3 shrink-0 text-xs">
-                                        <span className="font-medium">
-                                          {rsData.puntiAttuali.toFixed(0)}
-                                          {rsData.puntiProiezione > rsData.puntiAttuali && <span className="text-blue-500"> → {rsData.puntiProiezione.toFixed(0)}</span>}
-                                          <span className="text-gray-400 ml-1">pt</span>
-                                        </span>
-                                        <span className="font-bold text-green-700 dark:text-green-400">
-                                          {formatEuro(rsData.premioAttuale)}
-                                          {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
-                                            <span className="text-blue-600 ml-1">→ {formatEuro(rsData.premioProiettato)}</span>
-                                          )}
-                                        </span>
-                                      </div>
-                                    </button>
-                                    {isExp && (
-                                      <div className="px-2.5 pb-2.5 pt-2 border-t space-y-1.5">
-                                        <div className="grid grid-cols-2 gap-2">
-                                          <div className="text-center">
-                                            <div className="text-xs text-gray-500">Punti</div>
-                                            <span className="text-lg font-bold">{rsData.puntiAttuali.toFixed(0)}</span>
-                                            {rsData.puntiProiezione > rsData.puntiAttuali && (
-                                              <div className="text-xs text-blue-500">→ {rsData.puntiProiezione.toFixed(0)}</div>
-                                            )}
-                                          </div>
-                                          <div className="text-center">
-                                            <div className="text-xs text-gray-500">Premio €</div>
-                                            <span className="text-lg font-bold text-green-700 dark:text-green-400">{formatEuro(rsData.premioAttuale)}</span>
-                                            {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
-                                              <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5">
-                                                <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                        {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
-                                          <div className="space-y-1">
-                                            <div className="flex items-center justify-between text-xs">
-                                              <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
-                                              <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
-                                            </div>
-                                            <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
-                                            <div className="flex items-center justify-between text-xs">
-                                              <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
-                                                {(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(0)} pt
-                                              </span>
-                                              <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                      {(() => {
+                        if (pista.totalePezzi === 0) return null;
+                        const isCB = pista.pista === 'cb';
+                        const isPartnership = pista.pista === 'partnership';
+                        const premioColorVal: 'green' | 'orange' = isCB ? 'orange' : 'green';
+                        const hasRS = !!(pista.rsCalcBreakdown && pista.rsCalcBreakdown.size >= 1);
+                        const isMobileFisso = pista.pista === 'mobile' || pista.pista === 'fisso';
+                        const pdvList = pista.pdvBreakdown.filter(p => p.pezzi > 0);
+                        const usePdv = !hasRS && isMobileFisso && pdvList.length >= 1;
 
-                          {pista.calc.forecastTarget != null && pista.calc.forecastTarget > 0 && (
-                            <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
-                                <span className="font-medium">{pista.calc.forecastTarget.toFixed(0)} pt</span>
-                              </div>
-                              <Progress
-                                value={Math.min((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100, 100)}
-                                className="h-1.5"
-                              />
-                              <div className="flex items-center justify-between text-xs">
-                                <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
-                                  {(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(0)} pt
-                                </span>
-                                <span className="text-gray-400">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
-                              </div>
-                            </div>
-                          )}
+                        type Row = { key: string; testIdSuffix: string; name: string; subtitle?: string; metrics: CompactRowMetrics; detail: React.ReactNode };
+                        const rows: Row[] = [];
 
-                          <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2.5 space-y-1.5">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-500 dark:text-gray-400">Punti</span>
-                              <span className="font-bold" data-testid={`text-punti-partnership`}>{pista.calc.puntiTotali.toFixed(0)} pt</span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-500 dark:text-gray-400">Premio Attuale</span>
-                              <span className="font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-${pista.pista}`}>
-                                {formatEuro(pista.calc.premioStimato)}
-                              </span>
-                            </div>
-                            {pista.calcProiezione.premioStimato > 0 && (
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                  <TrendingUp className="h-3 w-3 text-blue-500" />
-                                  Proiezione
-                                </span>
-                                <span className="font-bold text-blue-600 dark:text-blue-400 text-base" data-testid={`text-premio-proiezione-${pista.pista}`}>
-                                  {formatEuro(pista.calcProiezione.premioStimato)}
-                                </span>
+                        if (hasRS) {
+                          for (const [rsKey, rsData] of pista.rsCalcBreakdown!.entries()) {
+                            const metrics: CompactRowMetrics = isCB
+                              ? { pezziAtt: rsData.pezziAttuali, pezziProi: rsData.pezziProiezione, premioAtt: rsData.premioAttuale, premioProi: rsData.premioProiettato }
+                              : isPartnership
+                              ? { puntiAtt: rsData.puntiAttuali, puntiProi: rsData.puntiProiezione, premioAtt: rsData.premioAttuale, premioProi: rsData.premioProiettato }
+                              : { puntiAtt: rsData.puntiAttuali, puntiProi: rsData.puntiProiezione, sogliaAtt: rsData.sogliaAttuale, sogliaProi: rsData.sogliaProiezione, premioAtt: rsData.premioAttuale, premioProi: rsData.premioProiettato };
+                            const detail = isCB ? (
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="text-center">
+                                  <div className="text-xs text-gray-500">Pezzi</div>
+                                  <span className="text-lg font-bold">{rsData.pezziAttuali}</span>
+                                  {rsData.pezziProiezione > rsData.pezziAttuali && <div className="text-xs text-blue-500">→ {rsData.pezziProiezione}</div>}
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-xs text-gray-500">Gettoni €</div>
+                                  <span className="text-lg font-bold text-orange-700 dark:text-orange-400">{formatEuro(rsData.premioAttuale)}</span>
+                                  {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                    <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5"><TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}</div>
+                                  )}
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : pista.totalePezzi > 0 && pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 1 ? (
-                        <div className="space-y-1.5">
-                          {Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => {
-                            const rowKey = `${pista.pista}::${rsKey}`;
-                            const isExp = expandedRsRows.has(rowKey);
-                            const projDiffers = rsData.puntiProiezione > rsData.puntiAttuali || rsData.sogliaProiezione !== rsData.sogliaAttuale;
-                            return (
-                              <div key={rsKey} className="rounded-lg border" data-testid={`row-pista-${pista.pista}-${rsKey}`}>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleRsRow(rowKey)}
-                                  aria-expanded={isExp}
-                                  className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
-                                  data-testid={`btn-expand-row-${pista.pista}-${rsKey}`}
-                                >
-                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                    {isExp ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
-                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{rsData.displayName}</span>
+                            ) : isPartnership ? (
+                              <>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="text-center">
+                                    <div className="text-xs text-gray-500">Punti</div>
+                                    <span className="text-lg font-bold">{rsData.puntiAttuali.toFixed(0)}</span>
+                                    {rsData.puntiProiezione > rsData.puntiAttuali && <div className="text-xs text-blue-500">→ {rsData.puntiProiezione.toFixed(0)}</div>}
                                   </div>
-                                  <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs flex-wrap justify-end pl-5 sm:pl-0">
-                                    <span className="flex items-center gap-1">
-                                      <span className="font-medium">{rsData.puntiAttuali.toFixed(1)} pt</span>
-                                      <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
-                                    </span>
-                                    {projDiffers && (
-                                      <span className="flex items-center gap-1 text-blue-600">
-                                        <TrendingUp className="h-3 w-3" />
-                                        <span className="font-medium">{rsData.puntiProiezione.toFixed(1)} pt</span>
-                                        <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
-                                      </span>
-                                    )}
-                                    {(rsData.premioAttuale > 0 || rsData.premioProiettato > 0) && (
-                                      <span className="font-bold text-green-700 dark:text-green-400">
-                                        {formatEuro(rsData.premioAttuale)}
-                                        {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
-                                          <span className="text-blue-600 ml-1">→ {formatEuro(rsData.premioProiettato)}</span>
-                                        )}
-                                      </span>
+                                  <div className="text-center">
+                                    <div className="text-xs text-gray-500">Premio €</div>
+                                    <span className="text-lg font-bold text-green-700 dark:text-green-400">{formatEuro(rsData.premioAttuale)}</span>
+                                    {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                      <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5"><TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}</div>
                                     )}
                                   </div>
-                                </button>
-                                {isExp && (
-                                  <div className="px-2.5 pb-2.5 pt-2 border-t space-y-1.5">
-                                    <div className="grid grid-cols-2 gap-2">
-                                      <div className="text-center">
-                                        <div className="text-xs text-gray-500">Soglia Att.</div>
-                                        <Badge className={`text-sm ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
-                                        {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiAttuali.toFixed(1)} pt</div>}
-                                      </div>
-                                      <div className="text-center">
-                                        <div className="text-xs text-gray-500">Proiezione</div>
-                                        <Badge className={`text-sm ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
-                                        {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiProiezione.toFixed(1)} pt</div>}
-                                      </div>
+                                </div>
+                                {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
+                                      <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
                                     </div>
-                                    {rsData.soglieRef && (
-                                      <div className="flex flex-wrap gap-1 justify-center mt-1">
-                                        {[
-                                          { label: "S1", value: rsData.soglieRef.s1 },
-                                          { label: "S2", value: rsData.soglieRef.s2 },
-                                          { label: "S3", value: rsData.soglieRef.s3 },
-                                          ...(rsData.soglieRef.s4 != null && rsData.soglieRef.s4 > 0 ? [{ label: "S4", value: rsData.soglieRef.s4 }] : []),
-                                          ...(rsData.soglieRef.s5 != null && rsData.soglieRef.s5 > 0 ? [{ label: "S5", value: rsData.soglieRef.s5 }] : []),
-                                        ].map((s) => (
-                                          <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">
-                                            {s.label}:{s.value}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    )}
-                                    {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
-                                      <div className="space-y-1">
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
-                                          <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
-                                        </div>
-                                        <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
-                                            {(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(1)} pt
-                                          </span>
-                                          <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {(rsData.premioAttuale > 0 || rsData.premioProiettato > 0) && (
-                                      <div className="flex items-center justify-between text-xs border-t pt-1">
-                                        <span className="text-green-700 font-semibold">{formatEuro(rsData.premioAttuale)}</span>
-                                        {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
-                                          <span className="text-blue-600 font-semibold flex items-center gap-0.5">
-                                            <TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}
-                                          </span>
-                                        )}
-                                      </div>
-                                    )}
+                                    <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(0)} pt</span>
+                                      <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                    </div>
                                   </div>
                                 )}
-                              </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="text-center">
+                                    <div className="text-xs text-gray-500">Soglia Att.</div>
+                                    <Badge className={`text-sm ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
+                                    {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiAttuali.toFixed(1)} pt</div>}
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-xs text-gray-500">Proiezione</div>
+                                    <Badge className={`text-sm ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
+                                    {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiProiezione.toFixed(1)} pt</div>}
+                                  </div>
+                                </div>
+                                {rsData.soglieRef && (
+                                  <div className="flex flex-wrap gap-1 justify-center mt-1">
+                                    {[
+                                      { label: "S1", value: rsData.soglieRef.s1 },
+                                      { label: "S2", value: rsData.soglieRef.s2 },
+                                      { label: "S3", value: rsData.soglieRef.s3 },
+                                      ...(rsData.soglieRef.s4 != null && rsData.soglieRef.s4 > 0 ? [{ label: "S4", value: rsData.soglieRef.s4 }] : []),
+                                      ...(rsData.soglieRef.s5 != null && rsData.soglieRef.s5 > 0 ? [{ label: "S5", value: rsData.soglieRef.s5 }] : []),
+                                    ].map((s) => (
+                                      <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">{s.label}:{s.value}</span>
+                                    ))}
+                                  </div>
+                                )}
+                                {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                      <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
+                                    </div>
+                                    <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(1)} pt</span>
+                                      <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
                             );
-                          })}
-                          <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2 flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-600">Totale Premio</span>
-                            <div className="flex items-center gap-3">
-                              <span className="font-bold text-green-700" data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
-                              {pista.calcProiezione.premioStimato > 0 && (
-                                <span className="font-bold text-blue-600 flex items-center gap-0.5" data-testid={`text-premio-proiezione-${pista.pista}`}>
-                                  <TrendingUp className="h-3 w-3" /> {formatEuro(pista.calcProiezione.premioStimato)}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ) : pista.totalePezzi > 0 && (pista.pista === "mobile" || pista.pista === "fisso") && pista.pdvBreakdown.filter(p => p.pezzi > 0).length > 1 ? (
-                        <div className="space-y-1.5">
-                          {pista.pdvBreakdown.filter(p => p.pezzi > 0).map((p) => {
-                            const rowKey = `${pista.pista}::pdv::${p.codicePos}`;
-                            const isExp = expandedRsRows.has(rowKey);
+                            rows.push({ key: rsKey, testIdSuffix: rsKey, name: rsData.displayName, metrics, detail });
+                          }
+                        } else if (usePdv) {
+                          for (const p of pdvList) {
                             const sogliaAtt = p.pdvCalc.sogliaLabel;
-                            const showSoglia = sogliaAtt && sogliaAtt !== "N/A";
-                            return (
-                              <div key={p.codicePos} className="rounded-lg border" data-testid={`row-pista-${pista.pista}-pdv-${p.codicePos}`}>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleRsRow(rowKey)}
-                                  aria-expanded={isExp}
-                                  className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
-                                  data-testid={`btn-expand-row-${pista.pista}-pdv-${p.codicePos}`}
-                                >
-                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                    {isExp ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
-                                    <div className="min-w-0">
-                                      <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{p.nomeNegozio}</div>
-                                      <div className="text-[11px] text-gray-500 truncate">{p.codicePos} · {p.ragioneSociale}</div>
-                                    </div>
+                            const metrics: CompactRowMetrics = { pezziAtt: p.pezzi, pezziProi: p.proiezione, puntiAtt: p.pdvCalc.puntiTotali, sogliaAtt, premioAtt: p.pdvCalc.premioStimato };
+                            const detail = (
+                              <>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="text-center">
+                                    <div className="text-xs text-gray-500">Soglia Att.</div>
+                                    <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline">{sogliaAtt}</Badge>
+                                    {p.pdvCalc.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{p.pdvCalc.puntiTotali.toFixed(1)} pt</div>}
                                   </div>
-                                  <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs flex-wrap justify-end pl-5 sm:pl-0">
-                                    <span className="font-medium">
-                                      {p.pezzi}
-                                      {p.proiezione > p.pezzi && <span className="text-blue-500"> → {p.proiezione}</span>}
-                                      <span className="text-gray-400 ml-1">pz</span>
-                                    </span>
-                                    {p.pdvCalc.puntiTotali > 0 && (
-                                      <span className="flex items-center gap-1">
-                                        <span className="font-medium">{p.pdvCalc.puntiTotali.toFixed(1)} pt</span>
-                                        {showSoglia && (
-                                          <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(sogliaAtt)}`} variant="outline">{sogliaAtt}</Badge>
-                                        )}
-                                      </span>
-                                    )}
-                                    {p.pdvCalc.premioStimato > 0 && (
-                                      <span className="font-bold text-green-700 dark:text-green-400">{formatEuro(p.pdvCalc.premioStimato)}</span>
-                                    )}
+                                  <div className="text-center">
+                                    <div className="text-xs text-gray-500">Premio €</div>
+                                    <span className="text-base font-bold text-green-700 dark:text-green-400">{formatEuro(p.pdvCalc.premioStimato)}</span>
                                   </div>
-                                </button>
-                                {isExp && (
-                                  <div className="px-2.5 pb-2.5 pt-2 border-t space-y-1.5">
-                                    <div className="grid grid-cols-2 gap-2">
-                                      <div className="text-center">
-                                        <div className="text-xs text-gray-500">Soglia Att.</div>
-                                        <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline">{sogliaAtt}</Badge>
-                                        {p.pdvCalc.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{p.pdvCalc.puntiTotali.toFixed(1)} pt</div>}
-                                      </div>
-                                      <div className="text-center">
-                                        <div className="text-xs text-gray-500">Premio €</div>
-                                        <span className="text-base font-bold text-green-700 dark:text-green-400">{formatEuro(p.pdvCalc.premioStimato)}</span>
-                                      </div>
+                                </div>
+                                {p.pdvCalc.forecastTarget != null && p.pdvCalc.forecastTarget > 0 && (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                      <span className="font-medium">{p.pdvCalc.forecastTarget.toFixed(0)} pt</span>
                                     </div>
-                                    {p.pdvCalc.forecastTarget != null && p.pdvCalc.forecastTarget > 0 && (
-                                      <div className="space-y-1">
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
-                                          <span className="font-medium">{p.pdvCalc.forecastTarget.toFixed(0)} pt</span>
-                                        </div>
-                                        <Progress value={Math.min((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100, 100)} className="h-1.5" />
-                                        <div className="flex items-center justify-between text-xs">
-                                          <span className={`font-medium ${(p.pdvCalc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
-                                            {(p.pdvCalc.forecastGap ?? 0) >= 0 ? "+" : ""}{(p.pdvCalc.forecastGap ?? 0).toFixed(1)} pt
-                                          </span>
-                                          <span className="text-gray-500">{Math.round((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100)}%</span>
-                                        </div>
-                                      </div>
-                                    )}
+                                    <Progress value={Math.min((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100, 100)} className="h-1.5" />
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className={`font-medium ${(p.pdvCalc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(p.pdvCalc.forecastGap ?? 0) >= 0 ? "+" : ""}{(p.pdvCalc.forecastGap ?? 0).toFixed(1)} pt</span>
+                                      <span className="text-gray-500">{Math.round((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100)}%</span>
+                                    </div>
                                   </div>
                                 )}
-                              </div>
+                              </>
                             );
-                          })}
-                          {pista.soglieRef && (
-                            <div className="flex flex-wrap gap-1.5 justify-center">
-                              {[
-                                { label: "S1", value: pista.soglieRef.s1 },
-                                { label: "S2", value: pista.soglieRef.s2 },
-                                { label: "S3", value: pista.soglieRef.s3 },
-                                ...(pista.soglieRef.s4 != null && pista.soglieRef.s4 > 0 ? [{ label: "S4", value: pista.soglieRef.s4 }] : []),
-                                ...(pista.soglieRef.s5 != null && pista.soglieRef.s5 > 0 ? [{ label: "S5", value: pista.soglieRef.s5 }] : []),
-                              ].map((s) => (
-                                <span key={s.label} className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 font-medium">
-                                  {s.label}:{s.value}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2 flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-600">Totale Premio</span>
-                            <div className="flex items-center gap-3">
-                              <span className="font-bold text-green-700" data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
-                              {pista.calcProiezione.premioStimato > 0 && (
-                                <span className="font-bold text-blue-600 flex items-center gap-0.5" data-testid={`text-premio-proiezione-${pista.pista}`}>
-                                  <TrendingUp className="h-3 w-3" /> {formatEuro(pista.calcProiezione.premioStimato)}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <Badge className={`text-xs ${getSogliaColor(pista.calc.sogliaLabel)} hidden`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>{pista.calc.sogliaLabel}</Badge>
-                          <Badge className={`text-xs ${getSogliaColor(pista.calcProiezione.sogliaLabel)} hidden`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>{pista.calcProiezione.sogliaLabel}</Badge>
-                        </div>
-                      ) : pista.totalePezzi > 0 && pista.calc.sogliaLabel !== "N/A" ? (
-                        <>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="rounded-lg border p-3 text-center">
-                              <div className="text-xs text-gray-500 mb-1">Soglia Attuale</div>
-                              <Badge className={`text-sm ${getSogliaColor(pista.calc.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>
-                                {pista.calc.sogliaLabel}
-                              </Badge>
-                              {pista.calc.puntiTotali > 0 && (
-                                <div className="text-sm text-gray-500 mt-1 font-medium">{pista.calc.puntiTotali.toFixed(1)} pt</div>
-                              )}
-                            </div>
-                            <div className="rounded-lg border p-3 text-center">
-                              <div className="text-xs text-gray-500 mb-1">Proiezione Soglia</div>
-                              <Badge className={`text-sm ${getSogliaColor(pista.calcProiezione.sogliaLabel)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>
-                                {pista.calcProiezione.sogliaLabel}
-                              </Badge>
-                              {pista.calcProiezione.puntiTotali > 0 && (
-                                <div className="text-sm text-gray-500 mt-1 font-medium">{pista.calcProiezione.puntiTotali.toFixed(1)} pt</div>
-                              )}
-                            </div>
-                          </div>
-
-                          {pista.soglieRef && (
-                            <div className="flex flex-wrap gap-1.5 justify-center">
-                              {[
-                                { label: "S1", value: pista.soglieRef.s1 },
-                                { label: "S2", value: pista.soglieRef.s2 },
-                                { label: "S3", value: pista.soglieRef.s3 },
-                                ...(pista.soglieRef.s4 != null && pista.soglieRef.s4 > 0 ? [{ label: "S4", value: pista.soglieRef.s4 }] : []),
-                                ...(pista.soglieRef.s5 != null && pista.soglieRef.s5 > 0 ? [{ label: "S5", value: pista.soglieRef.s5 }] : []),
-                              ].map((s) => (
-                                <span key={s.label} className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 font-medium">
-                                  {s.label}:{s.value}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          {pista.totalePezzi > 0 && pista.calc.forecastTarget != null && pista.calc.forecastTarget > 0 && (
-                            <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
-                                <span className="font-medium">{pista.calc.forecastTarget.toFixed(0)} pt</span>
-                              </div>
-                              <Progress
-                                value={Math.min((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100, 100)}
-                                className="h-1.5"
-                              />
-                              <div className="flex items-center justify-between text-xs">
-                                <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
-                                  {(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(1)} pt
-                                </span>
-                                <span className="text-gray-400">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
-                              </div>
-                            </div>
-                          )}
-
-                          {pista.totalePezzi > 0 && (pista.calc.premioStimato > 0 || pista.calcProiezione.premioStimato > 0) && (
-                            <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2.5 space-y-1.5">
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-500 dark:text-gray-400">Attuale</span>
-                                <span className="font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-${pista.pista}`}>
-                                  {formatEuro(pista.calc.premioStimato)}
-                                </span>
-                              </div>
-                              {pista.calcProiezione.premioStimato > 0 && (
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                    <TrendingUp className="h-3 w-3 text-blue-500" />
-                                    Proiezione
-                                  </span>
-                                  <span className="font-bold text-blue-600 dark:text-blue-400 text-base" data-testid={`text-premio-proiezione-${pista.pista}`}>
-                                    {formatEuro(pista.calcProiezione.premioStimato)}
-                                  </span>
+                            rows.push({ key: p.codicePos, testIdSuffix: p.codicePos, name: p.nomeNegozio, subtitle: `${p.codicePos} · ${p.ragioneSociale}`, metrics, detail });
+                          }
+                        } else {
+                          // Single aggregated "Totale" row
+                          const sogliaAtt = pista.calc.sogliaLabel;
+                          const sogliaProi = pista.calcProiezione.sogliaLabel;
+                          const metrics: CompactRowMetrics = isCB
+                            ? { pezziAtt: pista.totalePezzi, pezziProi: pista.proiezionePezzi, premioAtt: pista.calc.premioStimato, premioProi: pista.calcProiezione.premioStimato }
+                            : isPartnership
+                            ? { puntiAtt: pista.calc.puntiTotali, puntiProi: pista.calcProiezione.puntiTotali, premioAtt: pista.calc.premioStimato, premioProi: pista.calcProiezione.premioStimato }
+                            : { puntiAtt: pista.calc.puntiTotali, puntiProi: pista.calcProiezione.puntiTotali, sogliaAtt, sogliaProi, premioAtt: pista.calc.premioStimato, premioProi: pista.calcProiezione.premioStimato };
+                          const detail = (
+                            <>
+                              {!isCB && !isPartnership && sogliaAtt !== 'N/A' && (
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="text-center">
+                                    <div className="text-xs text-gray-500">Soglia Att.</div>
+                                    <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>{sogliaAtt}</Badge>
+                                    {pista.calc.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{pista.calc.puntiTotali.toFixed(1)} pt</div>}
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-xs text-gray-500">Proiezione</div>
+                                    <Badge className={`text-sm ${getSogliaColor(sogliaProi)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>{sogliaProi}</Badge>
+                                    {pista.calcProiezione.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(1)} pt</div>}
+                                  </div>
                                 </div>
                               )}
-                            </div>
-                          )}
-                        </>
-                      ) : null}
+                              {pista.soglieRef && !isCB && !isPartnership && (
+                                <div className="flex flex-wrap gap-1.5 justify-center">
+                                  {[
+                                    { label: "S1", value: pista.soglieRef.s1 },
+                                    { label: "S2", value: pista.soglieRef.s2 },
+                                    { label: "S3", value: pista.soglieRef.s3 },
+                                    ...(pista.soglieRef.s4 != null && pista.soglieRef.s4 > 0 ? [{ label: "S4", value: pista.soglieRef.s4 }] : []),
+                                    ...(pista.soglieRef.s5 != null && pista.soglieRef.s5 > 0 ? [{ label: "S5", value: pista.soglieRef.s5 }] : []),
+                                  ].map((s) => (
+                                    <span key={s.label} className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 font-medium">{s.label}:{s.value}</span>
+                                  ))}
+                                </div>
+                              )}
+                              {pista.calc.forecastTarget != null && pista.calc.forecastTarget > 0 && (
+                                <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                    <span className="font-medium">{pista.calc.forecastTarget.toFixed(0)} pt</span>
+                                  </div>
+                                  <Progress value={Math.min((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100, 100)} className="h-1.5" />
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(1)} pt</span>
+                                    <span className="text-gray-400">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
+                                  </div>
+                                </div>
+                              )}
+                              {(pista.calc.premioStimato > 0 || pista.calcProiezione.premioStimato > 0) && (
+                                <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3 py-2 space-y-1`}>
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-500">Attuale</span>
+                                    <span className={`font-bold ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`}>{formatEuro(pista.calc.premioStimato)}</span>
+                                  </div>
+                                  {pista.calcProiezione.premioStimato > 0 && (
+                                    <div className="flex items-center justify-between text-sm">
+                                      <span className="text-gray-500 flex items-center gap-1"><TrendingUp className="h-3 w-3 text-blue-500" /> Proiezione</span>
+                                      <span className="font-bold text-blue-600">{formatEuro(pista.calcProiezione.premioStimato)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          );
+                          rows.push({ key: 'totale', testIdSuffix: 'totale', name: 'Totale', metrics, detail });
+                        }
+
+                        return (
+                          <div className="space-y-1.5">
+                            {rows.map(r => {
+                              const rowKey = `${pista.pista}::${r.testIdSuffix}`;
+                              return (
+                                <PistaCompactRow
+                                  key={r.key}
+                                  testId={`${pista.pista}-${r.testIdSuffix}`}
+                                  expanded={expandedRsRows.has(rowKey)}
+                                  onToggle={() => toggleRsRow(rowKey)}
+                                  name={r.name}
+                                  subtitle={r.subtitle}
+                                  metrics={r.metrics}
+                                  premioColor={premioColorVal}
+                                >
+                                  {r.detail}
+                                </PistaCompactRow>
+                              );
+                            })}
+                            {/* Footer aggregate Totale Premio */}
+                            {rows.length > 1 && (
+                              <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3 py-2 flex items-center justify-between flex-wrap gap-2`}>
+                                <span className="text-sm font-medium text-gray-600">Totale Premio</span>
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <span className={`font-bold ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`} data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
+                                  {pista.calcProiezione.premioStimato > 0 && (
+                                    <span className="font-bold text-blue-600 flex items-center gap-0.5" data-testid={`text-premio-proiezione-${pista.pista}`}>
+                                      <TrendingUp className="h-3 w-3" /> {formatEuro(pista.calcProiezione.premioStimato)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {rows.length === 1 && (
+                              <>
+                                <span className="hidden" data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
+                                {pista.calcProiezione.premioStimato > 0 && <span className="hidden" data-testid={`text-premio-proiezione-${pista.pista}`}>{formatEuro(pista.calcProiezione.premioStimato)}</span>}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {pista.totalePezzi === 0 ? (
                         <p className="text-sm text-gray-400 italic">Nessuna attivazione mappata</p>
