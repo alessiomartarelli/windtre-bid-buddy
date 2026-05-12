@@ -187,6 +187,12 @@ interface OrgConfigResponse {
   configVersion: number;
 }
 
+const PISTA_ORDER: string[] = ['mobile', 'fisso', 'cb', 'partnership', 'extra_gara_iva', 'energia', 'assicurazioni', 'protecta'];
+const pistaOrderRank = (key: string): number => {
+  const i = PISTA_ORDER.indexOf(key);
+  return i === -1 ? 999 : i;
+};
+
 const PISTA_CONFIG = {
   mobile: { label: "Mobile", icon: Smartphone, color: "bg-blue-500", lightColor: "bg-blue-50 text-blue-700 border-blue-200" },
   fisso: { label: "Fisso", icon: Wifi, color: "bg-green-500", lightColor: "bg-green-50 text-green-700 border-green-200" },
@@ -2977,7 +2983,7 @@ export default function DashboardGaraReale() {
                               </AccordionTrigger>
                               <AccordionContent>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-3">
-                                  {Object.entries(byPista).sort(([, a], [, b]) => b.corePezzi - a.corePezzi).map(([pistaKey, pistaData]) => {
+                                  {Object.entries(byPista).sort(([a], [b]) => pistaOrderRank(a) - pistaOrderRank(b)).map(([pistaKey, pistaData]) => {
                                     const conf = PISTA_CONFIG[pistaKey as keyof typeof PISTA_CONFIG];
                                     if (!conf) return null;
                                     const calc = pdvCalcByPista[pistaKey];
@@ -3261,7 +3267,7 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
             <AccordionContent>
               <div className="space-y-3 pb-3">
                 <div className="flex flex-wrap gap-2">
-                  {Object.entries(byPista).sort(([, a], [, b]) => b - a).map(([pistaKey, pezzi]) => {
+                  {Object.entries(byPista).sort(([a], [b]) => pistaOrderRank(a) - pistaOrderRank(b)).map(([pistaKey, pezzi]) => {
                     const conf = PISTA_CONFIG[pistaKey as keyof typeof PISTA_CONFIG];
                     if (!conf) return null;
                     return (
