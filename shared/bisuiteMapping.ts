@@ -245,6 +245,9 @@ export function getDefaultMappingRules(): BiSuiteMappingRule[] {
     { id: ruleId(), pista: 'mobile', targetCategory: 'PROFESSIONAL_SPECIAL', targetLabel: 'Professional Special', conditions: { categoriaBiSuite: 'TIED IVA', descrizioneBiSuite: 'PROFESSIONAL SPECIAL' }, priority: 15, enabled: true, ruleType: 'base' },
     { id: ruleId(), pista: 'mobile', targetCategory: 'PROFESSIONAL_FLEX', targetLabel: 'Professional Flex', conditions: { categoriaBiSuite: 'TIED IVA', descrizioneBiSuite: 'PROFESSIONAL FLEX' }, priority: 15, enabled: true, ruleType: 'base' },
     { id: ruleId(), pista: 'mobile', targetCategory: 'PROFESSIONAL_DATA_10', targetLabel: 'Professional Data 10', conditions: { categoriaBiSuite: 'TIED IVA', descrizioneBiSuite: 'PROFESSIONAL DATA 10' }, priority: 15, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'mobile', targetCategory: 'ALTRE_SIM_IVA', targetLabel: 'Professional Full Plus', conditions: { categoriaBiSuite: 'TIED IVA', descrizioneBiSuite: 'PROFESSIONAL FULL PLUS' }, priority: 15, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'mobile', targetCategory: 'ALTRE_SIM_IVA', targetLabel: 'Professional Data 60', conditions: { categoriaBiSuite: 'TIED IVA', descrizioneBiSuite: 'PROFESSIONAL DATA 60' }, priority: 15, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'mobile', targetCategory: 'ALTRE_SIM_IVA', targetLabel: 'Professional Data 100', conditions: { categoriaBiSuite: 'TIED IVA', descrizioneBiSuite: 'PROFESSIONAL DATA 100' }, priority: 15, enabled: true, ruleType: 'base' },
 
     // ═══════════════ MOBILE — ADDITIONAL (da domande/risposte) ═══════════════
     { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'TIED CF', domandaTesto: 'MNP', rispostaDiversaDa: 'NO' }, priority: 20, enabled: true, ruleType: 'additional' },
@@ -591,6 +594,8 @@ function ruleFingerprint(r: BiSuiteMappingRule): string {
     r.pista,
     r.targetCategory,
     c.categoriaBiSuite || '',
+    c.tipologiaBiSuite || '',
+    c.descrizioneBiSuite || '',
     c.domandaTesto || '',
   ].join('|');
 }

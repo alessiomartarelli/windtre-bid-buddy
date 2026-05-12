@@ -350,7 +350,7 @@ export function TabelleCalcoloGara({ config, onChange, baseDefaults, pdvList, ex
             <TabsTrigger value="energia" className="text-xs sm:text-sm" data-testid="tab-gara-tc-energia">Energia</TabsTrigger>
             <TabsTrigger value="assicurazioni" className="text-xs sm:text-sm" data-testid="tab-gara-tc-assicurazioni">Assicurazioni</TabsTrigger>
             <TabsTrigger value="protecta" className="text-xs sm:text-sm" data-testid="tab-gara-tc-protecta">Protecta</TabsTrigger>
-            <TabsTrigger value="extraGara" className="text-xs sm:text-sm" data-testid="tab-gara-tc-extra-gara">Extra Gara</TabsTrigger>
+            <TabsTrigger value="extraGara" className="text-xs sm:text-sm" data-testid="tab-gara-tc-extra-gara">Extra Gara IVA</TabsTrigger>
             <TabsTrigger value="partnership" className="text-xs sm:text-sm" data-testid="tab-gara-tc-partnership">Partnership</TabsTrigger>
           </TabsList>
         </div>
