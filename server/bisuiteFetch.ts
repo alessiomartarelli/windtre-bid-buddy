@@ -42,10 +42,67 @@ async function getBisuiteToken(
   return data.access_token;
 }
 
+/**
+ * Normalizza un istante (string ISO o Date) al wall-time italiano (Europe/Rome)
+ * e ritorna un Date i cui componenti UTC corrispondono ai componenti italiani.
+ * Quando salvato in una colonna `timestamp without time zone` di Postgres,
+ * il driver formatta il Date in componenti UTC, quindi il valore persistito
+ * coincide con l'ora di parete italiana.
+ *
+ * Casi gestiti:
+ *  - stringa con `Z` o offset esplicito (es. "2026-03-31T22:00:00.000Z",
+ *    "2026-04-01T00:00:00+02:00"): convertita ad Europe/Rome.
+ *  - stringa naive senza fuso (es. "2026-04-01T00:00:00"): trattata come
+ *    già wall-time italiano, ritornata invariata in componenti.
+ *  - input null/undefined/vuoto/non parsabile: ritorna null.
+ */
+export function toItalianWallTime(input: string | Date | null | undefined): Date | null {
+  if (input === null || input === undefined || input === "") return null;
+
+  // Stringa naive senza fuso → già wall-time italiano: costruiamo un Date
+  // i cui componenti UTC sono quelli letti dalla stringa, senza shift.
+  if (typeof input === "string") {
+    const naive = input.match(
+      /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?)?$/,
+    );
+    if (naive) {
+      const [, y, mo, d, h, mi, s, ms] = naive;
+      return new Date(Date.UTC(
+        Number(y), Number(mo) - 1, Number(d),
+        Number(h ?? "0"), Number(mi ?? "0"), Number(s ?? "0"),
+        Number((ms ?? "0").padEnd(3, "0").slice(0, 3)),
+      ));
+    }
+  }
+
+  const d = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(d.getTime())) return null;
+
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  });
+  const parts: Record<string, string> = {};
+  for (const p of fmt.formatToParts(d)) {
+    if (p.type !== "literal") parts[p.type] = p.value;
+  }
+  return new Date(Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour) % 24,
+    Number(parts.minute),
+    Number(parts.second),
+    d.getUTCMilliseconds(),
+  ));
+}
+
 function extractSaleFields(sale: any, organizationId: string) {
   const bisuiteId = sale.id || sale.codiceEsterno || 0;
   const dataVenditaStr = sale.dataVendita || sale.createdAt;
-  const dataVendita = dataVenditaStr ? new Date(dataVenditaStr) : null;
+  const dataVendita = toItalianWallTime(dataVenditaStr);
 
   let codicePos = "";
   let nomeNegozio = "";

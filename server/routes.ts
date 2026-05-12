@@ -9,6 +9,7 @@ import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
 import { registerCdgRoutes } from "./cdgRoutes";
+import { toItalianWallTime } from "./bisuiteFetch";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
@@ -1708,7 +1709,7 @@ export async function registerRoutes(
   function extractSaleFields(sale: any, organizationId: string) {
     const bisuiteId = sale.id || sale.codiceEsterno || 0;
     const dataVenditaStr = sale.dataVendita || sale.createdAt;
-    const dataVendita = dataVenditaStr ? new Date(dataVenditaStr) : null;
+    const dataVendita = toItalianWallTime(dataVenditaStr);
 
     let codicePos = '';
     let nomeNegozio = '';
