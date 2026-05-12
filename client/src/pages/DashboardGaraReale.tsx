@@ -1343,6 +1343,7 @@ function drawPdfFooterPagination(doc: jsPDF, currentPage: number) {
 
 const TABELLA_PDV_PISTA_PDF_EXPORT_KEY = "tabella-pdv-pista";
 const PREMIO_PER_RS_PDF_EXPORT_KEY = "premio-per-rs";
+const DETTAGLIO_RS_PDF_EXPORT_KEY = "dettaglio-rs";
 
 type PremioRsRow = {
   displayName: string;
@@ -4906,10 +4907,19 @@ export default function DashboardGaraReale() {
 
             <Card data-testid="card-rs-breakdown">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Handshake className="h-5 w-5" />
-                  Dettaglio per Ragione Sociale
-                </CardTitle>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Handshake className="h-5 w-5" />
+                    Dettaglio per Ragione Sociale
+                  </CardTitle>
+                  <DettaglioRsPdfExport
+                    pdvList={mappedData.pdvList}
+                    pistaStats={pistaStats}
+                    orgId={orgId}
+                    mese={selMonth}
+                    anno={selYear}
+                  />
+                </div>
               </CardHeader>
               <CardContent>
                 <RsBreakdown pdvList={mappedData.pdvList} workdayInfo={workdayInfo} pistaStats={pistaStats} />
@@ -4919,6 +4929,243 @@ export default function DashboardGaraReale() {
         )}
       </div>
     </div>
+  );
+}
+
+type DettaglioRsAggColKey =
+  | "smartphone_mobile"
+  | "smartphone_cb"
+  | "accessori_pezzi"
+  | "accessori_importo"
+  | "servizi_pezzi"
+  | "servizi_importo";
+
+const DETTAGLIO_RS_AGG_COLS: { key: DettaglioRsAggColKey; label: string }[] = [
+  { key: "smartphone_mobile", label: "Smartphone Mobile" },
+  { key: "smartphone_cb", label: "Smartphone CB" },
+  { key: "accessori_pezzi", label: "Accessori (pz)" },
+  { key: "accessori_importo", label: "Accessori (€)" },
+  { key: "servizi_pezzi", label: "Servizi (pz)" },
+  { key: "servizi_importo", label: "Servizi (€)" },
+];
+
+function DettaglioRsPdfExport({
+  pdvList,
+  pistaStats,
+  orgId,
+  mese,
+  anno,
+}: {
+  pdvList: PdvData[];
+  pistaStats: Array<{ pista: string; calc: PistaCalcResult; pdvBreakdown: Array<{ codicePos: string; pezzi: number; pdvCalc: PistaCalcResult }> }>;
+  orgId?: string | null;
+  mese?: number;
+  anno?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [prefs, setPrefs] = useState<DashboardPdfPrefs>({ selectedColumns: null, nota: "", logoDataUrl: null });
+  const [hydratedOrg, setHydratedOrg] = useState<string | null>(null);
+
+  const { data: orgBranding } = useQuery<{ logoDataUrl: string | null }>({
+    queryKey: ['/api/organization-branding/logo'],
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const orgLogoDataUrl = orgBranding?.logoDataUrl ?? null;
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (hydratedOrg === orgId) return;
+    setPrefs(loadDashboardPdfPrefs(orgId, DETTAGLIO_RS_PDF_EXPORT_KEY));
+    setHydratedOrg(orgId);
+  }, [orgId, hydratedOrg]);
+
+  useEffect(() => {
+    if (!open || !orgId) return;
+    const shared = loadSharedPdfPrefs(orgId);
+    setPrefs(prev => ({
+      selectedColumns: prev.selectedColumns,
+      nota: shared.nota,
+      logoDataUrl: shared.logoDataUrl,
+    }));
+  }, [open, orgId]);
+
+  const rsGroups = useMemo(() => {
+    const grouped: Record<string, { ragioneSociale: string; pdvs: PdvData[] }> = {};
+    for (const pdv of pdvList) {
+      const rs = pdv.ragioneSociale || "N/D";
+      if (!grouped[rs]) grouped[rs] = { ragioneSociale: rs, pdvs: [] };
+      grouped[rs].pdvs.push(pdv);
+    }
+    return Object.values(grouped).sort((a, b) => a.ragioneSociale.localeCompare(b.ragioneSociale));
+  }, [pdvList]);
+
+  const pdvPezziPerPista = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    for (const stat of pistaStats) {
+      for (const b of stat.pdvBreakdown) {
+        if (!map.has(b.codicePos)) map.set(b.codicePos, new Map());
+        map.get(b.codicePos)!.set(stat.pista, (map.get(b.codicePos)!.get(stat.pista) ?? 0) + b.pezzi);
+      }
+    }
+    return map;
+  }, [pistaStats]);
+
+  const pisteAttive = useMemo(() => {
+    const totByPista = new Map<string, number>();
+    for (const stat of pistaStats) {
+      const tot = stat.pdvBreakdown.reduce((s, b) => s + b.pezzi, 0);
+      if (tot > 0 && (PISTA_CONFIG as any)[stat.pista]) {
+        totByPista.set(stat.pista, tot);
+      }
+    }
+    return Array.from(totByPista.keys())
+      .sort((a, b) => pistaOrderRank(a) - pistaOrderRank(b))
+      .map(k => ({ key: `pista:${k}`, label: (PISTA_CONFIG as any)[k].label as string, pista: k }));
+  }, [pistaStats]);
+
+  const columnOptions = useMemo(() => [
+    ...pisteAttive.map(p => ({ key: p.key, label: p.label })),
+    ...DETTAGLIO_RS_AGG_COLS.map(c => ({ key: `agg:${c.key}`, label: c.label })),
+  ], [pisteAttive]);
+
+  const baseFilename = () => {
+    const orgPart = orgId || 'org';
+    const mm = mese ? String(mese).padStart(2, '0') : '00';
+    const yy = anno ? String(anno) : '0000';
+    return `dettaglio-ragioni-sociali_${orgPart}_${yy}-${mm}`;
+  };
+
+  const exportPdf = (final: DashboardPdfPrefs) => {
+    const allKeys = columnOptions.map(c => c.key);
+    const selected = (final.selectedColumns ?? allKeys).filter(k => allKeys.includes(k));
+    if (selected.length === 0 || rsGroups.length === 0) return;
+
+    const selectedPiste = pisteAttive.filter(p => selected.includes(p.key));
+    const selectedAgg = DETTAGLIO_RS_AGG_COLS.filter(c => selected.includes(`agg:${c.key}`));
+
+    const fmtNum = (n: number) => Number.isFinite(n) ? n.toFixed(0) : '';
+    const fmtEuro = (n: number) => Number.isFinite(n) ? `€ ${n.toFixed(2).replace('.', ',')}` : '';
+
+    const header: string[] = ["Tipo", "Ragione Sociale", "Codice PDV", "Nome PDV"];
+    for (const p of selectedPiste) header.push(p.label);
+    for (const a of selectedAgg) header.push(a.label);
+
+    const aggValueForPdv = (pdv: PdvData, key: DettaglioRsAggColKey): { num: number; isEuro: boolean } => {
+      switch (key) {
+        case "smartphone_mobile": return { num: pdvSmartphoneMobileCount(pdv), isEuro: false };
+        case "smartphone_cb": return { num: pdvSmartphoneCBCount(pdv), isEuro: false };
+        case "accessori_pezzi": return { num: pdv.accessori?.pezzi ?? 0, isEuro: false };
+        case "accessori_importo": return { num: pdv.accessori?.importo ?? 0, isEuro: true };
+        case "servizi_pezzi": return { num: pdv.servizi?.pezzi ?? 0, isEuro: false };
+        case "servizi_importo": return { num: pdv.servizi?.importo ?? 0, isEuro: true };
+      }
+    };
+
+    const body: string[][] = [];
+    for (const rs of rsGroups) {
+      const rsRow: string[] = ["RS", rs.ragioneSociale, '', `${rs.pdvs.length} PDV`];
+      for (const p of selectedPiste) {
+        let tot = 0;
+        for (const pdv of rs.pdvs) tot += pdvPezziPerPista.get(pdv.codicePos)?.get(p.pista) ?? 0;
+        rsRow.push(tot > 0 ? fmtNum(tot) : '');
+      }
+      for (const a of selectedAgg) {
+        let tot = 0;
+        for (const pdv of rs.pdvs) tot += aggValueForPdv(pdv, a.key).num;
+        const isEuro = aggValueForPdv(rs.pdvs[0], a.key).isEuro;
+        rsRow.push(tot > 0 ? (isEuro ? fmtEuro(tot) : fmtNum(tot)) : '');
+      }
+      body.push(rsRow);
+      for (const pdv of rs.pdvs) {
+        const pdvRow: string[] = ["PDV", rs.ragioneSociale, pdv.codicePos, pdv.nomeNegozio];
+        for (const p of selectedPiste) {
+          const v = pdvPezziPerPista.get(pdv.codicePos)?.get(p.pista) ?? 0;
+          pdvRow.push(v > 0 ? fmtNum(v) : '');
+        }
+        for (const a of selectedAgg) {
+          const { num, isEuro } = aggValueForPdv(pdv, a.key);
+          pdvRow.push(num > 0 ? (isEuro ? fmtEuro(num) : fmtNum(num)) : '');
+        }
+        body.push(pdvRow);
+      }
+    }
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const mm = mese ? String(mese).padStart(2, '0') : '--';
+    const yy = anno ? String(anno) : '----';
+    const startY = drawPdfHeader(doc, {
+      title: 'Dettaglio per Ragione Sociale',
+      subtitle: `Org: ${orgId || '-'}    Periodo: ${mm}/${yy}`,
+      nota: final.nota,
+      logoDataUrl: final.logoDataUrl ?? orgLogoDataUrl,
+    });
+
+    autoTable(doc, {
+      startY,
+      head: [header],
+      body,
+      theme: 'striped',
+      headStyles: { fillColor: [99, 102, 241], fontSize: 8, halign: 'center' },
+      bodyStyles: { fontSize: 8 },
+      styles: { cellPadding: 1.4, overflow: 'linebreak' },
+      columnStyles: {
+        0: { cellWidth: 12 },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 22 },
+        3: { cellWidth: 40 },
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index >= 4) {
+          data.cell.styles.halign = 'right';
+        }
+        if (data.section === 'body' && body[data.row.index]?.[0] === 'RS') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [238, 242, 255];
+        }
+      },
+      margin: { left: 8, right: 8, top: startY },
+      didDrawPage: (data) => {
+        drawPdfFooterPagination(doc, data.pageNumber);
+      },
+    });
+
+    doc.save(`${baseFilename()}.pdf`);
+  };
+
+  if (rsGroups.length === 0 || columnOptions.length === 0) return null;
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8"
+        onClick={() => setOpen(true)}
+        data-testid="btn-dettaglio-rs-export-pdf"
+      >
+        <Download className="h-3.5 w-3.5 mr-1" />Esporta PDF
+      </Button>
+      <DashboardPdfExportDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Esporta PDF — Dettaglio per Ragione Sociale"
+        description="Personalizza il PDF con il dettaglio per Ragione Sociale (riga per PDV con totali RS)."
+        columnsLabel="Colonne da includere"
+        columnOptions={columnOptions}
+        prefs={prefs}
+        orgLogoDataUrl={orgLogoDataUrl}
+        onPrefsChange={(next) => {
+          setPrefs(next);
+          saveDashboardPdfPrefs(orgId, DETTAGLIO_RS_PDF_EXPORT_KEY, next);
+        }}
+        onConfirm={(final) => {
+          exportPdf(final);
+          setOpen(false);
+        }}
+        testIdPrefix="dettaglio-rs-pdf"
+      />
+    </>
   );
 }
 
