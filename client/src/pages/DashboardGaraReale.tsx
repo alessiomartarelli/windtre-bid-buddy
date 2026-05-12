@@ -130,6 +130,27 @@ interface ExtraTally {
   importo: number;
 }
 
+interface DeviceModalitaTally {
+  pezzi: number;
+  descriptions: Record<string, number>;
+}
+interface DeviceKindTally {
+  finanziato: DeviceModalitaTally;
+  rate: DeviceModalitaTally;
+  altro: DeviceModalitaTally;
+}
+interface DeviceTally {
+  smartphone: DeviceKindTally;
+  smartDevice: DeviceKindTally;
+  internetDevice: DeviceKindTally;
+}
+
+const EMPTY_DEVICE_KIND: DeviceKindTally = {
+  finanziato: { pezzi: 0, descriptions: {} },
+  rate: { pezzi: 0, descriptions: {} },
+  altro: { pezzi: 0, descriptions: {} },
+};
+
 interface PdvData {
   codicePos: string;
   nomeNegozio: string;
@@ -138,6 +159,7 @@ interface PdvData {
   addons?: AddonItem[];
   accessori?: ExtraTally;
   servizi?: ExtraTally;
+  devices?: DeviceTally;
   unmapped: number;
   totalArticoli: number;
 }
@@ -157,26 +179,61 @@ const SMARTPHONE_CB_CATEGORIES = new Set<string>([
   'multi_device_finanziamento',
 ]);
 
-function pdvSmartphoneMobileCount(pdv: PdvData): number {
+const SMARTPHONE_MOBILE_FIN = new Set<string>([
+  'DEVICE_1_FIN_SP_LT_200',
+  'DEVICE_1_FIN_SP_200_600',
+  'DEVICE_1_FIN_SP_GTE_600',
+  'DEVICE_2_FINANZIATO',
+]);
+const SMARTPHONE_MOBILE_RATE = new Set<string>([
+  'DEVICE_VAR_SP_LT_200',
+  'DEVICE_VAR_SP_GTE_200',
+]);
+const SMARTPHONE_CB_FIN = new Set<string>([
+  'IMP_AGG_GT0_FINANZ',
+  'multi_device_finanziamento',
+]);
+const SMARTPHONE_CB_RATE = new Set<string>([
+  'IMP_AGG_GT0_VAR',
+]);
+// IMP_AGG_0_VAR_FINANZ è ambigua (= 0) → conta nel totale ma non nel breakdown
+
+function countByCats(pdv: PdvData, pista: string, cats: Set<string>): number {
   let n = 0;
-  for (const it of pdv.items) {
-    if (it.pista === 'mobile' && SMARTPHONE_MOBILE_CATEGORIES.has(it.targetCategory)) n += it.pezzi;
-  }
-  for (const a of pdv.addons || []) {
-    if (a.pista === 'mobile' && SMARTPHONE_MOBILE_CATEGORIES.has(a.targetCategory)) n += a.occorrenze;
-  }
+  for (const it of pdv.items) if (it.pista === pista && cats.has(it.targetCategory)) n += it.pezzi;
+  for (const a of pdv.addons || []) if (a.pista === pista && cats.has(a.targetCategory)) n += a.occorrenze;
   return n;
 }
-
+function pdvSmartphoneMobileCount(pdv: PdvData): number {
+  return countByCats(pdv, 'mobile', SMARTPHONE_MOBILE_CATEGORIES);
+}
 function pdvSmartphoneCBCount(pdv: PdvData): number {
-  let n = 0;
-  for (const it of pdv.items) {
-    if (it.pista === 'cb' && SMARTPHONE_CB_CATEGORIES.has(it.targetCategory)) n += it.pezzi;
+  return countByCats(pdv, 'cb', SMARTPHONE_CB_CATEGORIES);
+}
+function pdvSmartphoneSplit(pdv: PdvData, pista: 'mobile' | 'cb'): { fin: number; rate: number; total: number } {
+  if (pista === 'mobile') {
+    const fin = countByCats(pdv, 'mobile', SMARTPHONE_MOBILE_FIN);
+    const rate = countByCats(pdv, 'mobile', SMARTPHONE_MOBILE_RATE);
+    return { fin, rate, total: pdvSmartphoneMobileCount(pdv) };
   }
-  for (const a of pdv.addons || []) {
-    if (a.pista === 'cb' && SMARTPHONE_CB_CATEGORIES.has(a.targetCategory)) n += a.occorrenze;
-  }
-  return n;
+  const fin = countByCats(pdv, 'cb', SMARTPHONE_CB_FIN);
+  const rate = countByCats(pdv, 'cb', SMARTPHONE_CB_RATE);
+  return { fin, rate, total: pdvSmartphoneCBCount(pdv) };
+}
+
+function deviceKindTotal(k?: DeviceKindTally): number {
+  if (!k) return 0;
+  return k.finanziato.pezzi + k.rate.pezzi + k.altro.pezzi;
+}
+function mergedDescriptions(k?: DeviceKindTally): { fin: Record<string, number>; rate: Record<string, number>; altro: Record<string, number>; all: Record<string, number> } {
+  const fin = k?.finanziato.descriptions || {};
+  const rate = k?.rate.descriptions || {};
+  const altro = k?.altro.descriptions || {};
+  const all: Record<string, number> = {};
+  for (const [d, n] of Object.entries(fin)) all[d] = (all[d] || 0) + n;
+  for (const [d, n] of Object.entries(rate)) all[d] = (all[d] || 0) + n;
+  for (const [d, n] of Object.entries(altro)) all[d] = (all[d] || 0) + n;
+  return { fin, rate, altro, all };
 }
 
 type PdvSortKey =
@@ -935,6 +992,14 @@ export default function DashboardGaraReale() {
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pdvSortKey, setPdvSortKey] = useState<PdvSortKey>('pezzi_default');
+  const [expandedDeviceDrills, setExpandedDeviceDrills] = useState<Set<string>>(new Set());
+  const toggleDeviceDrill = useCallback((key: string) => {
+    setExpandedDeviceDrills((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
 
   const { config: orgSystemTcDefaults } = useTabelleCalcoloConfig();
 
@@ -3118,26 +3183,40 @@ export default function DashboardGaraReale() {
                                     const pistaPct = pistaAggPremio > 0 ? Math.round((pistaPdvPremio / pistaAggPremio) * 1000) / 10 : 0;
                                     return (
                                       <div key={pistaKey} className={`rounded-lg border p-3 ${conf.lightColor}`}>
-                                        <div className="font-medium text-sm mb-2 flex items-center justify-between">
-                                          <span>{conf.label}</span>
-                                          <div className="flex items-center gap-2">
+                                        <div className="font-medium text-sm mb-2 flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="truncate">{conf.label}</span>
+                                            {pistaPdvPremio > 0 && (
+                                              <span className="text-xs font-semibold text-green-700 dark:text-green-400 shrink-0" data-testid={`pdv-pista-premio-inline-${pdv.codicePos}-${pistaKey}`}>
+                                                {formatEuro(pistaPdvPremio)}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2 shrink-0">
                                             <span className="text-xs text-gray-500">{pistaPct}%</span>
                                             <span className="font-bold">{pistaData.corePezzi}</span>
                                           </div>
                                         </div>
                                         {(pistaKey === 'mobile' || pistaKey === 'cb') && (() => {
-                                          const sp = pistaKey === 'mobile' ? pdvSmartphoneMobileCount(pdv) : pdvSmartphoneCBCount(pdv);
-                                          if (sp <= 0) return null;
+                                          const split = pdvSmartphoneSplit(pdv, pistaKey as 'mobile' | 'cb');
+                                          if (split.total <= 0) return null;
                                           const elapsed = workdayInfo.elapsedWorkingDays;
                                           const total = workdayInfo.totalWorkingDays;
-                                          const projSp = elapsed > 0 ? Math.round((sp / elapsed) * total) : sp;
+                                          const proj = (n: number) => elapsed > 0 ? Math.round((n / elapsed) * total) : n;
                                           return (
-                                            <div className="text-[11px] text-gray-700 dark:text-gray-200 mb-1.5 flex items-center gap-1 flex-wrap" data-testid={`pdv-smartphone-${pdv.codicePos}-${pistaKey}`}>
-                                              <Smartphone className="h-3 w-3" />
-                                              <span className="font-medium">Smartphone:</span>
-                                              <span>{sp} pz</span>
-                                              <span className="text-gray-400">·</span>
-                                              <span className="text-gray-500">proiezione {projSp}</span>
+                                            <div className="text-[11px] text-gray-700 dark:text-gray-200 mb-1.5 space-y-0.5" data-testid={`pdv-smartphone-${pdv.codicePos}-${pistaKey}`}>
+                                              <div className="flex items-center gap-1 flex-wrap">
+                                                <Smartphone className="h-3 w-3" />
+                                                <span className="font-medium">Smartphone:</span>
+                                                <span>{split.total} pz</span>
+                                                <span className="text-gray-400">·</span>
+                                                <span className="text-gray-500">proiezione {proj(split.total)}</span>
+                                              </div>
+                                              <div className="pl-4 text-gray-600 dark:text-gray-300 flex items-center gap-2 flex-wrap">
+                                                <span>Finanziato: <span className="font-medium">{split.fin}</span></span>
+                                                <span className="text-gray-400">·</span>
+                                                <span>Rate: <span className="font-medium">{split.rate}</span></span>
+                                              </div>
                                             </div>
                                           );
                                         })()}
@@ -3183,9 +3262,6 @@ export default function DashboardGaraReale() {
                                               </Badge>
                                               {calc.puntiTotali > 0 && (
                                                 <span className="text-xs text-gray-500" data-testid={`pdv-pista-punti-${pdv.codicePos}-${pistaKey}`}>{calc.puntiTotali.toFixed(1)} pt</span>
-                                              )}
-                                              {(pdvPremioByPista[pistaKey] ?? 0) > 0 && (
-                                                <span className="text-xs font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
                                               )}
                                             </div>
                                             {(() => {
@@ -3347,6 +3423,79 @@ export default function DashboardGaraReale() {
                                             <div className="text-[10px] text-gray-500 italic">Spedizione, assistenza, garanteasy</div>
                                           </div>
                                         </div>
+                                        {(() => {
+                                          const dev = pdv.devices;
+                                          const kinds: { key: 'smartphone' | 'smartDevice' | 'internetDevice'; label: string }[] = [
+                                            { key: 'smartphone', label: 'Smartphone' },
+                                            { key: 'smartDevice', label: 'Smart Device' },
+                                            { key: 'internetDevice', label: 'Internet Device' },
+                                          ];
+                                          const totAll = kinds.reduce((s, k) => s + deviceKindTotal(dev?.[k.key]), 0);
+                                          if (totAll <= 0) return null;
+                                          return (
+                                            <div className="rounded-lg border p-3 bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-200 sm:col-span-2 lg:col-span-3" data-testid={`pdv-devices-${pdv.codicePos}`}>
+                                              <div className="font-medium text-sm mb-2 flex items-center justify-between">
+                                                <span className="flex items-center gap-1.5"><Smartphone className="h-4 w-4" /> Device venduti</span>
+                                                <span className="font-bold">{totAll}</span>
+                                              </div>
+                                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                {kinds.map((kk) => {
+                                                  const k = dev?.[kk.key] || EMPTY_DEVICE_KIND;
+                                                  const tot = deviceKindTotal(k);
+                                                  const drillKey = `${pdv.codicePos}|${kk.key}`;
+                                                  const open = expandedDeviceDrills.has(drillKey);
+                                                  const merged = mergedDescriptions(k);
+                                                  const sortedAll = Object.entries(merged.all).sort(([, a], [, b]) => b - a);
+                                                  return (
+                                                    <div key={kk.key} className="rounded border bg-white/70 dark:bg-black/20 p-2 text-[12px] text-gray-700 dark:text-gray-200" data-testid={`pdv-device-kind-${pdv.codicePos}-${kk.key}`}>
+                                                      <div className="flex items-center justify-between mb-1">
+                                                        <span className="font-medium">{kk.label}</span>
+                                                        <span className="font-bold">{tot}</span>
+                                                      </div>
+                                                      <div className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
+                                                        <div>Finanziato: <span className="font-medium">{k.finanziato.pezzi}</span></div>
+                                                        <div>Rate: <span className="font-medium">{k.rate.pezzi}</span></div>
+                                                        {k.altro.pezzi > 0 && (<div>Altro: <span className="font-medium">{k.altro.pezzi}</span></div>)}
+                                                      </div>
+                                                      {tot > 0 && (
+                                                        <button
+                                                          type="button"
+                                                          className="mt-1.5 text-[11px] text-violet-700 dark:text-violet-300 hover:underline flex items-center gap-1"
+                                                          onClick={() => toggleDeviceDrill(drillKey)}
+                                                          data-testid={`button-drill-device-${pdv.codicePos}-${kk.key}`}
+                                                        >
+                                                          {open ? '▾' : '▸'} {open ? 'Nascondi pezzi' : 'Mostra pezzi'}
+                                                        </button>
+                                                      )}
+                                                      {open && sortedAll.length > 0 && (
+                                                        <div className="mt-1 pl-2 border-l border-violet-200 dark:border-violet-800 space-y-0.5">
+                                                          {sortedAll.map(([desc, count]) => {
+                                                            const fin = merged.fin[desc] || 0;
+                                                            const rate = merged.rate[desc] || 0;
+                                                            const altro = merged.altro[desc] || 0;
+                                                            const tags: string[] = [];
+                                                            if (fin > 0) tags.push(`F:${fin}`);
+                                                            if (rate > 0) tags.push(`R:${rate}`);
+                                                            if (altro > 0) tags.push(`A:${altro}`);
+                                                            return (
+                                                              <div key={desc} className="flex justify-between text-[11px] text-gray-700 dark:text-gray-300 gap-2">
+                                                                <span className="truncate" title={desc}>{desc}</span>
+                                                                <span className="shrink-0 font-medium">
+                                                                  {count}
+                                                                  {tags.length > 0 && <span className="ml-1 text-gray-400">({tags.join(' · ')})</span>}
+                                                                </span>
+                                                              </div>
+                                                            );
+                                                          })}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                          );
+                                        })()}
                                       </>
                                     );
                                   })()}

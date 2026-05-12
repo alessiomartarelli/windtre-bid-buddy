@@ -2084,12 +2084,27 @@ export async function registerRoutes(
         canone: number;
       };
 
+      type DeviceModalitaTally = { pezzi: number; descriptions: Record<string, number> };
+      type DeviceTally = {
+        smartphone: { finanziato: DeviceModalitaTally; rate: DeviceModalitaTally; altro: DeviceModalitaTally };
+        smartDevice: { finanziato: DeviceModalitaTally; rate: DeviceModalitaTally; altro: DeviceModalitaTally };
+        internetDevice: { finanziato: DeviceModalitaTally; rate: DeviceModalitaTally; altro: DeviceModalitaTally };
+      };
+      const newDeviceTally = (): DeviceTally => ({
+        smartphone: { finanziato: { pezzi: 0, descriptions: {} }, rate: { pezzi: 0, descriptions: {} }, altro: { pezzi: 0, descriptions: {} } },
+        smartDevice: { finanziato: { pezzi: 0, descriptions: {} }, rate: { pezzi: 0, descriptions: {} }, altro: { pezzi: 0, descriptions: {} } },
+        internetDevice: { finanziato: { pezzi: 0, descriptions: {} }, rate: { pezzi: 0, descriptions: {} }, altro: { pezzi: 0, descriptions: {} } },
+      });
+
       const byPdv: Record<string, {
         codicePos: string;
         nomeNegozio: string;
         ragioneSociale: string;
         items: AggregatedItem[];
         addons: AddonItem[];
+        accessori: { pezzi: number; importo: number };
+        servizi: { pezzi: number; importo: number };
+        devices: DeviceTally;
         unmapped: number;
         totalArticoli: number;
       }> = {};
@@ -2117,12 +2132,39 @@ export async function registerRoutes(
             addons: [],
             accessori: { pezzi: 0, importo: 0 },
             servizi: { pezzi: 0, importo: 0 },
+            devices: newDeviceTally(),
             unmapped: 0,
             totalArticoli: 0,
           };
         }
 
         const articoli = raw.articoli || [];
+
+        const matchDomanda = (testo: string, predicate: (risp: string) => boolean): boolean => {
+          for (const art of articoli) {
+            const dr = art.dettaglio?.domandeRisposte || [];
+            for (const qr of dr) {
+              const dom = String(qr.domanda || '').toUpperCase();
+              if (dom.includes(testo)) {
+                const risp = String(qr.risposta || '').toUpperCase();
+                if (predicate(risp)) return true;
+              }
+            }
+          }
+          return false;
+        };
+        const isFinanziato = matchDomanda('TELEFONO INCLUSO COMPASS', (r) => r.includes('SI'))
+          || matchDomanda('TELEFONO INCLUSO FINDOMESTIC', (r) => r.includes('SI'))
+          || matchDomanda('TELEFONO INCLUSO MULTI FINANZIAMENTO', (r) => r.includes('SI'))
+          || matchDomanda('MIA TELEFONO FINANZIAMENTO', (r) => /\d/.test(r));
+        const isRate = matchDomanda('TELEFONO INCLUSO VAR', (r) => r.includes('SI'))
+          || matchDomanda('MIA TELEFONO VAR', (r) => /\d/.test(r));
+        const saleModality: 'finanziato' | 'rate' | 'altro' = isFinanziato ? 'finanziato' : (isRate ? 'rate' : 'altro');
+        const tallyDevice = (kind: 'smartphone' | 'smartDevice' | 'internetDevice', desc: string) => {
+          const bucket = byPdv[codicePos].devices[kind][saleModality];
+          bucket.pezzi += 1;
+          bucket.descriptions[desc] = (bucket.descriptions[desc] || 0) + 1;
+        };
         const { mapBiSuiteArticle } = await import("../shared/bisuiteMapping");
         const clienteTipo = raw.cliente?.clienteTipo || '';
 
@@ -2143,6 +2185,14 @@ export async function registerRoutes(
           if (PRODOTTI_CATS.has(catNome) || SERVIZI_CATS.has(catNome)) {
             const dett = art.dettaglio || {};
             const imp = parseFloat(String(dett.importoImponibile ?? '')) || parseFloat(String(dett.prezzo ?? '')) || 0;
+            const desc = ((art.descrizione || '').trim()) || '(senza descrizione)';
+            if (catNome === 'TELEFONIA') {
+              tallyDevice('smartphone', desc);
+            } else if (catNome === 'SMART DEVICE') {
+              tallyDevice('smartDevice', desc);
+            } else if (catNome === 'INTERNET DEVICE' || catNome === 'MODEM/ROUTER') {
+              tallyDevice('internetDevice', desc);
+            }
             if (ACCESSORI_CATS.has(catNome)) {
               byPdv[codicePos].accessori.pezzi += 1;
               byPdv[codicePos].accessori.importo += imp;
