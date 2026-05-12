@@ -41,6 +41,8 @@ import {
   Download,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { apiUrl } from "@/lib/basePath";
 import { SIM_CONSUMER_CORE, SIM_PIVA_CORE } from "@/lib/mobileCategories";
 import { AppNavbar } from "@/components/AppNavbar";
@@ -1314,6 +1316,67 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
     XLSX.writeFile(wb, `${baseFilename()}.xlsx`);
   };
 
+  const exportPdf = () => {
+    const rows = buildExportRows();
+    if (rows.length <= 1) return;
+    const header = rows[0] as string[];
+    const body = rows.slice(1).map(r => r.map(v => (typeof v === 'number' ? String(v) : v as string)));
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    doc.setFontSize(14);
+    doc.setTextColor(40, 40, 40);
+    doc.text('Tabella PDV × Pista', 14, 14);
+
+    const mm = mese ? String(mese).padStart(2, '0') : '--';
+    const yy = anno ? String(anno) : '----';
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    const subtitle = `Org: ${orgId || '-'}    Periodo: ${mm}/${yy}`;
+    doc.text(subtitle, 14, 20);
+
+    autoTable(doc, {
+      startY: 25,
+      head: [header],
+      body,
+      theme: 'striped',
+      headStyles: { fillColor: [59, 130, 246], fontSize: 7, halign: 'center' },
+      bodyStyles: { fontSize: 7 },
+      styles: { cellPadding: 1.2, overflow: 'linebreak' },
+      columnStyles: {
+        0: { cellWidth: 12 },
+        1: { cellWidth: 38 },
+        2: { cellWidth: 18 },
+        3: { cellWidth: 30 },
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index >= 4) {
+          data.cell.styles.halign = 'right';
+        }
+        if (data.section === 'body' && (body[data.row.index]?.[0] === 'RS')) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [240, 244, 250];
+        }
+      },
+      margin: { left: 8, right: 8, top: 25 },
+      didDrawPage: (data) => {
+        const pageCount = doc.getNumberOfPages();
+        const currentPage = data.pageNumber;
+        doc.setFontSize(8);
+        doc.setTextColor(120, 120, 120);
+        doc.text(
+          `Pagina ${currentPage} / ${pageCount}`,
+          pageWidth - 14,
+          doc.internal.pageSize.getHeight() - 6,
+          { align: 'right' },
+        );
+      },
+    });
+
+    doc.save(`${baseFilename()}.pdf`);
+  };
+
   const exportCsv = () => {
     const rows = buildExportRows();
     const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -1342,6 +1405,9 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
             </Button>
             <Button size="sm" variant="outline" className="h-8" onClick={exportCsv} disabled={rsRows.length === 0} data-testid="btn-tabella-export-csv">
               <Download className="h-3.5 w-3.5 mr-1" />CSV
+            </Button>
+            <Button size="sm" variant="outline" className="h-8" onClick={exportPdf} disabled={rsRows.length === 0} data-testid="btn-tabella-export-pdf">
+              <Download className="h-3.5 w-3.5 mr-1" />PDF
             </Button>
           </div>
         </div>
