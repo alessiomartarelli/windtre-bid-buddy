@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/basePath';
@@ -61,7 +61,17 @@ import {
   PISTA_LABELS,
   getDefaultMappingRules,
   getEffectiveRulesForEditor,
+  buildDefaultsByEditorKey,
+  findDefaultForEditor,
+  diffSavedRuleAgainstDefault,
+  type RuleDefaultDiffEntry,
 } from '@shared/bisuiteMapping';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 const PISTA_ICONS: Record<GaraPista, React.ReactNode> = {
   mobile: <Smartphone className="h-4 w-4" />,
@@ -268,6 +278,34 @@ export default function MappaturaBiSuite() {
     setHasChanges(true);
   };
 
+  const alignRuleToDefault = (ruleId: string, defaultRule: BiSuiteMappingRule) => {
+    setRules((prev) =>
+      prev.map((r) =>
+        r.id === ruleId
+          ? { ...defaultRule, id: r.id, conditions: { ...defaultRule.conditions } }
+          : r,
+      ),
+    );
+    setHasChanges(true);
+    toast({
+      title: 'Regola allineata',
+      description: 'La regola è stata aggiornata con i valori di default. Ricordati di salvare.',
+    });
+  };
+
+  // Indicizza i default per editor key (looser di rulePrimaryKey: ignora
+  // domanda/risposta) così il RuleCard può mostrare un badge "Default
+  // aggiornato" con il diff dei campi (incl. priorità, esclusioni, soglie
+  // numeriche, domanda e risposta) anche quando il default ha cambiato
+  // proprio le condizioni di domanda/risposta. La risoluzione strict→
+  // domanda→unico-candidato è in `findDefaultForEditor`.
+  // Memoizzato: `getDefaultMappingRules()` incrementa un contatore interno
+  // di id ad ogni chiamata, quindi non va ri-eseguito ad ogni render.
+  const defaultsByEditorKey = useMemo(
+    () => buildDefaultsByEditorKey(getDefaultMappingRules()),
+    [],
+  );
+
   // displayRules = saved rules + synthesized partnership twins (read-only).
   // When the user has pending unsaved edits, recompute twins locally so the
   // partnership tab stays in sync with current CB rules. Otherwise use the
@@ -422,15 +460,26 @@ export default function MappaturaBiSuite() {
                     pistaList
                       .slice()
                       .sort((a, b) => b.priority - a.priority)
-                      .map((rule) => (
-                        <RuleCard
-                          key={rule.id}
-                          rule={rule}
-                          onEdit={() => setEditingRule(rule)}
-                          onDelete={() => deleteRule(rule.id)}
-                          onToggle={() => toggleRule(rule.id)}
-                        />
-                      ))
+                      .map((rule) => {
+                        const def = rule.synthetic ? undefined : findDefaultForEditor(rule, defaultsByEditorKey);
+                        const diff = def ? diffSavedRuleAgainstDefault(rule, def) : [];
+                        return (
+                          <RuleCard
+                            key={rule.id}
+                            rule={rule}
+                            defaultRule={def}
+                            diff={diff}
+                            onEdit={() => setEditingRule(rule)}
+                            onDelete={() => deleteRule(rule.id)}
+                            onToggle={() => toggleRule(rule.id)}
+                            onAlignToDefault={
+                              def && diff.length > 0
+                                ? () => alignRuleToDefault(rule.id, def)
+                                : undefined
+                            }
+                          />
+                        );
+                      })
                   )}
                 </div>
               </TabsContent>
@@ -618,14 +667,20 @@ function ArticlesTable({
 
 function RuleCard({
   rule,
+  defaultRule,
+  diff,
   onEdit,
   onDelete,
   onToggle,
+  onAlignToDefault,
 }: {
   rule: BiSuiteMappingRule;
+  defaultRule?: BiSuiteMappingRule;
+  diff: RuleDefaultDiffEntry[];
   onEdit: () => void;
   onDelete: () => void;
   onToggle: () => void;
+  onAlignToDefault?: () => void;
 }) {
   const cond = rule.conditions;
   const conditionParts: string[] = [];
@@ -643,10 +698,12 @@ function RuleCard({
   }
 
   const isSynthetic = !!rule.synthetic;
+  const hasDefaultDiff = !isSynthetic && diff.length > 0;
+  const isCustomRule = !isSynthetic && !defaultRule;
 
   return (
     <Card
-      className={`transition-opacity ${!rule.enabled ? 'opacity-50' : ''} ${isSynthetic ? 'border-dashed bg-muted/20' : ''}`}
+      className={`transition-opacity ${!rule.enabled ? 'opacity-50' : ''} ${isSynthetic ? 'border-dashed bg-muted/20' : ''} ${hasDefaultDiff ? 'border-orange-300 bg-orange-50/30 dark:bg-orange-950/10' : ''}`}
       data-testid={`rule-card-${rule.id}`}
     >
       <CardContent className="py-3 px-3 sm:px-4">
@@ -671,6 +728,47 @@ function RuleCard({
                   Auto-generata da CB
                 </Badge>
               )}
+              {isCustomRule && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] border-slate-300 text-slate-600 bg-slate-50 dark:bg-slate-900 dark:text-slate-300"
+                  title="Regola personalizzata: nessuna controparte nei default canonici."
+                  data-testid={`badge-custom-${rule.id}`}
+                >
+                  Personalizzata
+                </Badge>
+              )}
+              {hasDefaultDiff && (
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] border-orange-400 text-orange-700 bg-orange-50 cursor-help"
+                        data-testid={`badge-default-diff-${rule.id}`}
+                      >
+                        Default aggiornato ({diff.length})
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-sm">
+                      <div className="text-xs space-y-1">
+                        <div className="font-medium mb-1">
+                          La regola differisce dal default corrente:
+                        </div>
+                        {diff.map((d) => (
+                          <div key={d.field} className="grid grid-cols-[auto_1fr] gap-x-2">
+                            <span className="font-medium">{d.label}:</span>
+                            <span>
+                              <span className="text-orange-700 dark:text-orange-300">tua</span> "{d.saved}" →{' '}
+                              <span className="text-emerald-700 dark:text-emerald-300">default</span> "{d.defaultValue}"
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
             <div className="flex flex-wrap gap-1">
               {conditionParts.length > 0 ? (
@@ -686,6 +784,19 @@ function RuleCard({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {hasDefaultDiff && onAlignToDefault && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs border-orange-300 text-orange-700 hover:bg-orange-100 hover:text-orange-800"
+                onClick={onAlignToDefault}
+                title="Sostituisce questa regola con i valori del default corrente."
+                data-testid={`btn-align-default-${rule.id}`}
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                Allinea ai default
+              </Button>
+            )}
             <Switch
               checked={rule.enabled}
               onCheckedChange={onToggle}

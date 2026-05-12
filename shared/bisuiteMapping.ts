@@ -625,7 +625,7 @@ function normalizeEscludiTokens(s: string | undefined): string[] {
  * to find the default counterpart of a saved rule and copy over any newly
  * added exclusion tokens.
  */
-function rulePrimaryKey(r: BiSuiteMappingRule): string {
+export function rulePrimaryKey(r: BiSuiteMappingRule): string {
   const c = r.conditions;
   return [
     r.pista,
@@ -638,6 +638,76 @@ function rulePrimaryKey(r: BiSuiteMappingRule): string {
     c.rispostaDiversaDa || '',
     c.rispostaEsatta || '',
   ].join('|');
+}
+
+/**
+ * Looser identity key used by the editor to reconcile a saved rule with
+ * its default counterpart, EVEN WHEN the default has tightened the
+ * domanda/risposta conditions (which `rulePrimaryKey` would otherwise
+ * treat as a different rule). Includes only the structural slot
+ * (pista, target, categoria/tipologia/descrizione BiSuite) so that
+ * changes to question/answer conditions surface as "Default aggiornato"
+ * via `diffSavedRuleAgainstDefault` instead of dropping the rule into
+ * the "Personalizzata" bucket.
+ *
+ * NOTE: not used by `patchSavedRulesWithDefaultExclusions` (which keeps
+ * the strict `rulePrimaryKey` semantics to avoid regressions in the
+ * exclusion-token backfill).
+ */
+export function ruleEditorKey(r: BiSuiteMappingRule): string {
+  const c = r.conditions;
+  return [
+    r.pista,
+    r.targetCategory,
+    c.categoriaBiSuite || '',
+    c.tipologiaBiSuite || '',
+    c.descrizioneBiSuite || '',
+  ].join('|');
+}
+
+/**
+ * Build a lookup from `ruleEditorKey` → matching default rule for editor
+ * reconciliation. When multiple defaults share the same looser key (e.g.
+ * the same target reached via different domanda/risposta branches), this
+ * picks the best candidate against the saved rule:
+ *   1. Strict `rulePrimaryKey` match (identical domanda/risposta).
+ *   2. Same `domandaTesto` even if response fields differ.
+ *   3. Otherwise, only when exactly one default shares the looser key
+ *      (unambiguous slot).
+ * Returns `undefined` when there's ambiguity and no clear match.
+ */
+export function findDefaultForEditor(
+  saved: BiSuiteMappingRule,
+  defaultsByEditorKey: Map<string, BiSuiteMappingRule[]>,
+): BiSuiteMappingRule | undefined {
+  const candidates = defaultsByEditorKey.get(ruleEditorKey(saved)) || [];
+  if (candidates.length === 0) return undefined;
+
+  const savedStrict = rulePrimaryKey(saved);
+  const strict = candidates.find((d) => rulePrimaryKey(d) === savedStrict);
+  if (strict) return strict;
+
+  const savedDomanda = (saved.conditions.domandaTesto || '').trim();
+  const sameDomanda = candidates.filter(
+    (d) => (d.conditions.domandaTesto || '').trim() === savedDomanda,
+  );
+  if (sameDomanda.length === 1) return sameDomanda[0];
+
+  if (candidates.length === 1) return candidates[0];
+  return undefined;
+}
+
+export function buildDefaultsByEditorKey(
+  defaults: BiSuiteMappingRule[],
+): Map<string, BiSuiteMappingRule[]> {
+  const map = new Map<string, BiSuiteMappingRule[]>();
+  for (const d of defaults) {
+    const k = ruleEditorKey(d);
+    const arr = map.get(k);
+    if (arr) arr.push(d);
+    else map.set(k, [d]);
+  }
+  return map;
 }
 
 /**
@@ -680,6 +750,167 @@ export function patchSavedRulesWithDefaultExclusions(
   });
 
   return { rules: patched, changed };
+}
+
+/**
+ * Field-level diff between a saved rule and its default counterpart (matched
+ * by `rulePrimaryKey`). Returns the list of fields that differ between the
+ * two rules — used by the editor (`MappaturaBiSuite.tsx`) to flag rules whose
+ * default has shifted (priority bumped, new exclusion tokens, new numeric
+ * thresholds, enable flag flipped, etc.).
+ *
+ * Fields included in `rulePrimaryKey` (pista, targetCategory, categoria/
+ * tipologia/descrizioneBiSuite, domanda/risposta) are NOT compared — by
+ * construction they match when the helper is called with the matching
+ * default rule.
+ */
+export interface RuleDefaultDiffEntry {
+  field: string;
+  label: string;
+  saved: string;
+  defaultValue: string;
+}
+
+function escludiTokensLabel(s: string | undefined): string {
+  const tokens = normalizeEscludiTokens(s);
+  return tokens.length === 0 ? '—' : tokens.join(', ');
+}
+
+function numLabel(n: number | undefined): string {
+  return n === undefined || n === null ? '—' : String(n);
+}
+
+function strLabel(s: string | undefined): string {
+  return s && s.length > 0 ? s : '—';
+}
+
+export function diffSavedRuleAgainstDefault(
+  saved: BiSuiteMappingRule,
+  def: BiSuiteMappingRule,
+): RuleDefaultDiffEntry[] {
+  const diffs: RuleDefaultDiffEntry[] = [];
+  const sc = saved.conditions || {};
+  const dc = def.conditions || {};
+
+  if ((saved.targetCategory || '') !== (def.targetCategory || '')) {
+    diffs.push({
+      field: 'targetCategory',
+      label: 'Categoria target',
+      saved: strLabel(saved.targetCategory),
+      defaultValue: strLabel(def.targetCategory),
+    });
+  }
+  if ((sc.domandaTesto || '') !== (dc.domandaTesto || '')) {
+    diffs.push({
+      field: 'domandaTesto',
+      label: 'Testo domanda',
+      saved: strLabel(sc.domandaTesto),
+      defaultValue: strLabel(dc.domandaTesto),
+    });
+  }
+  if ((sc.rispostaContiene || '') !== (dc.rispostaContiene || '')) {
+    diffs.push({
+      field: 'rispostaContiene',
+      label: 'Risposta (contiene)',
+      saved: strLabel(sc.rispostaContiene),
+      defaultValue: strLabel(dc.rispostaContiene),
+    });
+  }
+  if ((sc.rispostaDiversaDa || '') !== (dc.rispostaDiversaDa || '')) {
+    diffs.push({
+      field: 'rispostaDiversaDa',
+      label: 'Risposta (diversa da)',
+      saved: strLabel(sc.rispostaDiversaDa),
+      defaultValue: strLabel(dc.rispostaDiversaDa),
+    });
+  }
+  if ((sc.rispostaEsatta || '') !== (dc.rispostaEsatta || '')) {
+    diffs.push({
+      field: 'rispostaEsatta',
+      label: 'Risposta (esatta)',
+      saved: strLabel(sc.rispostaEsatta),
+      defaultValue: strLabel(dc.rispostaEsatta),
+    });
+  }
+  if (saved.priority !== def.priority) {
+    diffs.push({
+      field: 'priority',
+      label: 'Priorità',
+      saved: String(saved.priority),
+      defaultValue: String(def.priority),
+    });
+  }
+  if (!!saved.enabled !== !!def.enabled) {
+    diffs.push({
+      field: 'enabled',
+      label: 'Abilitata',
+      saved: saved.enabled ? 'Sì' : 'No',
+      defaultValue: def.enabled ? 'Sì' : 'No',
+    });
+  }
+  const savedRuleType = saved.ruleType || 'base';
+  const defRuleType = def.ruleType || 'base';
+  if (savedRuleType !== defRuleType) {
+    diffs.push({
+      field: 'ruleType',
+      label: 'Tipo regola',
+      saved: savedRuleType,
+      defaultValue: defRuleType,
+    });
+  }
+  if ((saved.targetLabel || '') !== (def.targetLabel || '')) {
+    diffs.push({
+      field: 'targetLabel',
+      label: 'Etichetta target',
+      saved: strLabel(saved.targetLabel),
+      defaultValue: strLabel(def.targetLabel),
+    });
+  }
+
+  const savedEsc = normalizeEscludiTokens(sc.descrizioneEscludi).join(',');
+  const defEsc = normalizeEscludiTokens(dc.descrizioneEscludi).join(',');
+  if (savedEsc !== defEsc) {
+    diffs.push({
+      field: 'descrizioneEscludi',
+      label: 'Esclusioni descrizione',
+      saved: escludiTokensLabel(sc.descrizioneEscludi),
+      defaultValue: escludiTokensLabel(dc.descrizioneEscludi),
+    });
+  }
+  if ((sc.clienteTipo || '') !== (dc.clienteTipo || '')) {
+    diffs.push({
+      field: 'clienteTipo',
+      label: 'Tipo cliente',
+      saved: strLabel(sc.clienteTipo),
+      defaultValue: strLabel(dc.clienteTipo),
+    });
+  }
+  if ((sc.rispostaNumericaUguale ?? null) !== (dc.rispostaNumericaUguale ?? null)) {
+    diffs.push({
+      field: 'rispostaNumericaUguale',
+      label: 'Risposta numerica =',
+      saved: numLabel(sc.rispostaNumericaUguale),
+      defaultValue: numLabel(dc.rispostaNumericaUguale),
+    });
+  }
+  if ((sc.rispostaNumericaMaggiore ?? null) !== (dc.rispostaNumericaMaggiore ?? null)) {
+    diffs.push({
+      field: 'rispostaNumericaMaggiore',
+      label: 'Risposta numerica >',
+      saved: numLabel(sc.rispostaNumericaMaggiore),
+      defaultValue: numLabel(dc.rispostaNumericaMaggiore),
+    });
+  }
+  if ((sc.canoneMinimo ?? null) !== (dc.canoneMinimo ?? null)) {
+    diffs.push({
+      field: 'canoneMinimo',
+      label: 'Canone minimo',
+      saved: numLabel(sc.canoneMinimo),
+      defaultValue: numLabel(dc.canoneMinimo),
+    });
+  }
+
+  return diffs;
 }
 
 const CB_TARGET_CATEGORIES = new Set(CB_TARGETS.map(t => t.value));
