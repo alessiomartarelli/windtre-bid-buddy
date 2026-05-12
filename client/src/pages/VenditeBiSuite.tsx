@@ -179,6 +179,7 @@ export default function VenditeBiSuite() {
   const [selectedSale, setSelectedSale] = useState<BisuiteSale | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
   const [filterPista, setFilterPista] = useState<string>("all");
+  const [filterStato, setFilterStato] = useState<string>("finalizzate");
   const [viewMode, setViewMode] = useState<"vendite" | "addetti">("vendite");
   const [selectedAddetto, setSelectedAddetto] = useState<string | null>(null);
 
@@ -346,6 +347,13 @@ export default function VenditeBiSuite() {
       ? rawSales.filter((s) => (s.codicePos || "N/D") === selectedPdv)
       : rawSales;
 
+    if (filterStato !== "all") {
+      filtered = filtered.filter((s) => {
+        const isAnnullata = (s.stato || "").trim().toUpperCase() === "ANNULLATA";
+        return filterStato === "annullate" ? isAnnullata : !isAnnullata;
+      });
+    }
+
     if (filterType !== "all") {
       filtered = filtered.filter((s) => {
         const sc = saleClassifications.get(s.id);
@@ -376,7 +384,7 @@ export default function VenditeBiSuite() {
     }
 
     return filtered;
-  }, [sales, selectedPdv, filterType, filterPista, searchTerm, saleClassifications]);
+  }, [rawSales, selectedPdv, filterStato, filterType, filterPista, searchTerm, saleClassifications]);
 
   const totaleImporto = sales.reduce(
     (sum, s) => sum + (parseFloat(s.totale || "0") || 0),
@@ -614,12 +622,14 @@ export default function VenditeBiSuite() {
             (searchTerm.trim() ? 1 : 0) +
             (filterType !== "all" ? 1 : 0) +
             (filterPista !== "all" ? 1 : 0) +
+            (filterStato !== "finalizzate" ? 1 : 0) +
             (selectedPdv ? 1 : 0)
           }
           onReset={() => {
             setSearchTerm("");
             setFilterType("all");
             setFilterPista("all");
+            setFilterStato("finalizzate");
             setSelectedPdv(null);
           }}
           actions={
@@ -685,6 +695,18 @@ export default function VenditeBiSuite() {
                 <SelectItem value="canvass">Canvass</SelectItem>
                 <SelectItem value="prodotti">Prodotti</SelectItem>
                 <SelectItem value="servizi">Servizi</SelectItem>
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <FilterField label="Stato" icon={FilterIcon}>
+            <Select value={filterStato} onValueChange={setFilterStato}>
+              <SelectTrigger data-testid="select-stato">
+                <SelectValue placeholder="Finalizzate" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="finalizzate">Solo finalizzate</SelectItem>
+                <SelectItem value="annullate">Solo annullate</SelectItem>
+                <SelectItem value="all">Tutte (incluse annullate)</SelectItem>
               </SelectContent>
             </Select>
           </FilterField>

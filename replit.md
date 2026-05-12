@@ -2,7 +2,13 @@
 
 ## Overview
 
-This project is a WindTre sales quoting/estimating platform ("Preventivatore") designed for Italian telecom retail operators. Its core purpose is to enable organizations to create, configure, and manage sales forecasts ("preventivi") across various product lines: Mobile, Fixed-line, Energy, Insurance, Partnership Rewards, Protecta, and Extra Gara P.IVA. Each product line incorporates its own calculation engine, aligning with WindTre's incentive structures through thresholds, bonuses, and point systems. The platform supports multi-tenant organizations, offering role-based access (super_admin, admin, operatore) and per-store configurations for retail points of sale (PDV), including calendars, clusters, and sales targets.
+WindTre sales quoting/estimating platform ("Preventivatore") per operatori
+retail telecom italiani. Crea, configura e gestisce preventivi su varie linee
+prodotto: Mobile, Fisso, Energia, Assicurazioni, Partnership Rewards,
+Protecta, Extra Gara P.IVA. Ogni linea ha il suo motore di calcolo allineato
+agli incentivi WindTre (soglie, bonus, punti). Multi-tenant con ruoli
+`super_admin`, `admin`, `operatore` e config per-store (PDV) con calendari,
+cluster, target.
 
 ## User Preferences
 
@@ -11,309 +17,79 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend
-- **Framework**: React with TypeScript, bundled by Vite.
+- **Framework**: React + TypeScript, bundle Vite.
 - **Routing**: `wouter`.
-- **State Management**: TanStack React Query for server state; local React state and custom hooks for UI state.
-- **UI Components**: `shadcn/ui` (New York style) with Radix UI primitives and Tailwind CSS for styling. Glassmorphism is applied globally.
-- **Charts**: Recharts for data visualization.
-- **Design Patterns**: Multi-step wizard for quote building, complex calculation engines for each product line, local storage persistence for wizard state, and remote config synchronization.
+- **State**: TanStack React Query per server state; React state + custom hooks per UI.
+- **UI**: `shadcn/ui` (New York) + Radix UI + Tailwind CSS. Glassmorphism globale.
+- **Charts**: Recharts.
+- **Pattern**: wizard multi-step, motori di calcolo per linea, localStorage per stato wizard, sync remota della config.
 
 ### Backend
-- **Framework**: Express.js with TypeScript.
-- **Architecture**: Monolithic server providing RESTful JSON APIs and serving the frontend SPA.
-- **Build**: esbuild for server, Vite for client.
+- **Framework**: Express.js + TypeScript.
+- **Architettura**: server monolitico con REST JSON + serve frontend SPA.
+- **Build**: esbuild (server), Vite (client).
 
 ### Authentication
-- **Method**: Replit Auth via OpenID Connect (OIDC).
-- **Session Storage**: PostgreSQL-backed sessions using `connect-pg-simple`.
-- **Auth Flow**: Passport.js with OIDC strategy.
-- **User Management**: Profiles auto-created on first login, linked to organizations with `super_admin`, `admin`, and `operatore` roles.
+- **Method**: Replit Auth via OIDC.
+- **Session**: PostgreSQL via `connect-pg-simple`.
+- **Auth Flow**: Passport.js con OIDC strategy.
+- **User**: profili auto-creati al primo login, legati a organizzazioni con ruoli `super_admin`/`admin`/`operatore`.
 
 ### Database
-- **Database**: PostgreSQL.
-- **ORM**: Drizzle ORM with `drizzle-zod` for schema validation.
-- **Key Tables**: `sessions`, `organizations`, `profiles`, `preventivi` (quotes with JSONB data), `organization_config` (per-org config as JSONB), `gara_config` (per-org, per-month competition config as JSONB).
-- **Migrations**: `drizzle-kit push` for schema synchronization.
+- **DB**: PostgreSQL.
+- **ORM**: Drizzle ORM + `drizzle-zod`.
+- **Tabelle chiave**: `sessions`, `organizations`, `profiles`, `preventivi` (quotes JSONB), `organization_config` (config per-org JSONB), `gara_config` (config gara per-org/per-mese JSONB), `bisuite_sales`, `drms_uploads`, `cdg_*` (Controllo di Gestione).
+- **Migrations**: `drizzle-kit push`.
 
 ### Business Logic
-- Core calculation engines are located in `client/src/lib/`, handling product-specific point/premium calculations, thresholds, and bonuses (e.g., `calcoliMobile.ts`, `calcoloPistaFisso.ts`, `calcoloEnergia.ts`).
-- Centralized configuration for calculation parameters is managed via the "Tabelle Calcolo" UI, leveraging a hierarchy of system defaults and organization-specific overrides.
-
-### Prima Nota IVA (Amministrazione)
-The Amministrazione → Prima Nota IVA tab uses two key rules to derive a fiscally
-correct VAT register from BiSuite sales:
-- **Article filter**: only `art.tipo === "P"` (Prodotti) and `art.tipo === "S"`
-  (Servizi) are included. `tipo === "C"` (Canvass / Contracts: MIA TIED, ENERGIA
-  W3, FIBRA CF, ASSICURAZIONI, etc.) are procurement contracts billed separately
-  and are excluded from the receipt-based VAT register.
-- **Aliquota derivation**: the BiSuite `dettaglio.aliquotaPrezzo` field is NOT the
-  VAT percentage — it has variable semantics (sometimes an internal code, sometimes
-  the VAT amount in euros). The actual aliquota is computed as
-  `(importoScontrino − importoImponibile) / importoImponibile × 100`, then snapped
-  to the nearest Italian standard rate (4 / 5 / 10 / 22%) within ±0.5 pp.
-  See `classifyIvaArticolo` and `isArticoloFiscale` in `client/src/lib/incassoUtils.ts`.
-- Rows with `dettaglio.natura` (N1–N7) are grouped separately as non-imponibile /
-  esente / fuori campo IVA. Rows with scontrino > 0 but imponibile = 0 are
-  flagged "Da verificare" and excluded from VAT totals.
-
-### DRMS Commissioning Dashboard
-Admin-only section under `/drms-commissioning` for analyzing the WindTre DRMS
-(Estratto conto provvigionale) Excel exported monthly. Uploads are persisted in
-the `drms_uploads` table per organization+month (latest wins via overwrite
-confirm on conflict). Logic:
-- Excel parsing (SheetJS) is client-side: reads sheet `Estratto conto`, detects
-  the period from the most frequent `COMPETENZA` value (e.g. "MAR-26"), then
-  classifies every row across 13 capitoli (Energia, Mobile, Fisso, Partnership
-  Reward, CB, PR Assicurazioni, Extra PR Energia, Assicurazioni, Reload, SOS
-  Caring, PR Reload, Pinpad, Ass. Tecnica). Unmatched rows fall into "Altro".
-- Classification rules in `client/src/lib/drmsClassifier.ts`:
-  `classificaRiga(row, periodComp)` evaluates 9 ordered rules — ASSTTCN,
-  PR Reload set, PR Assicurazioni, SOS Caring, special PC ADJUSTMENT MANUALI
-  override (regex against DESCRIZIONE_ITEM), PR Customer Base set (in-period
-  → Partnership Reward, out-of-period → Extra PR Energia), Reload set,
-  CB attivazione for Mobile/Fisso non-PR, then base TIPO_FONIA mapping.
-- 4 dashboard tabs: Overview (KPI + ripartizione), Matrix (PV × capitolo
-  heatmap), Driver (drill-down per capitolo), PV (search + per-store metriche
-  Mobile incl. Tied/Untied/MNP/MIB/soglia and Fisso incl. FTTH/FWA/LNA/LA/
-  convergenti/soglia, deduplicato sui contratti contrattuali in periodo).
-- API: GET `/api/drms` (list), GET `/api/drms/by-period?month&year`, GET
-  `/api/drms/:id`, POST `/api/drms` (409 + `existingId` on conflict, accepts
-  `overwrite=true`), DELETE `/api/drms/:id`. All gated by `requireAdminRole`
-  with org-ownership check.
-
-### Controllo di Gestione
-Sezione admin per tracciare spese mensili con doppia data (pagamento per cassa
-+ competenza per accrual). Modulo `controllo_gestione` in `shared/modules.ts`,
-gated da `requireModule` + ruolo `admin`/`super_admin`. **Accesso**: tab
-"Controllo di Gestione" dentro Amministrazione (`/amministrazione#controllo`).
-La vecchia rotta top-level `/controllo-gestione` redirect al tab.
-`ControlloGestione.tsx` accetta una prop `embedded` che salta AppNavbar/header
-container quando renderizzata dentro Amministrazione.
-- Tabelle DB: `cdg_ragioni_sociali` (per organizzazione, RS **manuali**),
-  `cdg_categorie` e `cdg_fornitori` (per `organizationId` + colonna
-  `ragioniSociali text[]` **multi-RS**: ogni voce è riutilizzabile su più
-  Ragioni Sociali; la vecchia colonna `ragioneSociale` è nullable solo per
-  back-compat). I PDV sono ereditati read-only da
-  `organization_config.puntiVendita` (la vecchia tabella `cdg_pdv` e la
-  colonna `cdg_spese.pdv_id` sono state droppate in Task #71). `cdg_spese`
-  (FK opzionali a categoria/fornitore con onDelete set null; `pdvCodice`
-  varchar = codice PDV; `importo` numeric(14,2) = totale per back-compat;
-  `imponibile` + `aliquotaIva` + `iva` numeric nullable per la nuova logica
-  IVA; `dataPagamento` date; `meseCompetenza` varchar(7) "YYYY-MM").
-- **RS unificate**: `GET /api/cdg/ragioni-sociali/unified` ritorna
-  `[{nome, origine: "pdv"|"manuale", id?, partitaIva?, note?}]` mergiando
-  `organization_config.puntiVendita.ragioneSociale` (read-only, badge "da PDV"
-  in UI) e RS manuali da `cdg_ragioni_sociali` (manuali prevalgono per nome).
-  La gestione PDV resta in Amministrazione organizzazione.
-- **Spese — IVA**: il dialog richiede Imponibile (€) + Aliquota IVA (%, preset
-  0/4/5/10/22 + "Altro" custom). IVA = round(imponibile × aliquota / 100, 2 dec
-  in centesimi) e Totale = imponibile + IVA sono calcolati e mostrati read-only;
-  il backend (`computeImporti` in `server/cdgRoutes.ts`) ricalcola
-  autoritariamente lato server e persiste imponibile/aliquotaIva/iva +
-  `importo = totale` (back-compat). Backfill one-shot al register imposta
-  imponibile=importo, aliquotaIva=0, iva=0 per le spese pre-esistenti.
-- **Categorie / Fornitori multi-RS**: insert schemas richiedono
-  `ragioniSociali: string[]` (min 1). DB unique index canonico
-  `UQ_cdg_cat_org_nome` / `UQ_cdg_forn_org_nome` su `(organization_id, nome)`:
-  una sola voce per nome per organizzazione, riusabile su più RS. Backend
-  `cdgStorage.ts` filtra le list per RS via `${rs} = ANY(ragioniSociali)`;
-  `updateRagioneSociale` rinomina con `array_replace`; `deleteRagioneSociale`
-  rimuove la RS via `array_remove` ed elimina solo le righe rimaste senza RS
-  (orfane). Cancellare una RS NON cancella categorie/fornitori condivisi con
-  altre RS. Pre-check friendly su POST/PUT (`findCategoriaOverlap` /
-  `findFornitoreOverlap`) allineato all'unique index: 409 se esiste già una
-  voce con stesso nome (confronto case-sensitive, identico al DB unique
-  constraint) nella stessa org, indipendentemente dalle RS.
-- **PDV misti (ereditati + manuali)**: i PDV in CdG sono ora un mix di due
-  fonti, entrambe referenziate dalle spese via `pdvCodice`:
-  1. **Ereditati** (origine `"config"`, read-only): da
-     `organization_config.puntiVendita`, `codice = codicePos || nome`.
-     Gestione resta in `/admin`.
-  2. **Manuali** (origine `"manuale"`, CRUD locale al CdG): tabella
-     `cdg_pdv_manuali` `(id, organizationId, ragioneSociale, codice, nome,
-     indirizzo?, note?)` con unique index `UQ_cdg_pdv_manuali_org_rs_codice`
-     su `(org, rs, codice)`. Creati e modificati da Anagrafiche → PDV.
-  Endpoint `GET /api/cdg/pdv-by-rs[?rs=...]` ritorna l'unione mergiata
-  `[{codice, nome, ragioneSociale, origine, id?, indirizzo?, note?}]`. Su
-  POST/PUT manuale: rifiuta 409 se il `(rs, codice)` collide con un PDV
-  ereditato; il manuale può però usare lo stesso codice cross-RS. Su rename
-  di codice o RS, le spese collegate vengono propagate automaticamente.
-  `validateSpesaFks` accetta `pdvCodice` se valido in **una** delle due
-  fonti per la RS della spesa.
-- **Modifica/cancellazione ereditati (write-through su org config)**: gli RS
-  e PDV ereditati (origine `pdv` / `config`) sono editabili e cancellabili
-  direttamente dal CdG. Endpoint dedicati:
-  `PUT/DELETE /api/cdg/ragioni-sociali/inherited/:nome` e
-  `PUT/DELETE /api/cdg/pdv-inherited?rs=&codice=`. Lato server
-  `mutateOrgPuntiVendita` legge la config corrente, applica il mutator e
-  upsert preservando `configVersion`. Su rename RS: rinomina
-  `puntiVendita.ragioneSociale` in tutte le voci, propaga su
-  `cdg_categorie/fornitori.ragioniSociali` (array_replace),
-  `cdg_pdv_manuali`, `cdg_spese`, e RS manuale omonima. Su delete RS:
-  rimuove tutte le voci puntiVendita di quella RS + cascade come la delete
-  manuale. Su PDV ereditato: edit aggiorna `(codicePos|nome|ragioneSociale)`
-  preservando i campi extra (canale, cluster*, tipoPosizione) e propaga
-  rename a `cdg_spese`; delete rimuove la voce dalla config. PartitaIVA/Note
-  per RS ereditate vengono materializzate come override in
-  `cdg_ragioni_sociali`. UI: dialog Modifica con avviso "scrive su Gestione
-  Organizzazione"; AlertDialog di delete avvisa esplicitamente l'impatto
-  cross-app.
-- API: `/api/cdg/{ragioni-sociali|ragioni-sociali/unified|categorie|fornitori|spese|pdv-manuali}`
-  CRUD + `GET /api/cdg/pdv-by-rs[?rs=...]` (mix config + manuali) +
-  `GET /api/cdg/spese/:id/allegato` (download). Tutte gated
-  `controllo_gestione` + admin/super_admin con scoping su `organizationId`.
-- **Tipo spesa, periodicità ricorrente e sfasamento cassa**: campi
-  `ricorrente: boolean`, `periodicita: 'mensile'|'annuale'|null`,
-  `cashFlowOffsetMesi: int (0..3)`, `dataInizioRicorrenza: date|null`,
-  `dataFineRicorrenza: date|null` su `cdg_spese`. La UI obbliga a scegliere
-  fra "Una tantum" e "Ricorrente" (radio nel form). Se Ricorrente, va scelta
-  la periodicità (mensile o annuale) e una data inizio + data fine.
-  Lo sfasamento cassa (M / M+1 / M+2 / M+3) è disponibile sempre e definisce
-  la distanza in mesi tra `meseCompetenza` e `dataPagamento` di ogni
-  occorrenza generata. Backend: in POST il server calcola N occorrenze
-  iterando da dataInizio a dataFine con step 1 mese (mensile) o 12 mesi
-  (annuale); per ognuna `meseCompetenza` = mese iterato e `dataPagamento` =
-  (`meseCompetenza` + offset, giorno = giorno di dataInizio clampato al mese).
-  La master è la prima occorrenza, le successive sono cloni indipendenti
-  (no parent ref): edit/delete per riga singola. L'allegato NON viene
-  duplicato. UI tabella: badge `↻` su righe ricorrenti con tooltip
-  "Ricorrenza fino a DD/MM/YYYY".
-- Allegati: upload base64 in JSON → disk in `uploads/cdg/<orgId>/` (env
-  override `CDG_UPLOAD_DIR`), max 8MB, sanitized filename + path-traversal
-  check sul download. **Produzione**: settare
-  `CDG_UPLOAD_DIR=/var/www/incentive-w3/uploads/cdg` per persistenza tra deploy.
-- Frontend (`client/src/pages/ControlloGestione.tsx`): 3 tab Dashboard
-  (KPI totale + mese corrente + categorie, PieChart per categoria, BarChart
-  cassa vs competenza per mese), Spese (tabella + dialog form con allegato e
-  blocco IVA; il selettore PDV usa `pdvCodice`), Anagrafiche (RS card
-  unificata con badge "da PDV"; tab Categorie/Fornitori via
-  `MultiRsAnagraficaCrud` con multiselect Checkbox per le RS associate e
-  badge RS in tabella + filtro "RS"; tab PDV via `PdvReadOnlyView`
-  raggruppato per RS, read-only, con link a `/admin`). Export Excel include
-  colonne Imponibile / Aliquota IVA (%) / IVA / Totale.
-
-### Moduli per organizzazione
-Ogni `organizations.enabledModules` (jsonb) è un `Record<ModuleKey, boolean>`.
-Chiave assente o `true` = modulo abilitato; `false` = disabilitato. `super_admin`
-bypassa sempre i flag. Lista canonica delle chiavi (solo pagine top-level, simulatore incluso come
-on/off unico) in `shared/modules.ts`. Helper: `isModuleEnabled(record, key)`.
-- API super-admin: `GET/PUT /api/super-admin/organizations/:id/modules`.
-- Backend: `requireModule(key)` middleware (es. applicato a `/api/drms*`).
-- Frontend: hook `useEnabledModules()`, componente `<ModuleRoute>` in
-  `App.tsx` (redirect → `/` + toast), filtro voci in `AppNavbar.tsx`,
-  dialog di gestione in `SuperAdminPanel.tsx` (`ModulesDialog`).
-- Wizard `Preventivatore.tsx`: il modulo `simulatore` è on/off unico; non ci
-  sono più flag per singolo prodotto. Logica `prod_*` legacy lasciata in
-  `Preventivatore.tsx` come no-op (le chiavi non esistono più, quindi
-  `isModuleEnabled` ritorna sempre true).
-- `/admin`, `/super-admin`, `/profile`, `/dashboard` (sim) restano sempre core.
+- Motori di calcolo in `client/src/lib/`: `calcoliMobile.ts`,
+  `calcoloPistaFisso.ts`, `calcoloEnergia.ts`, ecc. Gestiscono punti,
+  soglie, bonus per linea prodotto.
+- Config calcoli centralizzata via UI "Tabelle Calcolo": gerarchia di
+  default di sistema + override per organizzazione.
 
 ### Production Deployment
-- **Environment**: VPS 85.215.124.207 with Nginx reverse proxy, app on port 3001.
-- **Base Path**: `/incentivew3` for all production assets and API calls.
-- **VPS directory**: `/var/www/incentive-w3/` (con trattino!). NON `/var/www/incentivew3/`.
-- **PM2 process**: id 0 (`incentive-w3`). NEVER touch pm2 id 9 (easycashflows) o 10 (protecta).
-- **Deploy recipe**: `npm run build` → `tar czf /tmp/incentivew3-deploy.tgz -C dist public index.cjs` → `scp` su VPS → ssh: `cd /var/www/incentive-w3 && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart 0 --update-env`.
-- **Mechanism**: Client-side `BASE_PATH` constant and `apiUrl()` helper, server-side sub-app mounting, and base href injection for asset resolution.
+- **VPS**: 85.215.124.207 con Nginx reverse proxy, app su porta 3001.
+- **Base Path**: `/incentivew3` per assets e API.
+- **Directory VPS**: `/var/www/incentive-w3/` (con trattino!). NON `/var/www/incentivew3/`.
+- **PM2**: id `0` (`incentive-w3`). NEVER toccare pm2 id 9 (easycashflows) o 12 (protecta).
+- **Deploy**: `npm run build` → `tar czf /tmp/incentivew3-deploy.tgz -C dist public index.cjs` → scp → ssh: `cd /var/www/incentive-w3 && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart 0 --update-env`.
+- **Mechanism**: client `BASE_PATH` constant + `apiUrl()` helper, server sub-app mounting, base href injection.
 
-### Struttura Organizzazione: CRUD RS/PDV (admin)
-La tab `/admin → Struttura` è ora editabile per `admin`/`super_admin` (sempre
-read-only per `operatore`). Tutte le mutazioni persistono in
-`organization_config.puntiVendita` e propagano cross-modulo.
-- **Authz hardening** su `PUT /api/organization-config`: il legacy write path
-  ora rifiuta `403` se un utente non admin tenta di modificare le chiavi
-  protette `puntiVendita`/`ragioniSociali` (diff vs config corrente; le altre
-  parti della config restano scrivibili da operatore).
-- Endpoint (gated `requireAdminRole` + scoping su `organizationId`):
-  - `POST /api/admin/struttura/ragione-sociale` — crea RS vuota (name-only).
-    Materializza in `cdg_ragioni_sociali` per visibilità immediata in CdG.
-  - `POST /api/admin/struttura/pdv` — crea PDV (codicePos univoco
-    case-insensitive nell'org).
-  - `PUT /api/admin/struttura/pdv` — modifica PDV (match per `(rs, codicePos)`
-    originali). Su rename `codicePos` propaga a `cdg_spese.pdv_codice` e
-    `cdg_pdv_manuali`. Su rename RS propaga su `cdg_*`.
-  - `DELETE /api/admin/struttura/pdv?rs=&codice=` — elimina PDV.
-  - `POST /api/admin/struttura/pdv/bulk` — usato dai banner di sync (PDF
-    Configurazione Gara + Preventivatore wizard) per aggiungere PDV mancanti
-    in massa, ritorna `{added, skipped}`.
-  - `PUT /api/admin/struttura/ragione-sociale/:nome` — rinomina RS (409 se
-    target già esiste). Cascade rename su `cdg_categorie/fornitori`
-    (`array_replace` su colonna `ragioniSociali text[]`),
-    `cdg_pdv_manuali`, `cdg_spese`, `cdg_ragioni_sociali`.
-  - `DELETE /api/admin/struttura/ragione-sociale/:nome` — elimina RS + tutti
-    i PDV figli + cascade su `cdg_*`.
-- Helper inline in `server/routes.ts` (~2424-2660): `readPv`/`writePv`
-  preservano `configVersion`; `findCodiceClash` controlla unicità globale
-  case-insensitive.
-- UI: `client/src/pages/AdminPanel.tsx` Struttura tab espone bottoni
-  Nuova RS, Rinomina/Elimina RS, Nuovo PDV per RS, Modifica/Elimina PDV;
-  dialog form con cluster Mobile/Fisso/CB, canale, tipoPosizione.
-- **Banner sync incongruenze** (consenso esplicito admin):
-  - `ConfigurazioneGara.tsx`: CTA "Aggiungi N alla struttura" sopra la
-    tabella unmatched del PDF di gara, gated `isAdminOrSuper`.
-  - `Preventivatore.tsx`: componente `PdvStrutturaBanner` mostrato sopra
-    `StepPuntiVendita` (step 1) quando i PDV del wizard contengono codici
-    non presenti nella struttura canonica. Per admin: bottone "Aggiungi
-    alla struttura" → bulk POST. Per operatore: messaggio informativo.
+## Documentazione di dettaglio
 
-### Wizard storage scoping (data leak fix)
-Le chiavi `localStorage` del wizard Preventivatore (`preventivatore-state`,
-`preventivatore-template`, `preventivatore-config`) sono scoped per
-`organizationId` (suffix `:${orgId}`). Il hook `usePreventivatoreStorage(orgId)`
-in `client/src/hooks/use-preventivatore-storage.ts` accetta orgId, è no-op
-finché auth non è caricata, e cancella in mount le vecchie chiavi globali
-legacy (purgeLegacyUnscopedKeys). `Preventivatore.tsx` passa
-`useAuth().profile.organizationId` e gate l'init effect su `storageReady`.
-Senza questo scoping, in browser usato da più organizzazioni TEST poteva
-caricare PDV/config di un'altra org (es. CMS S.R.L.) dal localStorage residuo.
+Le seguenti aree dell'app hanno documentazione separata in `docs/` per
+mantenere snello questo file:
+
+- [`docs/prima-nota-iva.md`](docs/prima-nota-iva.md) — Regole IVA e
+  classificazione articoli per il registro corrispettivi.
+- [`docs/drms-commissioning.md`](docs/drms-commissioning.md) — Dashboard
+  DRMS Commissioning (admin), parsing Excel WindTre, classificazione
+  capitoli, API.
+- [`docs/controllo-gestione.md`](docs/controllo-gestione.md) — Modulo
+  spese (CdG): RS/PDV/Categorie/Fornitori multi-RS, IVA, ricorrenze,
+  allegati, write-through su org config.
+- [`docs/moduli-organizzazione.md`](docs/moduli-organizzazione.md) —
+  Sistema dei moduli abilitabili per organizzazione
+  (`enabledModules`, `requireModule`, `<ModuleRoute>`).
+- [`docs/struttura-organizzazione.md`](docs/struttura-organizzazione.md) —
+  CRUD RS/PDV admin con propagazione cross-modulo, banner sync
+  incongruenze, wizard storage scoping per orgId.
+- [`docs/bisuite-mapping-tied-iva.md`](docs/bisuite-mapping-tied-iva.md) —
+  Mapping offerte SIM P.IVA (TIED IVA) → categorie Extra Gara IVA,
+  inventario completo descrizioni.
+- [`docs/vendite-bisuite.md`](docs/vendite-bisuite.md) — Data vendita
+  dalle API BiSuite, esclusione default delle vendite ANNULLATA, filtro
+  Stato nella pagina Vendite BiSuite.
 
 ## External Dependencies
 
-- **PostgreSQL**: Primary database.
-- **Replit Auth (OIDC)**: Authentication provider.
-- **BiSuite Sales API**: External service for fetching sales data, configured per-organization with OAuth2 client credentials. Includes a global rules engine for mapping sales articles to competition categories.
-
-### Mapping BiSuite — TIED IVA (Extra Gara IVA)
-Le offerte SIM P.IVA (categoria BiSuite "TIED IVA") sono mappate in
-`shared/bisuiteMapping.ts` con regole `priority: 15` basate sul prefisso di
-`descrizioneBiSuite` (matching via `String.includes`, case-insensitive — vedi
-riga ~427 di `bisuiteMapping.ts`). Il fallback senza match resta `SIM_IVA`
-(0 punti Extra Gara IVA), quindi ogni descrizione non gestita causa
-undercount. Tassonomia (definita in `client/src/lib/calcoloExtraGaraIva.ts`,
-`PUNTI_EXTRA_GARA`):
-- `PROFESSIONAL_WORLD` / `PROFESSIONAL_STAFF` → 1.5 punti (worldStaff).
-- `ALTRE_SIM_IVA` → 1 punto (fullPlusData60_100, tier "Full"/voce business).
-- `PROFESSIONAL_FLEX` / `PROFESSIONAL_SPECIAL` / `PROFESSIONAL_DATA_10` → 0.5
-  punti (flexSpecialData10, entry tier).
-- `SIM_IVA` (fallback) → 0 punti.
-
-**Inventario TIED IVA** (review eseguita Task #79, query distinct
-`descrizione` su tutti i `bisuite_sales` di tutte le org, lifetime). Stato per
-ogni `descrizioneBiSuite` osservata:
-
-| Descrizione (BiSuite)         | Categoria target    | Note                                  |
-|-------------------------------|---------------------|---------------------------------------|
-| `PROFESSIONAL WORLD`          | `PROFESSIONAL_WORLD`   | Top tier — 1.5 pt                  |
-| `PROFESSIONAL STAFF`          | `PROFESSIONAL_STAFF`   | Top tier — 1.5 pt                  |
-| `PROFESSIONAL FULL PLUS`      | `ALTRE_SIM_IVA`        | Tier Full — 1 pt (Task #78)        |
-| `PROFESSIONAL DATA 60` (GIGA) | `ALTRE_SIM_IVA`        | Tier Full — 1 pt (Task #78)        |
-| `PROFESSIONAL DATA 100` (GIGA)| `ALTRE_SIM_IVA`        | Tier Full — 1 pt (Task #78)        |
-| `PROFESSIONAL COUNTRY`        | `ALTRE_SIM_IVA`        | Tier Full voce internazionale — 1 pt (Task #79) |
-| `PROFESSIONAL FULL RESTART`   | `ALTRE_SIM_IVA`        | Variante Full — 1 pt (Task #79)    |
-| `PROFESSIONAL FLEX`           | `PROFESSIONAL_FLEX`    | Entry tier — 0.5 pt                |
-| `PROFESSIONAL SPECIAL`        | `PROFESSIONAL_SPECIAL` | Entry tier — 0.5 pt                |
-| `PROFESSIONAL DATA 10`        | `PROFESSIONAL_DATA_10` | Entry tier — 0.5 pt                |
-
-**Decisione "resta SIM_IVA"**: nessuna descrizione TIED IVA osservata viene
-intenzionalmente lasciata sul fallback. Il fallback `SIM_IVA` resta come
-guardia per offerte future non ancora classificate.
-
-**Enterprise**: nessuna offerta con prefisso `ENTERPRISE` è mai apparsa nei
-dati BiSuite reali (lifetime, tutte le org). Il catalogo WindTre attualmente
-ricondotto sotto categoria BiSuite "TIED IVA" è esclusivamente la famiglia
-`PROFESSIONAL *`. Quando/se compariranno SKU `ENTERPRISE *`, vanno
-classificate esplicitamente prima del merge (regola priority:15 in
-`bisuiteMapping.ts` ~righe 243-257) — il fallback `SIM_IVA` causerebbe
-undercount sull'Extra Gara IVA.
-- **Google Fonts CDN**: For custom fonts (Outfit, Inter).
-- **npm packages**: `recharts` (charts), `jspdf` and `jspdf-autotable` (PDF export), `xlsx` (Excel export), `framer-motion` (animations), `date-fns` (date utilities), `zod` (validation).
+- **PostgreSQL**: database primario.
+- **Replit Auth (OIDC)**: provider autenticazione.
+- **BiSuite Sales API**: servizio esterno per fetch vendite, configurato
+  per-organizzazione con OAuth2 client credentials. Include rules engine
+  globale per il mapping articoli → categorie gara.
+- **Google Fonts CDN**: font Outfit, Inter.
+- **npm packages chiave**: `recharts` (charts), `jspdf` + `jspdf-autotable`
+  (PDF export), `xlsx` (Excel export), `framer-motion` (animations),
+  `date-fns` (date utilities), `zod` (validation).
