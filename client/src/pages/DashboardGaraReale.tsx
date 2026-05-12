@@ -16,6 +16,17 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
   TrendingUp,
   Target,
   Award,
@@ -1108,9 +1119,166 @@ function TabellaCellSingolo({ valore, soglia, variant, stimata, dim }: { valore?
   );
 }
 
+function TabellaPdfExportDialog({
+  open,
+  onOpenChange,
+  pisteAttive,
+  prefs,
+  onPrefsChange,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  pisteAttive: any[];
+  prefs: TabellaPdfPrefs;
+  onPrefsChange: (next: TabellaPdfPrefs) => void;
+  onConfirm: (prefs: TabellaPdfPrefs) => void;
+}) {
+  const availableKeys = pisteAttive.map(p => p.pista as string);
+  const selectedSet = new Set(
+    prefs.selectedPiste === null ? availableKeys : prefs.selectedPiste.filter(k => availableKeys.includes(k)),
+  );
+
+  const togglePista = (key: string, checked: boolean) => {
+    const next = new Set(selectedSet);
+    if (checked) next.add(key); else next.delete(key);
+    onPrefsChange({ ...prefs, selectedPiste: Array.from(next) });
+  };
+
+  const selectAll = () => onPrefsChange({ ...prefs, selectedPiste: [...availableKeys] });
+  const selectNone = () => onPrefsChange({ ...prefs, selectedPiste: [] });
+
+  const handleLogoFile = (file: File | null) => {
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      alert("Logo troppo grande (max 1 MB).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : null;
+      if (dataUrl) onPrefsChange({ ...prefs, logoDataUrl: dataUrl });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const canExport = selectedSet.size > 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg" data-testid="dialog-pdf-export">
+        <DialogHeader>
+          <DialogTitle>Esporta PDF</DialogTitle>
+          <DialogDescription>Personalizza il PDF della tabella PDV × Pista.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-sm font-medium">Piste da includere</Label>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={selectAll} data-testid="btn-pdf-piste-all">Tutte</Button>
+                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={selectNone} data-testid="btn-pdf-piste-none">Nessuna</Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 rounded border p-3">
+              {pisteAttive.map(p => {
+                const conf = (PISTA_CONFIG as any)[p.pista];
+                const label = conf?.label ?? p.pista;
+                const id = `pdf-pista-${p.pista}`;
+                return (
+                  <div key={p.pista} className="flex items-center gap-2">
+                    <Checkbox
+                      id={id}
+                      checked={selectedSet.has(p.pista)}
+                      onCheckedChange={(c) => togglePista(p.pista, c === true)}
+                      data-testid={`checkbox-pdf-pista-${p.pista}`}
+                    />
+                    <Label htmlFor={id} className="text-sm font-normal cursor-pointer">{label}</Label>
+                  </div>
+                );
+              })}
+            </div>
+            {!canExport && (
+              <p className="text-xs text-red-600 mt-1">Seleziona almeno una pista.</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="pdf-nota" className="text-sm font-medium">Nota / intestazione (opzionale)</Label>
+            <Textarea
+              id="pdf-nota"
+              value={prefs.nota}
+              onChange={(e) => onPrefsChange({ ...prefs, nota: e.target.value })}
+              placeholder="Es. Documento per riunione mensile rete vendita"
+              className="mt-1 min-h-[60px]"
+              data-testid="textarea-pdf-nota"
+            />
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium">Logo organizzazione (opzionale)</Label>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={(e) => handleLogoFile(e.target.files?.[0] ?? null)}
+                className="text-sm flex-1"
+                data-testid="input-pdf-logo"
+              />
+              {prefs.logoDataUrl && (
+                <>
+                  <img
+                    src={prefs.logoDataUrl}
+                    alt="Logo preview"
+                    className="h-10 w-auto max-w-[80px] border rounded bg-white object-contain"
+                    data-testid="img-pdf-logo-preview"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7"
+                    onClick={() => onPrefsChange({ ...prefs, logoDataUrl: null })}
+                    data-testid="btn-pdf-logo-remove"
+                  >Rimuovi</Button>
+                </>
+              )}
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">PNG o JPEG, max 1 MB. Apparirà in alto a destra del PDF.</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} data-testid="btn-pdf-cancel">Annulla</Button>
+          <Button
+            type="button"
+            onClick={() => onConfirm({
+              ...prefs,
+              selectedPiste: Array.from(selectedSet),
+            })}
+            disabled={!canExport}
+            data-testid="btn-pdf-confirm"
+          >
+            <Download className="h-3.5 w-3.5 mr-1" />Esporta PDF
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[]; orgId?: string | null; mese?: number; anno?: number }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [hydratedOrgId, setHydratedOrgId] = useState<string | null>(null);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [pdfPrefs, setPdfPrefs] = useState<TabellaPdfPrefs>({ selectedPiste: null, nota: "", logoDataUrl: null });
+  const [pdfPrefsHydratedOrg, setPdfPrefsHydratedOrg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (pdfPrefsHydratedOrg === orgId) return;
+    setPdfPrefs(loadPdfPrefs(orgId));
+    setPdfPrefsHydratedOrg(orgId);
+  }, [orgId, pdfPrefsHydratedOrg]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -1266,9 +1434,12 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
   const expandAll = () => setExpanded(new Set(allKeys));
   const collapseAll = () => setExpanded(new Set());
 
-  const buildExportRows = () => {
+  const buildExportRows = (filterPiste?: string[] | null) => {
+    const piste = (filterPiste && filterPiste.length > 0)
+      ? pisteAttive.filter(p => filterPiste.includes(p.pista))
+      : pisteAttive;
     const header: string[] = ["Tipo", "Ragione Sociale", "Codice PDV", "Nome PDV"];
-    for (const p of pisteAttive) {
+    for (const p of piste) {
       const conf = (PISTA_CONFIG as any)[p.pista];
       const label = conf?.label ?? p.pista;
       header.push(`${label} - Punti Attuali`, `${label} - Proiezione`, `${label} - Soglia Attuale`, `${label} - Soglia Proiezione`);
@@ -1294,11 +1465,11 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
     };
     for (const rs of rsRows) {
       const rsRow: (string | number)[] = ["RS", rs.displayName, '', ''];
-      for (const p of pisteAttive) rsRow.push(...cellFromMetrics(rs.perPista.get(p.pista)));
+      for (const p of piste) rsRow.push(...cellFromMetrics(rs.perPista.get(p.pista)));
       rows.push(rsRow);
       for (const pdv of rs.pdvList) {
         const pdvRow: (string | number)[] = ["PDV", rs.displayName, pdv.codicePos, pdv.nomeNegozio];
-        for (const p of pisteAttive) pdvRow.push(...cellFromMetrics(rs.perPdv.get(pdv.codicePos)?.get(p.pista)));
+        for (const p of piste) pdvRow.push(...cellFromMetrics(rs.perPdv.get(pdv.codicePos)?.get(p.pista)));
         rows.push(pdvRow);
       }
     }
@@ -1320,14 +1491,33 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
     XLSX.writeFile(wb, `${baseFilename()}.xlsx`);
   };
 
-  const exportPdf = () => {
-    const rows = buildExportRows();
+  const exportPdf = (opts?: { selectedPiste?: string[] | null; nota?: string; logoDataUrl?: string | null }) => {
+    const selectedPiste = opts?.selectedPiste ?? null;
+    const nota = (opts?.nota ?? "").trim();
+    const logoDataUrl = opts?.logoDataUrl ?? null;
+    const rows = buildExportRows(selectedPiste);
     if (rows.length <= 1) return;
     const header = rows[0] as string[];
     const body = rows.slice(1).map(r => r.map(v => (typeof v === 'number' ? String(v) : v as string)));
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Logo (top-right)
+    let logoBottomY = 0;
+    if (logoDataUrl) {
+      try {
+        const fmt = logoDataUrl.startsWith('data:image/jpeg') || logoDataUrl.startsWith('data:image/jpg')
+          ? 'JPEG'
+          : 'PNG';
+        const logoW = 28;
+        const logoH = 16;
+        doc.addImage(logoDataUrl, fmt, pageWidth - 14 - logoW, 8, logoW, logoH);
+        logoBottomY = 8 + logoH;
+      } catch {
+        // ignore broken image
+      }
+    }
 
     doc.setFontSize(14);
     doc.setTextColor(40, 40, 40);
@@ -1340,8 +1530,21 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
     const subtitle = `Org: ${orgId || '-'}    Periodo: ${mm}/${yy}`;
     doc.text(subtitle, 14, 20);
 
+    let startY = 25;
+    if (nota) {
+      doc.setFontSize(9);
+      doc.setTextColor(60, 60, 60);
+      const maxWidth = pageWidth - 28;
+      const lines = doc.splitTextToSize(nota, maxWidth) as string[];
+      doc.text(lines, 14, startY);
+      startY += lines.length * 4 + 2;
+    }
+    if (logoBottomY > 0 && startY < logoBottomY + 2) {
+      startY = logoBottomY + 2;
+    }
+
     autoTable(doc, {
-      startY: 25,
+      startY,
       head: [header],
       body,
       theme: 'striped',
@@ -1363,7 +1566,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
           data.cell.styles.fillColor = [240, 244, 250];
         }
       },
-      margin: { left: 8, right: 8, top: 25 },
+      margin: { left: 8, right: 8, top: startY },
       didDrawPage: (data) => {
         const pageCount = doc.getNumberOfPages();
         const currentPage = data.pageNumber;
@@ -1410,12 +1613,30 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
             <Button size="sm" variant="outline" className="h-8" onClick={exportCsv} disabled={rsRows.length === 0} data-testid="btn-tabella-export-csv">
               <Download className="h-3.5 w-3.5 mr-1" />CSV
             </Button>
-            <Button size="sm" variant="outline" className="h-8" onClick={exportPdf} disabled={rsRows.length === 0} data-testid="btn-tabella-export-pdf">
+            <Button size="sm" variant="outline" className="h-8" onClick={() => setPdfDialogOpen(true)} disabled={rsRows.length === 0} data-testid="btn-tabella-export-pdf">
               <Download className="h-3.5 w-3.5 mr-1" />PDF
             </Button>
           </div>
         </div>
       </CardHeader>
+      <TabellaPdfExportDialog
+        open={pdfDialogOpen}
+        onOpenChange={setPdfDialogOpen}
+        pisteAttive={pisteAttive}
+        prefs={pdfPrefs}
+        onPrefsChange={(next) => {
+          setPdfPrefs(next);
+          savePdfPrefs(orgId, next);
+        }}
+        onConfirm={(prefs) => {
+          exportPdf({
+            selectedPiste: prefs.selectedPiste,
+            nota: prefs.nota,
+            logoDataUrl: prefs.logoDataUrl,
+          });
+          setPdfDialogOpen(false);
+        }}
+      />
       <CardContent className="p-0">
         <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
           <table className="w-full text-sm border-collapse" data-testid="table-pdv-pista">
@@ -1519,6 +1740,41 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
 
 const EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-expanded-rs:";
 const TABELLA_EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-tabella-expanded-rs:";
+const TABELLA_PDF_PREFS_STORAGE_PREFIX = "dashboard-gara-tabella-pdf-prefs:";
+
+type TabellaPdfPrefs = {
+  selectedPiste: string[] | null; // null = tutte le piste disponibili
+  nota: string;
+  logoDataUrl: string | null;
+};
+
+function loadPdfPrefs(orgId?: string | null): TabellaPdfPrefs {
+  const empty: TabellaPdfPrefs = { selectedPiste: null, nota: "", logoDataUrl: null };
+  if (!orgId) return empty;
+  try {
+    const raw = localStorage.getItem(`${TABELLA_PDF_PREFS_STORAGE_PREFIX}${orgId}`);
+    if (!raw) return empty;
+    const parsed = JSON.parse(raw);
+    return {
+      selectedPiste: Array.isArray(parsed?.selectedPiste)
+        ? parsed.selectedPiste.filter((s: unknown): s is string => typeof s === "string")
+        : null,
+      nota: typeof parsed?.nota === "string" ? parsed.nota : "",
+      logoDataUrl: typeof parsed?.logoDataUrl === "string" ? parsed.logoDataUrl : null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+function savePdfPrefs(orgId: string | null | undefined, prefs: TabellaPdfPrefs) {
+  if (!orgId) return;
+  try {
+    localStorage.setItem(`${TABELLA_PDF_PREFS_STORAGE_PREFIX}${orgId}`, JSON.stringify(prefs));
+  } catch {
+    // ignore
+  }
+}
 
 function getPistaRsRowKeys(pista: any): string[] {
   if (!pista || pista.totalePezzi === 0) return [];
