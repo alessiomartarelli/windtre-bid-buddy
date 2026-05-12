@@ -132,7 +132,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                     data-testid="nav-gara-menu"
                   >
                     <Trophy className="h-3.5 w-3.5 mr-1" />
-                    Gara
+                    Performance
                     <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
                   </Button>
                 </DropdownMenuTrigger>
