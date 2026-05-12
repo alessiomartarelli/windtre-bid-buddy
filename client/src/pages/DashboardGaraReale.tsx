@@ -1031,19 +1031,6 @@ function PistaCompactRow({
           </div>
         </div>
         <div className="flex flex-wrap items-stretch gap-2 flex-1 pl-5 lg:pl-0">
-          {m.pezziAtt !== undefined && (
-            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 min-w-[88px]">
-              <div className="text-[10px] uppercase tracking-wide text-gray-500">Pezzi</div>
-              <div className="flex items-baseline gap-1.5 whitespace-nowrap">
-                <span className="text-sm font-semibold">{m.pezziAtt}</span>
-                {m.pezziProi !== undefined && (
-                  <span className="text-[11px] text-blue-600 flex items-center gap-0.5">
-                    <TrendingUp className="h-3 w-3" />{m.pezziProi}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
           {hasPunti && (
             <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 flex-1 min-w-[160px] space-y-0.5">
               <div className="flex items-center justify-between gap-2 whitespace-nowrap">
@@ -1931,11 +1918,19 @@ export default function DashboardGaraReale() {
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
               const rsClusterMobile = firstPdvConfig?.clusterMobile;
-              rsCalc = calcMobilePerPdv(aggregatedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, getMobileSoglieForCluster(rsClusterMobile), tcMobile?.moltiplicatoriCanone);
+              const mRsSoglie = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              const mobileSoglieOverride = mRsSoglie
+                ? { soglia1: mRsSoglie.soglia1, soglia2: mRsSoglie.soglia2, soglia3: mRsSoglie.soglia3, soglia4: mRsSoglie.soglia4 }
+                : getMobileSoglieForCluster(rsClusterMobile);
+              rsCalc = calcMobilePerPdv(aggregatedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, mobileSoglieOverride, tcMobile?.moltiplicatoriCanone);
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
-              rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(firstPdvConfig?.clusterFisso), tcFisso?.euroPerPezzo, aggregatedRSAddons);
+              const fRsSoglie = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              const fissoSoglieOverride = fRsSoglie
+                ? { soglia1: fRsSoglie.soglia1, soglia2: fRsSoglie.soglia2, soglia3: fRsSoglie.soglia3, soglia4: fRsSoglie.soglia4, soglia5: fRsSoglie.soglia5 }
+                : getFissoSoglieForCluster(firstPdvConfig?.clusterFisso);
+              rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, fissoSoglieOverride, tcFisso?.euroPerPezzo, aggregatedRSAddons);
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
@@ -2023,11 +2018,19 @@ export default function DashboardGaraReale() {
             if (pista === "mobile") {
               const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
               const rsClusterMobile2 = firstPdvConfig?.clusterMobile;
-              rsProjCalc = calcMobilePerPdv(projectedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, getMobileSoglieForCluster(rsClusterMobile2), tcMobile?.moltiplicatoriCanone);
+              const mRsSoglie2 = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              const mobileSoglieOverride2 = mRsSoglie2
+                ? { soglia1: mRsSoglie2.soglia1, soglia2: mRsSoglie2.soglia2, soglia3: mRsSoglie2.soglia3, soglia4: mRsSoglie2.soglia4 }
+                : getMobileSoglieForCluster(rsClusterMobile2);
+              rsProjCalc = calcMobilePerPdv(projectedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, mobileSoglieOverride2, tcMobile?.moltiplicatoriCanone);
             } else if (pista === "fisso") {
               const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
               const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
-              rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(firstPdvConfig?.clusterFisso), tcFisso?.euroPerPezzo, projectedRSAddons);
+              const fRsSoglie2 = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              const fissoSoglieOverride2 = fRsSoglie2
+                ? { soglia1: fRsSoglie2.soglia1, soglia2: fRsSoglie2.soglia2, soglia3: fRsSoglie2.soglia3, soglia4: fRsSoglie2.soglia4, soglia5: fRsSoglie2.soglia5 }
+                : getFissoSoglieForCluster(firstPdvConfig?.clusterFisso);
+              rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, fissoSoglieOverride2, tcFisso?.euroPerPezzo, projectedRSAddons);
             } else if (pista === "partnership") {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
