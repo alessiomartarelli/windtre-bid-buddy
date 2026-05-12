@@ -2296,6 +2296,23 @@ export default function ConfigurazioneGara() {
 
                 {pdfData.pdvList.length > 0 && (
                   <div className="space-y-1">
+                    {(() => {
+                      const missing = pdfData.pdvList.filter(p => !canonicalCodes.has(String(p.codicePos).trim().toLowerCase()));
+                      if (missing.length === 0) return null;
+                      return (
+                        <div className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-2 py-1.5 text-xs flex items-start gap-2" data-testid="panel-incongruenze-pdf">
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-amber-600 shrink-0" />
+                          <div className="flex-1">
+                            <div className="font-semibold text-amber-700 dark:text-amber-400">Incongruenze rilevate: {missing.length} PDV non in struttura canonica</div>
+                            <div className="text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+                              {isAdminOrSuper
+                                ? 'Puoi aggiungerli alla struttura ufficiale dell\'organizzazione con il pulsante qui sotto.'
+                                : 'Solo un amministratore può aggiungerli alla struttura ufficiale dell\'organizzazione.'}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="flex items-center justify-between gap-2">
                       <Label className="text-xs font-semibold">PDV trovati nel PDF ({pdfData.pdvList.length})</Label>
                       {isAdminOrSuper && pdfData.pdvList.some(p => !canonicalCodes.has(String(p.codicePos).trim().toLowerCase())) && (
@@ -2330,7 +2347,7 @@ export default function ConfigurazioneGara() {
                         </thead>
                         <tbody>
                           {pdfData.pdvList.map(p => {
-                            const found = pdvList.some(pdv => pdv.codicePos === p.codicePos);
+                            const found = canonicalCodes.has(String(p.codicePos).trim().toLowerCase());
                             return (
                               <tr key={p.codicePos} className="border-t">
                                 <td className="px-2 py-1 font-mono">{p.codicePos}</td>
@@ -2338,9 +2355,9 @@ export default function ConfigurazioneGara() {
                                 <td className="px-2 py-1 text-center">{p.clusterFisso || '-'}</td>
                                 <td className="px-2 py-1 text-center">
                                   {found ? (
-                                    <Badge variant="secondary" className="text-[10px]"><Check className="h-3 w-3 mr-0.5" />Trovato</Badge>
+                                    <Badge variant="secondary" className="text-[10px]" data-testid={`badge-pdv-found-${p.codicePos}`}><Check className="h-3 w-3 mr-0.5" />In struttura</Badge>
                                   ) : (
-                                    <Badge variant="outline" className="text-[10px] text-amber-600"><AlertTriangle className="h-3 w-3 mr-0.5" />Non trovato</Badge>
+                                    <Badge variant="outline" className="text-[10px] text-amber-600" data-testid={`badge-pdv-missing-${p.codicePos}`}><AlertTriangle className="h-3 w-3 mr-0.5" />Non in struttura</Badge>
                                   )}
                                 </td>
                               </tr>
