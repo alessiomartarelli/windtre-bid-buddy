@@ -1007,65 +1007,83 @@ function PistaCompactRow({
   children?: React.ReactNode;
 }) {
   const m = metrics;
-  const showSoglia = !!m.sogliaAtt && m.sogliaAtt !== "N/A";
-  const showProiSoglia = !!m.sogliaProi && m.sogliaProi !== "N/A";
-  const projDiffersPezzi = m.pezziAtt !== undefined && m.pezziProi !== undefined && m.pezziProi > m.pezziAtt;
-  const projDiffersPunti = m.puntiAtt !== undefined && m.puntiProi !== undefined && (m.puntiProi > m.puntiAtt + 0.05 || (showProiSoglia && m.sogliaProi !== m.sogliaAtt));
-  const projDiffersPremio = m.premioAtt !== undefined && m.premioProi !== undefined && m.premioProi > m.premioAtt + 0.005;
+  const hasSogliaAtt = !!m.sogliaAtt && m.sogliaAtt !== "N/A";
+  const hasSogliaProi = !!m.sogliaProi && m.sogliaProi !== "N/A";
+  const hasPunti = m.puntiAtt !== undefined || m.puntiProi !== undefined;
+  const hasPremio = (m.premioAtt ?? 0) > 0 || (m.premioProi ?? 0) > 0;
   const premioCls = premioColor === 'orange' ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400';
+  const premioProiCls = premioColor === 'orange' ? 'text-orange-600 dark:text-orange-300' : 'text-blue-600 dark:text-blue-400';
   return (
     <div className="rounded-lg border" data-testid={`row-pista-${testId}`}>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
-        className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
+        className="w-full flex flex-col lg:flex-row lg:items-center gap-2 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
         data-testid={`btn-expand-row-${testId}`}
       >
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0 lg:w-48 lg:shrink-0">
           {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
           <div className="min-w-0">
             <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{name}</div>
             {subtitle && <div className="text-[11px] text-gray-500 truncate">{subtitle}</div>}
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs flex-wrap justify-end pl-5 sm:pl-0">
+        <div className="flex flex-wrap items-stretch gap-2 flex-1 pl-5 lg:pl-0">
           {m.pezziAtt !== undefined && (
-            <span className="font-medium whitespace-nowrap">
-              {m.pezziAtt}
-              {projDiffersPezzi && <span className="text-blue-500"> → {m.pezziProi}</span>}
-              <span className="text-gray-400 ml-1">pz</span>
-            </span>
+            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 min-w-[88px]">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500">Pezzi</div>
+              <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+                <span className="text-sm font-semibold">{m.pezziAtt}</span>
+                {m.pezziProi !== undefined && (
+                  <span className="text-[11px] text-blue-600 flex items-center gap-0.5">
+                    <TrendingUp className="h-3 w-3" />{m.pezziProi}
+                  </span>
+                )}
+              </div>
+            </div>
           )}
-          {m.puntiAtt !== undefined && (
-            <span className="flex items-center gap-1 whitespace-nowrap">
-              <span className="font-medium">{m.puntiAtt.toFixed(1)} pt</span>
-              {showSoglia && (
-                <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaAtt!)}`} variant="outline">{m.sogliaAtt}</Badge>
-              )}
-            </span>
+          {hasPunti && (
+            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 flex-1 min-w-[180px]">
+              <div className="grid grid-cols-2 gap-x-2">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wide text-gray-500">Att.</div>
+                  <div className="flex items-center gap-1 whitespace-nowrap">
+                    <span className="text-sm font-semibold">{(m.puntiAtt ?? 0).toFixed(1)} pt</span>
+                    {hasSogliaAtt && (
+                      <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaAtt!)}`} variant="outline">{m.sogliaAtt}</Badge>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wide text-blue-600 flex items-center gap-0.5"><TrendingUp className="h-2.5 w-2.5" />Proi.</div>
+                  <div className="flex items-center gap-1 whitespace-nowrap text-blue-700 dark:text-blue-400">
+                    <span className="text-sm font-semibold">{(m.puntiProi ?? m.puntiAtt ?? 0).toFixed(1)} pt</span>
+                    {hasSogliaProi && (
+                      <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaProi!)}`} variant="outline">{m.sogliaProi}</Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
-          {projDiffersPunti && m.puntiProi !== undefined && (
-            <span className="flex items-center gap-1 text-blue-600 whitespace-nowrap">
-              <TrendingUp className="h-3 w-3" />
-              <span className="font-medium">{m.puntiProi.toFixed(1)} pt</span>
-              {showProiSoglia && (
-                <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaProi!)}`} variant="outline">{m.sogliaProi}</Badge>
-              )}
-            </span>
-          )}
-          {m.premioAtt !== undefined && (m.premioAtt > 0 || (m.premioProi ?? 0) > 0) && (
-            <span className={`font-bold whitespace-nowrap ${premioCls}`}>
-              {formatEuro(m.premioAtt)}
-              {projDiffersPremio && (
-                <span className="text-blue-600 ml-1">→ {formatEuro(m.premioProi!)}</span>
-              )}
-            </span>
+          {hasPremio && (
+            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 min-w-[150px]">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500">Premio</div>
+              <div className="flex items-baseline gap-2 whitespace-nowrap">
+                <span className={`text-sm font-bold ${premioCls}`}>{formatEuro(m.premioAtt ?? 0)}</span>
+                {m.premioProi !== undefined && (
+                  <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${premioProiCls}`}>
+                    <TrendingUp className="h-3 w-3" />{formatEuro(m.premioProi)}
+                  </span>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </button>
       {expanded && children && (
-        <div className="px-2.5 pb-2.5 pt-2 border-t space-y-1.5">{children}</div>
+        <div className="px-3 pb-3 pt-2 border-t space-y-1.5">{children}</div>
       )}
     </div>
   );
