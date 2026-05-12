@@ -1119,36 +1119,46 @@ function TabellaCellSingolo({ valore, soglia, variant, stimata, dim }: { valore?
   );
 }
 
-function TabellaPdfExportDialog({
+type DashboardPdfColumnOption = { key: string; label: string };
+
+function DashboardPdfExportDialog({
   open,
   onOpenChange,
-  pisteAttive,
+  title = "Esporta PDF",
+  description,
+  columnsLabel = "Colonne da includere",
+  columnOptions,
   prefs,
   onPrefsChange,
   onConfirm,
-  orgLogoDataUrl,
+  testIdPrefix = "pdf",
+  orgLogoDataUrl = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  pisteAttive: any[];
-  prefs: TabellaPdfPrefs;
-  onPrefsChange: (next: TabellaPdfPrefs) => void;
-  onConfirm: (prefs: TabellaPdfPrefs) => void;
-  orgLogoDataUrl: string | null;
+  title?: string;
+  description?: string;
+  columnsLabel?: string;
+  columnOptions: DashboardPdfColumnOption[];
+  prefs: DashboardPdfPrefs;
+  onPrefsChange: (next: DashboardPdfPrefs) => void;
+  onConfirm: (prefs: DashboardPdfPrefs) => void;
+  testIdPrefix?: string;
+  orgLogoDataUrl?: string | null;
 }) {
-  const availableKeys = pisteAttive.map(p => p.pista as string);
+  const availableKeys = columnOptions.map(c => c.key);
   const selectedSet = new Set(
-    prefs.selectedPiste === null ? availableKeys : prefs.selectedPiste.filter(k => availableKeys.includes(k)),
+    prefs.selectedColumns === null ? availableKeys : prefs.selectedColumns.filter(k => availableKeys.includes(k)),
   );
 
-  const togglePista = (key: string, checked: boolean) => {
+  const toggleColumn = (key: string, checked: boolean) => {
     const next = new Set(selectedSet);
     if (checked) next.add(key); else next.delete(key);
-    onPrefsChange({ ...prefs, selectedPiste: Array.from(next) });
+    onPrefsChange({ ...prefs, selectedColumns: Array.from(next) });
   };
 
-  const selectAll = () => onPrefsChange({ ...prefs, selectedPiste: [...availableKeys] });
-  const selectNone = () => onPrefsChange({ ...prefs, selectedPiste: [] });
+  const selectAll = () => onPrefsChange({ ...prefs, selectedColumns: [...availableKeys] });
+  const selectNone = () => onPrefsChange({ ...prefs, selectedColumns: [] });
 
   const handleLogoFile = (file: File | null) => {
     if (!file) return;
@@ -1168,53 +1178,52 @@ function TabellaPdfExportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg" data-testid="dialog-pdf-export">
+      <DialogContent className="max-w-lg" data-testid={`dialog-${testIdPrefix}-export`}>
         <DialogHeader>
-          <DialogTitle>Esporta PDF</DialogTitle>
-          <DialogDescription>Personalizza il PDF della tabella PDV × Pista.</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <Label className="text-sm font-medium">Piste da includere</Label>
+              <Label className="text-sm font-medium">{columnsLabel}</Label>
               <div className="flex gap-2">
-                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={selectAll} data-testid="btn-pdf-piste-all">Tutte</Button>
-                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={selectNone} data-testid="btn-pdf-piste-none">Nessuna</Button>
+                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={selectAll} data-testid={`btn-${testIdPrefix}-cols-all`}>Tutte</Button>
+                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={selectNone} data-testid={`btn-${testIdPrefix}-cols-none`}>Nessuna</Button>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 rounded border p-3">
-              {pisteAttive.map(p => {
-                const conf = (PISTA_CONFIG as any)[p.pista];
-                const label = conf?.label ?? p.pista;
-                const id = `pdf-pista-${p.pista}`;
+              {columnOptions.map(opt => {
+                const id = `${testIdPrefix}-col-${opt.key}`;
                 return (
-                  <div key={p.pista} className="flex items-center gap-2">
+                  <div key={opt.key} className="flex items-center gap-2">
                     <Checkbox
                       id={id}
-                      checked={selectedSet.has(p.pista)}
-                      onCheckedChange={(c) => togglePista(p.pista, c === true)}
-                      data-testid={`checkbox-pdf-pista-${p.pista}`}
+                      checked={selectedSet.has(opt.key)}
+                      onCheckedChange={(c) => toggleColumn(opt.key, c === true)}
+                      data-testid={`checkbox-${testIdPrefix}-col-${opt.key}`}
                     />
-                    <Label htmlFor={id} className="text-sm font-normal cursor-pointer">{label}</Label>
+                    <Label htmlFor={id} className="text-sm font-normal cursor-pointer">{opt.label}</Label>
                   </div>
                 );
               })}
             </div>
             {!canExport && (
-              <p className="text-xs text-red-600 mt-1">Seleziona almeno una pista.</p>
+              <p className="text-xs text-red-600 mt-1">Seleziona almeno una voce.</p>
             )}
           </div>
 
           <div>
-            <Label htmlFor="pdf-nota" className="text-sm font-medium">Nota / intestazione (opzionale)</Label>
+            <Label htmlFor={`${testIdPrefix}-nota`} className="text-sm font-medium">Nota / intestazione (opzionale)</Label>
             <Textarea
-              id="pdf-nota"
+              id={`${testIdPrefix}-nota`}
               value={prefs.nota}
               onChange={(e) => onPrefsChange({ ...prefs, nota: e.target.value })}
               placeholder="Es. Documento per riunione mensile rete vendita"
               className="mt-1 min-h-[60px]"
-              data-testid="textarea-pdf-nota"
+              data-testid={`textarea-${testIdPrefix}-nota`}
             />
+            <p className="text-[11px] text-gray-500 mt-1">Condivisa tra i diversi export PDF della dashboard.</p>
           </div>
 
           <div>
@@ -1225,7 +1234,7 @@ function TabellaPdfExportDialog({
                 accept="image/png,image/jpeg"
                 onChange={(e) => handleLogoFile(e.target.files?.[0] ?? null)}
                 className="text-sm flex-1"
-                data-testid="input-pdf-logo"
+                data-testid={`input-${testIdPrefix}-logo`}
               />
               {(prefs.logoDataUrl || orgLogoDataUrl) && (
                 <>
@@ -1233,7 +1242,7 @@ function TabellaPdfExportDialog({
                     src={prefs.logoDataUrl || orgLogoDataUrl || ''}
                     alt="Logo preview"
                     className="h-10 w-auto max-w-[80px] border rounded bg-white object-contain"
-                    data-testid="img-pdf-logo-preview"
+                    data-testid={`img-${testIdPrefix}-logo-preview`}
                   />
                   {prefs.logoDataUrl && (
                     <Button
@@ -1242,7 +1251,7 @@ function TabellaPdfExportDialog({
                       variant="outline"
                       className="h-7"
                       onClick={() => onPrefsChange({ ...prefs, logoDataUrl: null })}
-                      data-testid="btn-pdf-logo-remove"
+                      data-testid={`btn-${testIdPrefix}-logo-remove`}
                     >{orgLogoDataUrl ? 'Usa logo org' : 'Rimuovi logo locale'}</Button>
                   )}
                 </>
@@ -1250,23 +1259,23 @@ function TabellaPdfExportDialog({
             </div>
             <p className="text-[11px] text-gray-500 mt-1">
               {prefs.logoDataUrl
-                ? 'Logo locale caricato solo per questo PDF. Rimuovi per tornare al logo dell\'organizzazione.'
+                ? 'Logo locale caricato solo per questo PDF. Rimuovi per tornare al logo dell\'organizzazione. Condiviso tra i diversi export PDF della dashboard.'
                 : orgLogoDataUrl
-                  ? 'Verrà usato il logo dell\'organizzazione. Carica un file per sovrascriverlo solo per questo PDF.'
-                  : 'Nessun logo configurato. Imposta il logo organizzazione da Admin → Branding, oppure carica un file qui (PNG/JPEG, max 1 MB).'}
+                  ? 'Verrà usato il logo dell\'organizzazione. Carica un file per sovrascriverlo (PNG/JPEG, max 1 MB). Condiviso tra i diversi export PDF della dashboard.'
+                  : 'Nessun logo configurato. Imposta il logo organizzazione da Admin → Branding, oppure carica un file qui (PNG/JPEG, max 1 MB). Condiviso tra i diversi export PDF della dashboard.'}
             </p>
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} data-testid="btn-pdf-cancel">Annulla</Button>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} data-testid={`btn-${testIdPrefix}-cancel`}>Annulla</Button>
           <Button
             type="button"
             onClick={() => onConfirm({
               ...prefs,
-              selectedPiste: Array.from(selectedSet),
+              selectedColumns: Array.from(selectedSet),
             })}
             disabled={!canExport}
-            data-testid="btn-pdf-confirm"
+            data-testid={`btn-${testIdPrefix}-confirm`}
           >
             <Download className="h-3.5 w-3.5 mr-1" />Esporta PDF
           </Button>
@@ -1276,11 +1285,233 @@ function TabellaPdfExportDialog({
   );
 }
 
+function drawPdfHeader(
+  doc: jsPDF,
+  opts: { title: string; subtitle?: string; nota?: string; logoDataUrl?: string | null },
+): number {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let logoBottomY = 0;
+  if (opts.logoDataUrl) {
+    try {
+      const fmt = opts.logoDataUrl.startsWith('data:image/jpeg') || opts.logoDataUrl.startsWith('data:image/jpg')
+        ? 'JPEG'
+        : 'PNG';
+      const logoW = 28;
+      const logoH = 16;
+      doc.addImage(opts.logoDataUrl, fmt, pageWidth - 14 - logoW, 8, logoW, logoH);
+      logoBottomY = 8 + logoH;
+    } catch {
+      // ignore broken image
+    }
+  }
+  doc.setFontSize(14);
+  doc.setTextColor(40, 40, 40);
+  doc.text(opts.title, 14, 14);
+  if (opts.subtitle) {
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(opts.subtitle, 14, 20);
+  }
+  let startY = opts.subtitle ? 25 : 20;
+  const nota = (opts.nota ?? "").trim();
+  if (nota) {
+    doc.setFontSize(9);
+    doc.setTextColor(60, 60, 60);
+    const maxWidth = pageWidth - 28;
+    const lines = doc.splitTextToSize(nota, maxWidth) as string[];
+    doc.text(lines, 14, startY);
+    startY += lines.length * 4 + 2;
+  }
+  if (logoBottomY > 0 && startY < logoBottomY + 2) {
+    startY = logoBottomY + 2;
+  }
+  return startY;
+}
+
+function drawPdfFooterPagination(doc: jsPDF, currentPage: number) {
+  const pageCount = doc.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  doc.setFontSize(8);
+  doc.setTextColor(120, 120, 120);
+  doc.text(
+    `Pagina ${currentPage} / ${pageCount}`,
+    pageWidth - 14,
+    doc.internal.pageSize.getHeight() - 6,
+    { align: 'right' },
+  );
+}
+
+const TABELLA_PDV_PISTA_PDF_EXPORT_KEY = "tabella-pdv-pista";
+const PREMIO_PER_RS_PDF_EXPORT_KEY = "premio-per-rs";
+
+type PremioRsRow = {
+  displayName: string;
+  premioAttuale: number;
+  premioProiettato: number;
+  dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }>;
+};
+
+function PremioPerRsPdfExport({ premioPerRS, orgId, mese, anno }: { premioPerRS: PremioRsRow[]; orgId?: string | null; mese?: number; anno?: number }) {
+  const [open, setOpen] = useState(false);
+  const [prefs, setPrefs] = useState<DashboardPdfPrefs>({ selectedColumns: null, nota: "", logoDataUrl: null });
+  const [hydratedOrg, setHydratedOrg] = useState<string | null>(null);
+
+  const { data: orgBranding } = useQuery<{ logoDataUrl: string | null }>({
+    queryKey: ['/api/organization-branding/logo'],
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const orgLogoDataUrl = orgBranding?.logoDataUrl ?? null;
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (hydratedOrg === orgId) return;
+    setPrefs(loadDashboardPdfPrefs(orgId, PREMIO_PER_RS_PDF_EXPORT_KEY));
+    setHydratedOrg(orgId);
+  }, [orgId, hydratedOrg]);
+
+  useEffect(() => {
+    if (!open || !orgId) return;
+    const shared = loadSharedPdfPrefs(orgId);
+    setPrefs(prev => ({
+      selectedColumns: prev.selectedColumns,
+      nota: shared.nota,
+      logoDataUrl: shared.logoDataUrl,
+    }));
+  }, [open, orgId]);
+
+  const pisteAttive = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const rs of premioPerRS) {
+      for (const d of rs.dettaglio) {
+        if (d.premioAttuale > 0 || d.premioProiettato > 0) {
+          if (!seen.has(d.pista)) seen.set(d.pista, d.label);
+        }
+      }
+    }
+    return Array.from(seen.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => pistaOrderRank(a.key) - pistaOrderRank(b.key));
+  }, [premioPerRS]);
+
+  const baseFilename = () => {
+    const orgPart = orgId || 'org';
+    const mm = mese ? String(mese).padStart(2, '0') : '00';
+    const yy = anno ? String(anno) : '0000';
+    return `riepilogo-premi-rs_${orgPart}_${yy}-${mm}`;
+  };
+
+  const exportPdf = (final: DashboardPdfPrefs) => {
+    const selected = final.selectedColumns ?? pisteAttive.map(p => p.key);
+    const piste = pisteAttive.filter(p => selected.includes(p.key));
+    if (piste.length === 0 || premioPerRS.length === 0) return;
+
+    const fmtEuro = (n: number) => Number.isFinite(n) ? `€ ${n.toFixed(2).replace('.', ',')}` : '';
+
+    const header: string[] = ["Ragione Sociale", "Premio Attuale", "Premio Proiezione"];
+    for (const p of piste) {
+      header.push(`${p.label} - Attuale`, `${p.label} - Proiezione`);
+    }
+    const body: string[][] = [];
+    for (const rs of premioPerRS) {
+      const row: string[] = [rs.displayName, fmtEuro(rs.premioAttuale), fmtEuro(rs.premioProiettato)];
+      for (const p of piste) {
+        const d = rs.dettaglio.find(x => x.pista === p.key);
+        row.push(d ? fmtEuro(d.premioAttuale) : '', d && d.premioProiettato > 0 ? fmtEuro(d.premioProiettato) : '');
+      }
+      body.push(row);
+    }
+    // Totals row
+    const totAtt = premioPerRS.reduce((s, r) => s + r.premioAttuale, 0);
+    const totProi = premioPerRS.reduce((s, r) => s + r.premioProiettato, 0);
+    const totalsRow: string[] = ["TOTALE", fmtEuro(totAtt), fmtEuro(totProi)];
+    for (const p of piste) {
+      const att = premioPerRS.reduce((s, r) => s + (r.dettaglio.find(x => x.pista === p.key)?.premioAttuale ?? 0), 0);
+      const proi = premioPerRS.reduce((s, r) => s + (r.dettaglio.find(x => x.pista === p.key)?.premioProiettato ?? 0), 0);
+      totalsRow.push(fmtEuro(att), proi > 0 ? fmtEuro(proi) : '');
+    }
+    body.push(totalsRow);
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const mm = mese ? String(mese).padStart(2, '0') : '--';
+    const yy = anno ? String(anno) : '----';
+    const startY = drawPdfHeader(doc, {
+      title: 'Riepilogo Premi per Ragione Sociale',
+      subtitle: `Org: ${orgId || '-'}    Periodo: ${mm}/${yy}`,
+      nota: final.nota,
+      logoDataUrl: final.logoDataUrl ?? orgLogoDataUrl,
+    });
+
+    autoTable(doc, {
+      startY,
+      head: [header],
+      body,
+      theme: 'striped',
+      headStyles: { fillColor: [34, 197, 94], fontSize: 8, halign: 'center' },
+      bodyStyles: { fontSize: 8 },
+      styles: { cellPadding: 1.5, overflow: 'linebreak' },
+      columnStyles: { 0: { cellWidth: 50 } },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index >= 1) {
+          data.cell.styles.halign = 'right';
+        }
+        if (data.section === 'body' && body[data.row.index]?.[0] === 'TOTALE') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [220, 252, 231];
+        }
+      },
+      margin: { left: 8, right: 8, top: startY },
+      didDrawPage: (data) => {
+        drawPdfFooterPagination(doc, data.pageNumber);
+      },
+    });
+
+    doc.save(`${baseFilename()}.pdf`);
+  };
+
+  if (premioPerRS.length === 0 || pisteAttive.length === 0) return null;
+
+  return (
+    <>
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8"
+          onClick={() => setOpen(true)}
+          data-testid="btn-premio-rs-export-pdf"
+        >
+          <Download className="h-3.5 w-3.5 mr-1" />Esporta PDF Riepilogo Premi
+        </Button>
+      </div>
+      <DashboardPdfExportDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Esporta PDF — Riepilogo Premi per RS"
+        description="Personalizza il PDF del riepilogo premi per Ragione Sociale."
+        columnsLabel="Piste da includere"
+        columnOptions={pisteAttive}
+        prefs={prefs}
+        onPrefsChange={(next) => {
+          setPrefs(next);
+          saveDashboardPdfPrefs(orgId, PREMIO_PER_RS_PDF_EXPORT_KEY, next);
+        }}
+        onConfirm={(final) => {
+          exportPdf(final);
+          setOpen(false);
+        }}
+        testIdPrefix="premio-rs-pdf"
+        orgLogoDataUrl={orgLogoDataUrl}
+      />
+    </>
+  );
+}
+
 function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[]; orgId?: string | null; mese?: number; anno?: number }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [hydratedOrgId, setHydratedOrgId] = useState<string | null>(null);
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
-  const [pdfPrefs, setPdfPrefs] = useState<TabellaPdfPrefs>({ selectedPiste: null, nota: "", logoDataUrl: null });
+  const [pdfPrefs, setPdfPrefs] = useState<DashboardPdfPrefs>({ selectedColumns: null, nota: "", logoDataUrl: null });
   const [pdfPrefsHydratedOrg, setPdfPrefsHydratedOrg] = useState<string | null>(null);
 
   const { data: orgBranding } = useQuery<{ logoDataUrl: string | null }>({
@@ -1293,9 +1524,19 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
   useEffect(() => {
     if (!orgId) return;
     if (pdfPrefsHydratedOrg === orgId) return;
-    setPdfPrefs(loadPdfPrefs(orgId));
+    setPdfPrefs(loadDashboardPdfPrefs(orgId, TABELLA_PDV_PISTA_PDF_EXPORT_KEY));
     setPdfPrefsHydratedOrg(orgId);
   }, [orgId, pdfPrefsHydratedOrg]);
+
+  useEffect(() => {
+    if (!pdfDialogOpen || !orgId) return;
+    const shared = loadSharedPdfPrefs(orgId);
+    setPdfPrefs(prev => ({
+      selectedColumns: prev.selectedColumns,
+      nota: shared.nota,
+      logoDataUrl: shared.logoDataUrl,
+    }));
+  }, [pdfDialogOpen, orgId]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -1510,7 +1751,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
 
   const exportPdf = (opts?: { selectedPiste?: string[] | null; nota?: string; logoDataUrl?: string | null }) => {
     const selectedPiste = opts?.selectedPiste ?? null;
-    const nota = (opts?.nota ?? "").trim();
+    const nota = opts?.nota ?? "";
     const logoDataUrl = opts?.logoDataUrl ?? null;
     const rows = buildExportRows(selectedPiste);
     if (rows.length <= 1) return;
@@ -1518,47 +1759,15 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
     const body = rows.slice(1).map(r => r.map(v => (typeof v === 'number' ? String(v) : v as string)));
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const pageWidth = doc.internal.pageSize.getWidth();
-
-    // Logo (top-right)
-    let logoBottomY = 0;
-    if (logoDataUrl) {
-      try {
-        const fmt = logoDataUrl.startsWith('data:image/jpeg') || logoDataUrl.startsWith('data:image/jpg')
-          ? 'JPEG'
-          : 'PNG';
-        const logoW = 28;
-        const logoH = 16;
-        doc.addImage(logoDataUrl, fmt, pageWidth - 14 - logoW, 8, logoW, logoH);
-        logoBottomY = 8 + logoH;
-      } catch {
-        // ignore broken image
-      }
-    }
-
-    doc.setFontSize(14);
-    doc.setTextColor(40, 40, 40);
-    doc.text('Tabella PDV × Pista', 14, 14);
 
     const mm = mese ? String(mese).padStart(2, '0') : '--';
     const yy = anno ? String(anno) : '----';
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    const subtitle = `Org: ${orgId || '-'}    Periodo: ${mm}/${yy}`;
-    doc.text(subtitle, 14, 20);
-
-    let startY = 25;
-    if (nota) {
-      doc.setFontSize(9);
-      doc.setTextColor(60, 60, 60);
-      const maxWidth = pageWidth - 28;
-      const lines = doc.splitTextToSize(nota, maxWidth) as string[];
-      doc.text(lines, 14, startY);
-      startY += lines.length * 4 + 2;
-    }
-    if (logoBottomY > 0 && startY < logoBottomY + 2) {
-      startY = logoBottomY + 2;
-    }
+    const startY = drawPdfHeader(doc, {
+      title: 'Tabella PDV × Pista',
+      subtitle: `Org: ${orgId || '-'}    Periodo: ${mm}/${yy}`,
+      nota,
+      logoDataUrl,
+    });
 
     autoTable(doc, {
       startY,
@@ -1585,16 +1794,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
       },
       margin: { left: 8, right: 8, top: startY },
       didDrawPage: (data) => {
-        const pageCount = doc.getNumberOfPages();
-        const currentPage = data.pageNumber;
-        doc.setFontSize(8);
-        doc.setTextColor(120, 120, 120);
-        doc.text(
-          `Pagina ${currentPage} / ${pageCount}`,
-          pageWidth - 14,
-          doc.internal.pageSize.getHeight() - 6,
-          { align: 'right' },
-        );
+        drawPdfFooterPagination(doc, data.pageNumber);
       },
     });
 
@@ -1636,24 +1836,31 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
           </div>
         </div>
       </CardHeader>
-      <TabellaPdfExportDialog
+      <DashboardPdfExportDialog
         open={pdfDialogOpen}
         onOpenChange={setPdfDialogOpen}
-        pisteAttive={pisteAttive}
+        title="Esporta PDF"
+        description="Personalizza il PDF della tabella PDV × Pista."
+        columnsLabel="Piste da includere"
+        columnOptions={pisteAttive.map(p => ({
+          key: p.pista as string,
+          label: ((PISTA_CONFIG as any)[p.pista]?.label ?? p.pista) as string,
+        }))}
         prefs={pdfPrefs}
         orgLogoDataUrl={orgLogoDataUrl}
         onPrefsChange={(next) => {
           setPdfPrefs(next);
-          savePdfPrefs(orgId, next);
+          saveDashboardPdfPrefs(orgId, TABELLA_PDV_PISTA_PDF_EXPORT_KEY, next);
         }}
         onConfirm={(prefs) => {
           exportPdf({
-            selectedPiste: prefs.selectedPiste,
+            selectedPiste: prefs.selectedColumns,
             nota: prefs.nota,
             logoDataUrl: prefs.logoDataUrl ?? orgLogoDataUrl,
           });
           setPdfDialogOpen(false);
         }}
+        testIdPrefix="tabella-pdf"
       />
       <CardContent className="p-0">
         <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
@@ -1758,40 +1965,106 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
 
 const EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-expanded-rs:";
 const TABELLA_EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-tabella-expanded-rs:";
-const TABELLA_PDF_PREFS_STORAGE_PREFIX = "dashboard-gara-tabella-pdf-prefs:";
 
-type TabellaPdfPrefs = {
-  selectedPiste: string[] | null; // null = tutte le piste disponibili
+// Shared (per-org): logo + nota — riutilizzati da tutti gli export PDF della dashboard.
+const PDF_SHARED_PREFS_STORAGE_PREFIX = "dashboard-gara-pdf-shared-prefs:";
+// Per-export (per-org + exportKey): selezione colonne dell'export.
+const PDF_COLS_STORAGE_PREFIX = "dashboard-gara-pdf-cols:";
+// Legacy: vecchia chiave dedicata alla TabellaPdvPista (selectedPiste + nota + logo).
+const LEGACY_TABELLA_PDF_PREFS_STORAGE_PREFIX = "dashboard-gara-tabella-pdf-prefs:";
+
+type DashboardPdfPrefs = {
+  selectedColumns: string[] | null; // null = tutte le colonne disponibili
   nota: string;
   logoDataUrl: string | null;
 };
 
-function loadPdfPrefs(orgId?: string | null): TabellaPdfPrefs {
-  const empty: TabellaPdfPrefs = { selectedPiste: null, nota: "", logoDataUrl: null };
+type SharedPdfPrefs = { nota: string; logoDataUrl: string | null };
+
+function loadSharedPdfPrefs(orgId?: string | null): SharedPdfPrefs {
+  const empty: SharedPdfPrefs = { nota: "", logoDataUrl: null };
   if (!orgId) return empty;
   try {
-    const raw = localStorage.getItem(`${TABELLA_PDF_PREFS_STORAGE_PREFIX}${orgId}`);
-    if (!raw) return empty;
-    const parsed = JSON.parse(raw);
-    return {
-      selectedPiste: Array.isArray(parsed?.selectedPiste)
-        ? parsed.selectedPiste.filter((s: unknown): s is string => typeof s === "string")
-        : null,
-      nota: typeof parsed?.nota === "string" ? parsed.nota : "",
-      logoDataUrl: typeof parsed?.logoDataUrl === "string" ? parsed.logoDataUrl : null,
-    };
+    const raw = localStorage.getItem(`${PDF_SHARED_PREFS_STORAGE_PREFIX}${orgId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        nota: typeof parsed?.nota === "string" ? parsed.nota : "",
+        logoDataUrl: typeof parsed?.logoDataUrl === "string" ? parsed.logoDataUrl : null,
+      };
+    }
+    // Migration: estrai logo+nota dalla vecchia chiave Tabella se presente.
+    const legacy = localStorage.getItem(`${LEGACY_TABELLA_PDF_PREFS_STORAGE_PREFIX}${orgId}`);
+    if (legacy) {
+      const parsed = JSON.parse(legacy);
+      const migrated: SharedPdfPrefs = {
+        nota: typeof parsed?.nota === "string" ? parsed.nota : "",
+        logoDataUrl: typeof parsed?.logoDataUrl === "string" ? parsed.logoDataUrl : null,
+      };
+      try { localStorage.setItem(`${PDF_SHARED_PREFS_STORAGE_PREFIX}${orgId}`, JSON.stringify(migrated)); } catch { /* ignore */ }
+      return migrated;
+    }
   } catch {
     return empty;
   }
+  return empty;
 }
 
-function savePdfPrefs(orgId: string | null | undefined, prefs: TabellaPdfPrefs) {
+function saveSharedPdfPrefs(orgId: string | null | undefined, prefs: SharedPdfPrefs) {
   if (!orgId) return;
   try {
-    localStorage.setItem(`${TABELLA_PDF_PREFS_STORAGE_PREFIX}${orgId}`, JSON.stringify(prefs));
+    localStorage.setItem(`${PDF_SHARED_PREFS_STORAGE_PREFIX}${orgId}`, JSON.stringify(prefs));
   } catch {
     // ignore
   }
+}
+
+function loadPdfColumns(orgId: string | null | undefined, exportKey: string): string[] | null {
+  if (!orgId) return null;
+  try {
+    const raw = localStorage.getItem(`${PDF_COLS_STORAGE_PREFIX}${exportKey}:${orgId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed === null) return null;
+      if (Array.isArray(parsed)) return parsed.filter((s: unknown): s is string => typeof s === "string");
+      return null;
+    }
+    // Migration: per la TabellaPdvPista riusa la legacy `selectedPiste`.
+    if (exportKey === "tabella-pdv-pista") {
+      const legacy = localStorage.getItem(`${LEGACY_TABELLA_PDF_PREFS_STORAGE_PREFIX}${orgId}`);
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        if (Array.isArray(parsed?.selectedPiste)) {
+          const cols = parsed.selectedPiste.filter((s: unknown): s is string => typeof s === "string");
+          try { localStorage.setItem(`${PDF_COLS_STORAGE_PREFIX}${exportKey}:${orgId}`, JSON.stringify(cols)); } catch { /* ignore */ }
+          return cols;
+        }
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function savePdfColumns(orgId: string | null | undefined, exportKey: string, cols: string[] | null) {
+  if (!orgId) return;
+  try {
+    localStorage.setItem(`${PDF_COLS_STORAGE_PREFIX}${exportKey}:${orgId}`, JSON.stringify(cols));
+  } catch {
+    // ignore
+  }
+}
+
+function loadDashboardPdfPrefs(orgId: string | null | undefined, exportKey: string): DashboardPdfPrefs {
+  const shared = loadSharedPdfPrefs(orgId);
+  const cols = loadPdfColumns(orgId, exportKey);
+  return { selectedColumns: cols, nota: shared.nota, logoDataUrl: shared.logoDataUrl };
+}
+
+function saveDashboardPdfPrefs(orgId: string | null | undefined, exportKey: string, prefs: DashboardPdfPrefs) {
+  saveSharedPdfPrefs(orgId, { nota: prefs.nota, logoDataUrl: prefs.logoDataUrl });
+  savePdfColumns(orgId, exportKey, prefs.selectedColumns);
 }
 
 function getPistaRsRowKeys(pista: any): string[] {
@@ -3309,6 +3582,10 @@ export default function DashboardGaraReale() {
                 </Card>
               );
             })()}
+
+            {premioPerRS.length > 0 && (
+              <PremioPerRsPdfExport premioPerRS={premioPerRS} orgId={orgId} mese={selMonth} anno={selYear} />
+            )}
 
             {premioPerRS.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="premio-per-rs-summary">
