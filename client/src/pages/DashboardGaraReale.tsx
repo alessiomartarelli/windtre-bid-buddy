@@ -1022,7 +1022,7 @@ function PistaCompactRow({
         className="w-full flex flex-col lg:flex-row lg:items-center gap-2 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
         data-testid={`btn-expand-row-${testId}`}
       >
-        <div className="flex items-center gap-1.5 min-w-0 lg:w-48 lg:shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0 lg:w-40 lg:shrink-0">
           {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
           <div className="min-w-0">
             <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{name}</div>
@@ -1044,25 +1044,23 @@ function PistaCompactRow({
             </div>
           )}
           {hasPunti && (
-            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 flex-1 min-w-[180px]">
-              <div className="grid grid-cols-2 gap-x-2">
-                <div>
-                  <div className="text-[10px] uppercase tracking-wide text-gray-500">Att.</div>
-                  <div className="flex items-center gap-1 whitespace-nowrap">
-                    <span className="text-sm font-semibold">{(m.puntiAtt ?? 0).toFixed(1)} pt</span>
-                    {hasSogliaAtt && (
-                      <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaAtt!)}`} variant="outline">{m.sogliaAtt}</Badge>
-                    )}
-                  </div>
+            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 flex-1 min-w-[160px] space-y-0.5">
+              <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+                <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Att.</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-semibold">{(m.puntiAtt ?? 0).toFixed(1)} pt</span>
+                  {hasSogliaAtt && (
+                    <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaAtt!)}`} variant="outline">{m.sogliaAtt}</Badge>
+                  )}
                 </div>
-                <div>
-                  <div className="text-[10px] uppercase tracking-wide text-blue-600 flex items-center gap-0.5"><TrendingUp className="h-2.5 w-2.5" />Proi.</div>
-                  <div className="flex items-center gap-1 whitespace-nowrap text-blue-700 dark:text-blue-400">
-                    <span className="text-sm font-semibold">{(m.puntiProi ?? m.puntiAtt ?? 0).toFixed(1)} pt</span>
-                    {hasSogliaProi && (
-                      <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaProi!)}`} variant="outline">{m.sogliaProi}</Badge>
-                    )}
-                  </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 whitespace-nowrap text-blue-700 dark:text-blue-400 border-t pt-0.5">
+                <span className="text-[10px] uppercase tracking-wide text-blue-600 flex items-center gap-0.5 shrink-0"><TrendingUp className="h-2.5 w-2.5" />Proi.</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-semibold">{(m.puntiProi ?? m.puntiAtt ?? 0).toFixed(1)} pt</span>
+                  {hasSogliaProi && (
+                    <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaProi!)}`} variant="outline">{m.sogliaProi}</Badge>
+                  )}
                 </div>
               </div>
             </div>
