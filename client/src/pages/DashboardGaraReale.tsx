@@ -1077,6 +1077,224 @@ function PistaCompactRow({
   );
 }
 
+type TabellaCellMetrics = {
+  puntiAtt: number;
+  puntiProi: number;
+  sogliaAtt?: string;
+  sogliaProi?: string;
+};
+
+function TabellaCellPunti({ metrics, dim }: { metrics?: TabellaCellMetrics; dim?: boolean }) {
+  if (!metrics || (metrics.puntiAtt === 0 && metrics.puntiProi === 0)) {
+    return <span className="text-gray-300 dark:text-gray-700">—</span>;
+  }
+  const showSogliaAtt = metrics.sogliaAtt && metrics.sogliaAtt !== 'N/A' && metrics.sogliaAtt !== 'Nessuna';
+  const showSogliaProi = metrics.sogliaProi && metrics.sogliaProi !== 'N/A' && metrics.sogliaProi !== 'Nessuna';
+  const sizeCls = dim ? 'text-[11px]' : 'text-xs';
+  return (
+    <div className={`flex flex-col items-center gap-0.5 ${sizeCls}`}>
+      <div className="flex items-center gap-1 whitespace-nowrap">
+        <span className="font-semibold">{metrics.puntiAtt.toFixed(1)}</span>
+        {showSogliaAtt && (
+          <Badge variant="outline" className={`text-[9px] h-4 px-1 ${getSogliaColor(metrics.sogliaAtt!)}`}>{metrics.sogliaAtt}</Badge>
+        )}
+      </div>
+      {metrics.puntiProi > 0 && (
+        <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 whitespace-nowrap">
+          <TrendingUp className="h-2.5 w-2.5" />
+          <span className="font-medium">{metrics.puntiProi.toFixed(1)}</span>
+          {showSogliaProi && (
+            <Badge variant="outline" className={`text-[9px] h-4 px-1 ${getSogliaColor(metrics.sogliaProi!)}`}>{metrics.sogliaProi}</Badge>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const { pisteAttive, rsRows } = useMemo(() => {
+    const piste = (pistaStats || []).filter(p => !!(PISTA_CONFIG as any)[p.pista] && ((p.pdvBreakdown && p.pdvBreakdown.length > 0) || (p.rsCalcBreakdown && p.rsCalcBreakdown.size > 0)));
+
+    type PdvRow = { codicePos: string; nomeNegozio: string };
+    type RsEntry = {
+      displayName: string;
+      pdvs: Map<string, PdvRow>;
+      perPista: Map<string, TabellaCellMetrics>;
+      perPdv: Map<string, Map<string, TabellaCellMetrics>>;
+    };
+    const rsMap = new Map<string, RsEntry>();
+
+    const ensureRs = (rsKey: string, displayName: string): RsEntry => {
+      if (!rsMap.has(rsKey)) {
+        rsMap.set(rsKey, {
+          displayName,
+          pdvs: new Map(),
+          perPista: new Map(),
+          perPdv: new Map(),
+        });
+      }
+      return rsMap.get(rsKey)!;
+    };
+
+    for (const pista of piste) {
+      const pistaKey = pista.pista;
+      const hasRsMode = !!(pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 0);
+
+      // PDV-level cells
+      for (const pdv of (pista.pdvBreakdown || [])) {
+        const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+        const rsEntry = ensureRs(rsKey, pdv.ragioneSociale || 'Senza RS');
+        if (!rsEntry.pdvs.has(pdv.codicePos)) {
+          rsEntry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio });
+        }
+        if (!rsEntry.perPdv.has(pdv.codicePos)) rsEntry.perPdv.set(pdv.codicePos, new Map());
+        const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
+        const puntiAtt = pdv.pdvCalc?.puntiTotali ?? 0;
+        const puntiProi = proj?.puntiTotali ?? puntiAtt;
+        rsEntry.perPdv.get(pdv.codicePos)!.set(pistaKey, {
+          puntiAtt,
+          puntiProi,
+          sogliaAtt: hasRsMode ? undefined : pdv.pdvCalc?.sogliaLabel,
+          sogliaProi: hasRsMode ? undefined : (proj?.sogliaLabel ?? pdv.pdvCalc?.sogliaLabel),
+        });
+      }
+
+      // RS-level cells
+      if (hasRsMode) {
+        pista.rsCalcBreakdown!.forEach((rsData: any, rsKey: string) => {
+          const rsEntry = ensureRs(rsKey, rsData.displayName || rsKey);
+          rsEntry.perPista.set(pistaKey, {
+            puntiAtt: rsData.puntiAttuali ?? 0,
+            puntiProi: rsData.puntiProiezione ?? rsData.puntiAttuali ?? 0,
+            sogliaAtt: rsData.sogliaAttuale,
+            sogliaProi: rsData.sogliaProiezione,
+          });
+        });
+      } else {
+        // sum per RS without soglia
+        const sums = new Map<string, { puntiAtt: number; puntiProi: number }>();
+        for (const pdv of (pista.pdvBreakdown || [])) {
+          const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+          if (!sums.has(rsKey)) sums.set(rsKey, { puntiAtt: 0, puntiProi: 0 });
+          const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
+          const s = sums.get(rsKey)!;
+          const pAtt = pdv.pdvCalc?.puntiTotali ?? 0;
+          s.puntiAtt += pAtt;
+          s.puntiProi += proj?.puntiTotali ?? pAtt;
+        }
+        sums.forEach((v, rsKey) => {
+          const entry = rsMap.get(rsKey);
+          if (entry) entry.perPista.set(pistaKey, { puntiAtt: v.puntiAtt, puntiProi: v.puntiProi });
+        });
+      }
+    }
+
+    const rsRows = Array.from(rsMap.entries())
+      .map(([rsKey, data]) => ({ rsKey, ...data, pdvList: Array.from(data.pdvs.values()).sort((a, b) => a.nomeNegozio.localeCompare(b.nomeNegozio)) }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+    return { pisteAttive: piste, rsRows };
+  }, [pistaStats]);
+
+  if (rsRows.length === 0) return null;
+
+  const toggleRs = (rsKey: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(rsKey)) next.delete(rsKey); else next.add(rsKey);
+      return next;
+    });
+  };
+  const allKeys = rsRows.map(r => r.rsKey);
+  const allExpanded = allKeys.every(k => expanded.has(k));
+  const noneExpanded = expanded.size === 0;
+  const expandAll = () => setExpanded(new Set(allKeys));
+  const collapseAll = () => setExpanded(new Set());
+
+  return (
+    <Card data-testid="card-tabella-pdv-pista">
+      <CardHeader>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-lg">Tabella PDV × Pista</CardTitle>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" className="h-8" onClick={expandAll} disabled={allExpanded} data-testid="btn-tabella-expand-all">Espandi tutto</Button>
+            <Button size="sm" variant="outline" className="h-8" onClick={collapseAll} disabled={noneExpanded} data-testid="btn-tabella-collapse-all">Collassa tutto</Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full text-sm border-collapse" data-testid="table-pdv-pista">
+            <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900 border-b z-20">
+              <tr>
+                <th className="text-left px-3 py-2 font-semibold sticky left-0 bg-gray-50 dark:bg-gray-900 min-w-[240px] border-r z-30">Ragione Sociale / PDV</th>
+                {pisteAttive.map(p => {
+                  const conf = (PISTA_CONFIG as any)[p.pista];
+                  if (!conf) return null;
+                  const Icon = conf.icon;
+                  return (
+                    <th key={p.pista} className="text-center px-3 py-2 font-semibold border-r last:border-r-0 min-w-[140px]" data-testid={`th-tabella-${p.pista}`}>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <div className={`p-1 rounded ${conf.color} text-white`}><Icon className="h-3 w-3" /></div>
+                        <span>{conf.label}</span>
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {rsRows.map(rs => {
+                const isExpanded = expanded.has(rs.rsKey);
+                return (
+                  <Fragment key={rs.rsKey}>
+                    <tr
+                      className="border-b bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 cursor-pointer"
+                      onClick={() => toggleRs(rs.rsKey)}
+                      data-testid={`row-table-rs-${rs.rsKey}`}
+                    >
+                      <td className="px-3 py-2 font-semibold sticky left-0 bg-blue-50 dark:bg-blue-950/40 border-r z-[5]">
+                        <div className="flex items-center gap-1.5">
+                          {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                          <span className="truncate" title={rs.displayName}>{rs.displayName}</span>
+                          <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">{rs.pdvs.size} PDV</Badge>
+                        </div>
+                      </td>
+                      {pisteAttive.map(p => (
+                        <td key={p.pista} className="px-3 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${rs.rsKey}-${p.pista}`}>
+                          <TabellaCellPunti metrics={rs.perPista.get(p.pista)} />
+                        </td>
+                      ))}
+                    </tr>
+                    {isExpanded && rs.pdvList.map(pdv => (
+                      <tr key={pdv.codicePos} className="border-b bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800/40" data-testid={`row-table-pdv-${pdv.codicePos}`}>
+                        <td className="px-3 py-2 sticky left-0 bg-white dark:bg-gray-950 border-r z-[5]">
+                          <div className="pl-6">
+                            <div className="font-medium text-gray-700 dark:text-gray-200 truncate text-xs" title={pdv.nomeNegozio}>{pdv.nomeNegozio}</div>
+                            <div className="text-gray-500 text-[10px]">{pdv.codicePos}</div>
+                          </div>
+                        </td>
+                        {pisteAttive.map(p => (
+                          <td key={p.pista} className="px-3 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${pdv.codicePos}-${p.pista}`}>
+                            <TabellaCellPunti metrics={rs.perPdv.get(pdv.codicePos)?.get(p.pista)} dim />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 const EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-expanded-rs:";
 
 function getPistaRsRowKeys(pista: any): string[] {
@@ -3909,6 +4127,8 @@ export default function DashboardGaraReale() {
                 </Card>
               );
             })()}
+
+            <TabellaPdvPista pistaStats={pistaStats} />
 
             <Card data-testid="card-rs-breakdown">
               <CardHeader>
