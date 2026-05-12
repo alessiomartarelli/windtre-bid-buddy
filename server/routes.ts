@@ -9,6 +9,8 @@ import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
 import { registerCdgRoutes } from "./cdgRoutes";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 
 function toItalianYMD(input: string | undefined): string | undefined | null {
   if (input === undefined || input === null || input === "") return undefined;
@@ -2414,6 +2416,235 @@ export async function registerRoutes(
       const msg = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: "Errore nel riepilogo articoli", details: msg });
     }
+  });
+
+  // === Struttura Organizzativa: CRUD RS / PDV (admin/super_admin) ===
+  // Scrive su organization_config.puntiVendita e propaga rinomine/eliminazioni
+  // alle tabelle CdG (cdg_spese, cdg_pdv_manuali, cdg_categorie, cdg_fornitori,
+  // cdg_ragioni_sociali) per mantenere la coerenza cross-modulo. Chiave PDV
+  // canonica = codicePos (univoca per organizzazione).
+  type StructPdv = {
+    id?: string; codicePos: string; nome: string; ragioneSociale: string;
+    canale?: string; tipoPosizione?: string;
+    clusterMobile?: string; clusterFisso?: string; clusterCB?: string;
+  };
+  const structPdvSchema = z.object({
+    codicePos: z.string().trim().min(1, "Codice POS obbligatorio"),
+    nome: z.string().trim().min(1, "Nome obbligatorio"),
+    ragioneSociale: z.string().trim().min(1, "Ragione Sociale obbligatoria"),
+    canale: z.string().trim().optional().default(""),
+    tipoPosizione: z.string().trim().optional().default(""),
+    clusterMobile: z.string().trim().optional().default(""),
+    clusterFisso: z.string().trim().optional().default(""),
+    clusterCB: z.string().trim().optional().default(""),
+  });
+
+  async function readPv(orgId: string): Promise<StructPdv[]> {
+    const cfg = await storage.getOrgConfig(orgId);
+    const arr = ((cfg?.config as Record<string, unknown> | null)?.puntiVendita || []) as StructPdv[];
+    return Array.isArray(arr) ? arr : [];
+  }
+  async function writePv(orgId: string, mutator: (pv: StructPdv[]) => StructPdv[]): Promise<void> {
+    const cfg = await storage.getOrgConfig(orgId);
+    const config = (cfg?.config as Record<string, unknown> | null) || {};
+    const pv = ((config.puntiVendita as StructPdv[] | undefined) || []).map(p => ({ ...p }));
+    const next = mutator(pv);
+    const newConfig = { ...config, puntiVendita: next };
+    await storage.upsertOrgConfig(orgId, newConfig, cfg?.configVersion || "2.0");
+  }
+  const norm = (s: unknown) => String(s ?? "").trim();
+  const normLow = (s: unknown) => norm(s).toLowerCase();
+  function findCodiceClash(pv: StructPdv[], codicePos: string, exclude?: { rs: string; codice: string }): boolean {
+    const target = normLow(codicePos);
+    for (const p of pv) {
+      const code = normLow(p.codicePos || p.nome);
+      if (exclude && normLow(p.ragioneSociale) === normLow(exclude.rs) && code === normLow(exclude.codice)) continue;
+      if (code === target) return true;
+    }
+    return false;
+  }
+
+  // POST /api/admin/struttura/pdv → crea singolo PDV
+  app.post("/api/admin/struttura/pdv", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const parsed = structPdvSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const cur = await readPv(orgId);
+    if (findCodiceClash(cur, parsed.data.codicePos)) {
+      return res.status(409).json({ error: `Codice POS "${parsed.data.codicePos}" già esistente` });
+    }
+    const newId = `pdv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await writePv(orgId, (pv) => [...pv, { id: newId, ...parsed.data }]);
+    res.status(201).json({ success: true, id: newId });
+  });
+
+  // POST /api/admin/struttura/pdv/bulk → crea N PDV (skip duplicati)
+  app.post("/api/admin/struttura/pdv/bulk", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const parsed = z.object({ pdvs: z.array(structPdvSchema).min(1) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const cur = await readPv(orgId);
+    const existing = new Set(cur.map(p => normLow(p.codicePos || p.nome)));
+    const added: string[] = [];
+    const skipped: string[] = [];
+    const toAdd: StructPdv[] = [];
+    for (const p of parsed.data.pdvs) {
+      const k = normLow(p.codicePos);
+      if (existing.has(k)) { skipped.push(p.codicePos); continue; }
+      existing.add(k);
+      toAdd.push({ id: `pdv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ...p });
+      added.push(p.codicePos);
+    }
+    if (toAdd.length > 0) {
+      await writePv(orgId, (pv) => [...pv, ...toAdd]);
+    }
+    res.json({ success: true, added, skipped });
+  });
+
+  // PUT /api/admin/struttura/pdv → modifica per (oldRagioneSociale, oldCodicePos)
+  app.put("/api/admin/struttura/pdv", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const schema = z.object({
+      oldRagioneSociale: z.string().trim().min(1),
+      oldCodicePos: z.string().trim().min(1),
+      codicePos: z.string().trim().min(1).optional(),
+      nome: z.string().trim().min(1).optional(),
+      ragioneSociale: z.string().trim().min(1).optional(),
+      canale: z.string().trim().optional(),
+      tipoPosizione: z.string().trim().optional(),
+      clusterMobile: z.string().trim().optional(),
+      clusterFisso: z.string().trim().optional(),
+      clusterCB: z.string().trim().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const { oldRagioneSociale, oldCodicePos } = parsed.data;
+    const cur = await readPv(orgId);
+    const idx = cur.findIndex(p =>
+      normLow(p.ragioneSociale) === normLow(oldRagioneSociale) &&
+      normLow(p.codicePos || p.nome) === normLow(oldCodicePos)
+    );
+    if (idx < 0) return res.status(404).json({ error: "PDV non trovato" });
+    const oldEntry = cur[idx];
+    const newCodice = parsed.data.codicePos ?? oldEntry.codicePos;
+    const newRs = parsed.data.ragioneSociale ?? oldEntry.ragioneSociale;
+    if (normLow(newCodice) !== normLow(oldCodicePos)) {
+      if (findCodiceClash(cur, newCodice, { rs: oldRagioneSociale, codice: oldCodicePos })) {
+        return res.status(409).json({ error: `Codice POS "${newCodice}" già esistente` });
+      }
+    }
+    await writePv(orgId, (pv) => pv.map((p, i) => i === idx ? {
+      ...p,
+      codicePos: newCodice,
+      nome: parsed.data.nome ?? p.nome,
+      ragioneSociale: newRs,
+      canale: parsed.data.canale ?? p.canale,
+      tipoPosizione: parsed.data.tipoPosizione ?? p.tipoPosizione,
+      clusterMobile: parsed.data.clusterMobile ?? p.clusterMobile,
+      clusterFisso: parsed.data.clusterFisso ?? p.clusterFisso,
+      clusterCB: parsed.data.clusterCB ?? p.clusterCB,
+    } : p));
+    // Propagazione su CdG: rename codicePos e/o ragioneSociale
+    if (normLow(newCodice) !== normLow(oldCodicePos) || normLow(newRs) !== normLow(oldRagioneSociale)) {
+      try {
+        await db.execute(sql`
+          UPDATE cdg_spese
+             SET pdv_codice = ${newCodice}, ragione_sociale = ${newRs}
+           WHERE organization_id = ${orgId}
+             AND ragione_sociale = ${oldRagioneSociale}
+             AND pdv_codice = ${oldCodicePos}
+        `);
+      } catch (e) { console.error("[struttura] propagate cdg_spese failed", e); }
+    }
+    res.json({ success: true });
+  });
+
+  // DELETE /api/admin/struttura/pdv?ragioneSociale=&codicePos=
+  app.delete("/api/admin/struttura/pdv", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const ragioneSociale = norm(req.query.ragioneSociale);
+    const codicePos = norm(req.query.codicePos);
+    if (!ragioneSociale || !codicePos) return res.status(400).json({ error: "ragioneSociale e codicePos obbligatori" });
+    const cur = await readPv(orgId);
+    const exists = cur.some(p =>
+      normLow(p.ragioneSociale) === normLow(ragioneSociale) &&
+      normLow(p.codicePos || p.nome) === normLow(codicePos)
+    );
+    if (!exists) return res.status(404).json({ error: "PDV non trovato" });
+    await writePv(orgId, (pv) => pv.filter(p =>
+      !(normLow(p.ragioneSociale) === normLow(ragioneSociale) &&
+        normLow(p.codicePos || p.nome) === normLow(codicePos))
+    ));
+    res.json({ success: true });
+  });
+
+  // PUT /api/admin/struttura/ragione-sociale/:nome → rinomina RS
+  app.put("/api/admin/struttura/ragione-sociale/:nome", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const oldName = decodeURIComponent(req.params.nome).trim();
+    const parsed = z.object({ nome: z.string().trim().min(1) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const newName = parsed.data.nome;
+    const cur = await readPv(orgId);
+    const exists = cur.some(p => normLow(p.ragioneSociale) === normLow(oldName));
+    if (!exists) return res.status(404).json({ error: "Ragione Sociale non trovata" });
+    if (normLow(newName) !== normLow(oldName)) {
+      const dup = cur.some(p => normLow(p.ragioneSociale) === normLow(newName));
+      if (dup) return res.status(409).json({ error: `Ragione Sociale "${newName}" già esistente` });
+    }
+    await writePv(orgId, (pv) => pv.map(p =>
+      normLow(p.ragioneSociale) === normLow(oldName) ? { ...p, ragioneSociale: newName } : p
+    ));
+    if (normLow(newName) !== normLow(oldName)) {
+      try {
+        await db.execute(sql`
+          UPDATE cdg_categorie
+             SET ragioni_sociali = array_replace(ragioni_sociali, ${oldName}, ${newName}),
+                 ragione_sociale = CASE WHEN ragione_sociale = ${oldName} THEN ${newName} ELSE ragione_sociale END
+           WHERE organization_id = ${orgId} AND ${oldName} = ANY(ragioni_sociali)
+        `);
+        await db.execute(sql`
+          UPDATE cdg_fornitori
+             SET ragioni_sociali = array_replace(ragioni_sociali, ${oldName}, ${newName}),
+                 ragione_sociale = CASE WHEN ragione_sociale = ${oldName} THEN ${newName} ELSE ragione_sociale END
+           WHERE organization_id = ${orgId} AND ${oldName} = ANY(ragioni_sociali)
+        `);
+        await db.execute(sql`UPDATE cdg_pdv_manuali SET ragione_sociale = ${newName} WHERE organization_id = ${orgId} AND ragione_sociale = ${oldName}`);
+        await db.execute(sql`UPDATE cdg_spese SET ragione_sociale = ${newName} WHERE organization_id = ${orgId} AND ragione_sociale = ${oldName}`);
+        await db.execute(sql`UPDATE cdg_ragioni_sociali SET nome = ${newName} WHERE organization_id = ${orgId} AND nome = ${oldName}`);
+      } catch (e) { console.error("[struttura] propagate rename RS failed", e); }
+    }
+    res.json({ success: true, nome: newName });
+  });
+
+  // DELETE /api/admin/struttura/ragione-sociale/:nome → elimina RS + tutti i PDV
+  app.delete("/api/admin/struttura/ragione-sociale/:nome", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const nome = decodeURIComponent(req.params.nome).trim();
+    if (!nome) return res.status(400).json({ error: "Nome obbligatorio" });
+    await writePv(orgId, (pv) => pv.filter(p => normLow(p.ragioneSociale) !== normLow(nome)));
+    try {
+      await db.execute(sql`DELETE FROM cdg_spese WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
+      await db.execute(sql`DELETE FROM cdg_pdv_manuali WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
+      await db.execute(sql`UPDATE cdg_categorie SET ragioni_sociali = array_remove(ragioni_sociali, ${nome}) WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)`);
+      await db.execute(sql`DELETE FROM cdg_categorie WHERE organization_id = ${orgId} AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0`);
+      await db.execute(sql`UPDATE cdg_fornitori SET ragioni_sociali = array_remove(ragioni_sociali, ${nome}) WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)`);
+      await db.execute(sql`DELETE FROM cdg_fornitori WHERE organization_id = ${orgId} AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0`);
+      await db.execute(sql`DELETE FROM cdg_ragioni_sociali WHERE organization_id = ${orgId} AND nome = ${nome}`);
+    } catch (e) { console.error("[struttura] cascade delete RS failed", e); }
+    res.json({ success: true });
   });
 
   // === Controllo di Gestione ===

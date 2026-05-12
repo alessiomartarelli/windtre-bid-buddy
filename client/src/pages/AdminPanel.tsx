@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, Store, Building2, ChevronRight, UserCheck } from 'lucide-react';
+import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, Store, Building2, ChevronRight, UserCheck, Edit2 } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
 import { z } from 'zod';
 import {
@@ -107,6 +107,121 @@ export default function AdminPanel() {
   const [dipendenti, setDipendenti] = useState<Dipendente[]>([]);
   const [dipendentiLoading, setDipendentiLoading] = useState(false);
   const [expandedDip, setExpandedDip] = useState<Set<string>>(new Set());
+
+  // === Struttura: dialogs CRUD ===
+  const emptyPdvForm: ConfigPdv = { codicePos: '', nome: '', ragioneSociale: '', canale: '', clusterMobile: '', clusterFisso: '', clusterCB: '', tipoPosizione: '' };
+  const [pdvDialogOpen, setPdvDialogOpen] = useState(false);
+  const [pdvDialogMode, setPdvDialogMode] = useState<'create' | 'edit'>('create');
+  const [pdvForm, setPdvForm] = useState<ConfigPdv>(emptyPdvForm);
+  const [pdvOrigKey, setPdvOrigKey] = useState<{ rs: string; codicePos: string } | null>(null);
+  const [pdvSaving, setPdvSaving] = useState(false);
+  const [rsRenameDialogOpen, setRsRenameDialogOpen] = useState(false);
+  const [rsRenameOld, setRsRenameOld] = useState('');
+  const [rsRenameNew, setRsRenameNew] = useState('');
+  const [rsRenameSaving, setRsRenameSaving] = useState(false);
+
+  const openCreatePdv = (defaultRs?: string) => {
+    setPdvDialogMode('create');
+    setPdvForm({ ...emptyPdvForm, ragioneSociale: defaultRs || '' });
+    setPdvOrigKey(null);
+    setPdvDialogOpen(true);
+  };
+  const openEditPdv = (pdv: ConfigPdv) => {
+    setPdvDialogMode('edit');
+    setPdvForm({ ...pdv });
+    setPdvOrigKey({ rs: pdv.ragioneSociale, codicePos: pdv.codicePos });
+    setPdvDialogOpen(true);
+  };
+
+  const submitPdv = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pdvForm.codicePos.trim() || !pdvForm.nome.trim() || !pdvForm.ragioneSociale.trim()) {
+      toast({ title: 'Campi obbligatori', description: 'Codice POS, Nome e Ragione Sociale sono obbligatori', variant: 'destructive' });
+      return;
+    }
+    setPdvSaving(true);
+    try {
+      let res: Response;
+      if (pdvDialogMode === 'create') {
+        res = await fetch(apiUrl('/api/admin/struttura/pdv'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify(pdvForm),
+        });
+      } else {
+        res = await fetch(apiUrl('/api/admin/struttura/pdv'), {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({
+            oldRagioneSociale: pdvOrigKey!.rs,
+            oldCodicePos: pdvOrigKey!.codicePos,
+            ...pdvForm,
+          }),
+        });
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: 'Errore', description: data?.error || 'Operazione fallita', variant: 'destructive' });
+      } else {
+        toast({ title: pdvDialogMode === 'create' ? 'PDV creato' : 'PDV aggiornato' });
+        setPdvDialogOpen(false);
+        await fetchOrgConfig();
+      }
+    } finally {
+      setPdvSaving(false);
+    }
+  };
+
+  const handleDeletePdv = async (pdv: ConfigPdv) => {
+    const url = apiUrl(`/api/admin/struttura/pdv?ragioneSociale=${encodeURIComponent(pdv.ragioneSociale)}&codicePos=${encodeURIComponent(pdv.codicePos)}`);
+    const res = await fetch(url, { method: 'DELETE', credentials: 'include' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast({ title: 'Errore', description: data?.error || 'Eliminazione fallita', variant: 'destructive' });
+    } else {
+      toast({ title: 'PDV eliminato' });
+      await fetchOrgConfig();
+    }
+  };
+
+  const openRenameRs = (rs: string) => {
+    setRsRenameOld(rs);
+    setRsRenameNew(rs);
+    setRsRenameDialogOpen(true);
+  };
+
+  const submitRenameRs = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rsRenameNew.trim()) return;
+    setRsRenameSaving(true);
+    try {
+      const res = await fetch(apiUrl(`/api/admin/struttura/ragione-sociale/${encodeURIComponent(rsRenameOld)}`), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ nome: rsRenameNew.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: 'Errore', description: data?.error || 'Rinomina fallita', variant: 'destructive' });
+      } else {
+        toast({ title: 'Ragione Sociale aggiornata' });
+        setRsRenameDialogOpen(false);
+        await fetchOrgConfig();
+      }
+    } finally {
+      setRsRenameSaving(false);
+    }
+  };
+
+  const handleDeleteRs = async (rs: string) => {
+    const res = await fetch(apiUrl(`/api/admin/struttura/ragione-sociale/${encodeURIComponent(rs)}`), {
+      method: 'DELETE', credentials: 'include',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast({ title: 'Errore', description: data?.error || 'Eliminazione fallita', variant: 'destructive' });
+    } else {
+      toast({ title: 'Ragione Sociale eliminata' });
+      await fetchOrgConfig();
+    }
+  };
 
   useEffect(() => {
     if (profile && !['super_admin', 'admin'].includes(profile.role)) {
@@ -497,39 +612,78 @@ export default function AdminPanel() {
 
           <TabsContent value="struttura">
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Building2 className="h-5 w-5" />
-                  Ragioni Sociali e Punti Vendita
-                </CardTitle>
-                <CardDescription>
-                  {rsGrouped.length} ragion{rsGrouped.length === 1 ? 'e sociale' : 'i sociali'}, {puntiVendita.length} punt{puntiVendita.length === 1 ? 'o' : 'i'} vendita
-                </CardDescription>
+              <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    Ragioni Sociali e Punti Vendita
+                  </CardTitle>
+                  <CardDescription>
+                    {rsGrouped.length} ragion{rsGrouped.length === 1 ? 'e sociale' : 'i sociali'}, {puntiVendita.length} punt{puntiVendita.length === 1 ? 'o' : 'i'} vendita
+                  </CardDescription>
+                </div>
+                <Button size="sm" onClick={() => openCreatePdv()} data-testid="button-add-pdv">
+                  <Plus className="mr-2 h-4 w-4" /> Nuovo PDV
+                </Button>
               </CardHeader>
               <CardContent>
                 {configLoading ? (
                   <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
                 ) : rsGrouped.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    Nessun punto vendita configurato. Vai al Simulatore per aggiungere i PDV.
-                  </p>
+                  <div className="text-center py-8 space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Nessun punto vendita configurato.
+                    </p>
+                    <Button size="sm" onClick={() => openCreatePdv()} data-testid="button-add-first-pdv">
+                      <Plus className="mr-2 h-4 w-4" /> Aggiungi il primo PDV
+                    </Button>
+                  </div>
                 ) : (
                   <div className="space-y-2">
                     {rsGrouped.map(([rs, pdvs]) => (
                       <Collapsible key={rs} open={expandedRS.has(rs)} onOpenChange={() => toggleRS(rs)}>
-                        <CollapsibleTrigger asChild>
-                          <button
-                            className="w-full flex items-center gap-3 p-3 rounded-lg border bg-muted/40 hover:bg-muted/70 transition-colors text-left"
-                            data-testid={`trigger-rs-${rs}`}
-                          >
-                            <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${expandedRS.has(rs) ? 'rotate-90' : ''}`} />
-                            <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            <span className="font-semibold text-sm flex-1 truncate">{rs}</span>
-                            <Badge variant="secondary" className="shrink-0">
-                              {pdvs.length} PDV
-                            </Badge>
-                          </button>
-                        </CollapsibleTrigger>
+                        <div className="w-full flex items-center gap-1 p-3 rounded-lg border bg-muted/40 hover:bg-muted/70 transition-colors">
+                          <CollapsibleTrigger asChild>
+                            <button
+                              className="flex items-center gap-3 flex-1 text-left min-w-0"
+                              data-testid={`trigger-rs-${rs}`}
+                            >
+                              <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${expandedRS.has(rs) ? 'rotate-90' : ''}`} />
+                              <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span className="font-semibold text-sm flex-1 truncate">{rs}</span>
+                              <Badge variant="secondary" className="shrink-0">
+                                {pdvs.length} PDV
+                              </Badge>
+                            </button>
+                          </CollapsibleTrigger>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openCreatePdv(rs); }} data-testid={`button-add-pdv-rs-${rs}`} title="Aggiungi PDV in questa RS">
+                            <Plus className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openRenameRs(rs); }} data-testid={`button-rename-rs-${rs}`} title="Rinomina Ragione Sociale">
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => e.stopPropagation()} data-testid={`button-delete-rs-${rs}`} title="Elimina Ragione Sociale">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Elimina "{rs}"?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Verranno rimossi <strong>{pdvs.length} PDV</strong> e tutte le voci collegate
+                                  (spese, PDV manuali, categorie/fornitori legati solo a questa RS) dal Controllo di Gestione.
+                                  L'operazione è irreversibile.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Annulla</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteRs(rs)} className="bg-destructive text-destructive-foreground" data-testid={`button-confirm-delete-rs-${rs}`}>Elimina</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                         <CollapsibleContent>
                           <div className="ml-4 mt-1 border-l-2 border-muted pl-4 space-y-0">
                             <div className="overflow-x-auto">
@@ -542,6 +696,7 @@ export default function AdminPanel() {
                                     <TableHead className="text-xs hidden md:table-cell">Posizione</TableHead>
                                     <TableHead className="text-xs hidden lg:table-cell">Cluster Mobile</TableHead>
                                     <TableHead className="text-xs hidden lg:table-cell">Cluster Fisso</TableHead>
+                                    <TableHead className="text-xs w-[80px] text-right">Azioni</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -553,6 +708,33 @@ export default function AdminPanel() {
                                       <TableCell className="text-xs hidden md:table-cell">{pdv.tipoPosizione?.replace(/_/g, ' ') || '-'}</TableCell>
                                       <TableCell className="text-xs hidden lg:table-cell">{pdv.clusterMobile || '-'}</TableCell>
                                       <TableCell className="text-xs hidden lg:table-cell">{pdv.clusterFisso || '-'}</TableCell>
+                                      <TableCell className="text-right">
+                                        <div className="flex justify-end gap-1">
+                                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditPdv(pdv)} data-testid={`button-edit-pdv-${pdv.codicePos}`} title="Modifica PDV">
+                                            <Pencil className="h-3.5 w-3.5" />
+                                          </Button>
+                                          <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" data-testid={`button-delete-pdv-${pdv.codicePos}`} title="Elimina PDV">
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                              </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                              <AlertDialogHeader>
+                                                <AlertDialogTitle>Elimina PDV "{pdv.nome}"?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                  Codice POS <strong>{pdv.codicePos}</strong>. Le spese del Controllo di Gestione associate
+                                                  manterranno il codice ma resteranno orfane (non più collegate a un PDV ereditato).
+                                                </AlertDialogDescription>
+                                              </AlertDialogHeader>
+                                              <AlertDialogFooter>
+                                                <AlertDialogCancel>Annulla</AlertDialogCancel>
+                                                <AlertDialogAction onClick={() => handleDeletePdv(pdv)} className="bg-destructive text-destructive-foreground" data-testid={`button-confirm-delete-pdv-${pdv.codicePos}`}>Elimina</AlertDialogAction>
+                                              </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                          </AlertDialog>
+                                        </div>
+                                      </TableCell>
                                     </TableRow>
                                   ))}
                                 </TableBody>
@@ -566,6 +748,120 @@ export default function AdminPanel() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Dialog: Nuovo / Modifica PDV */}
+            <Dialog open={pdvDialogOpen} onOpenChange={setPdvDialogOpen}>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>{pdvDialogMode === 'create' ? 'Nuovo Punto Vendita' : 'Modifica Punto Vendita'}</DialogTitle>
+                  <DialogDescription>
+                    {pdvDialogMode === 'create'
+                      ? 'Aggiungi un PDV alla struttura organizzativa.'
+                      : 'Modifica i dati del PDV. Le spese collegate verranno aggiornate automaticamente.'}
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={submitPdv} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Codice POS *</Label>
+                      <Input data-testid="input-pdv-codicePos" value={pdvForm.codicePos} onChange={(e) => setPdvForm(f => ({ ...f, codicePos: e.target.value }))} placeholder="9001xxxxx" required />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Nome *</Label>
+                      <Input data-testid="input-pdv-nome" value={pdvForm.nome} onChange={(e) => setPdvForm(f => ({ ...f, nome: e.target.value }))} placeholder="3Store Milano Duomo" required />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Ragione Sociale *</Label>
+                    {rsGrouped.length > 0 && pdvDialogMode === 'create' ? (
+                      <>
+                        <Select value={rsGrouped.some(([r]) => r === pdvForm.ragioneSociale) ? pdvForm.ragioneSociale : '__new__'} onValueChange={(v) => setPdvForm(f => ({ ...f, ragioneSociale: v === '__new__' ? '' : v }))}>
+                          <SelectTrigger data-testid="select-pdv-rs"><SelectValue placeholder="Seleziona RS" /></SelectTrigger>
+                          <SelectContent>
+                            {rsGrouped.map(([rs]) => (<SelectItem key={rs} value={rs}>{rs}</SelectItem>))}
+                            <SelectItem value="__new__">+ Nuova Ragione Sociale</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {!rsGrouped.some(([r]) => r === pdvForm.ragioneSociale) && (
+                          <Input className="mt-2" placeholder="Nome della nuova Ragione Sociale" value={pdvForm.ragioneSociale} onChange={(e) => setPdvForm(f => ({ ...f, ragioneSociale: e.target.value }))} data-testid="input-pdv-rs-new" />
+                        )}
+                      </>
+                    ) : (
+                      <Input data-testid="input-pdv-rs" value={pdvForm.ragioneSociale} onChange={(e) => setPdvForm(f => ({ ...f, ragioneSociale: e.target.value }))} placeholder="Nome Ragione Sociale" required />
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Canale</Label>
+                      <Select value={pdvForm.canale || '__none__'} onValueChange={(v) => setPdvForm(f => ({ ...f, canale: v === '__none__' ? '' : v }))}>
+                        <SelectTrigger data-testid="select-pdv-canale"><SelectValue placeholder="Seleziona" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— Nessuno —</SelectItem>
+                          <SelectItem value="franchising">Franchising</SelectItem>
+                          <SelectItem value="retail">Retail</SelectItem>
+                          <SelectItem value="dealer">Dealer</SelectItem>
+                          <SelectItem value="top_dealer">Top dealer</SelectItem>
+                          <SelectItem value="corner">Corner</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Tipo posizione</Label>
+                      <Select value={pdvForm.tipoPosizione || '__none__'} onValueChange={(v) => setPdvForm(f => ({ ...f, tipoPosizione: v === '__none__' ? '' : v }))}>
+                        <SelectTrigger data-testid="select-pdv-tipoPosizione"><SelectValue placeholder="Seleziona" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— Nessuno —</SelectItem>
+                          <SelectItem value="centro_commerciale">Centro commerciale</SelectItem>
+                          <SelectItem value="strada">Negozio su strada</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Cluster Mobile</Label>
+                      <Input data-testid="input-pdv-clusterMobile" value={pdvForm.clusterMobile || ''} onChange={(e) => setPdvForm(f => ({ ...f, clusterMobile: e.target.value }))} placeholder="es. strada_2" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Cluster Fisso</Label>
+                      <Input data-testid="input-pdv-clusterFisso" value={pdvForm.clusterFisso || ''} onChange={(e) => setPdvForm(f => ({ ...f, clusterFisso: e.target.value }))} placeholder="es. strada_3" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Cluster CB</Label>
+                      <Input data-testid="input-pdv-clusterCB" value={pdvForm.clusterCB || ''} onChange={(e) => setPdvForm(f => ({ ...f, clusterCB: e.target.value }))} placeholder="opzionale" />
+                    </div>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={pdvSaving} data-testid="button-save-pdv">
+                    {pdvSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : (pdvDialogMode === 'create' ? 'Crea PDV' : 'Salva modifiche')}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+
+            {/* Dialog: Rinomina RS */}
+            <Dialog open={rsRenameDialogOpen} onOpenChange={setRsRenameDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Rinomina Ragione Sociale</DialogTitle>
+                  <DialogDescription>
+                    Le modifiche vengono propagate ai PDV, alle spese e alle anagrafiche del Controllo di Gestione.
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={submitRenameRs} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label>Nome attuale</Label>
+                    <Input value={rsRenameOld} disabled />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Nuovo nome *</Label>
+                    <Input data-testid="input-rs-new-name" value={rsRenameNew} onChange={(e) => setRsRenameNew(e.target.value)} required autoFocus />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={rsRenameSaving || !rsRenameNew.trim()} data-testid="button-save-rs-rename">
+                    {rsRenameSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : 'Salva'}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           <TabsContent value="dipendenti">

@@ -56,6 +56,77 @@ import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { useAuth } from "@/hooks/useAuth";
 import { Ban } from "lucide-react";
 
+// Banner: avvisa quando i PDV inseriti nel wizard non sono presenti nella struttura canonica.
+// CTA disponibile solo per admin/super_admin: aggiunge i mancanti via /api/admin/struttura/pdv/bulk.
+type StrutturaPdvLite = { codicePos: string; nome: string; ragioneSociale: string };
+const PdvStrutturaBanner = ({ puntiVendita, role }: { puntiVendita: PuntoVendita[]; role?: string }) => {
+  const { toast } = useToast();
+  const [canonical, setCanonical] = useState<StrutturaPdvLite[] | null>(null);
+  const [working, setWorking] = useState(false);
+  const reload = async () => {
+    try {
+      const res = await fetch(apiUrl('/api/organization-config'), { credentials: 'include' });
+      if (!res.ok) { setCanonical([]); return; }
+      const data = await res.json();
+      const list = ((data?.config?.puntiVendita || []) as StrutturaPdvLite[]).map(p => ({
+        codicePos: String(p.codicePos || '').trim(),
+        nome: String(p.nome || '').trim(),
+        ragioneSociale: String(p.ragioneSociale || '').trim(),
+      }));
+      setCanonical(list);
+    } catch { setCanonical([]); }
+  };
+  useEffect(() => { void reload(); }, []);
+  if (!canonical) return null;
+  const canonicalCodes = new Set(canonical.map(p => p.codicePos.toLowerCase()).filter(Boolean));
+  const missing = puntiVendita.filter(p => {
+    const code = String(p.codicePos || '').trim();
+    return code && !canonicalCodes.has(code.toLowerCase());
+  });
+  if (missing.length === 0) return null;
+  const isAdmin = role === 'admin' || role === 'super_admin';
+  const handleAdd = async () => {
+    setWorking(true);
+    try {
+      const payload = { pdvs: missing.map(p => ({
+        codicePos: String(p.codicePos).trim(),
+        nome: String(p.nome || p.codicePos).trim(),
+        ragioneSociale: String(p.ragioneSociale || 'Da assegnare').trim() || 'Da assegnare',
+        canale: p.canale || '',
+        tipoPosizione: p.tipoPosizione || '',
+      })) };
+      const res = await fetch(apiUrl('/api/admin/struttura/pdv/bulk'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: 'Errore', description: data?.error || 'Operazione fallita', variant: 'destructive' });
+      } else {
+        toast({ title: 'Struttura aggiornata', description: `${(data.added || []).length} PDV aggiunti, ${(data.skipped || []).length} duplicati ignorati.` });
+        await reload();
+      }
+    } finally { setWorking(false); }
+  };
+  return (
+    <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3" data-testid="banner-pdv-struttura">
+      <div className="flex-1 text-sm">
+        <strong className="text-amber-900 dark:text-amber-200">Attenzione:</strong>{' '}
+        <span className="text-amber-900 dark:text-amber-100">
+          {missing.length === 1 ? '1 PDV non risulta' : `${missing.length} PDV non risultano`} nella struttura canonica dell'organizzazione (codici: {missing.slice(0, 5).map(m => m.codicePos).join(', ')}{missing.length > 5 ? '…' : ''}).
+        </span>
+      </div>
+      {isAdmin ? (
+        <Button size="sm" variant="outline" onClick={handleAdd} disabled={working} data-testid="button-add-missing-to-struttura" className="shrink-0">
+          {working ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Aggiungo...</> : `Aggiungi alla struttura`}
+        </Button>
+      ) : (
+        <span className="text-xs text-amber-700 dark:text-amber-300 shrink-0">Contatta un admin per allineare la struttura.</span>
+      )}
+    </div>
+  );
+};
+
 // TOTAL_STEPS è dinamico: 14 per gara_operatore_rs (include step selezione modalità), 13 altrimenti
 const getTotalSteps = (tipologiaGara: string) => tipologiaGara === "gara_operatore_rs" ? 14 : 13;
 
@@ -1690,7 +1761,12 @@ const Preventivatore = () => {
             <CardContent className="p-3 sm:p-6 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 260px)', minHeight: '300px' }}>
               <div className="animate-fade-in">
                 {step === 0 && <StepLetteraGara configGara={configGara} setConfigGara={setConfigGara} />}
-                {step === 1 && <StepPuntiVendita numeroPdv={numeroPdv} onNumeroPdvChange={handleNumeroPdvChange} puntiVendita={puntiVendita} updatePdvField={updatePdvField} ragioniSociali={ragioniSociali} onRagioniSocialiChange={setRagioniSociali} />}
+                {step === 1 && (
+                  <>
+                    <PdvStrutturaBanner puntiVendita={puntiVendita} role={authProfile?.role} />
+                    <StepPuntiVendita numeroPdv={numeroPdv} onNumeroPdvChange={handleNumeroPdvChange} puntiVendita={puntiVendita} updatePdvField={updatePdvField} ragioniSociali={ragioniSociali} onRagioniSocialiChange={setRagioniSociali} />
+                  </>
+                )}
                 {step === 2 && <StepCluster puntiVendita={puntiVendita} updatePdvField={updatePdvField} />}
                 {step === 3 && <StepCalendari puntiVendita={puntiVendita} annoGara={configGara.annoGara} meseGara={configGara.meseGara} updatePdvField={updatePdvField} />}
                 {step === 4 && <StepCalendarioMese puntiVendita={puntiVendita} anno={configGara.annoGara} meseGara={configGara.meseGara} calendarioOverrides={calendarioOverrides} onCalendarioOverridesChange={setCalendarioOverrides} />}

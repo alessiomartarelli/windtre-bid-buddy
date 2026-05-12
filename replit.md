@@ -216,6 +216,40 @@ on/off unico) in `shared/modules.ts`. Helper: `isModuleEnabled(record, key)`.
 - **Deploy recipe**: `npm run build` → `tar czf /tmp/incentivew3-deploy.tgz -C dist public index.cjs` → `scp` su VPS → ssh: `cd /var/www/incentive-w3 && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart 0 --update-env`.
 - **Mechanism**: Client-side `BASE_PATH` constant and `apiUrl()` helper, server-side sub-app mounting, and base href injection for asset resolution.
 
+### Struttura Organizzazione: CRUD RS/PDV (admin)
+La tab `/admin → Struttura` è ora editabile per `admin`/`super_admin` (sempre
+read-only per `operatore`). Tutte le mutazioni persistono in
+`organization_config.puntiVendita` e propagano cross-modulo.
+- Endpoint (gated `requireAdminRole` + scoping su `organizationId`):
+  - `POST /api/admin/struttura/pdv` — crea PDV (codicePos univoco
+    case-insensitive nell'org).
+  - `PUT /api/admin/struttura/pdv` — modifica PDV (match per `(rs, codicePos)`
+    originali). Su rename `codicePos` propaga a `cdg_spese.pdv_codice` e
+    `cdg_pdv_manuali`. Su rename RS propaga su `cdg_*`.
+  - `DELETE /api/admin/struttura/pdv?rs=&codice=` — elimina PDV.
+  - `POST /api/admin/struttura/pdv/bulk` — usato dai banner di sync (PDF
+    Configurazione Gara + Preventivatore wizard) per aggiungere PDV mancanti
+    in massa, ritorna `{added, skipped}`.
+  - `PUT /api/admin/struttura/ragione-sociale/:nome` — rinomina RS (409 se
+    target già esiste). Cascade rename su `cdg_categorie/fornitori`
+    (`array_replace` su colonna `ragioniSociali text[]`),
+    `cdg_pdv_manuali`, `cdg_spese`, `cdg_ragioni_sociali`.
+  - `DELETE /api/admin/struttura/ragione-sociale/:nome` — elimina RS + tutti
+    i PDV figli + cascade su `cdg_*`.
+- Helper inline in `server/routes.ts` (~2424-2660): `readPv`/`writePv`
+  preservano `configVersion`; `findCodiceClash` controlla unicità globale
+  case-insensitive.
+- UI: `client/src/pages/AdminPanel.tsx` Struttura tab espone bottoni
+  Nuova RS, Rinomina/Elimina RS, Nuovo PDV per RS, Modifica/Elimina PDV;
+  dialog form con cluster Mobile/Fisso/CB, canale, tipoPosizione.
+- **Banner sync incongruenze** (consenso esplicito admin):
+  - `ConfigurazioneGara.tsx`: CTA "Aggiungi N alla struttura" sopra la
+    tabella unmatched del PDF di gara, gated `isAdminOrSuper`.
+  - `Preventivatore.tsx`: componente `PdvStrutturaBanner` mostrato sopra
+    `StepPuntiVendita` (step 1) quando i PDV del wizard contengono codici
+    non presenti nella struttura canonica. Per admin: bottone "Aggiungi
+    alla struttura" → bulk POST. Per operatore: messaggio informativo.
+
 ### Wizard storage scoping (data leak fix)
 Le chiavi `localStorage` del wizard Preventivatore (`preventivatore-state`,
 `preventivatore-template`, `preventivatore-config`) sono scoped per

@@ -2276,7 +2276,40 @@ export default function ConfigurazioneGara() {
 
                 {pdfData.pdvList.length > 0 && (
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold">PDV trovati nel PDF ({pdfData.pdvList.length})</Label>
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs font-semibold">PDV trovati nel PDF ({pdfData.pdvList.length})</Label>
+                      {isAdminOrSuper && pdfData.pdvList.some(p => !pdvList.some(pdv => pdv.codicePos === p.codicePos)) && (
+                        <Button size="sm" variant="outline" type="button" data-testid="button-bulk-add-pdv-struttura" className="h-7 text-xs"
+                          onClick={async () => {
+                            const unmatchedFromPdf = pdfData.pdvList.filter(p => !pdvList.some(pdv => pdv.codicePos === p.codicePos));
+                            const rsTarget = pdfData.nomeRS?.trim() || (pdfData.codiciDealer[0] || '').trim() || 'Da assegnare';
+                            const payload = { pdvs: unmatchedFromPdf.map(p => ({
+                              codicePos: p.codicePos,
+                              nome: p.codicePos,
+                              ragioneSociale: rsTarget,
+                              clusterMobile: p.clusterMobile > 0 ? `strada_${p.clusterMobile}` : '',
+                              clusterFisso: p.clusterFisso > 0 ? `strada_${p.clusterFisso}` : '',
+                            })) };
+                            const res = await fetch(apiUrl('/api/admin/struttura/pdv/bulk'), {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+                              body: JSON.stringify(payload),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) {
+                              toast({ title: 'Errore', description: data?.error || 'Operazione fallita', variant: 'destructive' });
+                            } else {
+                              toast({
+                                title: 'Struttura aggiornata',
+                                description: `${(data.added || []).length} PDV aggiunti, ${(data.skipped || []).length} duplicati ignorati. RS: "${rsTarget}".`,
+                              });
+                            }
+                          }}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Aggiungi {pdfData.pdvList.filter(p => !pdvList.some(pdv => pdv.codicePos === p.codicePos)).length} alla struttura
+                        </Button>
+                      )}
+                    </div>
                     <div className="border rounded-lg overflow-hidden">
                       <table className="w-full text-xs">
                         <thead>
