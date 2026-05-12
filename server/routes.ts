@@ -6,7 +6,7 @@ import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
-import { getEffectiveRulesForEditor, getDefaultRulesHash } from "../shared/bisuiteMapping";
+import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
 import { registerCdgRoutes } from "./cdgRoutes";
 
@@ -102,6 +102,36 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   setupSession(app);
+
+  // One-shot migration (Task #82): backfill any new `descrizioneEscludi`
+  // tokens added to default mapping rules into the saved system_config so
+  // that `getDefaultMappingRules` upgrades (e.g. adding "PROFESSIONAL DATA
+  // 100" to the DATA 10 rule in Task #79) take effect on installations
+  // that already saved a snapshot of the rules. Idempotent: re-runs are
+  // no-ops once the saved rules already contain every default exclusion.
+  void (async () => {
+    try {
+      const sysMapping = await storage.getSystemConfig("bisuite_mapping");
+      const mapping = (sysMapping?.config ?? null) as
+        | { rules?: BiSuiteMappingRule[]; version?: string }
+        | null;
+      const savedRules: BiSuiteMappingRule[] = Array.isArray(mapping?.rules)
+        ? (mapping!.rules as BiSuiteMappingRule[])
+        : [];
+      if (savedRules.length === 0) return;
+      const { rules: patched, changed } = patchSavedRulesWithDefaultExclusions(savedRules);
+      if (!changed) return;
+      const updatedBy = sysMapping?.updatedBy ?? null;
+      await storage.upsertSystemConfig(
+        "bisuite_mapping",
+        { ...(mapping || {}), rules: patched },
+        updatedBy as string,
+      );
+      console.log("[bisuite-mapping] backfill: patched saved rules with new default exclusions");
+    } catch (e) {
+      console.error("[bisuite-mapping] backfill failed:", e);
+    }
+  })();
 
   // === AUTH: Signup ===
   app.post("/api/auth/signup", async (req: any, res) => {

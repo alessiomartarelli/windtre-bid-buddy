@@ -599,7 +599,87 @@ function ruleFingerprint(r: BiSuiteMappingRule): string {
     c.tipologiaBiSuite || '',
     c.descrizioneBiSuite || '',
     c.domandaTesto || '',
+    c.rispostaContiene || '',
+    c.rispostaDiversaDa || '',
+    c.rispostaEsatta || '',
+    normalizeEscludiTokens(c.descrizioneEscludi).join(','),
   ].join('|');
+}
+
+function normalizeEscludiTokens(s: string | undefined): string[] {
+  if (!s) return [];
+  return Array.from(
+    new Set(
+      s
+        .split(',')
+        .map((t) => t.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ).sort();
+}
+
+/**
+ * Primary fingerprint of a rule's identity, IGNORING secondary conditions
+ * like `descrizioneEscludi`. Two rules sharing this primary key are
+ * considered the "same rule" — used by `patchSavedRulesWithDefaultExclusions`
+ * to find the default counterpart of a saved rule and copy over any newly
+ * added exclusion tokens.
+ */
+function rulePrimaryKey(r: BiSuiteMappingRule): string {
+  const c = r.conditions;
+  return [
+    r.pista,
+    r.targetCategory,
+    c.categoriaBiSuite || '',
+    c.tipologiaBiSuite || '',
+    c.descrizioneBiSuite || '',
+    c.domandaTesto || '',
+    c.rispostaContiene || '',
+    c.rispostaDiversaDa || '',
+    c.rispostaEsatta || '',
+  ].join('|');
+}
+
+/**
+ * For each saved rule, if a default rule with the same primary key has
+ * additional `descrizioneEscludi` tokens (e.g. "PROFESSIONAL DATA 100"
+ * added to the "PROFESSIONAL DATA 10" rule in Task #79), merge those
+ * tokens into the saved rule's exclusions. Returns a new array; never
+ * mutates the input. Reports whether anything changed so callers can
+ * decide whether to persist.
+ */
+export function patchSavedRulesWithDefaultExclusions(
+  savedRules: BiSuiteMappingRule[],
+  defaultRules?: BiSuiteMappingRule[],
+): { rules: BiSuiteMappingRule[]; changed: boolean } {
+  const defaults = defaultRules || getDefaultMappingRules();
+  const defaultsByKey = new Map<string, BiSuiteMappingRule>();
+  for (const d of defaults) {
+    defaultsByKey.set(rulePrimaryKey(d), d);
+  }
+
+  let changed = false;
+  const patched = savedRules.map((r) => {
+    const def = defaultsByKey.get(rulePrimaryKey(r));
+    if (!def) return r;
+    const defTokens = normalizeEscludiTokens(def.conditions.descrizioneEscludi);
+    if (defTokens.length === 0) return r;
+    const savedTokens = normalizeEscludiTokens(r.conditions.descrizioneEscludi);
+    const merged = Array.from(new Set([...savedTokens, ...defTokens])).sort();
+    if (merged.length === savedTokens.length && merged.every((t, i) => t === savedTokens[i])) {
+      return r;
+    }
+    changed = true;
+    return {
+      ...r,
+      conditions: {
+        ...r.conditions,
+        descrizioneEscludi: merged.join(', '),
+      },
+    };
+  });
+
+  return { rules: patched, changed };
 }
 
 const CB_TARGET_CATEGORIES = new Set(CB_TARGETS.map(t => t.value));
@@ -655,9 +735,15 @@ export function mergeWithDefaultRules(
   defaultRules?: BiSuiteMappingRule[],
 ): BiSuiteMappingRule[] {
   const defaults = defaultRules || getDefaultMappingRules();
-  const existingKeys = new Set(savedRules.map(ruleFingerprint));
+  // First, propagate any new exclusions added to default rules into the
+  // matching saved rules (e.g. "PROFESSIONAL DATA 100" added to the
+  // PROFESSIONAL DATA 10 default rule in Task #79). Without this step,
+  // existing saved configs keep matching the broader pre-fix conditions
+  // and continue to misclassify new SKUs.
+  const { rules: patchedSaved } = patchSavedRulesWithDefaultExclusions(savedRules, defaults);
+  const existingKeys = new Set(patchedSaved.map(ruleFingerprint));
   const missing = defaults.filter(d => !existingKeys.has(ruleFingerprint(d)));
-  const merged = missing.length === 0 ? savedRules : [...savedRules, ...missing];
+  const merged = missing.length === 0 ? patchedSaved : [...patchedSaved, ...missing];
   const partnershipTwins = synthesizePartnershipTwins(merged);
   return partnershipTwins.length === 0 ? merged : [...merged, ...partnershipTwins];
 }
