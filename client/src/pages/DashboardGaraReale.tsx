@@ -1080,23 +1080,26 @@ function PistaCompactRow({
 }
 
 type TabellaCellMetrics = {
-  puntiAtt: number;
-  puntiProi?: number;
+  valoreAtt: number;
+  valoreProi?: number;
   sogliaAtt?: string;
   sogliaProi?: string;
+  unita: 'punti' | 'pezzi';
 };
 
-function TabellaCellSingolo({ punti, soglia, variant, dim }: { punti?: number; soglia?: string; variant: 'attuale' | 'proiezione'; dim?: boolean }) {
-  if (punti === undefined || punti === null) {
+function TabellaCellSingolo({ valore, soglia, unita, variant, dim }: { valore?: number; soglia?: string; unita: 'punti' | 'pezzi'; variant: 'attuale' | 'proiezione'; dim?: boolean }) {
+  if (valore === undefined || valore === null) {
     return <span className="text-gray-300 dark:text-gray-700">—</span>;
   }
   const showSoglia = soglia && soglia !== 'N/A' && soglia !== 'Nessuna';
   const sizeCls = dim ? 'text-[11px]' : 'text-xs';
   const colorCls = variant === 'proiezione' ? 'text-blue-600 dark:text-blue-400' : '';
+  const display = unita === 'pezzi' ? Math.round(valore).toString() : valore.toFixed(1);
+  const suffix = unita === 'pezzi' ? ' pz' : '';
   return (
     <div className={`flex items-center justify-center gap-1 whitespace-nowrap ${sizeCls} ${colorCls}`}>
       {variant === 'proiezione' && <TrendingUp className="h-2.5 w-2.5" />}
-      <span className="font-semibold">{punti.toFixed(1)}</span>
+      <span className="font-semibold">{display}{suffix && <span className="font-normal text-[9px] text-gray-500 ml-0.5">{suffix}</span>}</span>
       {showSoglia && (
         <Badge variant="outline" className={`text-[9px] h-4 px-1 ${getSogliaColor(soglia!)}`}>{soglia}</Badge>
       )}
@@ -1136,6 +1139,10 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
       const hasRsMode = !!(pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 0);
 
       // PDV-level cells
+      // In modalità per_rs (hasRsMode) i punti PDV non sono comparabili al totale RS
+      // (il calcolo RS aggrega i pezzi e applica le soglie a quel totale). Per evitare
+      // confusione mostriamo i PEZZI del PDV (attuali e proiezione), che è il vero
+      // contributo del PDV al totale RS. In modalità per_pdv mostriamo invece i PUNTI.
       for (const pdv of (pista.pdvBreakdown || [])) {
         const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
         const rsEntry = ensureRs(rsKey, pdv.ragioneSociale || 'Senza RS');
@@ -1143,46 +1150,54 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
           rsEntry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio });
         }
         if (!rsEntry.perPdv.has(pdv.codicePos)) rsEntry.perPdv.set(pdv.codicePos, new Map());
-        const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
-        const puntiAtt = pdv.pdvCalc?.puntiTotali ?? 0;
-        const puntiProi = proj ? (proj.puntiTotali ?? 0) : undefined;
-        rsEntry.perPdv.get(pdv.codicePos)!.set(pistaKey, {
-          puntiAtt,
-          puntiProi,
-          sogliaAtt: hasRsMode ? undefined : pdv.pdvCalc?.sogliaLabel,
-          sogliaProi: hasRsMode ? undefined : proj?.sogliaLabel,
-        });
+        if (hasRsMode) {
+          rsEntry.perPdv.get(pdv.codicePos)!.set(pistaKey, {
+            valoreAtt: pdv.pezzi ?? 0,
+            valoreProi: pdv.proiezione ?? undefined,
+            unita: 'pezzi',
+          });
+        } else {
+          const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
+          rsEntry.perPdv.get(pdv.codicePos)!.set(pistaKey, {
+            valoreAtt: pdv.pdvCalc?.puntiTotali ?? 0,
+            valoreProi: proj ? (proj.puntiTotali ?? 0) : undefined,
+            sogliaAtt: pdv.pdvCalc?.sogliaLabel,
+            sogliaProi: proj?.sogliaLabel,
+            unita: 'punti',
+          });
+        }
       }
 
-      // RS-level cells
+      // RS-level cells (sempre in punti)
       if (hasRsMode) {
         pista.rsCalcBreakdown!.forEach((rsData: any, rsKey: string) => {
           const rsEntry = ensureRs(rsKey, rsData.displayName || rsKey);
           rsEntry.perPista.set(pistaKey, {
-            puntiAtt: rsData.puntiAttuali ?? 0,
-            puntiProi: rsData.puntiProiezione ?? rsData.puntiAttuali ?? 0,
+            valoreAtt: rsData.puntiAttuali ?? 0,
+            valoreProi: rsData.puntiProiezione ?? rsData.puntiAttuali ?? 0,
             sogliaAtt: rsData.sogliaAttuale,
             sogliaProi: rsData.sogliaProiezione,
+            unita: 'punti',
           });
         });
       } else {
         // sum per RS without soglia
-        const sums = new Map<string, { puntiAtt: number; puntiProi: number; hasProj: boolean }>();
+        const sums = new Map<string, { valoreAtt: number; valoreProi: number; hasProj: boolean }>();
         for (const pdv of (pista.pdvBreakdown || [])) {
           const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
-          if (!sums.has(rsKey)) sums.set(rsKey, { puntiAtt: 0, puntiProi: 0, hasProj: false });
+          if (!sums.has(rsKey)) sums.set(rsKey, { valoreAtt: 0, valoreProi: 0, hasProj: false });
           const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
           const s = sums.get(rsKey)!;
           const pAtt = pdv.pdvCalc?.puntiTotali ?? 0;
-          s.puntiAtt += pAtt;
+          s.valoreAtt += pAtt;
           if (proj) {
-            s.puntiProi += proj.puntiTotali ?? 0;
+            s.valoreProi += proj.puntiTotali ?? 0;
             s.hasProj = true;
           }
         }
         sums.forEach((v, rsKey) => {
           const entry = rsMap.get(rsKey);
-          if (entry) entry.perPista.set(pistaKey, { puntiAtt: v.puntiAtt, puntiProi: v.hasProj ? v.puntiProi : undefined });
+          if (entry) entry.perPista.set(pistaKey, { valoreAtt: v.valoreAtt, valoreProi: v.hasProj ? v.valoreProi : undefined, unita: 'punti' });
         });
       }
     }
@@ -1220,13 +1235,20 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
     const fmtNum = (n: number | undefined) => (typeof n === 'number' ? Number(n.toFixed(2)) : '');
     const fmtSoglia = (s?: string) => (s && s !== 'N/A' && s !== 'Nessuna' ? s : '');
     const cellFromMetrics = (m?: TabellaCellMetrics): (string | number)[] => {
-      if (!m || (m.puntiAtt === 0 && m.puntiProi === 0)) return ['', '', '', ''];
-      const showProi = m.puntiProi > 0;
+      if (!m) return ['', '', '', ''];
+      const isPezzi = m.unita === 'pezzi';
+      const fmtVal = (v: number | undefined) => {
+        if (typeof v !== 'number') return '';
+        return isPezzi ? Math.round(v) : Number(v.toFixed(2));
+      };
+      const hasAtt = typeof m.valoreAtt === 'number';
+      const hasProi = typeof m.valoreProi === 'number';
+      if (!hasAtt && !hasProi) return ['', '', '', ''];
       return [
-        fmtNum(m.puntiAtt),
-        showProi ? fmtNum(m.puntiProi) : '',
+        hasAtt ? fmtVal(m.valoreAtt) : '',
+        hasProi ? fmtVal(m.valoreProi) : '',
         fmtSoglia(m.sogliaAtt),
-        showProi ? fmtSoglia(m.sogliaProi) : '',
+        fmtSoglia(m.sogliaProi),
       ];
     };
     for (const rs of rsRows) {
@@ -1347,10 +1369,10 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                         return (
                           <Fragment key={p.pista}>
                             <td className="px-2 py-2 text-center border-r" data-testid={`cell-table-${rs.rsKey}-${p.pista}-attuale`}>
-                              <TabellaCellSingolo punti={m?.puntiAtt} soglia={m?.sogliaAtt} variant="attuale" />
+                              <TabellaCellSingolo valore={m?.valoreAtt} soglia={m?.sogliaAtt} unita={m?.unita ?? 'punti'} variant="attuale" />
                             </td>
                             <td className="px-2 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${rs.rsKey}-${p.pista}-proiezione`}>
-                              <TabellaCellSingolo punti={m?.puntiProi} soglia={m?.sogliaProi} variant="proiezione" />
+                              <TabellaCellSingolo valore={m?.valoreProi} soglia={m?.sogliaProi} unita={m?.unita ?? 'punti'} variant="proiezione" />
                             </td>
                           </Fragment>
                         );
@@ -1369,10 +1391,10 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                           return (
                             <Fragment key={p.pista}>
                               <td className="px-2 py-2 text-center border-r" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-attuale`}>
-                                <TabellaCellSingolo punti={m?.puntiAtt} soglia={m?.sogliaAtt} variant="attuale" dim />
+                                <TabellaCellSingolo valore={m?.valoreAtt} soglia={m?.sogliaAtt} unita={m?.unita ?? 'punti'} variant="attuale" dim />
                               </td>
                               <td className="px-2 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-proiezione`}>
-                                <TabellaCellSingolo punti={m?.puntiProi} soglia={m?.sogliaProi} variant="proiezione" dim />
+                                <TabellaCellSingolo valore={m?.valoreProi} soglia={m?.sogliaProi} unita={m?.unita ?? 'punti'} variant="proiezione" dim />
                               </td>
                             </Fragment>
                           );
