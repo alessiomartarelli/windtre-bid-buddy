@@ -60,7 +60,6 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
 
   const adminItems: Array<{ path: string; label: string; icon: typeof Shield }> = [
     ...(isSuperAdmin ? [{ path: '/super-admin', label: 'Super Admin', icon: Shield }] : []),
-    ...(isAdminOrSuper ? [{ path: '/admin', label: 'Gestione Organizzazione', icon: Building2 }] : []),
     ...(isAdminOrSuper && (isEnabled('amministrazione') || isEnabled('controllo_gestione')) ? [{ path: '/amministrazione', label: 'Amministrazione', icon: BookOpen }] : []),
     ...(isAdminOrSuper && isEnabled('drms_commissioning') ? [{ path: '/drms-commissioning', label: 'DRMS Commissioning', icon: BarChart3 }] : []),
   ];
@@ -178,6 +177,19 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
         <div className="flex items-center gap-2">
           {children}
 
+          {isAdminOrSuper && (
+            <Button
+              variant={location === '/admin' ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setLocation('/admin')}
+              className={`hidden lg:inline-flex text-xs h-8 rounded-lg transition-all ${location === '/admin' ? 'shadow-sm' : ''}`}
+              data-testid="nav-gestione-organizzazione"
+            >
+              <Building2 className="h-3.5 w-3.5 mr-1" />
+              Gestione organizzazione
+            </Button>
+          )}
+
           <div className="lg:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -194,6 +206,15 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                         <span>{item.label}</span>
                       </DropdownMenuItem>
                     ))}
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                {isAdminOrSuper && (
+                  <>
+                    <DropdownMenuItem onClick={() => setLocation('/admin')}>
+                      <Building2 className="mr-2 h-4 w-4" />
+                      <span>Gestione organizzazione</span>
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
                 )}
@@ -249,7 +270,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setLocation('/profile')}>
                 <Settings className="mr-2 h-4 w-4" />
-                <span>Impostazioni</span>
+                <span>Impostazioni utente</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled>
