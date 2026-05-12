@@ -2822,6 +2822,110 @@ export default function DashboardGaraReale() {
                             </div>
                           </div>
                         </div>
+                      ) : pista.totalePezzi > 0 && (pista.pista === "mobile" || pista.pista === "fisso") && pista.pdvBreakdown.filter(p => p.pezzi > 0).length > 1 ? (
+                        <div className="space-y-1.5">
+                          {pista.pdvBreakdown.filter(p => p.pezzi > 0).map((p) => {
+                            const rowKey = `${pista.pista}::pdv::${p.codicePos}`;
+                            const isExp = expandedRsRows.has(rowKey);
+                            const sogliaAtt = p.pdvCalc.sogliaLabel;
+                            const showSoglia = sogliaAtt && sogliaAtt !== "N/A";
+                            return (
+                              <div key={p.codicePos} className="rounded-lg border" data-testid={`row-pista-${pista.pista}-pdv-${p.codicePos}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRsRow(rowKey)}
+                                  aria-expanded={isExp}
+                                  className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2 px-2.5 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
+                                  data-testid={`btn-expand-row-${pista.pista}-pdv-${p.codicePos}`}
+                                >
+                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                    {isExp ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{p.nomeNegozio}</div>
+                                      <div className="text-[11px] text-gray-500 truncate">{p.codicePos} · {p.ragioneSociale}</div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs flex-wrap justify-end pl-5 sm:pl-0">
+                                    <span className="font-medium">
+                                      {p.pezzi}
+                                      {p.proiezione > p.pezzi && <span className="text-blue-500"> → {p.proiezione}</span>}
+                                      <span className="text-gray-400 ml-1">pz</span>
+                                    </span>
+                                    {p.pdvCalc.puntiTotali > 0 && (
+                                      <span className="flex items-center gap-1">
+                                        <span className="font-medium">{p.pdvCalc.puntiTotali.toFixed(1)} pt</span>
+                                        {showSoglia && (
+                                          <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(sogliaAtt)}`} variant="outline">{sogliaAtt}</Badge>
+                                        )}
+                                      </span>
+                                    )}
+                                    {p.pdvCalc.premioStimato > 0 && (
+                                      <span className="font-bold text-green-700 dark:text-green-400">{formatEuro(p.pdvCalc.premioStimato)}</span>
+                                    )}
+                                  </div>
+                                </button>
+                                {isExp && (
+                                  <div className="px-2.5 pb-2.5 pt-2 border-t space-y-1.5">
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div className="text-center">
+                                        <div className="text-xs text-gray-500">Soglia Att.</div>
+                                        <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline">{sogliaAtt}</Badge>
+                                        {p.pdvCalc.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{p.pdvCalc.puntiTotali.toFixed(1)} pt</div>}
+                                      </div>
+                                      <div className="text-center">
+                                        <div className="text-xs text-gray-500">Premio €</div>
+                                        <span className="text-base font-bold text-green-700 dark:text-green-400">{formatEuro(p.pdvCalc.premioStimato)}</span>
+                                      </div>
+                                    </div>
+                                    {p.pdvCalc.forecastTarget != null && p.pdvCalc.forecastTarget > 0 && (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                          <span className="font-medium">{p.pdvCalc.forecastTarget.toFixed(0)} pt</span>
+                                        </div>
+                                        <Progress value={Math.min((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100, 100)} className="h-1.5" />
+                                        <div className="flex items-center justify-between text-xs">
+                                          <span className={`font-medium ${(p.pdvCalc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                            {(p.pdvCalc.forecastGap ?? 0) >= 0 ? "+" : ""}{(p.pdvCalc.forecastGap ?? 0).toFixed(1)} pt
+                                          </span>
+                                          <span className="text-gray-500">{Math.round((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100)}%</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {pista.soglieRef && (
+                            <div className="flex flex-wrap gap-1.5 justify-center">
+                              {[
+                                { label: "S1", value: pista.soglieRef.s1 },
+                                { label: "S2", value: pista.soglieRef.s2 },
+                                { label: "S3", value: pista.soglieRef.s3 },
+                                ...(pista.soglieRef.s4 != null && pista.soglieRef.s4 > 0 ? [{ label: "S4", value: pista.soglieRef.s4 }] : []),
+                                ...(pista.soglieRef.s5 != null && pista.soglieRef.s5 > 0 ? [{ label: "S5", value: pista.soglieRef.s5 }] : []),
+                              ].map((s) => (
+                                <span key={s.label} className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 font-medium">
+                                  {s.label}:{s.value}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20 px-3 py-2 flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-600">Totale Premio</span>
+                            <div className="flex items-center gap-3">
+                              <span className="font-bold text-green-700" data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
+                              {pista.calcProiezione.premioStimato > 0 && (
+                                <span className="font-bold text-blue-600 flex items-center gap-0.5" data-testid={`text-premio-proiezione-${pista.pista}`}>
+                                  <TrendingUp className="h-3 w-3" /> {formatEuro(pista.calcProiezione.premioStimato)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <Badge className={`text-xs ${getSogliaColor(pista.calc.sogliaLabel)} hidden`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>{pista.calc.sogliaLabel}</Badge>
+                          <Badge className={`text-xs ${getSogliaColor(pista.calcProiezione.sogliaLabel)} hidden`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>{pista.calcProiezione.sogliaLabel}</Badge>
+                        </div>
                       ) : pista.totalePezzi > 0 && pista.calc.sogliaLabel !== "N/A" ? (
                         <>
                           <div className="grid grid-cols-2 gap-3">
