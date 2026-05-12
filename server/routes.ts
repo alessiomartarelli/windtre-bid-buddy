@@ -2115,6 +2115,8 @@ export async function registerRoutes(
             ragioneSociale: sale.ragioneSociale || "",
             items: [],
             addons: [],
+            accessori: { pezzi: 0, importo: 0 },
+            servizi: { pezzi: 0, importo: 0 },
             unmapped: 0,
             totalArticoli: 0,
           };
@@ -2131,12 +2133,25 @@ export async function registerRoutes(
           'DEMO TELEFONIA WIND3', 'TELEFONIA TRADE-IN', 'ALTRO',
         ]);
         const SERVIZI_CATS = new Set(['SPEDIZIONE', 'ASSISTENZA']);
+        const ACCESSORI_CATS = new Set(['ACCESSORI']);
+        const SERVIZI_DASHBOARD_CATS = new Set(['SPEDIZIONE', 'ASSISTENZA', 'GARANTEASY']);
 
         let canvassCount = 0;
         let mappedCount = 0;
         for (const art of articoli) {
           const catNome = (art.categoria?.nome || '').toUpperCase().trim();
-          if (PRODOTTI_CATS.has(catNome) || SERVIZI_CATS.has(catNome)) continue;
+          if (PRODOTTI_CATS.has(catNome) || SERVIZI_CATS.has(catNome)) {
+            const dett = art.dettaglio || {};
+            const imp = parseFloat(String(dett.importoImponibile ?? '')) || parseFloat(String(dett.prezzo ?? '')) || 0;
+            if (ACCESSORI_CATS.has(catNome)) {
+              byPdv[codicePos].accessori.pezzi += 1;
+              byPdv[codicePos].accessori.importo += imp;
+            } else if (SERVIZI_DASHBOARD_CATS.has(catNome)) {
+              byPdv[codicePos].servizi.pezzi += 1;
+              byPdv[codicePos].servizi.importo += imp;
+            }
+            continue;
+          }
           canvassCount++;
           const mappedResults = mapBiSuiteArticle(art, clienteTipo, rules);
           if (mappedResults.length === 0) continue;

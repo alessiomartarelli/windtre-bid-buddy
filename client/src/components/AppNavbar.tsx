@@ -199,7 +199,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
                 )}
                 {garaItems.length > 0 && (
                   <>
-                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Gara</DropdownMenuLabel>
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Performance</DropdownMenuLabel>
                     {garaItems.map((item) => (
                       <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)}>
                         <item.icon className="mr-2 h-4 w-4" />

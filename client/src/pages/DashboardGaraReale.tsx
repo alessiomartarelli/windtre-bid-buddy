@@ -125,15 +125,90 @@ interface AddonItem {
   canone: number;
 }
 
+interface ExtraTally {
+  pezzi: number;
+  importo: number;
+}
+
 interface PdvData {
   codicePos: string;
   nomeNegozio: string;
   ragioneSociale: string;
   items: AggregatedItem[];
   addons?: AddonItem[];
+  accessori?: ExtraTally;
+  servizi?: ExtraTally;
   unmapped: number;
   totalArticoli: number;
 }
+
+const SMARTPHONE_MOBILE_CATEGORIES = new Set<string>([
+  'DEVICE_VAR_SP_LT_200',
+  'DEVICE_VAR_SP_GTE_200',
+  'DEVICE_1_FIN_SP_LT_200',
+  'DEVICE_1_FIN_SP_200_600',
+  'DEVICE_1_FIN_SP_GTE_600',
+]);
+
+const SMARTPHONE_CB_CATEGORIES = new Set<string>([
+  'IMP_AGG_0_VAR_FINANZ',
+  'IMP_AGG_GT0_FINANZ',
+  'IMP_AGG_GT0_VAR',
+  'multi_device_finanziamento',
+]);
+
+function pdvSmartphoneMobileCount(pdv: PdvData): number {
+  let n = 0;
+  for (const it of pdv.items) {
+    if (it.pista === 'mobile' && SMARTPHONE_MOBILE_CATEGORIES.has(it.targetCategory)) n += it.pezzi;
+  }
+  for (const a of pdv.addons || []) {
+    if (a.pista === 'mobile' && SMARTPHONE_MOBILE_CATEGORIES.has(a.targetCategory)) n += a.occorrenze;
+  }
+  return n;
+}
+
+function pdvSmartphoneCBCount(pdv: PdvData): number {
+  let n = 0;
+  for (const it of pdv.items) {
+    if (it.pista === 'cb' && SMARTPHONE_CB_CATEGORIES.has(it.targetCategory)) n += it.pezzi;
+  }
+  for (const a of pdv.addons || []) {
+    if (a.pista === 'cb' && SMARTPHONE_CB_CATEGORIES.has(a.targetCategory)) n += a.occorrenze;
+  }
+  return n;
+}
+
+type PdvSortKey =
+  | 'pezzi_default'
+  | 'premio'
+  | 'smartphone'
+  | 'accessori_pezzi'
+  | 'accessori_fatturato'
+  | 'servizi_fatturato'
+  | 'nome_az'
+  | 'punti_mobile'
+  | 'punti_fisso'
+  | 'punti_cb'
+  | 'punti_energia'
+  | 'punti_assicurazioni'
+  | 'punti_protecta';
+
+const PDV_SORT_OPTIONS: { value: PdvSortKey; label: string }[] = [
+  { value: 'pezzi_default', label: 'Pezzi totali (RS)' },
+  { value: 'premio', label: 'Premio €' },
+  { value: 'smartphone', label: 'Pezzi smartphone' },
+  { value: 'accessori_pezzi', label: 'Pezzi accessori' },
+  { value: 'accessori_fatturato', label: 'Fatturato accessori €' },
+  { value: 'servizi_fatturato', label: 'Fatturato servizi €' },
+  { value: 'nome_az', label: 'Nome PDV (A-Z)' },
+  { value: 'punti_mobile', label: 'Punti Mobile' },
+  { value: 'punti_fisso', label: 'Punti Fisso' },
+  { value: 'punti_cb', label: 'Punti CB' },
+  { value: 'punti_energia', label: 'Punti Energia' },
+  { value: 'punti_assicurazioni', label: 'Punti Assicurazioni' },
+  { value: 'punti_protecta', label: 'Punti Protecta' },
+];
 
 interface MappedSalesResponse {
   month: number;
@@ -859,6 +934,7 @@ export default function DashboardGaraReale() {
   const [expandedFissoGroups, setExpandedFissoGroups] = useState<Set<string>>(new Set());
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pdvSortKey, setPdvSortKey] = useState<PdvSortKey>('pezzi_default');
 
   const { config: orgSystemTcDefaults } = useTabelleCalcoloConfig();
 
@@ -2796,19 +2872,58 @@ export default function DashboardGaraReale() {
                   color: PDV_CHART_COLORS[i % PDV_CHART_COLORS.length],
                 }));
 
+              const puntiByPdvByPista = new Map<string, Record<string, number>>();
+              for (const pdv of pdvListWithRS) {
+                const m: Record<string, number> = {};
+                for (const stat of pistaStats) {
+                  const match = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                  if (match) m[stat.pista] = match.pdvCalc.puntiTotali;
+                }
+                puntiByPdvByPista.set(pdv.codicePos, m);
+              }
+              const premioByPdv = new Map<string, number>();
+              for (const s of pdvSummaries) premioByPdv.set(s.codicePos, s.premioTotale);
+
+              const sortValue = (pdv: typeof pdvListWithRS[number]): number | string => {
+                const punti = puntiByPdvByPista.get(pdv.codicePos) || {};
+                switch (pdvSortKey) {
+                  case 'premio': return premioByPdv.get(pdv.codicePos) || 0;
+                  case 'smartphone': return pdvSmartphoneMobileCount(pdv) + pdvSmartphoneCBCount(pdv);
+                  case 'accessori_pezzi': return pdv.accessori?.pezzi || 0;
+                  case 'accessori_fatturato': return pdv.accessori?.importo || 0;
+                  case 'servizi_fatturato': return pdv.servizi?.importo || 0;
+                  case 'nome_az': return (pdv.nomeNegozio || '').toLowerCase();
+                  case 'punti_mobile': return punti.mobile || 0;
+                  case 'punti_fisso': return punti.fisso || 0;
+                  case 'punti_cb': return punti.cb || 0;
+                  case 'punti_energia': return punti.energia || 0;
+                  case 'punti_assicurazioni': return punti.assicurazioni || 0;
+                  case 'punti_protecta': return punti.protecta || 0;
+                  case 'pezzi_default':
+                  default:
+                    return pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+                }
+              };
+              const cmp = (a: typeof pdvListWithRS[number], b: typeof pdvListWithRS[number]) => {
+                const va = sortValue(a); const vb = sortValue(b);
+                if (typeof va === 'string' && typeof vb === 'string') return va.localeCompare(vb);
+                return (Number(vb) || 0) - (Number(va) || 0);
+              };
+
               const rsGroups = new Map<string, typeof pdvListWithRS>();
               for (const pdv of pdvListWithRS) {
                 const key = pdv.configuredRS;
                 if (!rsGroups.has(key)) rsGroups.set(key, []);
                 rsGroups.get(key)!.push(pdv);
               }
+              const groupByRS = pdvSortKey === 'pezzi_default';
               const sortedRSGroups = Array.from(rsGroups.entries())
                 .map(([rs, pdvs]) => ({ rs, pdvs, totalPezzi: pdvs.reduce((s, p) => s + p.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s2, i) => s2 + i.pezzi, 0), 0) }))
                 .sort((a, b) => b.totalPezzi - a.totalPezzi);
-              const sortedPdvList = sortedRSGroups.flatMap(g =>
-                g.pdvs.sort((a, b) => b.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0) - a.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0))
-              );
-              const showRSHeaders = rsGroups.size > 1;
+              const sortedPdvList = groupByRS
+                ? sortedRSGroups.flatMap(g => g.pdvs.slice().sort(cmp))
+                : pdvListWithRS.slice().sort(cmp);
+              const showRSHeaders = groupByRS && rsGroups.size > 1;
 
               const pdvColorMap = new Map<string, string>();
               pieData.forEach((p) => { pdvColorMap.set(p.name, p.color); });
@@ -2816,10 +2931,25 @@ export default function DashboardGaraReale() {
               return (
                 <Card data-testid="card-pdv-breakdown">
                   <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Store className="h-5 w-5" />
-                      Dettaglio per PDV
-                    </CardTitle>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Store className="h-5 w-5" />
+                        Dettaglio per PDV
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 shrink-0">Ordina per</span>
+                        <Select value={pdvSortKey} onValueChange={(v) => setPdvSortKey(v as PdvSortKey)}>
+                          <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="select-pdv-sort">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PDV_SORT_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {pieData.length > 1 && (
@@ -2995,6 +3125,22 @@ export default function DashboardGaraReale() {
                                             <span className="font-bold">{pistaData.corePezzi}</span>
                                           </div>
                                         </div>
+                                        {(pistaKey === 'mobile' || pistaKey === 'cb') && (() => {
+                                          const sp = pistaKey === 'mobile' ? pdvSmartphoneMobileCount(pdv) : pdvSmartphoneCBCount(pdv);
+                                          if (sp <= 0) return null;
+                                          const elapsed = workdayInfo.elapsedWorkingDays;
+                                          const total = workdayInfo.totalWorkingDays;
+                                          const projSp = elapsed > 0 ? Math.round((sp / elapsed) * total) : sp;
+                                          return (
+                                            <div className="text-[11px] text-gray-700 dark:text-gray-200 mb-1.5 flex items-center gap-1 flex-wrap" data-testid={`pdv-smartphone-${pdv.codicePos}-${pistaKey}`}>
+                                              <Smartphone className="h-3 w-3" />
+                                              <span className="font-medium">Smartphone:</span>
+                                              <span>{sp} pz</span>
+                                              <span className="text-gray-400">·</span>
+                                              <span className="text-gray-500">proiezione {projSp}</span>
+                                            </div>
+                                          );
+                                        })()}
                                         {(() => {
                                           const elapsed = workdayInfo.elapsedWorkingDays;
                                           const total = workdayInfo.totalWorkingDays;
@@ -3149,6 +3295,61 @@ export default function DashboardGaraReale() {
                                       </div>
                                     );
                                   })}
+                                  {(() => {
+                                    const elapsed = workdayInfo.elapsedWorkingDays;
+                                    const total = workdayInfo.totalWorkingDays;
+                                    const acc = pdv.accessori || { pezzi: 0, importo: 0 };
+                                    const srv = pdv.servizi || { pezzi: 0, importo: 0 };
+                                    const projAccPz = elapsed > 0 ? Math.round((acc.pezzi / elapsed) * total) : acc.pezzi;
+                                    const projAccImp = elapsed > 0 ? (acc.importo / elapsed) * total : acc.importo;
+                                    const projSrvPz = elapsed > 0 ? Math.round((srv.pezzi / elapsed) * total) : srv.pezzi;
+                                    const projSrvImp = elapsed > 0 ? (srv.importo / elapsed) * total : srv.importo;
+                                    return (
+                                      <>
+                                        <div className="rounded-lg border p-3 bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-200" data-testid={`pdv-accessori-${pdv.codicePos}`}>
+                                          <div className="font-medium text-sm mb-2 flex items-center justify-between">
+                                            <span>Accessori</span>
+                                            <span className="font-bold">{acc.pezzi}</span>
+                                          </div>
+                                          <div className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              <span className="font-medium">Attuali:</span>
+                                              <span>{acc.pezzi} pz</span>
+                                              <span>·</span>
+                                              <span>{formatEuro(acc.importo)}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              <span className="font-medium">Proiezione:</span>
+                                              <span>{projAccPz} pz</span>
+                                              <span>·</span>
+                                              <span>{formatEuro(projAccImp)}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="rounded-lg border p-3 bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-200" data-testid={`pdv-servizi-${pdv.codicePos}`}>
+                                          <div className="font-medium text-sm mb-2 flex items-center justify-between">
+                                            <span>Servizi</span>
+                                            <span className="font-bold">{srv.pezzi}</span>
+                                          </div>
+                                          <div className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              <span className="font-medium">Attuali:</span>
+                                              <span>{srv.pezzi} pz</span>
+                                              <span>·</span>
+                                              <span>{formatEuro(srv.importo)}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              <span className="font-medium">Proiezione:</span>
+                                              <span>{projSrvPz} pz</span>
+                                              <span>·</span>
+                                              <span>{formatEuro(projSrvImp)}</span>
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 italic">Spedizione, assistenza, garanteasy</div>
+                                          </div>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
                                 </div>
                               </AccordionContent>
                             </AccordionItem>
@@ -3273,6 +3474,42 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
                     );
                   })}
                 </div>
+                {(() => {
+                  const spMob = rs.pdvs.reduce((s, p) => s + pdvSmartphoneMobileCount(p), 0);
+                  const spCB = rs.pdvs.reduce((s, p) => s + pdvSmartphoneCBCount(p), 0);
+                  const accPz = rs.pdvs.reduce((s, p) => s + (p.accessori?.pezzi || 0), 0);
+                  const accImp = rs.pdvs.reduce((s, p) => s + (p.accessori?.importo || 0), 0);
+                  const srvPz = rs.pdvs.reduce((s, p) => s + (p.servizi?.pezzi || 0), 0);
+                  const srvImp = rs.pdvs.reduce((s, p) => s + (p.servizi?.importo || 0), 0);
+                  const elapsed = workdayInfo.elapsedWorkingDays;
+                  const total = workdayInfo.totalWorkingDays;
+                  const pj = (n: number) => elapsed > 0 ? Math.round((n / elapsed) * total) : n;
+                  const pje = (n: number) => elapsed > 0 ? (n / elapsed) * total : n;
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                      <div className="rounded-lg border p-3 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-200">
+                        <div className="text-xs font-medium flex items-center gap-1"><Smartphone className="h-3 w-3" /> Smartphone Mobile</div>
+                        <div className="text-lg font-bold">{spMob}</div>
+                        <div className="text-[11px] text-gray-500">Proiezione: {pj(spMob)}</div>
+                      </div>
+                      <div className="rounded-lg border p-3 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-200">
+                        <div className="text-xs font-medium flex items-center gap-1"><Smartphone className="h-3 w-3" /> Smartphone CB</div>
+                        <div className="text-lg font-bold">{spCB}</div>
+                        <div className="text-[11px] text-gray-500">Proiezione: {pj(spCB)}</div>
+                      </div>
+                      <div className="rounded-lg border p-3 bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-200" data-testid={`rs-accessori-${rs.ragioneSociale}`}>
+                        <div className="text-xs font-medium">Accessori</div>
+                        <div className="text-lg font-bold">{accPz} pz · {formatEuro(accImp)}</div>
+                        <div className="text-[11px] text-gray-500">Proiezione: {pj(accPz)} pz · {formatEuro(pje(accImp))}</div>
+                      </div>
+                      <div className="rounded-lg border p-3 bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-200" data-testid={`rs-servizi-${rs.ragioneSociale}`}>
+                        <div className="text-xs font-medium">Servizi</div>
+                        <div className="text-lg font-bold">{srvPz} pz · {formatEuro(srvImp)}</div>
+                        <div className="text-[11px] text-gray-500">Proiezione: {pj(srvPz)} pz · {formatEuro(pje(srvImp))}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {rs.pdvs.map((pdv) => {
                     const pdvPezzi = pdv.items.reduce((s, i) => s + i.pezzi, 0);
