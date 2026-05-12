@@ -1000,6 +1000,15 @@ export default function DashboardGaraReale() {
       return next;
     });
   }, []);
+  const [expandedAggModelloDrills, setExpandedAggModelloDrills] = useState<Set<string>>(new Set());
+  const [aggModelloDrillMode, setAggModelloDrillMode] = useState<Record<string, 'pdv' | 'rs'>>({});
+  const toggleAggModelloDrill = useCallback((key: string) => {
+    setExpandedAggModelloDrills((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
 
   const { config: orgSystemTcDefaults } = useTabelleCalcoloConfig();
 
@@ -2875,7 +2884,8 @@ export default function DashboardGaraReale() {
                 { key: 'smartDevice', label: 'Smart Device' },
                 { key: 'internetDevice', label: 'Internet Device' },
               ];
-              type ModelloAgg = { totale: number; finanziato: number; rate: number; altro: number };
+              type PdvBreakdownEntry = { codicePos: string; nome: string; ragioneSociale: string; totale: number; finanziato: number; rate: number; altro: number };
+              type ModelloAgg = { totale: number; finanziato: number; rate: number; altro: number; perPdv: Map<string, PdvBreakdownEntry> };
               const aggByKind: Record<'smartphone' | 'smartDevice' | 'internetDevice', Map<string, ModelloAgg>> = {
                 smartphone: new Map(),
                 smartDevice: new Map(),
@@ -2884,15 +2894,22 @@ export default function DashboardGaraReale() {
               for (const pdv of mappedData.pdvList) {
                 const dev = pdv.devices;
                 if (!dev) continue;
+                const pdvConfig = puntiVenditaFromGara.find(p => p.codicePos === pdv.codicePos);
+                const pdvRS = pdvConfig?.ragioneSociale || pdv.ragioneSociale || 'N/D';
+                const pdvNome = pdv.nomeNegozio || pdv.codicePos;
                 for (const kk of kinds) {
                   const k = dev[kk.key];
                   if (!k) continue;
                   const map = aggByKind[kk.key];
                   for (const modal of ['finanziato', 'rate', 'altro'] as const) {
                     for (const [desc, n] of Object.entries(k[modal].descriptions || {})) {
-                      const cur = map.get(desc) || { totale: 0, finanziato: 0, rate: 0, altro: 0 };
+                      const cur = map.get(desc) || { totale: 0, finanziato: 0, rate: 0, altro: 0, perPdv: new Map<string, PdvBreakdownEntry>() };
                       cur.totale += n;
                       cur[modal] += n;
+                      const pdvEntry = cur.perPdv.get(pdv.codicePos) || { codicePos: pdv.codicePos, nome: pdvNome, ragioneSociale: pdvRS, totale: 0, finanziato: 0, rate: 0, altro: 0 };
+                      pdvEntry.totale += n;
+                      pdvEntry[modal] += n;
+                      cur.perPdv.set(pdv.codicePos, pdvEntry);
                       map.set(desc, cur);
                     }
                   }
@@ -2936,13 +2953,82 @@ export default function DashboardGaraReale() {
                                   if (r.finanziato > 0) tags.push(`F:${r.finanziato}`);
                                   if (r.rate > 0) tags.push(`R:${r.rate}`);
                                   if (r.altro > 0) tags.push(`A:${r.altro}`);
+                                  const drillKey = `${kk.key}|${r.desc}`;
+                                  const open = expandedAggModelloDrills.has(drillKey);
+                                  const mode = aggModelloDrillMode[drillKey] || 'pdv';
+                                  const pdvEntries = Array.from(r.perPdv.values()).sort((a, b) => b.totale - a.totale);
+                                  const rsMap = new Map<string, PdvBreakdownEntry>();
+                                  for (const pe of pdvEntries) {
+                                    const rsKey = normalizeRS(pe.ragioneSociale);
+                                    const cur = rsMap.get(rsKey) || { codicePos: '', nome: pe.ragioneSociale, ragioneSociale: pe.ragioneSociale, totale: 0, finanziato: 0, rate: 0, altro: 0 };
+                                    cur.totale += pe.totale;
+                                    cur.finanziato += pe.finanziato;
+                                    cur.rate += pe.rate;
+                                    cur.altro += pe.altro;
+                                    rsMap.set(rsKey, cur);
+                                  }
+                                  const rsEntries = Array.from(rsMap.values()).sort((a, b) => b.totale - a.totale);
+                                  const drillEntries = mode === 'rs' ? rsEntries : pdvEntries;
                                   return (
-                                    <div key={r.desc} className="flex items-center justify-between gap-2 text-xs text-gray-700 dark:text-gray-200" data-testid={`device-modello-row-${kk.key}-${r.desc}`}>
-                                      <span className="truncate" title={r.desc}>{r.desc}</span>
-                                      <span className="shrink-0 font-medium">
-                                        {r.totale}
-                                        {tags.length > 0 && <span className="ml-1 text-gray-400">({tags.join(' · ')})</span>}
-                                      </span>
+                                    <div key={r.desc} data-testid={`device-modello-row-${kk.key}-${r.desc}`}>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleAggModelloDrill(drillKey)}
+                                        className="w-full flex items-center justify-between gap-2 text-xs text-gray-700 dark:text-gray-200 hover-elevate active-elevate-2 rounded px-1 py-0.5 cursor-pointer text-left"
+                                        data-testid={`button-drill-agg-modello-${kk.key}-${r.desc}`}
+                                      >
+                                        <span className="truncate flex items-center gap-1" title={r.desc}>
+                                          <span className="text-[10px] text-gray-400 w-2 inline-block">{open ? '▾' : '▸'}</span>
+                                          <span className="truncate">{r.desc}</span>
+                                        </span>
+                                        <span className="shrink-0 font-medium">
+                                          {r.totale}
+                                          {tags.length > 0 && <span className="ml-1 text-gray-400">({tags.join(' · ')})</span>}
+                                        </span>
+                                      </button>
+                                      {open && (
+                                        <div className="mt-1 mb-1 pl-3 border-l-2 border-violet-300 dark:border-violet-700 space-y-1">
+                                          <div className="flex items-center gap-1 text-[10px]">
+                                            <button
+                                              type="button"
+                                              className={`px-1.5 py-0.5 rounded border ${mode === 'pdv' ? 'bg-violet-200 dark:bg-violet-800 border-violet-400' : 'bg-transparent border-violet-200 dark:border-violet-800'}`}
+                                              onClick={() => setAggModelloDrillMode(prev => ({ ...prev, [drillKey]: 'pdv' }))}
+                                              data-testid={`button-drill-mode-pdv-${kk.key}-${r.desc}`}
+                                            >
+                                              Per PDV ({pdvEntries.length})
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className={`px-1.5 py-0.5 rounded border ${mode === 'rs' ? 'bg-violet-200 dark:bg-violet-800 border-violet-400' : 'bg-transparent border-violet-200 dark:border-violet-800'}`}
+                                              onClick={() => setAggModelloDrillMode(prev => ({ ...prev, [drillKey]: 'rs' }))}
+                                              data-testid={`button-drill-mode-rs-${kk.key}-${r.desc}`}
+                                            >
+                                              Per RS ({rsEntries.length})
+                                            </button>
+                                          </div>
+                                          {drillEntries.map((e) => {
+                                            const subTags: string[] = [];
+                                            if (e.finanziato > 0) subTags.push(`F:${e.finanziato}`);
+                                            if (e.rate > 0) subTags.push(`R:${e.rate}`);
+                                            if (e.altro > 0) subTags.push(`A:${e.altro}`);
+                                            const rowKey = mode === 'rs' ? e.ragioneSociale : e.codicePos;
+                                            const label = mode === 'rs' ? e.ragioneSociale : `${e.nome}`;
+                                            const subtitle = mode === 'rs' ? null : e.ragioneSociale;
+                                            return (
+                                              <div key={rowKey} className="flex items-center justify-between gap-2 text-[11px] text-gray-600 dark:text-gray-300" data-testid={`drill-agg-modello-${mode}-${kk.key}-${r.desc}-${rowKey}`}>
+                                                <span className="truncate" title={subtitle ? `${label} · ${subtitle}` : label}>
+                                                  {label}
+                                                  {subtitle && <span className="text-gray-400"> · {subtitle}</span>}
+                                                </span>
+                                                <span className="shrink-0 font-medium">
+                                                  {e.totale}
+                                                  {subTags.length > 0 && <span className="ml-1 text-gray-400">({subTags.join(' · ')})</span>}
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
