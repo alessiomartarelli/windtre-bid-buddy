@@ -2955,11 +2955,6 @@ export default function DashboardGaraReale() {
                                       <div className="font-bold">{totalPezzi} pezzi</div>
                                       <div className="text-sm text-gray-400">Proiezione: {proiezione}</div>
                                     </div>
-                                    {pdv.unmapped > 0 && (
-                                      <Badge variant="outline" className="text-amber-600 border-amber-300 text-sm shrink-0">
-                                        {pdv.unmapped} non mappati
-                                      </Badge>
-                                    )}
                                   </div>
                                 </div>
                               </AccordionTrigger>
@@ -2991,15 +2986,27 @@ export default function DashboardGaraReale() {
                                             ? (calc.puntiTotali * total) / elapsed
                                             : (calc?.puntiTotali ?? 0);
                                           return (
-                                            <div className="text-[11px] text-gray-500 mb-1.5 flex items-center gap-1 flex-wrap" data-testid={`pdv-pista-proiezione-${pdv.codicePos}-${pistaKey}`}>
-                                              <span className="font-medium text-gray-600 dark:text-gray-400">Proiezione:</span>
-                                              <span>{projPezzi} pz</span>
-                                              {(calc?.puntiTotali ?? 0) > 0 && (
-                                                <>
-                                                  <span>·</span>
-                                                  <span>{projPunti.toFixed(1)} pt</span>
-                                                </>
-                                              )}
+                                            <div className="text-[11px] text-gray-500 mb-1.5 space-y-0.5" data-testid={`pdv-pista-proiezione-${pdv.codicePos}-${pistaKey}`}>
+                                              <div className="flex items-center gap-1 flex-wrap">
+                                                <span className="font-medium text-gray-600 dark:text-gray-400">Attuali:</span>
+                                                <span>{pistaData.corePezzi} pz</span>
+                                                {(calc?.puntiTotali ?? 0) > 0 && (
+                                                  <>
+                                                    <span>·</span>
+                                                    <span>{(calc?.puntiTotali ?? 0).toFixed(1)} pt</span>
+                                                  </>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-1 flex-wrap">
+                                                <span className="font-medium text-gray-600 dark:text-gray-400">Proiezione:</span>
+                                                <span>{projPezzi} pz</span>
+                                                {(calc?.puntiTotali ?? 0) > 0 && (
+                                                  <>
+                                                    <span>·</span>
+                                                    <span>{projPunti.toFixed(1)} pt</span>
+                                                  </>
+                                                )}
+                                              </div>
                                             </div>
                                           );
                                         })()}
