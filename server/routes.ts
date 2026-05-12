@@ -393,21 +393,31 @@ export async function registerRoutes(
       }
       const { config, configVersion } = req.body;
       // Struttura canonica (puntiVendita, ragioniSociali) è write-protected:
-      // solo admin/super_admin possono modificarla. Operatore può ancora salvare
-      // le altre parti della config (es. preferenze UI). Diff vs config corrente.
+      // solo admin/super_admin possono modificarla. Per i non-admin la guardia
+      // confronta lo stato POST-MERGE: se il payload omette una chiave protetta,
+      // verrebbe rimossa dal save → re-inietto il valore corrente. Se la include
+      // con valore diverso → 403.
+      let effectiveConfig: Record<string, unknown> = (config as Record<string, unknown> | null) || {};
       if (!['admin', 'super_admin'].includes(profile.role)) {
         const cur = await storage.getOrgConfig(profile.organizationId);
         const curCfg = (cur?.config as Record<string, unknown> | null) || {};
-        const newCfg = (config as Record<string, unknown> | null) || {};
         const ser = (v: unknown) => JSON.stringify(v ?? null);
-        const protectedKeys = ["puntiVendita", "ragioniSociali"];
+        const protectedKeys: ReadonlyArray<"puntiVendita" | "ragioniSociali"> = ["puntiVendita", "ragioniSociali"];
+        const merged: Record<string, unknown> = { ...effectiveConfig };
         for (const k of protectedKeys) {
-          if (k in newCfg && ser((newCfg as any)[k]) !== ser((curCfg as any)[k])) {
+          const incomingHas = Object.prototype.hasOwnProperty.call(effectiveConfig, k);
+          if (incomingHas && ser(effectiveConfig[k]) !== ser(curCfg[k])) {
             return res.status(403).json({ message: `Solo admin/super_admin possono modificare ${k}` });
           }
+          if (Object.prototype.hasOwnProperty.call(curCfg, k)) {
+            merged[k] = curCfg[k];
+          } else {
+            delete merged[k];
+          }
         }
+        effectiveConfig = merged;
       }
-      const result = await storage.upsertOrgConfig(profile.organizationId, config, configVersion || "2.0");
+      const result = await storage.upsertOrgConfig(profile.organizationId, effectiveConfig, configVersion || "2.0");
       res.json(result);
     } catch (error) {
       res.status(500).json({ message: "Error saving config" });
@@ -2600,6 +2610,29 @@ export async function registerRoutes(
             UPDATE bisuite_sales SET codice_pos = ${newCodice}
              WHERE organization_id = ${orgId} AND codice_pos = ${oldCodicePos}
           `);
+          // Best-effort: rinomina codicePos anche dentro i blob jsonb di
+          // gara_config.config e preventivi.data (campi stringa vari come
+          // "codicePos", "pdvCodice", ecc.). Limitiamo il pattern alle
+          // occorrenze come valore JSON ("OLD") per evitare match parziali.
+          // Cast jsonb→text→jsonb con replace su match esatto della stringa.
+          const oldQuoted = JSON.stringify(oldCodicePos);
+          const newQuoted = JSON.stringify(newCodice);
+          try {
+            await db.execute(sql`
+              UPDATE gara_config
+                 SET config = REPLACE(config::text, ${oldQuoted}, ${newQuoted})::jsonb
+               WHERE organization_id = ${orgId}
+                 AND config::text LIKE ${'%' + oldQuoted + '%'}
+            `);
+          } catch (e) { console.error("[struttura] propagate gara_config jsonb failed", e); }
+          try {
+            await db.execute(sql`
+              UPDATE preventivi
+                 SET data = REPLACE(data::text, ${oldQuoted}, ${newQuoted})::jsonb
+               WHERE organization_id = ${orgId}
+                 AND data::text LIKE ${'%' + oldQuoted + '%'}
+            `);
+          } catch (e) { console.error("[struttura] propagate preventivi jsonb failed", e); }
         }
       } catch (e) { console.error("[struttura] propagate cdg_spese/manuali/bisuite failed", e); }
     }
