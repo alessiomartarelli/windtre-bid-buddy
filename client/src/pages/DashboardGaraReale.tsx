@@ -874,8 +874,25 @@ export default function DashboardGaraReale() {
 
   const effectiveConfigId = selectedConfigId || (configList && configList.length > 0 ? configList[0].id : "");
 
+  // Versione delle regole BiSuite mapping. Cambia ogni volta che le regole
+  // vengono salvate o mergiate (anche fuori da questa pagina). Inserita nella
+  // queryKey delle vendite mappate per forzare un refetch automatico quando
+  // le regole cambiano, senza dover reimportare BiSuite o invalidare a mano.
+  const { data: mappingVersion } = useQuery<{ rulesUpdatedAt: string | null }>({
+    queryKey: ["/api/bisuite-mapping-version"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/bisuite-mapping-version"), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore versione mappatura");
+      return res.json();
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+  });
+  const rulesUpdatedAt = mappingVersion?.rulesUpdatedAt ?? null;
+
   const { data: mappedData, isLoading: loadingMapped } = useQuery<MappedSalesResponse>({
-    queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear, effectiveConfigId, "inGara"],
+    queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear, effectiveConfigId, "inGara", rulesUpdatedAt],
     queryFn: async () => {
       const params = new URLSearchParams({
         month: String(selMonth),

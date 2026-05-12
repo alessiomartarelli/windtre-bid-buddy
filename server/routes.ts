@@ -1919,6 +1919,29 @@ export async function registerRoutes(
     }
   });
 
+  // Lightweight versione delle regole BiSuite mapping. Usata dai client
+  // (Dashboard Gara Reale, MappaturaBiSuite) per inserire `rulesUpdatedAt`
+  // nelle queryKey React Query: così, qualunque sia la sorgente del cambio
+  // regole (PUT /api/admin/bisuite-mapping, merge automatico su login admin,
+  // seed di nuovi default), tutti i consumer rifetchano automaticamente
+  // alla prima visualizzazione successiva senza richiedere un re-import
+  // o un'invalidazione manuale per ciascuna pagina.
+  app.get("/api/bisuite-mapping-version", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const sysMapping = await storage.getSystemConfig("bisuite_mapping");
+      const rulesUpdatedAt = sysMapping?.updatedAt
+        ? new Date(sysMapping.updatedAt).toISOString()
+        : null;
+      res.json({ rulesUpdatedAt });
+    } catch (error) {
+      console.error("BiSuite mapping version error:", error);
+      res.status(500).json({ error: "Errore nel recupero versione mappatura" });
+    }
+  });
+
   app.get("/api/admin/bisuite-mapped-sales", isAuthenticated, requireModule(["amministrazione", "gara_dashboard"]), async (req: any, res) => {
     try {
       const userId = req.session.userId;
@@ -2005,6 +2028,9 @@ export async function registerRoutes(
       const { getDefaultMappingRules, mergeWithDefaultRules } = await import("../shared/bisuiteMapping");
       const rawRules = mappingConfig?.rules || getDefaultMappingRules();
       const rules = mergeWithDefaultRules(rawRules);
+      const rulesUpdatedAt = sysMapping?.updatedAt
+        ? new Date(sysMapping.updatedAt).toISOString()
+        : null;
 
       type AggregatedItem = {
         pista: string;
@@ -2192,6 +2218,7 @@ export async function registerRoutes(
         totalSalesUnfiltered,
         salesExcludedOutOfGara,
         calendarsAvailable,
+        rulesUpdatedAt,
       });
     } catch (error: unknown) {
       console.error("BiSuite mapped sales error:", error);
@@ -2225,6 +2252,9 @@ export async function registerRoutes(
       const { getDefaultMappingRules, mapBiSuiteArticle, mergeWithDefaultRules } = await import("../shared/bisuiteMapping");
       const rawRules = mappingConfig?.rules || getDefaultMappingRules();
       const rules = mergeWithDefaultRules(rawRules);
+      const rulesUpdatedAt = sysMapping?.updatedAt
+        ? new Date(sysMapping.updatedAt).toISOString()
+        : null;
 
       const PRODOTTI_CATS = new Set([
         'TELEFONIA', 'MODEM/ROUTER', 'SMART DEVICE', 'INTERNET DEVICE', 'SIM', 'RICARICHE',
@@ -2276,6 +2306,7 @@ export async function registerRoutes(
         prodotti: Object.values(prodotti).sort((a, b) => b.pezzi - a.pezzi),
         servizi: Object.values(servizi).sort((a, b) => b.pezzi - a.pezzi),
         nonMappati: Object.values(nonMappati).sort((a, b) => b.pezzi - a.pezzi),
+        rulesUpdatedAt,
       });
     } catch (error: unknown) {
       console.error("BiSuite articles summary error:", error);

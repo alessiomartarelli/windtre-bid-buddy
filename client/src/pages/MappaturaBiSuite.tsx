@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/basePath';
+import { queryClient } from '@/lib/queryClient';
+import { Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -212,7 +214,19 @@ export default function MappaturaBiSuite() {
       setRules(nextSavedRules);
       setServerEffectiveRules(nextEffective);
       setHasChanges(false);
-      toast({ title: 'Mappatura salvata', description: 'Le regole di mappatura sono state salvate.' });
+      // Invalida le cache delle vendite mappate così la Dashboard Gara Reale
+      // (e gli altri consumer) ricarica i dati con le nuove regole alla
+      // prossima visualizzazione, senza bisogno di rilanciare "Importa BiSuite".
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/bisuite-mapped-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/bisuite-articles-summary'] });
+      // Forza il refetch del marker di versione: tutti i consumer che lo
+      // includono nella loro queryKey (es. Dashboard Gara Reale) rifetchano
+      // automaticamente non appena la versione cambia.
+      queryClient.invalidateQueries({ queryKey: ['/api/bisuite-mapping-version'] });
+      toast({
+        title: 'Mappatura salvata',
+        description: 'Le vendite verranno rimappate automaticamente alla prossima visualizzazione.',
+      });
       if (isExtraTab) {
         loadArticlesSummary(summaryMonth, summaryYear);
       }
@@ -321,6 +335,19 @@ export default function MappaturaBiSuite() {
               Le regole con priorità più alta vengono valutate per prime.
             </CardDescription>
           </CardHeader>
+          <CardContent className="pt-0">
+            <div
+              className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-100"
+              data-testid="note-auto-remap"
+            >
+              <Info className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                Quando salvi le regole, le vendite BiSuite già importate vengono rimappate
+                automaticamente alla prossima visualizzazione: non serve rilanciare
+                "Importa BiSuite".
+              </span>
+            </div>
+          </CardContent>
         </Card>
 
         {loading ? (
