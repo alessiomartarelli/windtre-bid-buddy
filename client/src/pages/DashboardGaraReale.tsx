@@ -2981,14 +2981,36 @@ export default function DashboardGaraReale() {
                                             <span className="font-bold">{pistaData.corePezzi}</span>
                                           </div>
                                         </div>
+                                        {(() => {
+                                          const elapsed = workdayInfo.elapsedWorkingDays;
+                                          const total = workdayInfo.totalWorkingDays;
+                                          const projPezzi = elapsed > 0
+                                            ? Math.round((pistaData.corePezzi / elapsed) * total)
+                                            : pistaData.corePezzi;
+                                          const projPunti = elapsed > 0 && calc
+                                            ? (calc.puntiTotali * total) / elapsed
+                                            : (calc?.puntiTotali ?? 0);
+                                          return (
+                                            <div className="text-[11px] text-gray-500 mb-1.5 flex items-center gap-1 flex-wrap" data-testid={`pdv-pista-proiezione-${pdv.codicePos}-${pistaKey}`}>
+                                              <span className="font-medium text-gray-600 dark:text-gray-400">Proiezione:</span>
+                                              <span>{projPezzi} pz</span>
+                                              {(calc?.puntiTotali ?? 0) > 0 && (
+                                                <>
+                                                  <span>·</span>
+                                                  <span>{projPunti.toFixed(1)} pt</span>
+                                                </>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
                                         {!isRSMode && calc && calc.sogliaLabel !== "N/A" && (
                                           <div className="space-y-1.5 mb-2">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
                                               <Badge className={`text-xs ${getSogliaColor(calc.sogliaLabel)}`} variant="outline">
                                                 {calc.sogliaLabel}
                                               </Badge>
                                               {calc.puntiTotali > 0 && (
-                                                <span className="text-xs text-gray-500">{calc.puntiTotali.toFixed(1)} pt</span>
+                                                <span className="text-xs text-gray-500" data-testid={`pdv-pista-punti-${pdv.codicePos}-${pistaKey}`}>{calc.puntiTotali.toFixed(1)} pt</span>
                                               )}
                                               {(pdvPremioByPista[pistaKey] ?? 0) > 0 && (
                                                 <span className="text-xs font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
