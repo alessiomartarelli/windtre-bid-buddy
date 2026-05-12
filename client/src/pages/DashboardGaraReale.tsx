@@ -36,6 +36,8 @@ import {
   Users,
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
 } from "lucide-react";
 import { apiUrl } from "@/lib/basePath";
 import { SIM_CONSUMER_CORE, SIM_PIVA_CORE } from "@/lib/mobileCategories";
@@ -1077,6 +1079,19 @@ function PistaCompactRow({
 
 const EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-expanded-rs:";
 
+function getPistaRsRowKeys(pista: any): string[] {
+  if (!pista || pista.totalePezzi === 0) return [];
+  const hasRS = !!(pista.rsCalcBreakdown && pista.rsCalcBreakdown.size >= 1);
+  const isMobileFisso = pista.pista === 'mobile' || pista.pista === 'fisso';
+  const pdvList = (pista.pdvBreakdown ?? []).filter((p: any) => p.pezzi > 0);
+  const usePdv = !hasRS && isMobileFisso && pdvList.length >= 1;
+  let suffixes: string[];
+  if (hasRS) suffixes = Array.from(pista.rsCalcBreakdown!.keys()) as string[];
+  else if (usePdv) suffixes = pdvList.map((p: any) => p.codicePos as string);
+  else suffixes = ['totale'];
+  return suffixes.map((s) => `${pista.pista}::${s}`);
+}
+
 export default function DashboardGaraReale() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -1123,6 +1138,22 @@ export default function DashboardGaraReale() {
     setExpandedRsRows(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+  const expandRsRowKeys = useCallback((keys: string[]) => {
+    if (!keys.length) return;
+    setExpandedRsRows(prev => {
+      const next = new Set(prev);
+      for (const k of keys) next.add(k);
+      return next;
+    });
+  }, []);
+  const collapseRsRowKeys = useCallback((keys: string[]) => {
+    if (!keys.length) return;
+    setExpandedRsRows(prev => {
+      const next = new Set(prev);
+      for (const k of keys) next.delete(k);
       return next;
     });
   }, []);
@@ -2606,11 +2637,47 @@ export default function DashboardGaraReale() {
               </div>
             )}
 
+            {(() => {
+              const allKeys = pistaStats.flatMap((p) => getPistaRsRowKeys(p));
+              if (allKeys.length === 0) return null;
+              const allExpanded = allKeys.every((k) => expandedRsRows.has(k));
+              const noneExpanded = allKeys.every((k) => !expandedRsRows.has(k));
+              return (
+                <div className="flex items-center justify-end gap-2 mb-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1"
+                    onClick={() => expandRsRowKeys(allKeys)}
+                    disabled={allExpanded}
+                    data-testid="btn-expand-all-rs"
+                  >
+                    <ChevronsUpDown className="h-3.5 w-3.5" />
+                    Espandi tutto
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1"
+                    onClick={() => collapseRsRowKeys(allKeys)}
+                    disabled={noneExpanded}
+                    data-testid="btn-collapse-all-rs"
+                  >
+                    <ChevronsDownUp className="h-3.5 w-3.5" />
+                    Collassa tutto
+                  </Button>
+                </div>
+              );
+            })()}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {pistaStats.map((pista) => {
                 const pistaConf = PISTA_CONFIG[pista.pista as keyof typeof PISTA_CONFIG];
                 if (!pistaConf) return null;
                 const Icon = pistaConf.icon;
+                const pistaRowKeys = getPistaRsRowKeys(pista);
+                const showPistaToggle = pistaRowKeys.length >= 2;
+                const pistaAllExpanded = showPistaToggle && pistaRowKeys.every((k) => expandedRsRows.has(k));
 
                 return (
                   <Card key={pista.pista} className="overflow-hidden" data-testid={`card-pista-${pista.pista}`}>
@@ -2622,9 +2689,32 @@ export default function DashboardGaraReale() {
                           </div>
                           {pistaConf.label}
                         </CardTitle>
-                        {pista.totalePezzi > 0 && (
-                          <ProjectionBadge current={pista.totalePezzi} projected={pista.proiezionePezzi} label={pista.pista} />
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {showPistaToggle && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs gap-1"
+                              onClick={() =>
+                                pistaAllExpanded
+                                  ? collapseRsRowKeys(pistaRowKeys)
+                                  : expandRsRowKeys(pistaRowKeys)
+                              }
+                              title={pistaAllExpanded ? 'Collassa tutte le righe' : 'Espandi tutte le righe'}
+                              data-testid={`btn-toggle-all-rs-${pista.pista}`}
+                            >
+                              {pistaAllExpanded ? (
+                                <ChevronsDownUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronsUpDown className="h-3.5 w-3.5" />
+                              )}
+                              {pistaAllExpanded ? 'Collassa' : 'Espandi'}
+                            </Button>
+                          )}
+                          {pista.totalePezzi > 0 && (
+                            <ProjectionBadge current={pista.totalePezzi} projected={pista.proiezionePezzi} label={pista.pista} />
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
