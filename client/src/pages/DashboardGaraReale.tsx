@@ -3197,6 +3197,38 @@ export default function DashboardGaraReale() {
                                             <span className="font-bold">{pistaData.corePezzi}</span>
                                           </div>
                                         </div>
+                                        {pistaKey === 'fisso' && (() => {
+                                          const elapsed = workdayInfo.elapsedWorkingDays;
+                                          const total = workdayInfo.totalWorkingDays;
+                                          const proj = (n: number) => elapsed > 0 ? Math.round((n / elapsed) * total) : n;
+                                          const FISSO_BREAKDOWN: { label: string; cats: string[] }[] = [
+                                            { label: 'Netflix', cats: ['NETFLIX_CON_ADV', 'NETFLIX_SENZA_ADV'] },
+                                            { label: 'Linea Attiva', cats: ['LINEA_ATTIVA'] },
+                                            { label: 'Convergenti', cats: ['CONVERGENZA'] },
+                                            { label: 'Più Sicuri Casa/Ufficio', cats: ['PIU_SICURI_CASA_UFFICIO'] },
+                                          ];
+                                          const rows = FISSO_BREAKDOWN.map((b) => ({
+                                            label: b.label,
+                                            n: countByCats(pdv, 'fisso', new Set(b.cats)),
+                                          }));
+                                          if (rows.every((r) => r.n === 0)) return null;
+                                          return (
+                                            <div className="text-[11px] text-gray-700 dark:text-gray-200 mb-1.5 space-y-0.5" data-testid={`pdv-fisso-breakdown-${pdv.codicePos}`}>
+                                              {rows.map((r) => (
+                                                <div key={r.label} className="flex items-center gap-1 flex-wrap">
+                                                  <span className="font-medium text-gray-600 dark:text-gray-300">{r.label}:</span>
+                                                  <span>{r.n} pz</span>
+                                                  {r.n > 0 && (
+                                                    <>
+                                                      <span className="text-gray-400">·</span>
+                                                      <span className="text-gray-500">proiezione {proj(r.n)}</span>
+                                                    </>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          );
+                                        })()}
                                         {(pistaKey === 'mobile' || pistaKey === 'cb') && (() => {
                                           const split = pdvSmartphoneSplit(pdv, pistaKey as 'mobile' | 'cb');
                                           if (split.total <= 0) return null;
