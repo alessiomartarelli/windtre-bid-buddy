@@ -38,7 +38,9 @@ import {
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
+  Download,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { apiUrl } from "@/lib/basePath";
 import { SIM_CONSUMER_CORE, SIM_PIVA_CORE } from "@/lib/mobileCategories";
 import { AppNavbar } from "@/components/AppNavbar";
@@ -1102,7 +1104,7 @@ function TabellaCellSingolo({ punti, soglia, variant, dim }: { punti?: number; s
   );
 }
 
-function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
+function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[]; orgId?: string | null; mese?: number; anno?: number }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const { pisteAttive, rsRows } = useMemo(() => {
@@ -1207,6 +1209,69 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
   const expandAll = () => setExpanded(new Set(allKeys));
   const collapseAll = () => setExpanded(new Set());
 
+  const buildExportRows = () => {
+    const header: string[] = ["Tipo", "Ragione Sociale", "Codice PDV", "Nome PDV"];
+    for (const p of pisteAttive) {
+      const conf = (PISTA_CONFIG as any)[p.pista];
+      const label = conf?.label ?? p.pista;
+      header.push(`${label} - Punti Attuali`, `${label} - Proiezione`, `${label} - Soglia Attuale`, `${label} - Soglia Proiezione`);
+    }
+    const rows: (string | number)[][] = [header];
+    const fmtNum = (n: number | undefined) => (typeof n === 'number' ? Number(n.toFixed(2)) : '');
+    const fmtSoglia = (s?: string) => (s && s !== 'N/A' && s !== 'Nessuna' ? s : '');
+    const cellFromMetrics = (m?: TabellaCellMetrics): (string | number)[] => {
+      if (!m || (m.puntiAtt === 0 && m.puntiProi === 0)) return ['', '', '', ''];
+      const showProi = m.puntiProi > 0;
+      return [
+        fmtNum(m.puntiAtt),
+        showProi ? fmtNum(m.puntiProi) : '',
+        fmtSoglia(m.sogliaAtt),
+        showProi ? fmtSoglia(m.sogliaProi) : '',
+      ];
+    };
+    for (const rs of rsRows) {
+      const rsRow: (string | number)[] = ["RS", rs.displayName, '', ''];
+      for (const p of pisteAttive) rsRow.push(...cellFromMetrics(rs.perPista.get(p.pista)));
+      rows.push(rsRow);
+      for (const pdv of rs.pdvList) {
+        const pdvRow: (string | number)[] = ["PDV", rs.displayName, pdv.codicePos, pdv.nomeNegozio];
+        for (const p of pisteAttive) pdvRow.push(...cellFromMetrics(rs.perPdv.get(pdv.codicePos)?.get(p.pista)));
+        rows.push(pdvRow);
+      }
+    }
+    return rows;
+  };
+
+  const baseFilename = () => {
+    const orgPart = orgId || 'org';
+    const mm = mese ? String(mese).padStart(2, '0') : '00';
+    const yy = anno ? String(anno) : '0000';
+    return `tabella-pdv-pista_${orgPart}_${yy}-${mm}`;
+  };
+
+  const exportExcel = () => {
+    const rows = buildExportRows();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "PDV x Pista");
+    XLSX.writeFile(wb, `${baseFilename()}.xlsx`);
+  };
+
+  const exportCsv = () => {
+    const rows = buildExportRows();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const csv = XLSX.utils.sheet_to_csv(ws, { FS: ';' });
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${baseFilename()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Card data-testid="card-tabella-pdv-pista">
       <CardHeader>
@@ -1215,6 +1280,12 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
           <div className="flex gap-2">
             <Button size="sm" variant="outline" className="h-8" onClick={expandAll} disabled={allExpanded} data-testid="btn-tabella-expand-all">Espandi tutto</Button>
             <Button size="sm" variant="outline" className="h-8" onClick={collapseAll} disabled={noneExpanded} data-testid="btn-tabella-collapse-all">Collassa tutto</Button>
+            <Button size="sm" variant="outline" className="h-8" onClick={exportExcel} disabled={rsRows.length === 0} data-testid="btn-tabella-export-excel">
+              <Download className="h-3.5 w-3.5 mr-1" />Excel
+            </Button>
+            <Button size="sm" variant="outline" className="h-8" onClick={exportCsv} disabled={rsRows.length === 0} data-testid="btn-tabella-export-csv">
+              <Download className="h-3.5 w-3.5 mr-1" />CSV
+            </Button>
           </div>
         </div>
       </CardHeader>
@@ -4152,7 +4223,7 @@ export default function DashboardGaraReale() {
               );
             })()}
 
-            <TabellaPdvPista pistaStats={pistaStats} />
+            <TabellaPdvPista pistaStats={pistaStats} orgId={orgId} mese={selMonth} anno={selYear} />
 
             <Card data-testid="card-rs-breakdown">
               <CardHeader>
