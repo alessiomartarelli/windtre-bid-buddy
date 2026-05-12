@@ -1,4 +1,5 @@
-import { useState, useMemo, Fragment, useCallback } from "react";
+import { useState, useMemo, Fragment, useCallback, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -1087,13 +1088,50 @@ function PistaCompactRow({
   );
 }
 
+const EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-expanded-rs:";
+
 export default function DashboardGaraReale() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { profile, loading: authLoading } = useAuth();
+  const orgId = profile?.organizationId ?? null;
   const now = new Date();
   const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
   const [expandedPistaCategories, setExpandedPistaCategories] = useState<Set<string>>(new Set());
   const [expandedRsRows, setExpandedRsRows] = useState<Set<string>>(new Set());
+  const [expandedRsHydratedOrgId, setExpandedRsHydratedOrgId] = useState<string | null>(null);
+  useEffect(() => {
+    if (authLoading || !orgId) return;
+    if (expandedRsHydratedOrgId === orgId) return;
+    let next: Set<string> = new Set();
+    try {
+      const raw = localStorage.getItem(`${EXPANDED_RS_STORAGE_PREFIX}${orgId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          next = new Set(parsed.filter((k): k is string => typeof k === "string"));
+        }
+      }
+    } catch {
+      next = new Set();
+    }
+    setExpandedRsRows(next);
+    setExpandedRsHydratedOrgId(orgId);
+  }, [orgId, authLoading, expandedRsHydratedOrgId]);
+  useEffect(() => {
+    if (authLoading || !orgId) return;
+    if (expandedRsHydratedOrgId !== orgId) return;
+    try {
+      const key = `${EXPANDED_RS_STORAGE_PREFIX}${orgId}`;
+      if (expandedRsRows.size === 0) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, JSON.stringify(Array.from(expandedRsRows)));
+      }
+    } catch {
+      // ignore quota / serialization errors
+    }
+  }, [expandedRsRows, orgId, authLoading, expandedRsHydratedOrgId]);
   const toggleRsRow = useCallback((key: string) => {
     setExpandedRsRows(prev => {
       const next = new Set(prev);
