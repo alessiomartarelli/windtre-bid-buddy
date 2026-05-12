@@ -3140,7 +3140,7 @@ export default function DashboardGaraReale() {
                                 {rows.map((r) => {
                                   const tags: string[] = [];
                                   if (r.finanziato > 0) tags.push(`F:${r.finanziato}`);
-                                  if (r.rate > 0) tags.push(`R:${r.rate}`);
+                                  if (r.rate > 0) tags.push(`V:${r.rate}`);
                                   if (r.altro > 0) tags.push(`A:${r.altro}`);
                                   const drillKey = `${kk.key}|${r.desc}`;
                                   const open = expandedAggModelloDrills.has(drillKey);
@@ -3198,7 +3198,7 @@ export default function DashboardGaraReale() {
                                           {drillEntries.map((e) => {
                                             const subTags: string[] = [];
                                             if (e.finanziato > 0) subTags.push(`F:${e.finanziato}`);
-                                            if (e.rate > 0) subTags.push(`R:${e.rate}`);
+                                            if (e.rate > 0) subTags.push(`V:${e.rate}`);
                                             if (e.altro > 0) subTags.push(`A:${e.altro}`);
                                             const rowKey = mode === 'rs' ? e.ragioneSociale : e.codicePos;
                                             const label = mode === 'rs' ? e.ragioneSociale : `${e.nome}`;
@@ -3227,7 +3227,7 @@ export default function DashboardGaraReale() {
                         );
                       })}
                     </div>
-                    <div className="text-[11px] text-gray-500 mt-2 italic">F = Finanziato · R = Rate · A = Altro</div>
+                    <div className="text-[11px] text-gray-500 mt-2 italic">F = Finanziato · V = VAR · A = Altro</div>
                   </CardContent>
                 </Card>
               );
@@ -3611,7 +3611,7 @@ export default function DashboardGaraReale() {
                                               <div className="pl-4 text-gray-600 dark:text-gray-300 flex items-center gap-2 flex-wrap">
                                                 <span>Finanziato: <span className="font-medium">{split.fin}</span></span>
                                                 <span className="text-gray-400">·</span>
-                                                <span>Rate: <span className="font-medium">{split.rate}</span></span>
+                                                <span>VAR: <span className="font-medium">{split.rate}</span></span>
                                               </div>
                                             </div>
                                           );
@@ -3850,7 +3850,7 @@ export default function DashboardGaraReale() {
                                                       </div>
                                                       <div className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
                                                         <div>Finanziato: <span className="font-medium">{k.finanziato.pezzi}</span></div>
-                                                        <div>Rate: <span className="font-medium">{k.rate.pezzi}</span></div>
+                                                        <div>VAR: <span className="font-medium">{k.rate.pezzi}</span></div>
                                                         {k.altro.pezzi > 0 && (<div>Altro: <span className="font-medium">{k.altro.pezzi}</span></div>)}
                                                       </div>
                                                       {tot > 0 && (
@@ -3871,7 +3871,7 @@ export default function DashboardGaraReale() {
                                                             const altro = merged.altro[desc] || 0;
                                                             const tags: string[] = [];
                                                             if (fin > 0) tags.push(`F:${fin}`);
-                                                            if (rate > 0) tags.push(`R:${rate}`);
+                                                            if (rate > 0) tags.push(`V:${rate}`);
                                                             if (altro > 0) tags.push(`A:${altro}`);
                                                             return (
                                                               <div key={desc} className="flex justify-between text-[11px] text-gray-700 dark:text-gray-300 gap-2">
