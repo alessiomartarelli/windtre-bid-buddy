@@ -25,6 +25,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Separator } from '@/components/ui/separator';
 import { AppNavbar } from '@/components/AppNavbar';
 import {
@@ -66,6 +76,7 @@ import {
   diffSavedRuleAgainstDefault,
   type RuleDefaultDiffEntry,
 } from '@shared/bisuiteMapping';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Tooltip,
   TooltipContent,
@@ -105,6 +116,12 @@ interface ArticlesSummaryData {
   nonMappati: ArticleSummaryItem[];
 }
 
+interface DivergentEntry {
+  rule: BiSuiteMappingRule;
+  def: BiSuiteMappingRule;
+  diff: RuleDefaultDiffEntry[];
+}
+
 function generateRuleId(): string {
   return `rule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -136,6 +153,7 @@ export default function MappaturaBiSuite() {
   const [editingRule, setEditingRule] = useState<BiSuiteMappingRule | null>(null);
   const [editingFromNonMappati, setEditingFromNonMappati] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
+  const [bulkAlignScope, setBulkAlignScope] = useState<'all' | 'tab' | null>(null);
 
   const now = new Date();
   const [summaryMonth, setSummaryMonth] = useState(now.getMonth() + 1);
@@ -293,6 +311,24 @@ export default function MappaturaBiSuite() {
     });
   };
 
+  const alignRulesBulk = (entries: DivergentEntry[]) => {
+    if (entries.length === 0) return;
+    const map = new Map(entries.map((e) => [e.rule.id, e.def]));
+    setRules((prev) =>
+      prev.map((r) => {
+        const def = map.get(r.id);
+        return def
+          ? { ...def, id: r.id, conditions: { ...def.conditions } }
+          : r;
+      }),
+    );
+    setHasChanges(true);
+    toast({
+      title: 'Regole allineate',
+      description: `${entries.length} ${entries.length === 1 ? 'regola è stata aggiornata' : 'regole sono state aggiornate'} ai valori di default. Ricordati di salvare.`,
+    });
+  };
+
   // Indicizza i default per editor key (looser di rulePrimaryKey: ignora
   // domanda/risposta) così il RuleCard può mostrare un badge "Default
   // aggiornato" con il diff dei campi (incl. priorità, esclusioni, soglie
@@ -305,6 +341,48 @@ export default function MappaturaBiSuite() {
     () => buildDefaultsByEditorKey(getDefaultMappingRules()),
     [],
   );
+
+  // Calcola le regole salvate (non sintetiche) che divergono dal default
+  // canonico corrente, raggruppate per pista. Usato per il pannello "Allinea
+  // in blocco" in cima alla pagina e per i bottoni per-tab. Le sintetiche e
+  // le "Personalizzate" (senza match nei default) sono escluse, in linea
+  // col badge per-regola.
+  const divergentByPista = useMemo(() => {
+    const result: Record<GaraPista, DivergentEntry[]> = {
+      mobile: [],
+      fisso: [],
+      energia: [],
+      assicurazioni: [],
+      protecta: [],
+      partnership: [],
+      cb: [],
+    };
+    for (const r of rules) {
+      if (r.synthetic) continue;
+      const def = findDefaultForEditor(r, defaultsByEditorKey);
+      if (!def) continue;
+      const diff = diffSavedRuleAgainstDefault(r, def);
+      if (diff.length === 0) continue;
+      if (result[r.pista]) result[r.pista].push({ rule: r, def, diff });
+    }
+    return result;
+  }, [rules, defaultsByEditorKey]);
+
+  const allDivergent = useMemo<DivergentEntry[]>(
+    () => ALL_PISTE.flatMap((p) => divergentByPista[p]),
+    [divergentByPista],
+  );
+  const totalDivergent = allDivergent.length;
+  const tabDivergent: DivergentEntry[] = isExtraTab
+    ? []
+    : divergentByPista[activePista] || [];
+
+  const bulkAlignEntries: DivergentEntry[] =
+    bulkAlignScope === 'all'
+      ? allDivergent
+      : bulkAlignScope === 'tab'
+      ? tabDivergent
+      : [];
 
   // displayRules = saved rules + synthesized partnership twins (read-only).
   // When the user has pending unsaved edits, recompute twins locally so the
@@ -387,6 +465,58 @@ export default function MappaturaBiSuite() {
             </div>
           </CardContent>
         </Card>
+
+        {!loading && totalDivergent > 0 && (
+          <Card
+            className="mb-6 border-orange-300 bg-orange-50/50 dark:bg-orange-950/10"
+            data-testid="card-bulk-align"
+          >
+            <CardContent className="py-3 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <RotateCcw className="h-4 w-4 mt-0.5 text-orange-600" />
+                <div className="text-sm">
+                  <span
+                    className="font-medium text-orange-900 dark:text-orange-200"
+                    data-testid="text-divergent-count"
+                  >
+                    {totalDivergent} {totalDivergent === 1 ? 'regola diverge' : 'regole divergono'} dai default
+                  </span>
+                  {!isExtraTab && tabDivergent.length > 0 && (
+                    <span className="text-orange-700 dark:text-orange-300 ml-1">
+                      ({tabDivergent.length} in {PISTA_LABELS[activePista]})
+                    </span>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Allinea le regole salvate ai valori del default canonico aggiornato.
+                    Le sintetiche e le "Personalizzate" sono escluse.
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {!isExtraTab && tabDivergent.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-orange-300 text-orange-700 hover:bg-orange-100 hover:text-orange-800"
+                    onClick={() => setBulkAlignScope('tab')}
+                    data-testid="btn-bulk-align-tab"
+                  >
+                    Allinea solo {PISTA_LABELS[activePista]} ({tabDivergent.length})
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                  onClick={() => setBulkAlignScope('all')}
+                  data-testid="btn-bulk-align-all"
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Allinea tutte ({totalDivergent})
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -565,6 +695,86 @@ export default function MappaturaBiSuite() {
           }}
         />
       )}
+
+      <AlertDialog
+        open={bulkAlignScope !== null}
+        onOpenChange={(open) => {
+          if (!open) setBulkAlignScope(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Allineare {bulkAlignEntries.length}{' '}
+              {bulkAlignEntries.length === 1 ? 'regola' : 'regole'} ai default?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkAlignScope === 'all'
+                ? 'Tutte le regole salvate divergenti dai default canonici verranno sovrascritte.'
+                : `Solo le regole della pista ${PISTA_LABELS[activePista]} verranno sovrascritte.`}{' '}
+              Le regole sintetiche e quelle "Personalizzate" sono escluse. Le modifiche
+              non verranno applicate finché non clicchi Salva.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {bulkAlignEntries.length > 0 && (
+            <ScrollArea className="max-h-72 rounded-md border bg-muted/20 p-2">
+              <div className="space-y-2">
+                {bulkAlignEntries.map(({ rule, diff }) => (
+                  <div
+                    key={rule.id}
+                    className="text-xs rounded border bg-background px-2 py-1.5"
+                    data-testid={`bulk-align-row-${rule.id}`}
+                  >
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <Badge variant="outline" className="text-[10px]">
+                        {PISTA_LABELS[rule.pista]}
+                      </Badge>
+                      <Badge variant="default" className="text-[10px]">
+                        → {rule.targetLabel}
+                      </Badge>
+                      <span className="text-muted-foreground">
+                        {[
+                          rule.conditions.categoriaBiSuite &&
+                            `Cat: ${rule.conditions.categoriaBiSuite}`,
+                          rule.conditions.tipologiaBiSuite &&
+                            `Tip: ${rule.conditions.tipologiaBiSuite}`,
+                          rule.conditions.descrizioneBiSuite &&
+                            `Desc: "${rule.conditions.descrizioneBiSuite}"`,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || '(nessuna condizione)'}
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground">
+                      Campi sovrascritti:{' '}
+                      <span className="text-orange-700 dark:text-orange-300 font-medium">
+                        {diff.map((d) => d.label).join(', ')}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="btn-bulk-align-cancel">
+              Annulla
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                alignRulesBulk(bulkAlignEntries);
+                setBulkAlignScope(null);
+              }}
+              data-testid="btn-bulk-align-confirm"
+            >
+              Allinea {bulkAlignEntries.length}{' '}
+              {bulkAlignEntries.length === 1 ? 'regola' : 'regole'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
         <DialogContent>
