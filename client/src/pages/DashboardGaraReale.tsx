@@ -1079,34 +1079,24 @@ function PistaCompactRow({
 
 type TabellaCellMetrics = {
   puntiAtt: number;
-  puntiProi: number;
+  puntiProi?: number;
   sogliaAtt?: string;
   sogliaProi?: string;
 };
 
-function TabellaCellPunti({ metrics, dim }: { metrics?: TabellaCellMetrics; dim?: boolean }) {
-  if (!metrics || (metrics.puntiAtt === 0 && metrics.puntiProi === 0)) {
+function TabellaCellSingolo({ punti, soglia, variant, dim }: { punti?: number; soglia?: string; variant: 'attuale' | 'proiezione'; dim?: boolean }) {
+  if (punti === undefined || punti === null) {
     return <span className="text-gray-300 dark:text-gray-700">—</span>;
   }
-  const showSogliaAtt = metrics.sogliaAtt && metrics.sogliaAtt !== 'N/A' && metrics.sogliaAtt !== 'Nessuna';
-  const showSogliaProi = metrics.sogliaProi && metrics.sogliaProi !== 'N/A' && metrics.sogliaProi !== 'Nessuna';
+  const showSoglia = soglia && soglia !== 'N/A' && soglia !== 'Nessuna';
   const sizeCls = dim ? 'text-[11px]' : 'text-xs';
+  const colorCls = variant === 'proiezione' ? 'text-blue-600 dark:text-blue-400' : '';
   return (
-    <div className={`flex flex-col items-center gap-0.5 ${sizeCls}`}>
-      <div className="flex items-center gap-1 whitespace-nowrap">
-        <span className="font-semibold">{metrics.puntiAtt.toFixed(1)}</span>
-        {showSogliaAtt && (
-          <Badge variant="outline" className={`text-[9px] h-4 px-1 ${getSogliaColor(metrics.sogliaAtt!)}`}>{metrics.sogliaAtt}</Badge>
-        )}
-      </div>
-      {metrics.puntiProi > 0 && (
-        <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 whitespace-nowrap">
-          <TrendingUp className="h-2.5 w-2.5" />
-          <span className="font-medium">{metrics.puntiProi.toFixed(1)}</span>
-          {showSogliaProi && (
-            <Badge variant="outline" className={`text-[9px] h-4 px-1 ${getSogliaColor(metrics.sogliaProi!)}`}>{metrics.sogliaProi}</Badge>
-          )}
-        </div>
+    <div className={`flex items-center justify-center gap-1 whitespace-nowrap ${sizeCls} ${colorCls}`}>
+      {variant === 'proiezione' && <TrendingUp className="h-2.5 w-2.5" />}
+      <span className="font-semibold">{punti.toFixed(1)}</span>
+      {showSoglia && (
+        <Badge variant="outline" className={`text-[9px] h-4 px-1 ${getSogliaColor(soglia!)}`}>{soglia}</Badge>
       )}
     </div>
   );
@@ -1153,12 +1143,12 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
         if (!rsEntry.perPdv.has(pdv.codicePos)) rsEntry.perPdv.set(pdv.codicePos, new Map());
         const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
         const puntiAtt = pdv.pdvCalc?.puntiTotali ?? 0;
-        const puntiProi = proj?.puntiTotali ?? puntiAtt;
+        const puntiProi = proj ? (proj.puntiTotali ?? 0) : undefined;
         rsEntry.perPdv.get(pdv.codicePos)!.set(pistaKey, {
           puntiAtt,
           puntiProi,
           sogliaAtt: hasRsMode ? undefined : pdv.pdvCalc?.sogliaLabel,
-          sogliaProi: hasRsMode ? undefined : (proj?.sogliaLabel ?? pdv.pdvCalc?.sogliaLabel),
+          sogliaProi: hasRsMode ? undefined : proj?.sogliaLabel,
         });
       }
 
@@ -1175,19 +1165,22 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
         });
       } else {
         // sum per RS without soglia
-        const sums = new Map<string, { puntiAtt: number; puntiProi: number }>();
+        const sums = new Map<string, { puntiAtt: number; puntiProi: number; hasProj: boolean }>();
         for (const pdv of (pista.pdvBreakdown || [])) {
           const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
-          if (!sums.has(rsKey)) sums.set(rsKey, { puntiAtt: 0, puntiProi: 0 });
+          if (!sums.has(rsKey)) sums.set(rsKey, { puntiAtt: 0, puntiProi: 0, hasProj: false });
           const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
           const s = sums.get(rsKey)!;
           const pAtt = pdv.pdvCalc?.puntiTotali ?? 0;
           s.puntiAtt += pAtt;
-          s.puntiProi += proj?.puntiTotali ?? pAtt;
+          if (proj) {
+            s.puntiProi += proj.puntiTotali ?? 0;
+            s.hasProj = true;
+          }
         }
         sums.forEach((v, rsKey) => {
           const entry = rsMap.get(rsKey);
-          if (entry) entry.perPista.set(pistaKey, { puntiAtt: v.puntiAtt, puntiProi: v.puntiProi });
+          if (entry) entry.perPista.set(pistaKey, { puntiAtt: v.puntiAtt, puntiProi: v.hasProj ? v.puntiProi : undefined });
         });
       }
     }
@@ -1230,13 +1223,13 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
           <table className="w-full text-sm border-collapse" data-testid="table-pdv-pista">
             <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900 border-b z-20">
               <tr>
-                <th className="text-left px-3 py-2 font-semibold sticky left-0 bg-gray-50 dark:bg-gray-900 min-w-[240px] border-r z-30">Ragione Sociale / PDV</th>
+                <th rowSpan={2} className="text-left px-3 py-2 font-semibold sticky left-0 bg-gray-50 dark:bg-gray-900 min-w-[240px] border-r border-b z-30 align-middle">Ragione Sociale / PDV</th>
                 {pisteAttive.map(p => {
                   const conf = (PISTA_CONFIG as any)[p.pista];
                   if (!conf) return null;
                   const Icon = conf.icon;
                   return (
-                    <th key={p.pista} className="text-center px-3 py-2 font-semibold border-r last:border-r-0 min-w-[140px]" data-testid={`th-tabella-${p.pista}`}>
+                    <th key={p.pista} colSpan={2} className="text-center px-3 py-2 font-semibold border-r border-b last:border-r-0 min-w-[260px]" data-testid={`th-tabella-${p.pista}`}>
                       <div className="flex items-center justify-center gap-1.5">
                         <div className={`p-1 rounded ${conf.color} text-white`}><Icon className="h-3 w-3" /></div>
                         <span>{conf.label}</span>
@@ -1245,11 +1238,19 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
                   );
                 })}
               </tr>
+              <tr>
+                {pisteAttive.map(p => (
+                  <Fragment key={p.pista}>
+                    <th className="text-center px-2 py-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 border-r border-b min-w-[130px]" data-testid={`th-tabella-${p.pista}-attuale`}>Attuale</th>
+                    <th className="text-center px-2 py-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 border-r border-b last:border-r-0 min-w-[130px]" data-testid={`th-tabella-${p.pista}-proiezione`}>Proiezione</th>
+                  </Fragment>
+                ))}
+              </tr>
             </thead>
             <tbody>
               {rsRows.length === 0 && (
                 <tr data-testid="row-table-empty">
-                  <td colSpan={1 + pisteAttive.length} className="px-3 py-6 text-center text-sm text-gray-500">
+                  <td colSpan={1 + pisteAttive.length * 2} className="px-3 py-6 text-center text-sm text-gray-500">
                     Nessun dato disponibile per i punti vendita.
                   </td>
                 </tr>
@@ -1270,11 +1271,19 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
                           <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">{rs.pdvs.size} PDV</Badge>
                         </div>
                       </td>
-                      {pisteAttive.map(p => (
-                        <td key={p.pista} className="px-3 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${rs.rsKey}-${p.pista}`}>
-                          <TabellaCellPunti metrics={rs.perPista.get(p.pista)} />
-                        </td>
-                      ))}
+                      {pisteAttive.map(p => {
+                        const m = rs.perPista.get(p.pista);
+                        return (
+                          <Fragment key={p.pista}>
+                            <td className="px-2 py-2 text-center border-r" data-testid={`cell-table-${rs.rsKey}-${p.pista}-attuale`}>
+                              <TabellaCellSingolo punti={m?.puntiAtt} soglia={m?.sogliaAtt} variant="attuale" />
+                            </td>
+                            <td className="px-2 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${rs.rsKey}-${p.pista}-proiezione`}>
+                              <TabellaCellSingolo punti={m?.puntiProi} soglia={m?.sogliaProi} variant="proiezione" />
+                            </td>
+                          </Fragment>
+                        );
+                      })}
                     </tr>
                     {isExpanded && rs.pdvList.map(pdv => (
                       <tr key={pdv.codicePos} className="border-b bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800/40" data-testid={`row-table-pdv-${pdv.codicePos}`}>
@@ -1284,11 +1293,19 @@ function TabellaPdvPista({ pistaStats }: { pistaStats: any[] }) {
                             <div className="text-gray-500 text-[10px]">{pdv.codicePos}</div>
                           </div>
                         </td>
-                        {pisteAttive.map(p => (
-                          <td key={p.pista} className="px-3 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${pdv.codicePos}-${p.pista}`}>
-                            <TabellaCellPunti metrics={rs.perPdv.get(pdv.codicePos)?.get(p.pista)} dim />
-                          </td>
-                        ))}
+                        {pisteAttive.map(p => {
+                          const m = rs.perPdv.get(pdv.codicePos)?.get(p.pista);
+                          return (
+                            <Fragment key={p.pista}>
+                              <td className="px-2 py-2 text-center border-r" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-attuale`}>
+                                <TabellaCellSingolo punti={m?.puntiAtt} soglia={m?.sogliaAtt} variant="attuale" dim />
+                              </td>
+                              <td className="px-2 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-proiezione`}>
+                                <TabellaCellSingolo punti={m?.puntiProi} soglia={m?.sogliaProi} variant="proiezione" dim />
+                              </td>
+                            </Fragment>
+                          );
+                        })}
                       </tr>
                     ))}
                   </Fragment>
