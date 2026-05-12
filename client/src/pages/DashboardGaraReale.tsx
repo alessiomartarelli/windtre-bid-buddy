@@ -1705,10 +1705,6 @@ export default function DashboardGaraReale() {
             totalPunti += rsCalc.puntiTotali;
             if (rsCalc.sogliaRaggiunta > bestSoglia) bestSoglia = rsCalc.sogliaRaggiunta;
 
-            for (const pdv of rsPdvs) {
-              pdv.pdvCalc = rsCalc;
-            }
-
             const ratio = rsWorkday.elapsedWorkingDays > 0
               ? rsWorkday.totalWorkingDays / rsWorkday.elapsedWorkingDays
               : 1;
