@@ -1109,6 +1109,41 @@ function TabellaCellSingolo({ valore, soglia, unita, variant, dim }: { valore?: 
 
 function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[]; orgId?: string | null; mese?: number; anno?: number }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [hydratedOrgId, setHydratedOrgId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (hydratedOrgId === orgId) return;
+    let next: Set<string> = new Set();
+    try {
+      const raw = localStorage.getItem(`${TABELLA_EXPANDED_RS_STORAGE_PREFIX}${orgId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          next = new Set(parsed.filter((k): k is string => typeof k === "string"));
+        }
+      }
+    } catch {
+      next = new Set();
+    }
+    setExpanded(next);
+    setHydratedOrgId(orgId);
+  }, [orgId, hydratedOrgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (hydratedOrgId !== orgId) return;
+    try {
+      const key = `${TABELLA_EXPANDED_RS_STORAGE_PREFIX}${orgId}`;
+      if (expanded.size === 0) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, JSON.stringify(Array.from(expanded)));
+      }
+    } catch {
+      // ignore quota / serialization errors
+    }
+  }, [expanded, orgId, hydratedOrgId]);
 
   const { pisteAttive, rsRows } = useMemo(() => {
     const piste = (pistaStats || []).filter(p => !!(PISTA_CONFIG as any)[p.pista]);
@@ -1413,6 +1448,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
 }
 
 const EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-expanded-rs:";
+const TABELLA_EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-tabella-expanded-rs:";
 
 function getPistaRsRowKeys(pista: any): string[] {
   if (!pista || pista.totalePezzi === 0) return [];
