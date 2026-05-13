@@ -1095,23 +1095,68 @@ function PistaCompactRow({
 type TabellaCellMetrics = {
   valoreAtt: number;
   valoreProi?: number;
+  // Versione del valore già pre-arrotondata alla precisione di display (1 dec)
+  // della UI, usata per la cella in tabella. Quando presente, garantisce che
+  // la somma dei valori display dei PDV combaci esattamente col valore RS
+  // mostrato (allocazione pro-rata con residuo sull'ultimo PDV). I campi
+  // `valoreAtt`/`valoreProi` restano allineati alla precisione export (2 dec)
+  // così che anche export Excel/CSV/PDF abbiano somma esatta. In assenza dei
+  // campi *Ui la cella usa direttamente `valoreAtt`/`valoreProi`.
+  valoreAttUi?: number;
+  valoreProiUi?: number;
   sogliaAtt?: string;
   sogliaProi?: string;
   proiStimata?: boolean;
+  quotaRs?: boolean;
+  quotaRsTotalAtt?: number;
+  quotaRsTotalProi?: number;
 };
 
-function TabellaCellSingolo({ valore, soglia, variant, stimata, dim }: { valore?: number; soglia?: string; variant: 'attuale' | 'proiezione'; stimata?: boolean; dim?: boolean }) {
+// Helper centralizzato: ripartizione pro-rata di `total` sui pesi `weights`
+// arrotondata a `decimals` cifre, con residuo assegnato all'ultimo elemento
+// così che la somma dei valori restituiti sia esattamente uguale al totale
+// arrotondato alla stessa precisione (no drift di arrotondamento).
+function proRataConResiduo(total: number, weights: number[], decimals: number): number[] {
+  const n = weights.length;
+  if (n === 0) return [];
+  const factor = Math.pow(10, decimals);
+  const totalScaled = Math.round(total * factor);
+  const sumW = weights.reduce((a, b) => a + b, 0);
+  if (!Number.isFinite(sumW) || sumW <= 0) {
+    // Se non c'è denominatore (es. pezziTotaliRS = 0) la quota di ogni PDV
+    // è 0: non assegnamo il residuo per evitare di concentrare l'intero
+    // totale RS su un singolo PDV in modo fuorviante.
+    return new Array(n).fill(0);
+  }
+  const out: number[] = new Array(n);
+  let allocated = 0;
+  for (let i = 0; i < n - 1; i++) {
+    const v = Math.round((totalScaled * weights[i]) / sumW);
+    out[i] = v / factor;
+    allocated += v;
+  }
+  out[n - 1] = (totalScaled - allocated) / factor;
+  return out;
+}
+
+function TabellaCellSingolo({ valore, soglia, variant, stimata, dim, quotaRs, quotaRsTotal }: { valore?: number; soglia?: string; variant: 'attuale' | 'proiezione'; stimata?: boolean; dim?: boolean; quotaRs?: boolean; quotaRsTotal?: number }) {
   if (valore === undefined || valore === null) {
     return <span className="text-gray-300 dark:text-gray-700">—</span>;
   }
   const showSoglia = soglia && soglia !== 'N/A' && soglia !== 'Nessuna';
   const sizeCls = dim ? 'text-[11px]' : 'text-xs';
   const colorCls = variant === 'proiezione' ? 'text-blue-600 dark:text-blue-400' : '';
+  const italicCls = quotaRs ? 'italic' : '';
+  const tooltip = quotaRs
+    ? `Quota proporzionale ai pezzi del PDV sul totale RS${typeof quotaRsTotal === 'number' ? ` (totale RS: ${quotaRsTotal.toFixed(1)})` : ''}`
+    : stimata
+      ? 'Proiezione stimata in proporzione ai pezzi (calcolo punti per PDV non disponibile in modalità gara per RS)'
+      : undefined;
   return (
-    <div className={`flex items-center justify-center gap-1 whitespace-nowrap ${sizeCls} ${colorCls}`} title={stimata ? 'Proiezione stimata in proporzione ai pezzi (calcolo punti per PDV non disponibile in modalità gara per RS)' : undefined}>
+    <div className={`flex items-center justify-center gap-1 whitespace-nowrap ${sizeCls} ${colorCls} ${italicCls}`} title={tooltip}>
       {variant === 'proiezione' && <TrendingUp className="h-2.5 w-2.5" />}
       <span className="font-semibold">{valore.toFixed(1)}</span>
-      {stimata && <span className="text-[9px] text-gray-400">~</span>}
+      {(stimata || quotaRs) && <span className="text-[9px] text-gray-400">~</span>}
       {showSoglia && (
         <Badge variant="outline" className={`text-[9px] h-4 px-1 ${getSogliaColor(soglia!)}`}>{soglia}</Badge>
       )}
@@ -1601,44 +1646,8 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
       const pistaKey = pista.pista;
       const hasRsMode = !!(pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 0);
 
-      // PDV-level cells: SEMPRE punti prodotti dal PDV.
-      // In modalità per_rs il calcolo proiezione per PDV non è disponibile (le soglie
-      // sono applicate a livello RS), quindi stimiamo la proiezione punti del PDV in
-      // proporzione alla crescita dei pezzi: puntiAtt × (pezziProi / max(pezziAtt, 1)).
-      // In modalità per_pdv usiamo direttamente i valori calcolati.
-      for (const pdv of (pista.pdvBreakdown || [])) {
-        const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
-        const rsEntry = ensureRs(rsKey, pdv.ragioneSociale || 'Senza RS');
-        if (!rsEntry.pdvs.has(pdv.codicePos)) {
-          rsEntry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio });
-        }
-        if (!rsEntry.perPdv.has(pdv.codicePos)) rsEntry.perPdv.set(pdv.codicePos, new Map());
-        const puntiAtt = pdv.pdvCalc?.puntiTotali ?? 0;
-        const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
-        let valoreProi: number | undefined;
-        let proiStimata = false;
-        if (proj) {
-          valoreProi = proj.puntiTotali ?? 0;
-        } else if (hasRsMode) {
-          const pezziAtt = pdv.pezzi ?? 0;
-          const pezziProi = pdv.proiezione ?? pezziAtt;
-          if (pezziAtt > 0) {
-            valoreProi = puntiAtt * (pezziProi / pezziAtt);
-            proiStimata = true;
-          } else if (pezziProi === 0) {
-            valoreProi = 0;
-          }
-        }
-        rsEntry.perPdv.get(pdv.codicePos)!.set(pistaKey, {
-          valoreAtt: puntiAtt,
-          valoreProi,
-          sogliaAtt: hasRsMode ? undefined : pdv.pdvCalc?.sogliaLabel,
-          sogliaProi: hasRsMode ? undefined : proj?.sogliaLabel,
-          proiStimata,
-        });
-      }
-
-      // RS-level cells (sempre in punti)
+      // RS-level cells (sempre in punti) — calcolate per prime, così possiamo
+      // distribuire il loro totale ai PDV in modalità per_rs.
       if (hasRsMode) {
         pista.rsCalcBreakdown!.forEach((rsData: any, rsKey: string) => {
           const rsEntry = ensureRs(rsKey, rsData.displayName || rsKey);
@@ -1649,7 +1658,75 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
             sogliaProi: rsData.sogliaProiezione,
           });
         });
+      }
+
+      // PDV-level cells.
+      // - In `per_rs`: sostituiamo il punteggio "isolato" del PDV con la quota
+      //   proporzionale del totale RS, calcolata sui pezzi core del PDV / pezzi
+      //   core totali della RS. Stessa logica per la proiezione. L'ultimo PDV
+      //   del gruppo riceve il residuo per evitare drift di arrotondamento e
+      //   garantire che la somma combaci col totale RS.
+      // - In `per_pdv`: comportamento invariato (punti calcolati per il PDV,
+      //   con le sue soglie).
+      if (hasRsMode) {
+        const pdvsByRs = new Map<string, any[]>();
+        for (const pdv of (pista.pdvBreakdown || [])) {
+          const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+          if (!pdvsByRs.has(rsKey)) pdvsByRs.set(rsKey, []);
+          pdvsByRs.get(rsKey)!.push(pdv);
+        }
+        pdvsByRs.forEach((pdvs, rsKey) => {
+          const rsData = pista.rsCalcBreakdown!.get(rsKey);
+          const rsEntry = ensureRs(rsKey, rsData?.displayName || pdvs[0].ragioneSociale || rsKey);
+          const puntiTotaliRs = rsData?.puntiAttuali ?? 0;
+          const puntiProiRs = rsData?.puntiProiezione ?? puntiTotaliRs;
+          const pesiAtt = pdvs.map(p => p.pezzi ?? 0);
+          const pesiProi = pdvs.map(p => p.proiezione ?? p.pezzi ?? 0);
+          // Doppia allocazione: precisione UI (1 dec) e precisione export (2 dec).
+          // In entrambi i casi la somma combacia esattamente col totale RS
+          // arrotondato alla stessa precisione, grazie al residuo sull'ultimo PDV.
+          const quoteAttUi = proRataConResiduo(puntiTotaliRs, pesiAtt, 1);
+          const quoteAttExport = proRataConResiduo(puntiTotaliRs, pesiAtt, 2);
+          const quoteProiUi = proRataConResiduo(puntiProiRs, pesiProi, 1);
+          const quoteProiExport = proRataConResiduo(puntiProiRs, pesiProi, 2);
+          pdvs.forEach((pdv, idx) => {
+            if (!rsEntry.pdvs.has(pdv.codicePos)) {
+              rsEntry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio });
+            }
+            if (!rsEntry.perPdv.has(pdv.codicePos)) rsEntry.perPdv.set(pdv.codicePos, new Map());
+            rsEntry.perPdv.get(pdv.codicePos)!.set(pistaKey, {
+              valoreAtt: quoteAttExport[idx],
+              valoreProi: quoteProiExport[idx],
+              valoreAttUi: quoteAttUi[idx],
+              valoreProiUi: quoteProiUi[idx],
+              sogliaAtt: undefined,
+              sogliaProi: undefined,
+              quotaRs: true,
+              quotaRsTotalAtt: puntiTotaliRs,
+              quotaRsTotalProi: puntiProiRs,
+            });
+          });
+        });
       } else {
+        for (const pdv of (pista.pdvBreakdown || [])) {
+          const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+          const rsEntry = ensureRs(rsKey, pdv.ragioneSociale || 'Senza RS');
+          if (!rsEntry.pdvs.has(pdv.codicePos)) {
+            rsEntry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio });
+          }
+          if (!rsEntry.perPdv.has(pdv.codicePos)) rsEntry.perPdv.set(pdv.codicePos, new Map());
+          const puntiAtt = pdv.pdvCalc?.puntiTotali ?? 0;
+          const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
+          rsEntry.perPdv.get(pdv.codicePos)!.set(pistaKey, {
+            valoreAtt: puntiAtt,
+            valoreProi: proj ? (proj.puntiTotali ?? 0) : undefined,
+            sogliaAtt: pdv.pdvCalc?.sogliaLabel,
+            sogliaProi: proj?.sogliaLabel,
+          });
+        }
+      }
+
+      if (!hasRsMode) {
         // sum per RS without soglia
         const sums = new Map<string, { valoreAtt: number; valoreProi: number; hasProj: boolean }>();
         for (const pdv of (pista.pdvBreakdown || [])) {
@@ -1943,10 +2020,10 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                           return (
                             <Fragment key={p.pista}>
                               <td className="px-2 py-2 text-center border-r" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-attuale`}>
-                                <TabellaCellSingolo valore={m?.valoreAtt} soglia={m?.sogliaAtt} variant="attuale" dim />
+                                <TabellaCellSingolo valore={m?.valoreAttUi ?? m?.valoreAtt} soglia={m?.sogliaAtt} variant="attuale" dim quotaRs={m?.quotaRs} quotaRsTotal={m?.quotaRsTotalAtt} />
                               </td>
                               <td className="px-2 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-proiezione`}>
-                                <TabellaCellSingolo valore={m?.valoreProi} soglia={m?.sogliaProi} variant="proiezione" stimata={m?.proiStimata} dim />
+                                <TabellaCellSingolo valore={m?.valoreProiUi ?? m?.valoreProi} soglia={m?.sogliaProi} variant="proiezione" stimata={m?.proiStimata} dim quotaRs={m?.quotaRs} quotaRsTotal={m?.quotaRsTotalProi} />
                               </td>
                             </Fragment>
                           );
