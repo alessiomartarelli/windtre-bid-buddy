@@ -18,6 +18,7 @@ import {
   SMTP_CONFIG_KEY,
   type SmtpConfig,
 } from "./email";
+import { encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
@@ -547,6 +548,27 @@ export async function registerRoutes(
       const existing = await storage.getSystemConfig(SMTP_CONFIG_KEY);
       const prev = (existing?.config ?? {}) as Partial<SmtpConfig>;
       const incoming = parsed.data;
+      // Cifratura della password: se è in arrivo una nuova password la cifriamo
+      // ora; altrimenti riutilizziamo il valore già presente in DB (che può
+      // essere già cifrato o legacy in chiaro — verrà migrato alla prossima load).
+      let nextPass: string = "";
+      if (incoming.pass && incoming.pass.length > 0) {
+        if (!getSecretKey()) {
+          return res.status(503).json({
+            message:
+              "SMTP_SECRET_KEY non configurata sul server: impossibile salvare una nuova password SMTP cifrata. Configura la variabile d'ambiente e riprova.",
+          });
+        }
+        nextPass = encryptSecret(incoming.pass);
+      } else if (typeof prev.pass === "string" && prev.pass.length > 0) {
+        // Manteniamo il valore esistente: se non è ancora cifrato e abbiamo la
+        // chiave lo cifriamo ora (migrazione opportunistica al primo save).
+        if (!isEncrypted(prev.pass) && getSecretKey()) {
+          nextPass = encryptSecret(prev.pass);
+        } else {
+          nextPass = prev.pass;
+        }
+      }
       const next: Partial<SmtpConfig> = {
         host: incoming.host ?? "",
         port: incoming.port ?? 587,
@@ -554,7 +576,7 @@ export async function registerRoutes(
         user: incoming.user ?? "",
         from: incoming.from ?? "",
         baseUrl: incoming.baseUrl ?? "",
-        pass: incoming.pass && incoming.pass.length > 0 ? incoming.pass : (prev.pass ?? ""),
+        pass: nextPass,
       };
       await storage.upsertSystemConfig(SMTP_CONFIG_KEY, next, userId);
       invalidateEmailConfigCache();

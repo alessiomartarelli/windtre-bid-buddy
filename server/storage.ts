@@ -39,7 +39,7 @@ export interface IStorage {
   // System Config (super admin defaults)
   getSystemConfig(key: string): Promise<SystemConfig | undefined>;
   getAllSystemConfigs(): Promise<SystemConfig[]>;
-  upsertSystemConfig(key: string, config: any, updatedBy: string): Promise<SystemConfig>;
+  upsertSystemConfig(key: string, config: any, updatedBy: string | null): Promise<SystemConfig>;
 
   // BiSuite Sales
   upsertBisuiteSales(sales: InsertBisuiteSale[]): Promise<{ inserted: number; updated: number; total: number }>;
@@ -261,7 +261,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(systemConfig);
   }
 
-  async upsertSystemConfig(key: string, config: any, updatedBy: string): Promise<SystemConfig> {
+  async upsertSystemConfig(key: string, config: any, updatedBy: string | null): Promise<SystemConfig> {
     const [result] = await db.insert(systemConfig)
       .values({ key, config, updatedBy })
       .onConflictDoUpdate({

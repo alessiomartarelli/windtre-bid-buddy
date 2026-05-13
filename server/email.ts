@@ -1,5 +1,6 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { storage } from "./storage";
+import { decryptSecret, encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
 
 /**
  * Modulo email centralizzato. La configurazione SMTP viene letta da:
@@ -56,6 +57,27 @@ function mergeConfig(env: SmtpConfig, db: Partial<SmtpConfig> | null | undefined
   return merged;
 }
 
+/**
+ * Migra la password salvata in chiaro nel DB cifrandola con AES-GCM. Idempotente:
+ * se la password è già cifrata o se manca la chiave di cifratura non fa nulla.
+ */
+async function migratePlainPassword(
+  raw: Partial<SmtpConfig>,
+  updatedBy: string | null,
+): Promise<void> {
+  if (typeof raw.pass !== "string" || raw.pass.length === 0) return;
+  if (isEncrypted(raw.pass)) return;
+  if (!getSecretKey()) return;
+  try {
+    const next = { ...raw, pass: encryptSecret(raw.pass) };
+    await storage.upsertSystemConfig(SMTP_CONFIG_KEY, next, updatedBy);
+    console.log(`[email] password SMTP migrata a cifratura AES-GCM in ${SMTP_CONFIG_KEY}`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[email] migrazione password SMTP fallita: ${msg}`);
+  }
+}
+
 export async function loadEmailConfig(force = false): Promise<SmtpConfig> {
   if (!force && cachedConfig) return cachedConfig;
   const env = readEnvConfig();
@@ -63,7 +85,49 @@ export async function loadEmailConfig(force = false): Promise<SmtpConfig> {
   try {
     const sys = await storage.getSystemConfig(SMTP_CONFIG_KEY);
     if (sys?.config && typeof sys.config === "object") {
-      dbConfig = sys.config as Partial<SmtpConfig>;
+      const raw = sys.config as Partial<SmtpConfig>;
+      // Migrazione one-shot: se la password è ancora in chiaro la cifriamo
+      // ora che la chiave è disponibile. Non blocca la load (fire-and-forget
+      // ma awaited per coerenza del cache successivo).
+      if (
+        typeof raw.pass === "string" &&
+        raw.pass.length > 0 &&
+        !isEncrypted(raw.pass) &&
+        getSecretKey()
+      ) {
+        // updatedBy è nullable nello schema: se manca passiamo null, lo
+        // accettiamo come "sistema" (la colonna è nullable).
+        await migratePlainPassword(raw, sys.updatedBy ?? null);
+      }
+      // Risoluzione della password con politica strict:
+      //   - se è cifrata: tentiamo decifratura; se fallisce o la chiave
+      //     manca, IGNORIAMO la pass DB → fallback env-only.
+      //   - se è in chiaro (legacy non ancora migrato) e abbiamo la chiave,
+      //     la migrazione sopra l'avrà appena cifrata; la usiamo solo se
+      //     la chiave c'è. Senza chiave, NON usiamo mai una pass DB in
+      //     chiaro: forziamo l'env-only fallback richiesto dalla policy.
+      let resolvedPass: string | undefined;
+      if (typeof raw.pass === "string" && raw.pass.length > 0) {
+        if (isEncrypted(raw.pass)) {
+          const dec = decryptSecret(raw.pass);
+          if (dec === null) {
+            console.warn(
+              `[email] impossibile decifrare la password SMTP da ${SMTP_CONFIG_KEY} (chiave SMTP_SECRET_KEY mancante o errata): fallback a env-only per la password`,
+            );
+          } else {
+            resolvedPass = dec;
+          }
+        } else if (getSecretKey()) {
+          // Plaintext legacy con chiave disponibile: dopo la migrazione
+          // possiamo usarla in memoria per questa request.
+          resolvedPass = raw.pass;
+        } else {
+          console.warn(
+            `[email] password SMTP in DB ancora in chiaro ma SMTP_SECRET_KEY mancante: fallback a env-only (la migrazione cifrerà al primo restart con la chiave configurata)`,
+          );
+        }
+      }
+      dbConfig = { ...raw, pass: resolvedPass };
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
