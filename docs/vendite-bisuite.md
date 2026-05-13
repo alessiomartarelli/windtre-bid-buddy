@@ -38,14 +38,24 @@ Il trick `xmax = 0` di Postgres è usato in `RETURNING` per distinguere
 record inseriti vs aggiornati e popolare il riepilogo della risposta
 (`inserted`, `updated`, `chunks`, `failedChunks`).
 
-L'API BiSuite tronca silenziosamente le risposte oltre ~13-14 giorni:
-una singola chiamata con `from=2026-01-01&to=2026-05-13` restituisce
-solo gli ultimi giorni e omette i mesi precedenti. Per evitare questo,
-la sync spezza il range richiesto in **chunk mensili** allineati al
-1°/ultimo del mese (`buildMonthlyChunks`) e fa una chiamata per ogni
-mese. Il fallimento di un singolo chunk non interrompe gli altri e non
-cancella nulla: l'errore finisce in `failedChunks`. Default range se
-non specificato: `${anno_corrente}-01-01` → domani.
+L'API BiSuite ha **due limiti accertati** (verificati 13/05/2026):
+1. **Cap di 5000 record per risposta**. I parametri `page`, `offset`,
+   `limit` sono **ignorati** (rispondono sempre con i primi 5000).
+2. **Truncation per range troppo ampi**: una singola chiamata con range
+   da inizio anno restituisce solo gli ultimi ~13-14 giorni omettendo
+   i precedenti.
+
+Per gestire entrambi:
+- La sync spezza il range richiesto in **chunk mensili** allineati al
+  1°/ultimo del mese (`buildMonthlyChunks`).
+- Per ogni chunk, `fetchSalesRange` fa **bisezione ricorsiva** se la
+  risposta tocca il cap (`length >= BISUITE_API_HARD_CAP=5000`):
+  divide il range a metà, ricorre, e deduplica per id all'unione.
+  Le sovrapposizioni di confine sono comunque assorbite dall'upsert
+  idempotente sull'unique constraint.
+- Il fallimento di un singolo chunk **non interrompe gli altri** e
+  non cancella nulla: l'errore finisce in `failedChunks`. Default
+  range se non specificato: `${anno_corrente}-01-01` → domani.
 
 Recovery storico: `node runBisuiteFetch.cjs <orgId> [startYMD] [endYMD]`
 (CLI omonimo); oppure POST `/api/admin/bisuite-import` con `start_date`,

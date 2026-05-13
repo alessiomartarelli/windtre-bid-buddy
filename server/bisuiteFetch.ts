@@ -189,7 +189,15 @@ export function buildMonthlyChunks(fromYMD: string, toYMD: string): Array<{ from
   return chunks;
 }
 
-async function fetchSalesRange(
+/**
+ * Cap di record che l'API BiSuite restituisce per singola chiamata
+ * (verificato 13/05/2026: i parametri page/offset/limit sono ignorati,
+ * il cap è 5000). Quando una risposta raggiunge questo numero, la
+ * dobbiamo trattare come potenzialmente troncata e bisecare il range.
+ */
+const BISUITE_API_HARD_CAP = 5000;
+
+async function fetchSalesPage(
   salesEndpoint: string,
   token: string,
   from: string,
@@ -212,6 +220,74 @@ async function fetchSalesRange(
   if (Array.isArray(data?.vendite)) return data.vendite;
   if (Array.isArray(data?.sales)) return data.sales;
   return [];
+}
+
+function addDays(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return ymd2(dt);
+}
+
+function ymd2(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function daysBetween(fromYMD: string, toYMD: string): number {
+  const [fy, fm, fd] = fromYMD.split("-").map(Number);
+  const [ty, tm, td] = toYMD.split("-").map(Number);
+  const f = Date.UTC(fy, fm - 1, fd);
+  const t = Date.UTC(ty, tm - 1, td);
+  return Math.round((t - f) / (24 * 3600 * 1000));
+}
+
+/**
+ * Fetch con bisezione ricorsiva: se la risposta raggiunge il cap
+ * `BISUITE_API_HARD_CAP` significa che il range è probabilmente troncato.
+ * Spezziamo il range a metà e ricorriamo, deduplicando per id all'unione
+ * (eventuali sovrapposizioni di confine sono assorbite dall'upsert
+ * downstream, ma deduplichiamo qui per ridurre il payload).
+ */
+async function fetchSalesRange(
+  salesEndpoint: string,
+  token: string,
+  from: string,
+  to: string,
+): Promise<any[]> {
+  const arr = await fetchSalesPage(salesEndpoint, token, from, to);
+  if (arr.length < BISUITE_API_HARD_CAP) return arr;
+  const span = daysBetween(from, to);
+  if (span <= 0) {
+    console.warn(
+      `[bisuite-fetch] cap ${BISUITE_API_HARD_CAP} raggiunto su singolo giorno ${from}: ` +
+        `non posso bisecare oltre, possibile perdita dati.`,
+    );
+    return arr;
+  }
+  const midOffset = Math.floor(span / 2);
+  const mid = addDays(from, midOffset);
+  const next = addDays(mid, 1);
+  console.warn(
+    `[bisuite-fetch] cap raggiunto su ${from}→${to} (${arr.length} record), ` +
+      `bisect a ${from}→${mid} | ${next}→${to}`,
+  );
+  const [left, right] = await Promise.all([
+    fetchSalesRange(salesEndpoint, token, from, mid),
+    fetchSalesRange(salesEndpoint, token, next, to),
+  ]);
+  // Dedup intra-fetch per id (l'upsert DB è già idempotente, ma evitiamo
+  // di inflare i conteggi del log).
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const s of left.concat(right)) {
+    const rawId = s?.id ?? s?.codiceEsterno;
+    if (rawId == null) { out.push(s); continue; }
+    const k = String(rawId);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(s);
+  }
+  return out;
 }
 
 /**
