@@ -2,8 +2,11 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 
 /**
  * Cifratura simmetrica AES-256-GCM per segreti at-rest (es. password SMTP
- * salvata in `system_config`). La chiave viene derivata da `SMTP_SECRET_KEY`
+ * salvata in `system_config`, client_secret BiSuite salvato in
+ * `organization_config`). La chiave viene derivata da `SMTP_SECRET_KEY`
  * via SHA-256 in modo da accettare stringhe di lunghezza arbitraria.
+ * Nonostante il nome storico (`SMTP_SECRET_KEY`), la stessa chiave viene
+ * riusata per tutti i segreti at-rest dell'app.
  *
  * Formato del valore cifrato: `enc:v1:<base64(iv|tag|ciphertext)>`.
  *  - iv: 12 byte (consigliato per GCM)

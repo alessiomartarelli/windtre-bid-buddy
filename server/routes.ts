@@ -18,7 +18,7 @@ import {
   SMTP_CONFIG_KEY,
   type SmtpConfig,
 } from "./email";
-import { encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
+import { decryptSecret, encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
@@ -1756,10 +1756,24 @@ export async function registerRoutes(
 
       if (!creds) return res.json(null);
 
+      // Decifra il client_secret per la visualizzazione nel form admin.
+      // Se la decifratura fallisce (chiave mancante o payload corrotto)
+      // restituiamo stringa vuota: l'admin dovrà reinserire il segreto.
+      const rawSecret = creds.client_secret || "";
+      let secretForUi = "";
+      if (rawSecret) {
+        if (isEncrypted(rawSecret)) {
+          const dec = decryptSecret(rawSecret);
+          secretForUi = dec ?? "";
+        } else {
+          secretForUi = rawSecret;
+        }
+      }
+
       res.json({
         api_url: creds.api_url || "",
         client_id: creds.client_id || "",
-        client_secret: creds.client_secret || "",
+        client_secret: secretForUi,
       });
     } catch (error) {
       console.error("Error loading BiSuite credentials:", error);
@@ -1782,13 +1796,20 @@ export async function registerRoutes(
       if (api_url && !validateBisuiteUrl(api_url)) {
         return res.status(400).json({ error: "URL API non consentito. Utilizzare un host BiSuite valido." });
       }
+      if (!getSecretKey()) {
+        return res.status(500).json({
+          error:
+            "SMTP_SECRET_KEY non configurata sul server: impossibile salvare il client_secret BiSuite cifrato. Configura la variabile d'ambiente e riprova.",
+        });
+      }
 
       const orgConfig = await storage.getOrgConfig(organization_id);
       const existingConfig = (orgConfig?.config as Record<string, unknown>) || {};
 
+      const encSecret = isEncrypted(client_secret) ? client_secret : encryptSecret(client_secret);
       const updatedConfig = {
         ...existingConfig,
-        bisuiteCredentials: { api_url: api_url || "", client_id, client_secret },
+        bisuiteCredentials: { api_url: api_url || "", client_id, client_secret: encSecret },
       };
 
       await storage.upsertOrgConfig(
@@ -1819,13 +1840,20 @@ export async function registerRoutes(
       if (api_url && !validateBisuiteUrl(api_url)) {
         return res.status(400).json({ error: "URL API non consentito. Utilizzare un host BiSuite valido." });
       }
+      if (!getSecretKey()) {
+        return res.status(500).json({
+          error:
+            "SMTP_SECRET_KEY non configurata sul server: impossibile salvare il client_secret BiSuite cifrato. Configura la variabile d'ambiente e riprova.",
+        });
+      }
 
       const orgConfig = await storage.getOrgConfig(organization_id);
       const existingConfig = (orgConfig?.config as Record<string, unknown>) || {};
 
+      const encSecret = isEncrypted(client_secret) ? client_secret : encryptSecret(client_secret);
       const updatedConfig = {
         ...existingConfig,
-        bisuiteCredentials: { api_url: api_url || "", client_id, client_secret },
+        bisuiteCredentials: { api_url: api_url || "", client_id, client_secret: encSecret },
       };
 
       await storage.upsertOrgConfig(
@@ -1871,7 +1899,21 @@ export async function registerRoutes(
         }
         apiUrlStr = creds.api_url || "https://db1.bisuite.app";
         cId = creds.client_id;
-        cSecret = creds.client_secret;
+        // Decifra il client_secret cifrato at-rest. Se la decifratura
+        // fallisce (chiave mancante o payload corrotto) rifiutiamo con
+        // 500: usare un secret nullo provocherebbe comunque un OAuth
+        // failure poco diagnostico.
+        if (isEncrypted(creds.client_secret)) {
+          const dec = decryptSecret(creds.client_secret);
+          if (dec === null) {
+            return res.status(500).json({
+              error: "Impossibile decifrare il client_secret BiSuite (SMTP_SECRET_KEY mancante o errata).",
+            });
+          }
+          cSecret = dec;
+        } else {
+          cSecret = creds.client_secret;
+        }
       } else {
         return res.status(400).json({ error: "organization_id o credenziali dirette sono obbligatorie" });
       }

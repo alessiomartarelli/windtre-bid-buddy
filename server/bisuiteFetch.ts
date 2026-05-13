@@ -1,6 +1,70 @@
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { decryptSecret, encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
+
+/**
+ * Risolve le credenziali BiSuite per una org leggendole da
+ * `organization_config.config.bisuiteCredentials`. Se il `client_secret`
+ * è cifrato lo decifra in memoria; se è ancora in chiaro (legacy) ed è
+ * disponibile la chiave AES, lo migra opportunisticamente cifrandolo nel
+ * DB con un write-through. Ritorna null se mancano credenziali utili.
+ */
+export async function resolveBisuiteCredentials(
+  orgId: string,
+): Promise<{ apiUrl: string; clientId: string; clientSecret: string } | null> {
+  const orgConfig = await storage.getOrgConfig(orgId);
+  const cfg = orgConfig?.config as Record<string, any> | undefined;
+  const creds = cfg?.bisuiteCredentials as
+    | { api_url?: string; client_id?: string; client_secret?: string }
+    | undefined;
+  if (!creds?.client_id || !creds?.client_secret) return null;
+
+  let plainSecret: string;
+  if (isEncrypted(creds.client_secret)) {
+    const dec = decryptSecret(creds.client_secret);
+    if (dec === null) {
+      throw new Error(
+        `Impossibile decifrare il client_secret BiSuite per org ${orgId} ` +
+          `(SMTP_SECRET_KEY mancante o errata)`,
+      );
+    }
+    plainSecret = dec;
+  } else {
+    plainSecret = creds.client_secret;
+    // Migrazione opportunistica: cifriamo nel DB se possibile, fire-and-forget.
+    if (getSecretKey()) {
+      try {
+        const encSecret = encryptSecret(plainSecret);
+        const updatedConfig = {
+          ...(cfg ?? {}),
+          bisuiteCredentials: {
+            api_url: creds.api_url || "",
+            client_id: creds.client_id,
+            client_secret: encSecret,
+          },
+        };
+        await storage.upsertOrgConfig(
+          orgId,
+          updatedConfig,
+          orgConfig?.configVersion || "2.0",
+        );
+        console.log(
+          `[bisuite] client_secret migrato a cifratura AES-GCM per org ${orgId}`,
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[bisuite] migrazione client_secret fallita per org ${orgId}: ${msg}`);
+      }
+    }
+  }
+
+  return {
+    apiUrl: creds.api_url || "https://db1.bisuite.app",
+    clientId: creds.client_id,
+    clientSecret: plainSecret,
+  };
+}
 
 const BISUITE_SALES_PATH = "/api/v1/sales/full";
 
@@ -350,16 +414,14 @@ export async function runBisuiteFetchForOrg(
   orgId: string,
   opts?: { startDate?: string; endDate?: string; reconcile?: boolean },
 ): Promise<BisuiteFetchResult> {
-  const orgConfig = await storage.getOrgConfig(orgId);
-  const cfg = orgConfig?.config as Record<string, any> | undefined;
-  const creds = cfg?.bisuiteCredentials;
-  if (!creds?.client_id || !creds?.client_secret) {
+  const resolved = await resolveBisuiteCredentials(orgId);
+  if (!resolved) {
     throw new Error(`Credenziali BiSuite assenti per org ${orgId}`);
   }
 
-  const apiUrlStr = creds.api_url || "https://db1.bisuite.app";
+  const apiUrlStr = resolved.apiUrl;
   const tokenUrl = deriveTokenEndpoint(apiUrlStr);
-  const token = await getBisuiteToken(tokenUrl, creds.client_id, creds.client_secret);
+  const token = await getBisuiteToken(tokenUrl, resolved.clientId, resolved.clientSecret);
 
   const today = new Date();
   const defaultFrom = `${today.getFullYear()}-01-01`;
