@@ -149,17 +149,81 @@ function extractSaleFields(sale: any, organizationId: string) {
 
 export interface BisuiteFetchResult {
   orgId: string;
-  inserted: number;
   totalFromApi: number;
+  inserted: number;
+  updated: number;
+  chunks: number;
+  failedChunks: Array<{ from: string; to: string; error: string }>;
+}
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /**
- * Esegue il fetch BiSuite per una singola organizzazione (stesso comportamento
- * dell'endpoint POST /api/bisuite-fetch): recupera tutte le vendite e
- * sostituisce in blocco le righe esistenti per l'org.
+ * Spezza un range [fromYMD..toYMD] in chunk mensili (allineati al 1°/ultimo
+ * giorno del mese, troncati ai bordi del range). Necessario perché l'API
+ * BiSuite tronca silenziosamente le risposte oltre ~13-14 giorni: chiamandola
+ * con un range troppo ampio si ottengono solo gli ultimi N giorni e si
+ * perdono i mesi precedenti. Con chunk mensili ciascun mese viene scaricato
+ * per intero.
+ */
+export function buildMonthlyChunks(fromYMD: string, toYMD: string): Array<{ from: string; to: string }> {
+  const chunks: Array<{ from: string; to: string }> = [];
+  const [fy, fm] = fromYMD.split("-").map(Number);
+  const [ty, tm] = toYMD.split("-").map(Number);
+  if (!fy || !fm || !ty || !tm) return chunks;
+  let y = fy;
+  let m = fm;
+  while (y < ty || (y === ty && m <= tm)) {
+    const monthStart = `${y}-${String(m).padStart(2, "0")}-01`;
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const monthEnd = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    chunks.push({
+      from: monthStart < fromYMD ? fromYMD : monthStart,
+      to: monthEnd > toYMD ? toYMD : monthEnd,
+    });
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return chunks;
+}
+
+async function fetchSalesRange(
+  salesEndpoint: string,
+  token: string,
+  from: string,
+  to: string,
+): Promise<any[]> {
+  const url = new URL(salesEndpoint);
+  url.searchParams.set("from", from);
+  url.searchParams.set("to", to);
+  const resp = await fetch(url.toString(), {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`BiSuite API error (${resp.status}): ${body.slice(0, 300)}`);
+  }
+  const data: any = await resp.json();
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.vendite)) return data.vendite;
+  if (Array.isArray(data?.sales)) return data.sales;
+  return [];
+}
+
+/**
+ * Esegue il fetch BiSuite per una singola organizzazione in modo
+ * **non distruttivo**: scarica le vendite in chunk mensili e fa upsert
+ * sull'unique constraint (organization_id, bisuite_id). Non cancella mai
+ * record esistenti, neanche in caso di errore parziale: i chunk che
+ * falliscono vengono raccolti in `failedChunks` ma non interrompono il
+ * fetch degli altri mesi e lasciano intatti i dati storici.
  *
- * Se `startDate`/`endDate` non sono passati, scarica tutto quello che l'API
- * BiSuite restituisce per l'org.
+ * Se `startDate`/`endDate` non sono passati, sincronizza dall'inizio
+ * dell'anno corrente fino a domani (margine di sicurezza sui fusi).
  */
 export async function runBisuiteFetchForOrg(
   orgId: string,
@@ -176,41 +240,48 @@ export async function runBisuiteFetchForOrg(
   const tokenUrl = deriveTokenEndpoint(apiUrlStr);
   const token = await getBisuiteToken(tokenUrl, creds.client_id, creds.client_secret);
 
-  // L'API BiSuite richiede from/to obbligatori. Se non specificati,
-  // scarichiamo dall'inizio dell'anno corrente fino a domani (per
-  // sicurezza sui fusi/orari di chiusura).
   const today = new Date();
-  const yyyymmdd = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const defaultFrom = `${today.getFullYear()}-01-01`;
   const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000);
-  const defaultTo = yyyymmdd(tomorrow);
+  const defaultTo = ymd(tomorrow);
 
-  const salesUrl = new URL(deriveSalesEndpoint(apiUrlStr));
-  salesUrl.searchParams.set("from", opts?.startDate || defaultFrom);
-  salesUrl.searchParams.set("to", opts?.endDate || defaultTo);
+  const startYMD = opts?.startDate || defaultFrom;
+  const endYMD = opts?.endDate || defaultTo;
+  const chunks = buildMonthlyChunks(startYMD, endYMD);
 
-  const salesResp = await fetch(salesUrl.toString(), {
-    method: "GET",
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-  });
-  if (!salesResp.ok) {
-    const body = await salesResp.text();
-    throw new Error(`BiSuite API error (${salesResp.status}): ${body.slice(0, 300)}`);
+  const salesEndpoint = deriveSalesEndpoint(apiUrlStr);
+  let totalFromApi = 0;
+  let totalInserted = 0;
+  let totalUpdated = 0;
+  const failedChunks: Array<{ from: string; to: string; error: string }> = [];
+
+  for (const c of chunks) {
+    try {
+      const sales = await fetchSalesRange(salesEndpoint, token, c.from, c.to);
+      const records = sales.map((s) => extractSaleFields(s, orgId));
+      const stats = await storage.upsertBisuiteSales(records);
+      totalFromApi += sales.length;
+      totalInserted += stats.inserted;
+      totalUpdated += stats.updated;
+      console.log(
+        `[bisuite-chunk] org=${orgId} ${c.from}→${c.to}: api=${sales.length} ` +
+          `inseriti=${stats.inserted} aggiornati=${stats.updated}`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      failedChunks.push({ from: c.from, to: c.to, error: msg });
+      console.error(`[bisuite-chunk] FAIL org=${orgId} ${c.from}→${c.to}: ${msg}`);
+    }
   }
-  const salesData: any = await salesResp.json();
 
-  let sales: any[] = [];
-  if (Array.isArray(salesData)) sales = salesData;
-  else if (Array.isArray(salesData?.data)) sales = salesData.data;
-  else if (Array.isArray(salesData?.vendite)) sales = salesData.vendite;
-  else if (Array.isArray(salesData?.sales)) sales = salesData.sales;
-
-  const records = sales.map((s) => extractSaleFields(s, orgId));
-  await storage.deleteBisuiteSalesByOrg(orgId);
-  const inserted = await storage.upsertBisuiteSales(records);
-
-  return { orgId, inserted, totalFromApi: sales.length };
+  return {
+    orgId,
+    totalFromApi,
+    inserted: totalInserted,
+    updated: totalUpdated,
+    chunks: chunks.length,
+    failedChunks,
+  };
 }
 
 /**
@@ -235,7 +306,8 @@ export async function runBisuiteFetchForAllOrgs(): Promise<{
       ok.push(r);
       console.log(
         `[bisuite-scheduler] org=${org.id} (${org.name}) OK: ` +
-          `inserite ${r.inserted} / api ${r.totalFromApi}`,
+          `api=${r.totalFromApi} inseriti=${r.inserted} aggiornati=${r.updated} ` +
+          `chunk=${r.chunks} falliti=${r.failedChunks.length}`,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

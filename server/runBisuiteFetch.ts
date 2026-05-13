@@ -2,10 +2,13 @@ import { runBisuiteFetchForAllOrgs, runBisuiteFetchForOrg } from "./bisuiteFetch
 
 async function main() {
   const orgArg = process.argv[2];
+  const startArg = process.argv[3];
+  const endArg = process.argv[4];
   const startedAt = Date.now();
   if (orgArg) {
-    console.log(`[runBisuiteFetch] fetch per org=${orgArg}`);
-    const r = await runBisuiteFetchForOrg(orgArg);
+    const opts = startArg || endArg ? { startDate: startArg, endDate: endArg } : undefined;
+    console.log(`[runBisuiteFetch] fetch per org=${orgArg}${opts ? ` range=${startArg || "*"}→${endArg || "*"}` : ""}`);
+    const r = await runBisuiteFetchForOrg(orgArg, opts);
     console.log(`[runBisuiteFetch] OK in ${Date.now() - startedAt} ms:`, r);
   } else {
     console.log(`[runBisuiteFetch] fetch per TUTTE le organizzazioni`);

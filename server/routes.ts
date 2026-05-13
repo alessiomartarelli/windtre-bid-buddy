@@ -9,7 +9,7 @@ import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
 import { registerCdgRoutes } from "./cdgRoutes";
-import { toItalianWallTime } from "./bisuiteFetch";
+import { toItalianWallTime, runBisuiteFetchForOrg } from "./bisuiteFetch";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
@@ -1768,58 +1768,32 @@ export async function registerRoutes(
         return res.status(400).json({ error: "organization_id richiesto" });
       }
 
-      const orgConfig = await storage.getOrgConfig(organization_id);
-      const config = orgConfig?.config as Record<string, any> | undefined;
-      const creds = config?.bisuiteCredentials;
-      if (!creds?.client_id || !creds?.client_secret) {
-        return res.status(400).json({ error: "Credenziali BiSuite non configurate" });
+      // Solo super_admin può triggerare la sync per un'org diversa dalla
+      // propria; admin di tenant è limitato alla propria organizzazione
+      // (evita IDOR cross-tenant).
+      if (profile.role !== "super_admin" && organization_id !== profile.organizationId) {
+        return res.status(403).json({ error: "Non puoi importare vendite per altre organizzazioni" });
       }
 
-      const apiUrlStr = creds.api_url || "https://db1.bisuite.app";
-      const tokenUrl = deriveTokenEndpoint(apiUrlStr);
-      const token = await getBisuiteToken(tokenUrl, creds.client_id, creds.client_secret);
-
-      const salesUrl = new URL(deriveSalesEndpoint(apiUrlStr));
-      if (start_date) salesUrl.searchParams.set("from", start_date);
-      if (end_date) salesUrl.searchParams.set("to", end_date);
-
-      const salesResp = await fetch(salesUrl.toString(), {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!salesResp.ok) {
-        const errorBody = await salesResp.text();
-        return res.status(salesResp.status).json({ error: `BiSuite API error (${salesResp.status})`, details: errorBody });
+      try {
+        const r = await runBisuiteFetchForOrg(organization_id, {
+          startDate: start_date,
+          endDate: end_date,
+        });
+        res.json({
+          success: true,
+          message: `Sincronizzate ${r.totalFromApi} vendite (nuove ${r.inserted}, aggiornate ${r.updated})`,
+          count: r.inserted + r.updated,
+          totalFromApi: r.totalFromApi,
+          inserted: r.inserted,
+          updated: r.updated,
+          chunks: r.chunks,
+          failedChunks: r.failedChunks,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return res.status(500).json({ error: "Errore durante l'importazione", details: msg });
       }
-
-      const salesData = await salesResp.json();
-
-      let sales: any[] = [];
-      if (Array.isArray(salesData)) {
-        sales = salesData;
-      } else if (salesData?.data && Array.isArray(salesData.data)) {
-        sales = salesData.data;
-      } else if (salesData?.vendite && Array.isArray(salesData.vendite)) {
-        sales = salesData.vendite;
-      } else if (salesData?.sales && Array.isArray(salesData.sales)) {
-        sales = salesData.sales;
-      }
-
-      const records = sales.map((sale: any) => extractSaleFields(sale, organization_id));
-
-      await storage.deleteBisuiteSalesByOrg(organization_id);
-      const inserted = await storage.upsertBisuiteSales(records);
-
-      res.json({
-        success: true,
-        message: `Importate ${inserted} vendite nel database`,
-        count: inserted,
-        totalFromApi: sales.length,
-      });
     } catch (error: unknown) {
       console.error("BiSuite import error:", error);
       const msg = error instanceof Error ? error.message : String(error);
@@ -1861,50 +1835,20 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Credenziali BiSuite non configurate per la tua organizzazione. Contatta il super admin." });
       }
 
-      const apiUrlStr = creds.api_url || "https://db1.bisuite.app";
-      const tokenUrl = deriveTokenEndpoint(apiUrlStr);
-      const token = await getBisuiteToken(tokenUrl, creds.client_id, creds.client_secret);
-
-      const salesUrl = new URL(deriveSalesEndpoint(apiUrlStr));
-      if (start_date) salesUrl.searchParams.set("from", start_date);
-      if (end_date) salesUrl.searchParams.set("to", end_date);
-
-      const salesResp = await fetch(salesUrl.toString(), {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
+      const r = await runBisuiteFetchForOrg(orgId, {
+        startDate: start_date,
+        endDate: end_date,
       });
-
-      if (!salesResp.ok) {
-        const errorBody = await salesResp.text();
-        return res.status(salesResp.status).json({ error: `Errore API BiSuite (${salesResp.status})`, details: errorBody });
-      }
-
-      const salesData = await salesResp.json();
-
-      let sales: any[] = [];
-      if (Array.isArray(salesData)) {
-        sales = salesData;
-      } else if (salesData?.data && Array.isArray(salesData.data)) {
-        sales = salesData.data;
-      } else if (salesData?.vendite && Array.isArray(salesData.vendite)) {
-        sales = salesData.vendite;
-      } else if (salesData?.sales && Array.isArray(salesData.sales)) {
-        sales = salesData.sales;
-      }
-
-      const records = sales.map((sale: any) => extractSaleFields(sale, orgId));
-
-      await storage.deleteBisuiteSalesByOrg(orgId);
-      const inserted = await storage.upsertBisuiteSales(records);
 
       res.json({
         success: true,
-        message: `Importate ${inserted} vendite`,
-        count: inserted,
-        totalFromApi: sales.length,
+        message: `Sincronizzate ${r.totalFromApi} vendite (nuove ${r.inserted}, aggiornate ${r.updated})`,
+        count: r.inserted + r.updated,
+        totalFromApi: r.totalFromApi,
+        inserted: r.inserted,
+        updated: r.updated,
+        chunks: r.chunks,
+        failedChunks: r.failedChunks,
       });
     } catch (error: unknown) {
       console.error("BiSuite fetch error:", error);

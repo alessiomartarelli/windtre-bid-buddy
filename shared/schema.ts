@@ -102,6 +102,7 @@ export const bisuiteSales = pgTable("bisuite_sales", {
   index("IDX_bisuite_sales_date").on(table.dataVendita),
   index("IDX_bisuite_sales_pos").on(table.codicePos),
   index("IDX_bisuite_sales_bisuite_id").on(table.bisuiteId),
+  uniqueIndex("UQ_bisuite_sales_org_bisuite_id").on(table.organizationId, table.bisuiteId),
 ]);
 
 // Gara Config (per-organization, per-month competition configuration)

@@ -42,7 +42,7 @@ export interface IStorage {
   upsertSystemConfig(key: string, config: any, updatedBy: string): Promise<SystemConfig>;
 
   // BiSuite Sales
-  upsertBisuiteSales(sales: InsertBisuiteSale[]): Promise<number>;
+  upsertBisuiteSales(sales: InsertBisuiteSale[]): Promise<{ inserted: number; updated: number; total: number }>;
   getBisuiteSales(orgId: string, from?: Date, to?: Date, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
   getBisuiteSalesByItalianMonth(orgId: string, year: number, month: number, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
   getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
@@ -264,16 +264,62 @@ export class DatabaseStorage implements IStorage {
   }
 
   // BiSuite Sales
-  async upsertBisuiteSales(sales: InsertBisuiteSale[]): Promise<number> {
-    if (sales.length === 0) return 0;
-    let inserted = 0;
-    for (const sale of sales) {
-      await db.insert(bisuiteSales)
-        .values(sale)
-        .onConflictDoNothing();
-      inserted++;
+  /**
+   * Upsert non distruttivo basato sull'unique constraint
+   * (organization_id, bisuite_id). Aggiorna i campi mutabili dei record già
+   * presenti e inserisce quelli nuovi. Restituisce conteggi separati di
+   * inseriti/aggiornati usando il trick `xmax = 0` di Postgres (xmax è 0
+   * per le righe appena inserite, non-zero per quelle aggiornate via
+   * ON CONFLICT DO UPDATE).
+   *
+   * IMPORTANTE: NON cancella nulla. Se la stessa coppia (org, bisuite_id)
+   * compare più volte nello stesso batch tiene l'ultima occorrenza per
+   * evitare l'errore Postgres "ON CONFLICT DO UPDATE command cannot affect
+   * row a second time".
+   */
+  async upsertBisuiteSales(
+    sales: InsertBisuiteSale[],
+  ): Promise<{ inserted: number; updated: number; total: number }> {
+    if (sales.length === 0) return { inserted: 0, updated: 0, total: 0 };
+
+    // Dedup intra-batch su (orgId, bisuiteId): tiene l'ultima occorrenza
+    const dedupMap = new Map<string, InsertBisuiteSale>();
+    for (const s of sales) {
+      const key = `${s.organizationId}::${s.bisuiteId}`;
+      dedupMap.set(key, s);
     }
-    return inserted;
+    const deduped = Array.from(dedupMap.values());
+
+    let inserted = 0;
+    let updated = 0;
+    const BATCH = 500;
+    for (let i = 0; i < deduped.length; i += BATCH) {
+      const batch = deduped.slice(i, i + BATCH);
+      const result = await db.insert(bisuiteSales)
+        .values(batch)
+        .onConflictDoUpdate({
+          target: [bisuiteSales.organizationId, bisuiteSales.bisuiteId],
+          set: {
+            dataVendita: sql`excluded.data_vendita`,
+            codicePos: sql`excluded.codice_pos`,
+            nomeNegozio: sql`excluded.nome_negozio`,
+            ragioneSociale: sql`excluded.ragione_sociale`,
+            nomeAddetto: sql`excluded.nome_addetto`,
+            nomeCliente: sql`excluded.nome_cliente`,
+            totale: sql`excluded.totale`,
+            stato: sql`excluded.stato`,
+            categorieArticoli: sql`excluded.categorie_articoli`,
+            rawData: sql`excluded.raw_data`,
+            fetchedAt: sql`now()`,
+          },
+        })
+        .returning({ wasInserted: sql<boolean>`(xmax = 0)` });
+      for (const row of result) {
+        if (row.wasInserted) inserted++;
+        else updated++;
+      }
+    }
+    return { inserted, updated, total: inserted + updated };
   }
 
   async getBisuiteSales(orgId: string, from?: Date, to?: Date, includeAnnullate: boolean = false): Promise<BisuiteSale[]> {
