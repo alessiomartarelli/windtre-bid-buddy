@@ -228,6 +228,20 @@ export function buildMonthlyChunks(fromYMD: string, toYMD: string): Array<{ from
  */
 const BISUITE_API_HARD_CAP = 5000;
 
+/**
+ * Numero massimo di tentativi (incluso il primo) per scaricare un singolo
+ * chunk mensile prima di marcarlo come fallito. Molti errori (timeout, 5xx
+ * transitori, glitch di rete) sono temporanei e si recuperano con un retry
+ * con backoff esponenziale, evitando all'utente di dover premere "Riprova"
+ * a mano.
+ */
+const BISUITE_CHUNK_MAX_ATTEMPTS = 3;
+const BISUITE_CHUNK_RETRY_BASE_MS = 1000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchSalesPage(
   salesEndpoint: string,
   token: string,
@@ -371,21 +385,45 @@ export async function runBisuiteFetchForOrg(
   const failedChunks: Array<{ from: string; to: string; error: string }> = [];
 
   for (const c of chunks) {
-    try {
-      const sales = await fetchSalesRange(salesEndpoint, token, c.from, c.to);
-      const records = sales.map((s) => extractSaleFields(s, orgId));
-      const stats = await storage.upsertBisuiteSales(records);
-      totalFromApi += sales.length;
-      totalInserted += stats.inserted;
-      totalUpdated += stats.updated;
-      console.log(
-        `[bisuite-chunk] org=${orgId} ${c.from}→${c.to}: api=${sales.length} ` +
-          `inseriti=${stats.inserted} aggiornati=${stats.updated}`,
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+    let attempt = 0;
+    let lastErr: unknown = null;
+    let success = false;
+    while (attempt < BISUITE_CHUNK_MAX_ATTEMPTS && !success) {
+      attempt++;
+      try {
+        const sales = await fetchSalesRange(salesEndpoint, token, c.from, c.to);
+        const records = sales.map((s) => extractSaleFields(s, orgId));
+        const stats = await storage.upsertBisuiteSales(records);
+        totalFromApi += sales.length;
+        totalInserted += stats.inserted;
+        totalUpdated += stats.updated;
+        const retryNote = attempt > 1 ? ` (riuscito al tentativo ${attempt}/${BISUITE_CHUNK_MAX_ATTEMPTS})` : "";
+        console.log(
+          `[bisuite-chunk] org=${orgId} ${c.from}→${c.to}: api=${sales.length} ` +
+            `inseriti=${stats.inserted} aggiornati=${stats.updated}${retryNote}`,
+        );
+        success = true;
+      } catch (err) {
+        lastErr = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        if (attempt < BISUITE_CHUNK_MAX_ATTEMPTS) {
+          const delayMs = BISUITE_CHUNK_RETRY_BASE_MS * Math.pow(2, attempt - 1);
+          console.warn(
+            `[bisuite-chunk] retry org=${orgId} ${c.from}→${c.to} ` +
+              `tentativo ${attempt}/${BISUITE_CHUNK_MAX_ATTEMPTS} fallito: ${msg}. ` +
+              `Ritento tra ${delayMs}ms`,
+          );
+          await sleep(delayMs);
+        }
+      }
+    }
+    if (!success) {
+      const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
       failedChunks.push({ from: c.from, to: c.to, error: msg });
-      console.error(`[bisuite-chunk] FAIL org=${orgId} ${c.from}→${c.to}: ${msg}`);
+      console.error(
+        `[bisuite-chunk] FAIL org=${orgId} ${c.from}→${c.to} dopo ` +
+          `${BISUITE_CHUNK_MAX_ATTEMPTS} tentativi: ${msg}`,
+      );
     }
   }
 
