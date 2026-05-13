@@ -104,6 +104,9 @@ export interface ClassifiedArticle {
   type: ArticleType;
   pista?: PistaCanvass;
   prezzo: number;
+  importoScontrino: number;
+  importoFinanziato: number;
+  importoCredito: number;
 }
 
 export interface SaleClassification {
@@ -132,6 +135,9 @@ export function classifySaleArticles(rawData: any): SaleClassification {
     const tipNome = (art.tipologia?.nome || '').trim();
     const desc = (art.descrizione || '').trim();
     const prezzo = parseFloat(art.dettaglio?.prezzo || '0') || 0;
+    const importoScontrino = parseFloat(art.dettaglio?.importoScontrino || '0') || 0;
+    const importoFinanziato = parseFloat(art.dettaglio?.importoFinanziato || '0') || 0;
+    const importoCredito = parseFloat(art.dettaglio?.importoCredito || '0') || 0;
     const classification = classifyCategory(catNome);
 
     if (classification) {
@@ -142,6 +148,9 @@ export function classifySaleArticles(rawData: any): SaleClassification {
         type: classification.type,
         pista: classification.pista,
         prezzo,
+        importoScontrino,
+        importoFinanziato,
+        importoCredito,
       };
       articles.push(classified);
       countByType[classification.type]++;
@@ -161,6 +170,9 @@ export function classifySaleArticles(rawData: any): SaleClassification {
         descrizione: desc,
         type: 'prodotti',
         prezzo,
+        importoScontrino,
+        importoFinanziato,
+        importoCredito,
       });
       countByType.prodotti++;
       amountByType.prodotti += prezzo;

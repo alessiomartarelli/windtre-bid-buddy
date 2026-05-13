@@ -158,6 +158,32 @@ function IncassoBadges({ totals, formatter, compact }: { totals: IncassoTotals; 
   );
 }
 
+function ArticleIncassoRecap({
+  incasso,
+  formatCurrency,
+}: {
+  incasso: { scontrinato: number; fuoriScontrino: number; finanziato: number; credito: number };
+  formatCurrency: (v: number | string) => string;
+}) {
+  const items: { key: string; label: string; value: number; cls: string }[] = [
+    { key: "scontrinato", label: "Scontrinato", value: incasso.scontrinato, cls: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20" },
+    { key: "fuoriScontrino", label: "Fuori scont.", value: incasso.fuoriScontrino, cls: "bg-rose-500/10 text-rose-700 border-rose-500/20" },
+    { key: "finanziato", label: "Finanziato", value: incasso.finanziato, cls: "bg-purple-500/10 text-purple-700 border-purple-500/20" },
+    { key: "credito", label: "Credito/VAR", value: incasso.credito, cls: "bg-amber-500/10 text-amber-700 border-amber-500/20" },
+  ].filter(i => i.value > 0);
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-3 pt-2 border-t flex flex-wrap gap-1">
+      {items.map(i => (
+        <Badge key={i.key} variant="outline" className={`${i.cls} text-[10px] font-normal`} data-testid={`recap-${i.key}`}>
+          <span className="opacity-75 mr-1">{i.label}</span>
+          <span className="font-semibold">{formatCurrency(i.value)}</span>
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
 function getDefaultDates() {
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -380,6 +406,12 @@ export default function VenditeBiSuite() {
     let filteredAmount = 0;
     const prodottiByCategory: Record<string, { pezzi: number; importo: number }> = {};
     const serviziByLabel: Record<string, { pezzi: number; importo: number }> = {};
+    const emptyIncasso = () => ({ scontrinato: 0, fuoriScontrino: 0, finanziato: 0, credito: 0 });
+    const incassoByType: Record<ArticleType, { scontrinato: number; fuoriScontrino: number; finanziato: number; credito: number }> = {
+      canvass: emptyIncasso(),
+      prodotti: emptyIncasso(),
+      servizi: emptyIncasso(),
+    };
 
     for (const sale of aggregateSales) {
       const sc = saleClassifications.get(sale.id);
@@ -397,6 +429,11 @@ export default function VenditeBiSuite() {
         if (!matches) continue;
         byType[art.type]++;
         amtByType[art.type] += art.prezzo;
+        const inc = incassoByType[art.type];
+        if (art.importoScontrino > 0) inc.scontrinato += art.importoScontrino;
+        else inc.fuoriScontrino += art.prezzo;
+        inc.finanziato += art.importoFinanziato;
+        inc.credito += art.importoCredito;
         if (art.pista) {
           byPista[art.pista] = (byPista[art.pista] || 0) + 1;
           amtByPista[art.pista] = (amtByPista[art.pista] || 0) + art.prezzo;
@@ -425,6 +462,7 @@ export default function VenditeBiSuite() {
       filteredAmount,
       prodottiByCategory,
       serviziByLabel,
+      incassoByType,
     };
   }, [aggregateSales, saleClassifications, articleMatchesFilter]);
 
@@ -1024,6 +1062,7 @@ export default function VenditeBiSuite() {
                         </div>
                       ))}
                   </div>
+                  <ArticleIncassoRecap incasso={globalCounts.incassoByType.canvass} formatCurrency={formatCurrency} />
                 </CardContent>
               </Card>
               )}
@@ -1053,6 +1092,7 @@ export default function VenditeBiSuite() {
                         </div>
                       ))}
                   </div>
+                  <ArticleIncassoRecap incasso={globalCounts.incassoByType.prodotti} formatCurrency={formatCurrency} />
                 </CardContent>
               </Card>
               )}
@@ -1082,6 +1122,7 @@ export default function VenditeBiSuite() {
                         </div>
                       ))}
                   </div>
+                  <ArticleIncassoRecap incasso={globalCounts.incassoByType.servizi} formatCurrency={formatCurrency} />
                 </CardContent>
               </Card>
               )}
@@ -1843,12 +1884,38 @@ function SaleDetailDialog({
                       return (
                         <TableRow key={idx}>
                           <TableCell className="text-sm font-medium">
-                            {art.descrizione || art.codice || "-"}
-                            {art.marca && (
-                              <span className="text-xs text-muted-foreground ml-1">
-                                ({art.marca})
-                              </span>
-                            )}
+                            <div>
+                              {art.descrizione || art.codice || "-"}
+                              {art.marca && (
+                                <span className="text-xs text-muted-foreground ml-1">
+                                  ({art.marca})
+                                </span>
+                              )}
+                            </div>
+                            {(() => {
+                              const impScont = parseFloat(art.dettaglio?.importoScontrino || "0") || 0;
+                              const impFin = parseFloat(art.dettaglio?.importoFinanziato || "0") || 0;
+                              const impCre = parseFloat(art.dettaglio?.importoCredito || "0") || 0;
+                              const prezzo = parseFloat(art.dettaglio?.prezzo || "0") || 0;
+                              const badges: { key: string; label: string; cls: string }[] = [];
+                              if (impScont > 0) {
+                                badges.push({ key: "s", label: `Scontrinato ${formatCurrency(impScont)}`, cls: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20" });
+                              } else if (prezzo > 0) {
+                                badges.push({ key: "fs", label: "Fuori scontrino", cls: "bg-rose-500/10 text-rose-700 border-rose-500/20" });
+                              }
+                              if (impFin > 0) badges.push({ key: "f", label: `Finanziato ${formatCurrency(impFin)}`, cls: "bg-purple-500/10 text-purple-700 border-purple-500/20" });
+                              if (impCre > 0) badges.push({ key: "c", label: `Credito/VAR ${formatCurrency(impCre)}`, cls: "bg-amber-500/10 text-amber-700 border-amber-500/20" });
+                              if (badges.length === 0) return null;
+                              return (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {badges.map(b => (
+                                    <Badge key={b.key} variant="outline" className={`${b.cls} text-[10px] font-normal`} data-testid={`art-incasso-${b.key}-${idx}`}>
+                                      {b.label}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">
                             {cls ? (
