@@ -14,6 +14,7 @@ import {
   loadEmailConfig,
   invalidateEmailConfigCache,
   sendTestEmailWithConfig,
+  verifySmtpConnectionWithConfig,
   SMTP_CONFIG_KEY,
   type SmtpConfig,
 } from "./email";
@@ -604,6 +605,30 @@ export async function registerRoutes(
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       res.status(500).json({ message: `Errore invio test: ${msg}` });
+    }
+  });
+
+  // POST verifica la connessione SMTP senza inviare email, usando la config
+  // attualmente attiva (DB + env). Sfrutta transporter.verify() di nodemailer.
+  app.post("/api/admin/smtp-verify", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Solo il super admin può verificare la connessione SMTP" });
+      }
+      const cfg = await loadEmailConfig(true);
+      if (!cfg.host) {
+        return res.status(400).json({ message: "Host SMTP non configurato (nessun valore in DB né in env)" });
+      }
+      const result = await verifySmtpConnectionWithConfig(cfg);
+      if (result.ok) {
+        res.json({ ok: true });
+      } else {
+        res.status(502).json({ ok: false, message: `Verifica fallita: ${result.error}` });
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ message: `Errore verifica SMTP: ${msg}` });
     }
   });
 

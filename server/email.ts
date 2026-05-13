@@ -195,6 +195,32 @@ export async function sendTestEmailWithConfig(
   }
 }
 
+/**
+ * Verifica la connessione SMTP usando una configurazione specifica senza
+ * inviare alcuna email. Sfrutta `transporter.verify()` di nodemailer per
+ * validare host/porta/credenziali. Utile per il pulsante "Verifica
+ * connessione" del super admin.
+ */
+export async function verifySmtpConnectionWithConfig(
+  config: SmtpConfig,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!config.host) {
+    return { ok: false, error: "Host SMTP mancante" };
+  }
+  const transporter = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: config.user && config.pass ? { user: config.user, pass: config.pass } : undefined,
+  });
+  try {
+    await transporter.verify();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

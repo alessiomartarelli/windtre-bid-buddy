@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Mail, Send } from "lucide-react";
+import { Loader2, Mail, Send, PlugZap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -40,6 +40,7 @@ export function SmtpConfigForm({ defaultTestRecipient }: { defaultTestRecipient?
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [meta, setMeta] = useState<SmtpConfigResponse | null>(null);
 
   const [host, setHost] = useState("");
@@ -135,6 +136,25 @@ export function SmtpConfigForm({ defaultTestRecipient }: { defaultTestRecipient?
       });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    setVerifying(true);
+    try {
+      await apiRequest("POST", "/api/admin/smtp-verify");
+      toast({
+        title: "Connessione SMTP riuscita",
+        description: "Host, porta e credenziali sono validi.",
+      });
+    } catch (err) {
+      toast({
+        title: "Verifica connessione fallita",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -302,6 +322,25 @@ export function SmtpConfigForm({ defaultTestRecipient }: { defaultTestRecipient?
                   onChange={(e) => setTestTo(e.target.value)}
                   className="flex-1"
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleVerify}
+                  disabled={verifying || !meta?.host}
+                  data-testid="button-verify-smtp"
+                >
+                  {verifying ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Verifica...
+                    </>
+                  ) : (
+                    <>
+                      <PlugZap className="mr-2 h-4 w-4" />
+                      Verifica connessione
+                    </>
+                  )}
+                </Button>
                 <Button
                   type="button"
                   variant="secondary"
