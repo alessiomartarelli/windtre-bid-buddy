@@ -1,4 +1,4 @@
-import { pgTable, text, serial, varchar, timestamp, jsonb, index, boolean, integer, uniqueIndex, numeric, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, index, boolean, integer, uniqueIndex, numeric, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations, sql } from "drizzle-orm";
@@ -252,6 +252,26 @@ export const cdgSpese = pgTable("cdg_spese", {
   index("IDX_cdg_spese_competenza").on(t.organizationId, t.meseCompetenza),
   index("IDX_cdg_spese_pagamento").on(t.organizationId, t.dataPagamento),
 ]);
+
+// Notifiche di sync BiSuite (push agli admin)
+// Una riga per ogni org che lo scheduler notturno chiude come `partial`
+// (alcuni mesi mancanti) o `failed` (errore fatale a livello di org).
+// La pagina Vendite BiSuite legge le righe non lette per mostrarle in
+// un campanellino in navbar.
+export const bisuiteSyncNotifications = pgTable("bisuite_sync_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  status: varchar("status").notNull(),
+  failedMonths: jsonb("failed_months").$type<string[]>().default([]),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  readAt: timestamp("read_at"),
+}, (t) => [
+  index("IDX_bisuite_notif_org_unread").on(t.organizationId, t.readAt),
+]);
+
+export type BisuiteSyncNotification = typeof bisuiteSyncNotifications.$inferSelect;
+export type InsertBisuiteSyncNotification = typeof bisuiteSyncNotifications.$inferInsert;
 
 // Password reset tokens
 export const passwordResetTokens = pgTable("password_reset_tokens", {

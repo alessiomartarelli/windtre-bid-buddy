@@ -168,6 +168,17 @@ export function startBisuiteDailyScheduler(): void {
                 `mesi mancanti = [${p.failedMonths.join(", ")}]. ` +
                 `Riprovare con sync manuale.`,
             );
+            try {
+              await storage.createBisuiteSyncNotification({
+                organizationId: p.orgId,
+                status: "partial",
+                failedMonths: p.failedMonths,
+                errorMessage: null,
+              });
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              console.error(`[bisuite-scheduler] impossibile creare notifica partial per org=${p.orgId}: ${msg}`);
+            }
           }
         }
         if (result.failed.length > 0) {
@@ -175,6 +186,17 @@ export function startBisuiteDailyScheduler(): void {
             console.error(
               `[bisuite-scheduler] FAILED org=${f.orgId} (${f.orgName}): ${f.error}`,
             );
+            try {
+              await storage.createBisuiteSyncNotification({
+                organizationId: f.orgId,
+                status: "failed",
+                failedMonths: [],
+                errorMessage: f.error,
+              });
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              console.error(`[bisuite-scheduler] impossibile creare notifica failed per org=${f.orgId}: ${msg}`);
+            }
           }
         }
 

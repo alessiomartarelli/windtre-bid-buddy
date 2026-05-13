@@ -1887,6 +1887,69 @@ export async function registerRoutes(
     }
   });
 
+  // === Notifiche di sync BiSuite (push agli admin) ===
+  // Disponibili solo per admin/super_admin: contengono la lista dei mesi
+  // mancanti (status=partial) o l'errore (status=failed) generati dallo
+  // scheduler notturno. La pagina Vendite BiSuite resta il punto di
+  // riprova, quindi le notifiche linkano lì.
+  app.get("/api/bisuite-notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+      if (!["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo admin può leggere le notifiche di sync" });
+      }
+      const unreadOnly = req.query.unreadOnly === "true";
+      const limitRaw = parseInt(req.query.limit as string, 10);
+      const limit = Number.isFinite(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : 50;
+      const items = await storage.listBisuiteSyncNotifications(profile.organizationId, { unreadOnly, limit });
+      const unread = await storage.countUnreadBisuiteSyncNotifications(profile.organizationId);
+      res.json({ items, unread });
+    } catch (error: unknown) {
+      console.error("BiSuite notifications list error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore nel recupero notifiche", details: msg });
+    }
+  });
+
+  app.post("/api/bisuite-notifications/mark-all-read", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+      if (!["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo admin può aggiornare le notifiche" });
+      }
+      await storage.markAllBisuiteSyncNotificationsRead(profile.organizationId);
+      res.json({ success: true });
+    } catch (error: unknown) {
+      console.error("BiSuite notifications mark-all-read error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore aggiornamento notifiche", details: msg });
+    }
+  });
+
+  app.post("/api/bisuite-notifications/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+      if (!["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo admin può aggiornare le notifiche" });
+      }
+      await storage.markBisuiteSyncNotificationRead(req.params.id, profile.organizationId);
+      res.json({ success: true });
+    } catch (error: unknown) {
+      console.error("BiSuite notifications mark-read error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore aggiornamento notifica", details: msg });
+    }
+  });
+
   app.post("/api/bisuite-fetch", isAuthenticated, requireModule(["vendite_bisuite", "amministrazione", "gara_dashboard"]), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);

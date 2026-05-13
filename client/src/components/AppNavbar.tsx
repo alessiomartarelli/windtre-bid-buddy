@@ -18,6 +18,7 @@ import {
   ChevronDown, Zap, BookOpen, BarChart3,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificationsBell';
 
 interface AppNavbarProps {
   title?: string;
@@ -176,6 +177,8 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
 
         <div className="flex items-center gap-2">
           {children}
+
+          {isAdminOrSuper && <BisuiteSyncNotificationsBell />}
 
           {isAdminOrSuper && (
             <Button

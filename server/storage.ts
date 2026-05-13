@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload } from "@shared/schema";
+import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, bisuiteSyncNotifications, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type BisuiteSyncNotification, type InsertBisuiteSyncNotification } from "@shared/schema";
 import { eq, desc, and, isNull, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -71,6 +71,13 @@ export interface IStorage {
   createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
   getValidResetToken(token: string): Promise<PasswordResetToken | undefined>;
   markTokenUsed(token: string): Promise<void>;
+
+  // BiSuite Sync Notifications
+  createBisuiteSyncNotification(notif: InsertBisuiteSyncNotification): Promise<BisuiteSyncNotification>;
+  listBisuiteSyncNotifications(orgId: string, opts?: { unreadOnly?: boolean; limit?: number }): Promise<BisuiteSyncNotification[]>;
+  countUnreadBisuiteSyncNotifications(orgId: string): Promise<number>;
+  markBisuiteSyncNotificationRead(id: string, orgId: string): Promise<void>;
+  markAllBisuiteSyncNotificationsRead(orgId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -545,6 +552,56 @@ export class DatabaseStorage implements IStorage {
     await db.update(passwordResetTokens)
       .set({ usedAt: new Date() })
       .where(eq(passwordResetTokens.token, token));
+  }
+
+  // BiSuite Sync Notifications
+  async createBisuiteSyncNotification(notif: InsertBisuiteSyncNotification): Promise<BisuiteSyncNotification> {
+    const [result] = await db.insert(bisuiteSyncNotifications).values(notif).returning();
+    return result;
+  }
+
+  async listBisuiteSyncNotifications(
+    orgId: string,
+    opts: { unreadOnly?: boolean; limit?: number } = {},
+  ): Promise<BisuiteSyncNotification[]> {
+    const where = opts.unreadOnly
+      ? and(eq(bisuiteSyncNotifications.organizationId, orgId), isNull(bisuiteSyncNotifications.readAt))
+      : eq(bisuiteSyncNotifications.organizationId, orgId);
+    const q = db.select().from(bisuiteSyncNotifications)
+      .where(where)
+      .orderBy(desc(bisuiteSyncNotifications.createdAt));
+    if (opts.limit && opts.limit > 0) {
+      return await q.limit(opts.limit);
+    }
+    return await q;
+  }
+
+  async countUnreadBisuiteSyncNotifications(orgId: string): Promise<number> {
+    const [row] = await db.select({ c: sql<number>`count(*)::int` })
+      .from(bisuiteSyncNotifications)
+      .where(and(
+        eq(bisuiteSyncNotifications.organizationId, orgId),
+        isNull(bisuiteSyncNotifications.readAt),
+      ));
+    return row?.c ?? 0;
+  }
+
+  async markBisuiteSyncNotificationRead(id: string, orgId: string): Promise<void> {
+    await db.update(bisuiteSyncNotifications)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(bisuiteSyncNotifications.id, id),
+        eq(bisuiteSyncNotifications.organizationId, orgId),
+      ));
+  }
+
+  async markAllBisuiteSyncNotificationsRead(orgId: string): Promise<void> {
+    await db.update(bisuiteSyncNotifications)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(bisuiteSyncNotifications.organizationId, orgId),
+        isNull(bisuiteSyncNotifications.readAt),
+      ));
   }
 }
 
