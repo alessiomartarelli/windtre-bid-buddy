@@ -980,17 +980,12 @@ export default function VenditeBiSuite() {
               </Card>
             </div>
 
-            {aggregateSales.length > 0 && (
+            {aggregateSales.length > 0 && !componentFilterActive && (
               <Card>
                 <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Wallet className="h-4 w-4 text-primary" />
                     <span className="font-semibold text-sm">Modalità di Incasso{selectedPdv ? ` - ${pdvSummaries.find(p => p.codicePos === selectedPdv)?.nomeNegozio || selectedPdv}` : ""}</span>
-                    {componentFilterActive && (
-                      <span className="text-[10px] text-muted-foreground italic ml-1">
-                        (incassi calcolati a livello di vendita: includono l'intero scontrino delle vendite che contengono il filtro selezionato)
-                      </span>
-                    )}
                   </div>
                   <IncassoBadges totals={incassoTotals} formatter={formatCurrency} />
                 </CardContent>
@@ -1125,7 +1120,9 @@ export default function VenditeBiSuite() {
                           </AccordionTrigger>
                           <AccordionContent>
                             <div className="space-y-2 pb-2">
-                              <IncassoBadges totals={rsIncasso} formatter={formatCurrency} compact />
+                              {!componentFilterActive && (
+                                <IncassoBadges totals={rsIncasso} formatter={formatCurrency} compact />
+                              )}
                             </div>
                           </AccordionContent>
                         </AccordionItem>
@@ -1318,7 +1315,7 @@ export default function VenditeBiSuite() {
                                   </Badge>
                                 )}
                               </div>
-                              {(() => {
+                              {!componentFilterActive && (() => {
                                 const addettoInc = computeIncassoTotals(addetto.vendite);
                                 const hasIncasso = INCASSO_ITEMS_CONFIG.some(i => addettoInc[i.key] > 0);
                                 if (!hasIncasso) return null;
@@ -1428,7 +1425,7 @@ export default function VenditeBiSuite() {
                                   </Badge>
                                 )}
                               </div>
-                              {(() => {
+                              {!componentFilterActive && (() => {
                                 const pdvInc = incassoByPdv.get(pdv.codicePos);
                                 if (!pdvInc) return null;
                                 return (
