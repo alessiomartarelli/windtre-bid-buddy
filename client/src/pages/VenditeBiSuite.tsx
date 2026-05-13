@@ -111,6 +111,13 @@ interface BisuiteSale {
   fetchedAt: string | null;
 }
 
+interface ArticleIncasso {
+  scontrinato: number;
+  fuoriScontrino: number;
+  finanziato: number;
+  credito: number;
+}
+
 interface PdvSummary {
   codicePos: string;
   nomeNegozio: string;
@@ -122,6 +129,7 @@ interface PdvSummary {
   countByPista: Partial<Record<PistaCanvass, number>>;
   amountByPista: Partial<Record<PistaCanvass, number>>;
   vendite: BisuiteSale[];
+  articleIncasso: ArticleIncasso;
 }
 
 const PISTA_ICONS: Record<PistaCanvass, React.ReactNode> = {
@@ -503,6 +511,7 @@ export default function VenditeBiSuite() {
           countByPista: {},
           amountByPista: {},
           vendite: [],
+          articleIncasso: { scontrinato: 0, fuoriScontrino: 0, finanziato: 0, credito: 0 },
         };
       }
       const entry = map[code];
@@ -518,6 +527,10 @@ export default function VenditeBiSuite() {
           saleFilteredAmount += art.prezzo;
           entry.countByType[art.type]++;
           entry.amountByType[art.type] += art.prezzo;
+          if (art.importoScontrino > 0) entry.articleIncasso.scontrinato += art.importoScontrino;
+          else entry.articleIncasso.fuoriScontrino += art.prezzo;
+          entry.articleIncasso.finanziato += art.importoFinanziato;
+          entry.articleIncasso.credito += art.importoCredito;
           if (art.pista) {
             entry.countByPista[art.pista] = (entry.countByPista[art.pista] || 0) + 1;
             entry.amountByPista[art.pista] = (entry.amountByPista[art.pista] || 0) + art.prezzo;
@@ -552,20 +565,24 @@ export default function VenditeBiSuite() {
   }, [aggregateSales]);
 
   const rsSummaries = useMemo(() => {
-    const map = new Map<string, { ragioneSociale: string; vendite: BisuiteSale[]; totaleImporto: number; pdvCodes: Set<string> }>();
+    const map = new Map<string, { ragioneSociale: string; vendite: BisuiteSale[]; totaleImporto: number; pdvCodes: Set<string>; articleIncasso: ArticleIncasso }>();
     for (const sale of aggregateSales) {
       const rs = sale.ragioneSociale || "N/D";
-      if (!map.has(rs)) map.set(rs, { ragioneSociale: rs, vendite: [], totaleImporto: 0, pdvCodes: new Set() });
+      if (!map.has(rs)) map.set(rs, { ragioneSociale: rs, vendite: [], totaleImporto: 0, pdvCodes: new Set(), articleIncasso: { scontrinato: 0, fuoriScontrino: 0, finanziato: 0, credito: 0 } });
       const entry = map.get(rs)!;
       entry.vendite.push(sale);
-      if (componentFilterActive) {
-        const sc = saleClassifications.get(sale.id);
-        if (sc) {
-          for (const art of sc.articles) {
-            if (articleMatchesFilter(art)) entry.totaleImporto += art.prezzo;
-          }
+      const sc = saleClassifications.get(sale.id);
+      if (sc) {
+        for (const art of sc.articles) {
+          if (!articleMatchesFilter(art)) continue;
+          if (componentFilterActive) entry.totaleImporto += art.prezzo;
+          if (art.importoScontrino > 0) entry.articleIncasso.scontrinato += art.importoScontrino;
+          else entry.articleIncasso.fuoriScontrino += art.prezzo;
+          entry.articleIncasso.finanziato += art.importoFinanziato;
+          entry.articleIncasso.credito += art.importoCredito;
         }
-      } else {
+      }
+      if (!componentFilterActive) {
         entry.totaleImporto += parseFloat(sale.totale || "0") || 0;
       }
       entry.pdvCodes.add(sale.codicePos || "N/D");
@@ -583,6 +600,7 @@ export default function VenditeBiSuite() {
       amountByType: Record<ArticleType, number>;
       countByPista: Partial<Record<PistaCanvass, number>>;
       amountByPista: Partial<Record<PistaCanvass, number>>;
+      articleIncasso: ArticleIncasso;
     }>();
     for (const sale of aggregateSales) {
       const addetto = sale.nomeAddetto || "N/D";
@@ -591,6 +609,7 @@ export default function VenditeBiSuite() {
         countByType: { canvass: 0, prodotti: 0, servizi: 0 },
         amountByType: { canvass: 0, prodotti: 0, servizi: 0 },
         countByPista: {}, amountByPista: {},
+        articleIncasso: { scontrinato: 0, fuoriScontrino: 0, finanziato: 0, credito: 0 },
       });
       const entry = map.get(addetto)!;
       entry.vendite.push(sale);
@@ -603,6 +622,10 @@ export default function VenditeBiSuite() {
           saleFilteredAmount += art.prezzo;
           entry.countByType[art.type]++;
           entry.amountByType[art.type] += art.prezzo;
+          if (art.importoScontrino > 0) entry.articleIncasso.scontrinato += art.importoScontrino;
+          else entry.articleIncasso.fuoriScontrino += art.prezzo;
+          entry.articleIncasso.finanziato += art.importoFinanziato;
+          entry.articleIncasso.credito += art.importoCredito;
           if (art.pista) {
             entry.countByPista[art.pista] = (entry.countByPista[art.pista] || 0) + 1;
             entry.amountByPista[art.pista] = (entry.amountByPista[art.pista] || 0) + art.prezzo;
@@ -1164,6 +1187,7 @@ export default function VenditeBiSuite() {
                               {!componentFilterActive && (
                                 <IncassoBadges totals={rsIncasso} formatter={formatCurrency} compact />
                               )}
+                              <ArticleIncassoRecap incasso={rs.articleIncasso} formatCurrency={formatCurrency} />
                             </div>
                           </AccordionContent>
                         </AccordionItem>
@@ -1366,6 +1390,11 @@ export default function VenditeBiSuite() {
                                   </div>
                                 );
                               })()}
+                              {addetto.articleIncasso && (
+                                <div className="mt-1">
+                                  <ArticleIncassoRecap incasso={addetto.articleIncasso} formatCurrency={formatCurrency} />
+                                </div>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -1475,6 +1504,9 @@ export default function VenditeBiSuite() {
                                   </div>
                                 );
                               })()}
+                              <div className="mt-1">
+                                <ArticleIncassoRecap incasso={pdv.articleIncasso} formatCurrency={formatCurrency} />
+                              </div>
                               <Button
                                 variant="outline"
                                 size="sm"
