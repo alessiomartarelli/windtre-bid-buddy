@@ -12,7 +12,9 @@ set -euo pipefail
 #      BEFORE swapping the new bundle in. This avoids the "column does
 #      not exist" 500s that happen when the new code expects schema
 #      changes that were never applied to prod.
-#   5. Swap dist on the VPS and restart pm2 id 0 (incentive-w3 ONLY).
+#   5. Swap dist on the VPS and restart pm2 process named "incentive-w3"
+#      ONLY (we use the name, not the numeric id, because the id can
+#      change after a `pm2 delete`+`start`).
 #
 # Requirements: VPS_PASSWORD env var, sshpass, scp, ssh, npx.
 # NEVER touches pm2 id 9 (easycashflows) or id 12 (protecta).
@@ -20,7 +22,7 @@ set -euo pipefail
 VPS_HOST="85.215.124.207"
 VPS_USER="root"
 VPS_DIR="/var/www/incentive-w3"
-PM2_ID="0"
+PM2_NAME="incentive-w3"
 LOCAL_TAR="/tmp/incentivew3-deploy.tgz"
 TUNNEL_PORT="15432"
 
@@ -74,8 +76,8 @@ DATABASE_URL="${TUNNELED_DB_URL}" npx drizzle-kit push
 kill ${TUNNEL_PID} 2>/dev/null || true
 trap - EXIT
 
-echo "==> [5/5] Swapping bundle and restarting pm2 id ${PM2_ID}..."
-${SSH} "cd ${VPS_DIR} && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart ${PM2_ID} --update-env"
+echo "==> [5/5] Swapping bundle and restarting pm2 ${PM2_NAME}..."
+${SSH} "cd ${VPS_DIR} && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart ${PM2_NAME} --update-env"
 
 echo "==> Done. Verifying pm2 status..."
 ${SSH} "pm2 list"
