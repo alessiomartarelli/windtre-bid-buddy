@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, bisuiteSyncNotifications, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type BisuiteSyncNotification, type InsertBisuiteSyncNotification } from "@shared/schema";
-import { eq, desc, and, isNull, gte, lte, sql } from "drizzle-orm";
+import { eq, desc, and, isNull, isNotNull, lt, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Profiles
@@ -78,6 +78,7 @@ export interface IStorage {
   countUnreadBisuiteSyncNotifications(orgId: string): Promise<number>;
   markBisuiteSyncNotificationRead(id: string, orgId: string): Promise<void>;
   markAllBisuiteSyncNotificationsRead(orgId: string): Promise<void>;
+  deleteOldReadBisuiteSyncNotifications(olderThan: Date): Promise<{ deleted: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -602,6 +603,22 @@ export class DatabaseStorage implements IStorage {
         eq(bisuiteSyncNotifications.organizationId, orgId),
         isNull(bisuiteSyncNotifications.readAt),
       ));
+  }
+
+  /**
+   * Cancella le notifiche di sync BiSuite già lette (`read_at` non null) la
+   * cui `read_at` è più vecchia di `olderThan`. Le notifiche non lette non
+   * vengono mai toccate. Usata dal job notturno per evitare crescita
+   * indefinita della tabella.
+   */
+  async deleteOldReadBisuiteSyncNotifications(olderThan: Date): Promise<{ deleted: number }> {
+    const result = await db.delete(bisuiteSyncNotifications)
+      .where(and(
+        isNotNull(bisuiteSyncNotifications.readAt),
+        lt(bisuiteSyncNotifications.readAt, olderThan),
+      ))
+      .returning({ id: bisuiteSyncNotifications.id });
+    return { deleted: result.length };
   }
 }
 

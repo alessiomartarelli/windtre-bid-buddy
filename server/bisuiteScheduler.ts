@@ -76,6 +76,34 @@ function isPrevMonthReconcileEnabled(): boolean {
 }
 
 /**
+ * Numero di giorni di retention per le notifiche già lette.
+ * Default: 30 giorni. Configurabile via env BISUITE_NOTIFICATIONS_RETENTION_DAYS.
+ * Le notifiche non lette non vengono mai cancellate.
+ */
+function getNotificationRetentionDays(): number {
+  const raw = process.env.BISUITE_NOTIFICATIONS_RETENTION_DAYS;
+  if (!raw) return 30;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return 30;
+  return n;
+}
+
+async function cleanupOldReadNotifications(): Promise<void> {
+  const days = getNotificationRetentionDays();
+  const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000);
+  try {
+    const { deleted } = await storage.deleteOldReadBisuiteSyncNotifications(cutoff);
+    console.log(
+      `[bisuite-scheduler] cleanup notifiche lette più vecchie di ${days}gg ` +
+        `(< ${cutoff.toISOString()}): eliminate=${deleted}`,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[bisuite-scheduler] cleanup notifiche fallito: ${msg}`);
+  }
+}
+
+/**
  * Esegue un reconcile sul range mensile dato per tutte le org con credenziali
  * BiSuite. Logga per ogni org quanti record sono stati eliminati e quali
  * chunk sono stati skippati (chunk falliti = reconcile non eseguito).
@@ -223,10 +251,14 @@ export function startBisuiteDailyScheduler(): void {
               `(BISUITE_AUTO_RECONCILE=${process.env.BISUITE_AUTO_RECONCILE ?? "true"}).`,
           );
         }
+
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[bisuite-scheduler] errore fatale durante il fetch: ${msg}`);
       } finally {
+        // Cleanup notifiche vecchie eseguito sempre, anche se fetch/reconcile
+        // hanno lanciato eccezioni: la retention è indipendente dalla sync.
+        await cleanupOldReadNotifications();
         scheduleNext();
       }
     }, delay).unref?.();
