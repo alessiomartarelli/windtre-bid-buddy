@@ -1446,6 +1446,29 @@ export async function registerRoutes(
     }
   });
 
+  // === Profilo: preferenza notifiche email ===
+  app.patch("/api/auth/email-preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "Profilo non trovato" });
+      }
+      if (!["admin", "super_admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo admin / super admin possono gestire le notifiche email" });
+      }
+      const { emailNotificationsDisabled } = req.body ?? {};
+      if (typeof emailNotificationsDisabled !== "boolean") {
+        return res.status(400).json({ error: "emailNotificationsDisabled deve essere boolean" });
+      }
+      const updated = await storage.updateProfile(userId, { emailNotificationsDisabled });
+      res.json({ emailNotificationsDisabled: updated.emailNotificationsDisabled });
+    } catch (error) {
+      console.error("Error updating email preferences:", error);
+      res.status(500).json({ error: "Errore nell'aggiornamento delle preferenze email" });
+    }
+  });
+
   // === ADMIN: Toggle user active status ===
   app.post("/api/admin/toggle-active", isAuthenticated, async (req: any, res) => {
     try {

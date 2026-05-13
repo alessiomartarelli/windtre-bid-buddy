@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
 import { apiUrl } from "@/lib/basePath";
+import { apiRequest } from '@/lib/queryClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Building2, User, Lock, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Building2, User, Lock, Eye, EyeOff, Mail } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
 
 export default function Profile() {
@@ -21,6 +23,34 @@ export default function Profile() {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [emailDisabled, setEmailDisabled] = useState<boolean>(false);
+  const [savingEmailPref, setSavingEmailPref] = useState(false);
+
+  const isAdminLike = profile?.role === 'admin' || profile?.role === 'super_admin';
+
+  useEffect(() => {
+    setEmailDisabled(!!profile?.emailNotificationsDisabled);
+  }, [profile]);
+
+  const handleToggleEmailPref = async (disabled: boolean) => {
+    setSavingEmailPref(true);
+    const previous = emailDisabled;
+    setEmailDisabled(disabled);
+    try {
+      await apiRequest('PATCH', '/api/auth/email-preferences', { emailNotificationsDisabled: disabled });
+      toast({
+        title: 'Preferenza salvata',
+        description: disabled
+          ? 'Non riceverai più email per le sync BiSuite fallite.'
+          : 'Riceverai email per le sync BiSuite parziali o fallite.',
+      });
+    } catch (err) {
+      setEmailDisabled(previous);
+      toast({ title: 'Errore', description: 'Impossibile salvare la preferenza', variant: 'destructive' });
+    } finally {
+      setSavingEmailPref(false);
+    }
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +143,41 @@ export default function Profile() {
             </div>
           </CardContent>
         </Card>
+
+        {isAdminLike && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5" />
+                Notifiche email
+              </CardTitle>
+              <CardDescription>
+                Ricevi una email quando la sincronizzazione notturna BiSuite è parziale o fallisce
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="toggle-email-notifications" className="text-base">
+                    Email per sync BiSuite fallite
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {emailDisabled
+                      ? 'Riceverai solo la notifica in-app (campanellino).'
+                      : 'Riceverai una email a ' + (user?.email || 'il tuo indirizzo') + ' oltre alla notifica in-app.'}
+                  </p>
+                </div>
+                <Switch
+                  id="toggle-email-notifications"
+                  data-testid="switch-email-notifications"
+                  checked={!emailDisabled}
+                  disabled={savingEmailPref}
+                  onCheckedChange={(checked) => handleToggleEmailPref(!checked)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

@@ -33,6 +33,7 @@ export const profiles = pgTable("profiles", {
   organizationId: varchar("organization_id").references(() => organizations.id),
   profileImageUrl: varchar("profile_image_url"),
   isActive: boolean("is_active").notNull().default(true),
+  emailNotificationsDisabled: boolean("email_notifications_disabled").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

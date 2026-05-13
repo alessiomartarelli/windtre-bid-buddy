@@ -1,5 +1,51 @@
 import { runBisuiteFetchForAllOrgs, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import { storage } from "./storage";
+import { buildBisuiteSyncFailureEmail, sendMail } from "./email";
+
+/**
+ * Recupera gli indirizzi email degli admin/super_admin attivi dell'org
+ * che non hanno disabilitato le notifiche email.
+ */
+async function getAdminEmailsForOrg(orgId: string): Promise<string[]> {
+  try {
+    const profiles = await storage.getProfilesByOrg(orgId);
+    return profiles
+      .filter((p) =>
+        ["admin", "super_admin"].includes(p.role) &&
+        p.isActive &&
+        !p.emailNotificationsDisabled &&
+        !!p.email,
+      )
+      .map((p) => p.email as string);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[bisuite-scheduler] impossibile recuperare admin org=${orgId}: ${msg}`);
+    return [];
+  }
+}
+
+async function sendSyncFailureEmail(params: {
+  orgId: string;
+  orgName: string;
+  status: "partial" | "failed";
+  failedMonths: string[];
+  errorMessage: string | null;
+}): Promise<void> {
+  const recipients = await getAdminEmailsForOrg(params.orgId);
+  if (recipients.length === 0) {
+    console.log(
+      `[bisuite-scheduler] nessun admin con email attiva per org=${params.orgId}, skip email ${params.status}.`,
+    );
+    return;
+  }
+  const { subject, html, text } = buildBisuiteSyncFailureEmail({
+    orgName: params.orgName,
+    status: params.status,
+    failedMonths: params.failedMonths,
+    errorMessage: params.errorMessage,
+  });
+  await sendMail({ to: recipients, subject, html, text });
+}
 
 const ROME_TZ = "Europe/Rome";
 
@@ -207,6 +253,18 @@ export function startBisuiteDailyScheduler(): void {
               const msg = e instanceof Error ? e.message : String(e);
               console.error(`[bisuite-scheduler] impossibile creare notifica partial per org=${p.orgId}: ${msg}`);
             }
+            try {
+              await sendSyncFailureEmail({
+                orgId: p.orgId,
+                orgName: p.orgName,
+                status: "partial",
+                failedMonths: p.failedMonths,
+                errorMessage: null,
+              });
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              console.error(`[bisuite-scheduler] errore invio email partial org=${p.orgId}: ${msg}`);
+            }
           }
         }
         if (result.failed.length > 0) {
@@ -224,6 +282,18 @@ export function startBisuiteDailyScheduler(): void {
             } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
               console.error(`[bisuite-scheduler] impossibile creare notifica failed per org=${f.orgId}: ${msg}`);
+            }
+            try {
+              await sendSyncFailureEmail({
+                orgId: f.orgId,
+                orgName: f.orgName,
+                status: "failed",
+                failedMonths: [],
+                errorMessage: f.error,
+              });
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              console.error(`[bisuite-scheduler] errore invio email failed org=${f.orgId}: ${msg}`);
             }
           }
         }

@@ -10,6 +10,7 @@ interface Profile {
   email: string | null;
   role: string;
   profileImageUrl: string | null;
+  emailNotificationsDisabled?: boolean;
 }
 
 interface Organization {
