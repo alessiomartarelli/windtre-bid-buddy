@@ -294,95 +294,25 @@ export default function VenditeBiSuite() {
 
   const saleClassifications = useMemo(() => {
     const map = new Map<string, SaleClassification>();
-    sales.forEach((s) => {
+    rawSales.forEach((s) => {
       map.set(s.id, classifySaleArticles(s.rawData));
     });
     return map;
-  }, [sales]);
+  }, [rawSales]);
 
-  const globalCounts = useMemo(() => {
-    const byType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
-    const amtByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
-    const byPista: Partial<Record<PistaCanvass, number>> = {};
-    const amtByPista: Partial<Record<PistaCanvass, number>> = {};
-    let totalArticles = 0;
-    const prodottiByCategory: Record<string, { pezzi: number; importo: number }> = {};
-    const serviziByLabel: Record<string, { pezzi: number; importo: number }> = {};
+  // Indica se almeno un filtro "componente" (Tipo / Pista) è attivo: in tal
+  // caso gli aggregati di pezzi/importi devono essere calcolati a livello
+  // articolo, non a livello vendita intera.
+  const componentFilterActive = filterType !== "all" || filterPista !== "all";
 
-    saleClassifications.forEach((sc) => {
-      byType.canvass += sc.countByType.canvass;
-      byType.prodotti += sc.countByType.prodotti;
-      byType.servizi += sc.countByType.servizi;
-      amtByType.canvass += sc.amountByType.canvass;
-      amtByType.prodotti += sc.amountByType.prodotti;
-      amtByType.servizi += sc.amountByType.servizi;
-      totalArticles += sc.articles.length;
-
-      for (const art of sc.articles) {
-        if (art.type === 'prodotti' && art.categoriaNome) {
-          const key = art.categoriaNome.toUpperCase();
-          if (!prodottiByCategory[key]) prodottiByCategory[key] = { pezzi: 0, importo: 0 };
-          prodottiByCategory[key].pezzi++;
-          prodottiByCategory[key].importo += art.prezzo;
-        }
-        if (art.type === 'servizi' && art.descrizione) {
-          if (!serviziByLabel[art.descrizione]) serviziByLabel[art.descrizione] = { pezzi: 0, importo: 0 };
-          serviziByLabel[art.descrizione].pezzi++;
-          serviziByLabel[art.descrizione].importo += art.prezzo;
-        }
-      }
-
-      for (const [p, c] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
-        byPista[p] = (byPista[p] || 0) + c;
-      }
-      for (const [p, a] of Object.entries(sc.amountByPista) as [PistaCanvass, number][]) {
-        amtByPista[p] = (amtByPista[p] || 0) + a;
-      }
-    });
-
-    return { byType, amtByType, byPista, amtByPista, totalArticles, prodottiByCategory, serviziByLabel };
-  }, [saleClassifications]);
-
-  const pdvSummaries = useMemo(() => {
-    const map: Record<string, PdvSummary> = {};
-    sales.forEach((sale) => {
-      const code = sale.codicePos || "N/D";
-      if (!map[code]) {
-        map[code] = {
-          codicePos: code,
-          nomeNegozio: sale.nomeNegozio || code,
-          ragioneSociale: sale.ragioneSociale || "",
-          totaleVendite: 0,
-          totaleImporto: 0,
-          countByType: { canvass: 0, prodotti: 0, servizi: 0 },
-          amountByType: { canvass: 0, prodotti: 0, servizi: 0 },
-          countByPista: {},
-          amountByPista: {},
-          vendite: [],
-        };
-      }
-      map[code].totaleVendite++;
-      map[code].totaleImporto += parseFloat(sale.totale || "0") || 0;
-      map[code].vendite.push(sale);
-
-      const sc = saleClassifications.get(sale.id);
-      if (sc) {
-        map[code].countByType.canvass += sc.countByType.canvass;
-        map[code].countByType.prodotti += sc.countByType.prodotti;
-        map[code].countByType.servizi += sc.countByType.servizi;
-        map[code].amountByType.canvass += sc.amountByType.canvass;
-        map[code].amountByType.prodotti += sc.amountByType.prodotti;
-        map[code].amountByType.servizi += sc.amountByType.servizi;
-        for (const [p, c] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
-          map[code].countByPista[p] = (map[code].countByPista[p] || 0) + c;
-        }
-        for (const [p, a] of Object.entries(sc.amountByPista) as [PistaCanvass, number][]) {
-          map[code].amountByPista[p] = (map[code].amountByPista[p] || 0) + a;
-        }
-      }
-    });
-    return Object.values(map).sort((a, b) => b.totaleVendite - a.totaleVendite);
-  }, [sales, saleClassifications]);
+  const articleMatchesFilter = useCallback(
+    (art: { type: ArticleType; pista?: PistaCanvass }) => {
+      if (filterType !== "all" && art.type !== filterType) return false;
+      if (filterPista !== "all" && art.pista !== filterPista) return false;
+      return true;
+    },
+    [filterType, filterPista],
+  );
 
   const filteredSales = useMemo(() => {
     // Tabella vendite grezze: parte da rawSales per mantenere visibili anche
@@ -431,20 +361,148 @@ export default function VenditeBiSuite() {
     return filtered;
   }, [rawSales, selectedPdv, filterStato, filterType, filterPista, searchTerm, saleClassifications]);
 
-  const totaleImporto = sales.reduce(
-    (sum, s) => sum + (parseFloat(s.totale || "0") || 0),
-    0
+  // Vendite "in vista" (per gli aggregati): partono da `filteredSales`
+  // (che già rispetta stato/tipo/pista/PDV/ricerca) ma escludono comunque
+  // le ANNULLATA dagli importi/incassi quando lo stato selezionato non è
+  // proprio "annullate" — coerente con la card Importo storica.
+  const aggregateSales = filteredSales;
+
+  // Aggregati globali derivati dalle vendite filtrate. Quando è attivo un
+  // filtro per Tipo/Pista, contiamo SOLO gli articoli che corrispondono al
+  // filtro (livello componente). Altrimenti somma tutti gli articoli.
+  const globalCounts = useMemo(() => {
+    const byType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
+    const amtByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
+    const byPista: Partial<Record<PistaCanvass, number>> = {};
+    const amtByPista: Partial<Record<PistaCanvass, number>> = {};
+    let totalArticles = 0;
+    let filteredArticles = 0;
+    let filteredAmount = 0;
+    const prodottiByCategory: Record<string, { pezzi: number; importo: number }> = {};
+    const serviziByLabel: Record<string, { pezzi: number; importo: number }> = {};
+
+    for (const sale of aggregateSales) {
+      const sc = saleClassifications.get(sale.id);
+      if (!sc) continue;
+      totalArticles += sc.articles.length;
+
+      for (const art of sc.articles) {
+        const matches = articleMatchesFilter(art);
+        if (matches) {
+          filteredArticles++;
+          filteredAmount += art.prezzo;
+        }
+        // Per le card Canvass/Prodotti/Servizi mostriamo solo i pezzi
+        // coerenti col filtro attivo (se è "all", tutti).
+        if (!matches) continue;
+        byType[art.type]++;
+        amtByType[art.type] += art.prezzo;
+        if (art.pista) {
+          byPista[art.pista] = (byPista[art.pista] || 0) + 1;
+          amtByPista[art.pista] = (amtByPista[art.pista] || 0) + art.prezzo;
+        }
+        if (art.type === 'prodotti' && art.categoriaNome) {
+          const key = art.categoriaNome.toUpperCase();
+          if (!prodottiByCategory[key]) prodottiByCategory[key] = { pezzi: 0, importo: 0 };
+          prodottiByCategory[key].pezzi++;
+          prodottiByCategory[key].importo += art.prezzo;
+        }
+        if (art.type === 'servizi' && art.descrizione) {
+          if (!serviziByLabel[art.descrizione]) serviziByLabel[art.descrizione] = { pezzi: 0, importo: 0 };
+          serviziByLabel[art.descrizione].pezzi++;
+          serviziByLabel[art.descrizione].importo += art.prezzo;
+        }
+      }
+    }
+
+    return {
+      byType,
+      amtByType,
+      byPista,
+      amtByPista,
+      totalArticles,
+      filteredArticles,
+      filteredAmount,
+      prodottiByCategory,
+      serviziByLabel,
+    };
+  }, [aggregateSales, saleClassifications, articleMatchesFilter]);
+
+  // KPI top: numero "vendite/articoli" e importo. Quando un filtro Tipo/Pista
+  // è attivo i numeri riflettono i SOLI articoli di quel tipo; altrimenti
+  // restano i totali a livello vendita (sale.totale).
+  const totaleImporto = useMemo(() => {
+    if (componentFilterActive) return globalCounts.filteredAmount;
+    return aggregateSales.reduce((sum, s) => sum + (parseFloat(s.totale || "0") || 0), 0);
+  }, [aggregateSales, componentFilterActive, globalCounts.filteredAmount]);
+
+  const venditeCount = componentFilterActive
+    ? globalCounts.filteredArticles
+    : aggregateSales.length;
+
+  // Modalità di Incasso: gli incassi non si possono splittare per articolo,
+  // quindi sono sempre "a livello vendita". Quando il filtro Tipo è attivo
+  // restano comunque coerenti perché derivano dalle vendite filtrate
+  // (cioè quelle che CONTENGONO almeno un articolo del tipo selezionato).
+  const incassoTotals = useMemo(
+    () => computeIncassoTotals(aggregateSales),
+    [aggregateSales],
   );
 
-  const incassoTotals = useMemo(() => {
-    const source = selectedPdv ? sales.filter(s => (s.codicePos || "N/D") === selectedPdv) : sales;
-    return computeIncassoTotals(source);
-  }, [sales, selectedPdv]);
+  const pdvSummaries = useMemo(() => {
+    const map: Record<string, PdvSummary> = {};
+    for (const sale of aggregateSales) {
+      const code = sale.codicePos || "N/D";
+      if (!map[code]) {
+        map[code] = {
+          codicePos: code,
+          nomeNegozio: sale.nomeNegozio || code,
+          ragioneSociale: sale.ragioneSociale || "",
+          totaleVendite: 0,
+          totaleImporto: 0,
+          countByType: { canvass: 0, prodotti: 0, servizi: 0 },
+          amountByType: { canvass: 0, prodotti: 0, servizi: 0 },
+          countByPista: {},
+          amountByPista: {},
+          vendite: [],
+        };
+      }
+      const entry = map[code];
+      entry.vendite.push(sale);
+
+      const sc = saleClassifications.get(sale.id);
+      let saleMatchesFilter = !componentFilterActive;
+      let saleFilteredAmount = 0;
+      if (sc) {
+        for (const art of sc.articles) {
+          if (!articleMatchesFilter(art)) continue;
+          saleMatchesFilter = true;
+          saleFilteredAmount += art.prezzo;
+          entry.countByType[art.type]++;
+          entry.amountByType[art.type] += art.prezzo;
+          if (art.pista) {
+            entry.countByPista[art.pista] = (entry.countByPista[art.pista] || 0) + 1;
+            entry.amountByPista[art.pista] = (entry.amountByPista[art.pista] || 0) + art.prezzo;
+          }
+        }
+      }
+      if (saleMatchesFilter) {
+        entry.totaleVendite++;
+        entry.totaleImporto += componentFilterActive
+          ? saleFilteredAmount
+          : (parseFloat(sale.totale || "0") || 0);
+      }
+    }
+    // Rimuovi PDV senza match (può capitare con filtri stretti)
+    return Object.values(map)
+      .filter((p) => p.totaleVendite > 0 || p.vendite.length > 0)
+      .sort((a, b) => b.totaleVendite - a.totaleVendite);
+  }, [aggregateSales, saleClassifications, articleMatchesFilter, componentFilterActive]);
 
   const incassoByPdv = useMemo(() => {
     const map = new Map<string, IncassoTotals>();
     const grouped = new Map<string, BisuiteSale[]>();
-    for (const sale of sales) {
+    for (const sale of aggregateSales) {
       const code = sale.codicePos || "N/D";
       if (!grouped.has(code)) grouped.set(code, []);
       grouped.get(code)!.push(sale);
@@ -453,20 +511,29 @@ export default function VenditeBiSuite() {
       map.set(code, computeIncassoTotals(pdvSales));
     }
     return map;
-  }, [sales]);
+  }, [aggregateSales]);
 
   const rsSummaries = useMemo(() => {
     const map = new Map<string, { ragioneSociale: string; vendite: BisuiteSale[]; totaleImporto: number; pdvCodes: Set<string> }>();
-    for (const sale of sales) {
+    for (const sale of aggregateSales) {
       const rs = sale.ragioneSociale || "N/D";
       if (!map.has(rs)) map.set(rs, { ragioneSociale: rs, vendite: [], totaleImporto: 0, pdvCodes: new Set() });
       const entry = map.get(rs)!;
       entry.vendite.push(sale);
-      entry.totaleImporto += parseFloat(sale.totale || "0") || 0;
+      if (componentFilterActive) {
+        const sc = saleClassifications.get(sale.id);
+        if (sc) {
+          for (const art of sc.articles) {
+            if (articleMatchesFilter(art)) entry.totaleImporto += art.prezzo;
+          }
+        }
+      } else {
+        entry.totaleImporto += parseFloat(sale.totale || "0") || 0;
+      }
       entry.pdvCodes.add(sale.codicePos || "N/D");
     }
     return Array.from(map.values()).sort((a, b) => b.vendite.length - a.vendite.length);
-  }, [sales]);
+  }, [aggregateSales, componentFilterActive, saleClassifications, articleMatchesFilter]);
 
   const addettoSummaries = useMemo(() => {
     const map = new Map<string, {
@@ -479,7 +546,7 @@ export default function VenditeBiSuite() {
       countByPista: Partial<Record<PistaCanvass, number>>;
       amountByPista: Partial<Record<PistaCanvass, number>>;
     }>();
-    for (const sale of sales) {
+    for (const sale of aggregateSales) {
       const addetto = sale.nomeAddetto || "N/D";
       if (!map.has(addetto)) map.set(addetto, {
         nomeAddetto: addetto, vendite: [], totaleImporto: 0, pdvCodes: new Set(),
@@ -489,26 +556,27 @@ export default function VenditeBiSuite() {
       });
       const entry = map.get(addetto)!;
       entry.vendite.push(sale);
-      entry.totaleImporto += parseFloat(sale.totale || "0") || 0;
       entry.pdvCodes.add(sale.codicePos || "N/D");
       const sc = saleClassifications.get(sale.id);
+      let saleFilteredAmount = 0;
       if (sc) {
-        entry.countByType.canvass += sc.countByType.canvass;
-        entry.countByType.prodotti += sc.countByType.prodotti;
-        entry.countByType.servizi += sc.countByType.servizi;
-        entry.amountByType.canvass += sc.amountByType.canvass;
-        entry.amountByType.prodotti += sc.amountByType.prodotti;
-        entry.amountByType.servizi += sc.amountByType.servizi;
-        for (const [p, c] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
-          entry.countByPista[p] = (entry.countByPista[p] || 0) + c;
-        }
-        for (const [p, a] of Object.entries(sc.amountByPista) as [PistaCanvass, number][]) {
-          entry.amountByPista[p] = (entry.amountByPista[p] || 0) + a;
+        for (const art of sc.articles) {
+          if (!articleMatchesFilter(art)) continue;
+          saleFilteredAmount += art.prezzo;
+          entry.countByType[art.type]++;
+          entry.amountByType[art.type] += art.prezzo;
+          if (art.pista) {
+            entry.countByPista[art.pista] = (entry.countByPista[art.pista] || 0) + 1;
+            entry.amountByPista[art.pista] = (entry.amountByPista[art.pista] || 0) + art.prezzo;
+          }
         }
       }
+      entry.totaleImporto += componentFilterActive
+        ? saleFilteredAmount
+        : (parseFloat(sale.totale || "0") || 0);
     }
     return Array.from(map.values()).sort((a, b) => b.vendite.length - a.vendite.length);
-  }, [sales, saleClassifications]);
+  }, [aggregateSales, saleClassifications, articleMatchesFilter, componentFilterActive]);
 
   const allDomande = useMemo(() => {
     const set = new Set<string>();
@@ -863,9 +931,15 @@ export default function VenditeBiSuite() {
                 <CardContent className="p-3 sm:p-4 text-center">
                   <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 text-primary" />
                   <p className="text-lg sm:text-2xl font-bold" data-testid="text-total-sales">
-                    {sales.length}
+                    {venditeCount}
                   </p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Vendite Totali</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                    {componentFilterActive
+                      ? (filterType !== "all"
+                          ? `Articoli ${TYPE_LABELS[filterType as ArticleType]}`
+                          : `Articoli ${PISTA_CANVASS_LABELS[filterPista as PistaCanvass]}`)
+                      : "Vendite Totali"}
+                  </p>
                 </CardContent>
               </Card>
               <Card>
@@ -877,7 +951,9 @@ export default function VenditeBiSuite() {
                   >
                     {formatCurrency(totaleImporto)}
                   </p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Importo Totale</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                    {componentFilterActive ? "Importo (filtrato)" : "Importo Totale"}
+                  </p>
                 </CardContent>
               </Card>
               <Card>
@@ -893,28 +969,36 @@ export default function VenditeBiSuite() {
                 <CardContent className="p-3 sm:p-4 text-center">
                   <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 text-orange-500" />
                   <p className="text-sm sm:text-2xl font-bold" data-testid="text-avg-sale">
-                    {sales.length > 0
-                      ? formatCurrency(totaleImporto / sales.length)
+                    {aggregateSales.length > 0
+                      ? formatCurrency(totaleImporto / aggregateSales.length)
                       : "€ 0"}
                   </p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Media per Vendita</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                    {componentFilterActive ? "Media per Vendita (filtro)" : "Media per Vendita"}
+                  </p>
                 </CardContent>
               </Card>
             </div>
 
-            {sales.length > 0 && (
+            {aggregateSales.length > 0 && (
               <Card>
                 <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Wallet className="h-4 w-4 text-primary" />
                     <span className="font-semibold text-sm">Modalità di Incasso{selectedPdv ? ` - ${pdvSummaries.find(p => p.codicePos === selectedPdv)?.nomeNegozio || selectedPdv}` : ""}</span>
+                    {componentFilterActive && (
+                      <span className="text-[10px] text-muted-foreground italic ml-1">
+                        (incassi calcolati a livello di vendita: includono l'intero scontrino delle vendite che contengono il filtro selezionato)
+                      </span>
+                    )}
                   </div>
                   <IncassoBadges totals={incassoTotals} formatter={formatCurrency} />
                 </CardContent>
               </Card>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+            <div className={`grid grid-cols-1 ${filterType === "all" ? "sm:grid-cols-3" : ""} gap-2 sm:gap-4`}>
+              {(filterType === "all" || filterType === "canvass") && (
               <Card className="border-l-4 border-l-orange-500">
                 <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center justify-between mb-1">
@@ -947,6 +1031,8 @@ export default function VenditeBiSuite() {
                   </div>
                 </CardContent>
               </Card>
+              )}
+              {(filterType === "all" || filterType === "prodotti") && (
               <Card className="border-l-4 border-l-slate-400">
                 <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center justify-between mb-1">
@@ -974,6 +1060,8 @@ export default function VenditeBiSuite() {
                   </div>
                 </CardContent>
               </Card>
+              )}
+              {(filterType === "all" || filterType === "servizi") && (
               <Card className="border-l-4 border-l-cyan-500">
                 <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center justify-between mb-1">
@@ -1001,6 +1089,7 @@ export default function VenditeBiSuite() {
                   </div>
                 </CardContent>
               </Card>
+              )}
             </div>
 
             {!selectedPdv && rsSummaries.length > 1 && (
