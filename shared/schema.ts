@@ -96,12 +96,14 @@ export const bisuiteSales = pgTable("bisuite_sales", {
   categorieArticoli: text("categorie_articoli"),
   rawData: jsonb("raw_data").notNull(),
   fetchedAt: timestamp("fetched_at").defaultNow(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("IDX_bisuite_sales_org").on(table.organizationId),
   index("IDX_bisuite_sales_date").on(table.dataVendita),
   index("IDX_bisuite_sales_pos").on(table.codicePos),
   index("IDX_bisuite_sales_bisuite_id").on(table.bisuiteId),
+  index("IDX_bisuite_sales_last_seen").on(table.lastSeenAt),
   uniqueIndex("UQ_bisuite_sales_org_bisuite_id").on(table.organizationId, table.bisuiteId),
 ]);
 

@@ -62,6 +62,36 @@ Recovery storico: `node runBisuiteFetch.cjs <orgId> [startYMD] [endYMD]`
 `end_date`. La constraint `UQ_bisuite_sales_org_bisuite_id` rende le
 ri-esecuzioni idempotenti.
 
+## Reconcile vendite eliminate/accorpate upstream (Task #104)
+Dato che la sync è append/update only (Task #102), una vendita cancellata o
+accorpata su BiSuite non sparisce automaticamente dalla nostra `bisuite_sales`.
+Per ripianare la divergenza esiste una colonna `last_seen_at` (timestamp,
+aggiornato a `now()` ad ogni upsert in `upsertBisuiteSales`) e un endpoint
+admin dedicato:
+
+```
+POST /api/admin/bisuite-reconcile?orgId=<uuid>&from=YYYY-MM-DD&to=YYYY-MM-DD
+```
+
+(o equivalente body JSON `{ organization_id, from, to }`). Il flusso:
+1. cattura `threshold = now()` PRIMA del fetch;
+2. esegue `runBisuiteFetchForOrg(orgId, { startDate, endDate, reconcile: true })`
+   che scarica il range a chunk mensili e fa upsert (aggiornando
+   `last_seen_at >= threshold` su tutto ciò che vede);
+3. al termine, se NESSUN chunk è fallito, elimina i record dell'org la cui
+   `data_vendita::date` cade in `[from..to]` e con `last_seen_at < threshold`
+   (o `NULL` per i record legacy pre-Task #104). Sono le righe che il
+   server BiSuite non ci ha più mostrato in questa finestra → cancellate
+   o accorpate upstream.
+
+**Safety**: se anche un solo chunk fallisce il reconcile è skippato (loggato
+come `[bisuite-reconcile] SKIP`) per evitare di eliminare record ancora vivi
+ma non re-fetchati. La sync regolare (`POST /api/bisuite-fetch`,
+`POST /api/admin/bisuite-import`, scheduler giornaliero) NON esegue il
+reconcile: resta strettamente non distruttiva. Il reconcile va invocato a
+mano (o da un job dedicato) sulle finestre rilevanti per i conteggi gara
+(es. mese corrente, mese precedente).
+
 ## Esclusione vendite ANNULLATA
 Le query `getBisuiteSales*` in `server/storage.ts` aggiungono per default la
 condizione `upper(stato) <> 'ANNULLATA'`. Il chiamante può passare

@@ -1,4 +1,6 @@
 import { storage } from "./storage";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 
 const BISUITE_SALES_PATH = "/api/v1/sales/full";
 
@@ -154,6 +156,7 @@ export interface BisuiteFetchResult {
   updated: number;
   chunks: number;
   failedChunks: Array<{ from: string; to: string; error: string }>;
+  reconciled?: { from: string; to: string; deleted: number };
 }
 
 const ITALIAN_MONTHS = [
@@ -331,7 +334,7 @@ async function fetchSalesRange(
  */
 export async function runBisuiteFetchForOrg(
   orgId: string,
-  opts?: { startDate?: string; endDate?: string },
+  opts?: { startDate?: string; endDate?: string; reconcile?: boolean },
 ): Promise<BisuiteFetchResult> {
   const orgConfig = await storage.getOrgConfig(orgId);
   const cfg = orgConfig?.config as Record<string, any> | undefined;
@@ -354,6 +357,14 @@ export async function runBisuiteFetchForOrg(
   const chunks = buildMonthlyChunks(startYMD, endYMD);
 
   const salesEndpoint = deriveSalesEndpoint(apiUrlStr);
+  // Threshold catturata PRIMA del fetch dal CLOCK del DB (non dal Node):
+  // tutti gli upsert successivi useranno `now()` server-side e avranno
+  // `last_seen_at >= threshold`, quindi al reconcile possiamo eliminare
+  // in sicurezza i record con `last_seen_at < threshold`. Usare il DB
+  // time evita drift tra clock app e DB e timezone edge effects.
+  const nowResult = await db.execute(sql`select now() as now`);
+  const nowRow = (nowResult as unknown as { rows: Array<{ now: Date | string }> }).rows?.[0];
+  const reconcileThreshold = nowRow ? new Date(nowRow.now as any) : new Date();
   let totalFromApi = 0;
   let totalInserted = 0;
   let totalUpdated = 0;
@@ -378,6 +389,31 @@ export async function runBisuiteFetchForOrg(
     }
   }
 
+  let reconciled: { from: string; to: string; deleted: number } | undefined;
+  // Reconcile solo se richiesto esplicitamente E non ci sono chunk falliti:
+  // un chunk fallito significa che potrebbero esistere record nel range che
+  // non abbiamo potuto rivedere — eliminarli equivarrebbe a perdere dati
+  // ancora vivi su BiSuite.
+  if (opts?.reconcile && failedChunks.length === 0 && chunks.length > 0) {
+    try {
+      const r = await storage.reconcileBisuiteSales(orgId, startYMD, endYMD, reconcileThreshold);
+      reconciled = { from: startYMD, to: endYMD, deleted: r.deleted };
+      console.log(
+        `[bisuite-reconcile] org=${orgId} ${startYMD}→${endYMD}: ` +
+          `eliminati=${r.deleted} (last_seen_at < ${reconcileThreshold.toISOString()})`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[bisuite-reconcile] FAIL org=${orgId} ${startYMD}→${endYMD}: ${msg}`);
+      throw err;
+    }
+  } else if (opts?.reconcile && failedChunks.length > 0) {
+    console.warn(
+      `[bisuite-reconcile] SKIP org=${orgId}: ${failedChunks.length} chunk falliti, ` +
+        `reconcile non sicuro (potrebbe eliminare record ancora vivi).`,
+    );
+  }
+
   return {
     orgId,
     totalFromApi,
@@ -385,6 +421,7 @@ export async function runBisuiteFetchForOrg(
     updated: totalUpdated,
     chunks: chunks.length,
     failedChunks,
+    reconciled,
   };
 }
 

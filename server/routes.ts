@@ -1810,6 +1810,66 @@ export async function registerRoutes(
     }
   });
 
+  // Reconcile (Task #104): fetch del range + eliminazione dei record nello
+  // stesso range con `last_seen_at` più vecchio dell'inizio del fetch
+  // (= cancellati o accorpati su BiSuite). Idempotente. Ammessi sia query
+  // string (`?orgId=...&from=...&to=...`) sia body JSON.
+  app.post("/api/admin/bisuite-reconcile", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const orgId = (req.query.orgId as string) || (req.query.organization_id as string) || req.body?.organization_id || req.body?.orgId;
+      const from = (req.query.from as string) || req.body?.from || req.body?.start_date;
+      const to = (req.query.to as string) || req.body?.to || req.body?.end_date;
+      if (!orgId) {
+        return res.status(400).json({ error: "orgId richiesto" });
+      }
+      if (!from || !to) {
+        return res.status(400).json({ error: "from e to richiesti (YYYY-MM-DD)" });
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        return res.status(400).json({ error: "Formato date non valido, atteso YYYY-MM-DD" });
+      }
+      if (from > to) {
+        return res.status(400).json({ error: "from deve essere <= to" });
+      }
+      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+        return res.status(403).json({ error: "Non puoi eseguire reconcile per altre organizzazioni" });
+      }
+
+      try {
+        const r = await runBisuiteFetchForOrg(orgId, {
+          startDate: from,
+          endDate: to,
+          reconcile: true,
+        });
+        res.json({
+          success: true,
+          message: r.reconciled
+            ? `Sincronizzate ${r.totalFromApi} vendite (nuove ${r.inserted}, aggiornate ${r.updated}); eliminate ${r.reconciled.deleted} obsolete`
+            : `Sincronizzate ${r.totalFromApi} vendite (nuove ${r.inserted}, aggiornate ${r.updated}); reconcile saltato per chunk falliti`,
+          totalFromApi: r.totalFromApi,
+          inserted: r.inserted,
+          updated: r.updated,
+          chunks: r.chunks,
+          failedChunks: r.failedChunks,
+          reconciled: r.reconciled ?? null,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return res.status(500).json({ error: "Errore durante il reconcile", details: msg });
+      }
+    } catch (error: unknown) {
+      console.error("BiSuite reconcile error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore durante il reconcile", details: msg });
+    }
+  });
+
   app.get("/api/bisuite-credentials-status", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);

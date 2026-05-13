@@ -48,6 +48,7 @@ export interface IStorage {
   getBisuiteSalesByItalianDateRange(orgId: string, fromYMD?: string, toYMD?: string, includeAnnullate?: boolean): Promise<BisuiteSale[]>;
   getBisuiteSale(id: string): Promise<BisuiteSale | undefined>;
   deleteBisuiteSalesByOrg(orgId: string): Promise<void>;
+  reconcileBisuiteSales(orgId: string, fromYMD: string, toYMD: string, threshold: Date): Promise<{ deleted: number }>;
 
   // Gara Config
   getGaraConfig(orgId: string, month: number, year: number): Promise<GaraConfig | undefined>;
@@ -311,6 +312,7 @@ export class DatabaseStorage implements IStorage {
             categorieArticoli: sql`excluded.categorie_articoli`,
             rawData: sql`excluded.raw_data`,
             fetchedAt: sql`now()`,
+            lastSeenAt: sql`now()`,
           },
         })
         .returning({ wasInserted: sql<boolean>`(xmax = 0)` });
@@ -372,6 +374,30 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBisuiteSalesByOrg(orgId: string): Promise<void> {
     await db.delete(bisuiteSales).where(eq(bisuiteSales.organizationId, orgId));
+  }
+
+  /**
+   * Reconcile: dopo aver completato la sync di un range, elimina i record
+   * dell'org la cui `data_vendita` cade in [fromYMD..toYMD] (date italiane,
+   * confronto su `::date`) e che NON sono stati toccati dalla sync corrente
+   * (cioè `last_seen_at < threshold`). Serve a propagare le cancellazioni
+   * o gli accorpamenti effettuati lato BiSuite alla nostra copia.
+   * I record con `last_seen_at` NULL (legacy, pre-Task #104) sono trattati
+   * come stale e quindi eliminabili se nel range.
+   */
+  async reconcileBisuiteSales(
+    orgId: string,
+    fromYMD: string,
+    toYMD: string,
+    threshold: Date,
+  ): Promise<{ deleted: number }> {
+    const result = await db.delete(bisuiteSales).where(and(
+      eq(bisuiteSales.organizationId, orgId),
+      sql`${bisuiteSales.dataVendita}::date >= ${fromYMD}::date`,
+      sql`${bisuiteSales.dataVendita}::date <= ${toYMD}::date`,
+      sql`(${bisuiteSales.lastSeenAt} IS NULL OR ${bisuiteSales.lastSeenAt} < ${threshold.toISOString()})`,
+    )).returning({ id: bisuiteSales.id });
+    return { deleted: result.length };
   }
 
   // Gara Config
