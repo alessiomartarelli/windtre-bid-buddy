@@ -10,6 +10,13 @@ import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDef
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
 import { registerCdgRoutes } from "./cdgRoutes";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
+import {
+  loadEmailConfig,
+  invalidateEmailConfigCache,
+  sendTestEmailWithConfig,
+  SMTP_CONFIG_KEY,
+  type SmtpConfig,
+} from "./email";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
@@ -460,6 +467,143 @@ export async function registerRoutes(
       res.json(result);
     } catch (error) {
       res.status(500).json({ message: "Error saving system config" });
+    }
+  });
+
+  // === SMTP CONFIG (super admin only) ===
+  // GET ritorna la config attualmente attiva (DB merged con env). La password
+  // viene mascherata: torniamo solo `passSet: true|false`. La sorgente di
+  // ciascun campo è indicata in `sources` per dare al super admin un'idea di
+  // cosa arriva da env e cosa è stato salvato dal pannello.
+  const smtpConfigSchema = z.object({
+    host: z.string().trim().max(255).optional().default(""),
+    port: z.coerce.number().int().min(1).max(65535).optional().default(587),
+    secure: z.boolean().optional().default(false),
+    user: z.string().trim().max(255).optional().default(""),
+    pass: z.string().max(1024).optional(),
+    from: z.string().trim().max(255).optional().default(""),
+    baseUrl: z.string().trim().max(500).optional().default(""),
+  });
+
+  app.get("/api/admin/smtp-config", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Solo il super admin può vedere la configurazione SMTP" });
+      }
+      const effective = await loadEmailConfig(true);
+      const sys = await storage.getSystemConfig(SMTP_CONFIG_KEY);
+      const saved = (sys?.config ?? null) as Partial<SmtpConfig> | null;
+      res.json({
+        // Campi visibili nel form (no password in chiaro)
+        host: effective.host,
+        port: effective.port,
+        secure: effective.secure,
+        user: effective.user,
+        from: effective.from,
+        baseUrl: effective.baseUrl,
+        passSet: !!effective.pass,
+        // Mostriamo cosa è in DB vs cosa arriva dall'env, così il super admin
+        // sa se sta sovrascrivendo un valore d'ambiente.
+        savedInDb: saved
+          ? {
+              host: !!saved.host,
+              port: typeof saved.port === "number",
+              secure: typeof saved.secure === "boolean",
+              user: typeof saved.user === "string" && saved.user.length > 0,
+              pass: typeof saved.pass === "string" && saved.pass.length > 0,
+              from: !!saved.from,
+              baseUrl: !!saved.baseUrl,
+            }
+          : null,
+        envFallback: {
+          host: !!process.env.SMTP_HOST?.trim(),
+          user: !!process.env.SMTP_USER?.trim(),
+          pass: !!process.env.SMTP_PASS,
+          from: !!process.env.SMTP_FROM?.trim(),
+          baseUrl: !!process.env.APP_BASE_URL?.trim(),
+        },
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ message: `Errore lettura SMTP: ${msg}` });
+    }
+  });
+
+  // PUT salva i campi compilati. Per la password: stringa vuota o omessa =
+  // mantieni quella già salvata; stringa non vuota = sostituisci.
+  app.put("/api/admin/smtp-config", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Solo il super admin può modificare la configurazione SMTP" });
+      }
+      const parsed = smtpConfigSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Dati non validi", errors: parsed.error.flatten() });
+      }
+      const existing = await storage.getSystemConfig(SMTP_CONFIG_KEY);
+      const prev = (existing?.config ?? {}) as Partial<SmtpConfig>;
+      const incoming = parsed.data;
+      const next: Partial<SmtpConfig> = {
+        host: incoming.host ?? "",
+        port: incoming.port ?? 587,
+        secure: !!incoming.secure,
+        user: incoming.user ?? "",
+        from: incoming.from ?? "",
+        baseUrl: incoming.baseUrl ?? "",
+        pass: incoming.pass && incoming.pass.length > 0 ? incoming.pass : (prev.pass ?? ""),
+      };
+      await storage.upsertSystemConfig(SMTP_CONFIG_KEY, next, userId);
+      invalidateEmailConfigCache();
+      const refreshed = await loadEmailConfig(true);
+      res.json({
+        ok: true,
+        host: refreshed.host,
+        port: refreshed.port,
+        secure: refreshed.secure,
+        user: refreshed.user,
+        from: refreshed.from,
+        baseUrl: refreshed.baseUrl,
+        passSet: !!refreshed.pass,
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ message: `Errore salvataggio SMTP: ${msg}` });
+    }
+  });
+
+  // POST invia un'email di test usando la config attualmente attiva (post-save
+  // se appena salvata). Ritorna esito esplicito con l'errore SMTP se fallisce.
+  app.post("/api/admin/smtp-test", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Solo il super admin può inviare email di test" });
+      }
+      const schema = z.object({ to: z.string().email("Email destinatario non valida") });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Email non valida" });
+      }
+      const cfg = await loadEmailConfig(true);
+      if (!cfg.host) {
+        return res.status(400).json({ message: "Host SMTP non configurato (nessun valore in DB né in env)" });
+      }
+      const result = await sendTestEmailWithConfig(
+        cfg,
+        parsed.data.to,
+        profile.email ?? profile.id,
+      );
+      if (result.ok) {
+        res.json({ ok: true, messageId: result.messageId });
+      } else {
+        res.status(502).json({ ok: false, message: `Invio fallito: ${result.error}` });
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ message: `Errore invio test: ${msg}` });
     }
   });
 

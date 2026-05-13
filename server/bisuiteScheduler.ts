@@ -1,6 +1,6 @@
 import { runBisuiteFetchForAllOrgs, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import { storage } from "./storage";
-import { buildBisuiteSyncFailureEmail, sendMail } from "./email";
+import { buildBisuiteSyncFailureEmail, loadEmailConfig, sendMail } from "./email";
 
 /**
  * Recupera gli indirizzi email degli admin/super_admin attivi dell'org
@@ -38,6 +38,10 @@ async function sendSyncFailureEmail(params: {
     );
     return;
   }
+  // Carica la config email (DB → env) prima di costruire il messaggio: serve a
+  // popolare la cache di getAppBaseUrl() così i link assoluti nelle email usano
+  // il Base URL eventualmente configurato dal super admin.
+  await loadEmailConfig();
   const { subject, html, text } = buildBisuiteSyncFailureEmail({
     orgName: params.orgName,
     status: params.status,

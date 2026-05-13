@@ -1,56 +1,113 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { storage } from "./storage";
 
 /**
- * Modulo email centralizzato. Configura un singolo transport SMTP via env:
- * - SMTP_HOST (obbligatorio per abilitare l'invio)
- * - SMTP_PORT (default 587)
- * - SMTP_SECURE ("true" per TLS implicito su porta 465; default false → STARTTLS)
- * - SMTP_USER, SMTP_PASS (opzionali, per server con auth)
- * - SMTP_FROM (es. "Incentive W3 <noreply@example.com>")
- * - APP_BASE_URL (es. "https://incentive.example.com/incentivew3") per
- *   costruire link assoluti nelle mail.
+ * Modulo email centralizzato. La configurazione SMTP viene letta da:
+ *   1. `system_config` (chiave `smtp_config`), gestibile dal super admin via UI
+ *   2. variabili d'ambiente come fallback (SMTP_HOST/PORT/SECURE/USER/PASS/FROM, APP_BASE_URL)
  *
- * Se SMTP_HOST non è settato, sendMail() fa un no-op loggato e ritorna
- * false: non vogliamo che lo scheduler crashi se l'admin non ha ancora
- * configurato l'SMTP.
+ * Se nessuna delle due fonti fornisce un host SMTP, sendMail() fa un no-op
+ * loggato e ritorna false: non vogliamo che lo scheduler crashi se l'admin
+ * non ha ancora configurato l'SMTP.
  */
 
-let cachedTransporter: Transporter | null | undefined;
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  from: string;
+  baseUrl: string;
+}
 
-function getTransporter(): Transporter | null {
-  if (cachedTransporter !== undefined) return cachedTransporter;
-  const host = process.env.SMTP_HOST?.trim();
-  if (!host) {
-    cachedTransporter = null;
-    return null;
-  }
+export const SMTP_CONFIG_KEY = "smtp_config";
+
+let cachedConfig: SmtpConfig | null = null;
+let cachedTransporter: Transporter | null = null;
+
+function readEnvConfig(): SmtpConfig {
   const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
-  const secure = (process.env.SMTP_SECURE ?? "").toLowerCase().trim() === "true"
-    || port === 465;
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASS;
+  return {
+    host: process.env.SMTP_HOST?.trim() ?? "",
+    port: Number.isFinite(port) ? port : 587,
+    secure:
+      (process.env.SMTP_SECURE ?? "").toLowerCase().trim() === "true" ||
+      port === 465,
+    user: process.env.SMTP_USER?.trim() ?? "",
+    pass: process.env.SMTP_PASS ?? "",
+    from: process.env.SMTP_FROM?.trim() ?? "",
+    baseUrl: (process.env.APP_BASE_URL?.trim() ?? "").replace(/\/+$/, ""),
+  };
+}
+
+function mergeConfig(env: SmtpConfig, db: Partial<SmtpConfig> | null | undefined): SmtpConfig {
+  const merged: SmtpConfig = { ...env };
+  if (!db) return merged;
+  if (typeof db.host === "string" && db.host.trim()) merged.host = db.host.trim();
+  if (typeof db.port === "number" && Number.isFinite(db.port)) merged.port = db.port;
+  if (typeof db.secure === "boolean") merged.secure = db.secure;
+  if (typeof db.user === "string") merged.user = db.user.trim();
+  if (typeof db.pass === "string" && db.pass.length > 0) merged.pass = db.pass;
+  if (typeof db.from === "string" && db.from.trim()) merged.from = db.from.trim();
+  if (typeof db.baseUrl === "string" && db.baseUrl.trim()) {
+    merged.baseUrl = db.baseUrl.trim().replace(/\/+$/, "");
+  }
+  return merged;
+}
+
+export async function loadEmailConfig(force = false): Promise<SmtpConfig> {
+  if (!force && cachedConfig) return cachedConfig;
+  const env = readEnvConfig();
+  let dbConfig: Partial<SmtpConfig> | null = null;
+  try {
+    const sys = await storage.getSystemConfig(SMTP_CONFIG_KEY);
+    if (sys?.config && typeof sys.config === "object") {
+      dbConfig = sys.config as Partial<SmtpConfig>;
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[email] impossibile leggere ${SMTP_CONFIG_KEY} dal DB, uso solo env: ${msg}`);
+  }
+  cachedConfig = mergeConfig(env, dbConfig);
+  cachedTransporter = null;
+  return cachedConfig;
+}
+
+export function invalidateEmailConfigCache(): void {
+  cachedConfig = null;
+  cachedTransporter = null;
+}
+
+async function getTransporter(): Promise<Transporter | null> {
+  const config = await loadEmailConfig();
+  if (!config.host) return null;
+  if (cachedTransporter) return cachedTransporter;
   cachedTransporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: user && pass ? { user, pass } : undefined,
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: config.user && config.pass ? { user: config.user, pass: config.pass } : undefined,
   });
   return cachedTransporter;
 }
 
-export function isEmailConfigured(): boolean {
-  return !!process.env.SMTP_HOST?.trim();
+export async function isEmailConfigured(): Promise<boolean> {
+  const cfg = await loadEmailConfig();
+  return !!cfg.host;
 }
 
 let warnedMissingBaseUrl = false;
 
 export function getAppBaseUrl(): string {
+  const cached = cachedConfig?.baseUrl;
+  if (cached) return cached;
   const raw = process.env.APP_BASE_URL?.trim();
   if (!raw) {
     if (!warnedMissingBaseUrl) {
       console.warn(
         "[email] APP_BASE_URL non configurata: i link nelle email saranno relativi e potrebbero non essere cliccabili. " +
-          "Configura APP_BASE_URL (es. https://incentive.example.com/incentivew3) per generare link assoluti.",
+          "Configura APP_BASE_URL (o il campo Base URL dal pannello SMTP) per generare link assoluti.",
       );
       warnedMissingBaseUrl = true;
     }
@@ -67,17 +124,17 @@ export interface SendMailParams {
 }
 
 export async function sendMail(params: SendMailParams): Promise<boolean> {
-  const transporter = getTransporter();
+  const transporter = await getTransporter();
   if (!transporter) {
     console.warn(
-      `[email] SMTP non configurato (manca SMTP_HOST), skip invio a ${
+      `[email] SMTP non configurato (manca host SMTP), skip invio a ${
         Array.isArray(params.to) ? params.to.join(",") : params.to
       }: "${params.subject}"`,
     );
     return false;
   }
-  const from = process.env.SMTP_FROM?.trim()
-    || (process.env.SMTP_USER?.trim() ?? "noreply@localhost");
+  const config = await loadEmailConfig();
+  const from = config.from || config.user || "noreply@localhost";
   // Multi-destinatario: usiamo BCC per non esporre gli indirizzi degli
   // altri admin della stessa org. Se c'è un solo destinatario va in `to`.
   const recipients = Array.isArray(params.to) ? params.to : [params.to];
@@ -105,6 +162,36 @@ export async function sendMail(params: SendMailParams): Promise<boolean> {
       }: ${msg}`,
     );
     return false;
+  }
+}
+
+/**
+ * Invia un'email di test usando una configurazione SMTP specifica (non quella
+ * cachata). Utile per il pulsante "Invia email di test" del super admin: vogliamo
+ * testare la config appena salvata e ottenere un errore dettagliato in caso di
+ * fallimento, senza inquinare il transporter cachato del runtime.
+ */
+export async function sendTestEmailWithConfig(
+  config: SmtpConfig,
+  recipient: string,
+  triggeredBy?: string,
+): Promise<{ ok: true; messageId?: string } | { ok: false; error: string }> {
+  if (!config.host) {
+    return { ok: false, error: "Host SMTP mancante" };
+  }
+  const transporter = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: config.user && config.pass ? { user: config.user, pass: config.pass } : undefined,
+  });
+  const from = config.from || config.user || "noreply@localhost";
+  const { subject, html, text } = buildTestEmail({ recipient, triggeredBy });
+  try {
+    const info = await transporter.sendMail({ from, to: recipient, subject, html, text });
+    return { ok: true, messageId: info.messageId };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -168,4 +255,28 @@ export function buildBisuiteSyncFailureEmail(p: BisuiteSyncFailureEmailParams): 
   textParts.push("Puoi disattivare le notifiche email dal tuo profilo.");
 
   return { subject, html, text: textParts.join("\n") };
+}
+
+export interface TestEmailParams {
+  recipient: string;
+  triggeredBy?: string;
+}
+
+export function buildTestEmail(p: TestEmailParams): { subject: string; html: string; text: string } {
+  const base = getAppBaseUrl();
+  const subject = "[Incentive W3] Email di test SMTP";
+  const html = `<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;color:#111;">
+    <h2>Email di test ricevuta correttamente</h2>
+    <p>Se vedi questo messaggio, la configurazione SMTP di Incentive W3 funziona.</p>
+    ${p.triggeredBy ? `<p style="color:#71717a;font-size:12px;">Inviata da: ${escapeHtml(p.triggeredBy)}</p>` : ""}
+    ${base ? `<p style="color:#71717a;font-size:12px;">Base URL applicazione: ${escapeHtml(base)}</p>` : ""}
+  </body></html>`;
+  const text = [
+    "Email di test SMTP — Incentive W3",
+    "",
+    "Se vedi questo messaggio, la configurazione SMTP funziona correttamente.",
+    p.triggeredBy ? `Inviata da: ${p.triggeredBy}` : "",
+    base ? `Base URL applicazione: ${base}` : "",
+  ].filter(Boolean).join("\n");
+  return { subject, html, text };
 }

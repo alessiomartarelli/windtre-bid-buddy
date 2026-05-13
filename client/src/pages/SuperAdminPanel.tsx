@@ -14,6 +14,7 @@ import { AppNavbar } from '@/components/AppNavbar';
 import { ModulesDialog } from '@/components/ModulesDialog';
 import { BiSuiteConnectionForm } from '@/components/BiSuiteConnectionForm';
 import { BiSuiteSalesTest } from '@/components/BiSuiteSalesTest';
+import { SmtpConfigForm } from '@/components/SmtpConfigForm';
 import { z } from 'zod';
 import {
   Dialog,
@@ -542,6 +543,9 @@ export default function SuperAdminPanel() {
 
         {/* BiSuite Sales Test */}
         <BiSuiteSalesTest organizations={organizations} />
+
+        {/* SMTP Configuration */}
+        <SmtpConfigForm defaultTestRecipient={profile?.email ?? undefined} />
       </div>
 
       {modulesOrg && (
