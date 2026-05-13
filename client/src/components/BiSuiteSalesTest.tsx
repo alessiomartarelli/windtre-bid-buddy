@@ -220,10 +220,24 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
         throw new Error(err.error || 'Errore nell\'importazione');
       }
       const data = await res.json();
-      toast({
-        title: "Importazione completata",
-        description: data.message || `${data.count} vendite importate`,
-      });
+      const partial = !!data.partial;
+      const failedMonths: string[] = Array.isArray(data.failedMonths) ? data.failedMonths : [];
+      if (partial) {
+        toast({
+          title: "Sync parziale",
+          description:
+            (data.message || `${data.count} vendite importate`) +
+            (failedMonths.length > 0
+              ? ` Mesi non aggiornati: ${failedMonths.join(", ")}. Riprova l'importazione per recuperarli.`
+              : ""),
+          className: "bg-amber-50 border-amber-200 text-amber-800",
+        });
+      } else {
+        toast({
+          title: "Importazione completata",
+          description: data.message || `${data.count} vendite importate`,
+        });
+      }
       setTestResult({
         success: true,
         message: data.message || `${data.count} vendite importate nel database`,

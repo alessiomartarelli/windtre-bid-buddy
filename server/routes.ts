@@ -9,7 +9,7 @@ import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
 import { registerCdgRoutes } from "./cdgRoutes";
-import { toItalianWallTime, runBisuiteFetchForOrg } from "./bisuiteFetch";
+import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 
@@ -1780,15 +1780,24 @@ export async function registerRoutes(
           startDate: start_date,
           endDate: end_date,
         });
+        const partial = r.failedChunks.length > 0;
+        const failedMonths = partial ? formatFailedMonths(r.failedChunks) : [];
+        const baseMsg = `Sincronizzate ${r.totalFromApi} vendite (nuove ${r.inserted}, aggiornate ${r.updated})`;
+        const message = partial
+          ? `${baseMsg}. Sync parziale: mesi non aggiornati ${failedMonths.join(", ")}.`
+          : baseMsg;
         res.json({
           success: true,
-          message: `Sincronizzate ${r.totalFromApi} vendite (nuove ${r.inserted}, aggiornate ${r.updated})`,
+          partial,
+          status: partial ? "partial" : "ok",
+          message,
           count: r.inserted + r.updated,
           totalFromApi: r.totalFromApi,
           inserted: r.inserted,
           updated: r.updated,
           chunks: r.chunks,
           failedChunks: r.failedChunks,
+          failedMonths,
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1840,15 +1849,25 @@ export async function registerRoutes(
         endDate: end_date,
       });
 
+      const partial = r.failedChunks.length > 0;
+      const failedMonths = partial ? formatFailedMonths(r.failedChunks) : [];
+      const baseMsg = `Sincronizzate ${r.totalFromApi} vendite (nuove ${r.inserted}, aggiornate ${r.updated})`;
+      const message = partial
+        ? `${baseMsg}. Sync parziale: mesi non aggiornati ${failedMonths.join(", ")}.`
+        : baseMsg;
+
       res.json({
         success: true,
-        message: `Sincronizzate ${r.totalFromApi} vendite (nuove ${r.inserted}, aggiornate ${r.updated})`,
+        partial,
+        status: partial ? "partial" : "ok",
+        message,
         count: r.inserted + r.updated,
         totalFromApi: r.totalFromApi,
         inserted: r.inserted,
         updated: r.updated,
         chunks: r.chunks,
         failedChunks: r.failedChunks,
+        failedMonths,
       });
     } catch (error: unknown) {
       console.error("BiSuite fetch error:", error);

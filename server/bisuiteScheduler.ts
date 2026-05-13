@@ -59,8 +59,24 @@ export function startBisuiteDailyScheduler(): void {
         const ms = Date.now() - startedAt;
         console.log(
           `[bisuite-scheduler] completato in ${ms} ms — ok: ${result.ok.length}, ` +
-            `failed: ${result.failed.length}`,
+            `partial: ${result.partial.length}, failed: ${result.failed.length}`,
         );
+        if (result.partial.length > 0) {
+          for (const p of result.partial) {
+            console.warn(
+              `[bisuite-scheduler] PARTIAL org=${p.orgId} (${p.orgName}): ` +
+                `mesi mancanti = [${p.failedMonths.join(", ")}]. ` +
+                `Riprovare con sync manuale.`,
+            );
+          }
+        }
+        if (result.failed.length > 0) {
+          for (const f of result.failed) {
+            console.error(
+              `[bisuite-scheduler] FAILED org=${f.orgId} (${f.orgName}): ${f.error}`,
+            );
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[bisuite-scheduler] errore fatale durante il fetch: ${msg}`);

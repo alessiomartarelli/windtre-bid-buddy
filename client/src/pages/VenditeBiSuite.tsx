@@ -185,7 +185,7 @@ export default function VenditeBiSuite() {
 
   const orgId = profile?.organizationId || "";
   const queryClient = useQueryClient();
-  const [fetchResult, setFetchResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [fetchResult, setFetchResult] = useState<{ success: boolean; partial?: boolean; message: string; failedMonths?: string[] } | null>(null);
 
   const { data: credStatus } = useQuery<{ configured: boolean }>({
     queryKey: ["/api/bisuite-credentials-status"],
@@ -210,9 +210,15 @@ export default function VenditeBiSuite() {
       return data;
     },
     onSuccess: (data) => {
-      setFetchResult({ success: true, message: data.message || `Importate ${data.count} vendite` });
+      const partial = !!data.partial;
+      setFetchResult({
+        success: true,
+        partial,
+        message: data.message || `Importate ${data.count} vendite`,
+        failedMonths: Array.isArray(data.failedMonths) ? data.failedMonths : [],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/bisuite-sales"] });
-      setTimeout(() => setFetchResult(null), 5000);
+      setTimeout(() => setFetchResult(null), partial ? 12000 : 5000);
     },
     onError: (error: Error) => {
       setFetchResult({ success: false, message: error.message });
@@ -611,9 +617,53 @@ export default function VenditeBiSuite() {
 
       <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {fetchResult && (
-          <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${fetchResult.success ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
-            {fetchResult.success ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
-            {fetchResult.message}
+          <div
+            className={`flex items-start gap-2 px-4 py-3 rounded-lg text-sm ${
+              !fetchResult.success
+                ? "bg-red-50 text-red-700 border border-red-200"
+                : fetchResult.partial
+                ? "bg-amber-50 text-amber-800 border border-amber-200"
+                : "bg-green-50 text-green-700 border border-green-200"
+            }`}
+            data-testid={
+              !fetchResult.success
+                ? "alert-fetch-error"
+                : fetchResult.partial
+                ? "alert-fetch-partial"
+                : "alert-fetch-success"
+            }
+          >
+            {!fetchResult.success ? (
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            ) : fetchResult.partial ? (
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 space-y-1">
+              <div>{fetchResult.message}</div>
+              {fetchResult.partial && fetchResult.failedMonths && fetchResult.failedMonths.length > 0 && (
+                <div className="text-xs opacity-90" data-testid="text-failed-months">
+                  Mesi non aggiornati: <strong>{fetchResult.failedMonths.join(", ")}</strong>
+                </div>
+              )}
+            </div>
+            {fetchResult.partial && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 border-amber-300 text-amber-800 hover:bg-amber-100"
+                onClick={() => {
+                  setFetchResult(null);
+                  fetchMutation.mutate();
+                }}
+                disabled={fetchMutation.isPending}
+                data-testid="button-retry-fetch"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${fetchMutation.isPending ? "animate-spin" : ""}`} />
+                Riprova
+              </Button>
+            )}
           </div>
         )}
 

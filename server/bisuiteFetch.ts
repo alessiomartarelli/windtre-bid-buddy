@@ -156,6 +156,34 @@ export interface BisuiteFetchResult {
   failedChunks: Array<{ from: string; to: string; error: string }>;
 }
 
+const ITALIAN_MONTHS = [
+  "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno",
+  "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",
+];
+
+/**
+ * Trasforma un elenco di chunk falliti (mensili) in etichette uniche
+ * "<mese> <anno>" in italiano, ordinate cronologicamente. Pensata per
+ * essere mostrata all'utente nel toast/banner "sync parziale".
+ */
+export function formatFailedMonths(
+  failedChunks: Array<{ from: string; to: string }>,
+): string[] {
+  const seen = new Set<string>();
+  const out: Array<{ key: string; label: string }> = [];
+  for (const c of failedChunks) {
+    const m = /^(\d{4})-(\d{2})/.exec(c.from);
+    if (!m) continue;
+    const key = `${m[1]}-${m[2]}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const monthIdx = parseInt(m[2], 10) - 1;
+    const label = `${ITALIAN_MONTHS[monthIdx] ?? m[2]} ${m[1]}`;
+    out.push({ key, label });
+  }
+  return out.sort((a, b) => a.key.localeCompare(b.key)).map((x) => x.label);
+}
+
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -367,11 +395,13 @@ export async function runBisuiteFetchForOrg(
  */
 export async function runBisuiteFetchForAllOrgs(): Promise<{
   ok: BisuiteFetchResult[];
-  failed: Array<{ orgId: string; error: string }>;
+  partial: Array<BisuiteFetchResult & { orgName: string; failedMonths: string[] }>;
+  failed: Array<{ orgId: string; orgName: string; error: string }>;
 }> {
   const orgs = await storage.getOrganizations();
   const ok: BisuiteFetchResult[] = [];
-  const failed: Array<{ orgId: string; error: string }> = [];
+  const partial: Array<BisuiteFetchResult & { orgName: string; failedMonths: string[] }> = [];
+  const failed: Array<{ orgId: string; orgName: string; error: string }> = [];
 
   for (const org of orgs) {
     const cfg = await storage.getOrgConfig(org.id);
@@ -379,17 +409,28 @@ export async function runBisuiteFetchForAllOrgs(): Promise<{
     if (!creds?.client_id || !creds?.client_secret) continue;
     try {
       const r = await runBisuiteFetchForOrg(org.id);
-      ok.push(r);
-      console.log(
-        `[bisuite-scheduler] org=${org.id} (${org.name}) OK: ` +
-          `api=${r.totalFromApi} inseriti=${r.inserted} aggiornati=${r.updated} ` +
-          `chunk=${r.chunks} falliti=${r.failedChunks.length}`,
-      );
+      if (r.failedChunks.length > 0) {
+        const failedMonths = formatFailedMonths(r.failedChunks);
+        partial.push({ ...r, orgName: org.name, failedMonths });
+        console.warn(
+          `[bisuite-scheduler] org=${org.id} (${org.name}) PARTIAL: ` +
+            `api=${r.totalFromApi} inseriti=${r.inserted} aggiornati=${r.updated} ` +
+            `chunk=${r.chunks} falliti=${r.failedChunks.length} ` +
+            `mesi_mancanti=[${failedMonths.join(", ")}]`,
+        );
+      } else {
+        ok.push(r);
+        console.log(
+          `[bisuite-scheduler] org=${org.id} (${org.name}) OK: ` +
+            `api=${r.totalFromApi} inseriti=${r.inserted} aggiornati=${r.updated} ` +
+            `chunk=${r.chunks}`,
+        );
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      failed.push({ orgId: org.id, error: msg });
+      failed.push({ orgId: org.id, orgName: org.name, error: msg });
       console.error(`[bisuite-scheduler] org=${org.id} (${org.name}) FAIL: ${msg}`);
     }
   }
-  return { ok, failed };
+  return { ok, partial, failed };
 }

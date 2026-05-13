@@ -342,13 +342,27 @@ export default function Amministrazione() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Errore durante l'aggiornamento");
-      return data as { count?: number; totalFromApi?: number; message?: string };
+      return data as { count?: number; totalFromApi?: number; message?: string; partial?: boolean; failedMonths?: string[] };
     },
     onSuccess: (data) => {
-      toast({
-        title: "Dati aggiornati",
-        description: data.message || `Importate ${data.count ?? 0} vendite da BiSuite`,
-      });
+      const partial = !!data.partial;
+      const failedMonths = Array.isArray(data.failedMonths) ? data.failedMonths : [];
+      if (partial) {
+        toast({
+          title: "Sync parziale",
+          description:
+            (data.message || `Importate ${data.count ?? 0} vendite da BiSuite`) +
+            (failedMonths.length > 0
+              ? ` Mesi non aggiornati: ${failedMonths.join(", ")}. Premi di nuovo "Aggiorna" per riprovare.`
+              : ""),
+          className: "bg-amber-50 border-amber-200 text-amber-800",
+        });
+      } else {
+        toast({
+          title: "Dati aggiornati",
+          description: data.message || `Importate ${data.count ?? 0} vendite da BiSuite`,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/bisuite-sales"] });
     },
     onError: (err: Error) => {
