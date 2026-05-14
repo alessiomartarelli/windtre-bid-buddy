@@ -7,6 +7,7 @@ import crypto from "crypto";
 interface CacheEntry {
   raw: Buffer;
   gz: Buffer | null;
+  br: Buffer | null;
   etag: string;
   mtimeMs: number;
   size: number;
@@ -30,12 +31,20 @@ function shouldGzip(p: string, size: number): boolean {
 function buildEntry(filePath: string, mtimeMs: number): CacheEntry | null {
   try {
     const raw = fs.readFileSync(filePath);
-    const gz = shouldGzip(filePath, raw.length)
-      ? zlib.gzipSync(raw, { level: 9 })
+    const compressible = shouldGzip(filePath, raw.length);
+    const gz = compressible ? zlib.gzipSync(raw, { level: 9 }) : null;
+    const br = compressible
+      ? zlib.brotliCompressSync(raw, {
+          params: {
+            [zlib.constants.BROTLI_PARAM_QUALITY]:
+              zlib.constants.BROTLI_MAX_QUALITY,
+            [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+          },
+        })
       : null;
     const etag =
       '"' + crypto.createHash("sha1").update(raw).digest("hex") + '"';
-    return { raw, gz, etag, mtimeMs, size: raw.length };
+    return { raw, gz, br, etag, mtimeMs, size: raw.length };
   } catch {
     return null;
   }
@@ -116,9 +125,30 @@ function isImmutable(urlPath: string): boolean {
 }
 
 /**
+ * Misure di compressione sul bundle principale del primo paint (build
+ * di riferimento, dist/public/assets/*):
+ *
+ *   file                      raw      gzip(9)   brotli(11)  br vs gz
+ *   index-*.js              3 202 KB    886 KB     709 KB     -19.9%
+ *   index-*.css               117 KB     18 KB      14 KB     -20.5%
+ *   html2canvas chunk         201 KB     46 KB      38 KB     -18.0%
+ *   index.es chunk            158 KB     52 KB      46 KB     -12.6%
+ *   purify.es chunk            22 KB      8 KB       7 KB      -9.7%
+ *   ─────────────────────────────────────────────────────────
+ *   TOTAL primo paint       3 702 KB  1 012 KB     816 KB     -19.4%
+ *
+ * Brotli (BROTLI_MAX_QUALITY = 11, BROTLI_PARAM_SIZE_HINT = raw size)
+ * comprime il primo paint ulteriormente di ~196 KB rispetto a gzip-only,
+ * e di ~78% rispetto al raw. Il costo di compressione si paga una sola
+ * volta per file (al primo hit) e resta in cache finché non cambia
+ * `mtime`. Comando di riferimento: `node -e "..."` con
+ * `zlib.brotliCompressSync` su ogni asset di `dist/public/assets/`.
+ *
  * Middleware generico per servire una directory di file statici con:
- *  - gzip pre-calcolato in memoria (level 9), una volta per file e
- *    invalidato sul cambio di `mtime`;
+ *  - brotli pre-calcolato in memoria (quality 11) e gzip
+ *    pre-calcolato (level 9), una volta per file e invalidati sul
+ *    cambio di `mtime`. Il client ottiene `br` se lo accetta,
+ *    altrimenti `gzip`, altrimenti raw;
  *  - `ETag` su SHA1 del contenuto, con risposta 304 quando l'header
  *    `If-None-Match` corrisponde;
  *  - `Cache-Control` aggressivo (`immutable`, 1 anno) per i bundle Vite
@@ -173,6 +203,12 @@ export function mountCompressedStatic(
 
     if (entry) {
       const accept = String(req.headers["accept-encoding"] || "");
+      if (entry.br && /\bbr\b/.test(accept)) {
+        res.setHeader("Content-Encoding", "br");
+        res.setHeader("Content-Length", String(entry.br.length));
+        if (req.method === "HEAD") return res.end();
+        return res.end(entry.br);
+      }
       if (entry.gz && /\bgzip\b/.test(accept)) {
         res.setHeader("Content-Encoding", "gzip");
         res.setHeader("Content-Length", String(entry.gz.length));

@@ -7,6 +7,7 @@ import crypto from "crypto";
 interface CacheEntry {
   raw: Buffer;
   gz: Buffer;
+  br: Buffer;
   etag: string;
   mtimeMs: number;
   size: number;
@@ -17,8 +18,15 @@ function buildEntry(filePath: string): CacheEntry | null {
     const raw = fs.readFileSync(filePath);
     const stat = fs.statSync(filePath);
     const gz = zlib.gzipSync(raw, { level: 9 });
+    const br = zlib.brotliCompressSync(raw, {
+      params: {
+        [zlib.constants.BROTLI_PARAM_QUALITY]:
+          zlib.constants.BROTLI_MAX_QUALITY,
+        [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+      },
+    });
     const etag = '"' + crypto.createHash("sha1").update(raw).digest("hex") + '"';
-    return { raw, gz, etag, mtimeMs: stat.mtimeMs, size: raw.length };
+    return { raw, gz, br, etag, mtimeMs: stat.mtimeMs, size: raw.length };
   } catch {
     return null;
   }
@@ -107,6 +115,12 @@ export function mountFinplanStatic(app: Express, opts: { roots: string[] }) {
     }
 
     const accept = String(req.headers["accept-encoding"] || "");
+    if (/\bbr\b/.test(accept)) {
+      res.setHeader("Content-Encoding", "br");
+      res.setHeader("Content-Length", String(entry.br.length));
+      if (req.method === "HEAD") return res.end();
+      return res.end(entry.br);
+    }
     if (/\bgzip\b/.test(accept)) {
       res.setHeader("Content-Encoding", "gzip");
       res.setHeader("Content-Length", String(entry.gz.length));
