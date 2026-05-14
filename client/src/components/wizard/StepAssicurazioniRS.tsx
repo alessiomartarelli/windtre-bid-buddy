@@ -213,7 +213,7 @@ export const StepAssicurazioniRS: React.FC<StepAssicurazioniRSProps> = ({
                           <CardTitle className="text-base">{rs}</CardTitle>
                           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <span><Store className="w-3 h-3 inline" /> {numPdvRS} {numPdvRS === 1 ? 'negozio' : 'negozi'}</span>
-                            <span>· {puntiBaseRS.toFixed(1)} punti</span>
+                            <span>· {puntiBaseRS.toFixed(2)} punti</span>
                             {puntiReloadEff > 0 && <span>+ {puntiReloadEff} RF</span>}
                             <span>· S1: {effectiveS1} · S2: {effectiveS2}</span>
                             {gettoniRS > 0 && <span>· Gettoni: {formatCurrency(gettoniRS)}</span>}

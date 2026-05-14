@@ -622,7 +622,7 @@ function PdvDetailContent({ pdv, forceExpandAll = false }: { pdv: PdvDetail; for
               <td className="p-3 text-center">{pdv.volumiTotali}</td>
               <td className="p-3 text-center">
                 {pisteConDati.reduce((s, p) => s + p.punti, 0) > 0
-                  ? Math.round(pisteConDati.reduce((s, p) => s + p.punti, 0))
+                  ? pisteConDati.reduce((s, p) => s + p.punti, 0).toFixed(2)
                   : '–'}
               </td>
               <td className="p-3 text-center">–</td>
@@ -673,7 +673,7 @@ function PistaExpandableRow({ pista, forceOpen = false }: { pista: PdvPistaData;
           <Badge variant="outline">{pista.volumi}</Badge>
         </td>
         <td className="p-3 text-center text-muted-foreground">
-          {pista.punti > 0 ? Math.round(pista.punti) : '–'}
+          {pista.punti > 0 ? pista.punti.toFixed(2) : '–'}
         </td>
         <td className="p-3 text-center">
           {soglia ? (

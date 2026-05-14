@@ -1053,7 +1053,7 @@ function PistaCompactRow({
               <div className="flex items-center justify-between gap-2 whitespace-nowrap">
                 <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Att.</span>
                 <div className="flex items-center gap-1">
-                  <span className="text-sm font-semibold">{(m.puntiAtt ?? 0).toFixed(1)} pt</span>
+                  <span className="text-sm font-semibold">{(m.puntiAtt ?? 0).toFixed(2)} pt</span>
                   {hasSogliaAtt && (
                     <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaAtt!)}`} variant="outline">{m.sogliaAtt}</Badge>
                   )}
@@ -1062,7 +1062,7 @@ function PistaCompactRow({
               <div className="flex items-center justify-between gap-2 whitespace-nowrap text-blue-700 dark:text-blue-400 border-t pt-0.5">
                 <span className="text-[10px] uppercase tracking-wide text-blue-600 flex items-center gap-0.5 shrink-0"><TrendingUp className="h-2.5 w-2.5" />Proi.</span>
                 <div className="flex items-center gap-1">
-                  <span className="text-sm font-semibold">{(m.puntiProi ?? m.puntiAtt ?? 0).toFixed(1)} pt</span>
+                  <span className="text-sm font-semibold">{(m.puntiProi ?? m.puntiAtt ?? 0).toFixed(2)} pt</span>
                   {hasSogliaProi && (
                     <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaProi!)}`} variant="outline">{m.sogliaProi}</Badge>
                   )}
@@ -3836,8 +3836,8 @@ export default function DashboardGaraReale() {
                                 <div className="grid grid-cols-2 gap-2">
                                   <div className="text-center">
                                     <div className="text-xs text-gray-500">Punti</div>
-                                    <span className="text-lg font-bold">{rsData.puntiAttuali.toFixed(0)}</span>
-                                    {rsData.puntiProiezione > rsData.puntiAttuali && <div className="text-xs text-blue-500">→ {rsData.puntiProiezione.toFixed(0)}</div>}
+                                    <span className="text-lg font-bold">{rsData.puntiAttuali.toFixed(2)}</span>
+                                    {rsData.puntiProiezione > rsData.puntiAttuali && <div className="text-xs text-blue-500">→ {rsData.puntiProiezione.toFixed(2)}</div>}
                                   </div>
                                   <div className="text-center">
                                     <div className="text-xs text-gray-500">Premio €</div>
@@ -3851,11 +3851,11 @@ export default function DashboardGaraReale() {
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between text-xs">
                                       <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
-                                      <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
+                                      <span className="font-medium">{rsData.forecastTarget.toFixed(2)} pt</span>
                                     </div>
                                     <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
                                     <div className="flex items-center justify-between text-xs">
-                                      <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(0)} pt</span>
+                                      <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(2)} pt</span>
                                       <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
                                     </div>
                                   </div>
@@ -3867,12 +3867,12 @@ export default function DashboardGaraReale() {
                                   <div className="text-center">
                                     <div className="text-xs text-gray-500">Soglia Att.</div>
                                     <Badge className={`text-sm ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
-                                    {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiAttuali.toFixed(1)} pt</div>}
+                                    {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiAttuali.toFixed(2)} pt</div>}
                                   </div>
                                   <div className="text-center">
                                     <div className="text-xs text-gray-500">Proiezione</div>
                                     <Badge className={`text-sm ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
-                                    {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiProiezione.toFixed(1)} pt</div>}
+                                    {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiProiezione.toFixed(2)} pt</div>}
                                   </div>
                                 </div>
                                 {rsData.soglieRef && (
@@ -3892,11 +3892,11 @@ export default function DashboardGaraReale() {
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between text-xs">
                                       <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
-                                      <span className="font-medium">{rsData.forecastTarget.toFixed(0)} pt</span>
+                                      <span className="font-medium">{rsData.forecastTarget.toFixed(2)} pt</span>
                                     </div>
                                     <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
                                     <div className="flex items-center justify-between text-xs">
-                                      <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(1)} pt</span>
+                                      <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(2)} pt</span>
                                       <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
                                     </div>
                                   </div>
@@ -3919,7 +3919,7 @@ export default function DashboardGaraReale() {
                                   <div className="text-center">
                                     <div className="text-xs text-gray-500">Soglia Att.</div>
                                     <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline">{sogliaAtt}</Badge>
-                                    {p.pdvCalc.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{p.pdvCalc.puntiTotali.toFixed(1)} pt</div>}
+                                    {p.pdvCalc.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{p.pdvCalc.puntiTotali.toFixed(2)} pt</div>}
                                   </div>
                                   <div className="text-center">
                                     <div className="text-xs text-gray-500">Premio €</div>
@@ -3930,11 +3930,11 @@ export default function DashboardGaraReale() {
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between text-xs">
                                       <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
-                                      <span className="font-medium">{p.pdvCalc.forecastTarget.toFixed(0)} pt</span>
+                                      <span className="font-medium">{p.pdvCalc.forecastTarget.toFixed(2)} pt</span>
                                     </div>
                                     <Progress value={Math.min((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100, 100)} className="h-1.5" />
                                     <div className="flex items-center justify-between text-xs">
-                                      <span className={`font-medium ${(p.pdvCalc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(p.pdvCalc.forecastGap ?? 0) >= 0 ? "+" : ""}{(p.pdvCalc.forecastGap ?? 0).toFixed(1)} pt</span>
+                                      <span className={`font-medium ${(p.pdvCalc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(p.pdvCalc.forecastGap ?? 0) >= 0 ? "+" : ""}{(p.pdvCalc.forecastGap ?? 0).toFixed(2)} pt</span>
                                       <span className="text-gray-500">{Math.round((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100)}%</span>
                                     </div>
                                   </div>
@@ -3959,12 +3959,12 @@ export default function DashboardGaraReale() {
                                   <div className="text-center">
                                     <div className="text-xs text-gray-500">Soglia Att.</div>
                                     <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>{sogliaAtt}</Badge>
-                                    {pista.calc.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{pista.calc.puntiTotali.toFixed(1)} pt</div>}
+                                    {pista.calc.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{pista.calc.puntiTotali.toFixed(2)} pt</div>}
                                   </div>
                                   <div className="text-center">
                                     <div className="text-xs text-gray-500">Proiezione</div>
                                     <Badge className={`text-sm ${getSogliaColor(sogliaProi)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>{sogliaProi}</Badge>
-                                    {pista.calcProiezione.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(1)} pt</div>}
+                                    {pista.calcProiezione.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(2)} pt</div>}
                                   </div>
                                 </div>
                               )}
@@ -3985,11 +3985,11 @@ export default function DashboardGaraReale() {
                                 <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
-                                    <span className="font-medium">{pista.calc.forecastTarget.toFixed(0)} pt</span>
+                                    <span className="font-medium">{pista.calc.forecastTarget.toFixed(2)} pt</span>
                                   </div>
                                   <Progress value={Math.min((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100, 100)} className="h-1.5" />
                                   <div className="flex items-center justify-between text-xs">
-                                    <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(1)} pt</span>
+                                    <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(2)} pt</span>
                                     <span className="text-gray-400">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
                                   </div>
                                 </div>
@@ -4703,7 +4703,7 @@ export default function DashboardGaraReale() {
                                                 {(calc?.puntiTotali ?? 0) > 0 && (
                                                   <>
                                                     <span>·</span>
-                                                    <span>{(calc?.puntiTotali ?? 0).toFixed(1)} pt</span>
+                                                    <span>{(calc?.puntiTotali ?? 0).toFixed(2)} pt</span>
                                                   </>
                                                 )}
                                               </div>
@@ -4713,7 +4713,7 @@ export default function DashboardGaraReale() {
                                                 {(calc?.puntiTotali ?? 0) > 0 && (
                                                   <>
                                                     <span>·</span>
-                                                    <span>{projPunti.toFixed(1)} pt</span>
+                                                    <span>{projPunti.toFixed(2)} pt</span>
                                                   </>
                                                 )}
                                               </div>
@@ -4727,7 +4727,7 @@ export default function DashboardGaraReale() {
                                                 {calc.sogliaLabel}
                                               </Badge>
                                               {calc.puntiTotali > 0 && (
-                                                <span className="text-xs text-gray-500" data-testid={`pdv-pista-punti-${pdv.codicePos}-${pistaKey}`}>{calc.puntiTotali.toFixed(1)} pt</span>
+                                                <span className="text-xs text-gray-500" data-testid={`pdv-pista-punti-${pdv.codicePos}-${pistaKey}`}>{calc.puntiTotali.toFixed(2)} pt</span>
                                               )}
                                             </div>
                                             {(() => {

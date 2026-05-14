@@ -247,8 +247,8 @@ export function PdvDataTable({ preventivo }: PdvDataTableProps) {
       premioAssicurazioni: row.premioAssicurazioni,
       premioProtecta: row.premioProtecta,
       premioExtraGara: row.premioExtraGara,
-      puntiMobile: Math.round(row.puntiMobile),
-      puntiFisso: Math.round(row.puntiFisso),
+      puntiMobile: Number(row.puntiMobile.toFixed(2)),
+      puntiFisso: Number(row.puntiFisso.toFixed(2)),
     }));
   }, [pdvData]);
 

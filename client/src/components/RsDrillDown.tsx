@@ -654,7 +654,7 @@ function RsDetailContent({ rs, forceExpandAll = false }: { rs: RsDetail; forceEx
               <td className="p-3 text-center">{rs.volumiTotali}</td>
               <td className="p-3 text-center">
                 {pisteConDati.reduce((s, p) => s + p.punti, 0) > 0
-                  ? Math.round(pisteConDati.reduce((s, p) => s + p.punti, 0))
+                  ? pisteConDati.reduce((s, p) => s + p.punti, 0).toFixed(2)
                   : '–'}
               </td>
               <td className="p-3 text-center">–</td>
@@ -700,7 +700,7 @@ function PistaExpandableRow({ pista, forceOpen = false }: { pista: RsPistaData; 
           <Badge variant="outline">{pista.volumi}</Badge>
         </td>
         <td className="p-3 text-center text-muted-foreground">
-          {pista.punti > 0 ? Math.round(pista.punti) : '–'}
+          {pista.punti > 0 ? pista.punti.toFixed(2) : '–'}
         </td>
         <td className="p-3 text-center">
           {soglia ? (
