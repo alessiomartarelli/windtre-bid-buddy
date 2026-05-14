@@ -107,6 +107,15 @@ export interface ClassifiedArticle {
   importoScontrino: number;
   importoFinanziato: number;
   importoCredito: number;
+  /**
+   * Flag ufficiale BiSuite (`dettaglio.scontrino`): 1 = articolo da
+   * scontrinare (finisce nello scontrino fiscale), 0 = NON da
+   * scontrinare. Da preferire al check `importoScontrino > 0` perché
+   * BiSuite a volte popola `importoScontrino` anche per articoli con
+   * `scontrino=0`, e viceversa lascia `importoScontrino=0` per articoli
+   * con `scontrino=1` finanziati o a credito.
+   */
+  scontrinato: boolean;
 }
 
 export interface SaleClassification {
@@ -138,6 +147,12 @@ export function classifySaleArticles(rawData: any): SaleClassification {
     const importoScontrino = parseFloat(art.dettaglio?.importoScontrino || '0') || 0;
     const importoFinanziato = parseFloat(art.dettaglio?.importoFinanziato || '0') || 0;
     const importoCredito = parseFloat(art.dettaglio?.importoCredito || '0') || 0;
+    // Flag ufficiale BiSuite: 1 = da scontrinare, 0 = no.
+    const flagScontrinoRaw = art.dettaglio?.scontrino;
+    const scontrinato =
+      flagScontrinoRaw === 1 ||
+      flagScontrinoRaw === '1' ||
+      flagScontrinoRaw === true;
     const classification = classifyCategory(catNome);
 
     if (classification) {
@@ -151,6 +166,7 @@ export function classifySaleArticles(rawData: any): SaleClassification {
         importoScontrino,
         importoFinanziato,
         importoCredito,
+        scontrinato,
       };
       articles.push(classified);
       countByType[classification.type]++;
@@ -173,6 +189,7 @@ export function classifySaleArticles(rawData: any): SaleClassification {
         importoScontrino,
         importoFinanziato,
         importoCredito,
+        scontrinato,
       });
       countByType.prodotti++;
       amountByType.prodotti += prezzo;

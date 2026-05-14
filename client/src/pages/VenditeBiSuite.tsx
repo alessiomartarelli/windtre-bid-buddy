@@ -438,8 +438,8 @@ export default function VenditeBiSuite() {
         byType[art.type]++;
         amtByType[art.type] += art.prezzo;
         const inc = incassoByType[art.type];
-        if (art.importoScontrino > 0) inc.scontrinato += art.importoScontrino;
-        else inc.fuoriScontrino += art.prezzo;
+        if (art.scontrinato) inc.scontrinato += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
+        else inc.fuoriScontrino += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
         inc.finanziato += art.importoFinanziato;
         inc.credito += art.importoCredito;
         if (art.pista) {
@@ -527,8 +527,8 @@ export default function VenditeBiSuite() {
           saleFilteredAmount += art.prezzo;
           entry.countByType[art.type]++;
           entry.amountByType[art.type] += art.prezzo;
-          if (art.importoScontrino > 0) entry.articleIncasso.scontrinato += art.importoScontrino;
-          else entry.articleIncasso.fuoriScontrino += art.prezzo;
+          if (art.scontrinato) entry.articleIncasso.scontrinato += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
+          else entry.articleIncasso.fuoriScontrino += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
           entry.articleIncasso.finanziato += art.importoFinanziato;
           entry.articleIncasso.credito += art.importoCredito;
           if (art.pista) {
@@ -576,8 +576,8 @@ export default function VenditeBiSuite() {
         for (const art of sc.articles) {
           if (!articleMatchesFilter(art)) continue;
           if (componentFilterActive) entry.totaleImporto += art.prezzo;
-          if (art.importoScontrino > 0) entry.articleIncasso.scontrinato += art.importoScontrino;
-          else entry.articleIncasso.fuoriScontrino += art.prezzo;
+          if (art.scontrinato) entry.articleIncasso.scontrinato += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
+          else entry.articleIncasso.fuoriScontrino += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
           entry.articleIncasso.finanziato += art.importoFinanziato;
           entry.articleIncasso.credito += art.importoCredito;
         }
@@ -622,8 +622,8 @@ export default function VenditeBiSuite() {
           saleFilteredAmount += art.prezzo;
           entry.countByType[art.type]++;
           entry.amountByType[art.type] += art.prezzo;
-          if (art.importoScontrino > 0) entry.articleIncasso.scontrinato += art.importoScontrino;
-          else entry.articleIncasso.fuoriScontrino += art.prezzo;
+          if (art.scontrinato) entry.articleIncasso.scontrinato += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
+          else entry.articleIncasso.fuoriScontrino += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
           entry.articleIncasso.finanziato += art.importoFinanziato;
           entry.articleIncasso.credito += art.importoCredito;
           if (art.pista) {
@@ -1929,11 +1929,14 @@ function SaleDetailDialog({
                               const impFin = parseFloat(art.dettaglio?.importoFinanziato || "0") || 0;
                               const impCre = parseFloat(art.dettaglio?.importoCredito || "0") || 0;
                               const prezzo = parseFloat(art.dettaglio?.prezzo || "0") || 0;
+                              const flag = art.dettaglio?.scontrino;
+                              const isScontrinato = flag === 1 || flag === "1" || flag === true;
+                              const importoMostrato = impScont > 0 ? impScont : prezzo;
                               const badges: { key: string; label: string; cls: string }[] = [];
-                              if (impScont > 0) {
-                                badges.push({ key: "s", label: `Scontrinato ${formatCurrency(impScont)}`, cls: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20" });
-                              } else if (prezzo > 0) {
-                                badges.push({ key: "fs", label: "Fuori scontrino", cls: "bg-rose-500/10 text-rose-700 border-rose-500/20" });
+                              if (isScontrinato) {
+                                badges.push({ key: "s", label: `Scontrinato ${formatCurrency(importoMostrato)}`, cls: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20" });
+                              } else if (importoMostrato > 0) {
+                                badges.push({ key: "fs", label: `Fuori scontrino ${formatCurrency(importoMostrato)}`, cls: "bg-rose-500/10 text-rose-700 border-rose-500/20" });
                               }
                               if (impFin > 0) badges.push({ key: "f", label: `Finanziato ${formatCurrency(impFin)}`, cls: "bg-purple-500/10 text-purple-700 border-purple-500/20" });
                               if (impCre > 0) badges.push({ key: "c", label: `Credito/VAR ${formatCurrency(impCre)}`, cls: "bg-amber-500/10 text-amber-700 border-amber-500/20" });
