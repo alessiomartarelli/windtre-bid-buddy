@@ -125,6 +125,81 @@ function isImmutable(urlPath: string): boolean {
 }
 
 /**
+ * Pre-popola la cache scansionando ricorsivamente `root` e costruendo
+ * un'entry (raw + gzip level 9 + brotli quality 11 + ETag) per ogni
+ * file compressibile sotto la soglia. I file binari "grandi" vengono
+ * ignorati: rimangono serviti via stream alla prima richiesta. Da
+ * chiamare al boot in produzione per evitare di pagare i ~100-200 ms
+ * di compressione sul bundle principale al primo hit dopo un restart
+ * PM2 (brotli quality 11 è ancora più costoso del gzip level 9).
+ *
+ * Accetta una `skip` (RegExp sul path URL relativo) per allineare lo
+ * scope a quello del middleware: file mai serviti (es. `index.html`,
+ * gestito dal fallback SPA) non vengono precompressi.
+ *
+ * Ritorna un report con conteggio file e ms impiegati così che il
+ * chiamante possa loggarlo.
+ */
+export function precompressStatic(
+  root: string,
+  opts: { skip?: RegExp } = {},
+): {
+  files: number;
+  bytesRaw: number;
+  bytesGz: number;
+  bytesBr: number;
+  ms: number;
+} {
+  const start = Date.now();
+  const absRoot = path.resolve(root);
+  const skip = opts.skip;
+  let files = 0;
+  let bytesRaw = 0;
+  let bytesGz = 0;
+  let bytesBr = 0;
+
+  const walk = (dir: string) => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!e.isFile()) continue;
+      if (skip) {
+        const urlPath = "/" + path.relative(absRoot, full).split(path.sep).join("/");
+        if (skip.test(urlPath)) continue;
+      }
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(full);
+      } catch {
+        continue;
+      }
+      if (!COMPRESSIBLE.test(full) && stat.size > MAX_CACHED_RAW_BYTES) {
+        continue;
+      }
+      const entry = buildEntry(full, stat.mtimeMs);
+      if (!entry) continue;
+      cache.set(full, entry);
+      files += 1;
+      bytesRaw += entry.size;
+      if (entry.gz) bytesGz += entry.gz.length;
+      if (entry.br) bytesBr += entry.br.length;
+    }
+  };
+
+  walk(absRoot);
+  return { files, bytesRaw, bytesGz, bytesBr, ms: Date.now() - start };
+}
+
+/**
  * Misure di compressione sul bundle principale del primo paint (build
  * di riferimento, dist/public/assets/*):
  *
@@ -140,9 +215,10 @@ function isImmutable(urlPath: string): boolean {
  * Brotli (BROTLI_MAX_QUALITY = 11, BROTLI_PARAM_SIZE_HINT = raw size)
  * comprime il primo paint ulteriormente di ~196 KB rispetto a gzip-only,
  * e di ~78% rispetto al raw. Il costo di compressione si paga una sola
- * volta per file (al primo hit) e resta in cache finché non cambia
- * `mtime`. Comando di riferimento: `node -e "..."` con
- * `zlib.brotliCompressSync` su ogni asset di `dist/public/assets/`.
+ * volta per file (al primo hit, o al boot via `precompressStatic`) e
+ * resta in cache finché non cambia `mtime`. Comando di riferimento:
+ * `node -e "..."` con `zlib.brotliCompressSync` su ogni asset di
+ * `dist/public/assets/`.
  *
  * Middleware generico per servire una directory di file statici con:
  *  - brotli pre-calcolato in memoria (quality 11) e gzip

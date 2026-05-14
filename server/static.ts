@@ -1,7 +1,7 @@
 import { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { mountCompressedStatic } from "./compressedStatic";
+import { mountCompressedStatic, precompressStatic } from "./compressedStatic";
 
 const BASE_PATH = process.env.NODE_ENV === "production" ? "/incentivew3" : "";
 
@@ -17,9 +17,37 @@ export function serveStatic(app: Express) {
   // favicon, font, immagini, ecc.) con gzip + ETag + Cache-Control.
   // `index.html` resta gestito dal fallback SPA sotto, che riscrive i
   // path con `BASE_PATH` e non deve essere cacheato dal client.
+  // In produzione, pre-comprimi tutti i bundle al boot così che il primo
+  // GET dopo un restart PM2 non paghi i ~100-200 ms di gzip level 9 +
+  // brotli quality 11 sul bundle principale (~3 MB). In dev evitiamo il
+  // costo perché i file sono rigenerati a ogni HMR.
+  const SKIP = /(^|\/)index\.html$/i;
+  // Soglia di budget per il boot: oltre i 2s la precompressione sta
+  // diventando un problema (asset troppo grossi o disco lento) e va
+  // investigata.
+  const BOOT_BUDGET_MS = 2000;
+  if (process.env.NODE_ENV === "production") {
+    const report = precompressStatic(distPath, { skip: SKIP });
+    const mb = (n: number) => (n / (1024 * 1024)).toFixed(2);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[static] precompressed ${report.files} file(s), ` +
+        `${mb(report.bytesRaw)} MB raw → ${mb(report.bytesGz)} MB gzip / ` +
+        `${mb(report.bytesBr)} MB brotli in ${report.ms} ms`,
+    );
+    if (report.ms > BOOT_BUDGET_MS) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[static] precompression took ${report.ms} ms ` +
+          `(>${BOOT_BUDGET_MS} ms budget): boot is getting slow, ` +
+          `controlla la dimensione del bundle in dist/public.`,
+      );
+    }
+  }
+
   mountCompressedStatic(app, {
     root: distPath,
-    skip: /(^|\/)index\.html$/i,
+    skip: SKIP,
   });
 
   app.use("/{*path}", (_req, res) => {
