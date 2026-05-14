@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useDeferredValue, useTransition } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,6 +8,7 @@ import { AppNavbar } from "@/components/AppNavbar";
 import {
   computeIncassoTotals,
   computeIncassoCounts,
+  emptyIncassoTotals,
   INCASSO_ITEMS_CONFIG,
   toNum,
   classifyIvaArticolo,
@@ -307,6 +308,13 @@ export default function Amministrazione() {
   const [filterPdv, setFilterPdv] = useState<string[]>([]);
   const [filterRs, setFilterRs] = useState<string>("all");
   const [search, setSearch] = useState("");
+  // useDeferredValue allow il typing fluido nel campo Cerca: il filtro pesante
+  // viene applicato con priorità più bassa, mentre l'input mantiene il focus
+  // istantaneo. startTransition idem per i chip RS / PDV / IVA / escludiZero
+  // → l'evidenziazione del chip selezionato è immediata, il rebuild della
+  // tabella ~2800 scontrini avviene fuori dalla critical render.
+  const deferredSearch = useDeferredValue(search);
+  const [, startFiltersTransition] = useTransition();
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window !== "undefined") {
       const h = window.location.hash.replace(/^#/, "");
@@ -438,11 +446,11 @@ export default function Amministrazione() {
   }, [sales]);
 
   const filteredSales = useMemo(() => {
+    const q = deferredSearch ? deferredSearch.toLowerCase() : "";
     return sales.filter((s) => {
       if (filterPdv.length > 0 && !filterPdv.includes(s.codicePos || "N/D")) return false;
       if (filterRs !== "all" && (s.ragioneSociale || "") !== filterRs) return false;
-      if (search) {
-        const q = search.toLowerCase();
+      if (q) {
         const haystack = [
           s.codicePos, s.nomeNegozio, s.ragioneSociale, s.nomeAddetto, s.nomeCliente,
           String(s.bisuiteId),
@@ -451,36 +459,11 @@ export default function Amministrazione() {
       }
       return true;
     });
-  }, [sales, filterPdv, filterRs, search]);
+  }, [sales, filterPdv, filterRs, deferredSearch]);
 
-  const contabileRows = useMemo(() => buildContabileRows(filteredSales), [filteredSales]);
-  const ivaRowsAll = useMemo(() => buildIvaRows(filteredSales), [filteredSales]);
-  const ivaRows = useMemo(() => {
-    let rows = ivaRowsAll;
-    if (escludiZero) rows = rows.filter((r) => r.fiscalCategory !== "fuori_scontrino");
-    if (ivaCategoryFilter !== "all") rows = rows.filter((r) => r.fiscalCategory === ivaCategoryFilter);
-    return rows;
-  }, [ivaRowsAll, escludiZero, ivaCategoryFilter]);
-
-  const ivaAlerts = useMemo(() => {
-    const nonStdSales = new Set<string>();
-    const daVerSales = new Set<string>();
-    let nonStdLordo = 0;
-    let daVerLordo = 0;
-    for (const r of ivaRowsAll) {
-      if (r.fiscalCategory === "non_standard") {
-        nonStdSales.add(r.saleId);
-        nonStdLordo += r.lordo;
-      } else if (r.fiscalCategory === "da_verificare") {
-        daVerSales.add(r.saleId);
-        daVerLordo += r.lordo;
-      }
-    }
-    return {
-      nonStandard: { scontrini: nonStdSales.size, lordo: nonStdLordo },
-      daVerificare: { scontrini: daVerSales.size, lordo: daVerLordo },
-    };
-  }, [ivaRowsAll]);
+  // I globali sono derivati da rsGroupsBase più in basso (flatMap delle righe
+  // già costruite per RS), evitando un secondo pass O(n) su filteredSales.
+  // Le dichiarazioni concrete avvengono dopo rsGroupsBase.
 
   const goToIvaCategory = (cat: IvaCategoria) => {
     setIvaCategoryFilter(cat);
@@ -548,51 +531,148 @@ export default function Amministrazione() {
     return t;
   };
 
-  const contabileTotals = useMemo<{ totale: number; incasso: IncassoTotals; counts: IncassoTotals }>(() => {
-    return {
-      totale: contabileRows.reduce((s, r) => s + r.totale, 0),
-      incasso: computeIncassoTotals(filteredSales),
-      counts: computeIncassoCounts(filteredSales),
-    };
-  }, [contabileRows, filteredSales]);
+  // ── Aggregazione per RS — base pesante (deps: solo filteredSales) ──
+  // Costruisce, una sola volta per cambio dataset/filtri primari, le righe
+  // contabili, le righe IVA non filtrate, il riepilogo IVA, i totali e
+  // l'aggregato per giorno×PDV usato dal corpo della tabella contabile.
+  // Toggle come `escludiZero` o `ivaCategoryFilter` non triggerano più la
+  // ricostruzione contabile, e i chip RS reagiscono istantaneamente perché
+  // questa memo non dipende da `selectedRs`.
+  type ContabileAggRow = {
+    key: string;
+    dataDay: string;
+    dataMs: number;
+    codicePos: string;
+    nomeNegozio: string;
+    scontrini: number;
+    totale: number;
+    incasso: IncassoTotals;
+  };
+  const aggregateContabilePerDayPdv = (rows: ContabileRow[]): ContabileAggRow[] => {
+    const map = new Map<string, ContabileAggRow>();
+    for (const r of rows) {
+      const dataDay = italianDayKey(r.data) || (r.data || "").slice(0, 10);
+      const k = `${dataDay}|${r.codicePos}`;
+      let a = map.get(k);
+      if (!a) {
+        a = {
+          key: k,
+          dataDay,
+          dataMs: r.dataMs,
+          codicePos: r.codicePos,
+          nomeNegozio: r.nomeNegozio,
+          scontrini: 0,
+          totale: 0,
+          incasso: emptyIncassoTotals(),
+        };
+        map.set(k, a);
+      }
+      a.scontrini += 1;
+      a.totale += r.totale || 0;
+      for (const cfg of INCASSO_ITEMS_CONFIG) {
+        a.incasso[cfg.key] = (a.incasso[cfg.key] || 0) + (r.incasso[cfg.key] || 0);
+      }
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => a.dataMs - b.dataMs || a.nomeNegozio.localeCompare(b.nomeNegozio),
+    );
+  };
 
-  const ivaRiepilogo = useMemo(() => computeIvaRiepilogo(ivaRowsAll), [ivaRowsAll]);
-  const ivaTotals = useMemo(() => computeIvaTotals(ivaRiepilogo), [ivaRiepilogo]);
-
-  // Per-Ragione-Sociale grouping for sectioned views
-  const rsGroups = useMemo(() => {
+  const rsGroupsBase = useMemo(() => {
     const bySales = new Map<string, BisuiteSale[]>();
     for (const s of filteredSales) {
       const k = s.ragioneSociale || "— Senza Ragione Sociale —";
       const arr = bySales.get(k);
       if (arr) arr.push(s); else bySales.set(k, [s]);
     }
-    const groups = Array.from(bySales.entries())
+    return Array.from(bySales.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([rs, gSales]) => {
         const gContabileRows = buildContabileRows(gSales);
         const gIvaRowsAll = buildIvaRows(gSales);
-        let gIvaRows = gIvaRowsAll;
-        if (escludiZero) gIvaRows = gIvaRows.filter((r) => r.fiscalCategory !== "fuori_scontrino");
-        if (ivaCategoryFilter !== "all") gIvaRows = gIvaRows.filter((r) => r.fiscalCategory === ivaCategoryFilter);
         const gRiepilogo = computeIvaRiepilogo(gIvaRowsAll);
         return {
           rs,
           sales: gSales,
           contabileRows: gContabileRows,
+          contabileAggRows: aggregateContabilePerDayPdv(gContabileRows),
           contabileTotals: {
             totale: gContabileRows.reduce((s, r) => s + r.totale, 0),
             incasso: computeIncassoTotals(gSales),
             counts: computeIncassoCounts(gSales),
           },
           ivaRowsAll: gIvaRowsAll,
-          ivaRows: gIvaRows,
           ivaRiepilogo: gRiepilogo,
           ivaTotals: computeIvaTotals(gRiepilogo),
         };
       });
-    return groups;
-  }, [filteredSales, escludiZero, ivaCategoryFilter]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSales]);
+
+  // Globali derivati: niente più seconda passata su filteredSales.
+  const contabileRows = useMemo(
+    () => rsGroupsBase.flatMap((g) => g.contabileRows),
+    [rsGroupsBase],
+  );
+  const ivaRowsAll = useMemo(
+    () => rsGroupsBase.flatMap((g) => g.ivaRowsAll),
+    [rsGroupsBase],
+  );
+  const ivaRows = useMemo(() => {
+    let rows = ivaRowsAll;
+    if (escludiZero) rows = rows.filter((r) => r.fiscalCategory !== "fuori_scontrino");
+    if (ivaCategoryFilter !== "all") rows = rows.filter((r) => r.fiscalCategory === ivaCategoryFilter);
+    return rows;
+  }, [ivaRowsAll, escludiZero, ivaCategoryFilter]);
+
+  const ivaAlerts = useMemo(() => {
+    const nonStdSales = new Set<string>();
+    const daVerSales = new Set<string>();
+    let nonStdLordo = 0;
+    let daVerLordo = 0;
+    for (const r of ivaRowsAll) {
+      if (r.fiscalCategory === "non_standard") {
+        nonStdSales.add(r.saleId);
+        nonStdLordo += r.lordo;
+      } else if (r.fiscalCategory === "da_verificare") {
+        daVerSales.add(r.saleId);
+        daVerLordo += r.lordo;
+      }
+    }
+    return {
+      nonStandard: { scontrini: nonStdSales.size, lordo: nonStdLordo },
+      daVerificare: { scontrini: daVerSales.size, lordo: daVerLordo },
+    };
+  }, [ivaRowsAll]);
+
+  const contabileTotals = useMemo<{ totale: number; incasso: IncassoTotals; counts: IncassoTotals }>(() => {
+    const incasso = emptyIncassoTotals();
+    const counts = emptyIncassoTotals();
+    let totale = 0;
+    for (const g of rsGroupsBase) {
+      totale += g.contabileTotals.totale;
+      for (const cfg of INCASSO_ITEMS_CONFIG) {
+        incasso[cfg.key] += g.contabileTotals.incasso[cfg.key] || 0;
+        counts[cfg.key] += g.contabileTotals.counts[cfg.key] || 0;
+      }
+    }
+    return { totale, incasso, counts };
+  }, [rsGroupsBase]);
+
+  const ivaRiepilogo = useMemo(() => computeIvaRiepilogo(ivaRowsAll), [ivaRowsAll]);
+  const ivaTotals = useMemo(() => computeIvaTotals(ivaRiepilogo), [ivaRiepilogo]);
+
+  // ── Layer leggero IVA-filtrato: ricava `ivaRows` per RS senza ricostruire
+  // mai contabile/aggregati. Cambiare `escludiZero`/`ivaCategoryFilter` ora
+  // costa O(articoli IVA), non O(scontrini × buildContabile + buildIva).
+  const rsGroups = useMemo(() => {
+    return rsGroupsBase.map((g) => {
+      let gIvaRows = g.ivaRowsAll;
+      if (escludiZero) gIvaRows = gIvaRows.filter((r) => r.fiscalCategory !== "fuori_scontrino");
+      if (ivaCategoryFilter !== "all") gIvaRows = gIvaRows.filter((r) => r.fiscalCategory === ivaCategoryFilter);
+      return { ...g, ivaRows: gIvaRows };
+    });
+  }, [rsGroupsBase, escludiZero, ivaCategoryFilter]);
 
   const displayedRsGroups = useMemo(
     () => (selectedRs === "all" ? rsGroups : rsGroups.filter((g) => g.rs === selectedRs)),
@@ -1211,7 +1291,7 @@ export default function Amministrazione() {
             </Popover>
           </FilterField>
           <FilterField label="Ragione Sociale" icon={Building2}>
-            <Select value={filterRs} onValueChange={setFilterRs}>
+            <Select value={filterRs} onValueChange={(v) => startFiltersTransition(() => setFilterRs(v))}>
               <SelectTrigger data-testid="select-rs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tutte le RS</SelectItem>
@@ -1361,7 +1441,7 @@ export default function Amministrazione() {
                 <span className="text-xs uppercase tracking-wide text-muted-foreground mr-1">Ragione Sociale:</span>
                 <button
                   type="button"
-                  onClick={() => setSelectedRs("all")}
+                  onClick={() => startFiltersTransition(() => setSelectedRs("all"))}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                     selectedRs === "all"
                       ? "bg-primary text-primary-foreground border-primary"
@@ -1375,7 +1455,7 @@ export default function Amministrazione() {
                   <button
                     key={g.rs}
                     type="button"
-                    onClick={() => setSelectedRs(g.rs)}
+                    onClick={() => startFiltersTransition(() => setSelectedRs(g.rs))}
                     className={`text-xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5 ${
                       selectedRs === g.rs
                         ? "bg-primary text-primary-foreground border-primary"
@@ -1449,42 +1529,10 @@ export default function Amministrazione() {
                           </TableHeader>
                           <TableBody>
                             {(() => {
-                              // Aggrega per giorno + PDV (codicePos) all'interno della RS
-                              type Agg = {
-                                key: string;
-                                dataDay: string;
-                                dataMs: number;
-                                codicePos: string;
-                                nomeNegozio: string;
-                                scontrini: number;
-                                totale: number;
-                                incasso: ReturnType<typeof computeIncassoTotals>;
-                              };
-                              const map = new Map<string, Agg>();
-                              for (const r of g.contabileRows) {
-                                const dataDay = italianDayKey(r.data) || (r.data || "").slice(0, 10);
-                                const k = `${dataDay}|${r.codicePos}`;
-                                let a = map.get(k);
-                                if (!a) {
-                                  a = {
-                                    key: k, dataDay,
-                                    dataMs: r.dataMs,
-                                    codicePos: r.codicePos,
-                                    nomeNegozio: r.nomeNegozio,
-                                    scontrini: 0, totale: 0,
-                                    incasso: Object.fromEntries(INCASSO_ITEMS_CONFIG.map(c => [c.key, 0])) as any,
-                                  };
-                                  map.set(k, a);
-                                }
-                                a.scontrini += 1;
-                                a.totale += r.totale || 0;
-                                for (const cfg of INCASSO_ITEMS_CONFIG) {
-                                  a.incasso[cfg.key] = (a.incasso[cfg.key] || 0) + (r.incasso[cfg.key] || 0);
-                                }
-                              }
-                              const rows = Array.from(map.values()).sort(
-                                (a, b) => a.dataMs - b.dataMs || a.nomeNegozio.localeCompare(b.nomeNegozio),
-                              );
+                              // Aggregato giorno×PDV pre-calcolato in rsGroupsBase:
+                              // niente più ri-aggregazione di ~2800 righe ad ogni
+                              // re-render (chip click, hover, ecc).
+                              const rows = g.contabileAggRows;
                               if (rows.length === 0) {
                                 return (
                                   <TableRow><TableCell colSpan={4 + INCASSO_ITEMS_CONFIG.length} className="text-center text-muted-foreground py-8">Nessuno scontrino</TableCell></TableRow>
@@ -1558,7 +1606,7 @@ export default function Amministrazione() {
                   <Label htmlFor="iva-cat-filter" className="text-xs">Categoria fiscale</Label>
                   <Select
                     value={ivaCategoryFilter}
-                    onValueChange={(v) => setIvaCategoryFilter(v as IvaCategoria | "all")}
+                    onValueChange={(v) => startFiltersTransition(() => setIvaCategoryFilter(v as IvaCategoria | "all"))}
                   >
                     <SelectTrigger id="iva-cat-filter" className="h-8 w-[200px]" data-testid="select-iva-category">
                       <SelectValue />
@@ -1580,7 +1628,7 @@ export default function Amministrazione() {
                   <Switch
                     id="escludi-zero"
                     checked={escludiZero}
-                    onCheckedChange={setEscludiZero}
+                    onCheckedChange={(v) => startFiltersTransition(() => setEscludiZero(v))}
                     data-testid="switch-escludi-zero"
                   />
                 </div>
