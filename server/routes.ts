@@ -445,10 +445,12 @@ export async function registerRoutes(
   app.get("/api/finplan", isAuthenticated, requireModule(FINPLAN_MODULES), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
-      if (!profile?.organizationId) return res.json({ data: null, updatedAt: null, updatedBy: null });
+      if (!profile?.organizationId) return res.json({ data: {}, updatedAt: null, updatedBy: null });
       const row = await storage.getFinplanData(profile.organizationId);
-      if (!row) return res.json({ data: null, updatedAt: null, updatedBy: null });
-      res.json({ data: row.data ?? null, updatedAt: row.updatedAt, updatedBy: row.updatedBy });
+      // Primo accesso o nessun dato: ritorna oggetto vuoto autoritativo
+      // (lo shim lato client lo usa per resettare la cache cross-org).
+      if (!row) return res.json({ data: {}, updatedAt: null, updatedBy: null });
+      res.json({ data: row.data ?? {}, updatedAt: row.updatedAt, updatedBy: row.updatedBy });
     } catch (e) {
       console.error("[finplan] GET error:", e);
       res.status(500).json({ message: "Error fetching finplan data" });

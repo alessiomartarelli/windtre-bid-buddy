@@ -50,10 +50,12 @@ import/export JSON manuali già presenti nel tool.
   "controllo_gestione"])`: stesso gate della pagina Amministrazione, così
   un utente di un'altra org senza quei moduli non può leggere/scrivere
   il blob. `super_admin` bypassa il check come nel resto del sistema.
-- Cross-tenant cache: lo shim al boot azzera `localStorage[KEY]` se il
-  GET non restituisce dati (404/null/401 o errore di rete), così cambio
-  utente/org sullo stesso browser non leak-a dati della sessione
-  precedente.
+- Cross-tenant cache: lo shim al boot azzera `localStorage[KEY]` solo
+  quando il server risponde **200 con `data` vuoto/`{}`** (risposta
+  autoritativa "nessun dato per questa org"), così cambio utente/org
+  sullo stesso browser non leak-a dati della sessione precedente. In
+  caso di errori di rete/401/5xx la cache locale resta intatta come
+  fallback offline.
 - Race salvataggio: lo shim usa una coda "latest-wins" — se un PUT è in
   volo e arriva un nuovo snapshot, lo memorizza come `_pending` e lo
   flusha al termine, così l'ultimo stato viene sempre persistito.
