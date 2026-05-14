@@ -334,6 +334,13 @@ export default function Amministrazione() {
   const [escludiZero, setEscludiZero] = useState<boolean>(false);
   const [ivaCategoryFilter, setIvaCategoryFilter] = useState<IvaCategoria | "all">("all");
   const [selectedRs, setSelectedRs] = useState<string>("all");
+  // Iframe FinPlan keep-alive: una volta che l'utente apre il tab Analisi
+  // l'iframe resta montato (display:none quando non attivo) così tornarci
+  // è istantaneo e non rifa il bootstrap del tool standalone (~5 MB).
+  const [analisiEverOpened, setAnalisiEverOpened] = useState<boolean>(tab === "analisi");
+  useEffect(() => {
+    if (tab === "analisi") setAnalisiEverOpened(true);
+  }, [tab]);
 
   const orgId = profile?.organizationId || "";
   const isAuthorized = !!profile && ["admin", "super_admin"].includes(profile.role);
@@ -1244,18 +1251,8 @@ export default function Amministrazione() {
               )}
               <TabsTrigger value="analisi" data-testid="tab-analisi-top"><LineChart className="h-4 w-4 mr-2" />Analisi</TabsTrigger>
             </TabsList>
-            <TabsContent value="analisi" className="space-y-2">
-              <Card>
-                <CardContent className="p-0 overflow-hidden">
-                  <iframe
-                    src={`${BASE_PATH}/finplan/index.html`}
-                    title="FinPlan Studio"
-                    data-testid="iframe-finplan"
-                    style={{ width: "100%", height: "calc(100vh - 220px)", minHeight: 600, border: "0", display: "block" }}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
+            {/* Il vero iframe FinPlan è renderizzato fuori da questo blocco
+                in modo persistente: vedi <FinPlanIframeMount> più in basso. */}
           </Tabs>
         ) : tab === "controllo" && cdgEnabled ? (
           <Tabs value={tab} onValueChange={(v) => { if (isTabKey(v)) setTab(v); }} className="space-y-4">
@@ -1795,6 +1792,28 @@ export default function Amministrazione() {
             </TabsContent>
           </Tabs>
           </>
+        )}
+
+        {/* Iframe FinPlan persistente: si monta alla prima apertura del tab
+            Analisi e resta in DOM (display:none quando non attivo). Evita il
+            re-bootstrap del tool standalone (~5 MB) ad ogni cambio tab. */}
+        {analisiEverOpened && (
+          <div
+            style={{ display: tab === "analisi" ? "block" : "none" }}
+            className="space-y-2"
+            data-testid="finplan-iframe-mount"
+          >
+            <Card>
+              <CardContent className="p-0 overflow-hidden">
+                <iframe
+                  src={`${BASE_PATH}/finplan/index.html`}
+                  title="FinPlan Studio"
+                  data-testid="iframe-finplan"
+                  style={{ width: "100%", height: "calc(100vh - 220px)", minHeight: 600, border: "0", display: "block" }}
+                />
+              </CardContent>
+            </Card>
+          </div>
         )}
       </main>
     </div>

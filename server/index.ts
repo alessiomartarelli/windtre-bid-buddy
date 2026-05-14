@@ -1,7 +1,9 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
+import { mountFinplanStatic } from "./finplanStatic";
 import { createServer } from "http";
+import path from "path";
 import { startBisuiteDailyScheduler } from "./bisuiteScheduler";
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -85,6 +87,10 @@ app.use((req, res, next) => {
       return res.status(status).json({ message });
     });
 
+    // Serve gzipped FinPlan bundle prima di express.static.
+    mountFinplanStatic(subApp, {
+      roots: [path.resolve(__dirname, "public")],
+    });
     serveStatic(subApp);
     app.use(BASE_PATH, subApp);
 
@@ -105,6 +111,11 @@ app.use((req, res, next) => {
       return res.status(status).json({ message });
     });
 
+    // Serve gzipped FinPlan bundle prima di Vite (che servirebbe il file
+    // raw da client/public senza compressione né ETag).
+    mountFinplanStatic(app, {
+      roots: [path.resolve(process.cwd(), "client/public")],
+    });
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
