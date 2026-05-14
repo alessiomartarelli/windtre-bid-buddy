@@ -1,6 +1,7 @@
-import express, { type Express } from "express";
+import { type Express } from "express";
 import fs from "fs";
 import path from "path";
+import { mountCompressedStatic } from "./compressedStatic";
 
 const BASE_PATH = process.env.NODE_ENV === "production" ? "/incentivew3" : "";
 
@@ -12,7 +13,14 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath, { index: false }));
+  // Servi tutti i file statici di prod (bundle JS/CSS in `/assets/*`,
+  // favicon, font, immagini, ecc.) con gzip + ETag + Cache-Control.
+  // `index.html` resta gestito dal fallback SPA sotto, che riscrive i
+  // path con `BASE_PATH` e non deve essere cacheato dal client.
+  mountCompressedStatic(app, {
+    root: distPath,
+    skip: /(^|\/)index\.html$/i,
+  });
 
   app.use("/{*path}", (_req, res) => {
     const indexPath = path.resolve(distPath, "index.html");
