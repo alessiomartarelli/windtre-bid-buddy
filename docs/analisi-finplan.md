@@ -139,6 +139,81 @@ attesa a ogni apertura del tab Analisi:
   `TabsContent value="analisi"` non contiene più il vero iframe.
   Risultato: tornare al tab è istantaneo, niente re-bootstrap.
 
+## Performance interazioni interne (Task #128)
+
+Dopo aver ottimizzato boot/rete (Task #121), restavano 5-10s di
+freeze al cambio azienda o sezione interna. Tre interventi
+chirurgici dentro `client/public/finplan/index.html`, niente nuove
+dipendenze, comportamento invariato:
+
+- **Chart.js — update invece di destroy+recreate**: i tre helper
+  `makeArea` / `makeBar` / `makePie` ora controllano se sul canvas
+  esiste già un grafico dello stesso tipo e numero di dataset; in tal
+  caso mutano `chart.data` in place e chiamano `chart.update('none')`
+  (senza animazione). Salta la teardown di Chart.js, la
+  riallocazione del canvas e l'animazione di entrata, che sui pannelli
+  con 4-5 grafici dominavano il tempo di render. Fallback al
+  vecchio `destroy + new Chart` per type mismatch o dataset shape
+  diversa (sicuro, mai regressivo).
+- **Memo per-frame degli aggregati**: un IIFE in fondo al file wrappa
+  `coTotals`, `coIvaTotals`, `coIgTotals`, `coGcTotals`,
+  `coEsteroTotals`, `coFinanziamentiTotals`, `coRateazioniTotals` con
+  una cache `Map` keyed `<funcName>:<ci>:<frame>`. Il frame counter
+  viene bumpato (e la cache svuotata) all'inizio di ogni
+  `renderCo` / `renderConsolidated`, di ogni tick idle e a ogni click
+  di tab interno.
+  Conseguenza: dentro una singola chiamata di `renderConsolidated` le
+  ~30 invocazioni di `coTotals(co)` (ciclo `consMonthly` di 12 mesi
+  + tabella confronto + chart category aggregate) collassano a 5
+  (una per società); idem per le altre.
+  **Correttezza**: la cache è attiva SOLO quando siamo dentro a un
+  blocco di render tracciato (contatore `_inRender > 0`,
+  incrementato/decrementato in renderCo/renderConsolidated/idle
+  tick/inner-tab handler). Le chiamate dirette dei mutation handler
+  — es. `setTxIva` → `renderCoKPIs(ci)`, gli onchange dei valori
+  mensili → `renderCoKPIs + renderMonthCharts`, gli onchange degli
+  obiettivi → `renderObjCo + renderCoKPIs`, gli input di
+  `inv` → `renderDebtInv + renderCoKPIs` — passano per la wrapper
+  ma con `_inRender === 0` bypassano la cache e ricalcolano sempre,
+  così l'utente vede subito il valore aggiornato senza dover
+  cambiare azienda/sezione. La modifica preserva il guadagno
+  prestazionale (le ~30 chiamate dentro renderConsolidated restano
+  collassate a 5) senza introdurre stale reads. Su errore la
+  wrapper fa fallback alla funzione originale.
+- **renderCo incrementale**: `renderCo` viene riassegnato (function
+  declarations sono hoisted, quindi il wrap funziona anche se l'IIFE
+  sta a fine file) in modo da:
+  1. Renderizzare SUBITO `renderCoKPIs(ci)` + la sola sezione
+     attualmente visibile (rilevata via `document.querySelector('[id^="sec-<ci>-"].on')`),
+     che è ciò che l'utente vede mentre cambia azienda;
+  2. Schedulare ognuna delle altre 12 sezioni in
+     `requestIdleCallback` (con fallback `setTimeout(_, 16)`), una
+     per tick, così il main thread resta responsivo;
+  3. Pre-popolare la tbody Personale e fare `debounceSave()` solo
+     dopo che tutte le sezioni idle sono state aggiornate.
+  Il render set è identico a quello della versione 8244 di
+  `renderCo` (stessa lista di sub-renderer, stessi side effect),
+  semplicemente spalmato nel tempo. Le sezioni nascoste vengono
+  comunque aggiornate, così quando l'utente clicca un tab interno
+  trova la sezione già pronta. Se due `renderCo` consecutive si
+  sovrappongono, il bump del frame invalida la cache ma le idle
+  callback in volo riapplicano semplicemente i nuovi dati al DOM
+  (auto-healing, niente race visibili).
+- **Click su tab interno (`attachListeners`)**: il vecchio handler
+  chiamava `renderCo(ci)` per intero a ogni click, rifacendo TUTTE
+  le 14 sezioni anche se l'utente passava da "Mensile" a "Categorie".
+  Ora chiama solo `SECTION_RENDERERS[t.dataset.t](ci)` + KPI:
+  l'unica sezione visibile viene aggiornata, le altre restano
+  cached dal render precedente.
+- **Profiler opzionale**: aggiungendo `?perf=1` alla query string
+  dell'iframe, ogni `renderCo`/`renderConsolidated`/sub-section
+  logga su console il tempo in ms (`[finplan perf] ...`). In prod
+  resta off (zero overhead), ma utile per regression testing.
+
+I test `tests/finplan-sync.test.mjs` (5 scenari) restano verdi —
+lo shim sync, ETag/304, debounce 3s, conflict guard e PUT/GET
+autenticato non sono toccati da queste modifiche.
+
 ## Note operative
 
 - L'HTML usa CDN (Chart.js, xlsx, pdf.js) e font Google: nessuna
