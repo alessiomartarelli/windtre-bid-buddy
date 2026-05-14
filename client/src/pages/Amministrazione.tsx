@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useDeferredValue, useTransition } from "react";
+import { useState, useMemo, useEffect, useDeferredValue } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -308,13 +308,9 @@ export default function Amministrazione() {
   const [filterPdv, setFilterPdv] = useState<string[]>([]);
   const [filterRs, setFilterRs] = useState<string>("all");
   const [search, setSearch] = useState("");
-  // useDeferredValue allow il typing fluido nel campo Cerca: il filtro pesante
-  // viene applicato con priorità più bassa, mentre l'input mantiene il focus
-  // istantaneo. startTransition idem per i chip RS / PDV / IVA / escludiZero
-  // → l'evidenziazione del chip selezionato è immediata, il rebuild della
-  // tabella ~2800 scontrini avviene fuori dalla critical render.
+  // useDeferredValue per il typing fluido nel campo Cerca: il filtro pesante
+  // viene applicato con priorità più bassa, mentre l'input mantiene il focus.
   const deferredSearch = useDeferredValue(search);
-  const [, startFiltersTransition] = useTransition();
   const [tab, setTab] = useState<TabKey>(() => {
     if (typeof window !== "undefined") {
       const h = window.location.hash.replace(/^#/, "");
@@ -1291,7 +1287,7 @@ export default function Amministrazione() {
             </Popover>
           </FilterField>
           <FilterField label="Ragione Sociale" icon={Building2}>
-            <Select value={filterRs} onValueChange={(v) => startFiltersTransition(() => setFilterRs(v))}>
+            <Select value={filterRs} onValueChange={setFilterRs}>
               <SelectTrigger data-testid="select-rs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tutte le RS</SelectItem>
@@ -1441,7 +1437,7 @@ export default function Amministrazione() {
                 <span className="text-xs uppercase tracking-wide text-muted-foreground mr-1">Ragione Sociale:</span>
                 <button
                   type="button"
-                  onClick={() => startFiltersTransition(() => setSelectedRs("all"))}
+                  onClick={() => setSelectedRs("all")}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                     selectedRs === "all"
                       ? "bg-primary text-primary-foreground border-primary"
@@ -1455,7 +1451,7 @@ export default function Amministrazione() {
                   <button
                     key={g.rs}
                     type="button"
-                    onClick={() => startFiltersTransition(() => setSelectedRs(g.rs))}
+                    onClick={() => setSelectedRs(g.rs)}
                     className={`text-xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5 ${
                       selectedRs === g.rs
                         ? "bg-primary text-primary-foreground border-primary"
@@ -1606,7 +1602,7 @@ export default function Amministrazione() {
                   <Label htmlFor="iva-cat-filter" className="text-xs">Categoria fiscale</Label>
                   <Select
                     value={ivaCategoryFilter}
-                    onValueChange={(v) => startFiltersTransition(() => setIvaCategoryFilter(v as IvaCategoria | "all"))}
+                    onValueChange={(v) => setIvaCategoryFilter(v as IvaCategoria | "all")}
                   >
                     <SelectTrigger id="iva-cat-filter" className="h-8 w-[200px]" data-testid="select-iva-category">
                       <SelectValue />
@@ -1628,7 +1624,7 @@ export default function Amministrazione() {
                   <Switch
                     id="escludi-zero"
                     checked={escludiZero}
-                    onCheckedChange={(v) => startFiltersTransition(() => setEscludiZero(v))}
+                    onCheckedChange={setEscludiZero}
                     data-testid="switch-escludi-zero"
                   />
                 </div>
