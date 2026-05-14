@@ -186,25 +186,26 @@ dipendenze, comportamento invariato:
   1. Renderizzare SUBITO `renderCoKPIs(ci)` + la sola sezione
      attualmente visibile (rilevata via `document.querySelector('[id^="sec-<ci>-"].on')`),
      che è ciò che l'utente vede mentre cambia azienda;
-  2. Schedulare ognuna delle altre 12 sezioni in
+  2. Chiamare SUBITO `debounceSave()` (subito dopo il blocco sync,
+     non a fine backlog) per non ritardare la persistenza in caso
+     di edit immediato seguito da reload;
+  3. Schedulare ognuna delle altre 12 sezioni in
      `requestIdleCallback` (con fallback `setTimeout(_, 16)`), una
-     per tick, così il main thread resta responsivo;
-  3. Pre-popolare la tbody Personale e fare `debounceSave()` solo
-     dopo che tutte le sezioni idle sono state aggiornate.
+     per tick, così il main thread resta responsivo, e a fine
+     backlog popolare la tbody Personale.
   Il render set è identico a quello della versione 8244 di
   `renderCo` (stessa lista di sub-renderer, stessi side effect),
   semplicemente spalmato nel tempo. Le sezioni nascoste vengono
   comunque aggiornate, così quando l'utente clicca un tab interno
-  trova la sezione già pronta. Se due `renderCo` consecutive si
-  sovrappongono, il bump del frame invalida la cache ma le idle
-  callback in volo riapplicano semplicemente i nuovi dati al DOM
-  (auto-healing, niente race visibili).
+  trova la sezione già pronta.
 - **Click su tab interno (`attachListeners`)**: il vecchio handler
   chiamava `renderCo(ci)` per intero a ogni click, rifacendo TUTTE
   le 14 sezioni anche se l'utente passava da "Mensile" a "Categorie".
-  Ora chiama solo `SECTION_RENDERERS[t.dataset.t](ci)` + KPI:
-  l'unica sezione visibile viene aggiornata, le altre restano
-  cached dal render precedente.
+  Ora chiama solo KPIs + un singolo dispatch per il tab: per
+  `costifissi` / `cdg` / `personale` (che hanno setup extra:
+  attach listener HR, calcolo periodo, render PDV/risorse) il
+  dispatch va al ramo legacy; per gli altri 11 tab passa per
+  `SECTION_RENDERERS`. Mai entrambi: niente double-render.
 - **Profiler opzionale**: aggiungendo `?perf=1` alla query string
   dell'iframe, ogni `renderCo`/`renderConsolidated`/sub-section
   logga su console il tempo in ms (`[finplan perf] ...`). In prod
