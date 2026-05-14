@@ -87,6 +87,15 @@ mantenere snello questo file:
   dalle API BiSuite, esclusione default delle vendite ANNULLATA, filtro
   Stato nella pagina Vendite BiSuite.
 
+## Testing
+
+- **FinPlan sync tests** (`tests/finplan-sync.test.mjs`): 5 scenari (ETag/304,
+  PUT debounce, reconcile vergine, conflict guard, PUT/GET autenticato).
+  Lanciali via lo step di validation registrato `finplan-tests`
+  (`bash scripts/run-finplan-tests.sh`). Lo script aspetta fino a 30s che
+  l'app sia raggiungibile su `localhost:5000`, quindi richiede che il
+  workflow "Start application" sia già attivo. Run completo in ~1s.
+
 ## External Dependencies
 
 - **PostgreSQL**: database primario.
