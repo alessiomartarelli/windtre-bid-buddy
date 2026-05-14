@@ -97,16 +97,20 @@ attesa a ogni apertura del tab Analisi:
   Risultato: prima apertura ~600 KB trasferiti invece di 5,4 MB;
   aperture successive entro 1h → 0 byte (cache hit). Montato sia in
   dev (prima di Vite) sia in prod (prima di `express.static`).
-- **Lazy-load di xlsx + pdf.js** (`window.loadXLSX()` /
-  `window.loadPdfJs()` nello script inline): rimosse le `<script>` tag
-  blocking nel `<head>` per le due librerie più pesanti (~700 KB
-  combinate). Vengono iniettate come script async in microtask dopo il
-  primo paint (pre-warm). I call site di import/export PDF/Excel le
-  trovano già pronte; possono comunque chiamare `await
-  window.loadXLSX()` per sicurezza. Chart.js resta blocking perché
-  serve a `buildPanels()` immediatamente al boot. La config
-  `pdfjsLib.GlobalWorkerOptions.workerSrc` viene applicata nell'onload
-  dell'injector pdf.js, non al parse.
+- **xlsx + pdf.js in `defer`**: i tag `<script>` per xlsx e pdf.js nel
+  `<head>` hanno l'attributo `defer`. Significa: scaricano in parallelo
+  durante il parse HTML (niente blocco del primo paint) ed eseguono
+  in ordine subito prima di `DOMContentLoaded`. Sono "safe come defer"
+  perché lo script inline a fine body NON usa più `pdfjsLib`/`XLSX` al
+  parse: la config `pdfjsLib.GlobalWorkerOptions.workerSrc` è settata
+  via `onload` del tag deferred. Tutti i ~40 call site esistenti di
+  import/export sono dentro handler di interazione utente, quindi
+  girano molto dopo che le librerie sono pronte.
+  Per call site nuovi che vogliono garantire la readiness in modo
+  esplicito, sono esposte `window.loadXLSX()` / `window.loadPdfJs()`:
+  ritornano un Promise che resolve appena la globale è disponibile
+  (polling a 50ms, timeout 15s). Chart.js invece resta blocking perché
+  serve a `buildPanels()` immediatamente al boot.
 - **Google Fonts consolidati**: una sola richiesta che include tutti
   i family (Syne + Plus Jakarta Sans + Inter + JetBrains Mono),
   invece delle due richieste duplicate originali.
