@@ -84,11 +84,20 @@ export function mountFinplanStatic(app: Express, opts: { roots: string[] }) {
 
     res.setHeader("Content-Type", contentTypeFor(resolved));
     res.setHeader("ETag", entry.etag);
-    // Validato dal server tramite ETag ad ogni request: la 2a apertura
-    // restituisce 304 Not Modified (poche centinaia di byte) invece dei
-    // 5+ MB del bundle FinPlan. Per gli asset secondari (JSON statici)
-    // applichiamo lo stesso schema.
-    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+    // Cache policy:
+    //  - URL con `?v=<hash>`: cache immutable un anno (l'iframe usa la
+    //    versione corrente come query param e cambia URL ad ogni
+    //    deploy/edit del file → niente staleness).
+    //  - URL senza versione: cache 1h, poi revalida via ETag (se nulla è
+    //    cambiato risponde 304 da pochi byte). Questo evita una
+    //    revalidation roundtrip a ogni reload e tiene comunque l'app
+    //    fresca entro 1h.
+    const versioned = typeof req.query?.v === "string" && req.query.v.length > 0;
+    if (versioned) {
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    } else {
+      res.setHeader("Cache-Control", "public, max-age=3600, must-revalidate");
+    }
     res.setHeader("Vary", "Accept-Encoding");
 
     const inm = req.headers["if-none-match"];
