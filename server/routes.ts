@@ -434,6 +434,46 @@ export async function registerRoutes(
     }
   });
 
+  // === FINPLAN (Tab Analisi in Amministrazione) ===
+  // Persistenza opaca per-organizzazione del tool HTML "FinPlan Studio"
+  // embeddato nel tab Analisi. Visibile a tutti gli utenti autenticati con
+  // un'organizzazione (la pagina Amministrazione gestisce già la
+  // visibilità del tab a livello UI).
+  // Stesso gate della pagina Amministrazione: serve almeno uno dei due moduli.
+  const FINPLAN_MODULES = ["amministrazione", "controllo_gestione"];
+
+  app.get("/api/finplan", isAuthenticated, requireModule(FINPLAN_MODULES), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.json({ data: null, updatedAt: null, updatedBy: null });
+      const row = await storage.getFinplanData(profile.organizationId);
+      if (!row) return res.json({ data: null, updatedAt: null, updatedBy: null });
+      res.json({ data: row.data ?? null, updatedAt: row.updatedAt, updatedBy: row.updatedBy });
+    } catch (e) {
+      console.error("[finplan] GET error:", e);
+      res.status(500).json({ message: "Error fetching finplan data" });
+    }
+  });
+
+  app.put("/api/finplan", isAuthenticated, requireModule(FINPLAN_MODULES), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(400).json({ message: "User has no organization" });
+      const data = (req.body && typeof req.body === "object") ? req.body.data : null;
+      if (data === undefined) return res.status(400).json({ message: "Missing data" });
+      // Limite di sicurezza ~12MB sul payload JSON serializzato.
+      try {
+        const sz = JSON.stringify(data).length;
+        if (sz > 12 * 1024 * 1024) return res.status(413).json({ message: "Payload troppo grande (max 12MB)" });
+      } catch { return res.status(400).json({ message: "Data non serializzabile" }); }
+      const row = await storage.upsertFinplanData(profile.organizationId, data, profile.id);
+      res.json({ ok: true, updatedAt: row.updatedAt });
+    } catch (e) {
+      console.error("[finplan] PUT error:", e);
+      res.status(500).json({ message: "Error saving finplan data" });
+    }
+  });
+
   // === SYSTEM CONFIG (super admin calculation defaults) ===
   app.get("/api/system-config", isAuthenticated, requireModule(ORG_CONFIG_MODULES), async (req: any, res) => {
     try {

@@ -40,13 +40,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   BookOpen, Receipt, Loader2, Download, Search, AlertTriangle, HelpCircle, FileText,
   Calendar, CalendarDays, Store, Building2, RefreshCw, Wallet, ChevronDown, X,
+  LineChart,
 } from "lucide-react";
+import { BASE_PATH } from "@/lib/basePath";
 import * as XLSX from "xlsx";
 import ControlloGestione from "@/pages/ControlloGestione";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
 
-type TabKey = "contabile" | "iva" | "controllo";
-const TAB_KEYS: TabKey[] = ["contabile", "iva", "controllo"];
+type TabKey = "contabile" | "iva" | "controllo" | "analisi";
+const TAB_KEYS: TabKey[] = ["contabile", "iva", "controllo", "analisi"];
 function isTabKey(v: string): v is TabKey {
   return (TAB_KEYS as string[]).includes(v);
 }
@@ -327,7 +329,7 @@ export default function Amministrazione() {
   // forza il tab a "controllo" così l'utente vede CdG senza tab BiSuite vuote.
   useEffect(() => {
     if (tab === "controllo" && !cdgEnabled) setTab("contabile");
-    else if (!amministrazioneEnabled && cdgEnabled && tab !== "controllo") setTab("controllo");
+    else if (!amministrazioneEnabled && cdgEnabled && tab !== "controllo" && tab !== "analisi") setTab("controllo");
   }, [tab, cdgEnabled, amministrazioneEnabled]);
   const [escludiZero, setEscludiZero] = useState<boolean>(false);
   const [ivaCategoryFilter, setIvaCategoryFilter] = useState<IvaCategoria | "all">("all");
@@ -1089,7 +1091,7 @@ export default function Amministrazione() {
           </div>
         </div>
 
-        {!(tab === "controllo" && cdgEnabled) && (
+        {!(tab === "controllo" && cdgEnabled) && tab !== "analisi" && (
         <FilterBar
           activeCount={
             (filterPdv.length > 0 ? 1 : 0) +
@@ -1228,7 +1230,34 @@ export default function Amministrazione() {
         </FilterBar>
         )}
 
-        {tab === "controllo" && cdgEnabled ? (
+        {tab === "analisi" ? (
+          <Tabs value={tab} onValueChange={(v) => { if (isTabKey(v)) setTab(v); }} className="space-y-4">
+            <TabsList>
+              {amministrazioneEnabled && (
+                <>
+                  <TabsTrigger value="contabile" data-testid="tab-contabile-top2"><BookOpen className="h-4 w-4 mr-2" />Prima Nota Contabile</TabsTrigger>
+                  <TabsTrigger value="iva" data-testid="tab-iva-top2"><Receipt className="h-4 w-4 mr-2" />Prima Nota IVA</TabsTrigger>
+                </>
+              )}
+              {cdgEnabled && (
+                <TabsTrigger value="controllo" data-testid="tab-controllo-top2"><Wallet className="h-4 w-4 mr-2" />Controllo di Gestione</TabsTrigger>
+              )}
+              <TabsTrigger value="analisi" data-testid="tab-analisi-top"><LineChart className="h-4 w-4 mr-2" />Analisi</TabsTrigger>
+            </TabsList>
+            <TabsContent value="analisi" className="space-y-2">
+              <Card>
+                <CardContent className="p-0 overflow-hidden">
+                  <iframe
+                    src={`${BASE_PATH}/finplan/index.html`}
+                    title="FinPlan Studio"
+                    data-testid="iframe-finplan"
+                    style={{ width: "100%", height: "calc(100vh - 220px)", minHeight: 600, border: "0", display: "block" }}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        ) : tab === "controllo" && cdgEnabled ? (
           <Tabs value={tab} onValueChange={(v) => { if (isTabKey(v)) setTab(v); }} className="space-y-4">
             <TabsList>
               {amministrazioneEnabled && (
@@ -1238,6 +1267,7 @@ export default function Amministrazione() {
                 </>
               )}
               <TabsTrigger value="controllo" data-testid="tab-controllo-top"><Wallet className="h-4 w-4 mr-2" />Controllo di Gestione</TabsTrigger>
+              <TabsTrigger value="analisi" data-testid="tab-analisi-top-cdg"><LineChart className="h-4 w-4 mr-2" />Analisi</TabsTrigger>
             </TabsList>
             <TabsContent value="controllo" className="space-y-4">
               <ControlloGestione embedded />
@@ -1274,6 +1304,10 @@ export default function Amministrazione() {
                     Controllo di Gestione
                   </TabsTrigger>
                 )}
+                <TabsTrigger value="analisi" data-testid="tab-analisi">
+                  <LineChart className="h-4 w-4 mr-2" />
+                  Analisi
+                </TabsTrigger>
               </TabsList>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button

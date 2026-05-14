@@ -80,6 +80,9 @@ mantenere snello questo file:
 - [`docs/bisuite-mapping-tied-iva.md`](docs/bisuite-mapping-tied-iva.md) —
   Mapping offerte SIM P.IVA (TIED IVA) → categorie Extra Gara IVA,
   inventario completo descrizioni.
+- [`docs/analisi-finplan.md`](docs/analisi-finplan.md) — Tab Analisi
+  (FinPlan Studio) embeddato in Amministrazione, persistenza per-org
+  via `finplan_data`.
 - [`docs/vendite-bisuite.md`](docs/vendite-bisuite.md) — Data vendita
   dalle API BiSuite, esclusione default delle vendite ANNULLATA, filtro
   Stato nella pagina Vendite BiSuite.

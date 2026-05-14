@@ -274,6 +274,20 @@ export const bisuiteSyncNotifications = pgTable("bisuite_sync_notifications", {
 export type BisuiteSyncNotification = typeof bisuiteSyncNotifications.$inferSelect;
 export type InsertBisuiteSyncNotification = typeof bisuiteSyncNotifications.$inferInsert;
 
+// FinPlan Studio data (per-organization snapshot of the embedded
+// HTML tool: una riga per org, blob JSONB opaco lato server).
+export const finplanData = pgTable("finplan_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull().unique(),
+  data: jsonb("data").default({}),
+  updatedBy: varchar("updated_by").references(() => profiles.id),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type FinplanData = typeof finplanData.$inferSelect;
+export type InsertFinplanData = typeof finplanData.$inferInsert;
+
 // Password reset tokens
 export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

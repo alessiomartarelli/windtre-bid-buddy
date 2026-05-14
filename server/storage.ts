@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, bisuiteSyncNotifications, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type BisuiteSyncNotification, type InsertBisuiteSyncNotification } from "@shared/schema";
+import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, bisuiteSyncNotifications, finplanData, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData } from "@shared/schema";
 import { eq, desc, and, isNull, isNotNull, lt, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -71,6 +71,10 @@ export interface IStorage {
   createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
   getValidResetToken(token: string): Promise<PasswordResetToken | undefined>;
   markTokenUsed(token: string): Promise<void>;
+
+  // FinPlan Data
+  getFinplanData(orgId: string): Promise<FinplanData | undefined>;
+  upsertFinplanData(orgId: string, data: any, updatedBy: string | null): Promise<FinplanData>;
 
   // BiSuite Sync Notifications
   createBisuiteSyncNotification(notif: InsertBisuiteSyncNotification): Promise<BisuiteSyncNotification>;
@@ -553,6 +557,23 @@ export class DatabaseStorage implements IStorage {
     await db.update(passwordResetTokens)
       .set({ usedAt: new Date() })
       .where(eq(passwordResetTokens.token, token));
+  }
+
+  // FinPlan Data
+  async getFinplanData(orgId: string): Promise<FinplanData | undefined> {
+    const [row] = await db.select().from(finplanData).where(eq(finplanData.organizationId, orgId));
+    return row;
+  }
+
+  async upsertFinplanData(orgId: string, data: any, updatedBy: string | null): Promise<FinplanData> {
+    const [row] = await db.insert(finplanData)
+      .values({ organizationId: orgId, data, updatedBy })
+      .onConflictDoUpdate({
+        target: finplanData.organizationId,
+        set: { data, updatedBy, updatedAt: new Date() },
+      })
+      .returning();
+    return row;
   }
 
   // BiSuite Sync Notifications
