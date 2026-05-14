@@ -37,7 +37,14 @@ Lo script iniettato in `client/public/finplan/index.html`:
      `updatedAt`, non JSON.stringify, per robustezza al riordino
      chiavi jsonb). Reload solo se il server ha un updatedAt più
      recente **e** l'utente non ha scritto nella sessione corrente
-     (flag `_userWroteThisSession`).
+     (flag `_userWroteThisSession`). Se invece il server ha una
+     versione più nuova **ma** l'utente ha modifiche locali pendenti,
+     compare un banner non bloccante in basso al centro ("Esiste una
+     versione più recente salvata da un altro utente — ricarica per
+     vederla (perderai le modifiche non salvate)") con un pulsante
+     "Ricarica ora" che forza il reload e una × per chiuderlo. Niente
+     reload automatico in questo scenario, così le modifiche locali
+     non vengono perse senza consenso.
    - Se la cache è vuota (prima apertura su quel browser+org) →
      mostra un overlay leggero "Caricamento dati FinPlan…",
      fa un `fetch` async, scrive i dati in localStorage e fa **un
