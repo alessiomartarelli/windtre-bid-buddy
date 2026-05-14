@@ -1806,7 +1806,7 @@ export default function Amministrazione() {
             <Card>
               <CardContent className="p-0 overflow-hidden">
                 <iframe
-                  src={`${BASE_PATH}/finplan/index.html`}
+                  src={`${BASE_PATH}/finplan/index.html?org=${encodeURIComponent(orgId)}`}
                   title="FinPlan Studio"
                   data-testid="iframe-finplan"
                   style={{ width: "100%", height: "calc(100vh - 220px)", minHeight: 600, border: "0", display: "block" }}

@@ -115,6 +115,16 @@ attesa a ogni apertura del tab Analisi:
 - **Google Fonts consolidati**: una sola richiesta che include tutti
   i family (Syne + Plus Jakarta Sans + Inter + JetBrains Mono),
   invece delle due richieste duplicate originali.
+- **Tenant scoping del localStorage**: l'iframe è caricato con
+  `?org=<orgId>` dal wrapper React (Amministrazione.tsx). Lo script
+  inline parsa il query param e namespacing la chiave master in
+  `finplan_edg_20260505_134919__org_<orgId>`. Conseguenza: cambio
+  organizzazione → cache di un'altra org non viene MAI letta. Se
+  manca l'orgId (iframe aperto fuori dal wrapper), il fast-boot da
+  cache è disabilitato e si forza l'overlay async + GET autoritativa,
+  così non c'è nessun rischio di mostrare dati di un'altra org. È
+  prevista una migrazione one-shot dalla chiave legacy globale alla
+  prima apertura per quel orgId, per non perdere dati pre-fix.
 - **Iframe keep-alive** (`client/src/pages/Amministrazione.tsx`): la
   prima volta che l'utente apre il tab Analisi, l'iframe FinPlan viene
   montato in un wrapper persistente fuori dal blocco `<TabsContent>`,
