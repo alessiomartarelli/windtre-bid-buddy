@@ -32,9 +32,14 @@ import {
 } from "@/components/ui/table";
 import { FilterBar, FilterField } from "@/components/ui/filter-bar";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   BookOpen, Receipt, Loader2, Download, Search, AlertTriangle, HelpCircle, FileText,
-  Calendar, CalendarDays, Store, Building2, RefreshCw, Wallet,
+  Calendar, CalendarDays, Store, Building2, RefreshCw, Wallet, ChevronDown, X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import ControlloGestione from "@/pages/ControlloGestione";
@@ -297,7 +302,7 @@ export default function Amministrazione() {
   const initialRange = useMemo(() => currentMonthRangeYMD(), []);
   const [fromDate, setFromDate] = useState<string>(initialRange.from);
   const [toDate, setToDate] = useState<string>(initialRange.to);
-  const [filterPdv, setFilterPdv] = useState<string>("all");
+  const [filterPdv, setFilterPdv] = useState<string[]>([]);
   const [filterRs, setFilterRs] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<TabKey>(() => {
@@ -425,7 +430,7 @@ export default function Amministrazione() {
 
   const filteredSales = useMemo(() => {
     return sales.filter((s) => {
-      if (filterPdv !== "all" && (s.codicePos || "N/D") !== filterPdv) return false;
+      if (filterPdv.length > 0 && !filterPdv.includes(s.codicePos || "N/D")) return false;
       if (filterRs !== "all" && (s.ragioneSociale || "") !== filterRs) return false;
       if (search) {
         const q = search.toLowerCase();
@@ -934,9 +939,12 @@ export default function Amministrazione() {
     const lines: string[] = [];
     lines.push(row("Registro Corrispettivi"));
     lines.push(row(`Periodo: dal ${ymdToItalian(fromDate)} al ${ymdToItalian(toDate)}`));
-    if (filterPdv !== "all") {
-      const pdv = pdvOptions.find(([code]) => code === filterPdv);
-      lines.push(row(`Punto Vendita: ${pdv ? `${pdv[1]} (${pdv[0]})` : filterPdv}`));
+    if (filterPdv.length > 0) {
+      const labels = filterPdv.map((code) => {
+        const pdv = pdvOptions.find(([c]) => c === code);
+        return pdv ? `${pdv[1]} (${pdv[0]})` : code;
+      });
+      lines.push(row(`Punto Vendita: ${labels.join("; ")}`));
     }
     if (filterRs !== "all") {
       lines.push(row(`Ragione Sociale: ${filterRs}`));
@@ -1084,11 +1092,11 @@ export default function Amministrazione() {
         {!(tab === "controllo" && cdgEnabled) && (
         <FilterBar
           activeCount={
-            (filterPdv !== "all" ? 1 : 0) +
+            (filterPdv.length > 0 ? 1 : 0) +
             (filterRs !== "all" ? 1 : 0) +
             (search.trim() ? 1 : 0)
           }
-          onReset={() => { setFilterPdv("all"); setFilterRs("all"); setSearch(""); }}
+          onReset={() => { setFilterPdv([]); setFilterRs("all"); setSearch(""); }}
         >
           <FilterField label="Dal" icon={Calendar}>
             <Input
@@ -1109,15 +1117,89 @@ export default function Amministrazione() {
             />
           </FilterField>
           <FilterField label="Punto Vendita" icon={Store}>
-            <Select value={filterPdv} onValueChange={setFilterPdv}>
-              <SelectTrigger data-testid="select-pdv"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutti i PDV</SelectItem>
-                {pdvOptions.map(([code, name]) => (
-                  <SelectItem key={code} value={code}>{name} ({code})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between font-normal"
+                  data-testid="select-pdv"
+                >
+                  <span className="truncate text-left">
+                    {filterPdv.length === 0
+                      ? "Tutti i PDV"
+                      : filterPdv.length === 1
+                      ? (() => {
+                          const p = pdvOptions.find(([c]) => c === filterPdv[0]);
+                          return p ? `${p[1]} (${p[0]})` : filterPdv[0];
+                        })()
+                      : `${filterPdv.length} PDV selezionati`}
+                  </span>
+                  <div className="flex items-center gap-1 ml-2 shrink-0">
+                    {filterPdv.length > 0 && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="inline-flex items-center justify-center h-4 w-4 rounded hover:bg-muted-foreground/20"
+                        onClick={(e) => { e.stopPropagation(); setFilterPdv([]); }}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); setFilterPdv([]); } }}
+                        data-testid="button-clear-pdv"
+                        aria-label="Azzera selezione PDV"
+                      >
+                        <X className="h-3 w-3" />
+                      </span>
+                    )}
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </div>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] min-w-[260px]" align="start">
+                <Command>
+                  <CommandInput placeholder="Cerca PDV..." />
+                  <CommandList>
+                    <CommandEmpty>Nessun PDV trovato.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="__all__"
+                        onSelect={() => setFilterPdv([])}
+                        data-testid="option-pdv-all"
+                      >
+                        <Checkbox
+                          checked={filterPdv.length === 0}
+                          className="mr-2"
+                          tabIndex={-1}
+                        />
+                        <span className="font-medium">Tutti i PDV</span>
+                      </CommandItem>
+                      {pdvOptions.map(([code, name]) => {
+                        const checked = filterPdv.includes(code);
+                        return (
+                          <CommandItem
+                            key={code}
+                            value={`${name} ${code}`}
+                            onSelect={() => {
+                              setFilterPdv((prev) =>
+                                prev.includes(code)
+                                  ? prev.filter((c) => c !== code)
+                                  : [...prev, code],
+                              );
+                            }}
+                            data-testid={`option-pdv-${code}`}
+                          >
+                            <Checkbox
+                              checked={checked}
+                              className="mr-2"
+                              tabIndex={-1}
+                            />
+                            <span className="truncate">{name} ({code})</span>
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </FilterField>
           <FilterField label="Ragione Sociale" icon={Building2}>
             <Select value={filterRs} onValueChange={setFilterRs}>
