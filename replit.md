@@ -57,6 +57,22 @@ Preferred communication style: Simple, everyday language.
 - **Deploy**: usa `scripts/deploy-prod.sh` (richiede `VPS_PASSWORD`). Lo script: build → tar → scp → **sync schema sul DB di prod via tunnel SSH (`drizzle-kit push`) PRIMA del restart** → swap dist → `pm2 restart incentive-w3 --update-env`. Lo step di schema sync evita i 500 "column does not exist" che si presentavano quando il `db:push` post-merge in dev non veniva replicato in prod.
 - **Deploy manuale (fallback)**: `npm run build` → `tar czf /tmp/incentivew3-deploy.tgz -C dist public index.cjs` → scp → ssh: `cd /var/www/incentive-w3 && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart incentive-w3 --update-env`. Se il deploy include modifiche a `shared/schema.ts`, applica anche a mano le ALTER/CREATE sul DB prod (`PGPASSWORD=… psql -U incentive_w3 -d incentive_w3 -h localhost`).
 - **Mechanism**: client `BASE_PATH` constant + `apiUrl()` helper, server sub-app mounting, base href injection.
+- **Backup DB prod (Task #153)**: sorgenti in repo:
+  `scripts/incentive-w3-backup.sh` (lo script che gira sul VPS) e
+  `scripts/install-prod-backup.sh` (deploy idempotente — richiede
+  `VPS_PASSWORD` + `sshpass`, carica lo script in
+  `/usr/local/bin/incentive-w3-backup.sh`, scrive
+  `/etc/incentive-w3-backup.env` mode 600 con `PGPASSWORD`, garantisce
+  la riga di crontab). Cron root `30 3 * * *` esegue `pg_dump` del
+  **solo** db `incentive_w3` (NON tocca easycashflows pm2 id 9 né
+  protecta pm2 id 12) in
+  `/var/backups/incentive-w3/incentive_w3_YYYYMMDD_HHMMSS.sql.gz` con
+  retention 7 giorni (`find -mtime +7 -delete`) e log su
+  `backup.log`. Verifica post-install eseguita Task #153:
+  `ls -lh` mostra `incentive_w3_20260515_152151.sql.gz` da 15M (ben
+  >1MB), log `dump complete, size=15457480 bytes` + `done`.
+  Restore: `gunzip -c <file>.sql.gz | PGPASSWORD=… psql -U incentive_w3 -d <target> -h localhost`.
+  Run manuale: `ssh root@85.215.124.207 /usr/local/bin/incentive-w3-backup.sh`.
 
 ## Documentazione di dettaglio
 
