@@ -389,3 +389,138 @@ test('scenario 5: setup wizard gating — shown only for fresh orgs without save
     await pool.end().catch(() => {});
   }
 });
+
+// ===========================================================================
+// SCENARIO 6 (Task #152): no-overwrite "empty over non-empty".
+// Il setup wizard React, al primo accesso post-deploy, può tentare di
+// scrivere uno skeleton vuoto (0 transazioni, 0 debiti, obj con
+// target=0/current=0) sopra dati reali esistenti. Il PUT lato server
+// deve rifiutare con 409 + code `FINPLAN_EMPTY_OVERWRITE_BLOCKED`,
+// preservando lo snapshot precedente. Header `X-FinPlan-Force-Empty: 1`
+// permette di bypassare il guard quando l'utente vuole davvero azzerare.
+// ===========================================================================
+test('scenario 6: PUT rejects empty snapshot when DB already has non-empty data', async () => {
+  const pgMod = await import('pg');
+  const Pool = pgMod.default?.Pool || pgMod.Pool;
+  assert.ok(process.env.DATABASE_URL, 'DATABASE_URL must be set for this test');
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+  const session = await signupAndLogin();
+  try {
+    await enableFinplanModule(pool, session.orgId);
+
+    // 1. Seed dati reali (1 transazione su una RS).
+    const realPayload = {
+      version: 3,
+      savedAt: new Date().toISOString(),
+      data: [
+        {
+          transactions: [{ id: 1, type: 'E', amount: 1000, month: 0, cat: 'Vendite' }],
+          debts: [],
+          obj: [{ id: 1, name: 'RS1', target: 5000, current: 1000 }],
+        },
+        { transactions: [], debts: [], obj: [] },
+      ],
+    };
+    const seed = await jsonReq(`${BASE}/api/finplan`, {
+      method: 'PUT',
+      headers: { Cookie: session.cookie },
+      body: JSON.stringify({ data: realPayload }),
+    });
+    assert.equal(seed.status, 200, `seed PUT failed: ${JSON.stringify(seed.body)}`);
+    const seedAt = seed.body.updatedAt;
+
+    // 2. Tentiamo lo skeleton vuoto del wizard (0 tx, 0 debiti, obj con
+    //    target=0/current=0 — i default che il wizard crea al primo run).
+    const emptySkeleton = {
+      version: 3,
+      savedAt: new Date().toISOString(),
+      data: [
+        {
+          transactions: [],
+          debts: [],
+          obj: [{ id: 1, name: 'Società 1', target: 0, current: 0 }],
+        },
+        {
+          transactions: [],
+          debts: [],
+          obj: [{ id: 1, name: 'Società 2', target: 0, current: 0 }],
+        },
+      ],
+    };
+    const blocked = await jsonReq(`${BASE}/api/finplan`, {
+      method: 'PUT',
+      headers: { Cookie: session.cookie },
+      body: JSON.stringify({ data: emptySkeleton }),
+    });
+    assert.equal(
+      blocked.status,
+      409,
+      `empty-over-non-empty PUT must be 409, got ${blocked.status} ${JSON.stringify(blocked.body)}`,
+    );
+    assert.equal(
+      blocked.body?.code,
+      'FINPLAN_EMPTY_OVERWRITE_BLOCKED',
+      `response must include code FINPLAN_EMPTY_OVERWRITE_BLOCKED, got ${JSON.stringify(blocked.body)}`,
+    );
+
+    // 3. I dati reali devono essere ancora intatti.
+    const afterBlock = await jsonReq(`${BASE}/api/finplan`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(afterBlock.status, 200);
+    assert.equal(
+      afterBlock.body?.updatedAt,
+      seedAt,
+      'updatedAt must NOT advance after a blocked empty PUT',
+    );
+    assert.deepEqual(
+      afterBlock.body?.data,
+      realPayload,
+      'real data must remain unchanged after a blocked empty PUT',
+    );
+
+    // 4. Empty PUT è permesso quando il DB è già vuoto (no-op semantico).
+    //    Cancelliamo la riga e ritentiamo lo skeleton: deve passare.
+    await pool.query('DELETE FROM finplan_data WHERE organization_id = $1', [session.orgId]);
+    const freshEmpty = await jsonReq(`${BASE}/api/finplan`, {
+      method: 'PUT',
+      headers: { Cookie: session.cookie },
+      body: JSON.stringify({ data: emptySkeleton }),
+    });
+    assert.equal(
+      freshEmpty.status,
+      200,
+      `empty PUT on empty DB must succeed, got ${freshEmpty.status} ${JSON.stringify(freshEmpty.body)}`,
+    );
+
+    // 5. Header di force consente di azzerare anche dati reali. Reseediamo
+    //    e poi forziamo lo skeleton.
+    await jsonReq(`${BASE}/api/finplan`, {
+      method: 'PUT',
+      headers: { Cookie: session.cookie },
+      body: JSON.stringify({ data: realPayload }),
+    });
+    const forced = await jsonReq(`${BASE}/api/finplan`, {
+      method: 'PUT',
+      headers: { Cookie: session.cookie, 'X-FinPlan-Force-Empty': '1' },
+      body: JSON.stringify({ data: emptySkeleton }),
+    });
+    assert.equal(
+      forced.status,
+      200,
+      `forced empty PUT must succeed, got ${forced.status} ${JSON.stringify(forced.body)}`,
+    );
+    const afterForce = await jsonReq(`${BASE}/api/finplan`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.deepEqual(
+      afterForce.body?.data,
+      emptySkeleton,
+      'forced empty PUT must overwrite real data',
+    );
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});

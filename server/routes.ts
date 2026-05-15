@@ -448,6 +448,38 @@ export async function registerRoutes(
   // Stesso gate della pagina Amministrazione: serve almeno uno dei due moduli.
   const FINPLAN_MODULES = ["amministrazione", "controllo_gestione"];
 
+  // Task #152 — heuristica condivisa per riconoscere uno snapshot FinPlan
+  // "vuoto": 0 transazioni totali, 0 debiti, 0 obiettivi con valori non
+  // nulli (target/current > 0). Lo skeleton creato dal setup wizard al
+  // primo accesso ha sempre un default obj per RS con target=0/current=0:
+  // li consideriamo "non meaningful" così uno skeleton iniziale conta
+  // come vuoto e non può sovrascrivere dati reali.
+  function isEmptyFinplanSnapshot(data: unknown): boolean {
+    if (!data || typeof data !== "object") return true;
+    const d = data as Record<string, unknown>;
+    const arr = Array.isArray(d.data) ? (d.data as unknown[]) : [];
+    if (arr.length === 0) return true;
+    let tx = 0, debts = 0, objMeaningful = 0;
+    for (const entry of arr) {
+      if (!entry || typeof entry !== "object") continue;
+      const e = entry as Record<string, unknown>;
+      if (Array.isArray(e.transactions)) tx += (e.transactions as unknown[]).length;
+      if (Array.isArray(e.debts)) debts += (e.debts as unknown[]).length;
+      if (Array.isArray(e.obj)) {
+        for (const o of e.obj as unknown[]) {
+          if (!o || typeof o !== "object") continue;
+          const oo = o as Record<string, unknown>;
+          const target = Number(oo.target ?? 0);
+          const current = Number(oo.current ?? 0);
+          if ((Number.isFinite(target) && target > 0) || (Number.isFinite(current) && current > 0)) {
+            objMeaningful++;
+          }
+        }
+      }
+    }
+    return tx === 0 && debts === 0 && objMeaningful === 0;
+  }
+
   app.get("/api/finplan", isAuthenticated, requireModule(FINPLAN_MODULES), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
@@ -476,6 +508,26 @@ export async function registerRoutes(
         const sz = JSON.stringify(data).length;
         if (sz > 12 * 1024 * 1024) return res.status(413).json({ message: "Payload troppo grande (max 12MB)" });
       } catch { return res.status(400).json({ message: "Data non serializzabile" }); }
+      // Task #152 — guard difensivo: rifiuta uno snapshot "vuoto" (0
+      // transazioni totali, 0 debiti, 0 obiettivi con valori) se il DB
+      // ha già contenuto reale. Lo skeleton creato dal setup wizard al
+      // primo accesso post-deploy NON deve mai sovrascrivere dati
+      // esistenti. Bypass esplicito tramite header `X-FinPlan-Force-Empty: 1`
+      // per i casi in cui l'utente vuole davvero azzerare.
+      const force = req.get("X-FinPlan-Force-Empty") === "1";
+      if (!force && isEmptyFinplanSnapshot(data)) {
+        const existing = await storage.getFinplanData(profile.organizationId);
+        if (existing && !isEmptyFinplanSnapshot(existing.data)) {
+          console.warn(
+            `[finplan] PUT blocked: empty snapshot would overwrite non-empty data (org=${profile.organizationId}, existing updatedAt=${existing.updatedAt?.toISOString?.() ?? existing.updatedAt})`,
+          );
+          return res.status(409).json({
+            message: "Refused: empty payload would overwrite non-empty existing data",
+            code: "FINPLAN_EMPTY_OVERWRITE_BLOCKED",
+            existingUpdatedAt: existing.updatedAt,
+          });
+        }
+      }
       const row = await storage.upsertFinplanData(profile.organizationId, data, profile.id);
       res.json({ ok: true, updatedAt: row.updatedAt });
     } catch (e) {

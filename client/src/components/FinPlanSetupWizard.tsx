@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, FileSpreadsheet, Check, ChevronRight, ChevronLeft, SkipForward } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { BASE_PATH } from "@/lib/basePath";
 // Helper di import puri estratti in `client/src/lib/finplanImport.ts`
 // durante Task #144 per essere condivisi con la sezione Transazioni
 // della shell React (BankImportFlow).
@@ -164,8 +164,29 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
     setSaving(true);
     try {
       const snapshot = buildSnapshot(rsNames, byRs, sourceFileNames);
-      const res = await apiRequest("PUT", "/api/finplan", { data: snapshot });
-      await res.json().catch(() => null);
+      // Usiamo fetch diretto invece di `apiRequest` perché quest'ultimo
+      // throwa su qualsiasi non-2xx, perdendo il body. Qui dobbiamo
+      // distinguere la 409 di Task #152 (`FINPLAN_EMPTY_OVERWRITE_BLOCKED`)
+      // dalle altre per mostrare un toast esplicito.
+      const res = await fetch(`${BASE_PATH}/api/finplan`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: snapshot }),
+      });
+      const body = await res.json().catch(() => null);
+      if (res.status === 409 && body?.code === "FINPLAN_EMPTY_OVERWRITE_BLOCKED") {
+        toast({
+          title: "Salvataggio rifiutato",
+          description:
+            "Esistono già dati FinPlan per questa organizzazione. Apri il workspace per vederli o forza un reset manuale prima di rifare il setup.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${body?.message ?? res.statusText}`);
+      }
       try { localStorage.setItem(`finplan_setup_done__org_${orgId}`, "1"); } catch { /* ignore */ }
       toast({
         title: "Setup completato",
