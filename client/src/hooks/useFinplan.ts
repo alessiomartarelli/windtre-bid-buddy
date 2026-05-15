@@ -128,31 +128,16 @@ export interface UseFinplanMutationResult {
 }
 
 /**
- * Hook di scrittura per `/api/finplan`.
- *
- * Strategia (parallela allo shim dell'iframe in
- * `client/public/finplan/index.html`):
- *  - **debounce 3s** su `scheduleSave` per non saturare la rete su edit
- *    contigui (allineato con i test `tests/finplan-sync.test.mjs`);
- *  - **latest-wins**: lo snapshot più recente viene tracciato in
- *    `pendingRef` IMMEDIATAMENTE al call di `scheduleSave`, così sia
- *    `flush()` sia il cleanup di unmount possono sempre recuperarlo —
- *    anche se il timer di debounce non è ancora scattato. Se un nuovo
- *    snapshot arriva mentre un PUT è in volo, sostituisce quello in
- *    coda e viene flushato alla chiusura del PUT corrente;
- *  - **conflict guard server-authoritative**: prima di ogni PUT facciamo
- *    un preflight `GET /api/finplan` per leggere l'`updatedAt` corrente
- *    del server (NON la cache TanStack-Query, che può essere stale per
- *    via di `staleTime: 60s` + `refetchOnWindowFocus: false`). Se è
- *    diverso da `lastKnownRemoteAtRef` (l'updatedAt da cui l'utente è
- *    partito o l'ultimo PUT andato a buon fine), un altro client ha
- *    scritto: settiamo `error`, NON sovrascriviamo (per non clobberare
- *    modifiche altrui), aggiorniamo la cache con la versione canonica
- *    e lasciamo `pendingRef` intatto perché il consumer possa decidere
- *    se forzare il flush dopo merge. Il backend resta latest-wins
- *    (compatibilità con l'iframe legacy che condivide lo stesso
- *    `finplan_data`).
- *  - su unmount, lo snapshot in coda viene flushato best-effort.
+ * Hook di scrittura per `/api/finplan`. Specchio dello shim dell'iframe
+ * (`client/public/finplan/index.html`):
+ *  - debounce 3s su `scheduleSave`;
+ *  - latest-wins: `pendingRef` settato IMMEDIATAMENTE così flush/unmount
+ *    recuperano sempre l'ultima versione anche senza timer scattato;
+ *  - conflict guard server-authoritative: preflight `GET /api/finplan`
+ *    prima di ogni PUT, confronto contro `lastKnownRemoteAtRef`. Su
+ *    mismatch: error + cache aggiornata + refetch + pending preservato
+ *    per merge. Backend resta latest-wins (compat iframe legacy).
+ *  - flush best-effort all'unmount.
  */
 export function useFinplanMutation(orgId: string | undefined): UseFinplanMutationResult {
   const queryClient = useQueryClient();
@@ -224,14 +209,18 @@ export function useFinplanMutation(orgId: string | undefined): UseFinplanMutatio
             (!knownAt && serverAt);
           if (isConflict) {
             setError(new Error("Conflict: another client has modified the data; please reload"));
+            // Aggiorna la cache + force refetch così la UI vede la
+            // versione canonica e i consumer possono fare merge.
             if (headBody) {
               queryClient.setQueryData<FinplanApiResponse>(
                 [...FINPLAN_QUERY_KEY, orgId],
                 headBody,
               );
-            } else {
-              void queryClient.invalidateQueries({ queryKey: [...FINPLAN_QUERY_KEY, orgId] });
             }
+            void queryClient.invalidateQueries({
+              queryKey: [...FINPLAN_QUERY_KEY, orgId],
+              refetchType: "active",
+            });
             // Adottiamo serverAt come nuovo baseline così, dopo un
             // merge/reload del consumer, la prossima scrittura passa
             // direttamente.
