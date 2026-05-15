@@ -23,6 +23,9 @@ import {
   parseFile, autoDetectColumn, rowsToTransactions,
   type ParsedFile, type ColumnMapping, type BuiltTransaction,
 } from "@/lib/finplanImport";
+// Componente condiviso per la mappatura colonne (Task #144), riusato anche
+// dal `BankImportFlow` invocato dalla sezione Transazioni della shell React.
+import { MappingFields } from "@/components/finplan/import/MappingFields";
 
 type StepKey = "intro" | "rs" | "upload" | "mapping" | "save";
 const STEPS: StepKey[] = ["intro", "rs", "upload", "mapping", "save"];
@@ -635,68 +638,27 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
                 : "Associa le colonne, inclusa quella che identifica la Ragione Sociale."}
               {" "}Le voci con "(opz.)" sono opzionali. Compila Entrate+Uscite oppure Importo con segno.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <ColMap label="Data / Mese (opz.)" value={mapping.date} headers={referenceHeaders}
-                onChange={(v) => setMapping(m => ({ ...m, date: v }))} testId="select-map-date" />
-              <ColMap label="Descrizione (opz.)" value={mapping.desc} headers={referenceHeaders}
-                onChange={(v) => setMapping(m => ({ ...m, desc: v }))} testId="select-map-desc" />
-              <ColMap label="Entrate / Accrediti" value={mapping.amountIn} headers={referenceHeaders}
-                onChange={(v) => setMapping(m => ({ ...m, amountIn: v }))} testId="select-map-in" />
-              <ColMap label="Uscite / Addebiti" value={mapping.amountOut} headers={referenceHeaders}
-                onChange={(v) => setMapping(m => ({ ...m, amountOut: v }))} testId="select-map-out" />
-              <ColMap label="OPPURE Importo unico con segno" value={mapping.amountSigned} headers={referenceHeaders}
-                onChange={(v) => setMapping(m => ({ ...m, amountSigned: v }))} testId="select-map-signed" />
-              {uploadMode === "single-rs-col" && (
-                <ColMap label="Ragione Sociale" value={mapping.rs} headers={referenceHeaders}
-                  onChange={(v) => setMapping(m => ({ ...m, rs: v }))} testId="select-map-rs" />
-              )}
-            </div>
+            {/* Form mappatura condiviso con BankImportFlow (Task #144). */}
+            <MappingFields
+              headers={referenceHeaders}
+              mapping={mapping}
+              onMappingChange={setMapping}
+              defaultCatE={defaultCatE}
+              onDefaultCatEChange={setDefaultCatE}
+              defaultCatU={defaultCatU}
+              onDefaultCatUChange={setDefaultCatU}
+              ivaMode={ivaMode}
+              onIvaModeChange={setIvaMode}
+              showRsColumn={uploadMode === "single-rs-col"}
+              invalid={!mappingValid}
+              invalidMessage={
+                uploadMode === "single-rs-col"
+                  ? "Mappa Entrate e Uscite, oppure Importo con segno, e indica la colonna Ragione Sociale, per procedere."
+                  : "Mappa Entrate e Uscite, oppure Importo con segno, per procedere."
+              }
+              testIdPrefix="wizard-map"
+            />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-              <div className="space-y-1">
-                <Label>Categoria default Entrate</Label>
-                <Select value={defaultCatE} onValueChange={setDefaultCatE}>
-                  <SelectTrigger data-testid="select-default-cat-e"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {DEFAULT_CATS_E.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Categoria default Uscite</Label>
-                <Select value={defaultCatU} onValueChange={setDefaultCatU}>
-                  <SelectTrigger data-testid="select-default-cat-u"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {DEFAULT_CATS_U.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Modalità importi</Label>
-                <Select value={ivaMode} onValueChange={(v) => setIvaMode(v as "netti" | "lordi")}>
-                  <SelectTrigger data-testid="select-iva-mode"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="netti">Netti (estratto CC)</SelectItem>
-                    <SelectItem value="lordi">Lordi IVA 22% (fatture)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {!mappingValid && (
-              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs flex items-start gap-2" data-testid="warn-mapping-invalid">
-                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>
-                  Mappa Entrate <b>e</b> Uscite, oppure Importo con segno
-                  {uploadMode === "single-rs-col" ? ", e indica la colonna Ragione Sociale" : ""}
-                  , per procedere.
-                </span>
-              </div>
-            )}
 
             {mappingValid && (
               <>
@@ -958,29 +920,6 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function ColMap(props: {
-  label: string;
-  value: number;
-  headers: string[];
-  onChange: (v: number) => void;
-  testId: string;
-}) {
-  return (
-    <div className="space-y-1">
-      <Label>{props.label}</Label>
-      <Select value={String(props.value)} onValueChange={(v) => props.onChange(parseInt(v, 10))}>
-        <SelectTrigger data-testid={props.testId}><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="-1">— non presente —</SelectItem>
-          {props.headers.map((h, i) => (
-            <SelectItem key={i} value={String(i)}>{h}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
   );
 }
 

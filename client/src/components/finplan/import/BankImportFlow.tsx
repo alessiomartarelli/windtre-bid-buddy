@@ -9,21 +9,19 @@
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, Upload, AlertTriangle, Check, ChevronRight, ChevronLeft } from "lucide-react";
+import { Loader2, Upload, Check, ChevronRight, ChevronLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/utils/format";
 import {
-  DEFAULT_CATS_E, DEFAULT_CATS_U,
   EMPTY_MAPPING, autoDetectMapping, isMappingValid,
   parseFile, rowsToTransactions,
-  type ParsedFile, type ColumnMapping, type BuiltTransaction,
+  type ParsedFile, type BuiltTransaction,
 } from "@/lib/finplanImport";
+import { MappingFields } from "./MappingFields";
 
 interface BankImportFlowProps {
   open: boolean;
@@ -181,67 +179,20 @@ export function BankImportFlow({ open, onOpenChange, rsName, rsIndex, nextTxId, 
 
           {step === "mapping" && parsed && (
             <div className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <ColMap label="Data / Mese (opz.)" value={mapping.date} headers={parsed.headers}
-                  onChange={(v) => setMapping(m => ({ ...m, date: v }))} testId="bi-map-date" />
-                <ColMap label="Descrizione (opz.)" value={mapping.desc} headers={parsed.headers}
-                  onChange={(v) => setMapping(m => ({ ...m, desc: v }))} testId="bi-map-desc" />
-                <ColMap label="Entrate / Accrediti" value={mapping.amountIn} headers={parsed.headers}
-                  onChange={(v) => setMapping(m => ({ ...m, amountIn: v }))} testId="bi-map-in" />
-                <ColMap label="Uscite / Addebiti" value={mapping.amountOut} headers={parsed.headers}
-                  onChange={(v) => setMapping(m => ({ ...m, amountOut: v }))} testId="bi-map-out" />
-                <ColMap label="OPPURE Importo unico con segno" value={mapping.amountSigned} headers={parsed.headers}
-                  onChange={(v) => setMapping(m => ({ ...m, amountSigned: v }))} testId="bi-map-signed" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-                <div className="space-y-1">
-                  <Label>Categoria default Entrate</Label>
-                  <Select value={defaultCatE} onValueChange={setDefaultCatE}>
-                    <SelectTrigger data-testid="bi-default-cat-e"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {DEFAULT_CATS_E.map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Categoria default Uscite</Label>
-                  <Select value={defaultCatU} onValueChange={setDefaultCatU}>
-                    <SelectTrigger data-testid="bi-default-cat-u"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {DEFAULT_CATS_U.map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Modalità importi</Label>
-                  <Select value={ivaMode} onValueChange={(v) => setIvaMode(v as "netti" | "lordi")}>
-                    <SelectTrigger data-testid="bi-iva-mode"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="netti">Netti (estratto CC)</SelectItem>
-                      <SelectItem value="lordi">Lordi IVA 22% (fatture)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={autoClassifyOn}
-                  onChange={(e) => setAutoClassifyOn(e.target.checked)}
-                  data-testid="bi-auto-classify"
-                />
-                Auto-classificazione descrizioni (giroconti, infragruppo, estero, stipendi)
-              </label>
-              {!mappingOk && (
-                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                  <span>Mappa Entrate <b>e</b> Uscite, oppure Importo con segno, per procedere.</span>
-                </div>
-              )}
+              <MappingFields
+                headers={parsed.headers}
+                mapping={mapping}
+                onMappingChange={setMapping}
+                defaultCatE={defaultCatE}
+                onDefaultCatEChange={setDefaultCatE}
+                defaultCatU={defaultCatU}
+                onDefaultCatUChange={setDefaultCatU}
+                ivaMode={ivaMode}
+                onIvaModeChange={setIvaMode}
+                autoClassify={{ enabled: autoClassifyOn, onToggle: setAutoClassifyOn }}
+                invalid={!mappingOk}
+                testIdPrefix="bi-map"
+              />
               {mappingOk && (
                 <div className="grid grid-cols-3 gap-2 pt-2 text-sm" data-testid="bi-totals">
                   <Stat label="Righe" value={String(totals.count)} testId="bi-stat-count" />
@@ -325,23 +276,6 @@ export function BankImportFlow({ open, onOpenChange, rsName, rsIndex, nextTxId, 
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ColMap(props: { label: string; value: number; headers: string[]; onChange: (v: number) => void; testId: string }) {
-  return (
-    <div className="space-y-1">
-      <Label>{props.label}</Label>
-      <Select value={String(props.value)} onValueChange={(v) => props.onChange(parseInt(v, 10))}>
-        <SelectTrigger data-testid={props.testId}><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="-1">— non presente —</SelectItem>
-          {props.headers.map((h, i) => (
-            <SelectItem key={i} value={String(i)}>{h}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
   );
 }
 

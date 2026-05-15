@@ -7,7 +7,7 @@
 // (single source of truth: le transazioni). `txIdSeq` viene aggiornato
 // al massimo + 1 dopo append.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,7 @@ import { Pencil, Trash2, Plus, Upload, Search, ChevronLeft, ChevronRight } from 
 import type { FinplanCompanySnapshot, FinplanSnapshot, FinplanTransaction } from "@shared/finplanSchema";
 import type { FinplanUpdater } from "@/hooks/useFinplan";
 import { formatCurrency } from "@/utils/format";
-import { ALL_DEFAULT_CATS, DEFAULT_CATS_E, DEFAULT_CATS_U, MO } from "@/lib/finplanImport";
+import { ALL_DEFAULT_CATS, DEFAULT_CATS_E, DEFAULT_CATS_U, MO, classifyDesc } from "@/lib/finplanImport";
 import { rebuildMonthly, scorporaIva, isNoIvaCat } from "@/lib/finplanIva";
 import { BankImportFlow } from "../import/BankImportFlow";
 
@@ -40,6 +40,13 @@ interface TransazioniProps {
 
 const PAGE_SIZE = 20;
 const IVA_RATES = [0, 4, 5, 10, 22];
+// Soglia oltre la quale la tabella passa da paginazione a rendering
+// virtualizzato (Task #144 review): evita di montare migliaia di
+// TableRow simultaneamente su dataset grossi (import CC pluriennali).
+const VIRTUAL_THRESHOLD = 500;
+const VIRTUAL_ROW_HEIGHT = 36; // px, allineato a TableRow shadcn compact
+const VIRTUAL_VIEWPORT_H = 600; // px, container scrollabile
+const VIRTUAL_OVERSCAN = 8;
 
 interface FormState {
   id: number | null;
@@ -109,9 +116,35 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
     });
   }, [transactions, filterMonth, filterType, filterCat, search]);
 
+  const virtualized = filtered.length > VIRTUAL_THRESHOLD;
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
-  const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const pageRows = virtualized
+    ? filtered
+    : filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  // Virtualizzazione manuale: scrollTop → finestra di righe visibili.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !virtualized) return;
+    const onScroll = () => setScrollTop(el.scrollTop);
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [virtualized]);
+  const vStart = virtualized
+    ? Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN)
+    : 0;
+  const vEnd = virtualized
+    ? Math.min(
+        filtered.length,
+        Math.ceil((scrollTop + VIRTUAL_VIEWPORT_H) / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN,
+      )
+    : filtered.length;
+  const visibleRows = virtualized ? filtered.slice(vStart, vEnd) : pageRows;
+  const padTop = virtualized ? vStart * VIRTUAL_ROW_HEIGHT : 0;
+  const padBottom = virtualized ? (filtered.length - vEnd) * VIRTUAL_ROW_HEIGHT : 0;
 
   const totals = useMemo(() => {
     let e = 0, u = 0, iva = 0;
@@ -149,13 +182,24 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
     if (!Number.isFinite(amount) || amount <= 0) return;
     persistMutation(c => {
       const txs = (c.transactions ?? []).slice();
-      const noIva = isNoIvaCat(form.catId);
+      // Riclassificazione automatica categoria (Task #144 review).
+      // Riusa la stessa logica di mapping del flusso di import: se la
+      // descrizione contiene keyword di giroconto/infragruppo/estero/
+      // personale/fornitori, sovrascrive il catId di default. Se l'utente
+      // ha già selezionato manualmente una categoria diversa dal default
+      // del tipo (catId !== "e1"/"u2"), rispetta la scelta dell'utente.
+      const isDefaultCat = (form.type === "E" && form.catId === "e1")
+        || (form.type === "U" && form.catId === "u2");
+      const finalCatId = isDefaultCat
+        ? classifyDesc(form.desc, form.type, "e1", "u2").catId
+        : form.catId;
+      const noIva = isNoIvaCat(finalCatId);
       const next: FinplanTransaction = {
         id: form.id ?? 0,
         month: form.month,
         type: form.type,
         amount: +amount.toFixed(2),
-        catId: form.catId,
+        catId: finalCatId,
         ivaRate: noIva ? 0 : form.ivaRate,
         desc: form.desc,
       };
@@ -327,7 +371,12 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
       {/* Tabella */}
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div
+            ref={scrollRef}
+            className="overflow-auto"
+            style={virtualized ? { maxHeight: VIRTUAL_VIEWPORT_H } : undefined}
+            data-testid={virtualized ? "scroll-tx-virtualized" : "scroll-tx-paginated"}
+          >
             <Table>
               <TableHeader>
                 <TableRow>
@@ -343,13 +392,19 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pageRows.length === 0 ? (
+                {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                       Nessuna transazione corrisponde ai filtri.
                     </TableCell>
                   </TableRow>
-                ) : pageRows.map((tx) => {
+                ) : (<>
+                  {padTop > 0 && (
+                    <TableRow style={{ height: padTop }} aria-hidden>
+                      <TableCell colSpan={9} className="p-0 border-0" />
+                    </TableRow>
+                  )}
+                  {visibleRows.map((tx) => {
                   const idNum = typeof tx.id === "number" ? tx.id : -1;
                   const amt = typeof tx.amount === "number" ? tx.amount : 0;
                   const rate = typeof tx.ivaRate === "number" ? tx.ivaRate : 0;
@@ -357,7 +412,7 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
                   const eff = noIva ? 0 : rate;
                   const sc = scorporaIva(amt, eff);
                   return (
-                    <TableRow key={idNum} data-testid={`row-tx-${idNum}`}>
+                    <TableRow key={idNum} style={virtualized ? { height: VIRTUAL_ROW_HEIGHT } : undefined} data-testid={`row-tx-${idNum}`}>
                       <TableCell className="text-xs">{MO[tx.month ?? 0]}</TableCell>
                       <TableCell>
                         <Badge variant={tx.type === "E" ? "default" : "secondary"} className="text-[10px]">
@@ -392,23 +447,33 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
                     </TableRow>
                   );
                 })}
+                  {padBottom > 0 && (
+                    <TableRow style={{ height: padBottom }} aria-hidden>
+                      <TableCell colSpan={9} className="p-0 border-0" />
+                    </TableRow>
+                  )}
+                </>)}
               </TableBody>
             </Table>
           </div>
           <div className="flex items-center justify-between p-3 border-t text-xs text-muted-foreground">
             <span data-testid="text-tx-pagination">
               {filtered.length === 0 ? "Nessuna riga"
-                : `Righe ${safePage * PAGE_SIZE + 1}–${Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} di ${filtered.length}`}
+                : virtualized
+                  ? `${filtered.length} righe (vista virtualizzata)`
+                  : `Righe ${safePage * PAGE_SIZE + 1}–${Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} di ${filtered.length}`}
             </span>
-            <div className="flex items-center gap-1">
-              <Button size="icon" variant="outline" className="h-7 w-7" disabled={safePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))} data-testid="button-tx-prev">
-                <ChevronLeft className="h-3 w-3" />
-              </Button>
-              <span data-testid="text-tx-page">{safePage + 1} / {totalPages}</span>
-              <Button size="icon" variant="outline" className="h-7 w-7" disabled={safePage >= totalPages - 1} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} data-testid="button-tx-next">
-                <ChevronRight className="h-3 w-3" />
-              </Button>
-            </div>
+            {!virtualized && (
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="outline" className="h-7 w-7" disabled={safePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))} data-testid="button-tx-prev">
+                  <ChevronLeft className="h-3 w-3" />
+                </Button>
+                <span data-testid="text-tx-page">{safePage + 1} / {totalPages}</span>
+                <Button size="icon" variant="outline" className="h-7 w-7" disabled={safePage >= totalPages - 1} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} data-testid="button-tx-next">
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
