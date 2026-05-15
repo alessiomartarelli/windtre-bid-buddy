@@ -101,6 +101,14 @@ app.use((req, res, next) => {
       return res.status(status).json({ message });
     });
 
+    // Stesso catch-all 404 per /api/* anche in produzione, montato sul
+    // sub-app prima dello static handler così che le route eliminate
+    // (es. /api/finplan/preload dopo Task #148) restituiscano un 404
+    // JSON pulito invece dell'HTML SPA.
+    subApp.use("/api", (_req, res) => {
+      res.status(404).json({ message: "Not Found" });
+    });
+
     serveStatic(subApp);
     app.use(BASE_PATH, subApp);
 
@@ -110,6 +118,13 @@ app.use((req, res, next) => {
     startBisuiteDailyScheduler();
   } else {
     await registerRoutes(httpServer, app);
+
+    // Catch-all 404 per route /api/* non gestite. Senza questo, le path
+    // sconosciute /api/* passerebbero al middleware Vite che risponde 200
+    // con index.html (SPA fallback), nascondendo le route eliminate.
+    app.use("/api", (_req, res) => {
+      res.status(404).json({ message: "Not Found" });
+    });
 
     app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
       const status = err.status || err.statusCode || 500;

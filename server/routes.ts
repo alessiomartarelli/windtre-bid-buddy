@@ -21,59 +21,12 @@ import {
 import { decryptSecret, encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
-import fs from "fs";
-import path from "path";
-import crypto from "crypto";
-
-// === FinPlan PRELOAD allowlist ===
-// Il file `preload.json` contiene i dati finanziari REALI di Cms Group
-// (movimenti CC, transazioni, debiti delle 5 società del gruppo). NON deve
-// essere visibile ad altri tenant: l'endpoint `/api/finplan/preload` lo
-// serve solo agli organization_id presenti in questa allowlist; gli altri
-// ricevono 204 No Content e il tool parte vuoto in attesa di import.
-// Per aggiungere altre org in futuro: estendere la lista qui (oppure
-// settare l'env `FINPLAN_PRELOAD_ORGS` come CSV per override senza redeploy).
-const FINPLAN_PRELOAD_ORGS: string[] = (() => {
-  const env = (process.env.FINPLAN_PRELOAD_ORGS || "").trim();
-  if (env) return env.split(",").map((s) => s.trim()).filter(Boolean);
-  return ["org-admin-windtre"];
-})();
-
-// Cache in-memory del file preload (mtime-based). Evita di rileggere
-// 5MB da disco per ogni richiesta degli utenti autorizzati.
-let _preloadCache: { mtimeMs: number; raw: Buffer; etag: string } | null = null;
-function _resolvePreloadPath(): string | null {
-  // Defense-in-depth: il file vive FUORI da `client/public` (che Vite copia
-  // dentro `dist/public` ed è raggiungibile via Nginx). Lo teniamo in una
-  // posizione server-only e lo serviamo solo via endpoint autenticato +
-  // allowlistato. ESM: niente `__dirname`, risolviamo da `process.cwd()`.
-  // - dev: `server/data/finplan-preload.json` (cwd = repo root)
-  // - prod: `dist/server-data/finplan-preload.json` (lo script di deploy
-  //   copia `server/data` dentro `dist/server-data` prima del tar; cwd in
-  //   pm2 = `/var/www/incentive-w3`).
-  const candidates = [
-    path.resolve(process.cwd(), "server", "data", "finplan-preload.json"),
-    path.resolve(process.cwd(), "dist", "server-data", "finplan-preload.json"),
-  ];
-  for (const c of candidates) {
-    try { if (fs.statSync(c).isFile()) return c; } catch {}
-  }
-  return null;
-}
-function _getPreload(): { raw: Buffer; etag: string } | null {
-  const p = _resolvePreloadPath();
-  if (!p) return null;
-  try {
-    const stat = fs.statSync(p);
-    if (_preloadCache && _preloadCache.mtimeMs === stat.mtimeMs) {
-      return { raw: _preloadCache.raw, etag: _preloadCache.etag };
-    }
-    const raw = fs.readFileSync(p);
-    const etag = '"' + crypto.createHash("sha1").update(raw).digest("hex") + '"';
-    _preloadCache = { mtimeMs: stat.mtimeMs, raw, etag };
-    return { raw, etag };
-  } catch { return null; }
-}
+// FinPlan PRELOAD: rimosso in Task #148 (cutover finale). Le route
+// `/api/finplan/preload(/status)`, l'allowlist `FINPLAN_PRELOAD_ORGS`,
+// la cache in-memory del file `server/data/finplan-preload.json` e il
+// flag DB `finplanPreloadEnabled` sono stati eliminati. La shell React
+// gestisce ora il setup iniziale via `FinPlanSetupWizard` (mostrato sse
+// l'org non ha ancora dati salvati su `/api/finplan`).
 
 function toItalianYMD(input: string | undefined): string | undefined | null {
   if (input === undefined || input === null || input === "") return undefined;
@@ -510,64 +463,7 @@ export async function registerRoutes(
     }
   });
 
-  // Preload FinPlan multi-tenant gated. Vedi `FINPLAN_PRELOAD_ORGS` in
-  // testa al file. Org in allowlist: 200 + JSON di preload (~5MB) con
-  // ETag/Cache-Control conditional. Org NON in allowlist: 204 No Content
-  // (il client interpreta come "tool vuoto, importa via UI").
-  // Status check leggero: usato dal wizard di setup iniziale (Task #131)
-  // per decidere se mostrarsi o meno, senza dover scaricare i 5MB del
-  // payload preload completo. Risponde { hasPreload: boolean } senza
-  // body pesante. Stessa allowlist e stesso gate del GET pieno.
-  app.get("/api/finplan/preload/status", isAuthenticated, requireModule(FINPLAN_MODULES), async (req: any, res) => {
-    try {
-      const profile = await storage.getProfile(req.session.userId);
-      if (!profile?.organizationId) return res.json({ hasPreload: false });
-      // Stessa logica di gating del GET pieno (DB flag primario + env
-      // fallback): altrimenti il wizard di setup iniziale apparirebbe per
-      // org abilitate via DB ma non in env, sovrascrivendo il preload.
-      const org = await storage.getOrganization(profile.organizationId);
-      const enabledByDb = !!org?.finplanPreloadEnabled;
-      const enabledByEnv = FINPLAN_PRELOAD_ORGS.includes(profile.organizationId);
-      if (!enabledByDb && !enabledByEnv) return res.json({ hasPreload: false });
-      const pre = _getPreload();
-      res.json({ hasPreload: !!pre });
-    } catch (e) {
-      console.error("[finplan] preload/status error:", e);
-      res.status(500).json({ message: "Error fetching preload status" });
-    }
-  });
-
-  app.get("/api/finplan/preload", isAuthenticated, requireModule(FINPLAN_MODULES), async (req: any, res) => {
-    try {
-      const profile = await storage.getProfile(req.session.userId);
-      if (!profile?.organizationId) return res.status(204).end();
-      const org = await storage.getOrganization(profile.organizationId);
-      // Allowlist primaria: flag DB `finplanPreloadEnabled` (gestito da
-      // super-admin via UI). Env var resta come fallback per backward-compat
-      // / disaster recovery senza accesso al DB.
-      const enabledByDb = !!org?.finplanPreloadEnabled;
-      const enabledByEnv = FINPLAN_PRELOAD_ORGS.includes(profile.organizationId);
-      if (!enabledByDb && !enabledByEnv) {
-        // Bloccato per multi-tenant: nessun byte di Cms Group esce.
-        return res.status(204).end();
-      }
-      const pre = _getPreload();
-      if (!pre) return res.status(204).end();
-      // Conditional GET (riduce a 304 dopo il primo caricamento).
-      const inm = req.headers["if-none-match"];
-      if (inm && inm === pre.etag) {
-        res.setHeader("ETag", pre.etag);
-        return res.status(304).end();
-      }
-      res.setHeader("ETag", pre.etag);
-      res.setHeader("Cache-Control", "private, must-revalidate");
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      res.status(200).end(pre.raw);
-    } catch (e) {
-      console.error("[finplan] preload error:", e);
-      res.status(500).json({ message: "Error fetching finplan preload" });
-    }
-  });
+  // (Route preload eliminate in Task #148 — vedi nota in testa al file.)
 
   app.put("/api/finplan", isAuthenticated, requireModule(FINPLAN_MODULES), async (req: any, res) => {
     try {
@@ -1459,32 +1355,8 @@ export async function registerRoutes(
   app.put("/api/super-admin/organizations/:id/modules", isAuthenticated, putOrgModulesHandler);
   app.put("/api/admin/organizations/:id/modules", isAuthenticated, putOrgModulesHandler);
 
-  // PUT toggle FinPlan preload allowlist per organizzazione (super-admin only).
-  // Vedi commento in testa al file: il preload contiene dati REALI di Cms Group,
-  // quindi solo super-admin può abilitarlo per altre org.
-  app.put("/api/super-admin/organizations/:id/finplan-preload", isAuthenticated, async (req: any, res) => {
-    try {
-      const profile = await storage.getProfile(req.session.userId);
-      if (!profile || profile.role !== "super_admin") {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-      const enabled = req.body?.enabled;
-      if (typeof enabled !== "boolean") {
-        return res.status(400).json({ message: "Campo `enabled` (boolean) richiesto" });
-      }
-      const existing = await storage.getOrganization(req.params.id);
-      if (!existing) {
-        return res.status(404).json({ message: "Organizzazione non trovata" });
-      }
-      const updated = await storage.updateOrganization(req.params.id, {
-        finplanPreloadEnabled: enabled,
-      });
-      res.json({ finplanPreloadEnabled: updated.finplanPreloadEnabled });
-    } catch (e) {
-      console.error("Error updating finplan preload flag:", e);
-      res.status(500).json({ message: "Errore aggiornamento flag FinPlan" });
-    }
-  });
+  // (PUT toggle finplan-preload eliminato in Task #148 insieme alle route
+  // di preload; vedi nota in testa al file.)
 
   app.get("/api/super-admin/profiles", isAuthenticated, async (req: any, res) => {
     try {

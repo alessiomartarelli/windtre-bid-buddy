@@ -364,15 +364,8 @@ export default function Amministrazione() {
     },
     enabled: tab === "analisi" && !!profile?.organizationId,
   });
-  const finplanPreloadStatusQuery = useQuery<{ hasPreload: boolean }>({
-    queryKey: ["/api/finplan/preload/status", profile?.organizationId],
-    queryFn: async () => {
-      const res = await fetch(`${BASE_PATH}/api/finplan/preload/status`, { credentials: "include" });
-      if (!res.ok) throw new Error(`${res.status}`);
-      return res.json();
-    },
-    enabled: tab === "analisi" && !!profile?.organizationId,
-  });
+  // Post Task #148 (cutover): niente più preload status query. Il wizard
+  // si decide solo da `updatedAt` su /api/finplan + flag di dismiss locale.
   const finplanNeedsSetup = (() => {
     if (tab !== "analisi") return false;
     if (!profile?.organizationId) return false;
@@ -384,23 +377,22 @@ export default function Amministrazione() {
       const k2 = `finplan_setup_skipped__org_${profile.organizationId}`;
       if (localStorage.getItem(k1) || localStorage.getItem(k2)) return false;
     } catch { /* ignore */ }
-    if (finplanDataQuery.isLoading || finplanPreloadStatusQuery.isLoading) return false;
-    // Se una delle due query è in errore (rete giù, 5xx) NON mostriamo il
-    // wizard: meglio lasciare la shell React attiva che rischiare di
-    // sovrapporre il wizard a un'org Cms con preload.
-    if (finplanDataQuery.isError || finplanPreloadStatusQuery.isError) return false;
-    if (finplanPreloadStatusQuery.data?.hasPreload) return false;
+    if (finplanDataQuery.isLoading) return false;
+    // Se la query è in errore (rete giù, 5xx) NON mostriamo il wizard:
+    // meglio lasciare la shell React attiva che sovrapporre un wizard
+    // a un'org che potrebbe già avere dati salvati.
+    if (finplanDataQuery.isError) return false;
     if (finplanDataQuery.data?.updatedAt) return false;
     return true;
   })();
-  // Finché le query di gating non sono risolte (loading) non vogliamo
+  // Finché la query di gating non è risolta (loading) non vogliamo
   // mostrare la shell React né il wizard. In caso di errore lasciamo
   // passare la shell React come fallback sicuro.
   const finplanGatingResolved =
     tab !== "analisi" ||
     !profile?.organizationId ||
-    ((!finplanDataQuery.isLoading || finplanDataQuery.isError) &&
-     (!finplanPreloadStatusQuery.isLoading || finplanPreloadStatusQuery.isError));
+    !finplanDataQuery.isLoading ||
+    finplanDataQuery.isError;
 
   const orgId = profile?.organizationId || "";
   const isAuthorized = !!profile && ["admin", "super_admin"].includes(profile.role);

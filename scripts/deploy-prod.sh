@@ -38,14 +38,11 @@ echo "==> [1/5] Building bundle..."
 npm run build
 
 echo "==> [2/5] Packing tarball..."
-# Copia il preload FinPlan (server-only, fuori da public/) dentro dist/server-data
-# così il tar lo include senza esporlo via Nginx. Il resolver lato server
-# (`_resolvePreloadPath` in server/routes.ts) cerca in `dist/server-data/`
-# in produzione.
+# Task #148: niente più preload FinPlan server-side, il tar contiene solo
+# `dist/public` e `dist/index.cjs`. La directory `dist/server-data` non
+# viene più creata; rimuoviamo eventuali residui da deploy precedenti.
 rm -rf dist/server-data
-mkdir -p dist/server-data
-cp server/data/finplan-preload.json dist/server-data/finplan-preload.json
-tar czf "${LOCAL_TAR}" -C dist public index.cjs server-data
+tar czf "${LOCAL_TAR}" -C dist public index.cjs
 
 echo "==> [3/5] Uploading tarball to VPS..."
 ${SCP} "${LOCAL_TAR}" "${VPS_USER}@${VPS_HOST}:/tmp/incentivew3-deploy.tgz"
