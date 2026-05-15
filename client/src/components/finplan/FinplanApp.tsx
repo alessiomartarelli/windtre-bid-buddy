@@ -16,6 +16,9 @@ import { Proiezioni } from "./sections/Proiezioni";
 import { Debiti } from "./sections/Debiti";
 import { Categorie } from "./sections/Categorie";
 import { Budget } from "./sections/Budget";
+import { Personale } from "./sections/Personale";
+import { Partitari } from "./sections/Partitari";
+import { CdgPerPdv } from "./sections/CdgPerPdv";
 
 interface FinplanAppProps {
   orgId: string;
@@ -41,6 +44,7 @@ type SectionKey =
   | "budget"
   | "personale"
   | "partitari"
+  | "cdgperpdv"
   | "scenari";
 
 const SECTIONS: { key: SectionKey; label: string; icon: ComponentType<{ className?: string }>; active: boolean }[] = [
@@ -54,8 +58,9 @@ const SECTIONS: { key: SectionKey; label: string; icon: ComponentType<{ classNam
   { key: "debiti",      label: "Debiti",          icon: Wallet,     active: true  },
   { key: "categorie",   label: "Categorie",       icon: Briefcase,  active: true  },
   { key: "budget",      label: "Budget",          icon: BarChart3,  active: true  },
-  { key: "personale",   label: "Personale",       icon: Users,      active: false },
-  { key: "partitari",   label: "Partitari",       icon: FileText,   active: false },
+  { key: "personale",   label: "Personale",       icon: Users,      active: true  },
+  { key: "partitari",   label: "Partitari",       icon: FileText,   active: true  },
+  { key: "cdgperpdv",   label: "CdG per PDV",     icon: BarChart3,  active: true  },
   { key: "scenari",     label: "Scenari",         icon: TrendingUp, active: false },
 ];
 
@@ -282,6 +287,24 @@ export default function FinplanApp({ orgId }: FinplanAppProps) {
               <TabsContent value="budget" className="mt-4">
                 {isLoading ? <SectionLoading /> : (
                   <Budget snapshot={snapshot} companyIndex={activeCo} scheduleSave={scheduleSave} />
+                )}
+              </TabsContent>
+
+              <TabsContent value="personale" className="mt-4">
+                {isLoading ? <SectionLoading /> : (
+                  <Personale snapshot={snapshot} companyIndex={activeCo} scheduleSave={scheduleSave} />
+                )}
+              </TabsContent>
+
+              <TabsContent value="partitari" className="mt-4">
+                {isLoading ? <SectionLoading /> : (
+                  <Partitari snapshot={snapshot} companyIndex={activeCo} scheduleSave={scheduleSave} />
+                )}
+              </TabsContent>
+
+              <TabsContent value="cdgperpdv" className="mt-4">
+                {isLoading ? <SectionLoading /> : (
+                  <CdgPerPdv snapshot={snapshot} companyIndex={activeCo} scheduleSave={scheduleSave} />
                 )}
               </TabsContent>
 
