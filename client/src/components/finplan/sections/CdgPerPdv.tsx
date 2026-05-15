@@ -6,15 +6,32 @@
 //          mensili:{mi:val}}. Tutto opzionale (passthrough). Mostriamo
 // ricavi (entrate), costi (sum voci) e margine per PDV per il mese
 // selezionato + comparativa anno intero.
+//
+// VINCOLO ARCHITETTURALE — perché NON riusiamo direttamente le entità del
+// modulo Controllo di Gestione (`cdg_categorie`, `cdg_fornitori`,
+// `cdg_spese` da `shared/schema.ts`):
+//   1) Byte-compat con l'iframe legacy: lo standalone usa il modello JSONB
+//      `cdg.pdv/cdg.voci` annidato nello snapshot FinPlan; sostituirlo con
+//      i record server-side romperebbe i salvataggi esistenti.
+//   2) Granularità diversa: CdG modulo lavora su spese mensili con
+//      RS/PDV/Categoria/Fornitore (multi-RS); il mini-CdG di FinPlan è una
+//      proiezione 12 mesi per "voce di costo libera" senza fornitore.
+//   3) Indipendenza dei moduli: il flag `enabledModules.controllo_gestione`
+//      può essere off mentre `analisi_finplan` è on.
+// Interoperabilità: forniamo un import one-shot dei codici PDV già
+// definiti nel modulo CdG (`/api/cdg/pdv-by-rs`) per evitare data entry
+// duplicato. La gestione spese resta separata.
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, Legend } from "recharts";
 import type {
   FinplanCdg,
@@ -111,6 +128,53 @@ export function CdgPerPdv({ snapshot, companyIndex, scheduleSave }: Props) {
     ...cur,
     pdv: [...((cur.pdv ?? []) as CdgPdv[]), { id: uid(), nome: "Nuovo PDV", entrate: {} }],
   }));
+
+  // Interop: importa codici PDV dal modulo Controllo di Gestione
+  // (read-only su `/api/cdg/pdv-by-rs`). Crea solo PDV nuovi (match per
+  // nome case-insensitive); non tocca quelli esistenti né le voci.
+  const { toast } = useToast();
+  const cdgPdvQuery = useQuery<{ rs: string; pdv: { codice: string; nome: string }[] }[]>({
+    queryKey: ["/api/cdg/pdv-by-rs"],
+    enabled: false,
+  });
+  const importFromCdg = async () => {
+    try {
+      const r = await cdgPdvQuery.refetch();
+      const groups = (r.data ?? []) as { rs: string; pdv: { codice: string; nome: string }[] }[];
+      const flat: { nome: string }[] = [];
+      const seen = new Set<string>();
+      for (const g of groups) {
+        for (const p of (g.pdv ?? [])) {
+          const label = (p.nome || p.codice || "").trim();
+          if (!label) continue;
+          const k = label.toLowerCase();
+          if (seen.has(k)) continue;
+          seen.add(k);
+          flat.push({ nome: label });
+        }
+      }
+      if (flat.length === 0) {
+        toast({ title: "Nessun PDV trovato nel modulo CdG" });
+        return;
+      }
+      updateCdg(cur => {
+        const existing = ((cur.pdv ?? []) as CdgPdv[]).slice();
+        const have = new Set(existing.map(p => (p.nome || "").toLowerCase()));
+        let added = 0;
+        for (const p of flat) {
+          if (have.has(p.nome.toLowerCase())) continue;
+          existing.push({ id: uid(), nome: p.nome, entrate: {} });
+          added++;
+        }
+        if (added === 0) toast({ title: "Tutti i PDV CdG erano già presenti" });
+        else toast({ title: `${added} PDV importati dal modulo CdG` });
+        return { ...cur, pdv: existing };
+      });
+    } catch (e) {
+      toast({ title: "Errore import PDV da CdG", description: String(e), variant: "destructive" });
+    }
+  };
+
   const removePdv = (id: string) => updateCdg(cur => ({
     ...cur,
     pdv: ((cur.pdv ?? []) as CdgPdv[]).filter(p => p.id !== id),
@@ -168,6 +232,9 @@ export function CdgPerPdv({ snapshot, companyIndex, scheduleSave }: Props) {
                   <SelectItem value={String(ANNO)}>Anno intero</SelectItem>
                 </SelectContent>
               </Select>
+              <Button size="sm" variant="outline" onClick={importFromCdg} disabled={cdgPdvQuery.isFetching} data-testid="button-cdg-import-pdv" title="Importa codici PDV dal modulo Controllo di Gestione">
+                <Download className="h-3.5 w-3.5 mr-1" /> Importa PDV da CdG
+              </Button>
               <Button size="sm" onClick={addPdv} data-testid="button-cdg-add-pdv">
                 <Plus className="h-3.5 w-3.5 mr-1" /> Nuovo PDV
               </Button>

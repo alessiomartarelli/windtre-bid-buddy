@@ -2,17 +2,17 @@
 // Sorgente: index.html righe 5028-5866.
 // CRUD organico + KPI + chart per PDV + import Excel/CSV.
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2, Upload } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts";
 import type {
   FinplanCompanySnapshot,
@@ -67,6 +67,9 @@ export function Personale({ snapshot, companyIndex, scheduleSave }: Props) {
   const totals = useMemo(() => computeHrTotals(personale), [personale]);
   const perPdv = useMemo(() => aggregateHrPerPdv(personale), [personale]);
 
+  const [editing, setEditing] = useState<FinplanPersonaleRow | null>(null);
+  const [creating, setCreating] = useState(false);
+
   const updateRow = (id: FinplanPersonaleRow["id"], p: Partial<FinplanPersonaleRow>) =>
     scheduleSave(prev => patch(prev, snapshot, companyIndex, c => {
       const list = ((c.personale ?? []) as FinplanPersonaleRow[]).map(r =>
@@ -81,16 +84,12 @@ export function Personale({ snapshot, companyIndex, scheduleSave }: Props) {
       return syncHRToUscite({ ...c, personale: list });
     }));
 
-  const addRow = () =>
+  const insertRow = (row: FinplanPersonaleRow) =>
     scheduleSave(prev => patch(prev, snapshot, companyIndex, c => {
       const list = ((c.personale ?? []) as FinplanPersonaleRow[]).slice();
       const id = nextNumId(list);
-      list.push({
-        id, nome: "Nuovo dipendente", ruolo: "", ral: 0,
-        costoAzienda: 0, tfr: 0, benefit: 0, costoMensile: 0,
-        meseInizio: 0, meseUscita: -1, attivo: true,
-      } as FinplanPersonaleRow);
-      return { ...c, personale: list };
+      list.push({ ...row, id });
+      return syncHRToUscite({ ...c, personale: list });
     }));
 
   return (
@@ -114,7 +113,7 @@ export function Personale({ snapshot, companyIndex, scheduleSave }: Props) {
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm">Organico ({personale.length})</CardTitle>
-              <Button onClick={addRow} size="sm" data-testid="button-hr-add">
+              <Button onClick={() => setCreating(true)} size="sm" data-testid="button-hr-add">
                 <Plus className="h-3.5 w-3.5 mr-1" /> Nuovo dipendente
               </Button>
             </CardHeader>
@@ -140,27 +139,35 @@ export function Personale({ snapshot, companyIndex, scheduleSave }: Props) {
                     <TableRow><TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-6" data-testid="text-no-hr">
                       Nessun dipendente. Aggiungine uno o importa da Excel.
                     </TableCell></TableRow>
-                  ) : personale.map(p => (
-                    <TableRow key={String(p.id)} data-testid={`row-hr-${p.id}`}>
-                      <TableCell><span className="inline-block w-2.5 h-2.5 rounded" style={{ background: HR_COLORS[(Number(p.id) || 0) % HR_COLORS.length] }} /></TableCell>
-                      <TableCell><Input defaultValue={p.nome ?? ""} onBlur={e => updateRow(p.id, { nome: e.target.value })} className="h-7 text-xs" data-testid={`input-hr-nome-${p.id}`} /></TableCell>
-                      <TableCell><Input defaultValue={p.ruolo ?? ""} onBlur={e => updateRow(p.id, { ruolo: e.target.value })} className="h-7 text-xs w-28" data-testid={`input-hr-ruolo-${p.id}`} /></TableCell>
-                      <TableCell><Input defaultValue={(p as Record<string, unknown>).pdv as string ?? ""} onBlur={e => updateRow(p.id, { pdv: e.target.value } as Partial<FinplanPersonaleRow>)} className="h-7 text-xs w-32" data-testid={`input-hr-pdv-${p.id}`} /></TableCell>
-                      <TableCell><Input defaultValue={(p as Record<string, unknown>).ral as number ?? 0} onBlur={e => updateRow(p.id, { ral: parseEuro(e.target.value) } as Partial<FinplanPersonaleRow>)} className="h-7 font-mono text-xs text-right" inputMode="decimal" data-testid={`input-hr-ral-${p.id}`} /></TableCell>
-                      <TableCell><Input defaultValue={(p as Record<string, unknown>).costoAzienda as number ?? 0} onBlur={e => updateRow(p.id, { costoAzienda: parseEuro(e.target.value) } as Partial<FinplanPersonaleRow>)} className="h-7 font-mono text-xs text-right" inputMode="decimal" data-testid={`input-hr-costo-${p.id}`} /></TableCell>
-                      <TableCell><Input defaultValue={(p as Record<string, unknown>).tfr as number ?? 0} onBlur={e => updateRow(p.id, { tfr: parseEuro(e.target.value) } as Partial<FinplanPersonaleRow>)} className="h-7 font-mono text-xs text-right" inputMode="decimal" data-testid={`input-hr-tfr-${p.id}`} /></TableCell>
-                      <TableCell><Input defaultValue={(p as Record<string, unknown>).benefit as number ?? 0} onBlur={e => updateRow(p.id, { benefit: parseEuro(e.target.value) } as Partial<FinplanPersonaleRow>)} className="h-7 font-mono text-xs text-right" inputMode="decimal" data-testid={`input-hr-benefit-${p.id}`} /></TableCell>
-                      <TableCell className="text-right font-mono text-xs font-bold" data-testid={`text-hr-costomese-${p.id}`}>{formatCurrency(hrCostoMensile(p))}</TableCell>
-                      <TableCell>
-                        <Checkbox checked={(p as Record<string, unknown>).attivo !== false} onCheckedChange={v => updateRow(p.id, { attivo: !!v } as Partial<FinplanPersonaleRow>)} data-testid={`check-hr-attivo-${p.id}`} />
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeRow(p.id)} data-testid={`button-hr-del-${p.id}`}>
-                          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  ) : personale.map(p => {
+                    const rec = p as Record<string, unknown>;
+                    return (
+                      <TableRow key={String(p.id)} data-testid={`row-hr-${p.id}`}>
+                        <TableCell><span className="inline-block w-2.5 h-2.5 rounded" style={{ background: HR_COLORS[(Number(p.id) || 0) % HR_COLORS.length] }} /></TableCell>
+                        <TableCell className="text-xs font-medium" data-testid={`text-hr-nome-${p.id}`}>{p.nome || "—"}</TableCell>
+                        <TableCell className="text-xs" data-testid={`text-hr-ruolo-${p.id}`}>{p.ruolo || "—"}</TableCell>
+                        <TableCell className="text-xs" data-testid={`text-hr-pdv-${p.id}`}>{(rec.pdv as string) || "—"}</TableCell>
+                        <TableCell className="text-right font-mono text-xs" data-testid={`text-hr-ral-${p.id}`}>{formatCurrency(Number(rec.ral) || 0)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs" data-testid={`text-hr-costo-${p.id}`}>{formatCurrency(Number(rec.costoAzienda) || 0)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs" data-testid={`text-hr-tfr-${p.id}`}>{formatCurrency(Number(rec.tfr) || 0)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs" data-testid={`text-hr-benefit-${p.id}`}>{formatCurrency(Number(rec.benefit) || 0)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs font-bold" data-testid={`text-hr-costomese-${p.id}`}>{formatCurrency(hrCostoMensile(p))}</TableCell>
+                        <TableCell>
+                          <Checkbox checked={rec.attivo !== false} onCheckedChange={v => updateRow(p.id, { attivo: !!v } as Partial<FinplanPersonaleRow>)} data-testid={`check-hr-attivo-${p.id}`} />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-0">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditing(p)} data-testid={`button-hr-edit-${p.id}`}>
+                              <Pencil className="h-3.5 w-3.5 text-sky-600" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeRow(p.id)} data-testid={`button-hr-del-${p.id}`}>
+                              <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -192,6 +199,106 @@ export function Personale({ snapshot, companyIndex, scheduleSave }: Props) {
           />
         </TabsContent>
       </Tabs>
+
+      <HrModal
+        open={creating}
+        onOpenChange={setCreating}
+        title="Nuovo dipendente"
+        initial={null}
+        onSubmit={(row) => { insertRow(row); setCreating(false); }}
+      />
+      <HrModal
+        open={!!editing}
+        onOpenChange={(o) => { if (!o) setEditing(null); }}
+        title="Modifica dipendente"
+        initial={editing}
+        onSubmit={(row) => { if (editing) updateRow(editing.id, row); setEditing(null); }}
+      />
+    </div>
+  );
+}
+
+function HrModal({ open, onOpenChange, title, initial, onSubmit }: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  title: string;
+  initial: FinplanPersonaleRow | null;
+  onSubmit: (row: FinplanPersonaleRow) => void;
+}) {
+  const { toast } = useToast();
+  const r = (initial ?? {}) as Record<string, unknown>;
+  const [nome, setNome] = useState(String(r.nome ?? ""));
+  const [ruolo, setRuolo] = useState(String(r.ruolo ?? ""));
+  const [pdv, setPdv] = useState(String(r.pdv ?? ""));
+  const [ral, setRal] = useState(String(r.ral ?? ""));
+  const [costoAzienda, setCostoAzienda] = useState(String(r.costoAzienda ?? ""));
+  const [tfr, setTfr] = useState(String(r.tfr ?? ""));
+  const [benefit, setBenefit] = useState(String(r.benefit ?? ""));
+  const [attivo, setAttivo] = useState<boolean>(r.attivo !== false);
+
+  // Resetta i campi quando cambia la riga in editing
+  useEffect(() => {
+    const rr = (initial ?? {}) as Record<string, unknown>;
+    setNome(String(rr.nome ?? ""));
+    setRuolo(String(rr.ruolo ?? ""));
+    setPdv(String(rr.pdv ?? ""));
+    setRal(String(rr.ral ?? ""));
+    setCostoAzienda(String(rr.costoAzienda ?? ""));
+    setTfr(String(rr.tfr ?? ""));
+    setBenefit(String(rr.benefit ?? ""));
+    setAttivo(rr.attivo !== false);
+  }, [initial]);
+
+  const submit = () => {
+    if (!nome.trim()) { toast({ title: "Inserisci il nome", variant: "destructive" }); return; }
+    const row: FinplanPersonaleRow = {
+      id: (initial?.id ?? 0),
+      nome: nome.trim(),
+      ruolo: ruolo.trim(),
+      ral: parseEuro(ral),
+      costoAzienda: parseEuro(costoAzienda),
+      tfr: parseEuro(tfr),
+      benefit: parseEuro(benefit),
+      costoMensile: 0,
+      meseInizio: (initial as Record<string, unknown>)?.meseInizio as number ?? 0,
+      meseUscita: (initial as Record<string, unknown>)?.meseUscita as number ?? -1,
+      attivo,
+    };
+    (row as Record<string, unknown>).pdv = pdv.trim();
+    onSubmit(row);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg" data-testid="dialog-hr-form">
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Nome"><Input value={nome} onChange={e => setNome(e.target.value)} className="h-9" data-testid="input-hr-form-nome" /></Field>
+          <Field label="Ruolo"><Input value={ruolo} onChange={e => setRuolo(e.target.value)} className="h-9" data-testid="input-hr-form-ruolo" /></Field>
+          <Field label="PDV (sigla SS/SM/AM/BO/TASK/SPECIALIST)"><Input value={pdv} onChange={e => setPdv(e.target.value)} className="h-9" data-testid="input-hr-form-pdv" /></Field>
+          <Field label="RAL"><Input value={ral} onChange={e => setRal(e.target.value)} inputMode="decimal" className="h-9 font-mono" data-testid="input-hr-form-ral" /></Field>
+          <Field label="Costo azienda annuo"><Input value={costoAzienda} onChange={e => setCostoAzienda(e.target.value)} inputMode="decimal" className="h-9 font-mono" data-testid="input-hr-form-costo" /></Field>
+          <Field label="TFR"><Input value={tfr} onChange={e => setTfr(e.target.value)} inputMode="decimal" className="h-9 font-mono" data-testid="input-hr-form-tfr" /></Field>
+          <Field label="Benefit"><Input value={benefit} onChange={e => setBenefit(e.target.value)} inputMode="decimal" className="h-9 font-mono" data-testid="input-hr-form-benefit" /></Field>
+          <div className="flex items-end gap-2">
+            <Checkbox checked={attivo} onCheckedChange={v => setAttivo(!!v)} data-testid="check-hr-form-attivo" />
+            <Label className="text-xs">Attivo</Label>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} data-testid="button-hr-form-cancel">Annulla</Button>
+          <Button onClick={submit} data-testid="button-hr-form-save">Salva</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</Label>
+      {children}
     </div>
   );
 }

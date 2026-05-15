@@ -124,11 +124,25 @@ function PartitarioBucket({ type, rows, onAdd, onUpdate, onRemove, onAddPayment,
   onImport: (rows: FinplanPartitarioRow[]) => void;
 }) {
   const [filter, setFilter] = useState<"all" | PtStato>("all");
+  const [controparte, setControparte] = useState("");
+  const [fascia, setFascia] = useState<"all" | "0-30" | "31-60" | "61-90" | "90+">("all");
   const totals = useMemo(() => ptComputeTotals(rows), [rows]);
-  const filtered = useMemo(
-    () => filter === "all" ? rows : rows.filter(r => ptStato(r) === filter),
-    [rows, filter],
-  );
+  const filtered = useMemo(() => {
+    const cpQ = controparte.trim().toLowerCase();
+    return rows.filter(r => {
+      if (filter !== "all" && ptStato(r) !== filter) return false;
+      if (cpQ && !(r.ragsoc ?? "").toLowerCase().includes(cpQ)) return false;
+      if (fascia !== "all") {
+        const dd = ptGiorniScaduto(r) ?? -1;
+        if (dd <= 0) return false;
+        if (fascia === "0-30"  && !(dd >= 1  && dd <= 30)) return false;
+        if (fascia === "31-60" && !(dd >= 31 && dd <= 60)) return false;
+        if (fascia === "61-90" && !(dd >= 61 && dd <= 90)) return false;
+        if (fascia === "90+"   && !(dd > 90)) return false;
+      }
+      return true;
+    });
+  }, [rows, filter, controparte, fascia]);
 
   const label = type === "C" ? "Clienti" : "Fornitori";
 
@@ -145,7 +159,14 @@ function PartitarioBucket({ type, rows, onAdd, onUpdate, onRemove, onAddPayment,
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm">{label}</CardTitle>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
+            <Input
+              placeholder="Cerca controparte…"
+              value={controparte}
+              onChange={e => setControparte(e.target.value)}
+              className="h-8 w-44 text-xs"
+              data-testid={`input-pt-${type}-controparte`}
+            />
             <Select value={filter} onValueChange={v => setFilter(v as typeof filter)}>
               <SelectTrigger className="h-8 w-32 text-xs" data-testid={`select-pt-${type}-filter`}><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -154,6 +175,16 @@ function PartitarioBucket({ type, rows, onAdd, onUpdate, onRemove, onAddPayment,
                 <SelectItem value="parziale">Parziali</SelectItem>
                 <SelectItem value="scaduto">Scaduti</SelectItem>
                 <SelectItem value="pagato">Pagati</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={fascia} onValueChange={v => setFascia(v as typeof fascia)}>
+              <SelectTrigger className="h-8 w-36 text-xs" data-testid={`select-pt-${type}-fascia`}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutte le fasce</SelectItem>
+                <SelectItem value="0-30">Scaduto 0–30 gg</SelectItem>
+                <SelectItem value="31-60">Scaduto 31–60 gg</SelectItem>
+                <SelectItem value="61-90">Scaduto 61–90 gg</SelectItem>
+                <SelectItem value="90+">Scaduto &gt; 90 gg</SelectItem>
               </SelectContent>
             </Select>
             <NewRowDialog type={type} onAdd={onAdd} existing={rows} />
