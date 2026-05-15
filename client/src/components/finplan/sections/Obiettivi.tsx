@@ -172,8 +172,13 @@ export function Obiettivi({ snapshot, companyIndex, scheduleSave }: Props) {
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex-1 min-w-[200px]">
                       <Input
-                        value={o.name ?? ""}
-                        onChange={e => updateObj(o.id, "name", e.target.value)}
+                        // defaultValue+onBlur per evitare lo snap-back
+                        // del controlled input durante il debounce di
+                        // scheduleSave (coerente con gli altri input
+                        // della migrazione FinPlan).
+                        key={`name-${o.id}`}
+                        defaultValue={o.name ?? ""}
+                        onBlur={e => updateObj(o.id, "name", e.target.value)}
                         className="h-8 font-medium"
                         data-testid={`input-obj-name-${o.id}`}
                       />
