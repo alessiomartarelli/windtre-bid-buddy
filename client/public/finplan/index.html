@@ -8663,10 +8663,29 @@ buildPanels();
     let _PRELOAD = null;
     let _hasPreload = false;
     try {
-      const _resp = await fetch(_api, {credentials:'include', cache:'no-cache'});
+      // `cache:'no-store'` impedisce al browser di mandare conditional GET
+      // con If-None-Match: niente possibili 304 da gestire al boot. Il
+      // payload (5MB) viene scaricato fresco una sola volta per sessione,
+      // e da lì in poi il client lavora dal `loadProject(_PRELOAD)` in
+      // memoria. Se mai dovessimo aggiungere un secondo fetch warm, il
+      // 304 va trattato come "preload presente" (riusare il cache locale),
+      // NON come fallback no-preload — altrimenti gli org allowlistati
+      // perderebbero accidentalmente i dati Cms.
+      const _resp = await fetch(_api, {credentials:'include', cache:'no-store'});
       if (_resp && _resp.status === 200) {
         _PRELOAD = await _resp.json();
         _hasPreload = !!(_PRELOAD && Array.isArray(_PRELOAD.data));
+      } else if (_resp && _resp.status === 304) {
+        // Difensivo: in teoria non arriva con cache:'no-store', ma se in
+        // futuro qualcuno cambia la cache policy non vogliamo cadere nel
+        // path "no preload" per gli org allowlistati. In quel caso il
+        // body è vuoto ma sappiamo che il server CONFERMA preload → la
+        // strategia corretta è ricaricare bypassando la cache.
+        const _retry = await fetch(_api, {credentials:'include', cache:'reload'});
+        if (_retry && _retry.status === 200) {
+          _PRELOAD = await _retry.json();
+          _hasPreload = !!(_PRELOAD && Array.isArray(_PRELOAD.data));
+        }
       }
     } catch(e) { console.warn('Preload fetch failed:', e); }
 
