@@ -514,6 +514,29 @@ export async function registerRoutes(
   // testa al file. Org in allowlist: 200 + JSON di preload (~5MB) con
   // ETag/Cache-Control conditional. Org NON in allowlist: 204 No Content
   // (il client interpreta come "tool vuoto, importa via UI").
+  // Status check leggero: usato dal wizard di setup iniziale (Task #131)
+  // per decidere se mostrarsi o meno, senza dover scaricare i 5MB del
+  // payload preload completo. Risponde { hasPreload: boolean } senza
+  // body pesante. Stessa allowlist e stesso gate del GET pieno.
+  app.get("/api/finplan/preload/status", isAuthenticated, requireModule(FINPLAN_MODULES), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.json({ hasPreload: false });
+      // Stessa logica di gating del GET pieno (DB flag primario + env
+      // fallback): altrimenti il wizard di setup iniziale apparirebbe per
+      // org abilitate via DB ma non in env, sovrascrivendo il preload.
+      const org = await storage.getOrganization(profile.organizationId);
+      const enabledByDb = !!org?.finplanPreloadEnabled;
+      const enabledByEnv = FINPLAN_PRELOAD_ORGS.includes(profile.organizationId);
+      if (!enabledByDb && !enabledByEnv) return res.json({ hasPreload: false });
+      const pre = _getPreload();
+      res.json({ hasPreload: !!pre });
+    } catch (e) {
+      console.error("[finplan] preload/status error:", e);
+      res.status(500).json({ message: "Error fetching preload status" });
+    }
+  });
+
   app.get("/api/finplan/preload", isAuthenticated, requireModule(FINPLAN_MODULES), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);

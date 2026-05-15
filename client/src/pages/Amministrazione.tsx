@@ -47,6 +47,7 @@ import { BASE_PATH } from "@/lib/basePath";
 import * as XLSX from "xlsx";
 import ControlloGestione from "@/pages/ControlloGestione";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
+import { FinPlanSetupWizard } from "@/components/FinPlanSetupWizard";
 
 type TabKey = "contabile" | "iva" | "controllo" | "analisi";
 const TAB_KEYS: TabKey[] = ["contabile", "iva", "controllo", "analisi"];
@@ -345,6 +346,63 @@ export default function Amministrazione() {
   useEffect(() => {
     if (tab === "analisi") setAnalisiEverOpened(true);
   }, [tab]);
+
+  // ── FinPlan setup wizard (Task #131) ──
+  // La prima volta che un'org senza preload e senza dati FinPlan apre il
+  // tab Analisi, mostriamo un wizard di import iniziale al posto
+  // dell'iframe. Si dismette via "Salta" o al completamento del salvataggio
+  // (flag in localStorage scoped per orgId). Per le org Cms Group (con
+  // preload) non viene mai mostrato.
+  const [finplanSetupDismissed, setFinplanSetupDismissed] = useState(false);
+  // Query keys org-scoped: switch utente/org nella stessa sessione non
+  // riusa lo stato di gating dell'org precedente (staleTime: Infinity
+  // sul queryClient di default).
+  const finplanDataQuery = useQuery<{ data: unknown; updatedAt: string | null }>({
+    queryKey: ["/api/finplan", profile?.organizationId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_PATH}/api/finplan`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+    enabled: tab === "analisi" && !!profile?.organizationId,
+  });
+  const finplanPreloadStatusQuery = useQuery<{ hasPreload: boolean }>({
+    queryKey: ["/api/finplan/preload/status", profile?.organizationId],
+    queryFn: async () => {
+      const res = await fetch(`${BASE_PATH}/api/finplan/preload/status`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+    enabled: tab === "analisi" && !!profile?.organizationId,
+  });
+  const finplanNeedsSetup = (() => {
+    if (tab !== "analisi") return false;
+    if (!profile?.organizationId) return false;
+    if (finplanSetupDismissed) return false;
+    // Una volta marcato come "fatto"/"saltato" in localStorage non
+    // rimostriamo il wizard nelle sessioni successive.
+    try {
+      const k1 = `finplan_setup_done__org_${profile.organizationId}`;
+      const k2 = `finplan_setup_skipped__org_${profile.organizationId}`;
+      if (localStorage.getItem(k1) || localStorage.getItem(k2)) return false;
+    } catch { /* ignore */ }
+    if (finplanDataQuery.isLoading || finplanPreloadStatusQuery.isLoading) return false;
+    // Se una delle due query è in errore (rete giù, 5xx) NON mostriamo
+    // il wizard: meglio lasciare il path legacy (iframe) attivo che
+    // rischiare di sovrapporre il wizard a un'org Cms con preload.
+    if (finplanDataQuery.isError || finplanPreloadStatusQuery.isError) return false;
+    if (finplanPreloadStatusQuery.data?.hasPreload) return false;
+    if (finplanDataQuery.data?.updatedAt) return false;
+    return true;
+  })();
+  // Finché le query di gating non sono risolte (loading) non vogliamo
+  // mostrare l'iframe né il wizard. In caso di errore lasciamo passare
+  // l'iframe (path legacy) come fallback sicuro.
+  const finplanGatingResolved =
+    tab !== "analisi" ||
+    !profile?.organizationId ||
+    ((!finplanDataQuery.isLoading || finplanDataQuery.isError) &&
+     (!finplanPreloadStatusQuery.isLoading || finplanPreloadStatusQuery.isError));
 
   const orgId = profile?.organizationId || "";
   const isAuthorized = !!profile && ["admin", "super_admin"].includes(profile.role);
@@ -1838,10 +1896,28 @@ export default function Amministrazione() {
           </>
         )}
 
+        {/* Wizard di setup iniziale FinPlan (Task #131): mostrato al posto
+            dell'iframe la prima volta che un'org senza preload e senza
+            dati FinPlan apre il tab Analisi. Skippable. */}
+        {tab === "analisi" && finplanNeedsSetup && (
+          <div className="space-y-2" data-testid="finplan-setup-wrapper">
+            <FinPlanSetupWizard
+              orgId={orgId}
+              onComplete={() => {
+                setFinplanSetupDismissed(true);
+                queryClient.invalidateQueries({ queryKey: ["/api/finplan", profile?.organizationId] });
+              }}
+              onSkip={() => setFinplanSetupDismissed(true)}
+            />
+          </div>
+        )}
+
         {/* Iframe FinPlan persistente: si monta alla prima apertura del tab
             Analisi e resta in DOM (display:none quando non attivo). Evita il
-            re-bootstrap del tool standalone (~5 MB) ad ogni cambio tab. */}
-        {analisiEverOpened && (
+            re-bootstrap del tool standalone (~5 MB) ad ogni cambio tab.
+            Non viene montato finché il wizard di setup è visibile, così
+            l'iframe parte già con i dati appena salvati. */}
+        {analisiEverOpened && !finplanNeedsSetup && finplanGatingResolved && (
           <div
             style={{ display: tab === "analisi" ? "block" : "none" }}
             className="space-y-2"
