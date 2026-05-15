@@ -3765,7 +3765,13 @@ document.querySelectorAll('.co-tab').forEach(t=>t.addEventListener('click',()=>{
   activeCo=+t.dataset.co;
   document.getElementById(`co-panel-${activeCo}`).classList.add('active');
   updateBadge();
-  setTimeout(()=>{activeCo<5?renderCo(activeCo):renderConsolidated();},40);
+  setTimeout(()=>{
+    if (activeCo>=5) { renderConsolidated(); return; }
+    // Switch RS: usa il path leggero (KPI + sezione attiva). Le altre
+    // sezioni renderanno on-demand al primo click del tab interno.
+    if (typeof window._renderCoLight === 'function') window._renderCoLight(activeCo);
+    else renderCo(activeCo);
+  },40);
 }));
 
 // consolidated inner tabs
@@ -8568,6 +8574,25 @@ function tryLoadFromStorage() {
     debounceSave();
     _logPerf('renderCo['+ci+'] sync ('+active+')', t0);
 
+    // Esponiamo un percorso "leggero" usato dallo switch RS: rende solo
+    // KPI + sezione attiva, SENZA pre-render in idle delle altre 13.
+    // Le sezioni non attive renderanno on-demand al primo click sul tab
+    // interno (vedi attachListeners). Risultato: switch RS in <50ms.
+    if (!window._renderCoLight) {
+      window._renderCoLight = function(_ci){
+        var _t0 = PERF ? performance.now() : 0;
+        _bumpRenderFrame();
+        var _active = _activeSec(_ci);
+        _inRender++;
+        try {
+          renderCoKPIs(_ci);
+          var _fn = SECTION_RENDERERS[_active];
+          if (_fn) _fn(_ci);
+        } finally { _inRender--; }
+        _logPerf('renderCoLight['+_ci+'] ('+_active+')', _t0);
+      };
+    }
+
     var others = Object.keys(SECTION_RENDERERS).filter(function(k){ return k !== active; });
     var i = 0;
     function tick(){
@@ -8608,11 +8633,25 @@ function tryLoadFromStorage() {
 
 buildPanels();
 
-// Auto-load pre-embedded JSON data
+// Auto-load embedded JSON data — gated multi-tenant.
+// Solo le organizzazioni in `FINPLAN_PRELOAD_ORGS` (server) ricevono
+// i dati Cms Group dal preload. Per le altre l'endpoint risponde 204
+// e il tool parte vuoto: i dati vengono dallo shim /api/finplan
+// (localStorage hydrato dal server con il blob per-org).
 (async function(){
   try {
-    const _PRELOAD = await fetch(new URL('preload.json', location.href), {cache: 'force-cache'}).then(r => r.json());
-    // PRELOAD è sempre autoritativo per i dati CC.
+    const _api = new URL('../api/finplan/preload', location.href).pathname;
+    let _PRELOAD = null;
+    let _hasPreload = false;
+    try {
+      const _resp = await fetch(_api, {credentials:'include', cache:'no-cache'});
+      if (_resp && _resp.status === 200) {
+        _PRELOAD = await _resp.json();
+        _hasPreload = !!(_PRELOAD && Array.isArray(_PRELOAD.data));
+      }
+    } catch(e) { console.warn('Preload fetch failed:', e); }
+
+    // PRELOAD è sempre autoritativo per i dati CC (solo path Cms Group).
     // Dal localStorage recuperiamo SOLO i campi UI modificabili manualmente.
     const UI_FIELDS = ['debts','debtScadenze','scadenzario','budget','obj','cdg',
                        'personale','partitari','partitariPdf','storico','inv',
@@ -8620,33 +8659,45 @@ buildPanels();
                        'excludeEstero','excludeFinanziamenti','excludeRateazioni',
                        'ivaPeriod','growth','cfExclude'];
 
-    loadProject(_PRELOAD);
-
-    // Merge campi UI da localStorage se esistono
-    const _lsRaw = localStorage.getItem(STORAGE_KEY);
-    if(_lsRaw){
-      try{
-        const _lsSnap = JSON.parse(_lsRaw);
-        if(_lsSnap && _lsSnap.data){
-          _lsSnap.data.forEach((lsCo, ci)=>{
-            if(!lsCo || !DATA[ci]) return;
-            UI_FIELDS.forEach(f=>{
-              if(lsCo[f] !== undefined) DATA[ci][f] = lsCo[f];
+    if (_hasPreload) {
+      loadProject(_PRELOAD);
+      // Merge campi UI da localStorage (override per-org delle 5 società Cms)
+      const _lsRaw = localStorage.getItem(STORAGE_KEY);
+      if(_lsRaw){
+        try{
+          const _lsSnap = JSON.parse(_lsRaw);
+          if(_lsSnap && _lsSnap.data){
+            _lsSnap.data.forEach((lsCo, ci)=>{
+              if(!lsCo || !DATA[ci]) return;
+              UI_FIELDS.forEach(f=>{
+                if(lsCo[f] !== undefined) DATA[ci][f] = lsCo[f];
+              });
             });
-          });
-          // Merge campi globali
-          if(_lsSnap.consGrowth !== undefined) CONS.growth = _lsSnap.consGrowth;
-          if(_lsSnap.consIvaPeriod !== undefined) CONS.ivaPeriod = _lsSnap.consIvaPeriod;
-          console.log('✅ Merge campi UI da localStorage completato');
-        }
-      }catch(e){ console.warn('Merge localStorage fallito:', e); }
+            if(_lsSnap.consGrowth !== undefined) CONS.growth = _lsSnap.consGrowth;
+            if(_lsSnap.consIvaPeriod !== undefined) CONS.ivaPeriod = _lsSnap.consIvaPeriod;
+          }
+        }catch(e){ console.warn('Merge localStorage fallito:', e); }
+      }
+      console.log('✅ FinPlan: PRELOAD caricato (org allowlisted)');
+    } else {
+      // Path multi-tenant: nessun preload. Carichiamo l'INTERO snapshot
+      // dal localStorage (idratato dallo shim via /api/finplan), così
+      // l'utente recupera m+transactions+ogni campo persistito. Se vuoto,
+      // il tool parte con i defaults e l'utente importa via i pulsanti.
+      const _lsRaw = localStorage.getItem(STORAGE_KEY);
+      if (_lsRaw) {
+        try {
+          const _lsSnap = JSON.parse(_lsRaw);
+          if (_lsSnap && _lsSnap.data) loadProject(_lsSnap);
+        } catch(e) { console.warn('Load locale fallito:', e); }
+      }
+      console.log('ℹ️ FinPlan: workspace per-org (no preload)');
     }
 
     // Riclassifica e ricalcola IVA dopo merge
     for(let _i=0;_i<5;_i++) autoRiclassifica(_i);
     for(let _i=0;_i<5;_i++) ricalcolaIVA(_i);
 
-    console.log('✅ Dati pre-caricati dal PRELOAD (CC sempre aggiornato)');
     for(let i=0;i<5;i++) renderCo(i);
     updateBadge();
     autoCheckAllDebtAlerts();
@@ -8657,7 +8708,7 @@ buildPanels();
       }
     }
   } catch(e) {
-    console.warn('Pre-load failed:', e);
+    console.warn('Boot fallito:', e);
     for(let i=0;i<5;i++) renderCo(i);
     updateBadge();
     autoCheckAllDebtAlerts();

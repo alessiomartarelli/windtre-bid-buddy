@@ -74,6 +74,11 @@ export function mountFinplanStatic(app: Express, opts: { roots: string[] }) {
     if (!rel || rel.includes("..")) return next();
     const safe = path.normalize(rel).replace(/^([./\\])+/, "");
     if (!safe) return next();
+    // SECURITY: `preload.json` contiene dati finanziari interni di una
+    // sola organizzazione (Cms Group). NON deve essere accessibile via
+    // URL diretto da nessun tenant: viene servito solo dall'endpoint
+    // autenticato `/api/finplan/preload` con allowlist per organizzazione.
+    if (safe === "preload.json") return res.status(404).end();
 
     let resolved: string | null = null;
     for (const root of roots) {

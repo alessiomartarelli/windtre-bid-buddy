@@ -21,6 +21,52 @@ import {
 import { decryptSecret, encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+
+// === FinPlan PRELOAD allowlist ===
+// Il file `preload.json` contiene i dati finanziari REALI di Cms Group
+// (movimenti CC, transazioni, debiti delle 5 società del gruppo). NON deve
+// essere visibile ad altri tenant: l'endpoint `/api/finplan/preload` lo
+// serve solo agli organization_id presenti in questa allowlist; gli altri
+// ricevono 204 No Content e il tool parte vuoto in attesa di import.
+// Per aggiungere altre org in futuro: estendere la lista qui (oppure
+// settare l'env `FINPLAN_PRELOAD_ORGS` come CSV per override senza redeploy).
+const FINPLAN_PRELOAD_ORGS: string[] = (() => {
+  const env = (process.env.FINPLAN_PRELOAD_ORGS || "").trim();
+  if (env) return env.split(",").map((s) => s.trim()).filter(Boolean);
+  return ["org-admin-windtre"];
+})();
+
+// Cache in-memory del file preload (mtime-based). Evita di rileggere
+// 5MB da disco per ogni richiesta degli utenti autorizzati.
+let _preloadCache: { mtimeMs: number; raw: Buffer; etag: string } | null = null;
+function _resolvePreloadPath(): string | null {
+  const candidates = [
+    path.resolve(__dirname, "public", "finplan", "preload.json"),
+    path.resolve(process.cwd(), "client", "public", "finplan", "preload.json"),
+    path.resolve(process.cwd(), "dist", "public", "finplan", "preload.json"),
+  ];
+  for (const c of candidates) {
+    try { if (fs.statSync(c).isFile()) return c; } catch {}
+  }
+  return null;
+}
+function _getPreload(): { raw: Buffer; etag: string } | null {
+  const p = _resolvePreloadPath();
+  if (!p) return null;
+  try {
+    const stat = fs.statSync(p);
+    if (_preloadCache && _preloadCache.mtimeMs === stat.mtimeMs) {
+      return { raw: _preloadCache.raw, etag: _preloadCache.etag };
+    }
+    const raw = fs.readFileSync(p);
+    const etag = '"' + crypto.createHash("sha1").update(raw).digest("hex") + '"';
+    _preloadCache = { mtimeMs: stat.mtimeMs, raw, etag };
+    return { raw, etag };
+  } catch { return null; }
+}
 
 function toItalianYMD(input: string | undefined): string | undefined | null {
   if (input === undefined || input === null || input === "") return undefined;
@@ -454,6 +500,36 @@ export async function registerRoutes(
     } catch (e) {
       console.error("[finplan] GET error:", e);
       res.status(500).json({ message: "Error fetching finplan data" });
+    }
+  });
+
+  // Preload FinPlan multi-tenant gated. Vedi `FINPLAN_PRELOAD_ORGS` in
+  // testa al file. Org in allowlist: 200 + JSON di preload (~5MB) con
+  // ETag/Cache-Control conditional. Org NON in allowlist: 204 No Content
+  // (il client interpreta come "tool vuoto, importa via UI").
+  app.get("/api/finplan/preload", isAuthenticated, requireModule(FINPLAN_MODULES), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(204).end();
+      if (!FINPLAN_PRELOAD_ORGS.includes(profile.organizationId)) {
+        // Bloccato per multi-tenant: nessun byte di Cms Group esce.
+        return res.status(204).end();
+      }
+      const pre = _getPreload();
+      if (!pre) return res.status(204).end();
+      // Conditional GET (riduce a 304 dopo il primo caricamento).
+      const inm = req.headers["if-none-match"];
+      if (inm && inm === pre.etag) {
+        res.setHeader("ETag", pre.etag);
+        return res.status(304).end();
+      }
+      res.setHeader("ETag", pre.etag);
+      res.setHeader("Cache-Control", "private, must-revalidate");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.status(200).end(pre.raw);
+    } catch (e) {
+      console.error("[finplan] preload error:", e);
+      res.status(500).json({ message: "Error fetching finplan preload" });
     }
   });
 

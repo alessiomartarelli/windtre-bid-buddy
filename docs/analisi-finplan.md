@@ -211,9 +211,63 @@ dipendenze, comportamento invariato:
   logga su console il tempo in ms (`[finplan perf] ...`). In prod
   resta off (zero overhead), ma utile per regression testing.
 
-I test `tests/finplan-sync.test.mjs` (5 scenari) restano verdi —
-lo shim sync, ETag/304, debounce 3s, conflict guard e PUT/GET
-autenticato non sono toccati da queste modifiche.
+I test `tests/finplan-sync.test.mjs` (6 scenari, vedi sotto)
+restano verdi — lo shim sync, ETag/304, debounce 3s, conflict
+guard, PUT/GET autenticato e gating preload.
+
+## PRELOAD multi-tenant (Cms Group only)
+
+Il file `client/public/finplan/preload.json` (~5 MB) contiene i dati
+finanziari REALI di Cms Group (movimenti CC, transazioni, debiti delle
+5 società del gruppo). È vincolato a un'allowlist di organizzazioni —
+gli altri tenant non vedono mai un solo byte:
+
+- **Endpoint gated**: `GET /api/finplan/preload`
+  (`isAuthenticated` + `requireModule(["amministrazione",
+  "controllo_gestione"])`). Solo gli `organization_id` in
+  `FINPLAN_PRELOAD_ORGS` (`server/routes.ts`) ricevono 200 + JSON;
+  gli altri 204. Default allowlist: `["org-admin-windtre"]`. Override
+  via env `FINPLAN_PRELOAD_ORGS=csv,di,org,id` (CSV) senza redeploy.
+  Risposta autorizzata: ETag + `Cache-Control: private,
+  must-revalidate` + supporto `If-None-Match` → 304 (cache in-memory
+  mtime-based, niente rilettura di 5 MB ad ogni request).
+- **File statico bloccato**: `mountFinplanStatic` (`server/finplanStatic.ts`)
+  intercetta `preload.json` e risponde 404, così nemmeno l'URL diretto
+  `/finplan/preload.json` (anche senza login) può leakare i dati.
+- **Boot client (`client/public/finplan/index.html`)**: l'IIFE chiama
+  l'endpoint gated. Se 200 → `loadProject(_PRELOAD)` + merge UI fields
+  da localStorage (path Cms Group: CC sempre autoritativo dal preload,
+  UI personalizzabile dall'utente). Se 204 → carica l'**intero**
+  snapshot dal localStorage (idratato dallo shim via `/api/finplan`),
+  con tutti i campi tra cui `m` e `transactions`. Se localStorage
+  vuoto: tool parte con i defaults e l'utente importa via i pulsanti
+  esistenti.
+
+## Switch RS rapido
+
+Il click su una `.co-tab` (cambio Ragione Sociale tra le 5 società)
+ora passa per `window._renderCoLight(ci)` invece di `renderCo(ci)`:
+rende solo `renderCoKPIs(ci)` + la sezione attualmente attiva
+(`_activeSec(ci)`), senza schedulare in `requestIdleCallback` le
+altre 13 sezioni. Il pre-render aggressivo era utile al primissimo
+boot (ed è ancora attivo nel `renderCo` originale) ma penalizza
+gli switch rapidi tra RS quando l'utente vuole solo confrontare
+una sezione. Le altre sezioni renderanno on-demand al primo click
+sul tab interno (handler già presente in `attachListeners`).
+Risultato: switch RS in <50 ms anche con dati pieni.
+
+## Test (`tests/finplan-sync.test.mjs`)
+
+6 scenari, run via `bash scripts/run-finplan-tests.sh` (richiede il
+workflow "Start application" attivo):
+
+1. ETag/304 su `/finplan/index.html`.
+2. PUT debounce 3s su edit locale.
+3. Reconcile vergine: remoto più nuovo → reload + cache update.
+4. Conflict guard: dirty session non viene clobberata.
+5. Round-trip autenticato PUT/GET su `/api/finplan`.
+6. Preload gated: org NON allowlisted → 204; `/finplan/preload.json`
+   diretto → 404; senza auth → 401/403.
 
 ## Note operative
 

@@ -502,3 +502,68 @@ test('scenario 1b: authenticated PUT then GET round-trip persists data and retur
     await pool.end().catch(() => {});
   }
 });
+
+// ===========================================================================
+// SCENARIO 5: PRELOAD gating multi-tenant
+// (a) Org NON allowlisted → /api/finplan/preload risponde 204 (workspace vuoto).
+// (b) Accesso diretto al file statico /finplan/preload.json → 404 (bloccato a
+//     livello di handler statico). Garantisce che i dati Cms Group non siano
+//     leakable via URL pubblico anche senza login.
+// ===========================================================================
+test('scenario 5: preload gated — non-allowlisted org gets 204 and static URL is 404', async () => {
+  const pgMod = await import('pg');
+  const Pool = pgMod.default?.Pool || pgMod.Pool;
+  assert.ok(process.env.DATABASE_URL, 'DATABASE_URL must be set for this test');
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+  // (b) Accesso diretto al file statico — niente auth, deve fare 404.
+  const direct = await fetch(`${BASE}/finplan/preload.json`);
+  assert.equal(
+    direct.status,
+    404,
+    'preload.json must NOT be served directly by the static handler',
+  );
+  await direct.arrayBuffer();
+
+  const session = await signupAndLogin();
+  try {
+    // Abilita modulo amministrazione così l'endpoint passa requireModule.
+    await pool.query(
+      `UPDATE organizations
+         SET enabled_modules = '{"amministrazione":true,"controllo_gestione":true}'::jsonb
+       WHERE id = $1`,
+      [session.orgId],
+    );
+
+    // (a) Fresh org NON è in FINPLAN_PRELOAD_ORGS → deve ricevere 204.
+    const r = await fetch(`${BASE}/api/finplan/preload`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(
+      r.status,
+      204,
+      `non-allowlisted org must receive 204 from /api/finplan/preload, got ${r.status}`,
+    );
+    const buf = await r.arrayBuffer();
+    assert.equal(buf.byteLength, 0, '204 response must carry no body');
+
+    // E senza autenticazione: 401.
+    const noAuth = await fetch(`${BASE}/api/finplan/preload`);
+    assert.ok(
+      noAuth.status === 401 || noAuth.status === 403,
+      `unauthenticated request must be rejected (got ${noAuth.status})`,
+    );
+    await noAuth.arrayBuffer();
+  } finally {
+    await pool
+      .query(`DELETE FROM finplan_data WHERE organization_id = $1`, [session.orgId])
+      .catch(() => {});
+    await pool
+      .query(`DELETE FROM profiles WHERE id = $1`, [session.profileId])
+      .catch(() => {});
+    await pool
+      .query(`DELETE FROM organizations WHERE id = $1`, [session.orgId])
+      .catch(() => {});
+    await pool.end().catch(() => {});
+  }
+});
