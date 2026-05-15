@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,7 +20,7 @@ type FinplanTab =
   | "consolidato"
   | "scenari";
 
-const TABS: { key: FinplanTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+const TABS: { key: FinplanTab; label: string; icon: ComponentType<{ className?: string }> }[] = [
   { key: "overview",     label: "Overview",     icon: LineChart },
   { key: "transazioni",  label: "Transazioni",  icon: BarChart3 },
   { key: "obiettivi",    label: "Obiettivi",    icon: Target },
