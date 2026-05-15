@@ -75,7 +75,7 @@ export function Consolidato({ snapshot, defaultNames, companyColors, consolidato
           <IvaGruppo allRs={allRs} agg={agg} />
         </TabsContent>
         <TabsContent value="piano" className="mt-4">
-          <PianoFinanziario agg={agg} allRs={allRs} defaultNames={defaultNames} companyColors={companyColors} consolidatoColor={consolidatoColor} />
+          <PianoFinanziario agg={agg} allRs={allRs} defaultNames={defaultNames} companyColors={companyColors} />
         </TabsContent>
       </Tabs>
     </div>
@@ -365,7 +365,7 @@ function IvaGruppo({ allRs, agg }: { allRs: FinplanCompanySnapshot[]; agg: Group
 type PianoTab = "trasversale" | "societa" | "pdv" | "scenari";
 
 function PianoFinanziario({ agg, allRs, defaultNames, companyColors }: {
-  agg: GroupAggregate; allRs: FinplanCompanySnapshot[]; defaultNames: string[]; companyColors: string[]; consolidatoColor: string;
+  agg: GroupAggregate; allRs: FinplanCompanySnapshot[]; defaultNames: string[]; companyColors: string[];
 }) {
   const [tab, setTab] = useState<PianoTab>("trasversale");
   return (
