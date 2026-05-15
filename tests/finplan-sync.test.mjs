@@ -662,3 +662,215 @@ test('scenario 5: preload gated — non-allowlisted org gets 204 and static URL 
     await pool.end().catch(() => {});
   }
 });
+
+// ===========================================================================
+// SCENARIO 7: Wizard di setup iniziale FinPlan — gating multi-tenant.
+// Replica la logica di `finplanNeedsSetup` in `Amministrazione.tsx`:
+//   wizard mostrato sse  !hasPreload && !updatedAt && !dismissed
+// Verifichiamo i tre stati osservabili lato API/localStorage che pilotano
+// quel calcolo:
+//   (a) Org nuova senza preload e senza dati  → wizard MOSTRATO
+//   (b) Org allowlistata (preload presente)   → wizard NASCOSTO
+//   (c) Org con dati salvati (updatedAt != null) → wizard NASCOSTO
+// Una regressione su uno di questi tre branch farebbe ricomparire il wizard
+// alle org Cms Group o nasconderlo alle nuove (Task #136).
+// ===========================================================================
+function finplanNeedsSetup({ hasPreload, updatedAt, dismissed = false }) {
+  // Replica fedele di client/src/pages/Amministrazione.tsx:378
+  if (dismissed) return false;
+  if (hasPreload) return false;
+  if (updatedAt) return false;
+  return true;
+}
+
+test('scenario 7: setup wizard gating — shown only for fresh non-allowlisted orgs without saved data', async () => {
+  const pgMod = await import('pg');
+  const Pool = pgMod.default?.Pool || pgMod.Pool;
+  assert.ok(process.env.DATABASE_URL, 'DATABASE_URL must be set for this test');
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+  // Sanity-check del predicato locale prima di interrogare la rete: se la
+  // logica del wizard cambia (nuovo branch in `finplanNeedsSetup`), questi
+  // assert falliscono e ti costringono ad aggiornare il test.
+  assert.equal(
+    finplanNeedsSetup({ hasPreload: false, updatedAt: null }),
+    true,
+    'predicate: vergine + nessun preload → wizard',
+  );
+  assert.equal(
+    finplanNeedsSetup({ hasPreload: true, updatedAt: null }),
+    false,
+    'predicate: preload allowlistato → niente wizard',
+  );
+  assert.equal(
+    finplanNeedsSetup({ hasPreload: false, updatedAt: '2026-05-15T10:00:00Z' }),
+    false,
+    'predicate: dati salvati → niente wizard',
+  );
+  assert.equal(
+    finplanNeedsSetup({ hasPreload: false, updatedAt: null, dismissed: true }),
+    false,
+    'predicate: dismiss in localStorage → niente wizard',
+  );
+
+  // -------------------------------------------------------------------------
+  // (a) Org NUOVA senza preload e senza dati → wizard mostrato.
+  // -------------------------------------------------------------------------
+  const sessionA = await signupAndLogin();
+  let createdAllowedOrg = false;
+  let sessionB = null;
+  let sessionC = null;
+  const ALLOWED_ORG = 'org-admin-windtre';
+  try {
+    await pool.query(
+      `UPDATE organizations
+         SET enabled_modules = '{"amministrazione":true,"controllo_gestione":true}'::jsonb
+       WHERE id = $1`,
+      [sessionA.orgId],
+    );
+
+    const statusA = await jsonReq(`${BASE}/api/finplan/preload/status`, {
+      headers: { Cookie: sessionA.cookie },
+    });
+    assert.equal(statusA.status, 200, `(a) preload/status must be 200, got ${statusA.status}`);
+    assert.equal(
+      statusA.body?.hasPreload,
+      false,
+      '(a) fresh non-allowlisted org must report hasPreload:false',
+    );
+
+    const dataA = await jsonReq(`${BASE}/api/finplan`, {
+      headers: { Cookie: sessionA.cookie },
+    });
+    assert.equal(dataA.status, 200, `(a) GET /api/finplan must be 200, got ${dataA.status}`);
+    assert.equal(
+      dataA.body?.updatedAt,
+      null,
+      '(a) fresh org must have updatedAt:null',
+    );
+
+    assert.equal(
+      finplanNeedsSetup({
+        hasPreload: statusA.body.hasPreload,
+        updatedAt: dataA.body.updatedAt,
+      }),
+      true,
+      '(a) fresh non-allowlisted org WITHOUT saved data must show the setup wizard',
+    );
+
+    // -----------------------------------------------------------------------
+    // (b) Org allowlistata (preload presente) → wizard NASCOSTO.
+    //     Riassegniamo il profilo ad ALLOWED_ORG come fa scenario 6.
+    // -----------------------------------------------------------------------
+    sessionB = await signupAndLogin();
+    const upsertRes = await pool.query(
+      `INSERT INTO organizations (id, name, enabled_modules)
+         VALUES ($1, 'Cms Group (test)', '{"amministrazione":true,"controllo_gestione":true}'::jsonb)
+         ON CONFLICT (id) DO UPDATE
+           SET enabled_modules = organizations.enabled_modules ||
+               '{"amministrazione":true,"controllo_gestione":true}'::jsonb
+         RETURNING (xmax = 0) AS inserted`,
+      [ALLOWED_ORG],
+    );
+    createdAllowedOrg = !!upsertRes.rows[0]?.inserted;
+    await pool.query(
+      `UPDATE profiles SET organization_id = $1 WHERE id = $2`,
+      [ALLOWED_ORG, sessionB.profileId],
+    );
+
+    const statusB = await jsonReq(`${BASE}/api/finplan/preload/status`, {
+      headers: { Cookie: sessionB.cookie },
+    });
+    assert.equal(statusB.status, 200, `(b) preload/status must be 200, got ${statusB.status}`);
+    assert.equal(
+      statusB.body?.hasPreload,
+      true,
+      '(b) allowlisted org must report hasPreload:true (preload payload available)',
+    );
+
+    const dataB = await jsonReq(`${BASE}/api/finplan`, {
+      headers: { Cookie: sessionB.cookie },
+    });
+    assert.equal(dataB.status, 200, `(b) GET /api/finplan must be 200, got ${dataB.status}`);
+
+    assert.equal(
+      finplanNeedsSetup({
+        hasPreload: statusB.body.hasPreload,
+        updatedAt: dataB.body.updatedAt,
+      }),
+      false,
+      '(b) allowlisted org with preload must NOT show the setup wizard',
+    );
+
+    // -----------------------------------------------------------------------
+    // (c) Org con dati già salvati (updatedAt non nullo) → wizard NASCOSTO.
+    // -----------------------------------------------------------------------
+    sessionC = await signupAndLogin();
+    await pool.query(
+      `UPDATE organizations
+         SET enabled_modules = '{"amministrazione":true,"controllo_gestione":true}'::jsonb
+       WHERE id = $1`,
+      [sessionC.orgId],
+    );
+
+    const putC = await jsonReq(`${BASE}/api/finplan`, {
+      method: 'PUT',
+      headers: { Cookie: sessionC.cookie },
+      body: JSON.stringify({ data: { __test: 'scenario7_saved', n: 1 } }),
+    });
+    assert.equal(putC.status, 200, `(c) seed PUT must be 200, got ${putC.status}`);
+    assert.ok(
+      typeof putC.body?.updatedAt === 'string' && putC.body.updatedAt.length > 0,
+      '(c) PUT must return a non-empty updatedAt',
+    );
+
+    const statusC = await jsonReq(`${BASE}/api/finplan/preload/status`, {
+      headers: { Cookie: sessionC.cookie },
+    });
+    assert.equal(statusC.status, 200, `(c) preload/status must be 200, got ${statusC.status}`);
+    assert.equal(
+      statusC.body?.hasPreload,
+      false,
+      '(c) non-allowlisted org must still report hasPreload:false',
+    );
+
+    const dataC = await jsonReq(`${BASE}/api/finplan`, {
+      headers: { Cookie: sessionC.cookie },
+    });
+    assert.equal(dataC.status, 200, `(c) GET /api/finplan must be 200, got ${dataC.status}`);
+    assert.ok(
+      typeof dataC.body?.updatedAt === 'string' && dataC.body.updatedAt.length > 0,
+      '(c) org with previous PUT must have a non-empty updatedAt',
+    );
+
+    assert.equal(
+      finplanNeedsSetup({
+        hasPreload: statusC.body.hasPreload,
+        updatedAt: dataC.body.updatedAt,
+      }),
+      false,
+      '(c) org with saved data must NOT show the setup wizard',
+    );
+  } finally {
+    for (const s of [sessionA, sessionB, sessionC].filter(Boolean)) {
+      await pool
+        .query(`DELETE FROM finplan_data WHERE organization_id = $1`, [s.orgId])
+        .catch(() => {});
+      await pool
+        .query(`DELETE FROM profiles WHERE id = $1`, [s.profileId])
+        .catch(() => {});
+      await pool
+        .query(`DELETE FROM organizations WHERE id = $1`, [s.orgId])
+        .catch(() => {});
+    }
+    if (createdAllowedOrg) {
+      await pool
+        .query(`DELETE FROM finplan_data WHERE organization_id = $1`, [ALLOWED_ORG])
+        .catch(() => {});
+      await pool
+        .query(`DELETE FROM organizations WHERE id = $1`, [ALLOWED_ORG])
+        .catch(() => {});
+    }
+    await pool.end().catch(() => {});
+  }
+});
