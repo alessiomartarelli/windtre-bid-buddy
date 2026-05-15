@@ -38,7 +38,14 @@ echo "==> [1/5] Building bundle..."
 npm run build
 
 echo "==> [2/5] Packing tarball..."
-tar czf "${LOCAL_TAR}" -C dist public index.cjs
+# Copia il preload FinPlan (server-only, fuori da public/) dentro dist/server-data
+# così il tar lo include senza esporlo via Nginx. Il resolver lato server
+# (`_resolvePreloadPath` in server/routes.ts) cerca in `dist/server-data/`
+# in produzione.
+rm -rf dist/server-data
+mkdir -p dist/server-data
+cp server/data/finplan-preload.json dist/server-data/finplan-preload.json
+tar czf "${LOCAL_TAR}" -C dist public index.cjs server-data
 
 echo "==> [3/5] Uploading tarball to VPS..."
 ${SCP} "${LOCAL_TAR}" "${VPS_USER}@${VPS_HOST}:/tmp/incentivew3-deploy.tgz"

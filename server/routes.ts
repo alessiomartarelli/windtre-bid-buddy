@@ -43,14 +43,17 @@ const FINPLAN_PRELOAD_ORGS: string[] = (() => {
 // 5MB da disco per ogni richiesta degli utenti autorizzati.
 let _preloadCache: { mtimeMs: number; raw: Buffer; etag: string } | null = null;
 function _resolvePreloadPath(): string | null {
-  // ESM: niente `__dirname`. Cerchiamo nei path standard relativi a cwd —
-  // dev: `client/public/...`, prod: `dist/public/...` (il bundle gira da
-  // `/var/www/incentive-w3` con cwd = quella dir, e `dist/public` è creato
-  // dal `tar` di deploy). Il primo file esistente vince.
+  // Defense-in-depth: il file vive FUORI da `client/public` (che Vite copia
+  // dentro `dist/public` ed è raggiungibile via Nginx). Lo teniamo in una
+  // posizione server-only e lo serviamo solo via endpoint autenticato +
+  // allowlistato. ESM: niente `__dirname`, risolviamo da `process.cwd()`.
+  // - dev: `server/data/finplan-preload.json` (cwd = repo root)
+  // - prod: `dist/server-data/finplan-preload.json` (lo script di deploy
+  //   copia `server/data` dentro `dist/server-data` prima del tar; cwd in
+  //   pm2 = `/var/www/incentive-w3`).
   const candidates = [
-    path.resolve(process.cwd(), "client", "public", "finplan", "preload.json"),
-    path.resolve(process.cwd(), "dist", "public", "finplan", "preload.json"),
-    path.resolve(process.cwd(), "public", "finplan", "preload.json"),
+    path.resolve(process.cwd(), "server", "data", "finplan-preload.json"),
+    path.resolve(process.cwd(), "dist", "server-data", "finplan-preload.json"),
   ];
   for (const c of candidates) {
     try { if (fs.statSync(c).isFile()) return c; } catch {}

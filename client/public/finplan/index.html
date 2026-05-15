@@ -8330,6 +8330,12 @@ function renderCo(ci) {
 
 let _saveTimer = null;
 function debounceSave() {
+  // Centralizziamo qui il marker "dirty": ogni mutazione di stato passa
+  // per debounceSave (input handler, add/remove righe, recalcoli),
+  // quindi è il punto naturale per dichiarare che KPI/sezioni vanno
+  // ricomputate al prossimo render. Lo legge `_renderCoLight` per
+  // skippare i clic ripetuti sullo stesso tab RS.
+  try { window._finplanDirty = true; } catch(_) {}
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
     saveProject();
@@ -8579,16 +8585,29 @@ function tryLoadFromStorage() {
     // Le sezioni non attive renderanno on-demand al primo click sul tab
     // interno (vedi attachListeners). Risultato: switch RS in <50ms.
     if (!window._renderCoLight) {
+      // Dirty guard: se l'utente ri-clicca sullo stesso tab RS senza che
+      // nel frattempo siano stati editati input, skippiamo l'intero
+      // rerender (KPI + sezione). `window._finplanDirty` viene marcato
+      // `true` da chi muta lo state (input handlers, save reconcile) e
+      // resettato a `false` qui dopo un render riuscito.
+      window._finplanDirty = window._finplanDirty || false;
       window._renderCoLight = function(_ci){
         var _t0 = PERF ? performance.now() : 0;
-        _bumpRenderFrame();
         var _active = _activeSec(_ci);
+        var _key = _ci + '|' + _active;
+        if (window._lastRenderedLight === _key && !window._finplanDirty) {
+          _logPerf('renderCoLight['+_ci+'] ('+_active+') SKIP (clean)', _t0);
+          return;
+        }
+        _bumpRenderFrame();
         _inRender++;
         try {
           renderCoKPIs(_ci);
           var _fn = SECTION_RENDERERS[_active];
           if (_fn) _fn(_ci);
         } finally { _inRender--; }
+        window._lastRenderedLight = _key;
+        window._finplanDirty = false;
         _logPerf('renderCoLight['+_ci+'] ('+_active+')', _t0);
       };
     }
