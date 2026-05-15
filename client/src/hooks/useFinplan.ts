@@ -18,14 +18,16 @@ const FINPLAN_URL = `${BASE_PATH}/api/finplan`;
 
 export interface UseFinplanDataResult {
   /**
-   * Snapshot in shape "loose" — è il payload RAW restituito dal server,
-   * solo type-castato. Volutamente non normalizzato così è byte-compatibile
-   * con quanto scritto dall'iframe legacy. Per un parsing strict usare
-   * `FinplanSnapshotSchema.safeParse(...)` esplicitamente nel consumer.
+   * Alias di `snapshot` allineato al contratto del task (#142): `data`
+   * è il payload RAW restituito dal server, solo type-castato.
+   * Volutamente non normalizzato così è byte-compatibile con quanto
+   * scritto dall'iframe legacy.
    */
+  data: FinplanSnapshot | null;
+  /** Alias di `data` mantenuto per backward-compat con i consumer interni. */
   snapshot: FinplanSnapshot | null;
   /** Risultato di un parse Zod permissivo, utile per validare in UI sezioni
-   *  derivate. Non sostituisce `snapshot` (che è sempre raw). */
+   *  derivate. Non sostituisce `data`/`snapshot` (sempre raw). */
   parsed: FinplanSnapshot | null;
   parseIssuesCount: number;
   updatedAt: string | null;
@@ -92,6 +94,7 @@ export function useFinplanData(orgId: string | undefined): UseFinplanDataResult 
   }, [query.data]);
 
   return {
+    data: snapshot,
     snapshot,
     parsed,
     parseIssuesCount,
@@ -164,17 +167,27 @@ export function useFinplanMutation(orgId: string | undefined): UseFinplanMutatio
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
-  // Inizializza `lastKnownRemoteAtRef` dall'updatedAt corrente in cache,
-  // così la prima scrittura sa "da dove" è partito l'utente.
+  // Mantiene `lastKnownRemoteAtRef` REATTIVO rispetto alla cache:
+  // ci subscriviamo al cache di TanStack-Query, così se la GET completa
+  // dopo il mount (caso normale, cache vuota all'apertura della pagina)
+  // o se un refetch porta una versione più recente, il baseline si
+  // aggiorna senza che l'utente debba scrivere prima. Il baseline NON
+  // viene mai sovrascritto a `null`: una volta nota la versione, non la
+  // perdiamo se il server tornasse a 204 (caso patologico).
   useEffect(() => {
     if (!orgId) return;
-    const cached = queryClient.getQueryData<FinplanApiResponse>([
-      ...FINPLAN_QUERY_KEY,
-      orgId,
-    ]);
-    if (cached?.updatedAt && lastKnownRemoteAtRef.current === null) {
-      lastKnownRemoteAtRef.current = cached.updatedAt;
-    }
+    const key = [...FINPLAN_QUERY_KEY, orgId];
+    const sync = () => {
+      const cached = queryClient.getQueryData<FinplanApiResponse>(key);
+      if (cached?.updatedAt && lastKnownRemoteAtRef.current === null) {
+        lastKnownRemoteAtRef.current = cached.updatedAt;
+      }
+    };
+    sync();
+    const unsub = queryClient.getQueryCache().subscribe((event) => {
+      if (event.query.queryHash === JSON.stringify(key)) sync();
+    });
+    return () => unsub();
   }, [orgId, queryClient]);
 
   const doPut = useCallback(async (snapshot: FinplanSnapshot): Promise<void> => {
@@ -182,44 +195,55 @@ export function useFinplanMutation(orgId: string | undefined): UseFinplanMutatio
     setIsSaving(true);
     try {
       // CONFLICT GUARD AUTORITATIVO: preflight GET dal server per leggere
-      // l'updatedAt corrente. NON ci affidiamo alla cache TanStack-Query
-      // (staleTime 60s + niente refetchOnWindowFocus → può essere stale).
+      // l'updatedAt corrente. SEMPRE eseguito (anche se baseline è null:
+      // potrebbe esserci dato sul server che non abbiamo mai caricato e
+      // staremmo per clobberare). NON ci affidiamo alla cache TanStack-
+      // Query (staleTime 60s + niente refetchOnWindowFocus → stale).
       const knownAt = lastKnownRemoteAtRef.current;
-      if (knownAt) {
-        try {
-          const head = await fetch(FINPLAN_URL, { credentials: "include" });
-          if (head.ok) {
-            const headBody = (await head.json().catch(() => null)) as
-              | FinplanApiResponse
-              | null;
-            const serverAt = headBody?.updatedAt ?? null;
-            if (serverAt && serverAt !== knownAt) {
-              setError(new Error("Conflict: another client has modified the data; please reload"));
-              // Aggiorna la cache con la versione canonica del server
-              // così la UI può mostrare il banner di conflitto e il
-              // consumer decidere come fare merge.
-              if (headBody) {
-                queryClient.setQueryData<FinplanApiResponse>(
-                  [...FINPLAN_QUERY_KEY, orgId],
-                  headBody,
-                );
-              } else {
-                void queryClient.invalidateQueries({ queryKey: [...FINPLAN_QUERY_KEY, orgId] });
-              }
-              // NON consumiamo il pending: il consumer può fare merge e
-              // ri-chiamare `scheduleSave`/`flush` se decide di prevalere.
-              // Per evitare che la while loop ricicli all'infinito, riponiamo
-              // il pending qui:
-              pendingRef.current = snapshot;
-              return;
+      try {
+        const head = await fetch(FINPLAN_URL, { credentials: "include" });
+        if (head.ok) {
+          const headBody = (await head.json().catch(() => null)) as
+            | FinplanApiResponse
+            | null;
+          const serverAt = headBody?.updatedAt ?? null;
+          // Caso 1: baseline noto e diverso dal server → conflict.
+          // Caso 2: baseline null ma il server ha updatedAt → stiamo per
+          // clobberare dato esistente che non abbiamo mai caricato →
+          // conflict.
+          const isConflict =
+            (knownAt && serverAt && serverAt !== knownAt) ||
+            (!knownAt && serverAt);
+          if (isConflict) {
+            setError(new Error("Conflict: another client has modified the data; please reload"));
+            if (headBody) {
+              queryClient.setQueryData<FinplanApiResponse>(
+                [...FINPLAN_QUERY_KEY, orgId],
+                headBody,
+              );
+            } else {
+              void queryClient.invalidateQueries({ queryKey: [...FINPLAN_QUERY_KEY, orgId] });
             }
+            // Adottiamo serverAt come nuovo baseline così, dopo un
+            // merge/reload del consumer, la prossima scrittura passa
+            // direttamente.
+            if (serverAt) lastKnownRemoteAtRef.current = serverAt;
+            // Riponiamo il pending: il consumer può fare merge e
+            // ri-chiamare `scheduleSave`/`flush` se decide di prevalere.
+            pendingRef.current = snapshot;
+            return;
           }
-          // Se il preflight fallisce (rete/401), procediamo comunque col
-          // PUT — meglio salvare che bloccare l'utente. Conflitti reali
-          // saranno comunque visibili dal prossimo refetch.
-        } catch {
-          // ignore — proseguiamo
+          // Nessun conflitto: se baseline era null (genuinely fresh —
+          // né noi né il server hanno una versione), inizializziamo a
+          // serverAt (può essere null). Se diventa null restiamo coerenti
+          // perché sotto, dopo il PUT, lastKnown viene comunque aggiornato.
+          if (!knownAt && serverAt) lastKnownRemoteAtRef.current = serverAt;
         }
+        // Se il preflight fallisce (rete/401), procediamo comunque col
+        // PUT — meglio salvare che bloccare l'utente. Conflitti reali
+        // saranno comunque visibili dal prossimo refetch.
+      } catch {
+        // ignore — proseguiamo
       }
 
       const res = await fetch(FINPLAN_URL, {
