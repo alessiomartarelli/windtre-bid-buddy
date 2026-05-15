@@ -17,7 +17,17 @@ const STALE_TIME_MS = 60_000;
 const FINPLAN_URL = `${BASE_PATH}/api/finplan`;
 
 export interface UseFinplanDataResult {
+  /**
+   * Snapshot in shape "loose" — è il payload RAW restituito dal server,
+   * solo type-castato. Volutamente non normalizzato così è byte-compatibile
+   * con quanto scritto dall'iframe legacy. Per un parsing strict usare
+   * `FinplanSnapshotSchema.safeParse(...)` esplicitamente nel consumer.
+   */
   snapshot: FinplanSnapshot | null;
+  /** Risultato di un parse Zod permissivo, utile per validare in UI sezioni
+   *  derivate. Non sostituisce `snapshot` (che è sempre raw). */
+  parsed: FinplanSnapshot | null;
+  parseIssuesCount: number;
   updatedAt: string | null;
   updatedBy: string | null;
   isLoading: boolean;
@@ -33,6 +43,8 @@ export interface UseFinplanDataResult {
  * quando i due mondi (iframe legacy + shell React) sono entrambi attivi
  * durante la migrazione. Il payload può essere `{}` (nessun dato per
  * quell'org): in quel caso `snapshot` è `null` e l'UI mostra empty state.
+ *
+ * Importante: `snapshot` è restituito RAW (non normalizzato) per byte-compat.
  */
 export function useFinplanData(orgId: string | undefined): UseFinplanDataResult {
   const enabled = Boolean(orgId);
@@ -51,25 +63,38 @@ export function useFinplanData(orgId: string | undefined): UseFinplanDataResult 
     refetchOnWindowFocus: false,
   });
 
-  const snapshot = useMemo<FinplanSnapshot | null>(() => {
+  const { snapshot, parsed, parseIssuesCount } = useMemo<{
+    snapshot: FinplanSnapshot | null;
+    parsed: FinplanSnapshot | null;
+    parseIssuesCount: number;
+  }>(() => {
     const data = query.data?.data;
-    if (!data || typeof data !== "object" || Array.isArray(data)) return null;
-    if (Object.keys(data).length === 0) return null;
-    // Validazione runtime al boundary di lettura: usiamo `safeParse` per
-    // non far crashare la UI se il blob salvato dall'iframe legacy ha
-    // shape inattesa (gli schemi sono volutamente `.passthrough()` e
-    // permissivi). In caso di parse fallito, ritorniamo comunque il
-    // payload originale castato — meglio dati ad-hoc che pagina rotta —
-    // ma tracciamo il problema in console per follow-up.
-    const parsed = FinplanSnapshotSchema.safeParse(data);
-    if (parsed.success) return parsed.data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      return { snapshot: null, parsed: null, parseIssuesCount: 0 };
+    }
+    if (Object.keys(data).length === 0) {
+      return { snapshot: null, parsed: null, parseIssuesCount: 0 };
+    }
+    // Raw: passato così com'è (byte-compat con l'iframe legacy).
+    const raw = data as FinplanSnapshot;
+    // Parsed (boundary di lettura): permissivo, niente default che
+    // mutino shape (vedi shared/finplanSchema.ts).
+    const result = FinplanSnapshotSchema.safeParse(data);
+    if (result.success) {
+      return { snapshot: raw, parsed: result.data, parseIssuesCount: 0 };
+    }
     // eslint-disable-next-line no-console
-    console.warn("[useFinplanData] snapshot non conforme allo schema:", parsed.error.issues.slice(0, 3));
-    return data as FinplanSnapshot;
+    console.warn(
+      "[useFinplanData] snapshot non conforme allo schema:",
+      result.error.issues.slice(0, 3),
+    );
+    return { snapshot: raw, parsed: null, parseIssuesCount: result.error.issues.length };
   }, [query.data]);
 
   return {
     snapshot,
+    parsed,
+    parseIssuesCount,
     updatedAt: query.data?.updatedAt ?? null,
     updatedBy: query.data?.updatedBy ?? null,
     isLoading: query.isLoading,
@@ -93,8 +118,8 @@ export interface UseFinplanMutationResult {
   /** ISO della scrittura più recente confermata dal server. */
   lastSavedAt: string | null;
   /**
-   * Ultimo errore di sync (es. 409 in caso di conflitto). Resettato
-   * dopo una scrittura andata a buon fine.
+   * Ultimo errore di sync (es. conflict). Resettato dopo una scrittura
+   * andata a buon fine.
    */
   error: Error | null;
 }
@@ -107,21 +132,23 @@ export interface UseFinplanMutationResult {
  *  - **debounce 3s** su `scheduleSave` per non saturare la rete su edit
  *    contigui (allineato con i test `tests/finplan-sync.test.mjs`);
  *  - **latest-wins**: lo snapshot più recente viene tracciato in
- *    `pendingRef` immediatamente al call di `scheduleSave`, così sia
+ *    `pendingRef` IMMEDIATAMENTE al call di `scheduleSave`, così sia
  *    `flush()` sia il cleanup di unmount possono sempre recuperarlo —
  *    anche se il timer di debounce non è ancora scattato. Se un nuovo
  *    snapshot arriva mentre un PUT è in volo, sostituisce quello in
  *    coda e viene flushato alla chiusura del PUT corrente;
- *  - **conflict guard client-side**: prima di ogni PUT confrontiamo
- *    l'`updatedAt` della cache TanStack-Query (ultima verità nota dal
- *    server) con `lastKnownRemoteAtRef` (l'updatedAt da cui l'utente è
- *    partito o l'ultimo PUT andato a buon fine). Se sono diversi un
- *    altro client ha scritto nel frattempo: settiamo `error`, NON
- *    sovrascriviamo (per non clobberare modifiche altrui), invalidiamo
- *    la GET così la UI mostra il banner di conflitto e mantiene il
- *    `pendingRef` perché il consumer possa decidere se forzare il
- *    flush dopo merge. Il backend resta latest-wins (compatibilità con
- *    l'iframe legacy che condivide lo stesso `finplan_data`).
+ *  - **conflict guard server-authoritative**: prima di ogni PUT facciamo
+ *    un preflight `GET /api/finplan` per leggere l'`updatedAt` corrente
+ *    del server (NON la cache TanStack-Query, che può essere stale per
+ *    via di `staleTime: 60s` + `refetchOnWindowFocus: false`). Se è
+ *    diverso da `lastKnownRemoteAtRef` (l'updatedAt da cui l'utente è
+ *    partito o l'ultimo PUT andato a buon fine), un altro client ha
+ *    scritto: settiamo `error`, NON sovrascriviamo (per non clobberare
+ *    modifiche altrui), aggiorniamo la cache con la versione canonica
+ *    e lasciamo `pendingRef` intatto perché il consumer possa decidere
+ *    se forzare il flush dopo merge. Il backend resta latest-wins
+ *    (compatibilità con l'iframe legacy che condivide lo stesso
+ *    `finplan_data`).
  *  - su unmount, lo snapshot in coda viene flushato best-effort.
  */
 export function useFinplanMutation(orgId: string | undefined): UseFinplanMutationResult {
@@ -154,21 +181,45 @@ export function useFinplanMutation(orgId: string | undefined): UseFinplanMutatio
     if (!orgId) return;
     setIsSaving(true);
     try {
-      // Conflict guard: se la cache ha un updatedAt più recente del
-      // nostro punto di partenza, qualcuno ha scritto nel frattempo.
-      const cached = queryClient.getQueryData<FinplanApiResponse>([
-        ...FINPLAN_QUERY_KEY,
-        orgId,
-      ]);
-      const cachedAt = cached?.updatedAt ?? null;
+      // CONFLICT GUARD AUTORITATIVO: preflight GET dal server per leggere
+      // l'updatedAt corrente. NON ci affidiamo alla cache TanStack-Query
+      // (staleTime 60s + niente refetchOnWindowFocus → può essere stale).
       const knownAt = lastKnownRemoteAtRef.current;
-      if (cachedAt && knownAt && cachedAt !== knownAt) {
-        setError(new Error("Conflict: another client has modified the data; please reload"));
-        // Forza un refetch così il consumer vede la versione canonica.
-        void queryClient.invalidateQueries({ queryKey: [...FINPLAN_QUERY_KEY, orgId] });
-        // NON consumiamo il pending: il consumer può fare merge e
-        // ri-chiamare `scheduleSave`/`flush` se decide di prevalere.
-        return;
+      if (knownAt) {
+        try {
+          const head = await fetch(FINPLAN_URL, { credentials: "include" });
+          if (head.ok) {
+            const headBody = (await head.json().catch(() => null)) as
+              | FinplanApiResponse
+              | null;
+            const serverAt = headBody?.updatedAt ?? null;
+            if (serverAt && serverAt !== knownAt) {
+              setError(new Error("Conflict: another client has modified the data; please reload"));
+              // Aggiorna la cache con la versione canonica del server
+              // così la UI può mostrare il banner di conflitto e il
+              // consumer decidere come fare merge.
+              if (headBody) {
+                queryClient.setQueryData<FinplanApiResponse>(
+                  [...FINPLAN_QUERY_KEY, orgId],
+                  headBody,
+                );
+              } else {
+                void queryClient.invalidateQueries({ queryKey: [...FINPLAN_QUERY_KEY, orgId] });
+              }
+              // NON consumiamo il pending: il consumer può fare merge e
+              // ri-chiamare `scheduleSave`/`flush` se decide di prevalere.
+              // Per evitare che la while loop ricicli all'infinito, riponiamo
+              // il pending qui:
+              pendingRef.current = snapshot;
+              return;
+            }
+          }
+          // Se il preflight fallisce (rete/401), procediamo comunque col
+          // PUT — meglio salvare che bloccare l'utente. Conflitti reali
+          // saranno comunque visibili dal prossimo refetch.
+        } catch {
+          // ignore — proseguiamo
+        }
       }
 
       const res = await fetch(FINPLAN_URL, {
@@ -211,14 +262,22 @@ export function useFinplanMutation(orgId: string | undefined): UseFinplanMutatio
       // Il PUT in volo prenderà `_pending` quando finisce.
       return;
     }
+    const conflictGuard = { triggered: false };
     const p = (async () => {
       try {
-        while (pendingRef.current) {
+        while (pendingRef.current && !conflictGuard.triggered) {
           const next = pendingRef.current;
           pendingRef.current = null;
+          const beforeKnown = lastKnownRemoteAtRef.current;
           await doPut(next);
-          // Se il guard ha settato error e ha rimesso pending a null,
-          // usciamo per lasciare al consumer la decisione successiva.
+          // Se doPut ha rimesso il pending senza avanzare lastKnown
+          // → conflitto: fermiamo il loop per non riprovare in tight-loop.
+          if (
+            pendingRef.current === next &&
+            lastKnownRemoteAtRef.current === beforeKnown
+          ) {
+            conflictGuard.triggered = true;
+          }
         }
       } finally {
         inflightRef.current = null;
