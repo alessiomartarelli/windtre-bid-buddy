@@ -21,7 +21,7 @@ import {
   DEFAULT_CATS_E, DEFAULT_CATS_U,
   HEADER_KEYWORDS,
   parseFile, autoDetectColumn, rowsToTransactions,
-  type ParsedFile, type ColumnMapping, type BuiltTransaction,
+  type ParsedFile, type ColumnMapping, type BuiltTransaction, type ParsedRow,
 } from "@/lib/finplanImport";
 // Componente condiviso per la mappatura colonne (Task #144), riusato anche
 // dal `BankImportFlow` invocato dalla sezione Transazioni della shell React.
