@@ -213,7 +213,7 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
             data-testid="button-finplan-setup-skip"
           >
             <SkipForward className="h-4 w-4 mr-2" />
-            Salta e usa il tool standalone
+            Salta e apri il workspace vuoto
           </Button>
         </div>
         <div className="space-y-1 pt-2">
@@ -231,7 +231,8 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
               Questa procedura guidata ti aiuta a popolare il workspace FinPlan
               per la tua organizzazione importando uno o più estratti conto in
               formato Excel o CSV. Niente è obbligatorio: in qualunque momento
-              puoi saltare e usare i pulsanti di import del tool standalone.
+              puoi saltare e usare i pulsanti di import dentro la sezione
+              Transazioni del workspace.
             </p>
             <div className="rounded-md border bg-muted/30 p-3 space-y-1">
               <div className="font-medium">Cosa farai:</div>
