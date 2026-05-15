@@ -19,6 +19,7 @@ import { Budget } from "./sections/Budget";
 import { Personale } from "./sections/Personale";
 import { Partitari } from "./sections/Partitari";
 import { CdgPerPdv } from "./sections/CdgPerPdv";
+import { Consolidato } from "./sections/Consolidato";
 
 interface FinplanAppProps {
   orgId: string;
@@ -186,7 +187,14 @@ export default function FinplanApp({ orgId }: FinplanAppProps) {
           </div>
 
           {isConsolidato ? (
-            <ConsolidatoPlaceholder loading={isLoading} />
+            isLoading ? <SectionLoading /> : (
+              <Consolidato
+                snapshot={snapshot}
+                defaultNames={DEFAULT_COMPANY_NAMES}
+                companyColors={COMPANY_COLORS}
+                consolidatoColor={CONSOLIDATO_COLOR}
+              />
+            )
           ) : (
             <Tabs value={activeSec} onValueChange={(v) => setActiveSec(v as SectionKey)}>
               <TabsList className="flex flex-wrap h-auto justify-start gap-1">
@@ -345,18 +353,3 @@ function SectionPlaceholder({ title }: { title: string }) {
   );
 }
 
-function ConsolidatoPlaceholder({ loading }: { loading: boolean }) {
-  if (loading) return <SectionLoading />;
-  return (
-    <div
-      className="rounded-md border border-dashed p-12 text-center text-muted-foreground"
-      data-testid="finplan-consolidato-placeholder"
-    >
-      <Star className="h-8 w-8 mx-auto mb-3 text-amber-500" />
-      <p className="text-sm font-medium mb-1">Consolidato gruppo in arrivo</p>
-      <p className="text-xs">
-        Aggregazioni cross-Ragione Sociale verranno aggiunte in un task dedicato (#147).
-      </p>
-    </div>
-  );
-}
