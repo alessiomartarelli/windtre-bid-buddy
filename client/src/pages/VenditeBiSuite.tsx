@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { apiUrl } from "@/lib/basePath";
 import { useLocation } from "wouter";
 import * as XLSX from "xlsx";
+import { KpiCardsSkeleton, DataTableSkeleton } from "@/components/skeletons";
 import {
   computeIncassoTotals,
   INCASSO_ITEMS_CONFIG,
@@ -982,8 +983,9 @@ export default function VenditeBiSuite() {
         </FilterBar>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="space-y-4 py-4">
+            <KpiCardsSkeleton />
+            <DataTableSkeleton rows={10} columns={6} />
           </div>
         ) : (
           <>

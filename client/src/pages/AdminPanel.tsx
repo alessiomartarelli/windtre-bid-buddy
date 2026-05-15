@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, Store, Building2, ChevronRight, UserCheck, Edit2, Image as ImageIcon } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
+import { PageLoadingSkeleton } from '@/components/skeletons';
 import { z } from 'zod';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
@@ -561,11 +562,7 @@ export default function AdminPanel() {
   const canToggleActive = (user: TeamMember) => user.id !== profile?.id && ['super_admin', 'admin'].includes(profile?.role || '');
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <PageLoadingSkeleton />;
   }
 
   if (!profile || !['super_admin', 'admin'].includes(profile.role)) return null;

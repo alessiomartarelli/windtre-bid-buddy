@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/basePath';
 import { queryClient } from '@/lib/queryClient';
 import { Info } from 'lucide-react';
+import { DataTableSkeleton } from '@/components/skeletons';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

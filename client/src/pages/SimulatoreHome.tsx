@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { DataTableSkeleton } from "@/components/skeletons";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";

@@ -15,12 +15,13 @@ import Index from "@/pages/Index";
 import Auth from "@/pages/auth";
 import Profile from "@/pages/Profile";
 import AdminPanel from "@/pages/AdminPanel";
+import Dashboard from "@/pages/Dashboard";
 
 // Pagine pesanti caricate on-demand (Task #137: code-splitting). Riducono il
-// bundle di cold-start mantenendo le rotte leggere (Index, Auth, Profile)
-// nello chunk principale per UX immediata. Ogni `lazy()` produce un chunk
-// separato che viene scaricato solo quando l'utente naviga su quella rotta.
-const Dashboard = lazy(() => import("@/pages/Dashboard"));
+// bundle di cold-start mantenendo le rotte leggere (Index, Auth, Profile,
+// Dashboard) nello chunk principale per UX immediata. Ogni `lazy()` produce
+// un chunk separato che viene scaricato solo quando l'utente naviga sulla
+// rotta corrispondente.
 const Preventivatore = lazy(() => import("@/pages/Preventivatore"));
 const SimulatoreHome = lazy(() => import("@/pages/SimulatoreHome"));
 const SuperAdminPanel = lazy(() => import("@/pages/SuperAdminPanel"));

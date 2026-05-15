@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiUrl } from "@/lib/basePath";
 import { AppNavbar } from "@/components/AppNavbar";
+import { PageLoadingSkeleton, DataTableSkeleton } from "@/components/skeletons";
 import {
   computeIncassoTotals,
   computeIncassoCounts,
@@ -1209,11 +1210,7 @@ export default function Amministrazione() {
   };
 
   if (loading || !isAuthorized) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <PageLoadingSkeleton />;
   }
 
   return (
@@ -1405,9 +1402,7 @@ export default function Amministrazione() {
             </TabsContent>
           </Tabs>
         ) : isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
+          <DataTableSkeleton rows={8} columns={5} className="py-6" />
         ) : (
           <>
 <Tabs
