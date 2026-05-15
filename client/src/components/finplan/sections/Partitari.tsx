@@ -20,6 +20,7 @@ import type {
 } from "@shared/finplanSchema";
 import type { FinplanUpdater } from "@/hooks/useFinplan";
 import { formatCurrency } from "@/utils/format";
+import { parseItalianNumber } from "@/utils/parseItalianNumber";
 import { useToast } from "@/hooks/use-toast";
 import {
   PT_FIELDS,
@@ -59,7 +60,7 @@ function nextNumId(arr: { id?: number | string }[]): number {
 }
 
 function parseEuro(s: string): number {
-  return parseFloat(s.replace(",", ".")) || 0;
+  return parseItalianNumber(s);
 }
 
 const STATO_BADGE: Record<PtStato, string> = {

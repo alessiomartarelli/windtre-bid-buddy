@@ -40,6 +40,7 @@ import type {
 } from "@shared/finplanSchema";
 import type { FinplanUpdater } from "@/hooks/useFinplan";
 import { formatCurrency } from "@/utils/format";
+import { parseItalianNumber } from "@/utils/parseItalianNumber";
 
 interface Props {
   snapshot: FinplanSnapshot | null;
@@ -82,7 +83,7 @@ function uid(): string {
 }
 
 function parseEuro(s: string): number {
-  return parseFloat(s.replace(",", ".")) || 0;
+  return parseItalianNumber(s);
 }
 
 function getMese(map: Record<string, number> | undefined, mi: number): number {

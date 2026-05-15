@@ -21,6 +21,7 @@ import type {
 } from "@shared/finplanSchema";
 import type { FinplanUpdater } from "@/hooks/useFinplan";
 import { formatCurrency } from "@/utils/format";
+import { parseItalianNumber } from "@/utils/parseItalianNumber";
 import { useToast } from "@/hooks/use-toast";
 import {
   HR_COLORS,
@@ -58,7 +59,7 @@ function nextNumId(arr: { id?: number | string }[]): number {
 }
 
 function parseEuro(s: string): number {
-  return parseFloat(s.replace(",", ".")) || 0;
+  return parseItalianNumber(s);
 }
 
 export function Personale({ snapshot, companyIndex, scheduleSave }: Props) {
