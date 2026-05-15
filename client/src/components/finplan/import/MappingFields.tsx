@@ -122,7 +122,7 @@ export function MappingFields(props: MappingFieldsProps) {
             onClick={() => props.autoClassify!.onToggle(!props.autoClassify!.enabled)}
             data-testid={`${p}-toggle-auto-classify`}
           >
-            {props.autoClassify.enabled ? "Attiva" : "Disattiva"}
+            {props.autoClassify.enabled ? "Disattiva" : "Attiva"}
           </Button>
         </div>
       )}

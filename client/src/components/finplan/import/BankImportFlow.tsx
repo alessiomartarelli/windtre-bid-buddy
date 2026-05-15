@@ -16,7 +16,7 @@
 // Tutta la logica di parsing/mapping/build è importata da
 // `client/src/lib/finplanImport.ts` (funzioni pure testabili).
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -113,6 +113,19 @@ export function BankImportFlow(props: BankImportFlowProps) {
   const [defaultCatU, setDefaultCatU] = useState<string>("u2");
   const [ivaMode, setIvaMode] = useState<"netti" | "lordi">("netti");
   const [autoClassifyOn, setAutoClassifyOn] = useState(true);
+
+  // Robustness (review #144 round 3): se `rsNames` cambia di lunghezza
+  // mentre il flow è montato (es. il wizard aggiorna i nomi tra render),
+  // riallineiamo `parsedSlots` per evitare slot orfani o accessi fuori
+  // bounds. Conserviamo i parsed esistenti per le prime N posizioni
+  // comuni (no perdita lavoro), troncando o estendendo con `null`.
+  useEffect(() => {
+    setParsedSlots(prev => {
+      if (prev.length === rsNames.length) return prev;
+      const next: (ParsedFile | null)[] = rsNames.map((_, i) => prev[i] ?? null);
+      return next;
+    });
+  }, [rsNames.length]);
 
   // File di riferimento per la mappatura: in "multi-files" prendiamo il
   // primo slot caricato, negli altri due modi è il singolo file caricato.
