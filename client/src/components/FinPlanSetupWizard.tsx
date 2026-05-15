@@ -19,21 +19,96 @@ const MO = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","D
 // Categorie di default (mirror di DEFAULT_CATS_E/U dentro
 // client/public/finplan/index.html). Se vengono cambiate lì, replicare
 // qui per mantenere coerenza dopo il primo import.
+// Le categorie "speciali" (Infragruppo/Giroconto/Estero) hanno gli stessi
+// id usati dal tool standalone così l'auto-classificazione qui sotto
+// produce transazioni già riconosciute correttamente.
+const CAT_INFRAGRUPPO_E = "ig_e";
+const CAT_INFRAGRUPPO_U = "ig_u";
+const CAT_GIROCONTO_E = "gc_e";
+const CAT_GIROCONTO_U = "gc_u";
+const CAT_ESTERO_E = "est_e";
+const CAT_ESTERO_U = "est_u";
+
 const DEFAULT_CATS_E = [
-  { id: "e1", name: "Vendite Prodotti",   color: "#00D4AA", type: "E" },
-  { id: "e2", name: "Servizi/Consulenze", color: "#3B82F6", type: "E" },
-  { id: "e3", name: "Abbonamenti",        color: "#8B5CF6", type: "E" },
-  { id: "e4", name: "Affitti Attivi",     color: "#F59E0B", type: "E" },
-  { id: "e5", name: "Altro Entrate",      color: "#06B6D4", type: "E" },
+  { id: "e1", name: "Vendite Prodotti",   color: "#00D4AA", type: "E" as const },
+  { id: "e2", name: "Servizi/Consulenze", color: "#3B82F6", type: "E" as const },
+  { id: "e3", name: "Abbonamenti",        color: "#8B5CF6", type: "E" as const },
+  { id: "e4", name: "Affitti Attivi",     color: "#F59E0B", type: "E" as const },
+  { id: "e5", name: "Altro Entrate",      color: "#06B6D4", type: "E" as const },
+  { id: CAT_INFRAGRUPPO_E, name: "Infragruppo", color: "#A78BFA", type: "E" as const, infragruppo: true },
+  { id: CAT_GIROCONTO_E,   name: "Giroconto",   color: "#64748B", type: "E" as const, giroconto: true },
+  { id: CAT_ESTERO_E,      name: "Estero",      color: "#06B6D4", type: "E" as const, estero: true },
 ];
 const DEFAULT_CATS_U = [
-  { id: "u1", name: "Personale/Stipendi", color: "#F43F5E", type: "U" },
-  { id: "u2", name: "Fornitori",          color: "#F97316", type: "U" },
-  { id: "u3", name: "Affitti Passivi",    color: "#EAB308", type: "U" },
-  { id: "u4", name: "Marketing/Adv",      color: "#EC4899", type: "U" },
-  { id: "u5", name: "Utenze/Servizi",     color: "#84CC16", type: "U" },
-  { id: "u6", name: "Altro Uscite",       color: "#94A3B8", type: "U" },
+  { id: "u1", name: "Personale/Stipendi", color: "#F43F5E", type: "U" as const },
+  { id: "u2", name: "Fornitori",          color: "#F97316", type: "U" as const },
+  { id: "u3", name: "Affitti Passivi",    color: "#EAB308", type: "U" as const },
+  { id: "u4", name: "Marketing/Adv",      color: "#EC4899", type: "U" as const },
+  { id: "u5", name: "Utenze/Servizi",     color: "#84CC16", type: "U" as const },
+  { id: "u6", name: "Altro Uscite",       color: "#94A3B8", type: "U" as const },
+  { id: CAT_INFRAGRUPPO_U, name: "Infragruppo", color: "#7C3AED", type: "U" as const, infragruppo: true },
+  { id: CAT_GIROCONTO_U,   name: "Giroconto",   color: "#475569", type: "U" as const, giroconto: true },
+  { id: CAT_ESTERO_U,      name: "Estero",      color: "#0891B2", type: "U" as const, estero: true },
 ];
+
+// Keyword set semplificato dal tool standalone (`autoRiclassifica`):
+// queste vengono cercate dentro la descrizione del movimento per
+// riassegnare il catId al posto del default unico.
+const GIROCONTO_KW = [
+  "girocont", "giro conto", "giro-conto",
+  "bonifico interno", "trasferimento interno",
+  "storno", "partite interne", "movimento interno",
+];
+const INFRAGRUPPO_KW = [
+  "infragruppo", "intra gruppo", "intra-gruppo", "intercompany", "inter company",
+  "aziende gruppo", "azienda gruppo", "gruppo aziendale",
+  "fatture interne", "fattura interna", "fatt. interne", "fatt interne",
+  // Nomi società tipiche del gruppo (mirror del tool standalone).
+  "cms evo", "cms evolution", "phone & phone", "phone and phone",
+  "easy digital", "sc technology", "nuova ristorazione",
+];
+const ESTERO_KW = [
+  "estero", "foreign", "international", "internazionale", "overseas",
+  "bonifico estero", "bonifico internazionale", "wire transfer", "swift",
+  "sepa estero", "pagamento estero", "rimessa estera",
+  "reverse charge", "inversione contabile", "autofattura",
+];
+const PERSONALE_KW = [
+  "stipend", "salari", "salario", "personale dipendente",
+  "buste paga", "busta paga", "compenso amministratore",
+  "compensi amministratori", "tfr",
+];
+const FORNITORI_KW = [
+  "fornitor", "fattura n", "ft.", "fatt.", "pagamento fattura",
+  "pag. fattura", "pag.fattura", "pagam. fornitor",
+];
+
+function classifyDesc(
+  desc: string,
+  type: "E" | "U",
+  defE: string,
+  defU: string,
+): { catId: string; tag: string } {
+  const dv = (desc || "").toLowerCase().trim();
+  if (dv) {
+    if (GIROCONTO_KW.some(k => dv.includes(k))) {
+      return { catId: type === "E" ? CAT_GIROCONTO_E : CAT_GIROCONTO_U, tag: "Giroconto" };
+    }
+    if (INFRAGRUPPO_KW.some(k => dv.includes(k))) {
+      return { catId: type === "E" ? CAT_INFRAGRUPPO_E : CAT_INFRAGRUPPO_U, tag: "Infragruppo" };
+    }
+    if (ESTERO_KW.some(k => dv.includes(k))) {
+      return { catId: type === "E" ? CAT_ESTERO_E : CAT_ESTERO_U, tag: "Estero" };
+    }
+    if (type === "U" && PERSONALE_KW.some(k => dv.includes(k))) {
+      return { catId: "u1", tag: "Personale" };
+    }
+    if (type === "U" && FORNITORI_KW.some(k => dv.includes(k))) {
+      return { catId: "u2", tag: "Fornitori" };
+    }
+  }
+  return { catId: type === "E" ? defE : defU, tag: "" };
+}
 
 type StepKey = "intro" | "rs" | "upload" | "mapping" | "save";
 const STEPS: StepKey[] = ["intro", "rs", "upload", "mapping", "save"];
@@ -70,6 +145,9 @@ interface BuiltTransaction {
   catId: string;       // e.g. 'e1' or 'u2'
   ivaRate: number;
   desc: string;
+  autoTag: string;     // tag dell'auto-classificazione, "" se default
+  _rowIdx: number;     // indice riga sorgente (per chiave override)
+  _rsIdx: number;      // indice RS sorgente (per chiave override)
 }
 
 // Parse un valore numerico in formato italiano/europeo. Tollera
@@ -156,20 +234,31 @@ async function parseFile(file: File): Promise<ParsedFile> {
 }
 
 // Converte una lista di righe parsed + mapping in transazioni FinPlan.
+// `rowOriginalIndices[i]` è l'indice della riga `rows[i]` nel file
+// sorgente (utile in modalità single-rs-col dove le righe vengono
+// raggruppate per RS prima di essere processate). `rsIdx` è l'indice
+// della RS destinataria — entrambi servono a costruire la chiave di
+// override `${rsIdx}:${origRowIdx}:${type}` univoca tra RS diverse.
 function rowsToTransactions(
   rows: ParsedRow[],
+  rowOriginalIndices: number[],
+  rsIdx: number,
   mapping: ColumnMapping,
   defaultCatE: string,
   defaultCatU: string,
   ivaMode: "netti" | "lordi",
   startId: number,
+  autoClassifyOn: boolean,
+  overrides: Record<string, string>,
 ): BuiltTransaction[] {
   const out: BuiltTransaction[] = [];
   let nextId = startId;
   const usesSigned = mapping.amountIn < 0 && mapping.amountOut < 0 && mapping.amountSigned >= 0;
   const factor = ivaMode === "lordi" ? 1 / 1.22 : 1;
-  const ivaRate = ivaMode === "lordi" ? 22 : 0;
-  for (const row of rows) {
+  const baseIva = ivaMode === "lordi" ? 22 : 0;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const origIdx = rowOriginalIndices[i] ?? i;
     const month = mapping.date >= 0 ? parseMonth(row[mapping.date]) : 0;
     const desc = mapping.desc >= 0 ? String(row[mapping.desc] ?? "").trim() : "";
     let amountE = 0, amountU = 0;
@@ -180,12 +269,32 @@ function rowsToTransactions(
       if (mapping.amountIn >= 0) amountE = parseAmount(row[mapping.amountIn]);
       if (mapping.amountOut >= 0) amountU = parseAmount(row[mapping.amountOut]);
     }
-    if (amountE > 0) {
-      out.push({ id: nextId++, month, type: "E", amount: +(amountE * factor).toFixed(2), catId: defaultCatE, ivaRate, desc });
-    }
-    if (amountU > 0) {
-      out.push({ id: nextId++, month, type: "U", amount: +(amountU * factor).toFixed(2), catId: defaultCatU, ivaRate, desc });
-    }
+    const pushTx = (type: "E" | "U", amount: number) => {
+      const auto = autoClassifyOn
+        ? classifyDesc(desc, type, defaultCatE, defaultCatU)
+        : { catId: type === "E" ? defaultCatE : defaultCatU, tag: "" };
+      const ovKey = `${rsIdx}:${origIdx}:${type}`;
+      const finalCat = overrides[ovKey] ?? auto.catId;
+      // Le categorie speciali (giroconti/estero/personale) non hanno
+      // IVA scorporabile.
+      const noIva = finalCat === CAT_GIROCONTO_E || finalCat === CAT_GIROCONTO_U
+        || finalCat === CAT_ESTERO_E || finalCat === CAT_ESTERO_U
+        || finalCat === "u1";
+      const ivaRate = noIva ? 0 : baseIva;
+      const fact = noIva ? 1 : factor;
+      out.push({
+        id: nextId++, month, type,
+        amount: +(amount * fact).toFixed(2),
+        catId: finalCat,
+        ivaRate,
+        desc,
+        autoTag: overrides[ovKey] ? "Override" : auto.tag,
+        _rowIdx: origIdx,
+        _rsIdx: rsIdx,
+      });
+    };
+    if (amountE > 0) pushTx("E", amountE);
+    if (amountU > 0) pushTx("U", amountU);
   }
   return out;
 }
@@ -198,7 +307,11 @@ function buildSnapshot(
   sourceFileNames: (string | null)[],
 ): unknown {
   const data = rsNames.map((name, i) => {
-    const txs = txByRs[i] ?? [];
+    const rawTxs = txByRs[i] ?? [];
+    // Spogliamo i campi interni al wizard (autoTag, _rowIdx, _rsIdx)
+    // prima di serializzare, così lo snapshot resta allineato allo
+    // shape di saveProject() del tool standalone.
+    const txs = rawTxs.map(({ autoTag: _t, _rowIdx: _r, _rsIdx: _s, ...rest }) => rest);
     const m = MO.map(mo => ({ month: mo, e: 0, u: 0 }));
     let txIdSeq = 1;
     for (const tx of txs) {
@@ -290,6 +403,15 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
   const [defaultCatE, setDefaultCatE] = useState<string>("e1");
   const [defaultCatU, setDefaultCatU] = useState<string>("u2");
   const [ivaMode, setIvaMode] = useState<"netti" | "lordi">("netti");
+  // Auto-classificazione attiva di default; gli override per riga
+  // sono memorizzati per chiave "rowIdx:type" (E/U) così sopravvivono
+  // ai re-render anche se l'id sequenziale cambia.
+  const [autoClassifyOn, setAutoClassifyOn] = useState<boolean>(true);
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [previewExpanded, setPreviewExpanded] = useState<boolean>(false);
+  const [previewSearch, setPreviewSearch] = useState<string>("");
+  const [previewPage, setPreviewPage] = useState<number>(0);
+  const PREVIEW_PAGE_SIZE = 50;
 
   // Step "save": stato submit.
   const [saving, setSaving] = useState(false);
@@ -319,6 +441,19 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
     try {
       const p = await parseFile(file);
       setSlots(prev => prev.map((s, i) => i === slotIdx ? { ...s, parsed: p } : s));
+      // Reset degli override solo per la RS interessata (le chiavi sono
+      // namespaced come `${rsIdx}:${rowIdx}:${type}`), così non perdiamo
+      // gli override già fatti per altre RS.
+      setOverrides(prev => {
+        const next: Record<string, string> = {};
+        const prefix = `${slotIdx}:`;
+        for (const k of Object.keys(prev)) {
+          if (!k.startsWith(prefix)) next[k] = prev[k];
+        }
+        return next;
+      });
+      setPreviewPage(0);
+      setPreviewSearch("");
       // Auto-detect alla prima importazione (se mapping ancora vuoto).
       setMapping(curr => {
         const empty = curr.date < 0 && curr.amountIn < 0 && curr.amountOut < 0 && curr.amountSigned < 0 && curr.desc < 0;
@@ -389,26 +524,65 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
     if (uploadMode === "multi") {
       for (const s of slots) {
         if (!s.parsed) continue;
-        const txs = rowsToTransactions(s.parsed.rows, mapping, defaultCatE, defaultCatU, ivaMode, nextId);
+        const indices = s.parsed.rows.map((_, ri) => ri);
+        const txs = rowsToTransactions(
+          s.parsed.rows, indices, s.rsIndex,
+          mapping, defaultCatE, defaultCatU, ivaMode, nextId,
+          autoClassifyOn, overrides,
+        );
         out[s.rsIndex] = txs;
         if (txs.length > 0) nextId = txs[txs.length - 1].id + 1;
       }
     } else if (uploadMode === "single-rs-col" && singleParsed && mapping.rs >= 0) {
-      // Raggruppa righe per RS, poi processa.
-      const groups: ParsedRow[][] = Array.from({ length: 5 }, () => []);
-      for (const row of singleParsed.rows) {
+      // Raggruppa righe per RS conservando l'indice originale (necessario
+      // per costruire chiavi di override stabili).
+      const groups: { rows: ParsedRow[]; indices: number[] }[] =
+        Array.from({ length: 5 }, () => ({ rows: [], indices: [] }));
+      for (let ri = 0; ri < singleParsed.rows.length; ri++) {
+        const row = singleParsed.rows[ri];
         const idx = matchRsIndex(row[mapping.rs]);
-        if (idx >= 0) groups[idx].push(row);
+        if (idx >= 0) {
+          groups[idx].rows.push(row);
+          groups[idx].indices.push(ri);
+        }
       }
       for (let i = 0; i < 5; i++) {
-        if (groups[i].length === 0) continue;
-        const txs = rowsToTransactions(groups[i], mapping, defaultCatE, defaultCatU, ivaMode, nextId);
+        if (groups[i].rows.length === 0) continue;
+        const txs = rowsToTransactions(
+          groups[i].rows, groups[i].indices, i,
+          mapping, defaultCatE, defaultCatU, ivaMode, nextId,
+          autoClassifyOn, overrides,
+        );
         out[i] = txs;
         if (txs.length > 0) nextId = txs[txs.length - 1].id + 1;
       }
     }
     return out;
-  }, [uploadMode, slots, singleParsed, mapping, defaultCatE, defaultCatU, ivaMode, matchRsIndex]);
+  }, [uploadMode, slots, singleParsed, mapping, defaultCatE, defaultCatU, ivaMode, matchRsIndex, autoClassifyOn, overrides]);
+
+  // Vista piatta delle transazioni costruite (su tutte le RS), usata
+  // dalla preview e dallo statistico per categoria.
+  const builtTransactions = useMemo<BuiltTransaction[]>(
+    () => txByRs.flat(),
+    [txByRs],
+  );
+
+  // Statistiche per categoria (per la card di sintesi nello step mapping).
+  const catBreakdown = useMemo(() => {
+    const byCat = new Map<string, { count: number; total: number; type: "E" | "U" }>();
+    for (const tx of builtTransactions) {
+      const cur = byCat.get(tx.catId) || { count: 0, total: 0, type: tx.type };
+      cur.count += 1;
+      cur.total += tx.amount;
+      byCat.set(tx.catId, cur);
+    }
+    const allCats = [...DEFAULT_CATS_E, ...DEFAULT_CATS_U];
+    return Array.from(byCat.entries()).map(([catId, v]) => ({
+      catId,
+      name: allCats.find(c => c.id === catId)?.name || catId,
+      ...v,
+    })).sort((a, b) => b.total - a.total);
+  }, [builtTransactions]);
 
   const sourceFileNames = useMemo<(string | null)[]>(() => {
     if (uploadMode === "multi") {
@@ -804,6 +978,176 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
                   ))}
                 </div>
               </>
+            )}
+
+            {mappingValid && totals.count > 0 && (
+              <div className="rounded-md border p-3 space-y-3" data-testid="finplan-auto-classify">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-medium">Auto-classificazione categorie</div>
+                    <div className="text-xs text-muted-foreground">
+                      Riconosce giroconti, infragruppo, estero, stipendi e fornitori
+                      dalla descrizione. Puoi disattivarla o correggere riga per riga.
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={autoClassifyOn ? "default" : "outline"}
+                    onClick={() => setAutoClassifyOn(v => !v)}
+                    data-testid="button-toggle-auto-classify"
+                  >
+                    {autoClassifyOn ? "Disattiva" : "Attiva"}
+                  </Button>
+                </div>
+
+                {catBreakdown.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5" data-testid="finplan-cat-breakdown">
+                    {catBreakdown.map(b => (
+                      <Badge
+                        key={b.catId}
+                        variant={b.type === "E" ? "default" : "secondary"}
+                        data-testid={`badge-cat-${b.catId}`}
+                      >
+                        {b.name}: {b.count} · {fmtEur(b.total)}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                <div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPreviewExpanded(v => !v)}
+                    data-testid="button-toggle-preview"
+                  >
+                    {previewExpanded ? "Nascondi anteprima righe" : `Mostra anteprima righe (override per riga)`}
+                  </Button>
+                  {previewExpanded && (() => {
+                    const q = previewSearch.trim().toLowerCase();
+                    const filtered = q
+                      ? builtTransactions.filter(tx =>
+                          tx.desc.toLowerCase().includes(q)
+                          || tx.autoTag.toLowerCase().includes(q))
+                      : builtTransactions;
+                    const totalPages = Math.max(1, Math.ceil(filtered.length / PREVIEW_PAGE_SIZE));
+                    const page = Math.min(previewPage, totalPages - 1);
+                    const start = page * PREVIEW_PAGE_SIZE;
+                    const pageRows = filtered.slice(start, start + PREVIEW_PAGE_SIZE);
+                    return (
+                      <div className="mt-2 space-y-2" data-testid="finplan-preview-list">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            placeholder="Filtra per descrizione…"
+                            value={previewSearch}
+                            onChange={(e) => { setPreviewSearch(e.target.value); setPreviewPage(0); }}
+                            className="h-8 text-xs"
+                            data-testid="input-preview-search"
+                          />
+                        </div>
+                        <div className="max-h-72 overflow-y-auto rounded border">
+                          <table className="w-full text-xs">
+                            <thead className="sticky top-0 bg-muted text-left">
+                              <tr>
+                                <th className="px-2 py-1.5">Tipo</th>
+                                <th className="px-2 py-1.5">Importo</th>
+                                <th className="px-2 py-1.5">Descrizione</th>
+                                <th className="px-2 py-1.5">Auto</th>
+                                <th className="px-2 py-1.5">Categoria</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pageRows.map((tx) => {
+                                const ovKey = `${tx._rsIdx}:${tx._rowIdx}:${tx.type}`;
+                                const cats = tx.type === "E" ? DEFAULT_CATS_E : DEFAULT_CATS_U;
+                                return (
+                                  <tr key={tx.id} className="border-t">
+                                    <td className="px-2 py-1 align-top">
+                                      <Badge variant={tx.type === "E" ? "default" : "secondary"} className="text-[10px]">
+                                        {tx.type}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-2 py-1 align-top whitespace-nowrap font-mono">
+                                      {fmtEur(tx.amount)}
+                                    </td>
+                                    <td className="px-2 py-1 align-top max-w-[280px] truncate" title={tx.desc}>
+                                      {tx.desc || <span className="text-muted-foreground">—</span>}
+                                    </td>
+                                    <td className="px-2 py-1 align-top">
+                                      {tx.autoTag ? (
+                                        <Badge variant="outline" className="text-[10px]">{tx.autoTag}</Badge>
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </td>
+                                    <td className="px-2 py-1 align-top">
+                                      <Select
+                                        value={tx.catId}
+                                        onValueChange={(v) => setOverrides(o => ({ ...o, [ovKey]: v }))}
+                                      >
+                                        <SelectTrigger
+                                          className="h-7 text-xs"
+                                          data-testid={`select-override-${tx.id}`}
+                                        >
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {cats.map(c => (
+                                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {pageRows.length === 0 && (
+                                <tr><td colSpan={5} className="px-2 py-3 text-center text-muted-foreground">
+                                  Nessuna riga corrisponde al filtro.
+                                </td></tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span data-testid="text-preview-summary">
+                            {filtered.length === 0
+                              ? "Nessuna riga"
+                              : `Righe ${start + 1}–${Math.min(start + PREVIEW_PAGE_SIZE, filtered.length)} di ${filtered.length}${q ? ` (filtrate da ${builtTransactions.length})` : ""}`}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2"
+                              disabled={page <= 0}
+                              onClick={() => setPreviewPage(p => Math.max(0, p - 1))}
+                              data-testid="button-preview-prev"
+                            >
+                              <ChevronLeft className="h-3 w-3" />
+                            </Button>
+                            <span data-testid="text-preview-page">{page + 1} / {totalPages}</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2"
+                              disabled={page >= totalPages - 1}
+                              onClick={() => setPreviewPage(p => Math.min(totalPages - 1, p + 1))}
+                              data-testid="button-preview-next"
+                            >
+                              <ChevronRight className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
             )}
           </div>
         )}
