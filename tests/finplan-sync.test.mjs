@@ -286,6 +286,19 @@ test('scenario 4: legacy preload routes return 404 (no longer mounted)', async (
       404,
       `super-admin finplan-preload toggle must be 404 after Task #148, got ${adminToggle.status}`,
     );
+
+    // Iframe HTML standalone rimosso: nessun /finplan/* deve risolvere
+    // (NON deve scattare il fallback SPA di Vite, che risponderebbe 200
+    // con index.html mascherando la rimozione).
+    for (const legacyPath of ['/finplan/index.html', '/finplan/preload.json', '/finplan/']) {
+      const r = await fetch(`${BASE}${legacyPath}`, { headers: { Cookie: session.cookie } });
+      await r.arrayBuffer();
+      assert.equal(
+        r.status,
+        404,
+        `${legacyPath} must be 404 after Task #148 cutover, got ${r.status}`,
+      );
+    }
   } finally {
     const pgMod = await import('pg');
     const Pool = pgMod.default?.Pool || pgMod.Pool;

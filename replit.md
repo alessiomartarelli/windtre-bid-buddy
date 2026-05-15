@@ -89,8 +89,12 @@ mantenere snello questo file:
 
 ## Testing
 
-- **FinPlan sync tests** (`tests/finplan-sync.test.mjs`): 5 scenari (ETag/304,
-  PUT debounce, reconcile vergine, conflict guard, PUT/GET autenticato).
+- **FinPlan sync tests** (`tests/finplan-sync.test.mjs`): 5 scenari
+  post-cutover Task #148: (1) PUT/GET autenticato round-trip,
+  (2) latest-wins su PUT consecutivi (mirror del debounce React),
+  (3) preflight GET conflict-guard, (4) route legacy `/api/finplan/preload(/status)`
+  + super-admin `finplan-preload` + `/finplan/index.html` ⇒ 404 (no SPA
+  fallback), (5) setup wizard gating (`!updatedAt && !dismissed`).
   Lanciali via lo step di validation registrato `finplan-tests`
   (`bash scripts/run-finplan-tests.sh`). Lo script aspetta fino a 30s che
   l'app sia raggiungibile su `localhost:5000`, quindi richiede che il

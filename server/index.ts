@@ -109,6 +109,13 @@ app.use((req, res, next) => {
       res.status(404).json({ message: "Not Found" });
     });
 
+    // Stesso 404 esplicito per /finplan/* (iframe HTML standalone
+    // rimosso in Task #148). Va PRIMA di `serveStatic` per evitare il
+    // fallback SPA che restituirebbe 200 con index.html.
+    subApp.use("/finplan", (_req, res) => {
+      res.status(404).type("text/plain").send("Not Found");
+    });
+
     serveStatic(subApp);
     app.use(BASE_PATH, subApp);
 
@@ -124,6 +131,14 @@ app.use((req, res, next) => {
     // con index.html (SPA fallback), nascondendo le route eliminate.
     app.use("/api", (_req, res) => {
       res.status(404).json({ message: "Not Found" });
+    });
+
+    // Task #148: anche le path /finplan/* (vecchio iframe HTML standalone)
+    // devono rispondere 404, NON il fallback SPA di Vite. Lo standalone
+    // tool è stato eliminato; chi continua a chiedere `/finplan/index.html`
+    // o `/finplan/preload.json` deve sapere subito che non esiste più.
+    app.use("/finplan", (_req, res) => {
+      res.status(404).type("text/plain").send("Not Found");
     });
 
     app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
