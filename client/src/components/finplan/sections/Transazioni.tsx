@@ -28,9 +28,10 @@ import { Pencil, Trash2, Plus, Upload, Search, ChevronLeft, ChevronRight } from 
 import type { FinplanCompanySnapshot, FinplanSnapshot, FinplanTransaction } from "@shared/finplanSchema";
 import type { FinplanUpdater } from "@/hooks/useFinplan";
 import { formatCurrency } from "@/utils/format";
-import { ALL_DEFAULT_CATS, DEFAULT_CATS_E, DEFAULT_CATS_U, MO, classifyDesc } from "@/lib/finplanImport";
+import { ALL_DEFAULT_CATS, DEFAULT_CATS_E, DEFAULT_CATS_U, MO, classifyDesc, type BuiltTransaction } from "@/lib/finplanImport";
 import { rebuildMonthly, scorporaIva, isNoIvaCat } from "@/lib/finplanIva";
-import { BankImportFlow } from "../import/BankImportFlow";
+import { BankImportFlow, type BankImportMode } from "../import/BankImportFlow";
+import { useToast } from "@/hooks/use-toast";
 
 interface TransazioniProps {
   snapshot: FinplanSnapshot | null;
@@ -104,6 +105,18 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
   const [editing, setEditing] = useState<FormState | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  // Modalità di import scelta dall'utente: "append" (default, carica
+  // sulla RS attiva), oppure i due flussi multi-RS — un file per RS o
+  // un singolo file con colonna RS che identifica la società.
+  const [importMode, setImportMode] = useState<BankImportMode>("append");
+  const { toast } = useToast();
+
+  // Lista RS dell'organizzazione, per le modalità multi-RS.
+  const allCompanies = snapshot?.data ?? [];
+  const allRsNames = useMemo(
+    () => allCompanies.map((c, i) => String(c.name ?? `Società ${i + 1}`)),
+    [allCompanies],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -230,6 +243,54 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
     setDeleteId(null);
   };
 
+  // Append massivo multi-RS: dispatch di byRs[i] alle company[i]
+  // corrispondenti, in un singolo updater per evitare race condition fra
+  // PUT debounced.
+  const handleImportMulti = (byRs: BuiltTransaction[][]) => {
+    scheduleSave(prev => {
+      const base: FinplanSnapshot = prev && prev.data ? prev : (snapshot ?? { data: [] });
+      const data = (base.data ?? []).slice();
+      let dispatched = 0;
+      for (let i = 0; i < byRs.length && i < data.length; i++) {
+        const incoming = byRs[i];
+        if (!incoming || incoming.length === 0) continue;
+        const c = data[i];
+        const txs = (c.transactions ?? []).slice();
+        const existingIds = new Set<number>();
+        let maxExisting = (typeof c.txIdSeq === "number" ? c.txIdSeq : 1) - 1;
+        for (const t of txs) {
+          if (typeof t.id === "number") {
+            existingIds.add(t.id);
+            if (t.id > maxExisting) maxExisting = t.id;
+          }
+        }
+        let nextId = maxExisting + 1;
+        const stripped = incoming.map(b => ({
+          id: nextId++,
+          month: b.month, type: b.type, amount: b.amount,
+          catId: b.catId, ivaRate: b.ivaRate, desc: b.desc,
+        }));
+        const finalTxs = stripped.map(s => {
+          if (!existingIds.has(s.id)) return s;
+          let candidate = nextId++;
+          while (existingIds.has(candidate)) candidate = nextId++;
+          return { ...s, id: candidate };
+        });
+        const updated = [...txs, ...finalTxs];
+        const newCo: FinplanCompanySnapshot = { ...c, transactions: updated, txIdSeq: nextId };
+        newCo.m = rebuildMonthly(newCo);
+        data[i] = newCo;
+        dispatched += finalTxs.length;
+      }
+      // toast fuori dal updater per non spammare in caso di re-render.
+      setTimeout(() => toast({
+        title: "Import multi-RS completato",
+        description: `${dispatched} transazioni distribuite su ${byRs.filter(a => a && a.length > 0).length} RS`,
+      }), 0);
+      return { ...base, data };
+    });
+  };
+
   const handleImport = (built: { id: number; month: number; type: "E" | "U"; amount: number; catId: string; ivaRate: number; desc: string }[]) => {
     // CRITICO: re-assegniamo gli ID *dentro* l'updater, partendo dallo
     // stato `c` corrente. Gli ID calcolati dal dialog sono basati sullo
@@ -352,6 +413,16 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
           <Button onClick={startNew} size="sm" data-testid="button-add-tx">
             <Plus className="h-4 w-4 mr-1" /> Nuova transazione
           </Button>
+          <Select value={importMode} onValueChange={(v) => setImportMode(v as BankImportMode)}>
+            <SelectTrigger className="h-9 w-[230px]" data-testid="select-import-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="append">Append su questa RS</SelectItem>
+              <SelectItem value="multi-files">Un file per RS</SelectItem>
+              <SelectItem value="single-rs-col">Singolo file con colonna RS</SelectItem>
+            </SelectContent>
+          </Select>
           <Button onClick={() => setImportOpen(true)} size="sm" variant="outline" data-testid="button-import-cc">
             <Upload className="h-4 w-4 mr-1" /> Importa estratto CC
           </Button>
@@ -381,27 +452,26 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[60px]">Mese</TableHead>
-                  <TableHead className="w-[60px]">Tipo</TableHead>
                   <TableHead>Categoria</TableHead>
                   <TableHead>Descrizione</TableHead>
-                  <TableHead className="text-right">Netto</TableHead>
+                  <TableHead className="text-right">Importo entrata</TableHead>
+                  <TableHead className="text-right">Importo uscita</TableHead>
                   <TableHead className="w-[60px] text-right">IVA%</TableHead>
                   <TableHead className="text-right">IVA</TableHead>
-                  <TableHead className="text-right">Lordo</TableHead>
                   <TableHead className="w-[80px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       Nessuna transazione corrisponde ai filtri.
                     </TableCell>
                   </TableRow>
                 ) : (<>
                   {padTop > 0 && (
                     <TableRow style={{ height: padTop }} aria-hidden>
-                      <TableCell colSpan={9} className="p-0 border-0" />
+                      <TableCell colSpan={8} className="p-0 border-0" />
                     </TableRow>
                   )}
                   {visibleRows.map((tx) => {
@@ -411,14 +481,12 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
                   const noIva = isNoIvaCat(tx.catId);
                   const eff = noIva ? 0 : rate;
                   const sc = scorporaIva(amt, eff);
+                  // Importi per tipo: il netto va nella colonna Entrata o
+                  // Uscita in base al `tx.type`, l'altra resta vuota.
+                  const isEntrata = tx.type === "E";
                   return (
                     <TableRow key={idNum} style={virtualized ? { height: VIRTUAL_ROW_HEIGHT } : undefined} data-testid={`row-tx-${idNum}`}>
                       <TableCell className="text-xs">{MO[tx.month ?? 0]}</TableCell>
-                      <TableCell>
-                        <Badge variant={tx.type === "E" ? "default" : "secondary"} className="text-[10px]">
-                          {tx.type}
-                        </Badge>
-                      </TableCell>
                       <TableCell>
                         <span className="inline-flex items-center gap-1.5 text-xs">
                           <span className="inline-block w-2 h-2 rounded-sm" style={{ background: getCatColor(tx.catId, co) }} />
@@ -426,13 +494,15 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
                         </span>
                       </TableCell>
                       <TableCell className="max-w-[280px] truncate text-xs" title={tx.desc}>{tx.desc || "—"}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">{formatCurrency(sc.netto)}</TableCell>
+                      <TableCell className="text-right font-mono text-xs text-emerald-700 dark:text-emerald-400" data-testid={`tx-entrata-${idNum}`}>
+                        {isEntrata ? formatCurrency(sc.netto) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs text-rose-700 dark:text-rose-400" data-testid={`tx-uscita-${idNum}`}>
+                        {!isEntrata ? formatCurrency(sc.netto) : "—"}
+                      </TableCell>
                       <TableCell className="text-right text-xs">{noIva ? "—" : `${eff}%`}</TableCell>
                       <TableCell className="text-right font-mono text-xs text-muted-foreground">
                         {noIva ? "—" : formatCurrency(sc.iva)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs font-medium">
-                        {noIva ? formatCurrency(sc.netto) : formatCurrency(sc.lordo)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -449,7 +519,7 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
                 })}
                   {padBottom > 0 && (
                     <TableRow style={{ height: padBottom }} aria-hidden>
-                      <TableCell colSpan={9} className="p-0 border-0" />
+                      <TableCell colSpan={8} className="p-0 border-0" />
                     </TableRow>
                   )}
                 </>)}
@@ -516,14 +586,21 @@ export function Transazioni({ snapshot, companyIndex, scheduleSave }: Transazion
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Import CC dialog */}
+      {/* Import CC dialog: lo stesso BankImportFlow è riusato in tutti e
+          tre i mode (append / multi-files / single-rs-col), così la
+          sezione Transazioni espone l'intero set di flussi UX coperti
+          anche dal wizard di setup iniziale. */}
       <BankImportFlow
         open={importOpen}
         onOpenChange={setImportOpen}
+        mode={importMode}
         rsName={String(co?.name ?? `Società ${companyIndex + 1}`)}
         rsIndex={companyIndex}
         nextTxId={nextTxIdFromCompany(co)}
+        rsNames={allRsNames}
+        nextTxIdSeq={1}
         onConfirm={(built) => handleImport(built)}
+        onConfirmMulti={(byRs) => handleImportMulti(byRs)}
       />
     </div>
   );

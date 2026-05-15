@@ -39,6 +39,15 @@ interface BankImportFlowProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode?: BankImportMode;
+  /**
+   * Se true, NON renderizza il <Dialog> wrapper: il contenuto (steps,
+   * upload/mapping/preview, footer) viene reso inline e il chiamante è
+   * responsabile della cornice. Usato dal `FinPlanSetupWizard` per
+   * embeddare il flusso senza dialog. In modalità inline `open` viene
+   * trattato come sempre vero e `onOpenChange(false)` viene invocato
+   * dopo la conferma per segnalare al parent che lo step è completato.
+   */
+  inline?: boolean;
 
   // ----- append mode -----
   rsName?: string;
@@ -284,17 +293,8 @@ export function BankImportFlow(props: BankImportFlowProps) {
       ? "Importa estratti CC (un file per RS)"
       : "Importa estratto CC (singolo file con colonna RS)";
 
-  return (
-    <Dialog open={props.open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl" data-testid="dialog-bank-import">
-        <DialogHeader>
-          <DialogTitle>{titleLabel}</DialogTitle>
-          <DialogDescription>
-            Carica un file Excel/CSV e mappa le colonne. Le righe verranno aggiunte
-            alle transazioni esistenti.
-          </DialogDescription>
-        </DialogHeader>
-
+  const body = (
+    <>
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="bank-import-steps">
             {STEPS.map((s, i) => (
@@ -432,7 +432,7 @@ export function BankImportFlow(props: BankImportFlowProps) {
           )}
         </div>
 
-        <DialogFooter className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 pt-2 border-t">
           <Button
             variant="ghost"
             onClick={() => setStepIdx(i => Math.max(0, i - 1))}
@@ -454,7 +454,35 @@ export function BankImportFlow(props: BankImportFlowProps) {
               <Check className="h-4 w-4 mr-1" /> Aggiungi {totalCount} transazioni
             </Button>
           )}
-        </DialogFooter>
+        </div>
+    </>
+  );
+
+  if (props.inline) {
+    return (
+      <div className="space-y-3" data-testid="bank-import-inline">
+        <div>
+          <div className="text-sm font-medium">{titleLabel}</div>
+          <div className="text-xs text-muted-foreground">
+            Carica file Excel/CSV e mappa le colonne. Le righe verranno aggiunte alle transazioni.
+          </div>
+        </div>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Dialog open={props.open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-2xl" data-testid="dialog-bank-import">
+        <DialogHeader>
+          <DialogTitle>{titleLabel}</DialogTitle>
+          <DialogDescription>
+            Carica un file Excel/CSV e mappa le colonne. Le righe verranno aggiunte
+            alle transazioni esistenti.
+          </DialogDescription>
+        </DialogHeader>
+        {body}
       </DialogContent>
     </Dialog>
   );

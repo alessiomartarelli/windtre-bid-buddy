@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { FinplanSnapshot, FinplanTransaction, IvaPeriod } from "@shared/finplanSchema";
+import type { FinplanCompanySnapshot, FinplanSnapshot, FinplanTransaction, IvaPeriod } from "@shared/finplanSchema";
 import type { FinplanUpdater } from "@/hooks/useFinplan";
 import { formatCurrency } from "@/utils/format";
 import { MO } from "@/lib/finplanImport";
@@ -83,8 +83,11 @@ export function IvaSection({ snapshot, companyIndex, scheduleSave }: IvaSectionP
         desc: afDesc.trim() || "Autofattura estera",
       };
       const nextTxs = existing.concat(newTx);
-      const updated = { ...target, transactions: nextTxs, txIdSeq: maxId + 2 };
-      data[companyIndex] = rebuildMonthly(updated);
+      const updated: FinplanCompanySnapshot = { ...target, transactions: nextTxs, txIdSeq: maxId + 2 };
+      // rebuildMonthly restituisce l'array `m`, non lo snapshot completo:
+      // assegniamolo come campo della company prima di rimpiazzarla.
+      updated.m = rebuildMonthly(updated);
+      data[companyIndex] = updated;
       return { ...base, data };
     });
     toast({ title: "Autofattura aggiunta", description: `${MO[afMonth]} · ${formatCurrency(amount)}` });
