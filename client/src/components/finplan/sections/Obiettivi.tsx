@@ -6,7 +6,7 @@
 // Sorgente: client/public/finplan/index.html righe 2848-2934 (obj CRUD)
 // e 2971-3146 (perdite).
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Trash2 } from "lucide-react";
-import type { FinplanCompanySnapshot, FinplanObjective, FinplanPerdite, FinplanSnapshot } from "@shared/finplanSchema";
+import type { FinplanCompanySnapshot, FinplanObjective, FinplanPdvObiettivo, FinplanPerdite, FinplanSnapshot } from "@shared/finplanSchema";
 import type { FinplanUpdater } from "@/hooks/useFinplan";
 import { formatCurrency } from "@/utils/format";
 import { MO } from "@/lib/finplanImport";
@@ -222,6 +222,14 @@ export function Obiettivi({ snapshot, companyIndex, scheduleSave }: Props) {
         </CardContent>
       </Card>
 
+      {/* Obiettivi commerciali per PDV */}
+      <PdvObiettiviCard
+        list={(co?.pdvObiettivi ?? []) as FinplanPdvObiettivo[]}
+        scheduleSave={scheduleSave}
+        snapshot={snapshot}
+        companyIndex={companyIndex}
+      />
+
       {/* Recupero perdite */}
       <Card>
         <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
@@ -327,6 +335,193 @@ export function Obiettivi({ snapshot, companyIndex, scheduleSave }: Props) {
         )}
       </Card>
     </div>
+  );
+}
+
+// ──────────────────────── Obiettivi commerciali per PDV ────────────────────────
+// Modello dati: array `pdvObiettivi[]` per RS, ogni voce = un PDV (punto
+// vendita) con target annuale + ripartizione mensile (12 valori) + actual
+// mensile (12). Default ripartizione = uniforme (target/12) se `mesi`
+// non popolato. Persistenza via scheduleSave(prev=>...) byte-compat.
+
+function PdvObiettiviCard({ list, scheduleSave, snapshot, companyIndex }: {
+  list: FinplanPdvObiettivo[];
+  scheduleSave: Props["scheduleSave"];
+  snapshot: FinplanSnapshot | null;
+  companyIndex: number;
+}) {
+  const [draftPdv, setDraftPdv] = useState("");
+  const [draftTarget, setDraftTarget] = useState("");
+  const [openId, setOpenId] = useState<FinplanPdvObiettivo["id"] | null>(null);
+
+  const updateList = (fn: (l: FinplanPdvObiettivo[]) => FinplanPdvObiettivo[]) => {
+    scheduleSave(prev => updateCompany(prev, snapshot, companyIndex, co => ({
+      ...co,
+      pdvObiettivi: fn(((co.pdvObiettivi ?? []) as FinplanPdvObiettivo[]).slice()),
+    })));
+  };
+
+  const addPdv = () => {
+    const t = parseFloat(draftTarget.replace(",", "."));
+    const name = draftPdv.trim();
+    if (!name || !Number.isFinite(t) || t < 0) return;
+    updateList(l => {
+      const id = l.reduce((m, r) => {
+        const n = typeof r.id === "number" ? r.id : 0;
+        return n > m ? n : m;
+      }, 0) + 1;
+      l.push({ id, pdvName: name, targetAnnuo: t, mesi: Array(12).fill(t / 12), actualMesi: Array(12).fill(0) });
+      return l;
+    });
+    setDraftPdv("");
+    setDraftTarget("");
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-sm">Obiettivi commerciali per PDV ({list.length})</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Quick add */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+          <div className="md:col-span-5 space-y-1">
+            <Label className="text-xs">Nome PDV</Label>
+            <Input value={draftPdv} onChange={e => setDraftPdv(e.target.value)} className="h-8" placeholder="es. PDV Milano Centrale" data-testid="input-pdv-name" />
+          </div>
+          <div className="md:col-span-4 space-y-1">
+            <Label className="text-xs">Target annuo (EUR)</Label>
+            <Input value={draftTarget} onChange={e => setDraftTarget(e.target.value)} className="h-8 font-mono" placeholder="0,00" inputMode="decimal" data-testid="input-pdv-target" />
+          </div>
+          <div className="md:col-span-3 flex items-end">
+            <Button onClick={addPdv} size="sm" className="w-full" data-testid="button-pdv-add"><Plus className="h-3.5 w-3.5 mr-1" /> Aggiungi PDV</Button>
+          </div>
+        </div>
+
+        {list.length === 0 ? (
+          <p className="text-sm text-muted-foreground" data-testid="text-no-pdv">Nessun obiettivo PDV. Aggiungine uno sopra per tracciare target mensili e consuntivi.</p>
+        ) : (
+          <div className="overflow-x-auto rounded border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>PDV</TableHead>
+                  <TableHead className="text-right w-[140px]">Target annuo</TableHead>
+                  <TableHead className="text-right w-[140px]">Actual YTD</TableHead>
+                  <TableHead className="text-right w-[120px]">Variance</TableHead>
+                  <TableHead className="w-[80px]">% raggiunta</TableHead>
+                  <TableHead className="w-[60px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.map(r => {
+                  const target = r.targetAnnuo ?? 0;
+                  const actuals = r.actualMesi ?? [];
+                  const totA = actuals.reduce((s, n) => s + (n || 0), 0);
+                  const variance = +(totA - target).toFixed(2);
+                  const pct = target > 0 ? Math.min(999, (totA / target) * 100) : 0;
+                  const isOpen = openId === r.id;
+                  return (
+                    <Fragment key={String(r.id)}>
+                      <TableRow data-testid={`row-pdv-${r.id}`}>
+                        <TableCell className="text-xs">
+                          <Input
+                            defaultValue={r.pdvName ?? ""}
+                            onBlur={e => updateList(l => l.map(x => x.id === r.id ? { ...x, pdvName: e.target.value } : x))}
+                            className="h-7 text-xs"
+                            data-testid={`input-pdv-name-${r.id}`}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            defaultValue={target}
+                            onBlur={e => {
+                              const t = parseFloat(e.target.value.replace(",", ".")) || 0;
+                              updateList(l => l.map(x => x.id === r.id ? { ...x, targetAnnuo: t, mesi: (x.mesi && x.mesi.some(v => v !== (target / 12))) ? x.mesi : Array(12).fill(t / 12) } : x));
+                            }}
+                            className="h-7 font-mono text-xs text-right ml-auto w-32"
+                            inputMode="decimal"
+                            data-testid={`input-pdv-target-${r.id}`}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">{formatCurrency(totA)}</TableCell>
+                        <TableCell className={`text-right font-mono text-xs ${variance >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{formatCurrency(variance)}</TableCell>
+                        <TableCell className="text-xs">
+                          <div className="flex items-center gap-1">
+                            <Progress value={Math.min(100, pct)} className="h-1.5 flex-1" />
+                            <span className="font-mono w-10 text-right">{pct.toFixed(0)}%</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setOpenId(isOpen ? null : r.id ?? null)} data-testid={`button-pdv-toggle-${r.id}`}>
+                              {isOpen ? "▾" : "▸"}
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => updateList(l => l.filter(x => x.id !== r.id))} data-testid={`button-pdv-del-${r.id}`}>
+                              <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {isOpen && (
+                        <TableRow key={`m-${r.id}`}>
+                          <TableCell colSpan={6} className="bg-muted/30 p-2">
+                            <div className="text-[10px] uppercase text-muted-foreground mb-1">Target / Actual mensile</div>
+                            <div className="grid grid-cols-12 gap-1">
+                              {MO.map((m, i) => {
+                                const tMese = (r.mesi ?? Array(12).fill((r.targetAnnuo ?? 0) / 12))[i] ?? 0;
+                                const aMese = (r.actualMesi ?? [])[i] ?? 0;
+                                return (
+                                  <div key={i} className="rounded border bg-background p-1 text-center space-y-1">
+                                    <div className="font-medium text-[9px] uppercase text-muted-foreground">{m}</div>
+                                    <Input
+                                      defaultValue={tMese}
+                                      onBlur={e => {
+                                        const v = parseFloat(e.target.value.replace(",", ".")) || 0;
+                                        updateList(l => l.map(x => {
+                                          if (x.id !== r.id) return x;
+                                          const mesi = (x.mesi ?? Array(12).fill((x.targetAnnuo ?? 0) / 12)).slice();
+                                          while (mesi.length < 12) mesi.push(0);
+                                          mesi[i] = v;
+                                          return { ...x, mesi };
+                                        }));
+                                      }}
+                                      className="h-6 px-1 font-mono text-[10px] text-center"
+                                      inputMode="decimal"
+                                      data-testid={`input-pdv-target-m-${r.id}-${i}`}
+                                    />
+                                    <Input
+                                      defaultValue={aMese}
+                                      onBlur={e => {
+                                        const v = parseFloat(e.target.value.replace(",", ".")) || 0;
+                                        updateList(l => l.map(x => {
+                                          if (x.id !== r.id) return x;
+                                          const am = (x.actualMesi ?? Array(12).fill(0)).slice();
+                                          while (am.length < 12) am.push(0);
+                                          am[i] = v;
+                                          return { ...x, actualMesi: am };
+                                        }));
+                                      }}
+                                      className={`h-6 px-1 font-mono text-[10px] text-center ${aMese >= tMese && tMese > 0 ? "text-emerald-600" : aMese > 0 ? "text-rose-600" : ""}`}
+                                      inputMode="decimal"
+                                      data-testid={`input-pdv-actual-m-${r.id}-${i}`}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

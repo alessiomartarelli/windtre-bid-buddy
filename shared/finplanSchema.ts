@@ -74,21 +74,73 @@ export const ObjectiveSchema = z.object({
 }).passthrough();
 export type FinplanObjective = z.infer<typeof ObjectiveSchema>;
 
+// Obiettivi commerciali per PDV (Task #145, sezione Obiettivi).
+// Modello: per ogni PDV (punto vendita) della Ragione Sociale, target
+// annuale + ripartizione mensile (12 valori) + actual mensile (12).
+// Il consuntivo è opzionale: può essere alimentato manualmente dall'UI
+// o, in futuro, ricavato dalle vendite BiSuite del PDV corrispondente.
+export const PdvObiettivoSchema = z.object({
+  id: z.union([z.number(), z.string()]).optional(),
+  pdvId: z.union([z.number(), z.string()]).optional(),
+  pdvName: z.string().optional(),
+  /** Target annuale lordo (EUR). */
+  targetAnnuo: z.number().optional(),
+  /** Ripartizione mensile target (12 valori). Se assente: targetAnnuo/12. */
+  mesi: z.array(z.number()).optional(),
+  /** Consuntivo mensile (12 valori). */
+  actualMesi: z.array(z.number()).optional(),
+  note: z.string().optional(),
+}).passthrough();
+export type FinplanPdvObiettivo = z.infer<typeof PdvObiettivoSchema>;
+
 // ───────────────────── Debiti / scadenze / ADE ─────────────────────
 
+// Source: index.html ~3165-3408. Forma scritta dal tool legacy con
+// campi `total/rem/rate/nRate/importoRata/periodicita/dataInizio/
+// giornoPagamento/color/note`. Manteniamo `amount` come fallback storico.
 export const DebtSchema = z.object({
   id: z.union([z.number(), z.string()]).optional(),
   name: z.string().optional(),
   amount: z.number().optional(),
+  color: z.string().optional(),
+  total: z.number().optional(),
+  rem: z.number().optional(),
+  rate: z.number().optional(),
+  nRate: z.number().optional(),
+  importoRata: z.number().optional(),
+  periodicita: z.string().optional(),
+  dataInizio: z.string().optional(),
+  giornoPagamento: z.number().optional(),
+  note: z.string().optional(),
 }).passthrough();
 export type FinplanDebt = z.infer<typeof DebtSchema>;
 
+// Source: index.html ~9787 — riga scadenziario. `data/importo/pagata/
+// debtId/debtName/note` sono i campi prodotti dalla UI legacy;
+// `date/amount` sono fallback presenti su payload meno recenti.
 export const DebtScadenzaSchema = z.object({
   id: z.union([z.number(), z.string()]).optional(),
   date: z.string().optional(),
   amount: z.number().optional(),
+  data: z.string().optional(),
+  importo: z.number().optional(),
+  pagata: z.boolean().optional(),
+  debtId: z.union([z.number(), z.string()]).optional(),
+  debtName: z.string().optional(),
+  note: z.string().optional(),
 }).passthrough();
 export type FinplanDebtScadenza = z.infer<typeof DebtScadenzaSchema>;
+
+// Singola rata di un piano AdE. Source: index.html ~6488 (`rateScadenze:[]`)
+// popolato dalla UI con `{id, n, data, importo, pagata}`.
+export const AdeRateScadenzaSchema = z.object({
+  id: z.union([z.number(), z.string()]).optional(),
+  n: z.number().optional(),
+  data: z.string().optional(),
+  importo: z.number().optional(),
+  pagata: z.boolean().optional(),
+}).passthrough();
+export type FinplanAdeRateScadenza = z.infer<typeof AdeRateScadenzaSchema>;
 
 // Source: index.html riga ~6484 `co.ade.push({id, tipo, ente, ... rateScadenze:[]})`
 export const AdeSchema = z.object({
@@ -106,7 +158,7 @@ export const AdeSchema = z.object({
   rateazione: z.boolean().optional(),
   nRate: z.number().optional(),
   importoRata: z.number().optional(),
-  rateScadenze: z.array(z.unknown()).optional(),
+  rateScadenze: z.array(AdeRateScadenzaSchema).optional(),
 }).passthrough();
 export type FinplanAde = z.infer<typeof AdeSchema>;
 
@@ -283,6 +335,8 @@ export const FinplanCompanySnapshotSchema = z.object({
   transactions: z.array(TransactionSchema).optional(),
   cats: z.array(CategorySchema).optional(),
   obj: z.array(ObjectiveSchema).optional(),
+  /** Obiettivi commerciali per PDV (Task #145). Optional, byte-compat. */
+  pdvObiettivi: z.array(PdvObiettivoSchema).optional(),
   perdite: PerditeSchema.optional(),
   debts: z.array(DebtSchema).optional(),
   debtScadenze: z.array(DebtScadenzaSchema).optional(),

@@ -12,9 +12,63 @@
 //     - E (entrate, kind='E'): ≥90% green, ≥70% amber, else red
 //     - U (uscite,  kind='U'): ≤100% green, ≤120% amber, else red
 
-import type { FinplanBudget, FinplanCompanySnapshot, TxType } from "@shared/finplanSchema";
+import type { FinplanBudget, FinplanCategory, FinplanCompanySnapshot, TxType } from "@shared/finplanSchema";
 
 export type RagLevel = "green" | "amber" | "red";
+
+/** Riga di variance per categoria (vista Budget annuale). */
+export interface BudgetVarianceRow {
+  c: FinplanCategory;
+  budget: number;
+  actual: number;
+  /** actual - budget (positivo = sopra budget). */
+  variance: number;
+  /** Percentuale assoluta (actual / budget * 100). */
+  pct: number;
+  rag: RagLevel;
+}
+
+export interface BudgetVarianceTotals {
+  tBudget: number;
+  tActual: number;
+  /** tActual - tBudget. */
+  tVariance: number;
+}
+
+/** Calcolo variance per N categorie di un dato tipo (E/U). */
+export function computeBudgetVariance(
+  cats: FinplanCategory[],
+  co: FinplanCompanySnapshot | undefined,
+  bgt: FinplanBudget | undefined,
+  type: TxType,
+): { rows: BudgetVarianceRow[]; totals: BudgetVarianceTotals } {
+  const rows: BudgetVarianceRow[] = cats.map(c => {
+    const budget = getCatBudget(bgt, c.id);
+    const actual = getCatActual(co, c.id);
+    const variance = +(actual - budget).toFixed(2);
+    const pct = budget > 0 ? (actual / budget) * 100 : 0;
+    return { c, budget, actual, variance, pct, rag: ragColor(actual, budget, type) };
+  }).sort((a, b) => b.budget - a.budget);
+
+  const tBudget = +rows.reduce((s, r) => s + r.budget, 0).toFixed(2);
+  const tActual = +rows.reduce((s, r) => s + r.actual, 0).toFixed(2);
+  return {
+    rows,
+    totals: { tBudget, tActual, tVariance: +(tActual - tBudget).toFixed(2) },
+  };
+}
+
+/**
+ * Direzione "favorevole" della variance:
+ *   - per Entrate (E): actual > budget è positivo (overperform).
+ *   - per Uscite (U): actual < budget è positivo (under-spend).
+ * Restituisce "good" | "bad" | "neutral".
+ */
+export function varianceSign(variance: number, type: TxType): "good" | "bad" | "neutral" {
+  if (variance === 0) return "neutral";
+  if (type === "E") return variance > 0 ? "good" : "bad";
+  return variance < 0 ? "good" : "bad";
+}
 
 export function getCatBudget(bgt: FinplanBudget | undefined, catId: string): number {
   const list = bgt?.catBudget ?? [];

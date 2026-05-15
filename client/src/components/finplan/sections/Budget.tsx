@@ -13,12 +13,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Cell } from "recharts";
 import type { FinplanBudget, FinplanCategory, FinplanCompanySnapshot, FinplanSnapshot, TxType } from "@shared/finplanSchema";
 import type { FinplanUpdater } from "@/hooks/useFinplan";
 import { formatCurrency } from "@/utils/format";
 import { MO } from "@/lib/finplanImport";
-import { getBudgetMonthly, getCatActual, getCatActualMonthly, getCatBudget, ragBgClass, ragColor } from "@/lib/finplan/budget";
+import { computeBudgetVariance, getBudgetMonthly, getCatActualMonthly, ragBgClass, varianceSign } from "@/lib/finplan/budget";
 
 interface Props {
   snapshot: FinplanSnapshot | null;
@@ -130,21 +130,21 @@ function CategoryVariance({ type, cats, co, bgt, annualTot, setCatBudget }: {
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const rows = useMemo(() => cats.map(c => {
-    const budget = getCatBudget(bgt, c.id);
-    const actual = getCatActual(co, c.id);
-    const variance = +(actual - budget).toFixed(2);
-    const pct = budget > 0 ? (actual / budget) * 100 : 0;
-    return { c, budget, actual, variance, pct, rag: ragColor(actual, budget, type) };
-  }).sort((a, b) => b.budget - a.budget), [cats, co, bgt, type]);
+  // Variance/scostamento è calcolato in pure-lib `lib/finplan/budget.ts`
+  // così è riusabile sia in questa UI che in Consolidato (#147).
+  const { rows, totals } = useMemo(
+    () => computeBudgetVariance(cats, co, bgt, type),
+    [cats, co, bgt, type],
+  );
 
-  const totals = useMemo(() => {
-    const tBudget = rows.reduce((s, r) => s + r.budget, 0);
-    const tActual = rows.reduce((s, r) => s + r.actual, 0);
-    return { tBudget: +tBudget.toFixed(2), tActual: +tActual.toFixed(2), tVariance: +(tActual - tBudget).toFixed(2) };
-  }, [rows]);
-
-  const chartData = rows.map(r => ({ name: r.c.name ?? r.c.id, Budget: r.budget, Actual: r.actual }));
+  // Chart variance (verde = favorevole, rosso = sfavorevole). La
+  // direzione "favorevole" dipende dal tipo della categoria — vedi
+  // `varianceSign`. Bar = `variance` con segno; ReferenceLine y=0.
+  const chartData = rows.map(r => ({
+    name: r.c.name ?? r.c.id,
+    variance: r.variance,
+    sign: varianceSign(r.variance, type),
+  }));
 
   return (
     <>
@@ -166,7 +166,15 @@ function CategoryVariance({ type, cats, co, bgt, annualTot, setCatBudget }: {
 
       {chartData.length > 0 && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Budget vs Actual ({type === "E" ? "Entrate" : "Uscite"})</CardTitle></CardHeader>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              Scostamento vs Budget ({type === "E" ? "Entrate" : "Uscite"})
+            </CardTitle>
+            <p className="text-[11px] text-muted-foreground">
+              Verde = favorevole ({type === "E" ? "actual sopra budget" : "spesa sotto budget"}),
+              rosso = sfavorevole. Linea zero = a target.
+            </p>
+          </CardHeader>
           <CardContent>
             <div className="h-[280px]" data-testid={`chart-budget-${type}`}>
               <ResponsiveContainer width="100%" height="100%">
@@ -174,10 +182,13 @@ function CategoryVariance({ type, cats, co, bgt, annualTot, setCatBudget }: {
                   <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" height={50} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Budget" fill="#94A3B8" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Actual" fill={type === "E" ? "#10B981" : "#EF4444"} radius={[4, 4, 0, 0]} />
+                  <Tooltip formatter={(v: number) => formatCurrency(v as number)} />
+                  <ReferenceLine y={0} stroke="#94A3B8" strokeWidth={1} />
+                  <Bar dataKey="variance" radius={[4, 4, 0, 0]}>
+                    {chartData.map((entry, i) => (
+                      <Cell key={i} fill={entry.sign === "good" ? "#10B981" : entry.sign === "bad" ? "#EF4444" : "#94A3B8"} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
