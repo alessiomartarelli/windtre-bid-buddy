@@ -75,7 +75,7 @@ export function Consolidato({ snapshot, defaultNames, companyColors, consolidato
           <IvaGruppo allRs={allRs} agg={agg} />
         </TabsContent>
         <TabsContent value="piano" className="mt-4">
-          <PianoFinanziario agg={agg} allRs={allRs} defaultNames={defaultNames} companyColors={companyColors} />
+          <PianoFinanziario agg={agg} allRs={allRs} defaultNames={defaultNames} companyColors={companyColors} consolidatoColor={consolidatoColor} />
         </TabsContent>
       </Tabs>
     </div>
@@ -365,7 +365,7 @@ function IvaGruppo({ allRs, agg }: { allRs: FinplanCompanySnapshot[]; agg: Group
 type PianoTab = "trasversale" | "societa" | "pdv" | "scenari";
 
 function PianoFinanziario({ agg, allRs, defaultNames, companyColors }: {
-  agg: GroupAggregate; allRs: FinplanCompanySnapshot[]; defaultNames: string[]; companyColors: string[];
+  agg: GroupAggregate; allRs: FinplanCompanySnapshot[]; defaultNames: string[]; companyColors: string[]; consolidatoColor: string;
 }) {
   const [tab, setTab] = useState<PianoTab>("trasversale");
   return (
@@ -379,7 +379,7 @@ function PianoFinanziario({ agg, allRs, defaultNames, companyColors }: {
       <TabsContent value="trasversale"><AnalisiTrasversale agg={agg} /></TabsContent>
       <TabsContent value="societa"><PianoPerSocieta agg={agg} companyColors={companyColors} /></TabsContent>
       <TabsContent value="pdv"><ObiettiviPdv allRs={allRs} defaultNames={defaultNames} /></TabsContent>
-      <TabsContent value="scenari"><Scenari agg={agg} /></TabsContent>
+      <TabsContent value="scenari"><Scenari agg={agg} allRs={allRs} defaultNames={defaultNames} /></TabsContent>
     </Tabs>
   );
 }
@@ -560,16 +560,24 @@ function ObiettiviPdv({ allRs, defaultNames }: { allRs: FinplanCompanySnapshot[]
   );
 }
 
-function Scenari({ agg }: { agg: GroupAggregate }) {
+function Scenari({ agg, allRs, defaultNames }: {
+  agg: GroupAggregate; allRs: FinplanCompanySnapshot[]; defaultNames: string[];
+}) {
   const [pctR, setPctR] = useState(0);
   const [pctC, setPctC] = useState(0);
-  const sim = useMemo(() => applyScenario(agg, pctR, pctC), [agg, pctR, pctC]);
+  const sim = useMemo(() => applyScenario(allRs, defaultNames, pctR, pctC), [allRs, defaultNames, pctR, pctC]);
   const dM = sim.totals.margine - agg.totals.margine;
   const dCf = sim.totals.cashflow - agg.totals.cashflow;
   return (
     <div className="space-y-3">
       <Card data-testid="cons-scenari-form">
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Scenari what-if</CardTitle></CardHeader>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Scenari what-if</CardTitle>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Le percentuali riscalano tutte le transazioni (E e U). Il cashflow
+            mantiene l'esclusione delle categorie configurate in “Costi & Incassi”.
+          </p>
+        </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">

@@ -166,41 +166,32 @@ export function flattenPdvObiettivi(
   return out;
 }
 
-/** Applica scenario what-if (%) ai KPI di gruppo, senza mutare l'input. */
+/** Applica scenario what-if (%) ai KPI di gruppo, senza mutare l'input.
+ * Riutilizza `companyMonthly` su una copia delle RS con `transactions` e
+ * `m[]` riscalati: in questo modo la semantica `cfExclude` viene
+ * preservata (le categorie escluse dal cashflow restano escluse anche
+ * dopo il what-if), così il cashflow dello scenario resta coerente
+ * con quello mostrato in Overview. */
 export function applyScenario(
-  base: GroupAggregate,
+  allRs: FinplanCompanySnapshot[],
+  defaultNames: string[],
   pctRicavi: number,
   pctCosti: number,
 ): GroupAggregate {
   const fE = 1 + (Number.isFinite(pctRicavi) ? pctRicavi : 0) / 100;
   const fU = 1 + (Number.isFinite(pctCosti) ? pctCosti : 0) / 100;
-  const companies = base.companies.map(c => {
-    const monthly = c.monthly.map(m => ({
-      e: +(m.e * fE).toFixed(2),
-      u: +(m.u * fU).toFixed(2),
-      cf: +(m.e * fE - m.u * fU).toFixed(2),
+  const scaled: FinplanCompanySnapshot[] = allRs.map(co => {
+    const txs = (co.transactions ?? []).map(t => {
+      const amt = typeof t.amount === "number" ? t.amount : 0;
+      const f = t.type === "E" ? fE : t.type === "U" ? fU : 1;
+      return { ...t, amount: +(amt * f).toFixed(2) };
+    });
+    const m = (co.m ?? []).map(r => ({
+      ...r,
+      e: +(((typeof r?.e === "number" ? r.e : 0)) * fE).toFixed(2),
+      u: +(((typeof r?.u === "number" ? r.u : 0)) * fU).toFixed(2),
     }));
-    const totE = +(c.totE * fE).toFixed(2);
-    const totU = +(c.totU * fU).toFixed(2);
-    return {
-      ...c,
-      monthly,
-      totE,
-      totU,
-      margine: +(totE - totU).toFixed(2),
-      cashflow: +monthly.reduce((s, m) => s + m.cf, 0).toFixed(2),
-    };
+    return { ...co, transactions: txs, m };
   });
-  const monthly: MonthAgg[] = MO_LABELS.map((_, i) => ({
-    e: companies.reduce((s, c) => s + (c.monthly[i]?.e ?? 0), 0),
-    u: companies.reduce((s, c) => s + (c.monthly[i]?.u ?? 0), 0),
-    cf: companies.reduce((s, c) => s + (c.monthly[i]?.cf ?? 0), 0),
-  }));
-  const totals = {
-    totE: +companies.reduce((s, c) => s + c.totE, 0).toFixed(2),
-    totU: +companies.reduce((s, c) => s + c.totU, 0).toFixed(2),
-    margine: +companies.reduce((s, c) => s + c.margine, 0).toFixed(2),
-    cashflow: +companies.reduce((s, c) => s + c.cashflow, 0).toFixed(2),
-  };
-  return { ...base, companies, monthly, totals };
+  return aggregateGroupData(scaled, defaultNames);
 }
