@@ -179,8 +179,16 @@ export function useFinplanMutation(orgId: string | undefined): UseFinplanMutatio
     const key = [...FINPLAN_QUERY_KEY, orgId];
     const sync = () => {
       const cached = queryClient.getQueryData<FinplanApiResponse>(key);
-      if (cached?.updatedAt && lastKnownRemoteAtRef.current === null) {
-        lastKnownRemoteAtRef.current = cached.updatedAt;
+      const cachedAt = cached?.updatedAt ?? null;
+      if (!cachedAt) return;
+      const known = lastKnownRemoteAtRef.current;
+      // Avanza il baseline anche quando un refetch/setQueryData porta
+      // una versione più recente (non solo al primo bootstrap). Evita
+      // un conflict cycle "spurio" dopo refetch in background quando la
+      // pagina era inattiva. Confronto lessicografico ISO-8601 = ordine
+      // temporale.
+      if (known === null || cachedAt > known) {
+        lastKnownRemoteAtRef.current = cachedAt;
       }
     };
     sync();
