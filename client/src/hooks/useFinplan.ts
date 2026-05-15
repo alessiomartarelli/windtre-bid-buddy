@@ -106,14 +106,22 @@ export function useFinplanData(orgId: string | undefined): UseFinplanDataResult 
   };
 }
 
+export type FinplanUpdater = (prev: FinplanSnapshot | null) => FinplanSnapshot;
+
 export interface UseFinplanMutationResult {
   /**
    * Programma una scrittura del nuovo snapshot. Debounced 3s. Se chiamata
    * più volte entro la finestra, l'ULTIMO valore vince (latest-wins).
    * Mentre un PUT è in volo, eventuali nuove chiamate vengono accodate
    * come `_pending` e flushate al termine.
+   *
+   * Accetta anche un updater function `(prev) => next`, dove `prev` è
+   * l'ultima versione pendente (se esiste) altrimenti la cache TanStack-
+   * Query corrente. CRITICO per evitare clobber: edit rapidi (es. toggle
+   * checkbox multipli) DEVONO usare l'updater, altrimenti la seconda
+   * scrittura partirebbe da uno snapshot stale e perderebbe la prima.
    */
-  scheduleSave: (snapshot: FinplanSnapshot) => void;
+  scheduleSave: (snapshotOrUpdater: FinplanSnapshot | FinplanUpdater) => void;
   /** Forza il flush immediato dell'eventuale snapshot in coda. */
   flush: () => Promise<void>;
   /** True quando una richiesta PUT è in volo. */
@@ -144,6 +152,10 @@ export function useFinplanMutation(orgId: string | undefined): UseFinplanMutatio
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inflightRef = useRef<Promise<void> | null>(null);
   const pendingRef = useRef<FinplanSnapshot | null>(null);
+  // Snapshot attualmente in volo verso il server: serve agli updater di
+  // `scheduleSave` per evitare clobber se l'utente edita durante un PUT
+  // (la cache TanStack-Query è ancora stale finché doPut non risolve).
+  const inflightSnapshotRef = useRef<FinplanSnapshot | null>(null);
   // Updatedat dell'ultima versione "nota" (initial GET o ultimo PUT
   // confermato). Usato per il conflict guard prima di ogni PUT.
   const lastKnownRemoteAtRef = useRef<string | null>(null);
@@ -289,8 +301,13 @@ export function useFinplanMutation(orgId: string | undefined): UseFinplanMutatio
         while (pendingRef.current && !conflictGuard.triggered) {
           const next = pendingRef.current;
           pendingRef.current = null;
+          inflightSnapshotRef.current = next;
           const beforeKnown = lastKnownRemoteAtRef.current;
-          await doPut(next);
+          try {
+            await doPut(next);
+          } finally {
+            inflightSnapshotRef.current = null;
+          }
           // Se doPut ha rimesso il pending senza avanzare lastKnown
           // → conflitto: fermiamo il loop per non riprovare in tight-loop.
           if (
@@ -307,18 +324,37 @@ export function useFinplanMutation(orgId: string | undefined): UseFinplanMutatio
     inflightRef.current = p;
   }, [doPut]);
 
-  const scheduleSave = useCallback((snapshot: FinplanSnapshot) => {
+  const scheduleSave = useCallback((snapshotOrUpdater: FinplanSnapshot | FinplanUpdater) => {
     if (!orgId) return;
+    // Risolvi `prev` per gli updater: priorità a `pendingRef` (catena di
+    // edit non ancora flushati), fallback alla cache TanStack-Query.
+    let next: FinplanSnapshot;
+    if (typeof snapshotOrUpdater === "function") {
+      // Ordine di priorità: pending non ancora flushato → snapshot in volo
+      // verso il server → cache TanStack-Query (potenzialmente stale durante
+      // il PUT). Così edit concorrenti non perdono modifiche già inviate.
+      const prev =
+        pendingRef.current ??
+        inflightSnapshotRef.current ??
+        (queryClient.getQueryData<FinplanApiResponse>([...FINPLAN_QUERY_KEY, orgId])
+          ?.data as FinplanSnapshot | undefined) ??
+        null;
+      next = (snapshotOrUpdater as FinplanUpdater)(
+        prev && typeof prev === "object" && Object.keys(prev).length > 0 ? prev : null,
+      );
+    } else {
+      next = snapshotOrUpdater;
+    }
     // CRITICO: salviamo lo snapshot in `pendingRef` IMMEDIATAMENTE.
     // Se l'utente fa flush() o si naviga via prima che scattino i 3s,
     // l'ultima versione è comunque recuperabile.
-    pendingRef.current = snapshot;
+    pendingRef.current = next;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       debounceRef.current = null;
       triggerFlush();
     }, PUT_DEBOUNCE_MS);
-  }, [orgId, triggerFlush]);
+  }, [orgId, triggerFlush, queryClient]);
 
   const flush = useCallback(async () => {
     if (debounceRef.current) {
