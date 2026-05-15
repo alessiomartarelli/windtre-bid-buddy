@@ -519,16 +519,21 @@ test('scenario 6: allowlisted org gets 200 + JSON preload, conditional GET retur
   const session = await signupAndLogin();
   const ALLOWED_ORG = 'org-admin-windtre';
   const originalOrgId = session.orgId;
+  // Su DB pristini l'org allowlistata può non esistere → FK fail. Upsertiamo
+  // garantendo che esista, e ricordiamo se l'abbiamo creata noi per non
+  // cancellare in cleanup la riga reale ("Cms Group") quando il test gira
+  // su un DB già popolato.
+  const upsertRes = await pool.query(
+    `INSERT INTO organizations (id, name, enabled_modules)
+       VALUES ($1, 'Cms Group (test)', '{"amministrazione":true,"controllo_gestione":true}'::jsonb)
+       ON CONFLICT (id) DO UPDATE
+         SET enabled_modules = organizations.enabled_modules ||
+             '{"amministrazione":true,"controllo_gestione":true}'::jsonb
+       RETURNING (xmax = 0) AS inserted`,
+    [ALLOWED_ORG],
+  );
+  const createdAllowedOrg = !!upsertRes.rows[0]?.inserted;
   try {
-    // Sposta il profilo di test sotto l'org allowlistata. Sia il modulo
-    // amministrazione (gate `requireModule`) sia l'allowlist devono
-    // matchare → 200 + payload.
-    await pool.query(
-      `UPDATE organizations
-         SET enabled_modules = '{"amministrazione":true,"controllo_gestione":true}'::jsonb
-       WHERE id = $1`,
-      [ALLOWED_ORG],
-    );
     await pool.query(
       `UPDATE profiles SET organization_id = $1 WHERE id = $2`,
       [ALLOWED_ORG, session.profileId],
@@ -565,8 +570,10 @@ test('scenario 6: allowlisted org gets 200 + JSON preload, conditional GET retur
     const buf = await r2.arrayBuffer();
     assert.equal(buf.byteLength, 0, '304 response must have empty body');
   } finally {
-    // Riporta il profilo di test sotto la sua org originale prima di
-    // cancellare, così non lasciamo righe orfane su `org-admin-windtre`.
+    // Riporta il profilo di test sotto la sua org originale e poi
+    // ripulisce. Cancella l'org allowlistata SOLO se l'abbiamo creata
+    // noi (DB pristino) — su DB già popolati la riga reale "Cms Group"
+    // resta intatta.
     await pool
       .query(`UPDATE profiles SET organization_id = $1 WHERE id = $2`, [originalOrgId, session.profileId])
       .catch(() => {});
@@ -579,9 +586,18 @@ test('scenario 6: allowlisted org gets 200 + JSON preload, conditional GET retur
     await pool
       .query(`DELETE FROM organizations WHERE id = $1`, [originalOrgId])
       .catch(() => {});
+    if (createdAllowedOrg) {
+      await pool
+        .query(`DELETE FROM finplan_data WHERE organization_id = $1`, [ALLOWED_ORG])
+        .catch(() => {});
+      await pool
+        .query(`DELETE FROM organizations WHERE id = $1`, [ALLOWED_ORG])
+        .catch(() => {});
+    }
     await pool.end().catch(() => {});
   }
 });
+
 // ===========================================================================
 // SCENARIO 5: PRELOAD gating multi-tenant
 // (a) Org NON allowlisted → /api/finplan/preload risponde 204 (workspace vuoto).
