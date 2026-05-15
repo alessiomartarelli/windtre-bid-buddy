@@ -6,11 +6,9 @@ import {
 } from "recharts";
 import { TrendingUp, TrendingDown, Wallet, BarChart3, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import type { FinplanCompanySnapshot } from "@shared/finplanSchema";
+import { formatCurrency } from "@/utils/format";
 
 const MO = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
-
-const fmtEuro = (n: number) =>
-  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
 
 const fmtPct = (n: number) =>
   `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
@@ -88,7 +86,7 @@ function KpiCard({
           <Icon className="h-4 w-4" style={{ color: accent }} />
         </div>
         <div className="text-xl font-mono font-semibold" data-testid={`kpi-${label.toLowerCase()}-value`}>
-          {fmtEuro(value)}
+          {formatCurrency(value)}
         </div>
         {deltaPct !== null && Number.isFinite(deltaPct) && (
           <div className="flex items-center gap-1 mt-1 text-xs">
@@ -128,23 +126,23 @@ function CompactPie({ data, title, testId }: {
             Nessun dato
           </div>
         ) : (
-          <div style={{ height: 260 }}>
+          <div style={{ height: 320 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={data}
                   dataKey="value"
                   nameKey="name"
-                  cx="40%"
+                  cx="38%"
                   cy="50%"
-                  innerRadius={50}
-                  outerRadius={90}
+                  innerRadius={70}
+                  outerRadius={130}
                   paddingAngle={2}
                 >
                   {data.map((d, i) => <Cell key={i} fill={d.color} />)}
                 </Pie>
                 <Tooltip
-                  formatter={(v: number) => fmtEuro(v)}
+                  formatter={(v: number) => formatCurrency(v)}
                   contentStyle={{ fontSize: 12 }}
                 />
                 <Legend
@@ -224,8 +222,8 @@ export function Overview({ company, companyColor }: OverviewProps) {
               <RLineChart data={lineData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmtEuro(v as number)} width={70} />
-                <Tooltip formatter={(v: number) => fmtEuro(v)} contentStyle={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrency(v as number)} width={70} />
+                <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line type="monotone" dataKey="Ricavi"   stroke={companyColor} strokeWidth={2} dot={{ r: 3 }} />
                 <Line type="monotone" dataKey="Costi"    stroke="#F43F5E"      strokeWidth={2} dot={{ r: 3 }} />

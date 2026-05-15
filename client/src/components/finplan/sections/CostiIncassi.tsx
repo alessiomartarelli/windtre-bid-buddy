@@ -4,9 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import type { FinplanCompanySnapshot, FinplanSnapshot } from "@shared/finplanSchema";
 import type { FinplanUpdater } from "@/hooks/useFinplan";
-
-const fmtEuro = (n: number) =>
-  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
+import { formatCurrency } from "@/utils/format";
 
 interface CostiIncassiProps {
   snapshot: FinplanSnapshot | null;
@@ -156,7 +154,7 @@ function CategoryList({
                     {r.name}
                   </label>
                   <span className="font-mono text-xs text-muted-foreground" data-testid={`amount-${tid}`}>
-                    {fmtEuro(r.total)}
+                    {formatCurrency(r.total)}
                   </span>
                   <Badge
                     variant={r.excluded ? "secondary" : "outline"}
