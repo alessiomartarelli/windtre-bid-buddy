@@ -504,6 +504,85 @@ test('scenario 1b: authenticated PUT then GET round-trip persists data and retur
 });
 
 // ===========================================================================
+// SCENARIO 6: PRELOAD allowlisted — happy path
+// Riassegniamo il profilo di un utente di test all'org `org-admin-windtre`
+// (l'unica in `FINPLAN_PRELOAD_ORGS` di default) e verifichiamo che
+// `/api/finplan/preload` risponda 200 + JSON valido + ETag, e che un
+// secondo GET con `If-None-Match` ritorni 304.
+// ===========================================================================
+test('scenario 6: allowlisted org gets 200 + JSON preload, conditional GET returns 304', async () => {
+  const pgMod = await import('pg');
+  const Pool = pgMod.default?.Pool || pgMod.Pool;
+  assert.ok(process.env.DATABASE_URL, 'DATABASE_URL must be set for this test');
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+  const session = await signupAndLogin();
+  const ALLOWED_ORG = 'org-admin-windtre';
+  const originalOrgId = session.orgId;
+  try {
+    // Sposta il profilo di test sotto l'org allowlistata. Sia il modulo
+    // amministrazione (gate `requireModule`) sia l'allowlist devono
+    // matchare → 200 + payload.
+    await pool.query(
+      `UPDATE organizations
+         SET enabled_modules = '{"amministrazione":true,"controllo_gestione":true}'::jsonb
+       WHERE id = $1`,
+      [ALLOWED_ORG],
+    );
+    await pool.query(
+      `UPDATE profiles SET organization_id = $1 WHERE id = $2`,
+      [ALLOWED_ORG, session.profileId],
+    );
+
+    const r1 = await fetch(`${BASE}/api/finplan/preload`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(
+      r1.status,
+      200,
+      `allowlisted org must receive 200, got ${r1.status}`,
+    );
+    const etag = r1.headers.get('etag');
+    assert.ok(etag, 'preload response must include an ETag');
+    const ct = r1.headers.get('content-type') || '';
+    assert.match(ct, /application\/json/i, 'Content-Type must be JSON');
+    const body = await r1.json();
+    assert.ok(body && typeof body === 'object', 'body must be a JSON object');
+    assert.ok(
+      Array.isArray(body.data),
+      'preload payload must contain a `data` array (5 companies)',
+    );
+
+    // Conditional GET con stesso ETag → 304 vuoto.
+    const r2 = await fetch(`${BASE}/api/finplan/preload`, {
+      headers: { Cookie: session.cookie, 'If-None-Match': etag },
+    });
+    assert.equal(
+      r2.status,
+      304,
+      `conditional GET with matching ETag must return 304, got ${r2.status}`,
+    );
+    const buf = await r2.arrayBuffer();
+    assert.equal(buf.byteLength, 0, '304 response must have empty body');
+  } finally {
+    // Riporta il profilo di test sotto la sua org originale prima di
+    // cancellare, così non lasciamo righe orfane su `org-admin-windtre`.
+    await pool
+      .query(`UPDATE profiles SET organization_id = $1 WHERE id = $2`, [originalOrgId, session.profileId])
+      .catch(() => {});
+    await pool
+      .query(`DELETE FROM finplan_data WHERE organization_id = $1`, [originalOrgId])
+      .catch(() => {});
+    await pool
+      .query(`DELETE FROM profiles WHERE id = $1`, [session.profileId])
+      .catch(() => {});
+    await pool
+      .query(`DELETE FROM organizations WHERE id = $1`, [originalOrgId])
+      .catch(() => {});
+    await pool.end().catch(() => {});
+  }
+});
+// ===========================================================================
 // SCENARIO 5: PRELOAD gating multi-tenant
 // (a) Org NON allowlisted → /api/finplan/preload risponde 204 (workspace vuoto).
 // (b) Accesso diretto al file statico /finplan/preload.json → 404 (bloccato a

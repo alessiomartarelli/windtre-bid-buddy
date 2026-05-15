@@ -43,10 +43,14 @@ const FINPLAN_PRELOAD_ORGS: string[] = (() => {
 // 5MB da disco per ogni richiesta degli utenti autorizzati.
 let _preloadCache: { mtimeMs: number; raw: Buffer; etag: string } | null = null;
 function _resolvePreloadPath(): string | null {
+  // ESM: niente `__dirname`. Cerchiamo nei path standard relativi a cwd —
+  // dev: `client/public/...`, prod: `dist/public/...` (il bundle gira da
+  // `/var/www/incentive-w3` con cwd = quella dir, e `dist/public` è creato
+  // dal `tar` di deploy). Il primo file esistente vince.
   const candidates = [
-    path.resolve(__dirname, "public", "finplan", "preload.json"),
     path.resolve(process.cwd(), "client", "public", "finplan", "preload.json"),
     path.resolve(process.cwd(), "dist", "public", "finplan", "preload.json"),
+    path.resolve(process.cwd(), "public", "finplan", "preload.json"),
   ];
   for (const c of candidates) {
     try { if (fs.statSync(c).isFile()) return c; } catch {}
