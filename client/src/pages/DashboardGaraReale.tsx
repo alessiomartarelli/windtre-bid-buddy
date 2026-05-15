@@ -55,6 +55,7 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { apiUrl } from "@/lib/basePath";
+import { KpiCardsSkeleton, ChartSkeleton, DataTableSkeleton } from "@/components/skeletons";
 import { SIM_CONSUMER_CORE, SIM_PIVA_CORE } from "@/lib/mobileCategories";
 import { AppNavbar } from "@/components/AppNavbar";
 import { type GaraConfigRecord, type GaraConfigPdv, type GaraConfigListItem } from "@/hooks/useGaraConfig";
@@ -3500,9 +3501,10 @@ export default function DashboardGaraReale() {
       <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-20" data-testid="loading-state">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-            <span className="ml-3 text-gray-500">Caricamento dati...</span>
+          <div className="space-y-4" data-testid="loading-state">
+            <KpiCardsSkeleton />
+            <ChartSkeleton />
+            <DataTableSkeleton rows={8} columns={6} />
           </div>
         ) : garaConfigMissing ? (
           <Card data-testid="card-no-gara-config">

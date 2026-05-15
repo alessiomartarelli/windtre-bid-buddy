@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import compression from "compression";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { mountFinplanStatic } from "./finplanStatic";
@@ -11,6 +12,21 @@ const BASE_PATH = isProduction ? "/incentivew3" : "";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Compressione gzip su risposte API/JSON (Task #137). I bundle statici
+// hanno già pre-compressione brotli/gzip via mountCompressedStatic /
+// mountFinplanStatic; qui copriamo le risposte dinamiche (es. /api/finplan,
+// /api/bisuite-sales, /api/cdg/*) che possono pesare centinaia di KB.
+// Threshold 1 KB: payload piccoli non valgono l'overhead.
+app.use(
+  compression({
+    threshold: 1024,
+    filter: (req, res) => {
+      if (req.headers["x-no-compression"]) return false;
+      return compression.filter(req, res);
+    },
+  }),
+);
 
 declare module "http" {
   interface IncomingMessage {

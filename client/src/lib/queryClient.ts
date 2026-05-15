@@ -51,7 +51,13 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      // Tempo "stale" predefinito: 60s. Le navigazioni interne in <1 minuto
+      // riusano la cache senza refetch (UX più rapida), mentre dopo 60s
+      // i dati vengono rinfrescati al mount/focus successivo. Le pagine che
+      // hanno bisogno di freschezza diversa possono passare il proprio
+      // staleTime nella useQuery.
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
       retry: false,
     },
     mutations: {

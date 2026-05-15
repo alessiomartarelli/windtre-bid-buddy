@@ -23,6 +23,7 @@ import {
   ChevronDown, ChevronUp, History, Upload, Settings, Target, Zap, Shield, ShieldCheck, Calculator,
   FileText, X, Check, AlertTriangle,
 } from 'lucide-react';
+import { WizardStepSkeleton } from "@/components/skeletons";
 import { TabelleCalcoloGara, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
 import { useTabelleCalcoloConfig } from '@/hooks/useTabelleCalcoloConfig';
 import type { ExtraGaraSogliePerRS } from '@/lib/calcoloExtraGaraIva';
@@ -1488,9 +1489,7 @@ export default function ConfigurazioneGara() {
         </div>
 
         {loading && !initialLoaded ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
+          <WizardStepSkeleton className="py-6" />
         ) : (
           <Tabs defaultValue="pdv" className="space-y-4">
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">

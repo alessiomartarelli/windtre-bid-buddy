@@ -16,6 +16,8 @@ import {
   Loader2, ArrowLeft, TrendingUp, TrendingDown, Euro, Target, Calendar, 
   Users, FileText, BarChart3, Smartphone, Wifi, Zap, Shield, Award, Sparkles, Download
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { KpiCardsSkeleton, ChartSkeleton, DataTableSkeleton } from '@/components/skeletons';
 import {
   BarChart,
   Bar,
@@ -438,10 +440,20 @@ export default function Dashboard() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-          <p className="text-muted-foreground">Caricamento dashboard...</p>
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
+        <div className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+          <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-4">
+            <Skeleton className="h-7 w-40" />
+            <Skeleton className="h-3 w-56 mt-2" />
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 space-y-6">
+          <KpiCardsSkeleton />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartSkeleton />
+            <ChartSkeleton />
+          </div>
+          <DataTableSkeleton rows={6} columns={5} />
         </div>
       </div>
     );

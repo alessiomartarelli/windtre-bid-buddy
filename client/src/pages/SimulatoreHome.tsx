@@ -166,9 +166,7 @@ export default function SimulatoreHome() {
             </div>
 
             {showLoading ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
+              <DataTableSkeleton rows={6} columns={4} className="py-4" />
             ) : isError ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
                 <AlertCircle className="h-10 w-10 text-destructive" />

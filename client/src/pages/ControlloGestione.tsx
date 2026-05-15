@@ -31,6 +31,7 @@ import {
   Wallet, Plus, Pencil, Trash2, Loader2, Building2, Tag, Truck, Store, Download,
   TrendingUp, FileText, Paperclip, ExternalLink, Info,
 } from "lucide-react";
+import { KpiCardsSkeleton, DataTableSkeleton } from "@/components/skeletons";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   PieChart, Pie, Cell,
@@ -482,8 +483,11 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
 
   if (loading || !isAuthorized) {
     return (
-      <div className={embedded ? "flex items-center justify-center py-12" : "min-h-screen flex items-center justify-center"}>
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className={embedded ? "py-6 px-4" : "min-h-screen px-4 py-6"}>
+        <KpiCardsSkeleton />
+        <div className="mt-4">
+          <DataTableSkeleton rows={6} columns={6} />
+        </div>
       </div>
     );
   }

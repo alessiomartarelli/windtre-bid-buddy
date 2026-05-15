@@ -1957,7 +1957,7 @@ export default function DrmsCommissioning() {
     return (
       <>
         <AppNavbar title="DRMS Commissioning" />
-        <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+        <div className="px-4 py-6"><KpiCardsSkeleton /><div className="mt-4"><DataTableSkeleton rows={8} columns={5} /></div></div>
       </>
     );
   }

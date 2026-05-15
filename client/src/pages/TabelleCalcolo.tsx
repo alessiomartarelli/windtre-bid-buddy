@@ -548,8 +548,8 @@ export default function TabelleCalcolo() {
 
   if (authLoading || systemLoading || orgLoading || !initialized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-background px-4 py-6 space-y-4">
+        <DataTableSkeleton rows={10} columns={6} />
       </div>
     );
   }

@@ -519,9 +519,7 @@ export default function MappaturaBiSuite() {
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
+          <DataTableSkeleton rows={8} columns={5} className="py-6" />
         ) : (
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ActiveTab)}>
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
