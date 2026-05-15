@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from "react";
-import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,113 +11,21 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2, Upload, FileSpreadsheet, Check, ChevronRight, ChevronLeft, SkipForward, AlertTriangle, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-
-// Mese in lingua italiana, allineato al tool standalone (MO).
-const MO = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
-
-// Categorie di default (mirror di DEFAULT_CATS_E/U dentro
-// client/public/finplan/index.html). Se vengono cambiate lì, replicare
-// qui per mantenere coerenza dopo il primo import.
-// Le categorie "speciali" (Infragruppo/Giroconto/Estero) hanno gli stessi
-// id usati dal tool standalone così l'auto-classificazione qui sotto
-// produce transazioni già riconosciute correttamente.
-const CAT_INFRAGRUPPO_E = "ig_e";
-const CAT_INFRAGRUPPO_U = "ig_u";
-const CAT_GIROCONTO_E = "gc_e";
-const CAT_GIROCONTO_U = "gc_u";
-const CAT_ESTERO_E = "est_e";
-const CAT_ESTERO_U = "est_u";
-
-const DEFAULT_CATS_E = [
-  { id: "e1", name: "Vendite Prodotti",   color: "#00D4AA", type: "E" as const },
-  { id: "e2", name: "Servizi/Consulenze", color: "#3B82F6", type: "E" as const },
-  { id: "e3", name: "Abbonamenti",        color: "#8B5CF6", type: "E" as const },
-  { id: "e4", name: "Affitti Attivi",     color: "#F59E0B", type: "E" as const },
-  { id: "e5", name: "Altro Entrate",      color: "#06B6D4", type: "E" as const },
-  { id: CAT_INFRAGRUPPO_E, name: "Infragruppo", color: "#A78BFA", type: "E" as const, infragruppo: true },
-  { id: CAT_GIROCONTO_E,   name: "Giroconto",   color: "#64748B", type: "E" as const, giroconto: true },
-  { id: CAT_ESTERO_E,      name: "Estero",      color: "#06B6D4", type: "E" as const, estero: true },
-];
-const DEFAULT_CATS_U = [
-  { id: "u1", name: "Personale/Stipendi", color: "#F43F5E", type: "U" as const },
-  { id: "u2", name: "Fornitori",          color: "#F97316", type: "U" as const },
-  { id: "u3", name: "Affitti Passivi",    color: "#EAB308", type: "U" as const },
-  { id: "u4", name: "Marketing/Adv",      color: "#EC4899", type: "U" as const },
-  { id: "u5", name: "Utenze/Servizi",     color: "#84CC16", type: "U" as const },
-  { id: "u6", name: "Altro Uscite",       color: "#94A3B8", type: "U" as const },
-  { id: CAT_INFRAGRUPPO_U, name: "Infragruppo", color: "#7C3AED", type: "U" as const, infragruppo: true },
-  { id: CAT_GIROCONTO_U,   name: "Giroconto",   color: "#475569", type: "U" as const, giroconto: true },
-  { id: CAT_ESTERO_U,      name: "Estero",      color: "#0891B2", type: "U" as const, estero: true },
-];
-
-// Keyword set semplificato dal tool standalone (`autoRiclassifica`):
-// queste vengono cercate dentro la descrizione del movimento per
-// riassegnare il catId al posto del default unico.
-const GIROCONTO_KW = [
-  "girocont", "giro conto", "giro-conto",
-  "bonifico interno", "trasferimento interno",
-  "storno", "partite interne", "movimento interno",
-];
-const INFRAGRUPPO_KW = [
-  "infragruppo", "intra gruppo", "intra-gruppo", "intercompany", "inter company",
-  "aziende gruppo", "azienda gruppo", "gruppo aziendale",
-  "fatture interne", "fattura interna", "fatt. interne", "fatt interne",
-  // Nomi società tipiche del gruppo (mirror del tool standalone).
-  "cms evo", "cms evolution", "phone & phone", "phone and phone",
-  "easy digital", "sc technology", "nuova ristorazione",
-];
-const ESTERO_KW = [
-  "estero", "foreign", "international", "internazionale", "overseas",
-  "bonifico estero", "bonifico internazionale", "wire transfer", "swift",
-  "sepa estero", "pagamento estero", "rimessa estera",
-  "reverse charge", "inversione contabile", "autofattura",
-];
-const PERSONALE_KW = [
-  "stipend", "salari", "salario", "personale dipendente",
-  "buste paga", "busta paga", "compenso amministratore",
-  "compensi amministratori", "tfr",
-];
-const FORNITORI_KW = [
-  "fornitor", "fattura n", "ft.", "fatt.", "pagamento fattura",
-  "pag. fattura", "pag.fattura", "pagam. fornitor",
-];
-
-function classifyDesc(
-  desc: string,
-  type: "E" | "U",
-  defE: string,
-  defU: string,
-): { catId: string; tag: string } {
-  const dv = (desc || "").toLowerCase().trim();
-  if (dv) {
-    if (GIROCONTO_KW.some(k => dv.includes(k))) {
-      return { catId: type === "E" ? CAT_GIROCONTO_E : CAT_GIROCONTO_U, tag: "Giroconto" };
-    }
-    if (INFRAGRUPPO_KW.some(k => dv.includes(k))) {
-      return { catId: type === "E" ? CAT_INFRAGRUPPO_E : CAT_INFRAGRUPPO_U, tag: "Infragruppo" };
-    }
-    if (ESTERO_KW.some(k => dv.includes(k))) {
-      return { catId: type === "E" ? CAT_ESTERO_E : CAT_ESTERO_U, tag: "Estero" };
-    }
-    if (type === "U" && PERSONALE_KW.some(k => dv.includes(k))) {
-      return { catId: "u1", tag: "Personale" };
-    }
-    if (type === "U" && FORNITORI_KW.some(k => dv.includes(k))) {
-      return { catId: "u2", tag: "Fornitori" };
-    }
-  }
-  return { catId: type === "E" ? defE : defU, tag: "" };
-}
+// Helper di import puri estratti in `client/src/lib/finplanImport.ts`
+// durante Task #144 per essere condivisi con la sezione Transazioni
+// della shell React (BankImportFlow). Tutto ciò che era duplicato qui
+// (DEFAULT_CATS, classifyDesc, parseFile, rowsToTransactions, ecc.) è
+// ora importato da quel modulo per evitare drift fra wizard e tool.
+import {
+  MO,
+  DEFAULT_CATS_E, DEFAULT_CATS_U,
+  HEADER_KEYWORDS,
+  parseFile, autoDetectColumn, rowsToTransactions,
+  type ParsedFile, type ColumnMapping, type BuiltTransaction,
+} from "@/lib/finplanImport";
 
 type StepKey = "intro" | "rs" | "upload" | "mapping" | "save";
 const STEPS: StepKey[] = ["intro", "rs", "upload", "mapping", "save"];
-
-type ParsedRow = (string | number)[];
-interface ParsedFile {
-  headers: string[];
-  rows: ParsedRow[];
-  fileName: string;
-}
 
 type UploadMode = "multi" | "single-rs-col";
 
@@ -126,177 +33,6 @@ type UploadMode = "multi" | "single-rs-col";
 interface RsSlot {
   rsIndex: number;       // 0..4
   parsed: ParsedFile | null;
-}
-
-interface ColumnMapping {
-  date: number;        // -1 if not present
-  amountIn: number;    // -1 if not present (use signed)
-  amountOut: number;   // -1 if not present
-  amountSigned: number; // -1 if not present (alternative)
-  desc: number;        // -1 if not present
-  rs: number;          // -1 if not present (only meaningful in single-rs-col mode)
-}
-
-interface BuiltTransaction {
-  id: number;
-  month: number;       // 0..11
-  type: "E" | "U";
-  amount: number;      // positive
-  catId: string;       // e.g. 'e1' or 'u2'
-  ivaRate: number;
-  desc: string;
-  autoTag: string;     // tag dell'auto-classificazione, "" se default
-  _rowIdx: number;     // indice riga sorgente (per chiave override)
-  _rsIdx: number;      // indice RS sorgente (per chiave override)
-}
-
-// Parse un valore numerico in formato italiano/europeo. Tollera
-// "1.234,56", "1234.56", " 1 234,56 ", numeri puri Excel.
-function parseAmount(v: unknown): number {
-  if (v === null || v === undefined || v === "") return 0;
-  if (typeof v === "number") return v;
-  let s = String(v).trim();
-  s = s.replace(/[€$£\s]/g, "");
-  if (!s) return 0;
-  if (s.includes(".") && s.includes(",")) {
-    s = s.replace(/\./g, "").replace(",", ".");
-  } else if (s.includes(",")) {
-    s = s.replace(",", ".");
-  }
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
-}
-
-// Estrae il mese (0..11) da una stringa data IT/EN o da un seriale Excel.
-function parseMonth(v: unknown): number {
-  if (v === null || v === undefined || v === "") return 0;
-  if (typeof v === "number" && v > 10000 && v < 80000) {
-    const d = XLSX.SSF.parse_date_code(v);
-    if (d && d.m) return Math.max(0, Math.min(11, d.m - 1));
-  }
-  const s = String(v).trim();
-  const m1 = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
-  if (m1) return Math.max(0, Math.min(11, parseInt(m1[2], 10) - 1));
-  const m2 = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
-  if (m2) return Math.max(0, Math.min(11, parseInt(m2[2], 10) - 1));
-  const d = new Date(s);
-  if (!isNaN(d.getTime())) return d.getMonth();
-  return 0;
-}
-
-function autoDetectColumn(headers: string[], keywords: string[]): number {
-  const norm = (h: string) => h.toLowerCase().trim();
-  for (let i = 0; i < headers.length; i++) {
-    if (keywords.some(k => norm(headers[i]) === k)) return i;
-  }
-  for (let i = 0; i < headers.length; i++) {
-    if (keywords.some(k => norm(headers[i]).includes(k))) return i;
-  }
-  return -1;
-}
-
-async function parseFile(file: File): Promise<ParsedFile> {
-  const ext = file.name.split(".").pop()?.toLowerCase() || "";
-  if (ext === "csv") {
-    const text = await file.text();
-    const firstLine = text.split("\n")[0] || "";
-    const delim = firstLine.includes("\t") ? "\t"
-      : firstLine.split(";").length > firstLine.split(",").length ? ";" : ",";
-    const lines = text.trim().split("\n").map(l =>
-      l.split(delim).map(c => c.trim().replace(/^"|"$/g, ""))
-    );
-    if (lines.length < 2) throw new Error("CSV con dati insufficienti");
-    return {
-      headers: lines[0].map(h => h || ""),
-      rows: lines.slice(1).filter(r => r.some(c => c !== "")),
-      fileName: file.name,
-    };
-  }
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array" });
-  let chosenRaw: ParsedRow[] | null = null;
-  for (const sn of wb.SheetNames) {
-    const r = XLSX.utils.sheet_to_json<ParsedRow>(wb.Sheets[sn], { header: 1, defval: "" });
-    const dr = r.filter(row => row.some(c => c !== ""));
-    if (dr.length >= 2) { chosenRaw = dr; break; }
-  }
-  if (!chosenRaw) throw new Error("Nessun foglio con dati sufficienti");
-  let hi = 0;
-  for (let i = 0; i < Math.min(10, chosenRaw.length); i++) {
-    const nonNum = chosenRaw[i].filter(c =>
-      c !== "" && isNaN(parseFloat(String(c).replace(",", ".")))
-    ).length;
-    if (nonNum >= 1) { hi = i; break; }
-  }
-  const headers = chosenRaw[hi].map((h, i) => String(h ?? "").trim() || `Col${i+1}`);
-  const rows = chosenRaw.slice(hi + 1).filter(r => r.some(c => c !== ""));
-  return { headers, rows, fileName: file.name };
-}
-
-// Converte una lista di righe parsed + mapping in transazioni FinPlan.
-// `rowOriginalIndices[i]` è l'indice della riga `rows[i]` nel file
-// sorgente (utile in modalità single-rs-col dove le righe vengono
-// raggruppate per RS prima di essere processate). `rsIdx` è l'indice
-// della RS destinataria — entrambi servono a costruire la chiave di
-// override `${rsIdx}:${origRowIdx}:${type}` univoca tra RS diverse.
-function rowsToTransactions(
-  rows: ParsedRow[],
-  rowOriginalIndices: number[],
-  rsIdx: number,
-  mapping: ColumnMapping,
-  defaultCatE: string,
-  defaultCatU: string,
-  ivaMode: "netti" | "lordi",
-  startId: number,
-  autoClassifyOn: boolean,
-  overrides: Record<string, string>,
-): BuiltTransaction[] {
-  const out: BuiltTransaction[] = [];
-  let nextId = startId;
-  const usesSigned = mapping.amountIn < 0 && mapping.amountOut < 0 && mapping.amountSigned >= 0;
-  const factor = ivaMode === "lordi" ? 1 / 1.22 : 1;
-  const baseIva = ivaMode === "lordi" ? 22 : 0;
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const origIdx = rowOriginalIndices[i] ?? i;
-    const month = mapping.date >= 0 ? parseMonth(row[mapping.date]) : 0;
-    const desc = mapping.desc >= 0 ? String(row[mapping.desc] ?? "").trim() : "";
-    let amountE = 0, amountU = 0;
-    if (usesSigned) {
-      const a = parseAmount(row[mapping.amountSigned]);
-      if (a >= 0) amountE = a; else amountU = -a;
-    } else {
-      if (mapping.amountIn >= 0) amountE = parseAmount(row[mapping.amountIn]);
-      if (mapping.amountOut >= 0) amountU = parseAmount(row[mapping.amountOut]);
-    }
-    const pushTx = (type: "E" | "U", amount: number) => {
-      const auto = autoClassifyOn
-        ? classifyDesc(desc, type, defaultCatE, defaultCatU)
-        : { catId: type === "E" ? defaultCatE : defaultCatU, tag: "" };
-      const ovKey = `${rsIdx}:${origIdx}:${type}`;
-      const finalCat = overrides[ovKey] ?? auto.catId;
-      // Le categorie speciali (giroconti/estero/personale) non hanno
-      // IVA scorporabile.
-      const noIva = finalCat === CAT_GIROCONTO_E || finalCat === CAT_GIROCONTO_U
-        || finalCat === CAT_ESTERO_E || finalCat === CAT_ESTERO_U
-        || finalCat === "u1";
-      const ivaRate = noIva ? 0 : baseIva;
-      const fact = noIva ? 1 : factor;
-      out.push({
-        id: nextId++, month, type,
-        amount: +(amount * fact).toFixed(2),
-        catId: finalCat,
-        ivaRate,
-        desc,
-        autoTag: overrides[ovKey] ? "Override" : auto.tag,
-        _rowIdx: origIdx,
-        _rsIdx: rsIdx,
-      });
-    };
-    if (amountE > 0) pushTx("E", amountE);
-    if (amountU > 0) pushTx("U", amountU);
-  }
-  return out;
 }
 
 // Costruisce lo snapshot finale popolando le RS con le rispettive transazioni.
@@ -425,14 +161,17 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
   }, [uploadMode, singleParsed, slots]);
 
   // Auto-detect mapping quando cambiano gli headers di riferimento.
+  // Le keyword list sono centralizzate in `HEADER_KEYWORDS` dentro
+  // `client/src/lib/finplanImport.ts` per evitare drift fra wizard e
+  // BankImportFlow (sezione Transazioni).
   const applyAutoDetect = useCallback((headers: string[], wantRs: boolean) => {
     setMapping({
-      date: autoDetectColumn(headers, ["data","date","mese","periodo","data contabile","data valuta"]),
-      amountIn: autoDetectColumn(headers, ["accredit","entrate","ricavi","incassi","avere","credit","entrata"]),
-      amountOut: autoDetectColumn(headers, ["addebit","uscite","spese","dare","debit","uscita"]),
-      amountSigned: autoDetectColumn(headers, ["importo","amount","valore"]),
-      desc: autoDetectColumn(headers, ["descrizione","description","causale","nota","operazione","dettaglio"]),
-      rs: wantRs ? autoDetectColumn(headers, ["ragione sociale","ragionesociale","rs","società","societa","azienda","company"]) : -1,
+      date: autoDetectColumn(headers, [...HEADER_KEYWORDS.date]),
+      amountIn: autoDetectColumn(headers, [...HEADER_KEYWORDS.amountIn]),
+      amountOut: autoDetectColumn(headers, [...HEADER_KEYWORDS.amountOut]),
+      amountSigned: autoDetectColumn(headers, [...HEADER_KEYWORDS.amountSigned]),
+      desc: autoDetectColumn(headers, [...HEADER_KEYWORDS.desc]),
+      rs: wantRs ? autoDetectColumn(headers, [...HEADER_KEYWORDS.rs]) : -1,
     });
   }, []);
 
@@ -459,11 +198,11 @@ export function FinPlanSetupWizard({ orgId, onComplete, onSkip }: FinPlanSetupWi
         const empty = curr.date < 0 && curr.amountIn < 0 && curr.amountOut < 0 && curr.amountSigned < 0 && curr.desc < 0;
         if (empty) {
           return {
-            date: autoDetectColumn(p.headers, ["data","date","mese","periodo","data contabile","data valuta"]),
-            amountIn: autoDetectColumn(p.headers, ["accredit","entrate","ricavi","incassi","avere","credit","entrata"]),
-            amountOut: autoDetectColumn(p.headers, ["addebit","uscite","spese","dare","debit","uscita"]),
-            amountSigned: autoDetectColumn(p.headers, ["importo","amount","valore"]),
-            desc: autoDetectColumn(p.headers, ["descrizione","description","causale","nota","operazione","dettaglio"]),
+            date: autoDetectColumn(p.headers, [...HEADER_KEYWORDS.date]),
+            amountIn: autoDetectColumn(p.headers, [...HEADER_KEYWORDS.amountIn]),
+            amountOut: autoDetectColumn(p.headers, [...HEADER_KEYWORDS.amountOut]),
+            amountSigned: autoDetectColumn(p.headers, [...HEADER_KEYWORDS.amountSigned]),
+            desc: autoDetectColumn(p.headers, [...HEADER_KEYWORDS.desc]),
             rs: -1,
           };
         }

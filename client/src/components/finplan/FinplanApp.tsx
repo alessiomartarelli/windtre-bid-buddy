@@ -8,6 +8,9 @@ import { LineChart, BarChart3, Wallet, Target, TrendingUp, Briefcase, Users, Fil
 import { useFinplanData, useFinplanMutation } from "@/hooks/useFinplan";
 import { Overview } from "./sections/Overview";
 import { CostiIncassi } from "./sections/CostiIncassi";
+import { Transazioni } from "./sections/Transazioni";
+import { Mensile } from "./sections/Mensile";
+import { IvaSection } from "./sections/IvaSection";
 
 interface FinplanAppProps {
   orgId: string;
@@ -35,9 +38,9 @@ type SectionKey =
 const SECTIONS: { key: SectionKey; label: string; icon: ComponentType<{ className?: string }>; active: boolean }[] = [
   { key: "overview",    label: "Overview",        icon: LineChart, active: true  },
   { key: "costifissi",  label: "Costi & Incassi", icon: Filter,    active: true  },
-  { key: "transazioni", label: "Transazioni",     icon: BarChart3, active: false },
-  { key: "mensile",     label: "Mensile",         icon: BarChart3, active: false },
-  { key: "iva",         label: "IVA",             icon: FileText,  active: false },
+  { key: "transazioni", label: "Transazioni",     icon: BarChart3, active: true  },
+  { key: "mensile",     label: "Mensile",         icon: BarChart3, active: true  },
+  { key: "iva",         label: "IVA",             icon: FileText,  active: true  },
   { key: "obiettivi",   label: "Obiettivi",       icon: Target,    active: false },
   { key: "debiti",      label: "Debiti",          icon: Wallet,    active: false },
   { key: "personale",   label: "Personale",       icon: Users,     active: false },
@@ -198,6 +201,42 @@ export default function FinplanApp({ orgId }: FinplanAppProps) {
                   <SectionLoading />
                 ) : (
                   <CostiIncassi
+                    snapshot={snapshot}
+                    companyIndex={activeCo}
+                    scheduleSave={scheduleSave}
+                  />
+                )}
+              </TabsContent>
+
+              <TabsContent value="transazioni" className="mt-4">
+                {isLoading ? (
+                  <SectionLoading />
+                ) : (
+                  <Transazioni
+                    snapshot={snapshot}
+                    companyIndex={activeCo}
+                    scheduleSave={scheduleSave}
+                  />
+                )}
+              </TabsContent>
+
+              <TabsContent value="mensile" className="mt-4">
+                {isLoading ? (
+                  <SectionLoading />
+                ) : (
+                  <Mensile
+                    snapshot={snapshot}
+                    companyIndex={activeCo}
+                    scheduleSave={scheduleSave}
+                  />
+                )}
+              </TabsContent>
+
+              <TabsContent value="iva" className="mt-4">
+                {isLoading ? (
+                  <SectionLoading />
+                ) : (
+                  <IvaSection
                     snapshot={snapshot}
                     companyIndex={activeCo}
                     scheduleSave={scheduleSave}
