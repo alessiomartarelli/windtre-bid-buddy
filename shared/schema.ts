@@ -19,6 +19,7 @@ export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name").notNull(),
   enabledModules: jsonb("enabled_modules").$type<Record<string, boolean>>().default({}),
+  finplanPreloadEnabled: boolean("finplan_preload_enabled").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

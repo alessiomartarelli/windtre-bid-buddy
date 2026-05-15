@@ -518,7 +518,13 @@ export async function registerRoutes(
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) return res.status(204).end();
-      if (!FINPLAN_PRELOAD_ORGS.includes(profile.organizationId)) {
+      const org = await storage.getOrganization(profile.organizationId);
+      // Allowlist primaria: flag DB `finplanPreloadEnabled` (gestito da
+      // super-admin via UI). Env var resta come fallback per backward-compat
+      // / disaster recovery senza accesso al DB.
+      const enabledByDb = !!org?.finplanPreloadEnabled;
+      const enabledByEnv = FINPLAN_PRELOAD_ORGS.includes(profile.organizationId);
+      if (!enabledByDb && !enabledByEnv) {
         // Bloccato per multi-tenant: nessun byte di Cms Group esce.
         return res.status(204).end();
       }
@@ -1429,6 +1435,33 @@ export async function registerRoutes(
   };
   app.put("/api/super-admin/organizations/:id/modules", isAuthenticated, putOrgModulesHandler);
   app.put("/api/admin/organizations/:id/modules", isAuthenticated, putOrgModulesHandler);
+
+  // PUT toggle FinPlan preload allowlist per organizzazione (super-admin only).
+  // Vedi commento in testa al file: il preload contiene dati REALI di Cms Group,
+  // quindi solo super-admin può abilitarlo per altre org.
+  app.put("/api/super-admin/organizations/:id/finplan-preload", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const enabled = req.body?.enabled;
+      if (typeof enabled !== "boolean") {
+        return res.status(400).json({ message: "Campo `enabled` (boolean) richiesto" });
+      }
+      const existing = await storage.getOrganization(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Organizzazione non trovata" });
+      }
+      const updated = await storage.updateOrganization(req.params.id, {
+        finplanPreloadEnabled: enabled,
+      });
+      res.json({ finplanPreloadEnabled: updated.finplanPreloadEnabled });
+    } catch (e) {
+      console.error("Error updating finplan preload flag:", e);
+      res.status(500).json({ message: "Errore aggiornamento flag FinPlan" });
+    }
+  });
 
   app.get("/api/super-admin/profiles", isAuthenticated, async (req: any, res) => {
     try {

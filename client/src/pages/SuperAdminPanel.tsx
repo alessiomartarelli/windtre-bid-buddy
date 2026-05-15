@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Users, Building2, Trash2, Settings2 } from 'lucide-react';
+import { Loader2, Plus, Users, Building2, Trash2, Settings2, Wallet } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { AppNavbar } from '@/components/AppNavbar';
 import { ModulesDialog } from '@/components/ModulesDialog';
 import { BiSuiteConnectionForm } from '@/components/BiSuiteConnectionForm';
@@ -48,6 +49,8 @@ interface Organization {
   name: string;
   created_at?: string;
   createdAt?: string;
+  finplanPreloadEnabled?: boolean;
+  finplan_preload_enabled?: boolean;
 }
 
 interface Profile {
@@ -71,6 +74,7 @@ export default function SuperAdminPanel() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [modulesOrg, setModulesOrg] = useState<Organization | null>(null);
+  const [finplanTogglingId, setFinplanTogglingId] = useState<string | null>(null);
   
   // Form state
   const [email, setEmail] = useState('');
@@ -225,6 +229,46 @@ export default function SuperAdminPanel() {
     return allProfiles.filter((p: any) => (p.organizationId || p.organization_id) === orgId).length;
   };
 
+  const isFinplanEnabled = (org: Organization) => {
+    return !!(org.finplanPreloadEnabled ?? org.finplan_preload_enabled);
+  };
+
+  const handleToggleFinplanPreload = async (org: Organization, enabled: boolean) => {
+    setFinplanTogglingId(org.id);
+    try {
+      const res = await fetch(apiUrl(`/api/super-admin/organizations/${org.id}/finplan-preload`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({
+          title: 'Errore',
+          description: data?.message || 'Impossibile aggiornare il flag FinPlan',
+          variant: 'destructive',
+        });
+      } else {
+        setOrganizations((prev) =>
+          prev.map((o) => (o.id === org.id ? { ...o, finplanPreloadEnabled: enabled } : o)),
+        );
+        toast({
+          title: enabled ? 'Preload FinPlan abilitato' : 'Preload FinPlan disabilitato',
+          description: `${org.name}: l'utente vedrà ${enabled ? 'i dati condivisi al login' : 'il workspace vuoto'}.`,
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Errore',
+        description: 'Errore di rete durante l\'aggiornamento',
+        variant: 'destructive',
+      });
+    } finally {
+      setFinplanTogglingId(null);
+    }
+  };
+
   const isMyOrganization = (orgId: string) => {
     return profile?.organizationId === orgId;
   };
@@ -366,6 +410,12 @@ export default function SuperAdminPanel() {
                       <TableHead className="hidden sm:table-cell">ID</TableHead>
                       <TableHead>Utenti</TableHead>
                       <TableHead className="hidden sm:table-cell">Creata il</TableHead>
+                      <TableHead className="hidden md:table-cell">
+                        <span className="inline-flex items-center gap-1">
+                          <Wallet className="h-3.5 w-3.5" />
+                          FinPlan condiviso
+                        </span>
+                      </TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -381,6 +431,20 @@ export default function SuperAdminPanel() {
                         <TableCell>{getUserCountForOrg(org.id)}</TableCell>
                         <TableCell className="hidden sm:table-cell">
                           {new Date(org.createdAt || org.created_at || '').toLocaleDateString('it-IT')}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={isFinplanEnabled(org)}
+                              disabled={finplanTogglingId === org.id}
+                              onCheckedChange={(checked) => handleToggleFinplanPreload(org, checked)}
+                              data-testid={`switch-finplan-preload-${org.id}`}
+                              aria-label={`Abilita preload FinPlan per ${org.name}`}
+                            />
+                            {finplanTogglingId === org.id && (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
