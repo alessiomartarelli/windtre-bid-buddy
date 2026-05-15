@@ -8,7 +8,7 @@ import {
 } from "@shared/finplanSchema";
 
 // Manteniamo allineate le costanti chiave con lo shim inline dell'iframe
-// (`client/public/finplan/index.html`): la chiave React-Query è la stessa
+// (storia in git, file rimosso in Task #148): la chiave React-Query è la stessa
 // usata dal wrapper Amministrazione, così invalidare da uno aggiorna l'altro.
 const FINPLAN_QUERY_KEY = ["/api/finplan"] as const;
 const PUT_DEBOUNCE_MS = 3000;
@@ -137,7 +137,7 @@ export interface UseFinplanMutationResult {
 
 /**
  * Hook di scrittura per `/api/finplan`. Specchio dello shim dell'iframe
- * (`client/public/finplan/index.html`):
+ * (tool standalone HTML, rimosso in Task #148; storia in git):
  *  - debounce 3s su `scheduleSave`;
  *  - latest-wins: `pendingRef` settato IMMEDIATAMENTE così flush/unmount
  *    recuperano sempre l'ultima versione anche senza timer scattato;

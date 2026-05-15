@@ -3,7 +3,7 @@
 // riusabili dalle sezioni Transazioni/Mensile/IVA della shell React
 // (Task #144) e per essere coperte da test mirati.
 //
-// Sorgente storica: `client/public/finplan/index.html` funzioni
+// Sorgente storica: tool standalone HTML (rimosso in Task #148, vedi git) funzioni
 // `calcIVA`, `syncMonthlyFromTx`, `calcAutofattura`, `setTxIva`.
 
 import type { FinplanCompanySnapshot, FinplanTransaction, IvaPeriod } from "@shared/finplanSchema";

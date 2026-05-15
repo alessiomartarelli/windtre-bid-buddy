@@ -2,9 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import compression from "compression";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
-import { mountFinplanStatic } from "./finplanStatic";
 import { createServer } from "http";
-import path from "path";
 import { startBisuiteDailyScheduler } from "./bisuiteScheduler";
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -14,9 +12,9 @@ const app = express();
 const httpServer = createServer(app);
 
 // Compressione gzip su risposte API/JSON (Task #137). I bundle statici
-// hanno già pre-compressione brotli/gzip via mountCompressedStatic /
-// mountFinplanStatic; qui copriamo le risposte dinamiche (es. /api/finplan,
-// /api/bisuite-sales, /api/cdg/*) che possono pesare centinaia di KB.
+// hanno già pre-compressione brotli/gzip via mountCompressedStatic; qui
+// copriamo le risposte dinamiche (es. /api/finplan, /api/bisuite-sales,
+// /api/cdg/*) che possono pesare centinaia di KB.
 // Threshold 1 KB: payload piccoli non valgono l'overhead.
 app.use(
   compression({
@@ -103,10 +101,6 @@ app.use((req, res, next) => {
       return res.status(status).json({ message });
     });
 
-    // Serve gzipped FinPlan bundle prima di express.static.
-    mountFinplanStatic(subApp, {
-      roots: [path.resolve(__dirname, "public")],
-    });
     serveStatic(subApp);
     app.use(BASE_PATH, subApp);
 
@@ -127,11 +121,6 @@ app.use((req, res, next) => {
       return res.status(status).json({ message });
     });
 
-    // Serve gzipped FinPlan bundle prima di Vite (che servirebbe il file
-    // raw da client/public senza compressione né ETag).
-    mountFinplanStatic(app, {
-      roots: [path.resolve(process.cwd(), "client/public")],
-    });
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }

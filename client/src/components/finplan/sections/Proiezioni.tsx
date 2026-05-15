@@ -1,6 +1,6 @@
 // Sezione Proiezioni (Task #145).
 // Slider growth (-50%..+100%) → 12 mesi proiettati con `computeProiezioni`.
-// Sorgente: client/public/finplan/index.html righe 3148-3163.
+// Sorgente storica: tool standalone HTML (rimosso in Task #148, vedi git) righe ~3148-3163.
 
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

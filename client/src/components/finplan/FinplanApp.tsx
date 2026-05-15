@@ -25,8 +25,8 @@ interface FinplanAppProps {
   orgId: string;
 }
 
-// Etichette di default allineate al tool standalone
-// (`client/public/finplan/index.html` ~riga 846).
+// Etichette di default allineate al tool standalone originario
+// (rimosso in Task #148; storia in git per riferimento).
 const DEFAULT_COMPANY_NAMES = ["EASY DIGITAL GROUP", "CMS", "CMS EVO", "PHONE & PHONE", "SCT"];
 const COMPANY_COLORS = ["#00D4AA", "#3B82F6", "#8B5CF6", "#F59E0B", "#EF4444"];
 const CONSOLIDATO_INDEX = 5;
@@ -90,13 +90,9 @@ function loadPersisted(orgId: string): PersistedState | null {
 }
 
 /**
- * Shell React di FinPlan Studio (work in progress — Task #142/#143+).
- *
- * Sostituirà l'iframe legacy (`client/public/finplan/index.html`).
- * Per ora gated dietro `?finplanReact=1` su Amministrazione → Analisi.
- * - Task #142: shell + tabs placeholder.
- * - Task #143: CompanyNav (5 RS + Consolidato), Overview con KPI/donut/line,
- *   sezione Costi & Incassi (cfExclude). Sezioni rimanenti: #144-#147.
+ * Shell React di FinPlan Studio. Default del tab Analisi in
+ * Amministrazione dopo il cutover finale (Task #148). Sostituisce
+ * l'iframe HTML standalone, ora rimosso.
  */
 export default function FinplanApp({ orgId }: FinplanAppProps) {
   const persisted = useMemo(() => loadPersisted(orgId), [orgId]);
@@ -345,10 +341,7 @@ function SectionPlaceholder({ title }: { title: string }) {
       data-testid={`finplan-section-placeholder-${title.toLowerCase().replace(/\s+/g, "-")}`}
     >
       <p className="text-sm font-medium mb-1">Sezione “{title}” in arrivo</p>
-      <p className="text-xs">
-        Migrazione in corso (task successivi). Per usare la versione attuale, rimuovi
-        <code className="mx-1">?finplanReact=1</code> dall'URL.
-      </p>
+      <p className="text-xs">Disponibile in una versione futura.</p>
     </div>
   );
 }

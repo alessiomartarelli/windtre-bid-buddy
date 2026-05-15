@@ -3,7 +3,7 @@
 // `computeRecupero` (lib/finplan/perdite.ts) per progettare il rientro
 // dalla perdita pregressa via cashflow netto IVA o quote manuali.
 //
-// Sorgente: client/public/finplan/index.html righe 2848-2934 (obj CRUD)
+// Sorgente storica: tool standalone HTML (rimosso in Task #148, vedi git) righe ~2848-2934 (obj CRUD)
 // e 2971-3146 (perdite).
 
 import { Fragment, useMemo, useState } from "react";

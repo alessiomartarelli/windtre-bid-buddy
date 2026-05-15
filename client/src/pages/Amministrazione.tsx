@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useDeferredValue, lazy, Suspense } from "react";
+// Note: lazy/Suspense usati per code-splitting di FinplanApp (~200KB) in modo che il
+// bundle iniziale di Amministrazione non lo trascini quando l'utente non apre Analisi.
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -49,8 +51,8 @@ import * as XLSX from "xlsx";
 import ControlloGestione from "@/pages/ControlloGestione";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { FinPlanSetupWizard } from "@/components/FinPlanSetupWizard";
-// Task #142: shell React di FinPlan, lazy-loaded e gated dietro
-// `?finplanReact=1`. L'iframe legacy resta il default per gli utenti.
+// Shell React di FinPlan (Task #142-#148): default del tab Analisi dopo il
+// cutover finale. L'iframe HTML standalone è stato rimosso.
 const FinplanApp = lazy(() => import("@/components/finplan/FinplanApp"));
 
 type TabKey = "contabile" | "iva" | "controllo" | "analisi";
@@ -343,30 +345,10 @@ export default function Amministrazione() {
   const [escludiZero, setEscludiZero] = useState<boolean>(false);
   const [ivaCategoryFilter, setIvaCategoryFilter] = useState<IvaCategoria | "all">("all");
   const [selectedRs, setSelectedRs] = useState<string>("all");
-  // Task #142: feature flag per provare la nuova shell React di FinPlan
-  // senza rimuovere l'iframe legacy. Default = iframe; con `?finplanReact=1`
-  // (o `&finplanReact=1`) viene montata la shell React `<FinplanApp>`.
-  const finplanReactFlag = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return new URLSearchParams(window.location.search).get("finplanReact") === "1";
-    } catch {
-      return false;
-    }
-  }, []);
-
-  // Iframe FinPlan keep-alive: una volta che l'utente apre il tab Analisi
-  // l'iframe resta montato (display:none quando non attivo) così tornarci
-  // è istantaneo e non rifa il bootstrap del tool standalone (~5 MB).
-  const [analisiEverOpened, setAnalisiEverOpened] = useState<boolean>(tab === "analisi");
-  useEffect(() => {
-    if (tab === "analisi") setAnalisiEverOpened(true);
-  }, [tab]);
-
   // ── FinPlan setup wizard (Task #131) ──
   // La prima volta che un'org senza preload e senza dati FinPlan apre il
-  // tab Analisi, mostriamo un wizard di import iniziale al posto
-  // dell'iframe. Si dismette via "Salta" o al completamento del salvataggio
+  // tab Analisi, mostriamo un wizard di import iniziale al posto della
+  // shell React. Si dismette via "Salta" o al completamento del salvataggio
   // (flag in localStorage scoped per orgId). Per le org Cms Group (con
   // preload) non viene mai mostrato.
   const [finplanSetupDismissed, setFinplanSetupDismissed] = useState(false);
@@ -403,17 +385,17 @@ export default function Amministrazione() {
       if (localStorage.getItem(k1) || localStorage.getItem(k2)) return false;
     } catch { /* ignore */ }
     if (finplanDataQuery.isLoading || finplanPreloadStatusQuery.isLoading) return false;
-    // Se una delle due query è in errore (rete giù, 5xx) NON mostriamo
-    // il wizard: meglio lasciare il path legacy (iframe) attivo che
-    // rischiare di sovrapporre il wizard a un'org Cms con preload.
+    // Se una delle due query è in errore (rete giù, 5xx) NON mostriamo il
+    // wizard: meglio lasciare la shell React attiva che rischiare di
+    // sovrapporre il wizard a un'org Cms con preload.
     if (finplanDataQuery.isError || finplanPreloadStatusQuery.isError) return false;
     if (finplanPreloadStatusQuery.data?.hasPreload) return false;
     if (finplanDataQuery.data?.updatedAt) return false;
     return true;
   })();
   // Finché le query di gating non sono risolte (loading) non vogliamo
-  // mostrare l'iframe né il wizard. In caso di errore lasciamo passare
-  // l'iframe (path legacy) come fallback sicuro.
+  // mostrare la shell React né il wizard. In caso di errore lasciamo
+  // passare la shell React come fallback sicuro.
   const finplanGatingResolved =
     tab !== "analisi" ||
     !profile?.organizationId ||
@@ -1397,8 +1379,9 @@ export default function Amministrazione() {
               )}
               <TabsTrigger value="analisi" data-testid="tab-analisi-top"><LineChart className="h-4 w-4 mr-2" />Analisi</TabsTrigger>
             </TabsList>
-            {/* Il vero iframe FinPlan è renderizzato fuori da questo blocco
-                in modo persistente: vedi <FinPlanIframeMount> più in basso. */}
+            {/* La shell React FinPlan è renderizzata fuori da questo blocco
+                (vedi `finplan-react-mount` in fondo al file) per evitare
+                il rimontaggio ad ogni cambio tab. */}
           </Tabs>
         ) : tab === "controllo" && cdgEnabled ? (
           <Tabs value={tab} onValueChange={(v) => { if (isTabKey(v)) setTab(v); }} className="space-y-4">
@@ -1907,7 +1890,7 @@ export default function Amministrazione() {
         )}
 
         {/* Wizard di setup iniziale FinPlan (Task #131): mostrato al posto
-            dell'iframe la prima volta che un'org senza preload e senza
+            della shell React la prima volta che un'org senza preload e senza
             dati FinPlan apre il tab Analisi. Skippable. */}
         {tab === "analisi" && finplanNeedsSetup && (
           <div className="space-y-2" data-testid="finplan-setup-wrapper">
@@ -1922,33 +1905,13 @@ export default function Amministrazione() {
           </div>
         )}
 
-        {/* Iframe FinPlan persistente: si monta alla prima apertura del tab
-            Analisi e resta in DOM (display:none quando non attivo). Evita il
-            re-bootstrap del tool standalone (~5 MB) ad ogni cambio tab.
-            Non viene montato finché il wizard di setup è visibile, così
-            l'iframe parte già con i dati appena salvati. */}
-        {analisiEverOpened && !finplanNeedsSetup && finplanGatingResolved && (
-          <div
-            style={{ display: tab === "analisi" ? "block" : "none" }}
-            className="space-y-2"
-            data-testid="finplan-iframe-mount"
-          >
-            {finplanReactFlag ? (
-              <Suspense fallback={<PageLoadingSkeleton />}>
-                <FinplanApp orgId={orgId} />
-              </Suspense>
-            ) : (
-              <Card>
-                <CardContent className="p-0 overflow-hidden">
-                  <iframe
-                    src={`${BASE_PATH}/finplan/index.html?org=${encodeURIComponent(orgId)}`}
-                    title="FinPlan Studio"
-                    data-testid="iframe-finplan"
-                    style={{ width: "100%", height: "calc(100vh - 220px)", minHeight: 600, border: "0", display: "block" }}
-                  />
-                </CardContent>
-              </Card>
-            )}
+        {/* Shell React FinPlan: default del tab Analisi dopo il cutover
+            (Task #148). L'iframe HTML standalone è stato eliminato. */}
+        {tab === "analisi" && !finplanNeedsSetup && finplanGatingResolved && (
+          <div className="space-y-2" data-testid="finplan-react-mount">
+            <Suspense fallback={<PageLoadingSkeleton />}>
+              <FinplanApp orgId={orgId} />
+            </Suspense>
           </div>
         )}
       </main>

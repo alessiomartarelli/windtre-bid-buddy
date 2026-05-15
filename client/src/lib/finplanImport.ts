@@ -4,9 +4,8 @@
 //
 // Tutte le funzioni qui sono pure: parsing CSV/XLSX, classificazione
 // descrizione, conversione righe → transazioni FinPlan. Niente UI,
-// niente state. La sorgente storica resta `client/public/finplan/index.html`
-// (autoRiclassifica/parseFile) — modifiche qui devono essere replicate lì
-// finché l'iframe legacy resta gated come fallback.
+// niente state. Sorgente storica: tool standalone HTML rimosso in Task #148
+// (funzioni `autoRiclassifica`/`parseFile`); resta in git per riferimento.
 
 import * as XLSX from "xlsx";
 

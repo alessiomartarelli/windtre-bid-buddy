@@ -1,5 +1,5 @@
 // Pure helpers per il modulo Personale/HR (Task #146).
-// Sorgente storica: `client/public/finplan/index.html` ~righe 5028-5866.
+// Sorgente storica: tool standalone HTML (rimosso in Task #148, vedi git) ~righe 5028-5866.
 //
 // Il modello `FinplanPersonaleRow` è passthrough (vedi shared/finplanSchema.ts):
 // mantiene byte-compat con lo standalone, che scrive campi extra come

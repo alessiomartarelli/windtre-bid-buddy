@@ -1,5 +1,5 @@
 // Proiezioni a 12 mesi (Task #145).
-// Riproduce la formula del tool standalone (`client/public/finplan/index.html`
+// Riproduce la formula del tool standalone HTML (rimosso in Task #148, vedi git;
 // ~righe 3148-3163): media degli E/U mensili attuali, applica una crescita
 // composta `g` per le entrate e `g*0.4` per le uscite (le uscite seguono
 // con minor elasticità: assume costi semi-fissi).

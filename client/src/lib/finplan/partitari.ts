@@ -1,5 +1,5 @@
 // Pure helpers per il modulo Partitari (Task #146).
-// Sorgente storica: `client/public/finplan/index.html` ~righe 6029-6310.
+// Sorgente storica: tool standalone HTML (rimosso in Task #148, vedi git) ~righe 6029-6310.
 
 import type { FinplanPartitarioRow } from "@shared/finplanSchema";
 

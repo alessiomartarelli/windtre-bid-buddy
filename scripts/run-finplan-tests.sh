@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Run the FinPlan sync test suite (tests/finplan-sync.test.mjs).
 #
-# Scenarios 1 and 1b hit the running app on http://localhost:5000, so this
-# script first waits (up to ~30s) for the dev server to be reachable. Start
-# it via the "Start application" workflow (npm run dev) before invoking this.
+# Gli scenari residui (post Task #148, niente più iframe HTML) hit-tano
+# l'app su http://localhost:5000, quindi lo script aspetta (fino a ~30s)
+# che il dev server risponda. Avvialo via il workflow "Start application"
+# (npm run dev) prima di lanciare questo script.
 
 set -euo pipefail
 
@@ -11,8 +12,11 @@ BASE_URL="${FINPLAN_BASE_URL:-http://localhost:5000}"
 
 echo "[finplan-tests] waiting for $BASE_URL ..."
 for i in $(seq 1 30); do
-  if curl -sSf -o /dev/null "$BASE_URL/finplan/index.html"; then
-    echo "[finplan-tests] server reachable after ${i}s"
+  # Endpoint readiness: /api/auth/user esiste sempre (anche unauth → 401),
+  # quindi un qualsiasi codice HTTP != 000 indica che il server risponde.
+  code=$(curl -sS -o /dev/null -w "%{http_code}" "$BASE_URL/api/auth/user" || true)
+  if [ -n "$code" ] && [ "$code" != "000" ]; then
+    echo "[finplan-tests] server reachable after ${i}s (HTTP $code)"
     break
   fi
   if [ "$i" = "30" ]; then
