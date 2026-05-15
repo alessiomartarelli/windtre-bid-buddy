@@ -11,6 +11,11 @@ import { CostiIncassi } from "./sections/CostiIncassi";
 import { Transazioni } from "./sections/Transazioni";
 import { Mensile } from "./sections/Mensile";
 import { IvaSection } from "./sections/IvaSection";
+import { Obiettivi } from "./sections/Obiettivi";
+import { Proiezioni } from "./sections/Proiezioni";
+import { Debiti } from "./sections/Debiti";
+import { Categorie } from "./sections/Categorie";
+import { Budget } from "./sections/Budget";
 
 interface FinplanAppProps {
   orgId: string;
@@ -30,21 +35,27 @@ type SectionKey =
   | "mensile"
   | "iva"
   | "obiettivi"
+  | "proiezioni"
   | "debiti"
+  | "categorie"
+  | "budget"
   | "personale"
   | "partitari"
   | "scenari";
 
 const SECTIONS: { key: SectionKey; label: string; icon: ComponentType<{ className?: string }>; active: boolean }[] = [
-  { key: "overview",    label: "Overview",        icon: LineChart, active: true  },
-  { key: "costifissi",  label: "Costi & Incassi", icon: Filter,    active: true  },
-  { key: "transazioni", label: "Transazioni",     icon: BarChart3, active: true  },
-  { key: "mensile",     label: "Mensile",         icon: BarChart3, active: true  },
-  { key: "iva",         label: "IVA",             icon: FileText,  active: true  },
-  { key: "obiettivi",   label: "Obiettivi",       icon: Target,    active: false },
-  { key: "debiti",      label: "Debiti",          icon: Wallet,    active: false },
-  { key: "personale",   label: "Personale",       icon: Users,     active: false },
-  { key: "partitari",   label: "Partitari",       icon: FileText,  active: false },
+  { key: "overview",    label: "Overview",        icon: LineChart,  active: true  },
+  { key: "costifissi",  label: "Costi & Incassi", icon: Filter,     active: true  },
+  { key: "transazioni", label: "Transazioni",     icon: BarChart3,  active: true  },
+  { key: "mensile",     label: "Mensile",         icon: BarChart3,  active: true  },
+  { key: "iva",         label: "IVA",             icon: FileText,   active: true  },
+  { key: "obiettivi",   label: "Obiettivi",       icon: Target,     active: true  },
+  { key: "proiezioni",  label: "Proiezioni",      icon: TrendingUp, active: true  },
+  { key: "debiti",      label: "Debiti",          icon: Wallet,     active: true  },
+  { key: "categorie",   label: "Categorie",       icon: Briefcase,  active: true  },
+  { key: "budget",      label: "Budget",          icon: BarChart3,  active: true  },
+  { key: "personale",   label: "Personale",       icon: Users,      active: false },
+  { key: "partitari",   label: "Partitari",       icon: FileText,   active: false },
   { key: "scenari",     label: "Scenari",         icon: TrendingUp, active: false },
 ];
 
@@ -241,6 +252,36 @@ export default function FinplanApp({ orgId }: FinplanAppProps) {
                     companyIndex={activeCo}
                     scheduleSave={scheduleSave}
                   />
+                )}
+              </TabsContent>
+
+              <TabsContent value="obiettivi" className="mt-4">
+                {isLoading ? <SectionLoading /> : (
+                  <Obiettivi snapshot={snapshot} companyIndex={activeCo} scheduleSave={scheduleSave} />
+                )}
+              </TabsContent>
+
+              <TabsContent value="proiezioni" className="mt-4">
+                {isLoading ? <SectionLoading /> : (
+                  <Proiezioni snapshot={snapshot} companyIndex={activeCo} scheduleSave={scheduleSave} />
+                )}
+              </TabsContent>
+
+              <TabsContent value="debiti" className="mt-4">
+                {isLoading ? <SectionLoading /> : (
+                  <Debiti snapshot={snapshot} companyIndex={activeCo} scheduleSave={scheduleSave} />
+                )}
+              </TabsContent>
+
+              <TabsContent value="categorie" className="mt-4">
+                {isLoading ? <SectionLoading /> : (
+                  <Categorie snapshot={snapshot} companyIndex={activeCo} scheduleSave={scheduleSave} />
+                )}
+              </TabsContent>
+
+              <TabsContent value="budget" className="mt-4">
+                {isLoading ? <SectionLoading /> : (
+                  <Budget snapshot={snapshot} companyIndex={activeCo} scheduleSave={scheduleSave} />
                 )}
               </TabsContent>
 
