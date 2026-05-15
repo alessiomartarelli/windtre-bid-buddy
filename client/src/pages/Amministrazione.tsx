@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useDeferredValue } from "react";
+import { useState, useMemo, useEffect, useDeferredValue, lazy, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -49,6 +49,9 @@ import * as XLSX from "xlsx";
 import ControlloGestione from "@/pages/ControlloGestione";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { FinPlanSetupWizard } from "@/components/FinPlanSetupWizard";
+// Task #142: shell React di FinPlan, lazy-loaded e gated dietro
+// `?finplanReact=1`. L'iframe legacy resta il default per gli utenti.
+const FinplanApp = lazy(() => import("@/components/finplan/FinplanApp"));
 
 type TabKey = "contabile" | "iva" | "controllo" | "analisi";
 const TAB_KEYS: TabKey[] = ["contabile", "iva", "controllo", "analisi"];
@@ -340,6 +343,18 @@ export default function Amministrazione() {
   const [escludiZero, setEscludiZero] = useState<boolean>(false);
   const [ivaCategoryFilter, setIvaCategoryFilter] = useState<IvaCategoria | "all">("all");
   const [selectedRs, setSelectedRs] = useState<string>("all");
+  // Task #142: feature flag per provare la nuova shell React di FinPlan
+  // senza rimuovere l'iframe legacy. Default = iframe; con `?finplanReact=1`
+  // (o `&finplanReact=1`) viene montata la shell React `<FinplanApp>`.
+  const finplanReactFlag = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return new URLSearchParams(window.location.search).get("finplanReact") === "1";
+    } catch {
+      return false;
+    }
+  }, []);
+
   // Iframe FinPlan keep-alive: una volta che l'utente apre il tab Analisi
   // l'iframe resta montato (display:none quando non attivo) così tornarci
   // è istantaneo e non rifa il bootstrap del tool standalone (~5 MB).
@@ -1918,16 +1933,22 @@ export default function Amministrazione() {
             className="space-y-2"
             data-testid="finplan-iframe-mount"
           >
-            <Card>
-              <CardContent className="p-0 overflow-hidden">
-                <iframe
-                  src={`${BASE_PATH}/finplan/index.html?org=${encodeURIComponent(orgId)}`}
-                  title="FinPlan Studio"
-                  data-testid="iframe-finplan"
-                  style={{ width: "100%", height: "calc(100vh - 220px)", minHeight: 600, border: "0", display: "block" }}
-                />
-              </CardContent>
-            </Card>
+            {finplanReactFlag ? (
+              <Suspense fallback={<PageLoadingSkeleton />}>
+                <FinplanApp orgId={orgId} />
+              </Suspense>
+            ) : (
+              <Card>
+                <CardContent className="p-0 overflow-hidden">
+                  <iframe
+                    src={`${BASE_PATH}/finplan/index.html?org=${encodeURIComponent(orgId)}`}
+                    title="FinPlan Studio"
+                    data-testid="iframe-finplan"
+                    style={{ width: "100%", height: "calc(100vh - 220px)", minHeight: 600, border: "0", display: "block" }}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
       </main>
