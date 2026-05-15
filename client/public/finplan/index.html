@@ -8692,6 +8692,38 @@ buildPanels();
         } catch(e) { console.warn('Load locale fallito:', e); }
       }
       console.log('ℹ️ FinPlan: workspace per-org (no preload)');
+      // Banner non bloccante: la prima volta su questa org+browser avvisa
+      // l'utente che il workspace parte vuoto e va popolato via i pulsanti
+      // di import del tool (Importa CC, Importa HR, ecc.). Si chiude
+      // manualmente con × oppure dopo 12s. Non si ripresenta nelle
+      // sessioni successive (flag in localStorage scoped per org).
+      try {
+        var _bk = (window.__finplanKey || STORAGE_KEY) + '_noPreloadBannerSeen';
+        if (!localStorage.getItem(_bk)) {
+          var _seenLocal = !!localStorage.getItem(STORAGE_KEY);
+          var _msg = _seenLocal
+            ? 'FinPlan: workspace della tua organizzazione caricato. Usa i pulsanti del tool per importare nuovi dati.'
+            : 'FinPlan: questa organizzazione parte con un workspace vuoto. Usa i pulsanti "Importa CC / HR / Excel" del tool per popolare le 5 ragioni sociali.';
+          var _bn = document.createElement('div');
+          _bn.setAttribute('data-finplan-banner', 'no-preload');
+          _bn.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:99999;max-width:560px;padding:10px 14px;background:rgba(20,20,28,0.95);color:#fff;border:1px solid rgba(255,255,255,0.18);border-radius:10px;font:12px/1.4 system-ui,-apple-system,sans-serif;display:flex;gap:10px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,0.35)';
+          var _txt = document.createElement('span');
+          _txt.style.cssText = 'flex:1';
+          _txt.textContent = _msg;
+          var _close = document.createElement('button');
+          _close.textContent = '×';
+          _close.setAttribute('aria-label', 'Chiudi');
+          _close.style.cssText = 'background:transparent;border:0;color:#fff;font-size:18px;cursor:pointer;padding:0 6px;line-height:1';
+          var _dismiss = function(){
+            try { localStorage.setItem(_bk, '1'); } catch(e){}
+            if (_bn.parentNode) _bn.parentNode.removeChild(_bn);
+          };
+          _close.addEventListener('click', _dismiss);
+          _bn.appendChild(_txt); _bn.appendChild(_close);
+          (document.body || document.documentElement).appendChild(_bn);
+          setTimeout(_dismiss, 12000);
+        }
+      } catch(e) { /* banner best-effort */ }
     }
 
     // Riclassifica e ricalcola IVA dopo merge
