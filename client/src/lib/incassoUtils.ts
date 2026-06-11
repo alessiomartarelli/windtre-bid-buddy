@@ -277,6 +277,36 @@ export function computeIncassoCounts(salesList: SaleWithRaw[]): IncassoTotals {
   return c;
 }
 
+/**
+ * Indica se una vendita ha usato un determinato metodo di pagamento
+ * (cioè il relativo importo è > 0). Per finanziato/var basta che almeno
+ * un articolo dello scontrino abbia importoFinanziato/importoCredito > 0.
+ * Usata per filtrare le vendite cliccando su un badge metodo di pagamento.
+ */
+export function saleUsesPaymentMethod(sale: SaleWithRaw, key: keyof IncassoTotals): boolean {
+  const pag = sale.rawData?.pagamento;
+  switch (key) {
+    case "contanti": return toNum(pag?.contanti) > 0;
+    case "pos": return toNum(pag?.pagamentiElettronici) > 0;
+    case "nonScontrinato": return toNum(pag?.nonScontrinato) > 0;
+    case "nonScontrinatoPos": return toNum(pag?.nonScontrinatoPos) > 0;
+    case "bonifici": return toNum(pag?.bonifici) > 0;
+    case "assegni": return toNum(pag?.assegni) > 0;
+    case "buoni": return toNum(pag?.buoni) > 0;
+    case "coupon": return toNum(pag?.coupon) > 0;
+    case "altriPagamenti": return toNum(pag?.altriPagamenti) > 0;
+    case "finanziato": {
+      const articoli = sale.rawData?.articoli;
+      return Array.isArray(articoli) && articoli.some(a => toNum(a?.dettaglio?.importoFinanziato) > 0);
+    }
+    case "var": {
+      const articoli = sale.rawData?.articoli;
+      return Array.isArray(articoli) && articoli.some(a => toNum(a?.dettaglio?.importoCredito) > 0);
+    }
+    default: return false;
+  }
+}
+
 export interface IncassoItemConfig {
   key: keyof IncassoTotals;
   label: string;

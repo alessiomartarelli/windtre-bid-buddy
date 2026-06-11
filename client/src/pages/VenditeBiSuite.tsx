@@ -7,6 +7,7 @@ import * as XLSX from "xlsx";
 import { KpiCardsSkeleton, DataTableSkeleton } from "@/components/skeletons";
 import {
   computeIncassoTotals,
+  saleUsesPaymentMethod,
   INCASSO_ITEMS_CONFIG,
   type IncassoTotals,
 } from "@/lib/incassoUtils";
@@ -151,18 +152,46 @@ const INCASSO_ICON_MAP: Record<string, React.ReactNode> = {
   tag: <Tag className="h-3.5 w-3.5" />,
 };
 
-function IncassoBadges({ totals, formatter, compact }: { totals: IncassoTotals; formatter: (v: number) => string; compact?: boolean }) {
+function IncassoBadges({ totals, formatter, compact, activeKey, onSelect }: { totals: IncassoTotals; formatter: (v: number) => string; compact?: boolean; activeKey?: keyof IncassoTotals | null; onSelect?: (key: keyof IncassoTotals) => void }) {
   const active = INCASSO_ITEMS_CONFIG.filter(i => totals[i.key] > 0);
   if (active.length === 0) return null;
+  const clickable = !!onSelect;
   return (
     <div className={`flex flex-wrap ${compact ? "gap-1.5" : "gap-2 sm:gap-3"}`}>
-      {active.map(item => (
-        <div key={item.key} className={`flex items-center gap-1 ${compact ? "bg-muted/40 rounded px-1.5 py-0.5" : "bg-muted/50 rounded-lg px-2.5 py-1.5"}`} data-testid={`incasso-${item.key}`}>
-          <span className={item.color}>{INCASSO_ICON_MAP[item.icon]}</span>
-          <span className={`${compact ? "text-[10px]" : "text-xs"} text-muted-foreground`}>{item.label}</span>
-          <span className={`${compact ? "text-[10px]" : "text-xs"} font-semibold ${item.color}`}>{formatter(totals[item.key])}</span>
-        </div>
-      ))}
+      {active.map(item => {
+        const isActive = activeKey === item.key;
+        const baseCls = `flex items-center gap-1 ${compact ? "bg-muted/40 rounded px-1.5 py-0.5" : "bg-muted/50 rounded-lg px-2.5 py-1.5"}`;
+        const interactiveCls = clickable
+          ? `cursor-pointer transition-all ${isActive ? "ring-2 ring-primary bg-primary/10" : "hover:ring-1 hover:ring-primary/40"}`
+          : "";
+        const content = (
+          <>
+            <span className={item.color}>{INCASSO_ICON_MAP[item.icon]}</span>
+            <span className={`${compact ? "text-[10px]" : "text-xs"} text-muted-foreground`}>{item.label}</span>
+            <span className={`${compact ? "text-[10px]" : "text-xs"} font-semibold ${item.color}`}>{formatter(totals[item.key])}</span>
+          </>
+        );
+        if (clickable) {
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => onSelect!(item.key)}
+              className={`${baseCls} ${interactiveCls}`}
+              aria-pressed={isActive}
+              title={isActive ? `Rimuovi filtro ${item.label}` : `Filtra le vendite con ${item.label}`}
+              data-testid={`incasso-${item.key}`}
+            >
+              {content}
+            </button>
+          );
+        }
+        return (
+          <div key={item.key} className={baseCls} data-testid={`incasso-${item.key}`}>
+            {content}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -215,6 +244,7 @@ export default function VenditeBiSuite() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterPista, setFilterPista] = useState<string>("all");
   const [filterStato, setFilterStato] = useState<string>("finalizzate");
+  const [filterPagamento, setFilterPagamento] = useState<keyof IncassoTotals | null>(null);
   const [viewMode, setViewMode] = useState<"vendite" | "addetti">("vendite");
   const [selectedAddetto, setSelectedAddetto] = useState<string | null>(null);
 
@@ -349,7 +379,11 @@ export default function VenditeBiSuite() {
     [filterType, filterPista],
   );
 
-  const filteredSales = useMemo(() => {
+  // Vendite filtrate da TUTTI i filtri tranne il metodo di pagamento. Serve
+  // come base per i badge "Modalità di Incasso", che devono restare tutti
+  // visibili e cliccabili anche quando un metodo è selezionato (così l'utente
+  // può cambiare scelta).
+  const filteredSalesNoPay = useMemo(() => {
     // Tabella vendite grezze: parte da rawSales per mantenere visibili anche
     // le righe ANNULLATA (con il loro badge), che invece sono escluse dagli
     // aggregati calcolati su `sales`.
@@ -396,10 +430,21 @@ export default function VenditeBiSuite() {
     return filtered;
   }, [rawSales, selectedPdv, filterStato, filterType, filterPista, searchTerm, saleClassifications]);
 
+  // Vendite finali mostrate in tabella/aggregati: applica anche il filtro per
+  // metodo di pagamento (cliccando un badge "Modalità di Incasso").
+  const filteredSales = useMemo(() => {
+    if (!filterPagamento) return filteredSalesNoPay;
+    return filteredSalesNoPay.filter((s) => saleUsesPaymentMethod(s, filterPagamento));
+  }, [filteredSalesNoPay, filterPagamento]);
+
+  const handleSelectPagamento = useCallback((key: keyof IncassoTotals) => {
+    setFilterPagamento((prev) => (prev === key ? null : key));
+  }, []);
+
   // Vendite "in vista" (per gli aggregati): partono da `filteredSales`
-  // (che già rispetta stato/tipo/pista/PDV/ricerca) ma escludono comunque
-  // le ANNULLATA dagli importi/incassi quando lo stato selezionato non è
-  // proprio "annullate" — coerente con la card Importo storica.
+  // (che già rispetta stato/tipo/pista/PDV/ricerca/pagamento) ma escludono
+  // comunque le ANNULLATA dagli importi/incassi quando lo stato selezionato
+  // non è proprio "annullate" — coerente con la card Importo storica.
   const aggregateSales = filteredSales;
 
   // Aggregati globali derivati dalle vendite filtrate. Quando è attivo un
@@ -491,9 +536,12 @@ export default function VenditeBiSuite() {
   // quindi sono sempre "a livello vendita". Quando il filtro Tipo è attivo
   // restano comunque coerenti perché derivano dalle vendite filtrate
   // (cioè quelle che CONTENGONO almeno un articolo del tipo selezionato).
+  // Calcolato sulle vendite SENZA il filtro per metodo di pagamento: così i
+  // badge restano tutti visibili/cliccabili anche dopo aver selezionato un
+  // metodo, permettendo all'utente di cambiare scelta o azzerare il filtro.
   const incassoTotals = useMemo(
-    () => computeIncassoTotals(aggregateSales),
-    [aggregateSales],
+    () => computeIncassoTotals(filteredSalesNoPay),
+    [filteredSalesNoPay],
   );
 
   const pdvSummaries = useMemo(() => {
@@ -842,6 +890,7 @@ export default function VenditeBiSuite() {
             (filterType !== "all" ? 1 : 0) +
             (filterPista !== "all" ? 1 : 0) +
             (filterStato !== "finalizzate" ? 1 : 0) +
+            (filterPagamento ? 1 : 0) +
             (selectedPdv ? 1 : 0)
           }
           onReset={() => {
@@ -849,6 +898,7 @@ export default function VenditeBiSuite() {
             setFilterType("all");
             setFilterPista("all");
             setFilterStato("finalizzate");
+            setFilterPagamento(null);
             setSelectedPdv(null);
           }}
           actions={
@@ -1043,14 +1093,34 @@ export default function VenditeBiSuite() {
               </Card>
             </div>
 
-            {aggregateSales.length > 0 && (
+            {filteredSalesNoPay.length > 0 && (
               <Card>
                 <CardContent className="p-3 sm:p-4">
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
                     <Wallet className="h-4 w-4 text-primary" />
                     <span className="font-semibold text-sm">Modalità di Incasso{selectedPdv ? ` - ${pdvSummaries.find(p => p.codicePos === selectedPdv)?.nomeNegozio || selectedPdv}` : ""}</span>
+                    {filterPagamento && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs ml-auto"
+                        onClick={() => setFilterPagamento(null)}
+                        data-testid="button-clear-pagamento"
+                      >
+                        <X className="h-3 w-3 mr-1" />
+                        Azzera filtro pagamento
+                      </Button>
+                    )}
                   </div>
-                  <IncassoBadges totals={incassoTotals} formatter={formatCurrency} />
+                  <p className="text-[10px] text-muted-foreground mb-2">
+                    Clicca un metodo per filtrare le vendite con quell'incasso.
+                  </p>
+                  <IncassoBadges
+                    totals={incassoTotals}
+                    formatter={formatCurrency}
+                    activeKey={filterPagamento}
+                    onSelect={handleSelectPagamento}
+                  />
                   {componentFilterActive && (
                     <p className="text-[10px] text-muted-foreground mt-3 pt-2 border-t" data-testid="text-incasso-scontrino-note">
                       Importi riferiti all'intero scontrino: i metodi di pagamento non sono divisibili per singolo tipo articolo.
