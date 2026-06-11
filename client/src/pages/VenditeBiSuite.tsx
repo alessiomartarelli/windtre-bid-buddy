@@ -1043,7 +1043,7 @@ export default function VenditeBiSuite() {
               </Card>
             </div>
 
-            {aggregateSales.length > 0 && !componentFilterActive && (
+            {aggregateSales.length > 0 && (
               <Card>
                 <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center gap-2 mb-3">
@@ -1051,6 +1051,11 @@ export default function VenditeBiSuite() {
                     <span className="font-semibold text-sm">Modalità di Incasso{selectedPdv ? ` - ${pdvSummaries.find(p => p.codicePos === selectedPdv)?.nomeNegozio || selectedPdv}` : ""}</span>
                   </div>
                   <IncassoBadges totals={incassoTotals} formatter={formatCurrency} />
+                  {componentFilterActive && (
+                    <p className="text-[10px] text-muted-foreground mt-3 pt-2 border-t" data-testid="text-incasso-scontrino-note">
+                      Importi riferiti all'intero scontrino: i metodi di pagamento non sono divisibili per singolo tipo articolo.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}
