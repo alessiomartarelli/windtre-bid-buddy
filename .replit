@@ -40,6 +40,10 @@ args = "Start application"
 task = "workflow.run"
 args = "finplan-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-authz-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -56,6 +60,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-finplan-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-authz-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-authz-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

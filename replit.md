@@ -119,6 +119,19 @@ mantenere snello questo file:
   (`bash scripts/run-finplan-tests.sh`). Lo script aspetta fino a 30s che
   l'app sia raggiungibile su `localhost:5000`, quindi richiede che il
   workflow "Start application" sia già attivo. Run completo in ~1s.
+- **Customer Journey authz tests** (`tests/customer-journey-authz.test.mjs`):
+  2 scenari security-critical (Task #160) sull'isolamento per-operatore:
+  (1) `GET /api/customer-journeys` filtrata per ruolo — admin/super_admin
+  vedono tutte le journey dell'org, operatore senza addetti ⇒ 0 (no
+  leakage del tenant), operatore con addetto corrispondente ⇒ solo la sua
+  (match case-insensitive); (2) `GET /api/customer-journeys/:id` enforce
+  l'ownership — proprietario ⇒ 200, non proprietario / operatore senza
+  addetti ⇒ 403, admin ⇒ 200 su qualunque journey. La route rilegge il
+  profilo ad ogni richiesta, così i test mutano `role`/`bisuite_addetti`
+  dello stesso profilo signup per coprire i vari ruoli. Lanciali via lo
+  step di validation `cj-authz-tests`
+  (`bash scripts/run-customer-journey-authz-tests.sh`); richiede il
+  workflow "Start application" attivo. Run completo in ~1s.
 
 ## External Dependencies
 
