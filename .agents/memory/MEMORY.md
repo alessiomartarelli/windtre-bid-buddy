@@ -1,1 +1,2 @@
 - [Deploy prod via workflow](deploy-prod-via-workflow.md) — `npm run build` supera 120s e i bg process vengono uccisi; lancia deploy con un workflow temporaneo.
+- [Customer Journey operator isolation](cj-operator-isolation.md) — operator-scoped queries: guard `filter != null` (empty array => []), never `filter.length > 0`, or empty addetti leaks whole tenant.

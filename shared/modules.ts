@@ -21,6 +21,7 @@ export const MODULES: ModuleDef[] = [
   { key: "gara_dashboard", label: "Dashboard Gara", group: "pagine", description: "Dashboard gara reale" },
   { key: "gara_configurazione", label: "Configurazione Gara", group: "pagine" },
   { key: "vendite_bisuite", label: "Vendite BiSuite", group: "pagine" },
+  { key: "customer_journey", label: "Customer Journey", group: "pagine", description: "Cross-sell strutturato sui clienti da nuova attivazione mobile" },
   { key: "mappatura_bisuite", label: "Mappatura BiSuite", group: "pagine", superOnly: true },
   { key: "simulatore", label: "Simulatore Preventivi", group: "pagine" },
   { key: "tabelle_calcolo", label: "Tabelle Calcolo", group: "pagine" },

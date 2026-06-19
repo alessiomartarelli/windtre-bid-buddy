@@ -10,12 +10,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, Store, Building2, ChevronRight, UserCheck, Edit2, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, Store, Building2, ChevronRight, UserCheck, Edit2, Image as ImageIcon, UserCog, Link2 } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
+import { BiSuiteConnectionForm } from '@/components/BiSuiteConnectionForm';
 import { PageLoadingSkeleton } from '@/components/skeletons';
 import { z } from 'zod';
 import {
@@ -47,6 +49,7 @@ interface TeamMember {
   organizationId?: string | null;
   is_active?: boolean;
   isActive?: boolean;
+  bisuiteAddetti?: string[] | null;
 }
 
 interface ConfigPdv {
@@ -114,6 +117,46 @@ export default function AdminPanel() {
   const [brandingLogo, setBrandingLogo] = useState<string | null>(null);
   const [brandingLoading, setBrandingLoading] = useState(false);
   const [brandingSaving, setBrandingSaving] = useState(false);
+
+  const [addettiDialogOpen, setAddettiDialogOpen] = useState(false);
+  const [addettiUser, setAddettiUser] = useState<TeamMember | null>(null);
+  const [addettiSelected, setAddettiSelected] = useState<string[]>([]);
+  const [addettiSaving, setAddettiSaving] = useState(false);
+
+  const openAddettiDialog = (member: TeamMember) => {
+    setAddettiUser(member);
+    setAddettiSelected(Array.isArray(member.bisuiteAddetti) ? member.bisuiteAddetti : []);
+    setAddettiDialogOpen(true);
+  };
+
+  const toggleAddetto = (nome: string) => {
+    setAddettiSelected((prev) =>
+      prev.includes(nome) ? prev.filter((a) => a !== nome) : [...prev, nome],
+    );
+  };
+
+  const handleSaveAddetti = async () => {
+    if (!addettiUser) return;
+    setAddettiSaving(true);
+    try {
+      const res = await fetch(apiUrl('/api/admin/profile-addetti'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ user_id: addettiUser.id, addetti: addettiSelected }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: 'Errore', description: data?.error || 'Salvataggio fallito', variant: 'destructive' });
+      } else {
+        toast({ title: 'Addetti aggiornati' });
+        setAddettiDialogOpen(false);
+        fetchTeamMembers();
+      }
+    } finally {
+      setAddettiSaving(false);
+    }
+  };
 
   // === Struttura: dialogs CRUD ===
   const emptyPdvForm: ConfigPdv = { codicePos: '', nome: '', ragioneSociale: '', canale: '', clusterMobile: '', clusterFisso: '', clusterCB: '', tipoPosizione: '' };
@@ -660,6 +703,51 @@ export default function AdminPanel() {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={addettiDialogOpen} onOpenChange={setAddettiDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Addetti BiSuite</DialogTitle>
+              <DialogDescription>
+                Collega {addettiUser ? getMemberName(addettiUser) : 'questo operatore'} ai
+                nominativi addetto BiSuite. L'operatore vedrà solo le customer journey
+                dei propri clienti.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              {dipendenti.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  Nessun addetto disponibile dalle vendite BiSuite.
+                </p>
+              ) : (
+                <div className="max-h-72 overflow-y-auto space-y-1 pr-1">
+                  {dipendenti.map((d) => (
+                    <label
+                      key={d.nome}
+                      className="flex items-center gap-3 rounded-md px-2 py-2 hover-elevate cursor-pointer"
+                      data-testid={`addetto-option-${d.nome}`}
+                    >
+                      <Checkbox
+                        checked={addettiSelected.includes(d.nome)}
+                        onCheckedChange={() => toggleAddetto(d.nome)}
+                      />
+                      <span className="text-sm flex-1">{d.nome}</span>
+                      <span className="text-xs text-muted-foreground">{d.totaleVendite} vendite</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <Button
+                className="w-full"
+                onClick={handleSaveAddetti}
+                disabled={addettiSaving}
+                data-testid="button-save-addetti"
+              >
+                {addettiSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : 'Salva Addetti'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
@@ -674,7 +762,7 @@ export default function AdminPanel() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4" data-testid="tabs-org">
+          <TabsList className="grid w-full grid-cols-5" data-testid="tabs-org">
             <TabsTrigger value="struttura" data-testid="tab-struttura">
               <Building2 className="h-4 w-4 mr-1.5 hidden sm:block" />
               Struttura
@@ -686,6 +774,10 @@ export default function AdminPanel() {
             <TabsTrigger value="utenti" data-testid="tab-utenti">
               <Users className="h-4 w-4 mr-1.5 hidden sm:block" />
               Utenti
+            </TabsTrigger>
+            <TabsTrigger value="bisuite" data-testid="tab-bisuite">
+              <Link2 className="h-4 w-4 mr-1.5 hidden sm:block" />
+              BiSuite
             </TabsTrigger>
             <TabsTrigger value="branding" data-testid="tab-branding">
               <ImageIcon className="h-4 w-4 mr-1.5 hidden sm:block" />
@@ -1128,6 +1220,11 @@ export default function AdminPanel() {
                                       <KeyRound className="h-4 w-4" />
                                     </Button>
                                   )}
+                                  {member.role === 'operatore' && (
+                                    <Button variant="ghost" size="icon" onClick={() => openAddettiDialog(member)} title="Addetti BiSuite" data-testid={`button-addetti-${member.id}`}>
+                                      <UserCog className="h-4 w-4" />
+                                    </Button>
+                                  )}
                                   {canDeleteUser(member) && (
                                     <AlertDialog>
                                       <AlertDialogTrigger asChild>
@@ -1160,6 +1257,25 @@ export default function AdminPanel() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="bisuite">
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Credenziali BiSuite</h3>
+                <p className="text-sm text-muted-foreground">
+                  Configura le credenziali OAuth 2.0 BiSuite per la tua organizzazione.
+                  Servono per importare le vendite e generare le customer journey.
+                </p>
+              </div>
+              {organization ? (
+                <BiSuiteConnectionForm
+                  organizations={[{ id: organization.id, name: organization.name }]}
+                />
+              ) : (
+                <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="branding">

@@ -27,6 +27,7 @@ const SimulatoreHome = lazy(() => import("@/pages/SimulatoreHome"));
 const SuperAdminPanel = lazy(() => import("@/pages/SuperAdminPanel"));
 const TabelleCalcolo = lazy(() => import("@/pages/TabelleCalcolo"));
 const VenditeBiSuite = lazy(() => import("@/pages/VenditeBiSuite"));
+const CustomerJourney = lazy(() => import("@/pages/CustomerJourney"));
 const MappaturaBiSuite = lazy(() => import("@/pages/MappaturaBiSuite"));
 const DashboardGaraReale = lazy(() => import("@/pages/DashboardGaraReale"));
 const ConfigurazioneGara = lazy(() => import("@/pages/ConfigurazioneGara"));
@@ -114,6 +115,9 @@ function Router() {
         </Route>
         <Route path="/tabelle-calcolo">
           {() => <ModuleRoute component={TabelleCalcolo} moduleKey="tabelle_calcolo" />}
+        </Route>
+        <Route path="/customer-journey">
+          {() => <ModuleRoute component={CustomerJourney} moduleKey="customer_journey" />}
         </Route>
         <Route path="/vendite-bisuite">
           {() => <ModuleRoute component={VenditeBiSuite} moduleKey="vendite_bisuite" />}

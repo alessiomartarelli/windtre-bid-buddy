@@ -1,6 +1,11 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, bisuiteSyncNotifications, finplanData, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData } from "@shared/schema";
-import { eq, desc, and, isNull, isNotNull, lt, gte, lte, sql } from "drizzle-orm";
+import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState } from "@shared/schema";
+import { eq, desc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
+import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo } from "@shared/customerJourney";
+
+// Data trigger della customer journey: una CJ si apre solo per nuove
+// attivazioni di pista mobile a partire da questa data (Task #158).
+const CJ_TRIGGER_DATE = new Date("2026-07-01T00:00:00.000Z");
 
 export interface IStorage {
   // Profiles
@@ -75,6 +80,15 @@ export interface IStorage {
   // FinPlan Data
   getFinplanData(orgId: string): Promise<FinplanData | undefined>;
   upsertFinplanData(orgId: string, data: any, updatedBy: string | null): Promise<FinplanData>;
+
+  // Customer Journey (Task #158)
+  listCustomerJourneys(orgId: string, addettiFilter?: string[] | null): Promise<CustomerJourney[]>;
+  getCustomerJourney(id: string, orgId: string): Promise<CustomerJourney | undefined>;
+  getCustomerJourneyItems(journeyId: string): Promise<CustomerJourneyItem[]>;
+  getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined>;
+  updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
+  setCustomerJourneyItemGettone(id: string, orgId: string, confirmed: boolean, userId: string | null): Promise<CustomerJourneyItem>;
+  reconcileCustomerJourneys(orgId: string): Promise<{ journeys: number; items: number }>;
 
   // BiSuite Sync Notifications
   createBisuiteSyncNotification(notif: InsertBisuiteSyncNotification): Promise<BisuiteSyncNotification>;
@@ -574,6 +588,289 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+
+  // === Customer Journey (Task #158) ===
+
+  async listCustomerJourneys(orgId: string, addettiFilter?: string[] | null): Promise<CustomerJourney[]> {
+    // `addettiFilter == null` => nessun filtro (admin/super_admin vedono tutto).
+    // `addettiFilter` array (anche vuoto) => filtro operatore: un array vuoto
+    // significa "nessun addetto associato" e DEVE restituire [] (no leakage).
+    if (addettiFilter != null) {
+      // L'operatore vede solo le journey che contengono almeno un item
+      // gestito da uno dei suoi nominativi addetto (case-insensitive).
+      const lower = addettiFilter.map((a) => a.toLowerCase().trim()).filter(Boolean);
+      if (lower.length === 0) return [];
+      const rows = await db.selectDistinct({ cj: customerJourneys })
+        .from(customerJourneys)
+        .innerJoin(customerJourneyItems, eq(customerJourneyItems.journeyId, customerJourneys.id))
+        .where(and(
+          eq(customerJourneys.organizationId, orgId),
+          inArray(sql`lower(trim(${customerJourneyItems.addetto}))`, lower),
+        ))
+        .orderBy(desc(customerJourneys.openedAt));
+      return rows.map((r) => r.cj);
+    }
+    return await db.select().from(customerJourneys)
+      .where(eq(customerJourneys.organizationId, orgId))
+      .orderBy(desc(customerJourneys.openedAt));
+  }
+
+  async getCustomerJourney(id: string, orgId: string): Promise<CustomerJourney | undefined> {
+    const [row] = await db.select().from(customerJourneys)
+      .where(and(eq(customerJourneys.id, id), eq(customerJourneys.organizationId, orgId)));
+    return row;
+  }
+
+  async getCustomerJourneyItems(journeyId: string): Promise<CustomerJourneyItem[]> {
+    return await db.select().from(customerJourneyItems)
+      .where(eq(customerJourneyItems.journeyId, journeyId))
+      .orderBy(desc(customerJourneyItems.dataInserimento));
+  }
+
+  async getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined> {
+    const [row] = await db.select().from(customerJourneyItems)
+      .where(and(eq(customerJourneyItems.id, id), eq(customerJourneyItems.organizationId, orgId)));
+    return row;
+  }
+
+  async updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem> {
+    const [row] = await db.update(customerJourneyItems)
+      .set({
+        state,
+        stateManual: true,
+        stateUpdatedAt: new Date(),
+        stateUpdatedBy: userId,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(customerJourneyItems.id, id), eq(customerJourneyItems.organizationId, orgId)))
+      .returning();
+    return row;
+  }
+
+  async setCustomerJourneyItemGettone(id: string, orgId: string, confirmed: boolean, userId: string | null): Promise<CustomerJourneyItem> {
+    const [row] = await db.update(customerJourneyItems)
+      .set({
+        gettoneConfirmed: confirmed,
+        gettoneConfirmedAt: confirmed ? new Date() : null,
+        gettoneConfirmedBy: confirmed ? userId : null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(customerJourneyItems.id, id), eq(customerJourneyItems.organizationId, orgId)))
+      .returning();
+    return row;
+  }
+
+  /**
+   * Motore di reconcile: deriva le customer journey dalle vendite BiSuite
+   * dell'organizzazione. Una journey si apre quando un cliente registra una
+   * nuova attivazione di pista mobile dal {@link CJ_TRIGGER_DATE}. Per i
+   * clienti con journey aperta materializza un item per ogni articolo-driver
+   * (mobile/fisso/energia/assicurazioni/telefono/protetti) di TUTTE le sue
+   * vendite (anche precedenti al trigger), così da mostrare il quadro
+   * completo del cross-sell. Lo stato auto (inserito/attivato/stornato) deriva
+   * dallo `stato` della vendita; gli stati impostati manualmente
+   * (`state_manual`) e le conferme gettone non vengono mai sovrascritti.
+   */
+  async reconcileCustomerJourneys(orgId: string): Promise<{ journeys: number; items: number }> {
+    const sales = await db.select().from(bisuiteSales)
+      .where(eq(bisuiteSales.organizationId, orgId));
+
+    type Anag = {
+      customerKey: string; customerType: string;
+      nome: string | null; cognome: string | null; ragioneSociale: string | null;
+      nominativo: string | null; telefono: string | null; codiceCliente: string | null;
+    };
+    type Candidate = {
+      anag: Anag;
+      hasTrigger: boolean;
+      triggerSaleId: string | null; triggerBisuiteId: number | null; openedAt: Date | null;
+      items: InsertCustomerJourneyItem[];
+    };
+    const byCustomer = new Map<string, Candidate>();
+
+    for (const sale of sales) {
+      const raw: any = sale.rawData || {};
+      const cliente: any = raw.cliente || {};
+      const cf = String(cliente.codiceFiscale || "").toUpperCase().trim();
+      const piva = String(cliente.piva || "").toUpperCase().trim();
+      const tipo = String(cliente.clienteTipo || "").toUpperCase().trim();
+      const isAzienda = tipo === "GIURIDICA" || tipo === "PROFESSIONISTA";
+      let customerKey = "";
+      let customerType = "privato";
+      if (isAzienda && piva) { customerKey = piva; customerType = "azienda"; }
+      else if (cf) { customerKey = cf; customerType = "privato"; }
+      else if (piva) { customerKey = piva; customerType = "azienda"; }
+      else continue; // cliente non identificabile: impossibile collegare
+
+      const anag: Anag = {
+        customerKey, customerType,
+        nome: cliente.nome ?? null,
+        cognome: cliente.cognome ?? null,
+        ragioneSociale: cliente.ragioneSociale ?? cliente.denominazione ?? null,
+        nominativo: raw.addetto?.nominativo ?? sale.nomeAddetto ?? null,
+        telefono: cliente.tel1 ?? cliente.tel2 ?? null,
+        codiceCliente: cliente.codiceEsterno != null ? String(cliente.codiceEsterno) : null,
+      };
+
+      let cand = byCustomer.get(customerKey);
+      if (!cand) {
+        cand = { anag, hasTrigger: false, triggerSaleId: null, triggerBisuiteId: null, openedAt: null, items: [] };
+        byCustomer.set(customerKey, cand);
+      } else {
+        // mantieni l'anagrafica più completa
+        cand.anag = { ...cand.anag, ...Object.fromEntries(Object.entries(anag).filter(([, v]) => v != null && v !== "")) } as Anag;
+      }
+
+      const saleDate: Date | null = sale.dataVendita ?? null;
+      const stato = String(sale.stato || "").toUpperCase();
+      const autoState: CjItemState = stato.includes("ANNULL")
+        ? "stornato"
+        : (stato.includes("FINALIZZAT") || stato.includes("ATTIV")) ? "attivato" : "inserito";
+
+      const articoli: any[] = Array.isArray(raw.articoli) ? raw.articoli : [];
+      for (const art of articoli) {
+        const categoria = art?.categoria?.nome ?? null;
+        const tipologia = art?.tipologia?.nome ?? null;
+        const driver = driverFromCategory(categoria);
+        if (!driver) continue;
+
+        // Trigger journey: nuova attivazione mobile dal CJ_TRIGGER_DATE.
+        if (driver === "mobile" && isMobileActivationCategory(categoria)
+            && autoState !== "stornato" && saleDate && saleDate >= CJ_TRIGGER_DATE) {
+          if (!cand.hasTrigger || (cand.openedAt && saleDate < cand.openedAt)) {
+            cand.hasTrigger = true;
+            cand.triggerSaleId = sale.id;
+            cand.triggerBisuiteId = sale.bisuiteId ?? null;
+            cand.openedAt = saleDate;
+          }
+        }
+
+        const dett: any = art?.dettaglio || {};
+        const parsed = parseVenditaInfo(dett);
+        const sub = energiaSubtype(tipologia);
+        let pod: string | null = null;
+        let pdr: string | null = null;
+        if (parsed.podPdr) {
+          if (sub === "gas") pdr = parsed.podPdr;
+          else if (sub === "luce") pod = parsed.podPdr;
+          else pod = parsed.podPdr;
+        }
+        const modVendita = dett.tipologiaVendita ?? null;
+        const isFinanziamento = String(modVendita || "").toUpperCase().includes("FINANZIAMENTO");
+
+        cand.items.push({
+          journeyId: "", // riempito dopo aver creato/recuperato la journey
+          organizationId: orgId,
+          driver,
+          bisuiteSaleId: sale.id,
+          bisuiteId: sale.bisuiteId ?? null,
+          bisuiteArticleId: art?.id != null ? Number(art.id) : null,
+          nome: cliente.nome ?? null,
+          cognome: cliente.cognome ?? null,
+          cf: cf || null,
+          piva: piva || null,
+          telefono: cliente.tel1 ?? null,
+          codiceCliente: anag.codiceCliente,
+          codiceContratto: parsed.codiceContratto ?? null,
+          categoria,
+          tipologia,
+          descrizione: art?.descrizione ?? null,
+          canone: dett.canone != null ? String(dett.canone) : null,
+          dataInserimento: saleDate,
+          dataAttivazione: null,
+          addetto: anag.nominativo,
+          pdvOrigine: raw.attivita?.nominativo ?? sale.nomeNegozio ?? null,
+          pdvDestinazione: null,
+          pod, pdr,
+          imei: parsed.imei ?? null,
+          importo: dett.prezzo != null ? String(dett.prezzo) : (raw.importoScontrino != null ? String(raw.importoScontrino) : null),
+          rata: isFinanziamento && dett.importoFinanziato != null ? String(dett.importoFinanziato) : null,
+          modVendita,
+          state: autoState,
+        });
+      }
+    }
+
+    let journeyCount = 0;
+    let itemCount = 0;
+    for (const cand of Array.from(byCustomer.values())) {
+      if (!cand.hasTrigger) continue;
+      journeyCount++;
+
+      const [journey] = await db.insert(customerJourneys)
+        .values({
+          organizationId: orgId,
+          customerKey: cand.anag.customerKey,
+          customerType: cand.anag.customerType,
+          nome: cand.anag.nome,
+          cognome: cand.anag.cognome,
+          ragioneSociale: cand.anag.ragioneSociale,
+          nominativo: cand.anag.nominativo,
+          telefono: cand.anag.telefono,
+          codiceCliente: cand.anag.codiceCliente,
+          triggerSaleId: cand.triggerSaleId,
+          triggerBisuiteId: cand.triggerBisuiteId,
+          openedAt: cand.openedAt,
+          status: "aperta",
+        })
+        .onConflictDoUpdate({
+          target: [customerJourneys.organizationId, customerJourneys.customerKey],
+          set: {
+            customerType: cand.anag.customerType,
+            nome: cand.anag.nome,
+            cognome: cand.anag.cognome,
+            ragioneSociale: cand.anag.ragioneSociale,
+            nominativo: cand.anag.nominativo,
+            telefono: cand.anag.telefono,
+            codiceCliente: cand.anag.codiceCliente,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+
+      for (const item of cand.items) {
+        item.journeyId = journey.id;
+        if (item.bisuiteArticleId == null) continue; // serve per la unique key
+        await db.insert(customerJourneyItems)
+          .values(item)
+          .onConflictDoUpdate({
+            target: [customerJourneyItems.organizationId, customerJourneyItems.bisuiteSaleId, customerJourneyItems.bisuiteArticleId],
+            set: {
+              journeyId: sql`excluded.journey_id`,
+              driver: sql`excluded.driver`,
+              bisuiteId: sql`excluded.bisuite_id`,
+              nome: sql`excluded.nome`,
+              cognome: sql`excluded.cognome`,
+              cf: sql`excluded.cf`,
+              piva: sql`excluded.piva`,
+              telefono: sql`excluded.telefono`,
+              codiceCliente: sql`excluded.codice_cliente`,
+              codiceContratto: sql`excluded.codice_contratto`,
+              categoria: sql`excluded.categoria`,
+              tipologia: sql`excluded.tipologia`,
+              descrizione: sql`excluded.descrizione`,
+              canone: sql`excluded.canone`,
+              dataInserimento: sql`excluded.data_inserimento`,
+              addetto: sql`excluded.addetto`,
+              pdvOrigine: sql`excluded.pdv_origine`,
+              pod: sql`excluded.pod`,
+              pdr: sql`excluded.pdr`,
+              imei: sql`excluded.imei`,
+              importo: sql`excluded.importo`,
+              rata: sql`excluded.rata`,
+              modVendita: sql`excluded.mod_vendita`,
+              // Preserva lo stato impostato manualmente; altrimenti aggiorna
+              // con lo stato auto derivato dal connettore.
+              state: sql`CASE WHEN ${customerJourneyItems.stateManual} THEN ${customerJourneyItems.state} ELSE excluded.state END`,
+              updatedAt: new Date(),
+            },
+          });
+        itemCount++;
+      }
+    }
+
+    return { journeys: journeyCount, items: itemCount };
   }
 
   // BiSuite Sync Notifications

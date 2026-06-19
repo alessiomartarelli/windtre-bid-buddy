@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield, Users,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
-  ChevronDown, Zap, BookOpen, BarChart3,
+  ChevronDown, Zap, BookOpen, BarChart3, Route,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificationsBell';
@@ -69,6 +69,7 @@ export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) 
     ...(isEnabled('gara_dashboard') ? [{ path: '/dashboard-gara-reale', label: 'Dashboard', icon: LayoutDashboard }] : []),
     ...(isAdminOrSuper && isEnabled('gara_configurazione') ? [{ path: '/configurazione-gara', label: 'Configurazione', icon: Trophy }] : []),
     ...(isEnabled('vendite_bisuite') ? [{ path: '/vendite-bisuite', label: 'Vendite BiSuite', icon: ShoppingCart }] : []),
+    ...(isEnabled('customer_journey') ? [{ path: '/customer-journey', label: 'Customer Journey', icon: Route }] : []),
     ...(isSuperAdmin ? [{ path: '/mappatura-bisuite', label: 'Mappatura', icon: MapPin }] : []),
   ];
 

@@ -102,6 +102,10 @@ mantenere snello questo file:
 - [`docs/vendite-bisuite.md`](docs/vendite-bisuite.md) — Data vendita
   dalle API BiSuite, esclusione default delle vendite ANNULLATA, filtro
   Stato nella pagina Vendite BiSuite.
+- [`docs/customer-journey.md`](docs/customer-journey.md) — Modulo Customer
+  Journey: cross-sell per cliente da nuova attivazione mobile (≥01/07/2026),
+  driver attivati/attivabili, stati item, gettone manuale, addetti per
+  operatore, gap campi BiSuite.
 
 ## Testing
 

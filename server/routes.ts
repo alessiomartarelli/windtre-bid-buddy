@@ -8,6 +8,8 @@ import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
+import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState } from "@shared/schema";
+import { driverFromCategory, CJ_DRIVER_ORDER } from "@shared/customerJourney";
 import { registerCdgRoutes } from "./cdgRoutes";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import {
@@ -1577,6 +1579,36 @@ export async function registerRoutes(
     }
   });
 
+  // Associazione operatore ↔ nominativi addetto BiSuite (Task #158): governa
+  // il filtro per-operatore su vendite e customer journey.
+  app.post("/api/admin/profile-addetti", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      const { user_id, userId: userIdAlt, addetti } = req.body as { user_id?: string; userId?: string; addetti?: unknown };
+      const targetId = user_id || userIdAlt;
+      if (!targetId) return res.status(400).json({ error: "user_id obbligatorio" });
+      if (!Array.isArray(addetti) || !addetti.every((a) => typeof a === "string")) {
+        return res.status(400).json({ error: "addetti deve essere un array di stringhe" });
+      }
+      const targetProfile = await storage.getProfile(targetId);
+      if (!targetProfile) return res.status(404).json({ error: "Utente non trovato" });
+      if (profile.role === "admin" && targetProfile.organizationId !== profile.organizationId) {
+        return res.status(403).json({ error: "Non puoi modificare utenti di un'altra organizzazione" });
+      }
+      const cleaned = Array.from(new Set(
+        (addetti as string[]).map((a) => a.trim()).filter(Boolean),
+      ));
+      const updated = await storage.updateProfile(targetId, { bisuiteAddetti: cleaned });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating profile addetti:", error);
+      res.status(500).json({ error: "Errore nell'aggiornamento degli addetti" });
+    }
+  });
+
   app.post("/api/admin/update-organization", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.userId;
@@ -1848,12 +1880,19 @@ export async function registerRoutes(
   app.get("/api/admin/bisuite-credentials", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
-      if (!profile || profile.role !== "super_admin") {
-        return res.status(403).json({ error: "Solo il super admin può accedere alle credenziali BiSuite" });
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo gli amministratori possono accedere alle credenziali BiSuite" });
       }
 
-      const orgId = req.query.org_id as string;
+      // Il super_admin può indicare qualsiasi org; l'admin di tenant è
+      // vincolato alla propria organizzazione.
+      const orgId = profile.role === "super_admin"
+        ? (req.query.org_id as string)
+        : (profile.organizationId ?? undefined);
       if (!orgId) return res.status(400).json({ error: "org_id è obbligatorio" });
+      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+        return res.status(403).json({ error: "Non puoi accedere alle credenziali di un'altra organizzazione" });
+      }
 
       const orgConfig = await storage.getOrgConfig(orgId);
       const cfg = orgConfig?.config as Record<string, unknown> | undefined;
@@ -1890,13 +1929,16 @@ export async function registerRoutes(
   app.post("/api/admin/bisuite-credentials", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
-      if (!profile || profile.role !== "super_admin") {
-        return res.status(403).json({ error: "Solo il super admin può gestire le credenziali BiSuite" });
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo gli amministratori possono gestire le credenziali BiSuite" });
       }
 
       const { organization_id, api_url, client_id, client_secret } = req.body;
       if (!organization_id || !client_id || !client_secret) {
         return res.status(400).json({ error: "organization_id, client_id e client_secret sono obbligatori" });
+      }
+      if (profile.role !== "super_admin" && organization_id !== profile.organizationId) {
+        return res.status(403).json({ error: "Non puoi gestire le credenziali di un'altra organizzazione" });
       }
       if (api_url && !validateBisuiteUrl(api_url)) {
         return res.status(400).json({ error: "URL API non consentito. Utilizzare un host BiSuite valido." });
@@ -1934,13 +1976,16 @@ export async function registerRoutes(
   app.put("/api/admin/bisuite-credentials", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
-      if (!profile || profile.role !== "super_admin") {
-        return res.status(403).json({ error: "Solo il super admin può gestire le credenziali BiSuite" });
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo gli amministratori possono gestire le credenziali BiSuite" });
       }
 
       const { organization_id, api_url, client_id, client_secret } = req.body;
       if (!organization_id || !client_id || !client_secret) {
         return res.status(400).json({ error: "organization_id, client_id e client_secret sono obbligatori" });
+      }
+      if (profile.role !== "super_admin" && organization_id !== profile.organizationId) {
+        return res.status(403).json({ error: "Non puoi gestire le credenziali di un'altra organizzazione" });
       }
       if (api_url && !validateBisuiteUrl(api_url)) {
         return res.status(400).json({ error: "URL API non consentito. Utilizzare un host BiSuite valido." });
@@ -2380,10 +2425,24 @@ export async function registerRoutes(
       // chiamante può passare includeAnnullate=true per includerle (usato dalla
       // pagina VenditeBiSuite che mostra anche le righe annullate con badge).
       const includeAnnullate = req.query.includeAnnullate === "true";
+
+      // Filtro per-operatore (Task #158): l'operatore vede solo le vendite il
+      // cui addetto rientra nei nominativi BiSuite a lui associati
+      // (profile.bisuiteAddetti, match case-insensitive). Admin e super_admin
+      // vedono tutte le vendite dell'org.
+      const operatorAddetti = profile.role === "operatore"
+        ? (profile.bisuiteAddetti ?? []).map((a) => a.toLowerCase().trim()).filter(Boolean)
+        : null;
+      const applyOperatorFilter = (sales: BisuiteSale[]): BisuiteSale[] => {
+        if (!operatorAddetti) return sales;
+        if (operatorAddetti.length === 0) return [];
+        return sales.filter((s) => operatorAddetti.includes(String(s.nomeAddetto || "").toLowerCase().trim()));
+      };
+
       const yearParam = req.query.year ? parseInt(req.query.year as string, 10) : NaN;
       const monthParam = req.query.month ? parseInt(req.query.month as string, 10) : NaN;
       if (Number.isFinite(yearParam) && Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12) {
-        const sales = await storage.getBisuiteSalesByItalianMonth(orgId, yearParam, monthParam, includeAnnullate);
+        const sales = applyOperatorFilter(await storage.getBisuiteSalesByItalianMonth(orgId, yearParam, monthParam, includeAnnullate));
         return res.json({ sales, count: sales.length });
       }
 
@@ -2392,7 +2451,7 @@ export async function registerRoutes(
       if (fromYMD === null || toYMD === null) {
         return res.status(400).json({ error: "Parametri from/to non validi (atteso YYYY-MM-DD)" });
       }
-      const sales = await storage.getBisuiteSalesByItalianDateRange(orgId, fromYMD, toYMD, includeAnnullate);
+      const sales = applyOperatorFilter(await storage.getBisuiteSalesByItalianDateRange(orgId, fromYMD, toYMD, includeAnnullate));
       res.json({ sales, count: sales.length });
     } catch (error: unknown) {
       console.error("BiSuite sales read error:", error);
@@ -2479,6 +2538,123 @@ export async function registerRoutes(
       console.error("BiSuite sale detail error:", error);
       const msg = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: "Errore nel recupero dettaglio", details: msg });
+    }
+  });
+
+  // ── Customer Journey (Task #158) ────────────────────────────────
+  // Lista journey dell'org. Per gli operatori filtra solo le journey che
+  // contengono almeno un item gestito dai loro nominativi addetto.
+  app.get("/api/customer-journeys", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const addettiFilter = profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null;
+      const journeys = await storage.listCustomerJourneys(profile.organizationId, addettiFilter);
+      res.json(journeys);
+    } catch (error) {
+      console.error("Customer journeys list error:", error);
+      res.status(500).json({ error: "Errore nel recupero delle customer journey" });
+    }
+  });
+
+  // Dettaglio journey: anagrafica + items + riepilogo driver
+  // (attivati vs attivabili). L'operatore può vedere solo le proprie journey.
+  app.get("/api/customer-journeys/:id", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const journey = await storage.getCustomerJourney(req.params.id, profile.organizationId);
+      if (!journey) return res.status(404).json({ error: "Customer journey non trovata" });
+
+      const items = await storage.getCustomerJourneyItems(journey.id);
+
+      if (profile.role === "operatore") {
+        const mine = (profile.bisuiteAddetti ?? []).map((a) => a.toLowerCase().trim()).filter(Boolean);
+        const owns = items.some((it) => mine.includes(String(it.addetto || "").toLowerCase().trim()));
+        if (!owns) return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      // Un driver è "attivato" se ha almeno un item in stato non KO e non
+      // stornato. L'energia distingue gas/luce ma per il riepilogo conta come
+      // singolo driver attivabile.
+      const activeStates = new Set(["inserito", "in_lavorazione", "attivato", "pagato", "riaccreditato"]);
+      const drivers = CJ_DRIVER_ORDER.map((driver) => {
+        const driverItems = items.filter((it) => it.driver === driver);
+        const activated = driverItems.some((it) => activeStates.has(it.state));
+        return { driver, activated, count: driverItems.length };
+      });
+
+      res.json({ journey, items, drivers });
+    } catch (error) {
+      console.error("Customer journey detail error:", error);
+      res.status(500).json({ error: "Errore nel recupero della customer journey" });
+    }
+  });
+
+  // Reconcile: ricostruisce le journey dell'org dalle vendite BiSuite.
+  app.post("/api/customer-journeys/reconcile", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      if (!["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo gli amministratori possono rigenerare le customer journey" });
+      }
+      const result = await storage.reconcileCustomerJourneys(profile.organizationId);
+      res.json(result);
+    } catch (error) {
+      console.error("Customer journey reconcile error:", error);
+      res.status(500).json({ error: "Errore nella rigenerazione delle customer journey" });
+    }
+  });
+
+  // Aggiorna manualmente lo stato di un item della journey.
+  app.patch("/api/customer-journey-items/:id/state", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const { state } = req.body as { state?: string };
+      if (!state || !CJ_ITEM_STATES.includes(state as CjItemState)) {
+        return res.status(400).json({ error: "Stato non valido" });
+      }
+      const item = await storage.getCustomerJourneyItem(req.params.id, profile.organizationId);
+      if (!item) return res.status(404).json({ error: "Item non trovato" });
+      if (profile.role === "operatore") {
+        const mine = (profile.bisuiteAddetti ?? []).map((a) => a.toLowerCase().trim()).filter(Boolean);
+        if (!mine.includes(String(item.addetto || "").toLowerCase().trim())) {
+          return res.status(403).json({ error: "Accesso non autorizzato" });
+        }
+      }
+      const updated = await storage.updateCustomerJourneyItemState(req.params.id, profile.organizationId, state as CjItemState, profile.id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Customer journey item state error:", error);
+      res.status(500).json({ error: "Errore nell'aggiornamento dello stato" });
+    }
+  });
+
+  // Conferma/annulla manualmente il gettone di un item (la formula non è
+  // cablata in Fase 1: si registra solo la conferma manuale).
+  app.patch("/api/customer-journey-items/:id/gettone", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const { confirmed } = req.body as { confirmed?: boolean };
+      if (typeof confirmed !== "boolean") {
+        return res.status(400).json({ error: "Parametro 'confirmed' obbligatorio (boolean)" });
+      }
+      const item = await storage.getCustomerJourneyItem(req.params.id, profile.organizationId);
+      if (!item) return res.status(404).json({ error: "Item non trovato" });
+      if (profile.role === "operatore") {
+        const mine = (profile.bisuiteAddetti ?? []).map((a) => a.toLowerCase().trim()).filter(Boolean);
+        if (!mine.includes(String(item.addetto || "").toLowerCase().trim())) {
+          return res.status(403).json({ error: "Accesso non autorizzato" });
+        }
+      }
+      const updated = await storage.setCustomerJourneyItemGettone(req.params.id, profile.organizationId, confirmed, profile.id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Customer journey item gettone error:", error);
+      res.status(500).json({ error: "Errore nella conferma del gettone" });
     }
   });
 
