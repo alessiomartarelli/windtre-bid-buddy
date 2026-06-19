@@ -346,7 +346,10 @@ function JourneyDetailView({
                     <TableHead>Driver</TableHead>
                     <TableHead>Descrizione</TableHead>
                     <TableHead>Contratto</TableHead>
+                    <TableHead>Addetto</TableHead>
+                    <TableHead>PDV</TableHead>
                     <TableHead>Inserito</TableHead>
+                    <TableHead>Attivato</TableHead>
                     <TableHead>Stato</TableHead>
                     <TableHead className="text-center">Gettone</TableHead>
                   </TableRow>
@@ -366,7 +369,18 @@ function JourneyDetailView({
                         {it.codiceContratto || "—"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs">
+                        {it.addetto || "—"}
+                      </TableCell>
+                      <TableCell className="max-w-[160px] text-xs">
+                        <span className="block truncate" title={it.pdvDestinazione || it.pdvOrigine || ""}>
+                          {it.pdvDestinazione || it.pdvOrigine || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">
                         {fmtDate(it.dataInserimento)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {fmtDate(it.dataAttivazione)}
                       </TableCell>
                       <TableCell>
                         <Select

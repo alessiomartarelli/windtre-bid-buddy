@@ -1244,7 +1244,7 @@ export async function registerRoutes(
   });
 
   // === ADMIN: Dipendenti from BiSuite sales ===
-  app.get("/api/admin/bisuite-dipendenti", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+  app.get("/api/admin/bisuite-dipendenti", isAuthenticated, requireModule(["vendite_bisuite", "customer_journey"]), async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
@@ -2531,6 +2531,15 @@ export async function registerRoutes(
 
       if (profile.role !== "super_admin" && sale.organizationId !== profile.organizationId) {
         return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      // Filtro per-operatore (Task #158): l'operatore può vedere solo le
+      // vendite il cui addetto rientra nei suoi nominativi BiSuite (stesso
+      // contratto null-vs-empty usato nella lista): nessun addetto => 403.
+      if (profile.role === "operatore") {
+        const mine = (profile.bisuiteAddetti ?? []).map((a) => a.toLowerCase().trim()).filter(Boolean);
+        const owns = mine.includes(String(sale.nomeAddetto || "").toLowerCase().trim());
+        if (!owns) return res.status(403).json({ error: "Accesso non autorizzato" });
       }
 
       res.json(sale);
