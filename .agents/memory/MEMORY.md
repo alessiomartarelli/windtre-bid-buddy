@@ -1,2 +1,3 @@
 - [Deploy prod via workflow](deploy-prod-via-workflow.md) — `npm run build` supera 120s e i bg process vengono uccisi; lancia deploy con un workflow temporaneo.
 - [Customer Journey operator isolation](cj-operator-isolation.md) — operator-scoped queries: guard `filter != null` (empty array => []), never `filter.length > 0`, or empty addetti leaks whole tenant.
+- [Dev DB schema drift](dev-db-schema-drift.md) — se signup/login danno 500 "column ... does not exist", il DB dev è disallineato da shared/schema.ts: lancia `npm run db:push`.
