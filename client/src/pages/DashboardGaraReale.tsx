@@ -285,7 +285,7 @@ const PDV_SORT_OPTIONS: { value: PdvSortKey; label: string }[] = [
   { value: 'punti_cb', label: 'Punti CB' },
   { value: 'punti_energia', label: 'Punti Energia' },
   { value: 'punti_assicurazioni', label: 'Punti Assicurazioni' },
-  { value: 'punti_protecta', label: 'Punti Protecta' },
+  { value: 'punti_protecta', label: 'Punti Windtre Protetti' },
 ];
 
 interface MappedSalesResponse {
@@ -353,7 +353,7 @@ const PISTA_CONFIG = {
   assicurazioni: { label: "Assicurazioni", icon: Shield, color: "bg-purple-500", lightColor: "bg-purple-50 text-purple-700 border-purple-200" },
   partnership: { label: "Partnership", icon: Handshake, color: "bg-cyan-500", lightColor: "bg-cyan-50 text-cyan-700 border-cyan-200" },
   cb: { label: "Customer Base", icon: Users, color: "bg-orange-500", lightColor: "bg-orange-50 text-orange-700 border-orange-200" },
-  protecta: { label: "Protecta", icon: Shield, color: "bg-rose-500", lightColor: "bg-rose-50 text-rose-700 border-rose-200" },
+  protecta: { label: "Windtre Protetti", icon: Shield, color: "bg-rose-500", lightColor: "bg-rose-50 text-rose-700 border-rose-200" },
   extra_gara_iva: { label: "Extra Gara P.IVA", icon: Briefcase, color: "bg-indigo-500", lightColor: "bg-indigo-50 text-indigo-700 border-indigo-200" },
 } as const;
 

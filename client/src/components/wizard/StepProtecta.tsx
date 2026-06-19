@@ -58,7 +58,7 @@ const StepProtecta: React.FC<StepProtectaProps> = ({
     <div className="space-y-6">
       <StepContentHeader
         icon={Lock}
-        title="Protecta - Sistemi di Allarme"
+        title="Windtre Protetti - Sistemi di Allarme"
         subtitle="Inserisci il numero di pezzi venduti per ogni tipologia di allarme"
         totalPremio={totalePremio}
       />
@@ -185,7 +185,7 @@ const StepProtecta: React.FC<StepProtectaProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Lock className="h-5 w-5 text-primary" />
-              <span className="font-medium">Totale Premio Protecta</span>
+              <span className="font-medium">Totale Premio Windtre Protetti</span>
             </div>
             <span className="text-2xl font-bold text-primary">
               {formatCurrency(totalePremio)}

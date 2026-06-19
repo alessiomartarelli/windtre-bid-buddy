@@ -71,7 +71,7 @@ const VOLUME_NAME_MAP: Record<string, string> = {
   volumiPartnership: 'Partnership',
   volumiEnergia: 'Energia',
   volumiAssicurazioni: 'Assicurazioni',
-  volumiProtecta: 'Protecta',
+  volumiProtecta: 'Windtre Protetti',
   volumiExtraGara: 'Extra Gara IVA',
 };
 
@@ -81,7 +81,7 @@ const PREMIO_NAME_MAP: Record<string, string> = {
   premioPartnership: 'Partnership',
   premioEnergia: 'Energia',
   premioAssicurazioni: 'Assicurazioni',
-  premioProtecta: 'Protecta',
+  premioProtecta: 'Windtre Protetti',
   premioExtraGara: 'Extra Gara IVA',
 };
 
@@ -364,7 +364,7 @@ export function PdvDataTable({ preventivo }: PdvDataTableProps) {
                     <TableHead className="sticky top-0 bg-background z-10 text-center" style={{ color: PISTA_COLORS.Partnership }}>Partner.</TableHead>
                     <TableHead className="sticky top-0 bg-background z-10 text-center" style={{ color: PISTA_COLORS.Energia }}>Energia</TableHead>
                     <TableHead className="sticky top-0 bg-background z-10 text-center" style={{ color: PISTA_COLORS.Assicurazioni }}>Assic.</TableHead>
-                    <TableHead className="sticky top-0 bg-background z-10 text-center" style={{ color: PISTA_COLORS.Protecta }}>Protecta</TableHead>
+                    <TableHead className="sticky top-0 bg-background z-10 text-center" style={{ color: PISTA_COLORS.Protecta }}>Windtre Protetti</TableHead>
                     <TableHead className="sticky top-0 bg-background z-10 text-center" style={{ color: PISTA_COLORS.ExtraGara }}>Extra IVA</TableHead>
                     <TableHead className="sticky top-0 bg-background z-10 text-center">Soglia M</TableHead>
                     <TableHead className="sticky top-0 bg-background z-10 text-center">Soglia F</TableHead>

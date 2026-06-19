@@ -633,7 +633,7 @@ export default function TabelleCalcolo() {
               <TabsTrigger value="fisso" className="text-xs sm:text-sm" data-testid="tab-fisso">Fisso</TabsTrigger>
               <TabsTrigger value="energia" className="text-xs sm:text-sm" data-testid="tab-energia">Energia</TabsTrigger>
               <TabsTrigger value="assicurazioni" className="text-xs sm:text-sm" data-testid="tab-assicurazioni">Assicurazioni</TabsTrigger>
-              <TabsTrigger value="protecta" className="text-xs sm:text-sm" data-testid="tab-protecta">Protecta</TabsTrigger>
+              <TabsTrigger value="protecta" className="text-xs sm:text-sm" data-testid="tab-protecta">Windtre Protetti</TabsTrigger>
               <TabsTrigger value="extraGara" className="text-xs sm:text-sm" data-testid="tab-extra-gara">Extra Gara IVA</TabsTrigger>
               <TabsTrigger value="partnership" className="text-xs sm:text-sm" data-testid="tab-partnership">Partnership</TabsTrigger>
             </TabsList>
@@ -1211,7 +1211,7 @@ function ProtectaTab({ config, systemConfig, isOverridden, updateValue, resetVal
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Gettoni per Prodotto Protecta</CardTitle>
+        <CardTitle className="text-base">Gettoni per Prodotto Windtre Protetti</CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <table className="w-full text-sm" data-testid="table-protecta-gettoni">

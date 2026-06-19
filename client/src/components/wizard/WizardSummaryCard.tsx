@@ -65,7 +65,7 @@ const CATEGORY_CONFIG = [
   { key: 'partnership', label: 'CB+', icon: Gift, color: 'bg-purple-500', activeColor: 'ring-purple-500' },
   { key: 'energia', label: 'Energia', icon: Zap, color: 'bg-yellow-500', activeColor: 'ring-yellow-500' },
   { key: 'assicurazioni', label: 'Assic.', icon: Shield, color: 'bg-green-500', activeColor: 'ring-green-500' },
-  { key: 'protecta', label: 'Protecta', icon: Lock, color: 'bg-teal-500', activeColor: 'ring-teal-500' },
+  { key: 'protecta', label: 'Protetti', icon: Lock, color: 'bg-teal-500', activeColor: 'ring-teal-500' },
   { key: 'extra', label: 'Extra IVA', icon: Receipt, color: 'bg-orange-500', activeColor: 'ring-orange-500' },
 ];
 

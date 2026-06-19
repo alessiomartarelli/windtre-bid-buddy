@@ -1107,7 +1107,7 @@ export default function ConfigurazioneGara() {
               premioExtra: pdfData.soglieProtecta!.premioExtra,
             };
           }));
-          parts.push('Protecta target/decurtazione impostati');
+          parts.push('Windtre Protetti target/decurtazione impostati');
         }
 
         if (pdfData.decurtazione) {
@@ -1866,9 +1866,9 @@ export default function ConfigurazioneGara() {
                 <div className="space-y-6">
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Energia, Assicurazioni & Protecta per Ragione Sociale</CardTitle>
+                      <CardTitle className="text-base">Energia, Assicurazioni & Windtre Protetti per Ragione Sociale</CardTitle>
                       <CardDescription className="text-xs">
-                        Configura i target di Energia, Assicurazioni e Protecta separatamente per ogni Ragione Sociale.
+                        Configura i target di Energia, Assicurazioni e Windtre Protetti separatamente per ogni Ragione Sociale.
                       </CardDescription>
                     </CardHeader>
                   </Card>
@@ -2002,7 +2002,7 @@ export default function ConfigurazioneGara() {
                             <div className="space-y-3">
                               <div className="flex items-center gap-2">
                                 <ShieldCheck className="h-4 w-4 text-teal-600" />
-                                <Label className="text-xs font-semibold">Protecta (Casa e Negozio Protetti)</Label>
+                                <Label className="text-xs font-semibold">Windtre Protetti (Casa e Negozio)</Label>
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                 <div className="space-y-1">
@@ -2014,7 +2014,7 @@ export default function ConfigurazioneGara() {
                                   <Input type="number" className="h-8 text-sm" value={pConf.premioExtra} onChange={e => updateProtectaRS('premioExtra', Number(e.target.value) || 0)} data-testid={`input-protecta-rs-premioExtra-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs">Decurtazione Protecta ({'<'} N)</Label>
+                                  <Label className="text-xs">Decurtazione Windtre Protetti ({'<'} N)</Label>
                                   <Input type="number" className="h-8 text-sm" value={pConf.targetDecurtazione} onChange={e => updateProtectaRS('targetDecurtazione', Number(e.target.value) || 0)} data-testid={`input-protecta-rs-targetDecurtazione-${rs}`} />
                                 </div>
                               </div>
@@ -2505,7 +2505,7 @@ export default function ConfigurazioneGara() {
 
                 {pdfData.soglieProtecta && (
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold">Protecta (Casa e Negozio Protetti)</Label>
+                    <Label className="text-xs font-semibold">Windtre Protetti (Casa e Negozio)</Label>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="bg-muted/50 rounded p-2 text-center">
                         <div className="text-[10px] text-muted-foreground">Target Extra ({pdfData.soglieProtecta.premioExtra}€/PDV)</div>

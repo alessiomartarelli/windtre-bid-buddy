@@ -72,7 +72,7 @@ export const PISTA_CANVASS_LABELS: Record<PistaCanvass, string> = {
   fisso: 'Fisso',
   cb: 'CB',
   assicurazioni: 'Assicurazioni',
-  protecta: 'Protecta',
+  protecta: 'Windtre Protetti',
   energia: 'Energia',
 };
 

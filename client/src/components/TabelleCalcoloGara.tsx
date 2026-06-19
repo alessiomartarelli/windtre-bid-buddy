@@ -349,7 +349,7 @@ export function TabelleCalcoloGara({ config, onChange, baseDefaults, pdvList, ex
             <TabsTrigger value="fisso" className="text-xs sm:text-sm" data-testid="tab-gara-tc-fisso">Fisso</TabsTrigger>
             <TabsTrigger value="energia" className="text-xs sm:text-sm" data-testid="tab-gara-tc-energia">Energia</TabsTrigger>
             <TabsTrigger value="assicurazioni" className="text-xs sm:text-sm" data-testid="tab-gara-tc-assicurazioni">Assicurazioni</TabsTrigger>
-            <TabsTrigger value="protecta" className="text-xs sm:text-sm" data-testid="tab-gara-tc-protecta">Protecta</TabsTrigger>
+            <TabsTrigger value="protecta" className="text-xs sm:text-sm" data-testid="tab-gara-tc-protecta">Windtre Protetti</TabsTrigger>
             <TabsTrigger value="extraGara" className="text-xs sm:text-sm" data-testid="tab-gara-tc-extra-gara">Extra Gara IVA</TabsTrigger>
             <TabsTrigger value="partnership" className="text-xs sm:text-sm" data-testid="tab-gara-tc-partnership">Partnership</TabsTrigger>
           </TabsList>
@@ -778,12 +778,12 @@ function AssicurazioniSubTab({ config, baseDefaults, isOverridden, updateValue, 
 function ProtectaSubTab({ config, baseDefaults, isOverridden, updateValue, resetValue }: SimpleSubTabProps) {
   return (
     <>
-      <CalcInfoBox title="Come funziona il calcolo Protecta">
-        <p>Per ogni prodotto Protecta venduto viene riconosciuto un <strong>gettone fisso</strong> in euro.</p>
-        <p>Il premio totale Protecta = somma dei gettoni di tutti i prodotti venduti nel mese.</p>
+      <CalcInfoBox title="Come funziona il calcolo Windtre Protetti">
+        <p>Per ogni prodotto Windtre Protetti venduto viene riconosciuto un <strong>gettone fisso</strong> in euro.</p>
+        <p>Il premio totale Windtre Protetti = somma dei gettoni di tutti i prodotti venduti nel mese.</p>
       </CalcInfoBox>
       <Card>
-      <CardHeader><CardTitle className="text-base">Gettoni per Prodotto Protecta</CardTitle></CardHeader>
+      <CardHeader><CardTitle className="text-base">Gettoni per Prodotto Windtre Protetti</CardTitle></CardHeader>
       <CardContent className="overflow-x-auto">
         <table className="w-full text-sm" data-testid="table-gara-protecta-gettoni">
           <thead>

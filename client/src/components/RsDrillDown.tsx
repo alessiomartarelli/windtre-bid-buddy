@@ -48,7 +48,7 @@ const PISTA_ICONS: Record<string, React.ReactNode> = {
   Partnership: <Users className="h-4 w-4" />,
   Energia: <Zap className="h-4 w-4" />,
   Assicurazioni: <Shield className="h-4 w-4" />,
-  Protecta: <Award className="h-4 w-4" />,
+  'Windtre Protetti': <Award className="h-4 w-4" />,
 };
 
 /* ── label maps ─────────────────────────────────────────────── */
@@ -426,7 +426,7 @@ export function RsDrillDown({ preventivo, forceExpandAll = false }: RsDrillDownP
       }
 
       piste.push({
-        pista: 'Protecta',
+        pista: 'Windtre Protetti',
         volumi: volumiProtecta,
         premio: isSingleRS ? (risultatoProtecta?.totalePremio || 0) : 0,
         punti: 0,

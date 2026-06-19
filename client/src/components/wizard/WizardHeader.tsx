@@ -46,7 +46,7 @@ const STEP_CONFIG_STANDARD = [
   { icon: Gift, label: "Partnership", shortLabel: "CB+", group: "kpi" },
   { icon: Zap, label: "Energia", shortLabel: "Energia", group: "kpi" },
   { icon: Shield, label: "Assicurazioni", shortLabel: "Assic.", group: "kpi" },
-  { icon: Lock, label: "Protecta", shortLabel: "Protecta", group: "kpi" },
+  { icon: Lock, label: "Windtre Protetti", shortLabel: "Protetti", group: "kpi" },
   { icon: Receipt, label: "Extra IVA", shortLabel: "Extra IVA", group: "kpi" },
 ] as const;
 
@@ -64,7 +64,7 @@ const STEP_CONFIG_RS = [
   { icon: Gift, label: "Partnership", shortLabel: "CB+", group: "kpi" },
   { icon: Zap, label: "Energia", shortLabel: "Energia", group: "kpi" },
   { icon: Shield, label: "Assicurazioni", shortLabel: "Assic.", group: "kpi" },
-  { icon: Lock, label: "Protecta", shortLabel: "Protecta", group: "kpi" },
+  { icon: Lock, label: "Windtre Protetti", shortLabel: "Protetti", group: "kpi" },
   { icon: Receipt, label: "Extra IVA", shortLabel: "Extra IVA", group: "kpi" },
 ] as const;
 

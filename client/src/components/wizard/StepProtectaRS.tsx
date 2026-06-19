@@ -88,7 +88,7 @@ export const StepProtectaRS: React.FC<StepProtectaRSProps> = ({
     <div className="space-y-6">
       <StepContentHeader
         icon={Lock}
-        title="Protecta per Ragione Sociale"
+        title="Windtre Protetti per Ragione Sociale"
         subtitle="Sistemi di Allarme aggregati per azienda"
         totalPremio={totalePremio}
         extraInfo={`${totalePezzi} pezzi totali · ${ragioneSocialeList.length} aziende`}
@@ -228,7 +228,7 @@ export const StepProtectaRS: React.FC<StepProtectaRSProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Lock className="h-5 w-5 text-primary" />
-              <span className="font-medium">Totale Premio Protecta RS</span>
+              <span className="font-medium">Totale Premio Windtre Protetti RS</span>
             </div>
             <span className="text-2xl font-bold text-primary">
               {formatCurrency(totalePremio)}

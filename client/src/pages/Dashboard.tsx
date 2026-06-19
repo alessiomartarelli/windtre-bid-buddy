@@ -84,6 +84,9 @@ const CATEGORY_COLORS = {
 
 const COLORS = Object.values(CATEGORY_COLORS);
 
+const displayCategoria = (name: string): string =>
+  name === 'Protecta' ? 'Windtre Protetti' : name;
+
 const formatCurrency = (value: number) => {
   if (isNaN(value) || value === null || value === undefined) {
     return '€ 0';
@@ -606,7 +609,7 @@ export default function Dashboard() {
                       {aggregatedData.categorieDistribuzione.map((cat) => (
                         <CategoryCard
                           key={cat.name}
-                          name={cat.name}
+                          name={displayCategoria(cat.name)}
                           value={cat.value}
                           icon={getCategoryIcon(cat.name)}
                           color={cat.color}
@@ -700,7 +703,7 @@ export default function Dashboard() {
                               formatter={(value: number) => [formatCurrency(value), 'Premio']}
                             />
                             <Legend 
-                              formatter={(value) => <span className="text-sm">{value}</span>}
+                              formatter={(value) => <span className="text-sm">{displayCategoria(value as string)}</span>}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -797,7 +800,7 @@ export default function Dashboard() {
                       {singlePreventivoData.categorieDistribuzione.map((cat) => (
                         <CategoryCard
                           key={cat.name}
-                          name={cat.name}
+                          name={displayCategoria(cat.name)}
                           value={cat.value}
                           icon={getCategoryIcon(cat.name)}
                           color={cat.color}
@@ -848,7 +851,7 @@ export default function Dashboard() {
                               }}
                               formatter={(value: number) => [formatCurrency(value), 'Premio']}
                             />
-                            <Legend />
+                            <Legend formatter={(value) => <span className="text-sm">{displayCategoria(value as string)}</span>} />
                           </PieChart>
                         </ResponsiveContainer>
                       ) : (

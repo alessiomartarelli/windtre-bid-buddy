@@ -2097,7 +2097,7 @@ const Preventivatore = () => {
                 {isProdEnabled('prod_partnership_reward') && (<><span className="text-muted-foreground">CB+ Partnership Reward:</span><span className="font-medium">{formatCurrency(effTotPartnership)}</span></>)}
                 {isProdEnabled('prod_energia') && (<><span className="text-muted-foreground">Energia:</span><span className="font-medium">{formatCurrency(effTotEnergia)}</span></>)}
                 {isProdEnabled('prod_assicurazioni') && (<><span className="text-muted-foreground">Assicurazioni:</span><span className="font-medium">{formatCurrency(effTotAssicurazioni)}</span></>)}
-                {isProdEnabled('prod_protecta') && (<><span className="text-muted-foreground">Protecta:</span><span className="font-medium">{formatCurrency(effTotProtecta)}</span></>)}
+                {isProdEnabled('prod_protecta') && (<><span className="text-muted-foreground">Windtre Protetti:</span><span className="font-medium">{formatCurrency(effTotProtecta)}</span></>)}
                 {isProdEnabled('prod_extra_gara_iva') && (<><span className="text-muted-foreground">Extra Gara P.IVA:</span><span className="font-medium">{formatCurrency(effTotExtraGaraIva)}</span></>)}
                 <span className="text-muted-foreground font-semibold border-t pt-2">Totale:</span>
                 <span className="font-bold text-primary border-t pt-2">
