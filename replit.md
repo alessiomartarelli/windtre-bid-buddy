@@ -132,6 +132,21 @@ mantenere snello questo file:
   step di validation `cj-authz-tests`
   (`bash scripts/run-customer-journey-authz-tests.sh`); richiede il
   workflow "Start application" attivo. Run completo in ~1s.
+- **Customer Journey reconcile tests** (`tests/customer-journey-reconcile.test.mjs`):
+  2 scenari (Task #164) sulla preservazione dei campi manuali nel reconcile.
+  Setup: signup admin + org, inserisce una vendita BiSuite (`bisuite_sales`)
+  con un'attivazione mobile (categoria UNTIED, `data_vendita ≥ 01/07/2026`,
+  innesca la journey) e due dispositivi TELEFONIA finanziati (IMEI + RATA
+  derivati). Guida `reconcileCustomerJourneys` e PATCH dettagli via HTTP,
+  legge lo stato finale degli item dal DB. (1) i 4 campi manuali (DATA
+  ATTIVAZIONE, PDV DESTINAZIONE, IMEI, RATA) salvati via
+  `updateCustomerJourneyItemDetails` (`details_manual = true`) NON vengono
+  sovrascritti da un reconcile successivo anche se cambiano IMEI/importo
+  finanziato della vendita; (2) gli item NON modificati a mano vengono
+  comunque aggiornati con IMEI/RATA derivati da BiSuite (ramo `ELSE excluded`).
+  Lanciali via lo step di validation `cj-reconcile-tests`
+  (`bash scripts/run-customer-journey-reconcile-tests.sh`); richiede il
+  workflow "Start application" attivo. Run completo in ~4s.
 
 ## External Dependencies
 
