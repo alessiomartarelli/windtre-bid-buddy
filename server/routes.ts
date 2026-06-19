@@ -1,6 +1,6 @@
 import type { Express, RequestHandler } from "express";
 import { type Server } from "http";
-import { storage } from "./storage";
+import { storage, type CjItemDetailsUpdate } from "./storage";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
@@ -2664,6 +2664,63 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Customer journey item gettone error:", error);
       res.status(500).json({ error: "Errore nella conferma del gettone" });
+    }
+  });
+
+  // Compila a mano i campi di dettaglio che BiSuite non fornisce in modo
+  // affidabile: data attivazione, PDV destinazione, IMEI, RATA (Task #161).
+  // Una volta salvati (`detailsManual = true`), il reconcile non li sovrascrive.
+  app.patch("/api/customer-journey-items/:id/details", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+
+      const body = req.body as {
+        dataAttivazione?: string | null;
+        pdvDestinazione?: string | null;
+        imei?: string | null;
+        rata?: string | null;
+      };
+
+      const details: CjItemDetailsUpdate = {};
+      if ("dataAttivazione" in body) {
+        const raw = body.dataAttivazione;
+        if (raw == null || raw === "") {
+          details.dataAttivazione = null;
+        } else {
+          const d = new Date(raw);
+          if (Number.isNaN(d.getTime())) {
+            return res.status(400).json({ error: "Data attivazione non valida" });
+          }
+          details.dataAttivazione = d;
+        }
+      }
+      const normStr = (v: string | null | undefined): string | null => {
+        if (v == null) return null;
+        const t = String(v).trim();
+        return t === "" ? null : t;
+      };
+      if ("pdvDestinazione" in body) details.pdvDestinazione = normStr(body.pdvDestinazione);
+      if ("imei" in body) details.imei = normStr(body.imei);
+      if ("rata" in body) details.rata = normStr(body.rata);
+
+      if (Object.keys(details).length === 0) {
+        return res.status(400).json({ error: "Nessun campo da aggiornare" });
+      }
+
+      const item = await storage.getCustomerJourneyItem(req.params.id, profile.organizationId);
+      if (!item) return res.status(404).json({ error: "Item non trovato" });
+      if (profile.role === "operatore") {
+        const mine = (profile.bisuiteAddetti ?? []).map((a) => a.toLowerCase().trim()).filter(Boolean);
+        if (!mine.includes(String(item.addetto || "").toLowerCase().trim())) {
+          return res.status(403).json({ error: "Accesso non autorizzato" });
+        }
+      }
+      const updated = await storage.updateCustomerJourneyItemDetails(req.params.id, profile.organizationId, details, profile.id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Customer journey item details error:", error);
+      res.status(500).json({ error: "Errore nell'aggiornamento dei dettagli" });
     }
   });
 

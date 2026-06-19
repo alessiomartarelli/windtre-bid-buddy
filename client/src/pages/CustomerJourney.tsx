@@ -7,6 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -16,7 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   Route as RouteIcon, RefreshCw, ArrowLeft, CheckCircle2, Circle,
-  Search, User, Building2, Loader2, Coins,
+  Search, User, Building2, Loader2, Coins, Pencil,
 } from "lucide-react";
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS,
@@ -28,6 +32,13 @@ interface DriverSummary {
   driver: string;
   activated: boolean;
   count: number;
+}
+
+interface ItemDetailsPayload {
+  dataAttivazione: string | null;
+  pdvDestinazione: string | null;
+  imei: string | null;
+  rata: string | null;
 }
 
 interface JourneyDetail {
@@ -127,6 +138,24 @@ export default function CustomerJourneyPage() {
       toast({
         title: "Errore",
         description: err instanceof Error ? err.message : "Conferma gettone fallita",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const detailsMutation = useMutation({
+    mutationFn: async ({ id, details }: { id: string; details: ItemDetailsPayload }) => {
+      const res = await apiRequest("PATCH", `/api/customer-journey-items/${id}/details`, details);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys", selectedId] });
+      toast({ title: "Dettagli aggiornati" });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: "Errore",
+        description: err instanceof Error ? err.message : "Aggiornamento dettagli fallito",
         variant: "destructive",
       });
     },
@@ -254,8 +283,10 @@ export default function CustomerJourneyPage() {
                 detail={detailQuery.data}
                 onSetState={(id, state) => stateMutation.mutate({ id, state })}
                 onSetGettone={(id, confirmed) => gettoneMutation.mutate({ id, confirmed })}
+                onSaveDetails={(id, details) => detailsMutation.mutate({ id, details })}
                 statePending={stateMutation.isPending}
                 gettonePending={gettoneMutation.isPending}
+                detailsPending={detailsMutation.isPending}
               />
             )}
           </>
@@ -266,16 +297,19 @@ export default function CustomerJourneyPage() {
 }
 
 function JourneyDetailView({
-  detail, onSetState, onSetGettone, statePending, gettonePending,
+  detail, onSetState, onSetGettone, onSaveDetails, statePending, gettonePending, detailsPending,
 }: {
   detail: JourneyDetail;
   onSetState: (id: string, state: CjItemState) => void;
   onSetGettone: (id: string, confirmed: boolean) => void;
+  onSaveDetails: (id: string, details: ItemDetailsPayload) => void;
   statePending: boolean;
   gettonePending: boolean;
+  detailsPending: boolean;
 }) {
   const { journey, items, drivers } = detail;
   const driverMap = new Map(drivers.map((d) => [d.driver, d]));
+  const [editItem, setEditItem] = useState<CustomerJourneyItem | null>(null);
 
   return (
     <div className="space-y-6">
@@ -348,10 +382,13 @@ function JourneyDetailView({
                     <TableHead>Contratto</TableHead>
                     <TableHead>Addetto</TableHead>
                     <TableHead>PDV</TableHead>
+                    <TableHead>IMEI</TableHead>
+                    <TableHead>RATA</TableHead>
                     <TableHead>Inserito</TableHead>
                     <TableHead>Attivato</TableHead>
                     <TableHead>Stato</TableHead>
                     <TableHead className="text-center">Gettone</TableHead>
+                    <TableHead className="text-center">Modifica</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -376,10 +413,16 @@ function JourneyDetailView({
                           {it.pdvDestinazione || it.pdvOrigine || "—"}
                         </span>
                       </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs" data-testid={`text-imei-${it.id}`}>
+                        {it.imei || "—"}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-xs" data-testid={`text-rata-${it.id}`}>
+                        {it.rata ? `€ ${it.rata}` : "—"}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap text-xs">
                         {fmtDate(it.dataInserimento)}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap text-xs">
+                      <TableCell className="whitespace-nowrap text-xs" data-testid={`text-attivazione-${it.id}`}>
                         {fmtDate(it.dataAttivazione)}
                       </TableCell>
                       <TableCell>
@@ -416,6 +459,18 @@ function JourneyDetailView({
                           {it.gettoneConfirmed ? "Confermato" : "Conferma"}
                         </Button>
                       </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setEditItem(it)}
+                          data-testid={`button-edit-details-${it.id}`}
+                          title="Modifica dettagli"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -424,6 +479,120 @@ function JourneyDetailView({
           )}
         </CardContent>
       </Card>
+
+      {editItem && (
+        <ItemDetailsDialog
+          key={editItem.id}
+          item={editItem}
+          pending={detailsPending}
+          onClose={() => setEditItem(null)}
+          onSave={(details) => {
+            onSaveDetails(editItem.id, details);
+            setEditItem(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function toDateInput(d: string | Date | null | undefined): string {
+  if (!d) return "";
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return "";
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function ItemDetailsDialog({
+  item, pending, onClose, onSave,
+}: {
+  item: CustomerJourneyItem;
+  pending: boolean;
+  onClose: () => void;
+  onSave: (details: ItemDetailsPayload) => void;
+}) {
+  const [dataAttivazione, setDataAttivazione] = useState(toDateInput(item.dataAttivazione));
+  const [pdvDestinazione, setPdvDestinazione] = useState(item.pdvDestinazione || "");
+  const [imei, setImei] = useState(item.imei || "");
+  const [rata, setRata] = useState(item.rata || "");
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent data-testid="dialog-edit-details">
+        <DialogHeader>
+          <DialogTitle>Modifica dettagli contratto</DialogTitle>
+          <DialogDescription>
+            Compila i campi non forniti da BiSuite. Una volta salvati, la
+            rigenerazione automatica non li sovrascrive.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-data-attivazione">Data attivazione</Label>
+            <Input
+              id="edit-data-attivazione"
+              type="date"
+              value={dataAttivazione}
+              onChange={(e) => setDataAttivazione(e.target.value)}
+              data-testid="input-data-attivazione"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-pdv-destinazione">PDV destinazione</Label>
+            <Input
+              id="edit-pdv-destinazione"
+              value={pdvDestinazione}
+              onChange={(e) => setPdvDestinazione(e.target.value)}
+              placeholder="Punto vendita di destinazione"
+              data-testid="input-pdv-destinazione"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-imei">IMEI</Label>
+            <Input
+              id="edit-imei"
+              value={imei}
+              onChange={(e) => setImei(e.target.value)}
+              placeholder="IMEI del telefono"
+              data-testid="input-imei"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-rata">RATA (€)</Label>
+            <Input
+              id="edit-rata"
+              value={rata}
+              onChange={(e) => setRata(e.target.value)}
+              placeholder="Importo rata"
+              inputMode="decimal"
+              data-testid="input-rata"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={pending} data-testid="button-cancel-details">
+            Annulla
+          </Button>
+          <Button
+            onClick={() =>
+              onSave({
+                dataAttivazione: dataAttivazione || null,
+                pdvDestinazione: pdvDestinazione.trim() || null,
+                imei: imei.trim() || null,
+                rata: rata.trim() || null,
+              })
+            }
+            disabled={pending}
+            data-testid="button-save-details"
+          >
+            {pending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+            Salva
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

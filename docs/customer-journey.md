@@ -90,17 +90,28 @@ Tutte le route CJ sono protette da `requireModule("customer_journey")`.
 | MOD. VENDITA | `dettaglio.tipologiaVendita` |
 | CODICE CONTRATTO / POD / PDR / ICCID / IMEI | parse da `venditaInfo1..5` (free-text) |
 
-### Campi mancanti / inaffidabili (Fase 1)
+### Campi non forniti da BiSuite → compilazione manuale
 
-Questi campi non sono forniti in modo affidabile dal connettore e restano
-NULL/vuoti finché non arriva una sorgente migliore:
+BiSuite non fornisce in modo affidabile alcuni campi. Sono quindi **compilabili
+a mano** dall'UI (Task #161): nel dettaglio journey, ogni contratto ha
+un'icona matita ("Modifica") che apre un dialog per editare:
 
-- **DATA ATTIVAZIONE**: il connettore espone solo `dataFine`; non è una vera
-  data di attivazione → lasciata `null`.
-- **PDV DESTINAZIONE**: non disponibile.
-- **IMEI del telefono**: spesso assente nei `venditaInfo`.
-- **RATA**: disponibile solo `importoFinanziato` (usato come `rata` solo per le
-  vendite in finanziamento).
+- **DATA ATTIVAZIONE**: il connettore espone solo `dataFine`, non una vera data
+  di attivazione → il reconcile la lascia `null`, l'utente la imposta a mano.
+- **PDV DESTINAZIONE**: non disponibile da BiSuite → solo manuale.
+- **IMEI del telefono**: spesso assente nei `venditaInfo` → auto-derivato se
+  presente, altrimenti compilabile a mano.
+- **RATA**: il reconcile valorizza solo `importoFinanziato` per le vendite in
+  finanziamento → editabile a mano per gli altri casi.
+
+Il salvataggio imposta `detailsManual = true` sull'item: da quel momento il
+reconcile **non sovrascrive più** questi quattro campi (IMEI e RATA via SQL
+CASE nell'upsert; DATA ATTIVAZIONE e PDV DESTINAZIONE non sono nell'upsert, già
+preservati). Permessi: gli operatori possono editare solo i propri item
+(match su `addetto`), come per stato e gettone. Endpoint:
+`PATCH /api/customer-journey-items/:id/details`
+con body `{ dataAttivazione?, pdvDestinazione?, imei?, rata? }` (valori `null`
+o stringa vuota azzerano il campo).
 
 ## Dati di esempio (stato al 19/06/2026)
 

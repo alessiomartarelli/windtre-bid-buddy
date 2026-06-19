@@ -190,6 +190,12 @@ export const customerJourneyItems = pgTable("customer_journey_items", {
   gettoneConfirmed: boolean("gettone_confirmed").notNull().default(false),
   gettoneConfirmedAt: timestamp("gettone_confirmed_at"),
   gettoneConfirmedBy: varchar("gettone_confirmed_by"),
+  // true se i campi di dettaglio (data attivazione, PDV destinazione, IMEI,
+  // RATA) sono stati compilati a mano: il reconcile non li sovrascrive più
+  // (BiSuite non fornisce questi campi in modo affidabile, Task #161).
+  detailsManual: boolean("details_manual").notNull().default(false),
+  detailsUpdatedAt: timestamp("details_updated_at"),
+  detailsUpdatedBy: varchar("details_updated_by"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

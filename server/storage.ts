@@ -7,6 +7,16 @@ import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVe
 // attivazioni di pista mobile a partire da questa data (Task #158).
 const CJ_TRIGGER_DATE = new Date("2026-07-01T00:00:00.000Z");
 
+// Campi di dettaglio compilabili a mano su un item della customer journey
+// (BiSuite non li fornisce in modo affidabile, Task #161). `dataAttivazione`
+// è una data (o null per azzerare); gli altri sono stringhe (o null).
+export type CjItemDetailsUpdate = {
+  dataAttivazione?: Date | null;
+  pdvDestinazione?: string | null;
+  imei?: string | null;
+  rata?: string | null;
+};
+
 export interface IStorage {
   // Profiles
   getProfile(id: string): Promise<Profile | undefined>;
@@ -88,6 +98,7 @@ export interface IStorage {
   getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined>;
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
   setCustomerJourneyItemGettone(id: string, orgId: string, confirmed: boolean, userId: string | null): Promise<CustomerJourneyItem>;
+  updateCustomerJourneyItemDetails(id: string, orgId: string, details: CjItemDetailsUpdate, userId: string | null): Promise<CustomerJourneyItem>;
   reconcileCustomerJourneys(orgId: string): Promise<{ journeys: number; items: number }>;
 
   // BiSuite Sync Notifications
@@ -661,6 +672,25 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async updateCustomerJourneyItemDetails(id: string, orgId: string, details: CjItemDetailsUpdate, userId: string | null): Promise<CustomerJourneyItem> {
+    // Aggiorna solo i campi forniti (undefined => non toccato; null => azzera).
+    const set: Record<string, unknown> = {
+      detailsManual: true,
+      detailsUpdatedAt: new Date(),
+      detailsUpdatedBy: userId,
+      updatedAt: new Date(),
+    };
+    if (details.dataAttivazione !== undefined) set.dataAttivazione = details.dataAttivazione;
+    if (details.pdvDestinazione !== undefined) set.pdvDestinazione = details.pdvDestinazione;
+    if (details.imei !== undefined) set.imei = details.imei;
+    if (details.rata !== undefined) set.rata = details.rata;
+    const [row] = await db.update(customerJourneyItems)
+      .set(set)
+      .where(and(eq(customerJourneyItems.id, id), eq(customerJourneyItems.organizationId, orgId)))
+      .returning();
+    return row;
+  }
+
   /**
    * Motore di reconcile: deriva le customer journey dalle vendite BiSuite
    * dell'organizzazione. Una journey si apre quando un cliente registra una
@@ -856,9 +886,13 @@ export class DatabaseStorage implements IStorage {
               pdvOrigine: sql`excluded.pdv_origine`,
               pod: sql`excluded.pod`,
               pdr: sql`excluded.pdr`,
-              imei: sql`excluded.imei`,
+              // IMEI e RATA possono essere compilati a mano (BiSuite non li
+              // fornisce in modo affidabile): se l'item è stato modificato
+              // manualmente, il reconcile li preserva. data_attivazione e
+              // pdv_destinazione sono esclusi dall'upsert per lo stesso motivo.
+              imei: sql`CASE WHEN ${customerJourneyItems.detailsManual} THEN ${customerJourneyItems.imei} ELSE excluded.imei END`,
               importo: sql`excluded.importo`,
-              rata: sql`excluded.rata`,
+              rata: sql`CASE WHEN ${customerJourneyItems.detailsManual} THEN ${customerJourneyItems.rata} ELSE excluded.rata END`,
               modVendita: sql`excluded.mod_vendita`,
               // Preserva lo stato impostato manualmente; altrimenti aggiorna
               // con lo stato auto derivato dal connettore.
