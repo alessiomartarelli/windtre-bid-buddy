@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { decryptSecret, encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
+import { isModuleEnabled } from "../shared/modules";
 
 /**
  * Risolve le credenziali BiSuite per una org leggendole da
@@ -512,6 +513,25 @@ export async function runBisuiteFetchForOrg(
       `[bisuite-reconcile] SKIP org=${orgId}: ${failedChunks.length} chunk falliti, ` +
         `reconcile non sicuro (potrebbe eliminare record ancora vivi).`,
     );
+  }
+
+  // Apertura automatica delle Customer Journey (Task #158): se l'org ha il
+  // modulo `customer_journey` abilitato e il fetch ha visto dei dati, rigenera
+  // le journey dalle vendite appena importate, così le nuove attivazioni mobile
+  // (dalla trigger date) aprono una journey senza intervento manuale.
+  // Best-effort: un errore qui non deve invalidare il fetch.
+  try {
+    const org = await storage.getOrganization(orgId);
+    if (org && isModuleEnabled(org.enabledModules ?? null, "customer_journey") && chunks.length > 0) {
+      const cj = await storage.reconcileCustomerJourneys(orgId);
+      console.log(
+        `[customer-journey] org=${orgId} reconcile post-fetch: ` +
+          `journeys=${cj.journeys} items=${cj.items}`,
+      );
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[customer-journey] FAIL reconcile post-fetch org=${orgId}: ${msg}`);
   }
 
   return {

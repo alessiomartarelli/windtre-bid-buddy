@@ -1877,7 +1877,7 @@ export async function registerRoutes(
   }
 
   // ── GET credentials ─────────────────────────────────────────────
-  app.get("/api/admin/bisuite-credentials", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+  app.get("/api/admin/bisuite-credentials", isAuthenticated, requireModule(["vendite_bisuite", "customer_journey"]), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
@@ -1926,7 +1926,7 @@ export async function registerRoutes(
   });
 
   // ── POST credentials (create) ──────────────────────────────────
-  app.post("/api/admin/bisuite-credentials", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+  app.post("/api/admin/bisuite-credentials", isAuthenticated, requireModule(["vendite_bisuite", "customer_journey"]), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
@@ -1973,7 +1973,7 @@ export async function registerRoutes(
   });
 
   // ── PUT credentials (update) ────────────────────────────────────
-  app.put("/api/admin/bisuite-credentials", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+  app.put("/api/admin/bisuite-credentials", isAuthenticated, requireModule(["vendite_bisuite", "customer_journey"]), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
@@ -2020,7 +2020,7 @@ export async function registerRoutes(
   });
 
   // ── POST bisuite-api (proxy) ────────────────────────────────────
-  app.post("/api/admin/bisuite-api", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+  app.post("/api/admin/bisuite-api", isAuthenticated, requireModule(["vendite_bisuite", "customer_journey"]), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || profile.role !== "super_admin") {
