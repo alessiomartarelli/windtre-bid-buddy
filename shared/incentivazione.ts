@@ -122,7 +122,7 @@ export function defaultSections(): Section[] {
         { id: "iva", name: "IVA F+M (S2)", target: 10, unit: "pt", isLock: true, excelCol: W3_COL.iva },
         { id: "energia", name: "Energia", target: 16, unit: "pt", isLock: false, excelCol: W3_COL.energia },
         { id: "protecta", name: "Protecta", target: 1, unit: "pz", isLock: true, excelCol: W3_COL.protecta },
-        { id: "extra_marginalita", name: "Extra Marginalità", target: 22, unit: "pz", isLock: true, excelCol: W3_COL.extra_marginalita },
+        { id: "extra_marginalita", name: "Smartphone", target: 22, unit: "pz", isLock: true, excelCol: W3_COL.extra_marginalita },
         { id: "accessori", name: "Accessori", target: 427, unit: "€", isLock: false, live: true },
         { id: "servizi", name: "Servizi", target: 300, unit: "€", isLock: false, live: true },
       ],
