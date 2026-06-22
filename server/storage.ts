@@ -643,12 +643,19 @@ export class DatabaseStorage implements IStorage {
   // `dettaglio.prezzo` di ogni articolo per categoria.id, raggruppato per
   // addetto (match case-insensitive). Esclude le vendite ANNULLATA.
   async aggregateAccessoriServizi(orgId: string, fromYMD: string, toYMD: string, accCats: number[], servCats: number[]): Promise<Array<{ name: string; acc: number; serv: number }>> {
-    const accArr = accCats.length ? accCats : [-1];
-    const servArr = servCats.length ? servCats : [-1];
+    const toIntArr = (xs: number[]) => {
+      const ints = xs.map((n) => Math.trunc(Number(n))).filter((n) => Number.isFinite(n));
+      return ints.length ? ints : [-1];
+    };
+    const accArr = toIntArr(accCats);
+    const servArr = toIntArr(servCats);
+    // NB: un array JS interpolato in `sql` verrebbe espanso in più placeholder
+    // (`ANY($1, $2)`) -> errore Postgres 42809. Costruiamo un vero array int[].
+    const intArrayLit = (xs: number[]) => sql`ARRAY[${sql.join(xs.map((n) => sql`${n}`), sql`, `)}]::int[]`;
     const rows = await db.execute(sql`
       SELECT min(s.nome_addetto) AS name,
-        coalesce(sum(CASE WHEN (a->'categoria'->>'id')::int = ANY(${accArr}) THEN (a->'dettaglio'->>'prezzo')::numeric ELSE 0 END), 0) AS acc,
-        coalesce(sum(CASE WHEN (a->'categoria'->>'id')::int = ANY(${servArr}) THEN (a->'dettaglio'->>'prezzo')::numeric ELSE 0 END), 0) AS serv
+        coalesce(sum(CASE WHEN (a->'categoria'->>'id')::int = ANY(${intArrayLit(accArr)}) THEN (a->'dettaglio'->>'prezzo')::numeric ELSE 0 END), 0) AS acc,
+        coalesce(sum(CASE WHEN (a->'categoria'->>'id')::int = ANY(${intArrayLit(servArr)}) THEN (a->'dettaglio'->>'prezzo')::numeric ELSE 0 END), 0) AS serv
       FROM ${bisuiteSales} s,
         jsonb_array_elements(s.raw_data->'articoli') a
       WHERE s.organization_id = ${orgId}
