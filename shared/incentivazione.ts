@@ -87,8 +87,12 @@ export interface LiveAddetto {
 export const DEFAULT_CAT_ACC = [13, 3];
 export const DEFAULT_CAT_SERV = [4, 27];
 
-// Template W3: col A=nome, B=mobile, C=fisso, D=cb, E=assic, F=iva,
-// G=energia, H=protecta, I=skip, J=smartphone.
+// Template W3 (foglio "Riepilogo" del report valenze): col A=Addetto,
+// B=PISTA MOBILE, C=PISTA FISSO, D=PISTA CB, E=PISTA ASSICURAZIONI,
+// F=PISTA IVA W3, G=PISTA ENERGIA, H=PISTA PROTECTA, I=PISTA FISSO (2ª,
+// non usata dal regolamento — skip), J=PISTA EXTRA MARGINALITA. Le colonne
+// da L in poi sono le "Proiezione" calcolate nel file e vengono ignorate
+// (il mapping è per posizione fissa, non per header).
 const W3_COL: Record<string, string> = {
   mobile: "B",
   fisso: "C",
@@ -97,7 +101,7 @@ const W3_COL: Record<string, string> = {
   iva: "F",
   energia: "G",
   protecta: "H",
-  smartphone: "J",
+  extra_marginalita: "J",
 };
 
 export function defaultSections(): Section[] {
@@ -118,7 +122,7 @@ export function defaultSections(): Section[] {
         { id: "iva", name: "IVA F+M (S2)", target: 10, unit: "pt", isLock: true, excelCol: W3_COL.iva },
         { id: "energia", name: "Energia", target: 16, unit: "pt", isLock: false, excelCol: W3_COL.energia },
         { id: "protecta", name: "Protecta", target: 1, unit: "pz", isLock: true, excelCol: W3_COL.protecta },
-        { id: "smartphone", name: "Smartphone", target: 22, unit: "pz", isLock: true, note: "Extra Marg.", excelCol: W3_COL.smartphone },
+        { id: "extra_marginalita", name: "Extra Marginalità", target: 22, unit: "pz", isLock: true, excelCol: W3_COL.extra_marginalita },
         { id: "accessori", name: "Accessori", target: 427, unit: "€", isLock: false, live: true },
         { id: "servizi", name: "Servizi", target: 300, unit: "€", isLock: false, live: true },
       ],

@@ -194,3 +194,69 @@ test('buildEmps: employees sorted worst-status first', () => {
   assert.equal(emps[0].name, 'Rosso', 'worst status (r) sorts first');
   assert.equal(emps[1].name, 'Verde');
 });
+
+// ===========================================================================
+// parseValenzeAoa — lettura del file Excel valenze REALE (foglio "Riepilogo"
+// del report WindTre). Fixture stabile in tests/fixtures/valenze-w3.xlsx.
+// Verifica che il mapping per-posizione delle piste W3 estragga i valori giusti
+// dal file di produzione, ignori la colonna separatore vuota, le 9 colonne
+// "... Proiezione" calcolate e la 2ª "PISTA FISSO" (col I, non usata dal
+// regolamento), e che la pista J sia "Extra Marginalità" (non "Smartphone").
+// ===========================================================================
+const XLSX = await import('xlsx');
+const { readFileSync } = await import('node:fs');
+const { defaultSections, parseValenzeAoa } = await import('../shared/incentivazione.ts');
+
+function loadValenzeFixture() {
+  const buf = readFileSync(new URL('./fixtures/valenze-w3.xlsx', import.meta.url));
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+}
+
+const W3_TRACKS = defaultSections().find((s) => s.id === 'ss_w3').tracks;
+
+test('parseValenzeAoa: real Excel — header layout and row count', () => {
+  const aoa = loadValenzeFixture();
+  assert.ok(aoa.length >= 2, 'fixture must have a header + data rows');
+  const header = aoa[0].map((h) => String(h).trim());
+  assert.equal(header[0], 'Addetto');
+  assert.deepEqual(header.slice(1, 10), [
+    'PISTA MOBILE', 'PISTA FISSO', 'PISTA CB', 'PISTA ASSICURAZIONI',
+    'PISTA IVA W3', 'PISTA ENERGIA', 'PISTA PROTECTA', 'PISTA FISSO',
+    'PISTA EXTRA MARGINALITA',
+  ]);
+  assert.equal(header[10], '', 'col K is the empty separator');
+  assert.ok(header.slice(11).every((h) => /Proiezione$/.test(h)),
+    'cols from L onward are computed "Proiezione" columns');
+});
+
+test('parseValenzeAoa: real Excel — values mapped by fixed position', () => {
+  const rows = parseValenzeAoa(loadValenzeFixture(), W3_TRACKS);
+  assert.equal(rows.length, 40, 'file has 40 addetti (no Totale/Media rows)');
+
+  const vit = rows.find((r) => r.name === 'Vitiello Marco');
+  assert.ok(vit, 'Vitiello Marco present');
+  assert.equal(vit.mobile, 55.5);
+  assert.equal(vit.fisso, 22.75);
+  assert.equal(vit.cb_rete, 30);
+  assert.equal(vit.assicurazione, 13.5);
+  assert.equal(vit.iva, 11.5);
+  assert.equal(vit.energia, 13);
+  assert.equal(vit.protecta, 2);
+  // col J = "PISTA EXTRA MARGINALITA" (25), non la 2ª PISTA FISSO col I (5.25).
+  assert.equal(vit.extra_marginalita, 25, 'col J read as Extra Marginalità');
+  assert.ok(!('smartphone' in vit), 'no legacy "smartphone" key');
+});
+
+test('parseValenzeAoa: real Excel — ignores projection + extra columns', () => {
+  const rows = parseValenzeAoa(loadValenzeFixture(), W3_TRACKS);
+  const keys = Object.keys(rows[0]).filter((k) => k !== 'name');
+  // Solo le 8 piste W3 con colonna Excel (mobile..extra_marginalita); le live
+  // (accessori/servizi) e tutto il resto (proiezioni, separatore, 2ª fisso)
+  // non devono comparire.
+  assert.deepEqual(
+    keys.sort(),
+    ['assicurazione', 'cb_rete', 'energia', 'extra_marginalita', 'fisso', 'iva', 'mobile', 'protecta'],
+  );
+});
