@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -47,6 +47,11 @@ interface JourneyDetail {
   drivers: DriverSummary[];
 }
 
+interface CjConfig {
+  triggerDate: string;
+  defaultTriggerDate: string;
+}
+
 const STATE_VARIANTS: Record<string, string> = {
   inserito: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30",
   in_lavorazione: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
@@ -75,6 +80,7 @@ export default function CustomerJourneyPage() {
   const { toast } = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [triggerDateInput, setTriggerDateInput] = useState<string>("");
 
   const isAdmin = ["super_admin", "admin"].includes(profile?.role || "");
 
@@ -86,6 +92,21 @@ export default function CustomerJourneyPage() {
     queryKey: ["/api/customer-journeys", selectedId],
     enabled: !!selectedId,
   });
+
+  const configQuery = useQuery<CjConfig>({
+    queryKey: ["/api/customer-journey-config"],
+    enabled: isAdmin,
+  });
+
+  useEffect(() => {
+    if (configQuery.data?.triggerDate) {
+      setTriggerDateInput(configQuery.data.triggerDate);
+    }
+  }, [configQuery.data?.triggerDate]);
+
+  const triggerDateLabel = configQuery.data?.triggerDate
+    ? fmtDate(configQuery.data.triggerDate)
+    : "";
 
   const reconcileMutation = useMutation({
     mutationFn: async () => {
@@ -103,6 +124,27 @@ export default function CustomerJourneyPage() {
       toast({
         title: "Errore",
         description: err instanceof Error ? err.message : "Rigenerazione fallita",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const configMutation = useMutation({
+    mutationFn: async (triggerDate: string) => {
+      const res = await apiRequest("PUT", "/api/customer-journey-config", { triggerDate });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journey-config"] });
+      toast({
+        title: "Data aggiornata",
+        description: "Rigenera da BiSuite per applicare la nuova data.",
+      });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: "Errore",
+        description: err instanceof Error ? err.message : "Salvataggio data fallito",
         variant: "destructive",
       });
     },
@@ -182,8 +224,9 @@ export default function CustomerJourneyPage() {
                   <RouteIcon className="h-5 w-5 text-primary" />
                   Customer Journey
                 </h2>
-                <p className="text-sm text-muted-foreground">
-                  Cross-sell sui clienti da nuova attivazione mobile (dal 01/07/2026).
+                <p className="text-sm text-muted-foreground" data-testid="text-trigger-date-desc">
+                  Cross-sell sui clienti da nuova attivazione mobile
+                  {triggerDateLabel ? ` (dal ${triggerDateLabel}).` : "."}
                 </p>
               </div>
               {isAdmin && (
@@ -201,6 +244,59 @@ export default function CustomerJourneyPage() {
                 </Button>
               )}
             </div>
+
+            {isAdmin && (
+              <Card data-testid="card-cj-config">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Configurazione modulo</CardTitle>
+                  <CardDescription>
+                    Le customer journey si aprono dalle nuove attivazioni mobile a partire
+                    da questa data. Dopo la modifica, usa “Rigenera da BiSuite” per applicarla.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cj-trigger-date">Data di apertura journey</Label>
+                      <Input
+                        id="cj-trigger-date"
+                        type="date"
+                        value={triggerDateInput}
+                        onChange={(e) => setTriggerDateInput(e.target.value)}
+                        className="w-full sm:w-48"
+                        data-testid="input-trigger-date"
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => triggerDateInput && configMutation.mutate(triggerDateInput)}
+                      disabled={
+                        configMutation.isPending ||
+                        !triggerDateInput ||
+                        triggerDateInput === configQuery.data?.triggerDate
+                      }
+                      data-testid="button-save-trigger-date"
+                    >
+                      {configMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : null}
+                      Salva data
+                    </Button>
+                    {configQuery.data?.defaultTriggerDate &&
+                      configQuery.data.triggerDate !== configQuery.data.defaultTriggerDate && (
+                        <Button
+                          variant="ghost"
+                          onClick={() => configMutation.mutate(configQuery.data!.defaultTriggerDate)}
+                          disabled={configMutation.isPending}
+                          data-testid="button-reset-trigger-date"
+                        >
+                          Ripristina default ({fmtDate(configQuery.data.defaultTriggerDate)})
+                        </Button>
+                      )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -223,7 +319,8 @@ export default function CustomerJourneyPage() {
                   <RouteIcon className="h-10 w-10 mx-auto mb-3 opacity-40" />
                   <p className="font-medium">Nessuna customer journey</p>
                   <p className="text-sm mt-1">
-                    Le journey si aprono dalle nuove attivazioni mobile dal 01/07/2026.
+                    Le journey si aprono dalle nuove attivazioni mobile
+                    {triggerDateLabel ? ` dal ${triggerDateLabel}.` : "."}
                     {isAdmin && " Usa “Rigenera da BiSuite” per elaborare le vendite."}
                   </p>
                 </CardContent>

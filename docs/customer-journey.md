@@ -1,7 +1,8 @@
 # Modulo Customer Journey (CJ)
 
 Modulo per-org abilitabile (`customer_journey`) per il cross-sell strutturato
-sui clienti che effettuano una **nuova attivazione mobile dal 01/07/2026**.
+sui clienti che effettuano una **nuova attivazione mobile** a partire da una
+**data trigger configurabile per organizzazione** (default `01/07/2026`).
 Per ogni cliente si apre una "journey" che mostra i driver già attivati e
 quelli ancora attivabili, e traccia ogni contratto attraverso i suoi stati.
 
@@ -10,7 +11,13 @@ quelli ancora attivabili, e traccia ogni contratto attraverso i suoi stati.
 - **Journey**: una per cliente per organizzazione, identificata dalla
   `customerKey` (CF per i privati, P.IVA per le aziende, normalizzata
   uppercase/trim). Si apre quando il cliente fa una nuova attivazione mobile
-  con data di vendita ≥ `2026-07-01` (`CJ_TRIGGER_DATE`).
+  con data di vendita ≥ alla data trigger dell'org (default `2026-07-01`,
+  `CJ_DEFAULT_TRIGGER_DATE`). La data trigger è memorizzata in
+  `organization_config.config.customerJourneyTriggerDate` (stringa
+  `YYYY-MM-DD`); se assente o non valida si usa il default. Un admin la
+  imposta dalla pagina Customer Journey (card "Configurazione modulo") via
+  `GET`/`PUT /api/customer-journey-config`; dopo la modifica serve un
+  "Rigenera da BiSuite" per applicarla. La modifica è admin-only.
 - **Item**: un contratto/driver dentro la journey, derivato da un articolo di
   una vendita BiSuite. Unico per `(org, bisuiteSaleId, bisuiteArticleId)`.
 - **Driver** (`CJ_DRIVERS` / `CJ_DRIVER_ORDER`):

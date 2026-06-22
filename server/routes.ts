@@ -1,6 +1,6 @@
 import type { Express, RequestHandler } from "express";
 import { type Server } from "http";
-import { storage, type CjItemDetailsUpdate } from "./storage";
+import { storage, type CjItemDetailsUpdate, CJ_DEFAULT_TRIGGER_DATE, formatCjTriggerDate } from "./storage";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
@@ -2613,6 +2613,47 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Customer journey reconcile error:", error);
       res.status(500).json({ error: "Errore nella rigenerazione delle customer journey" });
+    }
+  });
+
+  // Config del modulo: data dalla quale si aprono le customer journey.
+  app.get("/api/customer-journey-config", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const triggerDate = await storage.getCustomerJourneyTriggerDate(profile.organizationId);
+      res.json({
+        triggerDate: formatCjTriggerDate(triggerDate),
+        defaultTriggerDate: formatCjTriggerDate(CJ_DEFAULT_TRIGGER_DATE),
+      });
+    } catch (error) {
+      console.error("Customer journey config get error:", error);
+      res.status(500).json({ error: "Errore nel recupero della configurazione" });
+    }
+  });
+
+  app.put("/api/customer-journey-config", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      if (!["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo gli amministratori possono modificare la configurazione" });
+      }
+      const { triggerDate } = req.body as { triggerDate?: string | null };
+      if (triggerDate != null && triggerDate !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(triggerDate)) {
+        return res.status(400).json({ error: "Data non valida (formato atteso AAAA-MM-GG)" });
+      }
+      const saved = await storage.setCustomerJourneyTriggerDate(
+        profile.organizationId,
+        triggerDate && triggerDate !== "" ? triggerDate : null,
+      );
+      res.json({
+        triggerDate: formatCjTriggerDate(saved),
+        defaultTriggerDate: formatCjTriggerDate(CJ_DEFAULT_TRIGGER_DATE),
+      });
+    } catch (error) {
+      console.error("Customer journey config put error:", error);
+      res.status(500).json({ error: "Errore nel salvataggio della configurazione" });
     }
   });
 

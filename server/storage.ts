@@ -3,9 +3,25 @@ import { profiles, organizations, preventivi, organizationConfig, passwordResetT
 import { eq, desc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo } from "@shared/customerJourney";
 
-// Data trigger della customer journey: una CJ si apre solo per nuove
-// attivazioni di pista mobile a partire da questa data (Task #158).
-const CJ_TRIGGER_DATE = new Date("2026-07-01T00:00:00.000Z");
+// Data trigger di default della customer journey: una CJ si apre solo per
+// nuove attivazioni di pista mobile a partire da questa data (Task #158).
+// È sovrascrivibile per organizzazione tramite la config
+// (`config.customerJourneyTriggerDate`, Task #167); qui resta il fallback.
+export const CJ_DEFAULT_TRIGGER_DATE = new Date("2026-07-01T00:00:00.000Z");
+
+// Converte una data trigger in stringa "YYYY-MM-DD" (UTC) per la UI/API.
+export function formatCjTriggerDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+// Parsa una data trigger memorizzata in config. Accetta "YYYY-MM-DD" o un
+// timestamp ISO completo; ritorna null se non valida/assente.
+function parseCjTriggerDate(raw: unknown): Date | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  const v = raw.trim();
+  const d = new Date(v.length === 10 ? `${v}T00:00:00.000Z` : v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 // Campi di dettaglio compilabili a mano su un item della customer journey
 // (BiSuite non li fornisce in modo affidabile, Task #161). `dataAttivazione`
@@ -99,6 +115,8 @@ export interface IStorage {
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
   setCustomerJourneyItemGettone(id: string, orgId: string, confirmed: boolean, userId: string | null): Promise<CustomerJourneyItem>;
   updateCustomerJourneyItemDetails(id: string, orgId: string, details: CjItemDetailsUpdate, userId: string | null): Promise<CustomerJourneyItem>;
+  getCustomerJourneyTriggerDate(orgId: string): Promise<Date>;
+  setCustomerJourneyTriggerDate(orgId: string, date: string | null): Promise<Date>;
   reconcileCustomerJourneys(orgId: string): Promise<{ journeys: number; items: number }>;
 
   // BiSuite Sync Notifications
@@ -694,7 +712,8 @@ export class DatabaseStorage implements IStorage {
   /**
    * Motore di reconcile: deriva le customer journey dalle vendite BiSuite
    * dell'organizzazione. Una journey si apre quando un cliente registra una
-   * nuova attivazione di pista mobile dal {@link CJ_TRIGGER_DATE}. Per i
+   * nuova attivazione di pista mobile dalla data trigger configurata per
+   * l'organizzazione (fallback {@link CJ_DEFAULT_TRIGGER_DATE}). Per i
    * clienti con journey aperta materializza un item per ogni articolo-driver
    * (mobile/fisso/energia/assicurazioni/telefono/protetti) di TUTTE le sue
    * vendite (anche precedenti al trigger), così da mostrare il quadro
@@ -702,7 +721,26 @@ export class DatabaseStorage implements IStorage {
    * dallo `stato` della vendita; gli stati impostati manualmente
    * (`state_manual`) e le conferme gettone non vengono mai sovrascritti.
    */
+  async getCustomerJourneyTriggerDate(orgId: string): Promise<Date> {
+    const cfg = await this.getOrgConfig(orgId);
+    const raw = (cfg?.config as Record<string, unknown> | null | undefined)?.customerJourneyTriggerDate;
+    return parseCjTriggerDate(raw) ?? CJ_DEFAULT_TRIGGER_DATE;
+  }
+
+  async setCustomerJourneyTriggerDate(orgId: string, date: string | null): Promise<Date> {
+    const cfg = await this.getOrgConfig(orgId);
+    const config: Record<string, unknown> = { ...((cfg?.config as Record<string, unknown> | null) || {}) };
+    if (date && parseCjTriggerDate(date)) {
+      config.customerJourneyTriggerDate = formatCjTriggerDate(parseCjTriggerDate(date)!);
+    } else {
+      delete config.customerJourneyTriggerDate;
+    }
+    await this.upsertOrgConfig(orgId, config, cfg?.configVersion || "2.0");
+    return this.getCustomerJourneyTriggerDate(orgId);
+  }
+
   async reconcileCustomerJourneys(orgId: string): Promise<{ journeys: number; items: number }> {
+    const triggerDate = await this.getCustomerJourneyTriggerDate(orgId);
     const sales = await db.select().from(bisuiteSales)
       .where(eq(bisuiteSales.organizationId, orgId));
 
@@ -765,9 +803,9 @@ export class DatabaseStorage implements IStorage {
         const driver = driverFromCategory(categoria);
         if (!driver) continue;
 
-        // Trigger journey: nuova attivazione mobile dal CJ_TRIGGER_DATE.
+        // Trigger journey: nuova attivazione mobile dalla data configurata.
         if (driver === "mobile" && isMobileActivationCategory(categoria)
-            && autoState !== "stornato" && saleDate && saleDate >= CJ_TRIGGER_DATE) {
+            && autoState !== "stornato" && saleDate && saleDate >= triggerDate) {
           if (!cand.hasTrigger || (cand.openedAt && saleDate < cand.openedAt)) {
             cand.hasTrigger = true;
             cand.triggerSaleId = sale.id;
