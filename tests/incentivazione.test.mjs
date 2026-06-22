@@ -13,12 +13,18 @@ import assert from 'node:assert/strict';
 //   - `projV` / `semOf` inclusi i casi limite (el === 0, valore nullo).
 //   - `buildEmps` inclusi `unlockProjected` (tutti i lucchetti g|a),
 //     il caso senza dati e il merge dei dati live BiSuite.
+//   - `colIdx` / `parseValenzeAoa`: porta d'ingresso dei dati. Mapping per
+//     `excelCol` esplicita (template W3), fallback per keyword sull'header
+//     (template Vodafone), scarto righe Totale/Media/senza nome, parsing
+//     numerico con virgola decimale e celle vuote => null.
 
 const {
   buildCalendar,
   projV,
   semOf,
   buildEmps,
+  colIdx,
+  parseValenzeAoa,
 } = await import('../shared/incentivazione.ts');
 
 // Luglio 2026: nessuna festività nazionale, 23 giorni lavorativi
@@ -205,7 +211,7 @@ test('buildEmps: employees sorted worst-status first', () => {
 // ===========================================================================
 const XLSX = await import('xlsx');
 const { readFileSync } = await import('node:fs');
-const { defaultSections, parseValenzeAoa } = await import('../shared/incentivazione.ts');
+const { defaultSections } = await import('../shared/incentivazione.ts');
 
 function loadValenzeFixture() {
   const buf = readFileSync(new URL('./fixtures/valenze-w3.xlsx', import.meta.url));
@@ -259,4 +265,108 @@ test('parseValenzeAoa: real Excel — ignores projection + extra columns', () =>
     keys.sort(),
     ['assicurazione', 'cb_rete', 'energia', 'extra_marginalita', 'fisso', 'iva', 'mobile', 'protecta'],
   );
+});
+
+// ===========================================================================
+// colIdx — lettera colonna Excel => indice 0-based (incluse colonne doppie).
+// ===========================================================================
+test('colIdx: column letter to 0-based index', () => {
+  assert.equal(colIdx('A'), 0);
+  assert.equal(colIdx('B'), 1);
+  assert.equal(colIdx('Z'), 25);
+  assert.equal(colIdx('AA'), 26);
+  assert.equal(colIdx('AB'), 27);
+  assert.equal(colIdx('a'), 0, 'case-insensitive');
+});
+
+// ── tracks di prova per parseValenzeAoa ─────────────────────────────────────
+// Template W3: posizioni fisse via `excelCol` (A=nome implicito, B=mobile,
+// C=fisso, E=assicurazione). I track `live` (Accessori) arrivano dal
+// connettore BiSuite e NON vanno mappati dall'Excel.
+const W3_PARSE_TRACKS = [
+  { id: 'mobile', name: 'Mobile', target: 50, unit: 'pt', isLock: false, excelCol: 'B' },
+  { id: 'fisso', name: 'Fisso', target: 22, unit: 'pt', isLock: false, excelCol: 'C' },
+  { id: 'assicurazione', name: 'Assicurazione', target: 7, unit: 'pt', isLock: true, excelCol: 'E' },
+  { id: 'accessori', name: 'Accessori', target: 100, unit: '€', isLock: false, live: true },
+];
+
+// ===========================================================================
+// parseValenzeAoa — template W3: mapping per `excelCol` esplicita. La colonna
+// D (CB) non è mappata da nessun track e viene ignorata; i track `live`
+// (accessori) non compaiono perché arrivano dal connettore.
+// ===========================================================================
+test('parseValenzeAoa: W3 template maps by explicit excelCol', () => {
+  const aoa = [
+    ['Nome', 'Mobile', 'Fisso', 'CB', 'Assic'],
+    ['Mario', '10', '5', '3', '2'],
+    ['Anna', 20, 7, 0, 4],
+  ];
+  const rows = parseValenzeAoa(aoa, W3_PARSE_TRACKS);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0], { name: 'Mario', mobile: 10, fisso: 5, assicurazione: 2 });
+  assert.deepEqual(rows[1], { name: 'Anna', mobile: 20, fisso: 7, assicurazione: 4 });
+  assert.equal('accessori' in rows[0], false, 'live track is not read from Excel');
+});
+
+// ===========================================================================
+// parseValenzeAoa — template Vodafone: nessuna posizione fissa, il mapping si
+// affida al fallback per keyword sull'header (con prefisso "Pista " ignorato).
+// ===========================================================================
+test('parseValenzeAoa: Vodafone template maps by header keyword fallback', () => {
+  const VDF_TRACKS = [
+    { id: 'mobile_pt', name: 'Mobile (S7) pt', target: 45, unit: 'pt', isLock: false },
+    { id: 'energia', name: 'Energia', target: 12, unit: 'pz', isLock: true },
+  ];
+  const aoa = [
+    ['Addetto', 'Pista Energia', 'Mobile pt'],
+    ['Sara', '4', '50'],
+  ];
+  const rows = parseValenzeAoa(aoa, VDF_TRACKS);
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0], { name: 'Sara', mobile_pt: 50, energia: 4 });
+});
+
+// ===========================================================================
+// parseValenzeAoa — scarto righe: "Totale"/"Media" (case-insensitive) e righe
+// senza nome non diventano addetti.
+// ===========================================================================
+test('parseValenzeAoa: Totale/Media and nameless rows are dropped', () => {
+  const aoa = [
+    ['Nome', 'Mobile', 'Fisso', 'CB', 'Assic'],
+    ['Mario', '10', '5', '3', '2'],
+    ['Totale', '30', '12', '3', '6'],
+    ['media', '15', '6', '1', '3'],
+    ['', '1', '1', '1', '1'],
+    ['  ', '1', '1', '1', '1'],
+  ];
+  const rows = parseValenzeAoa(aoa, W3_PARSE_TRACKS);
+  assert.equal(rows.length, 1, 'only the named, non-summary row survives');
+  assert.equal(rows[0].name, 'Mario');
+});
+
+// ===========================================================================
+// parseValenzeAoa — parsing numerico: virgola decimale ("1,5" => 1.5), celle
+// vuote/assenti => null, valore non numerico => 0 (guard `|| 0`).
+// ===========================================================================
+test('parseValenzeAoa: decimal comma, empty cells and non-numeric values', () => {
+  const aoa = [
+    ['Nome', 'Mobile', 'Fisso', 'CB', 'Assic'],
+    ['Mario', '1,5', '', '3', 'n/d'],
+    ['Anna', '2,75'],
+  ];
+  const rows = parseValenzeAoa(aoa, W3_PARSE_TRACKS);
+  assert.equal(rows[0].mobile, 1.5, 'comma decimal parsed as 1.5');
+  assert.equal(rows[0].fisso, null, 'empty string cell => null');
+  assert.equal(rows[0].assicurazione, 0, 'non-numeric cell => 0 via guard');
+  assert.equal(rows[1].mobile, 2.75);
+  assert.equal(rows[1].fisso, null, 'missing cell => null');
+  assert.equal(rows[1].assicurazione, null, 'missing cell => null');
+});
+
+// ===========================================================================
+// parseValenzeAoa — AOA vuoto o solo header => nessuna riga.
+// ===========================================================================
+test('parseValenzeAoa: empty or header-only AOA yields no rows', () => {
+  assert.deepEqual(parseValenzeAoa([], W3_PARSE_TRACKS), []);
+  assert.deepEqual(parseValenzeAoa([['Nome', 'Mobile']], W3_PARSE_TRACKS), []);
 });

@@ -153,7 +153,7 @@ mantenere snello questo file:
   (`bash scripts/run-customer-journey-reconcile-tests.sh`); richiede il
   workflow "Start application" attivo. Run completo in ~4s.
 - **Incentivazione interna tests** (`tests/incentivazione.test.mjs`):
-  12 test sulla logica pura di `shared/incentivazione.ts` (gare addetto nel
+  18 test sulla logica pura di `shared/incentivazione.ts` (gare addetto nel
   tempo). Sono funzioni pure: NON serve né dev server né DB, il modulo TS è
   caricato via loader `tsx`. Coprono: (1) `buildCalendar` per mese futuro
   (regressione del bug dei giorni trascorsi != 0 ⇒ el/mult/pct = 0),
@@ -162,12 +162,17 @@ mantenere snello questo file:
   lineare con guard su valore nullo ed `el === 0`); (3) `semOf` (semaforo
   g/a/r/u inclusi i casi limite); (4) `buildEmps` con `unlockProjected`
   (sblocco gara solo se TUTTI i lucchetti sono g|a), il caso senza dati, il
-  merge dei dati live BiSuite e l'ordinamento per stato; (5) `parseValenzeAoa`
-  sul file Excel valenze REALE (fixture stabile `tests/fixtures/valenze-w3.xlsx`,
+  merge dei dati live BiSuite e l'ordinamento per stato; (5) `colIdx` (lettera
+  colonna ⇒ indice 0-based) e `parseValenzeAoa` (lettura file Excel valenze) sia
+  con AOA sintetici sia sul file REALE. Casi sintetici: mapping per `excelCol`
+  esplicita (template W3), fallback per keyword sull'header (template Vodafone,
+  prefisso "Pista " ignorato), scarto righe Totale/Media/senza nome, parsing con
+  virgola decimale ("1,5" ⇒ 1.5), celle vuote/assenti ⇒ null e celle non
+  numeriche ⇒ 0. Caso REALE (fixture stabile `tests/fixtures/valenze-w3.xlsx`,
   foglio "Riepilogo"): verifica il layout header, il mapping per-posizione delle
   8 piste W3 con `excelCol` (col B–H + J), che la col J sia "Extra Marginalità"
   (non più "Smartphone") e che separatore vuoto, 2ª "PISTA FISSO" (col I) e le 9
-  colonne "Proiezione" siano ignorati. 15 test totali. Lanciali via lo step
+  colonne "Proiezione" siano ignorati. Lanciali via lo step
   di validation `incentivazione-tests`
   (`bash scripts/run-incentivazione-tests.sh`). Run completo in ~1s.
 
