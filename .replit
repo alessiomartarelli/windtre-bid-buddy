@@ -60,6 +60,10 @@ args = "incentivazione-tests"
 task = "workflow.run"
 args = "incentivazione-accservizi-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "inc-dashboard-authz-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -131,6 +135,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-incentivazione-accessori-servizi-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "inc-dashboard-authz-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-incentivazione-dashboard-authz-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

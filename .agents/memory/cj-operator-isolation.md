@@ -26,8 +26,18 @@ bisuite-sales) must follow this null-vs-empty contract. Routes set
 the empty-mapping operator case.
 
 **Regression coverage:** `tests/customer-journey-authz.test.mjs` (validation
-step `cj-authz-tests`) locks the CJ list + detail authz. Test trick: signup
-makes an `admin` profile and the route re-reads the profile every request, so
-the test mutates `profiles.role` / `bisuite_addetti` on the same signup profile
-(same cookie) to exercise admin / operatore(empty) / operatore(match) /
-super_admin without multiple logins.
+step `cj-authz-tests`) locks the CJ list + detail authz. The incentivazione
+gare-addetto dashboard (`GET /api/incentivazione/dashboard/:month/:year`) uses
+the SAME contract on both `live` (Accessori/Servizi sums) and
+`valenze[sectionId].rows` — covered by
+`tests/incentivazione-dashboard-authz.test.mjs` (validation step
+`inc-dashboard-authz-tests`). Test trick: signup makes an `admin` profile and
+the route re-reads the profile every request, so the test mutates
+`profiles.role` / `bisuite_addetti` on the same signup profile (same cookie) to
+exercise admin / operatore(empty) / operatore(match) / super_admin without
+multiple logins.
+
+**Calendar gotcha (dashboard test):** `buildCalendar` clamps "now" inside the
+selected month, so a future/current month yields a partial date window. To make
+seeded BiSuite sales fall inside the live aggregation range, pick a month fully
+in the past (the test uses the previous calendar month).
