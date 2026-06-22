@@ -175,6 +175,22 @@ mantenere snello questo file:
   colonne "Proiezione" siano ignorati. Lanciali via lo step
   di validation `incentivazione-tests`
   (`bash scripts/run-incentivazione-tests.sh`). Run completo in ~1s.
+- **Incentivazione Accessori/Servizi live tests**
+  (`tests/incentivazione-accessori-servizi.test.mjs`): 4 scenari DB-backed
+  (Task #174) su `aggregateAccessoriServizi` (`server/storage.ts`), il
+  conteggio live Accessori/Servizi BiSuite per addetto nelle gare addetto.
+  È DB-backed ma NON passa dall'HTTP: chiama direttamente la funzione di
+  storage via loader `tsx`, usando lo stesso pool `pg` del server per
+  inserire le vendite di test (crea org al volo, niente signup). Richiede
+  solo `DATABASE_URL`, non il dev server. Coprono: (1) somma per addetto
+  separata catAcc vs catServ su più vendite (una sola riga per addetto);
+  (2) esclusione delle vendite ANNULLATA dalle somme; (3) addetto con sole
+  categorie non mappate ⇒ acc/serv = 0 e vendite fuori intervallo di date
+  escluse del tutto; (4) più addetti distinti con grouping case-insensitive
+  sul nominativo (le grafie diverse dello stesso addetto si fondono).
+  Lanciali via lo step di validation `incentivazione-accservizi-tests`
+  (`bash scripts/run-incentivazione-accessori-servizi-tests.sh`). Run
+  completo in ~5s.
 
 ## External Dependencies
 
