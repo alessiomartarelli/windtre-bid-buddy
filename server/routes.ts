@@ -1241,12 +1241,12 @@ export async function registerRoutes(
 
   // Dashboard data: calendario + valenze caricate + Accessori/Servizi live,
   // filtrate per operatore (isolamento per-addetto come Customer Journey).
-  app.get("/api/incentivazione/dashboard", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+  app.get("/api/incentivazione/dashboard/:month/:year", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
-      const month = parseInt(String(req.query.month), 10);
-      const year = parseInt(String(req.query.year), 10);
+      const month = parseInt(String(req.params.month), 10);
+      const year = parseInt(String(req.params.year), 10);
       if (!month || !year || month < 1 || month > 12) return res.status(400).json({ error: "Mese/anno non validi" });
 
       const cfgRow = await storage.getIncentivazioneConfig(profile.organizationId, month, year);

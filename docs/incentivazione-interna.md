@@ -56,8 +56,8 @@ Quando non esiste config salvata per il periodo si usa
 
 ## Isolamento per operatore
 
-`GET /api/incentivazione/dashboard` filtra valenze e dati live in base al
-ruolo:
+`GET /api/incentivazione/dashboard/:month/:year` filtra valenze e dati live
+in base al ruolo:
 
 - `admin` / `super_admin` → vedono tutti gli addetti dell'org;
 - `operatore` → solo gli addetti presenti nei propri `bisuite_addetti`
@@ -72,7 +72,7 @@ richiedono `requireAdminRole`.
 
 - `GET /api/incentivazione/config?month&year` → `{ config, updatedAt, isDefault }`.
 - `PUT /api/incentivazione/config` (admin) — body `{ month, year, config }`.
-- `GET /api/incentivazione/dashboard?month&year` → `{ config, calendar, valenze, live }`
+- `GET /api/incentivazione/dashboard/:month/:year` → `{ config, calendar, valenze, live }`
   (filtrato per operatore).
 - `POST /api/incentivazione/valenze` (admin) — body
   `{ month, year, sectionId, fileName, rows }` (rows già parsate dal
