@@ -152,6 +152,19 @@ mantenere snello questo file:
   Lanciali via lo step di validation `cj-reconcile-tests`
   (`bash scripts/run-customer-journey-reconcile-tests.sh`); richiede il
   workflow "Start application" attivo. Run completo in ~4s.
+- **Incentivazione interna tests** (`tests/incentivazione.test.mjs`):
+  12 test sulla logica pura di `shared/incentivazione.ts` (gare addetto nel
+  tempo). Sono funzioni pure: NON serve né dev server né DB, il modulo TS è
+  caricato via loader `tsx`. Coprono: (1) `buildCalendar` per mese futuro
+  (regressione del bug dei giorni trascorsi != 0 ⇒ el/mult/pct = 0),
+  corrente (el parziale, mult = tot/el) e passato (el == tot, pct 100), più
+  l'esclusione delle festività infrasettimanali; (2) `projV` (proiezione
+  lineare con guard su valore nullo ed `el === 0`); (3) `semOf` (semaforo
+  g/a/r/u inclusi i casi limite); (4) `buildEmps` con `unlockProjected`
+  (sblocco gara solo se TUTTI i lucchetti sono g|a), il caso senza dati, il
+  merge dei dati live BiSuite e l'ordinamento per stato. Lanciali via lo step
+  di validation `incentivazione-tests`
+  (`bash scripts/run-incentivazione-tests.sh`). Run completo in <1s.
 
 ## External Dependencies
 

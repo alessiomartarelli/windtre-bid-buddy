@@ -52,6 +52,10 @@ args = "cj-reconcile-tests"
 task = "workflow.run"
 args = "cj-trigger-date-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "incentivazione-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -101,6 +105,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-customer-journey-trigger-date-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "incentivazione-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-incentivazione-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
