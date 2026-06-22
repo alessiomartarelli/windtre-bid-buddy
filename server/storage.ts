@@ -105,6 +105,7 @@ export interface IStorage {
   upsertIncentivazioneValenze(value: InsertIncentivazioneValenze): Promise<IncentivazioneValenze>;
   deleteIncentivazioneValenze(orgId: string, month: number, year: number, sectionId: string): Promise<void>;
   aggregateAccessoriServizi(orgId: string, fromYMD: string, toYMD: string, accCats: number[], servCats: number[]): Promise<Array<{ name: string; acc: number; serv: number }>>;
+  getLastBisuiteSync(orgId: string): Promise<Date | null>;
 
   // Password Reset Tokens
   createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
@@ -671,6 +672,17 @@ export class DatabaseStorage implements IStorage {
       acc: Number(r.acc ?? 0),
       serv: Number(r.serv ?? 0),
     }));
+  }
+
+  // Data dell'ultima sincronizzazione vendite dal connettore BiSuite per l'org:
+  // ogni sync aggiorna `last_seen_at` su ogni vendita vista, quindi il max è
+  // l'istante dell'ultimo fetch riuscito. null se non ci sono ancora vendite.
+  async getLastBisuiteSync(orgId: string): Promise<Date | null> {
+    const [row] = await db
+      .select({ last: sql<Date | null>`max(${bisuiteSales.lastSeenAt})` })
+      .from(bisuiteSales)
+      .where(eq(bisuiteSales.organizationId, orgId));
+    return row?.last ? new Date(row.last) : null;
   }
 
   // Password Reset Tokens

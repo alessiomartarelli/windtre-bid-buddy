@@ -1275,8 +1275,9 @@ export async function registerRoutes(
         profile.organizationId, calendar.from, calendar.to, config.catAcc, config.catServ,
       );
       const live = liveAll.filter((l) => allowed(l.name));
+      const lastBisuiteSync = await storage.getLastBisuiteSync(profile.organizationId);
 
-      res.json({ month, year, config, calendar, valenze, live });
+      res.json({ month, year, config, calendar, valenze, live, lastBisuiteSync });
     } catch (e) {
       console.error("Incentivazione dashboard error:", e);
       res.status(500).json({ error: "Errore nel recupero della dashboard" });

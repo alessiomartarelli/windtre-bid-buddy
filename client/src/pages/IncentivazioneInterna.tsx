@@ -35,12 +35,22 @@ interface DashboardResp {
   calendar: CalendarInfo;
   valenze: Record<string, { fileName: string; uploadedAt: string | null; rows: ValenzaRow[] }>;
   live: LiveAddetto[];
+  lastBisuiteSync: string | null;
 }
 
 const MONTHS = [
   "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
   "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
 ];
+
+function fmtSyncDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("it-IT", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
 
 const SEM_COLOR: Record<Semaforo, string> = {
   g: "hsl(142 71% 45%)",
@@ -261,6 +271,7 @@ export default function IncentivazioneInterna() {
                   counts={counts}
                   totalEmps={emps.length}
                   liveCount={live.length}
+                  lastBisuiteSync={data?.lastBisuiteSync ?? null}
                   valenzeInfo={data?.valenze?.[s.id]}
                   isAdmin={isAdmin}
                   statusFilter={statusFilter}
@@ -292,6 +303,7 @@ function SectionView(props: {
   counts: { g: number; a: number; r: number; unlock: number };
   totalEmps: number;
   liveCount: number;
+  lastBisuiteSync: string | null;
   valenzeInfo?: { fileName: string; uploadedAt: string | null; rows: ValenzaRow[] };
   isAdmin: boolean;
   statusFilter: "all" | Semaforo;
@@ -307,7 +319,7 @@ function SectionView(props: {
   year: number;
 }) {
   const {
-    section, calendar, emps, counts, totalEmps, liveCount, valenzeInfo, isAdmin,
+    section, calendar, emps, counts, totalEmps, liveCount, lastBisuiteSync, valenzeInfo, isAdmin,
     statusFilter, setStatusFilter, unlockOnly, setUnlockOnly, search, setSearch,
     onUpload, onDeleteValenze, uploading,
   } = props;
@@ -367,6 +379,12 @@ function SectionView(props: {
           <div className="text-sm font-semibold">Accessori e Servizi · live da BiSuite</div>
           <div className="text-xs text-muted-foreground mt-0.5">
             Aggregati dalle vendite del periodo per addetto. {liveCount} addetti con movimenti.
+          </div>
+          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1" data-testid="text-bisuite-last-sync">
+            <RefreshCw className="h-3 w-3 shrink-0" />
+            {lastBisuiteSync
+              ? `Ultima sincronizzazione: ${fmtSyncDate(lastBisuiteSync)}`
+              : "Nessuna sincronizzazione vendite ancora effettuata."}
           </div>
         </Card>
       </div>

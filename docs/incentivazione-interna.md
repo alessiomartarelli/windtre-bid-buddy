@@ -72,8 +72,11 @@ richiedono `requireAdminRole`.
 
 - `GET /api/incentivazione/config?month&year` → `{ config, updatedAt, isDefault }`.
 - `PUT /api/incentivazione/config` (admin) — body `{ month, year, config }`.
-- `GET /api/incentivazione/dashboard/:month/:year` → `{ config, calendar, valenze, live }`
-  (filtrato per operatore).
+- `GET /api/incentivazione/dashboard/:month/:year` →
+  `{ config, calendar, valenze, live, lastBisuiteSync }` (filtrato per
+  operatore). `lastBisuiteSync` = `max(bisuite_sales.last_seen_at)` dell'org
+  (data dell'ultima sincronizzazione vendite dal connettore; `null` se nessuna
+  vendita), mostrata nel riquadro Accessori/Servizi.
 - `POST /api/incentivazione/valenze` (admin) — body
   `{ month, year, sectionId, fileName, rows }` (rows già parsate dal
   client via SheetJS).
