@@ -235,6 +235,39 @@ export const drmsUploads = pgTable("drms_uploads", {
   index("IDX_drms_uploads_org_month_year").on(table.organizationId, table.month, table.year),
 ]);
 
+// Incentivazione interna (gare addetto, Task #170): configurazione per
+// organizzazione e per mese/anno. `config` JSONB contiene sezioni, piste
+// (tracks), categorie connettore Accessori/Servizi e festività override.
+export const incentivazioneConfig = pgTable("incentivazione_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  config: jsonb("config").notNull().default({}),
+  updatedBy: varchar("updated_by").references(() => profiles.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("UQ_incentivazione_config_org_month_year").on(table.organizationId, table.month, table.year),
+]);
+
+// Incentivazione interna: valenze caricate da Excel per sezione e mese/anno.
+// `rows` JSONB = [{ name, <trackId>: number|null, ... }]. Una riga per addetto.
+export const incentivazioneValenze = pgTable("incentivazione_valenze", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  sectionId: varchar("section_id").notNull(),
+  fileName: varchar("file_name").notNull(),
+  rows: jsonb("rows").notNull().default([]),
+  uploadedBy: varchar("uploaded_by").references(() => profiles.id),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+}, (table) => [
+  index("IDX_incentivazione_valenze_org_month_year").on(table.organizationId, table.month, table.year),
+  uniqueIndex("UQ_incentivazione_valenze_org_month_year_section").on(table.organizationId, table.month, table.year, table.sectionId),
+]);
+
 // === Controllo di Gestione ===
 // Anagrafica Ragioni Sociali (per organizzazione). Le altre anagrafiche
 // (categorie, fornitori, PDV) sono scoped per (organizationId, ragioneSociale).
@@ -463,6 +496,11 @@ export type InsertGaraConfig = typeof garaConfig.$inferInsert;
 
 export type DrmsUpload = typeof drmsUploads.$inferSelect;
 export type InsertDrmsUpload = typeof drmsUploads.$inferInsert;
+
+export type IncentivazioneConfigRow = typeof incentivazioneConfig.$inferSelect;
+export type InsertIncentivazioneConfigRow = typeof incentivazioneConfig.$inferInsert;
+export type IncentivazioneValenze = typeof incentivazioneValenze.$inferSelect;
+export type InsertIncentivazioneValenze = typeof incentivazioneValenze.$inferInsert;
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 

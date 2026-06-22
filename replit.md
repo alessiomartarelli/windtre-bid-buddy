@@ -106,6 +106,11 @@ mantenere snello questo file:
   Journey: cross-sell per cliente da nuova attivazione mobile (≥01/07/2026),
   driver attivati/attivabili, stati item, gettone manuale, addetti per
   operatore, gap campi BiSuite.
+- [`docs/incentivazione-interna.md`](docs/incentivazione-interna.md) —
+  Modulo Incentivazione interna (gare addetto): valenze piste da Excel +
+  Accessori/Servizi live BiSuite, config admin per-mese (sezioni/piste/
+  lucchetti/base/categorie), calendario lavorativo, sblocco gara,
+  isolamento per operatore.
 
 ## Testing
 

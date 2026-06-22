@@ -10,6 +10,7 @@ import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDef
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
 import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER } from "@shared/customerJourney";
+import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
 import { registerCdgRoutes } from "./cdgRoutes";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import {
@@ -1200,6 +1201,125 @@ export async function registerRoutes(
     } catch (e) {
       console.error("Error deleting DRMS upload:", e);
       res.status(500).json({ message: "Errore nell'eliminazione dell'upload DRMS" });
+    }
+  });
+
+  // === Incentivazione interna (gare addetto, Task #170) ===
+  // Config per org+mese+anno: sezioni/piste/target/lucchetti, categorie
+  // connettore Accessori/Servizi, festività. Admin-editabile in-app.
+  app.get("/api/incentivazione/config", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const month = parseInt(String(req.query.month), 10);
+      const year = parseInt(String(req.query.year), 10);
+      if (!month || !year || month < 1 || month > 12) return res.status(400).json({ error: "Mese/anno non validi" });
+      const row = await storage.getIncentivazioneConfig(profile.organizationId, month, year);
+      const config = normalizeConfig(row?.config ?? null, year);
+      res.json({ month, year, config, updatedAt: row?.updatedAt ?? null, isDefault: !row });
+    } catch (e) {
+      console.error("Incentivazione config get error:", e);
+      res.status(500).json({ error: "Errore nel recupero della configurazione" });
+    }
+  });
+
+  app.put("/api/incentivazione/config", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const month = parseInt(String(req.body.month), 10);
+      const year = parseInt(String(req.body.year), 10);
+      if (!month || !year || month < 1 || month > 12) return res.status(400).json({ error: "Mese/anno non validi" });
+      const config = normalizeConfig(req.body.config ?? null, year);
+      const row = await storage.upsertIncentivazioneConfig(profile.organizationId!, month, year, config as unknown as Record<string, unknown>, profile.id);
+      res.json({ month, year, config, updatedAt: row.updatedAt });
+    } catch (e) {
+      console.error("Incentivazione config put error:", e);
+      res.status(500).json({ error: "Errore nel salvataggio della configurazione" });
+    }
+  });
+
+  // Dashboard data: calendario + valenze caricate + Accessori/Servizi live,
+  // filtrate per operatore (isolamento per-addetto come Customer Journey).
+  app.get("/api/incentivazione/dashboard", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const month = parseInt(String(req.query.month), 10);
+      const year = parseInt(String(req.query.year), 10);
+      if (!month || !year || month < 1 || month > 12) return res.status(400).json({ error: "Mese/anno non validi" });
+
+      const cfgRow = await storage.getIncentivazioneConfig(profile.organizationId, month, year);
+      const config = normalizeConfig(cfgRow?.config ?? null, year);
+      const calendar = buildCalendar(year, month, config.holidays);
+
+      // Filtro operatore: null = admin/super (vede tutto), array = solo i propri
+      // addetti (anche vuoto => nessun dato, mai leak del tenant).
+      const addettiFilter = profile.role === "operatore"
+        ? (profile.bisuiteAddetti ?? []).map((a) => normN(a)).filter(Boolean)
+        : null;
+      const allowed = (name: string) => addettiFilter === null || addettiFilter.includes(normN(name));
+
+      const valenzeRows = await storage.listIncentivazioneValenze(profile.organizationId, month, year);
+      const valenze: Record<string, { fileName: string; uploadedAt: Date | null; rows: any[] }> = {};
+      for (const v of valenzeRows) {
+        const rows = Array.isArray(v.rows) ? (v.rows as any[]) : [];
+        valenze[v.sectionId] = {
+          fileName: v.fileName,
+          uploadedAt: v.uploadedAt,
+          rows: rows.filter((r) => allowed(String(r?.name ?? ""))),
+        };
+      }
+
+      const liveAll = await storage.aggregateAccessoriServizi(
+        profile.organizationId, calendar.from, calendar.to, config.catAcc, config.catServ,
+      );
+      const live = liveAll.filter((l) => allowed(l.name));
+
+      res.json({ month, year, config, calendar, valenze, live });
+    } catch (e) {
+      console.error("Incentivazione dashboard error:", e);
+      res.status(500).json({ error: "Errore nel recupero della dashboard" });
+    }
+  });
+
+  // Salva le valenze di una sezione (rows già parsate dal client via SheetJS).
+  app.post("/api/incentivazione/valenze", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const month = parseInt(String(req.body.month), 10);
+      const year = parseInt(String(req.body.year), 10);
+      const sectionId = String(req.body.sectionId ?? "").trim();
+      const fileName = String(req.body.fileName ?? "valenze.xlsx").trim();
+      const rows = Array.isArray(req.body.rows) ? req.body.rows : null;
+      if (!month || !year || month < 1 || month > 12) return res.status(400).json({ error: "Mese/anno non validi" });
+      if (!SECTION_IDS.includes(sectionId as any)) return res.status(400).json({ error: "Sezione non valida" });
+      if (!rows || !rows.length) return res.status(400).json({ error: "Nessuna riga valida" });
+      const saved = await storage.upsertIncentivazioneValenze({
+        organizationId: profile.organizationId!,
+        month, year, sectionId, fileName, rows, uploadedBy: profile.id,
+      });
+      res.json({ ok: true, sectionId, count: rows.length, uploadedAt: saved.uploadedAt });
+    } catch (e) {
+      console.error("Incentivazione valenze post error:", e);
+      res.status(500).json({ error: "Errore nel salvataggio delle valenze" });
+    }
+  });
+
+  app.delete("/api/incentivazione/valenze", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const month = parseInt(String(req.query.month), 10);
+      const year = parseInt(String(req.query.year), 10);
+      const sectionId = String(req.query.sectionId ?? "").trim();
+      if (!month || !year || !SECTION_IDS.includes(sectionId as any)) return res.status(400).json({ error: "Parametri non validi" });
+      await storage.deleteIncentivazioneValenze(profile.organizationId!, month, year, sectionId);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("Incentivazione valenze delete error:", e);
+      res.status(500).json({ error: "Errore nell'eliminazione delle valenze" });
     }
   });
 

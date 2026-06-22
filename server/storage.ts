@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState } from "@shared/schema";
+import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState } from "@shared/schema";
 import { eq, desc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo } from "@shared/customerJourney";
 
@@ -97,6 +97,14 @@ export interface IStorage {
   createDrmsUpload(upload: InsertDrmsUpload): Promise<DrmsUpload>;
   deleteDrmsUploadsByPeriod(orgId: string, month: number, year: number): Promise<void>;
   deleteDrmsUpload(id: string): Promise<void>;
+
+  // Incentivazione interna (gare addetto)
+  getIncentivazioneConfig(orgId: string, month: number, year: number): Promise<IncentivazioneConfigRow | undefined>;
+  upsertIncentivazioneConfig(orgId: string, month: number, year: number, config: Record<string, unknown>, updatedBy: string | null): Promise<IncentivazioneConfigRow>;
+  listIncentivazioneValenze(orgId: string, month: number, year: number): Promise<IncentivazioneValenze[]>;
+  upsertIncentivazioneValenze(value: InsertIncentivazioneValenze): Promise<IncentivazioneValenze>;
+  deleteIncentivazioneValenze(orgId: string, month: number, year: number, sectionId: string): Promise<void>;
+  aggregateAccessoriServizi(orgId: string, fromYMD: string, toYMD: string, accCats: number[], servCats: number[]): Promise<Array<{ name: string; acc: number; serv: number }>>;
 
   // Password Reset Tokens
   createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
@@ -572,6 +580,90 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDrmsUpload(id: string): Promise<void> {
     await db.delete(drmsUploads).where(eq(drmsUploads.id, id));
+  }
+
+  // Incentivazione interna (gare addetto)
+  async getIncentivazioneConfig(orgId: string, month: number, year: number): Promise<IncentivazioneConfigRow | undefined> {
+    const [r] = await db.select().from(incentivazioneConfig)
+      .where(and(
+        eq(incentivazioneConfig.organizationId, orgId),
+        eq(incentivazioneConfig.month, month),
+        eq(incentivazioneConfig.year, year),
+      ))
+      .limit(1);
+    return r;
+  }
+
+  async upsertIncentivazioneConfig(orgId: string, month: number, year: number, config: Record<string, unknown>, updatedBy: string | null): Promise<IncentivazioneConfigRow> {
+    const [r] = await db.insert(incentivazioneConfig)
+      .values({ organizationId: orgId, month, year, config, updatedBy })
+      .onConflictDoUpdate({
+        target: [incentivazioneConfig.organizationId, incentivazioneConfig.month, incentivazioneConfig.year],
+        set: { config, updatedBy, updatedAt: new Date() },
+      })
+      .returning();
+    return r;
+  }
+
+  async listIncentivazioneValenze(orgId: string, month: number, year: number): Promise<IncentivazioneValenze[]> {
+    return await db.select().from(incentivazioneValenze)
+      .where(and(
+        eq(incentivazioneValenze.organizationId, orgId),
+        eq(incentivazioneValenze.month, month),
+        eq(incentivazioneValenze.year, year),
+      ));
+  }
+
+  async upsertIncentivazioneValenze(value: InsertIncentivazioneValenze): Promise<IncentivazioneValenze> {
+    const [r] = await db.insert(incentivazioneValenze)
+      .values(value)
+      .onConflictDoUpdate({
+        target: [incentivazioneValenze.organizationId, incentivazioneValenze.month, incentivazioneValenze.year, incentivazioneValenze.sectionId],
+        set: {
+          fileName: value.fileName,
+          rows: value.rows,
+          uploadedBy: value.uploadedBy ?? null,
+          uploadedAt: new Date(),
+        },
+      })
+      .returning();
+    return r;
+  }
+
+  async deleteIncentivazioneValenze(orgId: string, month: number, year: number, sectionId: string): Promise<void> {
+    await db.delete(incentivazioneValenze).where(and(
+      eq(incentivazioneValenze.organizationId, orgId),
+      eq(incentivazioneValenze.month, month),
+      eq(incentivazioneValenze.year, year),
+      eq(incentivazioneValenze.sectionId, sectionId),
+    ));
+  }
+
+  // Aggrega Accessori/Servizi dalle vendite BiSuite per il periodo: somma il
+  // `dettaglio.prezzo` di ogni articolo per categoria.id, raggruppato per
+  // addetto (match case-insensitive). Esclude le vendite ANNULLATA.
+  async aggregateAccessoriServizi(orgId: string, fromYMD: string, toYMD: string, accCats: number[], servCats: number[]): Promise<Array<{ name: string; acc: number; serv: number }>> {
+    const accArr = accCats.length ? accCats : [-1];
+    const servArr = servCats.length ? servCats : [-1];
+    const rows = await db.execute(sql`
+      SELECT min(s.nome_addetto) AS name,
+        coalesce(sum(CASE WHEN (a->'categoria'->>'id')::int = ANY(${accArr}) THEN (a->'dettaglio'->>'prezzo')::numeric ELSE 0 END), 0) AS acc,
+        coalesce(sum(CASE WHEN (a->'categoria'->>'id')::int = ANY(${servArr}) THEN (a->'dettaglio'->>'prezzo')::numeric ELSE 0 END), 0) AS serv
+      FROM ${bisuiteSales} s,
+        jsonb_array_elements(s.raw_data->'articoli') a
+      WHERE s.organization_id = ${orgId}
+        AND s.data_vendita::date >= ${fromYMD}::date
+        AND s.data_vendita::date <= ${toYMD}::date
+        AND upper(coalesce(trim(s.stato), '')) <> 'ANNULLATA'
+        AND s.nome_addetto IS NOT NULL AND trim(s.nome_addetto) <> ''
+      GROUP BY lower(trim(s.nome_addetto))
+    `);
+    const out = (rows as unknown as { rows?: any[] }).rows ?? (rows as unknown as any[]);
+    return (out as any[]).map((r) => ({
+      name: String(r.name ?? ""),
+      acc: Number(r.acc ?? 0),
+      serv: Number(r.serv ?? 0),
+    }));
   }
 
   // Password Reset Tokens
