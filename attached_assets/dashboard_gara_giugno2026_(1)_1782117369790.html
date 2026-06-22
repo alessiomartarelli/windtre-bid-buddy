@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Gara Incentivi · Giugno 2026</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* ===================== RESET & VARS ===================== */
+:root{
+  --bg:#EEF2F7;--card:#fff;--bdr:#DDE3EC;--bdr2:#C8D0DC;
+  --txt:#18222F;--mut:#64748B;--fnt:#94A3B8;
+  --green:#059669;--gbg:#ECFDF5;--gbdr:#A7F3D0;
+  --amber:#D97706;--abg:#FFFBEB;--abdr:#FDE68A;
+  --red:#DC2626;--rbg:#FEF2F2;--rbdr:#FCA5A5;
+  --w3:#1A56DB;--vdf:#DC2626;
+  --r:12px;--rsm:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;background:var(--bg);color:var(--txt);font-size:14px;line-height:1.5;min-height:100vh;}
+
+/* ===================== LOGIN ===================== */
+#login-screen{
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;padding:24px;
+  background:linear-gradient(135deg,#0F1729 0%,#1e3059 100%);
+}
+.login-card{
+  background:var(--card);border-radius:20px;padding:36px 32px;
+  width:100%;max-width:380px;
+  box-shadow:0 24px 80px rgba(0,0,0,.4);
+}
+.login-logo{font-size:40px;text-align:center;margin-bottom:10px;}
+.login-title{font-size:22px;font-weight:800;letter-spacing:-.5px;text-align:center;margin-bottom:4px;}
+.login-sub{font-size:12px;color:var(--mut);text-align:center;margin-bottom:28px;}
+.lfield{margin-bottom:14px;}
+.lfield label{display:block;font-size:11px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;}
+.lfield input{
+  width:100%;padding:11px 14px;
+  border:1.5px solid var(--bdr);border-radius:var(--rsm);
+  font-size:14px;color:var(--txt);outline:none;transition:.15s;
+  background:#fff;
+}
+.lfield input:focus{border-color:var(--w3);box-shadow:0 0 0 3px rgba(26,86,219,.1);}
+.login-btn{
+  width:100%;background:#0F1729;color:#fff;border:none;
+  border-radius:var(--rsm);padding:13px;font-size:14px;font-weight:700;
+  cursor:pointer;margin-top:6px;transition:.15s;letter-spacing:.2px;
+}
+.login-btn:hover{background:#1A2744;}
+.login-err{margin-top:10px;font-size:12px;color:var(--red);text-align:center;min-height:18px;font-weight:600;}
+.login-hint{
+  margin-top:20px;padding:14px 16px;background:var(--bg);
+  border-radius:var(--rsm);font-size:11px;
+}
+.login-hint .lh-title{font-weight:700;color:var(--txt);margin-bottom:8px;font-size:12px;}
+.cred-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:5px 0;border-bottom:1px solid var(--bdr);
+}
+.cred-row:last-child{border-bottom:none;}
+.cred-role{color:var(--mut);}
+.cred-val{font-family:'SF Mono','Fira Code','Courier New',monospace;font-size:10px;
+  background:var(--card);padding:2px 7px;border-radius:4px;border:1px solid var(--bdr);color:var(--txt);}
+
+/* ===================== APP SHELL ===================== */
+#app{display:none;min-height:100vh;background:var(--bg);}
+
+/* Header */
+.hdr{
+  background:#0F1729;color:#fff;
+  padding:0 24px;height:58px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.hdr-l .ht{font-size:15px;font-weight:800;letter-spacing:-.3px;}
+.hdr-l .hs{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px;}
+.hdr-r{display:flex;align-items:center;gap:12px;}
+.role-pill{padding:4px 11px;border-radius:20px;font-size:11px;font-weight:700;}
+.rp-admin{background:#6366F1;color:#fff;}
+.rp-w3{background:var(--w3);color:#fff;}
+.rp-vdf{background:var(--vdf);color:#fff;}
+.user-name{font-size:11px;color:rgba(255,255,255,.55);}
+.logout-btn{
+  background:rgba(255,255,255,.08);color:rgba(255,255,255,.8);
+  border:1px solid rgba(255,255,255,.18);border-radius:6px;
+  padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;transition:.15s;
+}
+.logout-btn:hover{background:rgba(255,255,255,.15);}
+
+/* Tabs */
+.tabs{
+  background:var(--card);border-bottom:1px solid var(--bdr);
+  padding:0 20px;display:flex;overflow-x:auto;
+  position:sticky;top:58px;z-index:99;
+}
+.tab{
+  display:flex;flex-direction:column;align-items:flex-start;
+  padding:8px 18px 0;border:none;background:none;cursor:pointer;
+  color:var(--mut);border-bottom:3px solid transparent;margin-bottom:-1px;
+  transition:color .15s;white-space:nowrap;min-width:130px;
+}
+.tab:hover{color:var(--txt);}
+.tab .top{font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;}
+.tab .lbl{font-size:13px;font-weight:600;padding-bottom:8px;}
+.tab.on.w3{color:var(--w3);border-bottom-color:var(--w3);}
+.tab.on.w3 .top{color:var(--w3);}
+.tab.on.vdf{color:var(--vdf);border-bottom-color:var(--vdf);}
+.tab.on.vdf .top{color:var(--vdf);}
+
+/* Pages */
+.pg{display:none;}.pg.on{display:block;}
+
+/* ===================== CONTENT ===================== */
+.content{padding:20px 24px;max-width:1440px;margin:0 auto;}
+
+/* Calendar bar */
+.cbar{
+  background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);
+  padding:14px 20px;margin-bottom:16px;
+  display:flex;gap:16px;flex-wrap:wrap;align-items:center;
+}
+.ci{display:flex;flex-direction:column;align-items:center;min-width:48px;}
+.ci .v{font-size:24px;font-weight:800;letter-spacing:-1px;line-height:1;}
+.ci .l{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;white-space:nowrap;}
+.csep{width:1px;height:34px;background:var(--bdr);}
+.cprog{flex:1;min-width:120px;}
+.cprog .l{font-size:11px;color:var(--mut);margin-bottom:5px;}
+.mbar{height:7px;background:var(--bdr);border-radius:4px;overflow:hidden;}
+.mfill{height:100%;background:linear-gradient(90deg,#3B82F6,#6366F1);border-radius:4px;}
+
+/* Data controls area */
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+@media(max-width:700px){.controls{grid-template-columns:1fr;}}
+
+/* Upload box */
+.upload-box{
+  border:2px dashed var(--bdr);border-radius:var(--r);
+  background:var(--card);padding:16px;cursor:pointer;transition:.15s;
+}
+.upload-box:hover,.upload-box.over{border-color:var(--bdr2);background:#F8FAFC;}
+.upload-box.loaded{border-style:solid;border-color:var(--gbdr);background:var(--gbg);}
+.ub-inner{display:flex;align-items:center;gap:14px;}
+.ub-ico{font-size:26px;flex-shrink:0;}
+.ub-title{font-size:13px;font-weight:700;color:var(--txt);margin-bottom:2px;}
+.ub-sub{font-size:11px;color:var(--mut);}
+.ub-ok{font-size:11px;color:var(--green);margin-top:2px;font-weight:500;}
+input[type="file"]{display:none;}
+
+/* ── SYNC PANEL ── the star of the show */
+.sync-panel{
+  background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);
+  padding:16px;display:flex;flex-direction:column;gap:12px;
+}
+.sync-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
+.sync-info{}
+.sync-info .si-title{font-size:13px;font-weight:700;color:var(--txt);margin-bottom:4px;}
+.sync-info .si-desc{font-size:11px;color:var(--mut);line-height:1.5;margin-bottom:8px;}
+.sync-cats{display:flex;flex-wrap:wrap;gap:5px;}
+.cat-chip{padding:3px 9px;border-radius:4px;font-size:10px;font-weight:700;}
+.cc-blue{background:#EFF6FF;color:var(--w3);}
+.cc-green{background:var(--gbg);color:var(--green);}
+.cc-gray{background:#F1F5F9;color:var(--mut);}
+
+/* THE BUTTON */
+.sync-btn{
+  flex-shrink:0;
+  background:var(--green);color:#fff;border:none;
+  border-radius:var(--rsm);padding:14px 22px;
+  font-size:14px;font-weight:700;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:.15s;min-width:140px;
+}
+.sync-btn:hover:not([disabled]){background:#047857;}
+.sync-btn[disabled]{opacity:.55;cursor:not-allowed;}
+.sync-btn .sb-main{display:flex;align-items:center;gap:6px;}
+.sync-btn .sb-sub{font-size:10px;opacity:.75;font-weight:400;}
+
+/* Sync status strip */
+.sync-status-strip{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 12px;border-radius:var(--rsm);font-size:11px;
+}
+.sss-idle{background:#F8FAFC;color:var(--mut);border:1px solid var(--bdr);}
+.sss-live{background:var(--gbg);color:#065F46;border:1px solid var(--gbdr);font-weight:600;}
+.sss-err{background:var(--rbg);color:var(--red);border:1px solid var(--rbdr);}
+.sss-loading{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;}
+
+/* API Key config (collapsed by default) */
+.api-cfg{margin-top:2px;}
+.api-cfg summary{font-size:11px;color:var(--mut);cursor:pointer;user-select:none;padding:4px 0;}
+.api-cfg summary:hover{color:var(--txt);}
+.api-key-row{display:flex;gap:8px;margin-top:8px;align-items:center;}
+.api-key-row input{
+  flex:1;padding:8px 10px;border:1px solid var(--bdr);border-radius:6px;
+  font-size:12px;font-family:'SF Mono','Fira Code','Courier New',monospace;
+  color:var(--txt);outline:none;
+}
+.api-key-row input:focus{border-color:var(--w3);}
+.api-key-row .ak-hint{font-size:10px;color:var(--fnt);}
+
+/* Notices */
+.notice{font-size:12px;padding:8px 12px;border-radius:var(--rsm);margin-bottom:12px;display:flex;align-items:flex-start;gap:6px;}
+.n-demo{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;}
+.n-ok{background:var(--gbg);color:#065F46;border:1px solid var(--gbdr);}
+.n-warn{background:var(--abg);color:#92400E;border:1px solid var(--abdr);}
+
+/* Summary row */
+.srow{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px;}
+.sc{background:var(--card);border:1px solid var(--bdr);border-radius:var(--rsm);padding:12px 14px;}
+.sc .sl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;color:var(--mut);margin-bottom:3px;}
+.sc .sv{font-size:24px;font-weight:800;letter-spacing:-1px;line-height:1.1;}
+.sc .ss{font-size:11px;color:var(--mut);margin-top:2px;}
+.sc.g .sv{color:var(--green);}.sc.a .sv{color:var(--amber);}.sc.r .sv{color:var(--red);}
+
+/* Employee grid */
+.egrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px;}
+
+/* Employee card */
+.ecard{background:var(--card);border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden;}
+.ehead{padding:11px 14px;display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--bdr);}
+.ename{font-weight:700;font-size:13px;text-transform:capitalize;}
+.ppill{padding:4px 9px;border-radius:20px;font-size:11px;font-weight:700;flex-shrink:0;margin-left:8px;}
+.ppill.g{background:var(--gbg);color:var(--green);}
+.ppill.a{background:var(--abg);color:var(--amber);}
+.ppill.r{background:var(--rbg);color:var(--red);}
+.lbar{padding:8px 14px;background:#FAFBFC;border-bottom:1px solid var(--bdr);}
+.ltit{font-size:10px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;}
+.lpills{display:flex;flex-wrap:wrap;gap:5px;}
+.lp{padding:3px 7px;border-radius:5px;font-size:10px;font-weight:700;border:1px solid;}
+.lp.g{background:var(--gbg);color:var(--green);border-color:var(--gbdr);}
+.lp.a{background:var(--abg);color:var(--amber);border-color:var(--abdr);}
+.lp.r{background:var(--rbg);color:var(--red);border-color:var(--rbdr);}
+.lp.u{background:#F1F5F9;color:var(--fnt);border-color:var(--bdr);}
+.tbody{padding:10px 14px;}
+.trow{margin-bottom:7px;}.trow:last-child{margin-bottom:0;}
+.ttop{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;}
+.tleft{display:flex;align-items:center;gap:5px;}
+.sem{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.sem.g{background:var(--green);}
+.sem.a{background:var(--amber);}
+.sem.r{background:var(--red);box-shadow:0 0 0 2px var(--rbdr);}
+.sem.u{background:var(--fnt);}
+.tname{font-size:11.5px;font-weight:500;}
+.tnote{font-size:9px;color:var(--mut);margin-left:3px;}
+.ldot{width:5px;height:5px;border-radius:50%;background:var(--green);display:inline-block;margin-left:3px;vertical-align:middle;}
+.tvals{font-size:10.5px;color:var(--mut);white-space:nowrap;}
+.tvals .av{font-weight:700;color:var(--txt);}
+.pbar{height:3px;background:var(--bdr);border-radius:2px;overflow:hidden;}
+.pfill{height:100%;border-radius:2px;}
+.pfill.g{background:var(--green);}.pfill.a{background:var(--amber);}.pfill.r{background:var(--red);}
+
+/* Coming soon */
+.cs-wrap{text-align:center;padding:60px 20px;}
+.cs-e{font-size:44px;display:block;margin-bottom:10px;}
+.cs-h{font-size:20px;font-weight:800;margin-bottom:6px;}
+.cs-p{color:var(--mut);}
+
+/* Spinner */
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin .8s linear infinite;}
+
+/* Responsive */
+@media(max-width:640px){
+  .content{padding:12px 14px;}
+  .hdr{padding:0 14px;}
+  .tabs{padding:0 12px;}
+  .egrid{grid-template-columns:1fr;}
+  .srow{grid-template-columns:repeat(3,1fr);}
+  .sync-top{flex-direction:column;}
+  .sync-btn{width:100%;}
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">🏆</div>
+    <div class="login-title">Gara Incentivi</div>
+    <div class="login-sub">EasyDigital Group · Piano Variabile · Giugno 2026</div>
+    <div class="lfield">
+      <label>Username</label>
+      <input type="text" id="lu" placeholder="Inserisci username" autocomplete="username">
+    </div>
+    <div class="lfield">
+      <label>Password</label>
+      <input type="password" id="lp" placeholder="••••••••" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="login-btn" onclick="doLogin()">Accedi →</button>
+    <div class="login-err" id="lerr"></div>
+    <div class="login-hint">
+      <div class="lh-title">Accessi disponibili</div>
+      <div class="cred-row">
+        <span class="cred-role">🔑 Amministratore</span>
+        <span class="cred-val">admin / Admin2026</span>
+      </div>
+      <div class="cred-row">
+        <span class="cred-role">📶 Operatore W3</span>
+        <span class="cred-val">wind3 / Wind3@26</span>
+      </div>
+      <div class="cred-row">
+        <span class="cred-role">📱 Operatore Vodafone</span>
+        <span class="cred-val">vodafone / Voda@26</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app">
+  <!-- Header -->
+  <header class="hdr">
+    <div class="hdr-l">
+      <div class="ht">🏆 Gara Incentivi · Rete Retail</div>
+      <div class="hs">EasyDigital Group · Piano Variabile Mensile · Giugno 2026</div>
+    </div>
+    <div class="hdr-r">
+      <span id="role-pill" class="role-pill"></span>
+      <span id="user-name" class="user-name"></span>
+      <button class="logout-btn" onclick="doLogout()">⏏ Esci</button>
+    </div>
+  </header>
+
+  <!-- Tabs (built dynamically) -->
+  <nav id="tabs-nav" class="tabs"></nav>
+
+  <!-- Pages -->
+  <div id="pg-ss_w3"  class="pg"></div>
+  <div id="pg-sm_w3"  class="pg"></div>
+  <div id="pg-ss_vdf" class="pg"></div>
+  <div id="pg-sm_vdf" class="pg"></div>
+</div>
+
+<script>
+/* ============================================================
+   ① CREDENZIALI — modificare prima del deploy
+      ruolo 'admin'  → vede tutti i 4 tab
+      ruolo 'w3'     → vede solo SS W3 e SM W3
+      ruolo 'vdf'    → vede solo SS VDF e SM VDF
+   ============================================================ */
+const USERS = {
+  'admin':    { pw:'Admin2026',  role:'admin', display:'Amministratore',    tabs:['ss_w3','sm_w3','ss_vdf','sm_vdf'] },
+  'wind3':    { pw:'Wind3@26',   role:'w3',    display:'Operatore W3',       tabs:['ss_w3','sm_w3']                  },
+  'vodafone': { pw:'Voda@26',    role:'vdf',   display:'Operatore Vodafone', tabs:['ss_vdf','sm_vdf']                },
+};
+
+/* ============================================================
+   ② CONFIG SEZIONI
+   ============================================================ */
+const SEC = {
+  ss_w3:  { label:'Store Specialist', op:'W3',      cls:'w3',  base:400, locks:4, ready:true  },
+  sm_w3:  { label:'Store Manager',    op:'W3',      cls:'w3',  base:null,locks:0, ready:false },
+  ss_vdf: { label:'Store Specialist', op:'Vodafone',cls:'vdf', base:300, locks:4, ready:true  },
+  sm_vdf: { label:'Store Manager',    op:'Vodafone',cls:'vdf', base:null,locks:0, ready:false },
+};
+
+const TRACKS = {
+  ss_w3: [
+    { id:'mobile',        name:'Mobile (S3)',   target:50,  unit:'pt', isLock:false },
+    { id:'fisso',         name:'Fisso (S3)',     target:22,  unit:'pt', isLock:false },
+    { id:'cb_rete',       name:'CB Rete',        target:25,  unit:'pz', isLock:false },
+    { id:'assicurazione', name:'Assicurazione',  target:7,   unit:'pt', isLock:true  },
+    { id:'iva',           name:'IVA F+M (S2)',   target:10,  unit:'pt', isLock:true  },
+    { id:'energia',       name:'Energia',        target:16,  unit:'pt', isLock:false },
+    { id:'protecta',      name:'Protecta',       target:1,   unit:'pz', isLock:true  },
+    { id:'smartphone',    name:'Smartphone',     target:22,  unit:'pz', isLock:true,  note:'Extra Marg.' },
+    { id:'accessori',     name:'Accessori',      target:427, unit:'€',  isLock:false, live:true },
+    { id:'servizi',       name:'Servizi',        target:300, unit:'€',  isLock:false, live:true },
+  ],
+  sm_w3:  [],
+  ss_vdf: [
+    { id:'fisso_pt',  name:'Fisso (S6) pt',  target:20,  unit:'pt',   isLock:true  },
+    { id:'fisso_pz',  name:'Fisso (S6) pz',  target:15,  unit:'pz',   isLock:true,  sub:true },
+    { id:'mobile_pt', name:'Mobile (S7) pt', target:45,  unit:'pt',   isLock:false },
+    { id:'mobile_pz', name:'Mobile (S7) pz', target:30,  unit:'pz',   isLock:false, sub:true },
+    { id:'iva_voci',  name:'IVA voci (S3)',  target:8,   unit:'voci', isLock:true  },
+    { id:'iva_fissi', name:'IVA fissi (S3)', target:3,   unit:'fissi',isLock:true,  sub:true },
+    { id:'tnp',       name:'TNP/Smartphone', target:16,  unit:'pz',   isLock:true,  note:'≥65% fin.' },
+    { id:'energia',   name:'Energia',        target:12,  unit:'pz',   isLock:true  },
+    { id:'accessori', name:'Accessori',      target:427, unit:'€',    isLock:false, live:true },
+    { id:'servizi',   name:'Servizi',        target:305, unit:'€',    isLock:false, live:true },
+  ],
+  sm_vdf: [],
+};
+
+/* Template W3: col A=nome, B=mobile, C=fisso, D=cb, E=assic, F=iva, G=energia, H=protecta, I=skip, J=smartphone */
+const TMPL_W3 = { A:'_n',B:'mobile',C:'fisso',D:'cb_rete',E:'assicurazione',F:'iva',G:'energia',H:'protecta',I:'_skip',J:'smartphone' };
+
+/* Categorie connettori:
+   ACCESSORI = ACCESSORI (13) + GARANZIE (3)
+   SERVIZI   = ASSISTENZA (4) + GARANTEASY (27)  */
+const CAT_ACC  = [13, 3];
+const CAT_SERV = [4, 27];
+
+/* ── Calendario dinamico — aggiorna automaticamente ad ogni apertura ── */
+const GARA_YEAR  = 2026;
+const GARA_MONTH = 5;   // Giugno (0-indexed)
+
+const _HOLIDAYS = new Set([
+  '2026-01-01','2026-01-06','2026-04-05','2026-04-06',
+  '2026-04-25','2026-05-01','2026-06-02','2026-08-15',
+  '2026-11-01','2026-12-08','2026-12-25','2026-12-26',
+]);
+function _isWd(d) {
+  const dw = d.getDay();
+  if (dw === 0 || dw === 6) return false;
+  const k = d.getFullYear() + '-' +
+            String(d.getMonth()+1).padStart(2,'0') + '-' +
+            String(d.getDate()).padStart(2,'0');
+  return !_HOLIDAYS.has(k);
+}
+function _countWd(y, m, upToDay) {
+  let c = 0, d = new Date(y, m, 1), end = new Date(y, m, upToDay);
+  while (d <= end) { if (_isWd(d)) c++; d.setDate(d.getDate()+1); }
+  return c;
+}
+function _toISO(d) {
+  return d.getFullYear() + '-' +
+         String(d.getMonth()+1).padStart(2,'0') + '-' +
+         String(d.getDate()).padStart(2,'0');
+}
+
+/* Oggi, cappato all'ultimo giorno del mese di gara */
+const _now       = new Date();
+const _garaEnd   = new Date(GARA_YEAR, GARA_MONTH + 1, 0);  // 30 giu 2026
+const _today     = _now <= _garaEnd ? _now : _garaEnd;
+const _lastMonth = new Date(GARA_YEAR, GARA_MONTH + 1, 0).getDate();
+
+const PERIOD_FROM = '2026-06-01';
+const PERIOD_TO   = _toISO(_today);                               // data odierna
+
+const CAL_TOT  = _countWd(GARA_YEAR, GARA_MONTH, _lastMonth);   // 21
+const CAL_EL   = _countWd(GARA_YEAR, GARA_MONTH, _today.getDate()); // dinamico
+const CAL_REM  = CAL_TOT - CAL_EL;
+const CAL_PCT  = Math.round(CAL_EL / CAL_TOT * 100);
+
+const DEMO_W3 = [
+  { name:'Vitiello Marco',    mobile:47.25, fisso:19.75, cb_rete:26,  assicurazione:11.5, iva:10.5, energia:11, protecta:2, smartphone:20 },
+  { name:'Cacace Giulia',     mobile:27.75, fisso:22.5,  cb_rete:27,  assicurazione:7,    iva:12.5, energia:18, protecta:0, smartphone:16 },
+  { name:'Noia Domenico',     mobile:43,    fisso:12.5,  cb_rete:23,  assicurazione:8,    iva:9,    energia:11, protecta:0, smartphone:14 },
+  { name:'elia arianna',      mobile:41.75, fisso:14.5,  cb_rete:15,  assicurazione:9.5,  iva:9,    energia:5,  protecta:0, smartphone:17 },
+  { name:'FEDERICO BENINATO', mobile:30,    fisso:14,    cb_rete:27,  assicurazione:7.5,  iva:11,   energia:6,  protecta:0, smartphone:15 },
+  { name:'Lucantoni andrea',  mobile:37.75, fisso:14.5,  cb_rete:21,  assicurazione:5,    iva:4,    energia:6,  protecta:1, smartphone:19 },
+  { name:'Greco Maila',       mobile:31,    fisso:10.75, cb_rete:24,  assicurazione:3.5,  iva:10.5, energia:11, protecta:0, smartphone:18 },
+  { name:'Locci Damiano',     mobile:34.5,  fisso:18.5,  cb_rete:14,  assicurazione:2,    iva:6.5,  energia:13, protecta:0, smartphone:12 },
+];
+
+/* ============================================================
+   ③ STATO APPLICAZIONE
+   ============================================================ */
+let CU = null;   // current user
+let AT = null;   // active tab
+const mData   = {};  // tabId → rows[] (da file)
+const lData   = {};  // tabId → [{n,a,s}] (da connettori)
+const syncing = {};
+const syncErr = {};
+const syncTime= {};
+const debugInfo = {}; // tabId → {acc: string, serv: string}
+
+/* ============================================================
+   ④ AUTH
+   ============================================================ */
+function doLogin() {
+  const u = document.getElementById('lu').value.trim();
+  const p = document.getElementById('lp').value;
+  const usr = USERS[u];
+  if (!usr || usr.pw !== p) {
+    document.getElementById('lerr').textContent = 'Credenziali non valide — riprova.';
+    return;
+  }
+  CU = { username: u, ...usr };
+  AT = CU.tabs[0];
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  buildNav();
+  switchTab(AT);
+}
+
+function doLogout() {
+  CU = null; AT = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('lu').value = '';
+  document.getElementById('lp').value = '';
+  document.getElementById('lerr').textContent = '';
+}
+
+function buildNav() {
+  const rmap = { admin:'rp-admin', w3:'rp-w3', vdf:'rp-vdf' };
+  const rlbl = { admin:'Admin',   w3:'W3',    vdf:'Vodafone' };
+  document.getElementById('role-pill').className = 'role-pill ' + rmap[CU.role];
+  document.getElementById('role-pill').textContent = rlbl[CU.role];
+  document.getElementById('user-name').textContent = CU.display;
+
+  const nav = document.getElementById('tabs-nav');
+  nav.innerHTML = CU.tabs.map(tid => {
+    const s = SEC[tid];
+    return `<button class="tab ${s.cls}" onclick="switchTab('${tid}')" id="tb-${tid}">
+      <span class="top">${s.op}</span><span class="lbl">${s.label}</span>
+    </button>`;
+  }).join('');
+}
+
+function switchTab(tid) {
+  AT = tid;
+  document.querySelectorAll('.tab').forEach(b => { b.classList.remove('on','w3','vdf'); });
+  document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
+  const tb = document.getElementById('tb-' + tid);
+  if (tb) { tb.classList.add('on', SEC[tid].cls); }
+  document.getElementById('pg-' + tid)?.classList.add('on');
+  renderPage(tid);
+}
+
+/* ============================================================
+   ⑤ LOGICA PROIEZIONE & SEMAFORO
+   ============================================================ */
+function normN(n) { return String(n || '').toLowerCase().trim().replace(/\s+/g, ' '); }
+function projV(v) { return (v === null || CAL_EL === 0) ? null : (v / CAL_EL) * CAL_TOT; }
+function semOf(v, t) {
+  if (v === null) return 'u';
+  if (v >= t) return 'g';
+  const p = projV(v);
+  return p !== null && p >= t ? 'a' : 'r';
+}
+
+function buildEmps(tabId, rows) {
+  const tracks = TRACKS[tabId] || [];
+  const lm = {};
+  if (lData[tabId]) lData[tabId].forEach(e => { lm[normN(e.n)] = { acc: e.a, serv: e.s }; });
+
+  return rows.map(r => {
+    const live = lm[normN(r.name)];
+    const merged = { ...r,
+      accessori: live ? live.acc : (r.accessori ?? null),
+      servizi:   live ? live.serv : (r.servizi ?? null),
+    };
+    const tds = {};
+    tracks.forEach(t => {
+      const v = (merged[t.id] !== undefined && merged[t.id] !== null)
+                ? parseFloat(merged[t.id]) : null;
+      tds[t.id] = { actual: v, proj: projV(v), sem: semOf(v, t.target), target: t.target };
+    });
+    const locks = tracks.filter(t => t.isLock && !t.sub)
+                        .map(t => ({ id: t.id, name: t.name, sem: tds[t.id]?.sem || 'u' }));
+    const ks = tracks.filter(t => !t.sub).map(t => tds[t.id]?.sem).filter(s => s && s !== 'u');
+    const status = ks.length === 0 ? 'u'
+                 : ks.every(s => s === 'g') ? 'g'
+                 : ks.every(s => s !== 'r') ? 'a' : 'r';
+    return { name: r.name, tds, locks, status };
+  }).sort((a, b) => ({ r:0, a:1, g:2, u:1 }[a.status] || 0) - ({ r:0, a:1, g:2, u:1 }[b.status] || 0));
+}
+
+/* ============================================================
+   ⑥ SYNC DAI CONNETTORI
+   • W3  (ss_w3 / sm_w3)  → CMSDWHBisuite
+   • VDF (ss_vdf / sm_vdf) → PhoneDWHBisuite
+   2 chiamate parallele per tab: una per Accessori (cat 13+3),
+   una per Servizi (cat 4+27). Ogni chiamata esegue 2 tool call
+   e noi leggiamo tutti i blocchi mcp_tool_result in JS.
+   parseFloat(sale.totale) = importo IVA inclusa.
+   ============================================================ */
+async function syncTab(tabId) {
+  if (syncing[tabId]) return;
+  syncing[tabId] = true;
+  syncErr[tabId] = null;
+  renderPage(tabId);
+
+  const apiKey = document.getElementById('ak-' + tabId)?.value.trim() || '';
+
+  /* Connettore in base all'operatore del tab */
+  const connector = (tabId === 'ss_w3' || tabId === 'sm_w3')
+    ? 'CMSDWHBisuite'
+    : 'PhoneDWHBisuite';
+
+  /* Una chiamata API che esegue due tool call (una per categoria).
+     Tenta il parsing da tutti i possibili blocchi di risposta:
+     mcp_tool_result, tool_result, e testo come fallback finale. */
+  async function queryTwo(catIds, type) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['x-api-key'] = apiKey;
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        messages: [{ role: 'user',
+          content: `Esegui queste due chiamate al tool get_sales:\n` +
+            `1. categoria_id=${catIds[0]} from_date="${PERIOD_FROM}" to_date="${PERIOD_TO}" limit=500\n` +
+            `2. categoria_id=${catIds[1]} from_date="${PERIOD_FROM}" to_date="${PERIOD_TO}" limit=500`
+        }],
+        mcp_servers: [{ type: 'url', url: 'https://db1.bisuite.app/mcp', name: connector }]
+      })
+    });
+
+    if (!resp.ok) {
+      const eb = await resp.json().catch(() => ({}));
+      throw new Error(`${connector} ${type}: ${eb?.error?.message || 'HTTP ' + resp.status}`);
+    }
+
+    const d = await resp.json();
+
+    /* Salva i tipi di blocco per il debug visibile */
+    const blockTypes = (d.content || []).map(b => b.type).join(', ');
+    if (!debugInfo[tabId]) debugInfo[tabId] = {};
+    debugInfo[tabId][type] = `blocks: [${blockTypes}]`;
+
+    const out = {};
+
+    /* Strategia 1: mcp_tool_result (Claude.ai) */
+    for (const b of d.content.filter(b => b.type === 'mcp_tool_result')) {
+      const raw = b.content?.[0]?.text ?? (typeof b.content === 'string' ? b.content : null);
+      if (raw) parseSales(raw, out);
+    }
+
+    /* Strategia 2: tool_result (API standard) */
+    if (!Object.keys(out).length) {
+      for (const b of d.content.filter(b => b.type === 'tool_result')) {
+        const raw = b.content?.[0]?.text ?? (typeof b.content === 'string' ? b.content : null);
+        if (raw) parseSales(raw, out);
+      }
+    }
+
+    /* Strategia 3: estrai JSON {"sales":[...]} dal testo (ultimo tentativo) */
+    if (!Object.keys(out).length) {
+      const allText = d.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
+      const matches = allText.matchAll(/\{"sales"\s*:\s*\[[\s\S]*?\]\s*\}/g);
+      for (const m of matches) {
+        try { parseSales(m[0], out); } catch {}
+      }
+    }
+
+    debugInfo[tabId][type] += ` → ${Object.keys(out).length} addetti`;
+    return { type, data: out };
+  }
+
+  function parseSales(raw, out) {
+    const sales = JSON.parse(raw).sales || [];
+    for (const s of sales) {
+      const k = normN(s.addetto_nome);
+      if (!out[k]) out[k] = { n: s.addetto_nome, v: 0 };
+      out[k].v += parseFloat(s.totale) || 0;
+    }
+  }
+
+  try {
+    /* 2 chiamate parallele: acc e serv */
+    const [accRes, servRes] = await Promise.all([
+      queryTwo(CAT_ACC,  'acc'),
+      queryTwo(CAT_SERV, 'serv'),
+    ]);
+
+    /* Merge: somma acc e serv per addetto (normalizzato case-insensitive) */
+    const merged = {};
+    for (const { type, data } of [accRes, servRes]) {
+      for (const [k, { n, v }] of Object.entries(data)) {
+        if (!merged[k]) merged[k] = { n, a: 0, s: 0 };
+        if (type === 'acc')  merged[k].a += v;
+        if (type === 'serv') merged[k].s += v;
+      }
+    }
+
+    lData[tabId] = Object.values(merged);
+    syncTime[tabId] = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    syncErr[tabId] = e.message;
+  }
+
+  syncing[tabId] = false;
+  renderPage(tabId);
+}
+
+/* ============================================================
+   ⑦ PARSING FILE EXCEL/CSV
+   ============================================================ */
+function colIdx(l) { let i = 0; for (const c of l.toUpperCase()) i = i * 26 + (c.charCodeAt(0) - 64); return i - 1; }
+
+function parseFile(data, tabId) {
+  const wb = XLSX.read(data, { type: 'binary' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  if (aoa.length < 2) return null;
+
+  let cmap = {};
+  if (tabId === 'ss_w3' || tabId === 'sm_w3') {
+    for (const [l, tid] of Object.entries(TMPL_W3))
+      if (tid !== '_n' && tid !== '_skip') cmap[tid] = colIdx(l);
+  } else {
+    // VDF: keyword fallback
+    const rawH = aoa[0].map(h => String(h || '').trim().toLowerCase());
+    const hints = {
+      fisso_pt:['fisso pt','fisso_pt'], fisso_pz:['fisso pz','fisso_pz'],
+      mobile_pt:['mobile pt','mobile_pt'], mobile_pz:['mobile pz','mobile_pz'],
+      iva_voci:['iva voci','voci'], iva_fissi:['iva fissi','fissi'],
+      tnp:['tnp'], energia:['energia'],
+      accessori:['accessori','acc'], servizi:['servizi','serv'],
+    };
+    const used = new Set([0]);
+    for (const [tid, hs] of Object.entries(hints)) {
+      for (let ci = 0; ci < rawH.length; ci++) {
+        if (used.has(ci)) continue;
+        const h = rawH[ci].replace(/^pista\s+/, '');
+        for (const hint of hs) {
+          if (h === hint || h.includes(hint) || hint.includes(h)) {
+            cmap[tid] = ci; used.add(ci); break;
+          }
+        }
+        if (cmap[tid] !== undefined) break;
+      }
+    }
+  }
+
+  return aoa.slice(1)
+    .filter(r => String(r[0] || '').trim() && !/^totale$|^media$/i.test(String(r[0] || '').trim()))
+    .map(r => ({
+      name: String(r[0] || 'N/D').trim(),
+      ...Object.fromEntries(Object.entries(cmap).map(([tid, ci]) => [
+        tid, r[ci] !== '' ? parseFloat(String(r[ci]).replace(',', '.')) || 0 : null
+      ]))
+    }));
+}
+
+function handleFile(e, tabId) {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const rows = parseFile(ev.target.result, tabId);
+      if (rows?.length) { mData[tabId] = rows; renderPage(tabId); }
+      else alert('Nessun dato trovato nel file.');
+    } catch (ex) { alert('Errore parsing: ' + ex.message); }
+  };
+  r.readAsBinaryString(f);
+  e.target.value = '';
+}
+
+/* ============================================================
+   ⑧ RENDERING
+   ============================================================ */
+function fmtV(v, unit) {
+  if (v === null) return '—';
+  if (unit === '€') return Math.round(v).toLocaleString('it-IT') + '€';
+  return (Math.round(v * 10) / 10) + ' ' + unit;
+}
+
+function cardHTML(emp, tracks) {
+  const pl = { g:'✓ Premio', a:'⟳ In proiezione', r:'✕ A rischio', u:'—' }[emp.status] || '—';
+  const ps = emp.status === 'u' ? 'a' : emp.status;
+  const locks = emp.locks.map(l =>
+    `<span class="lp ${l.sem}">${l.sem === 'g' ? '🔓' : '🔒'} ${l.name.replace(/ \(S[0-9]+\).*/,'').replace(/ [—–].*/,'')}</span>`
+  ).join('');
+  const trows = tracks.filter(t => !t.sub).map(t => {
+    const td = emp.tds[t.id]; if (!td) return '';
+    const { actual: v, proj: p, sem: s } = td;
+    const nm = t.name
+             + (t.note ? `<span class="tnote">${t.note}</span>` : '')
+             + (t.live && v !== null ? `<span class="ldot" title="Dato live dal connettore"></span>` : '');
+    if (v === null) {
+      return `<div class="trow"><div class="ttop"><div class="tleft"><div class="sem u"></div><div class="tname">${nm}</div></div><div class="tvals" style="color:var(--fnt)">—</div></div><div class="pbar"></div></div>`;
+    }
+    const pct = Math.min(100, Math.round(v / td.target * 100));
+    const pc = s === 'g' ? 'var(--green)' : s === 'a' ? 'var(--amber)' : 'var(--red)';
+    return `<div class="trow">
+      <div class="ttop">
+        <div class="tleft"><div class="sem ${s}"></div><div class="tname">${nm}</div></div>
+        <div class="tvals"><span class="av">${fmtV(v, t.unit)}</span> → <span style="color:${pc}">${fmtV(p, t.unit)}</span> / ${fmtV(td.target, t.unit)}</div>
+      </div>
+      <div class="pbar"><div class="pfill ${s}" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+  return `<div class="ecard">
+    <div class="ehead"><div><div class="ename">${emp.name}</div></div><span class="ppill ${ps}">${pl}</span></div>
+    <div class="lbar"><div class="ltit">🔐 Lucchetti bloccanti (${emp.locks.length})</div><div class="lpills">${locks}</div></div>
+    <div class="tbody">${trows}</div>
+  </div>`;
+}
+
+function renderPage(tabId) {
+  const el = document.getElementById('pg-' + tabId);
+  if (!el) return;
+  const sec = SEC[tabId];
+  if (!sec.ready) {
+    el.innerHTML = `<div class="content"><div class="cs-wrap"><span class="cs-e">📋</span><div class="cs-h">Regolamento non ancora disponibile</div><p class="cs-p">Il piano variabile ${sec.label} ${sec.op} sarà configurato appena ricevuto il documento ufficiale.</p></div></div>`;
+    return;
+  }
+  const tracks = TRACKS[tabId] || [];
+  const rows   = mData[tabId] || (tabId === 'ss_w3' ? DEMO_W3 : []);
+  const isDemo = !mData[tabId];
+  const emps   = rows.length ? buildEmps(tabId, rows.map(r => ({ ...r }))) : [];
+  const g = emps.filter(e => e.status === 'g').length;
+  const a = emps.filter(e => e.status === 'a').length;
+  const r = emps.filter(e => e.status === 'r').length;
+  const isSyncing = !!syncing[tabId];
+  const hasLive   = !!lData[tabId];
+  const err       = syncErr[tabId];
+  const ts        = syncTime[tabId];
+  const fileLabel  = sec.op === 'W3' ? 'template_valenze_SS_W3.xlsx' : 'template_valenze_SS_VDF.xlsx';
+  const connLabel  = (tabId === 'ss_w3' || tabId === 'sm_w3') ? 'CMS DWH' : 'Phone DWH';
+  const connName   = (tabId === 'ss_w3' || tabId === 'sm_w3') ? 'CMSDWHBisuite' : 'PhoneDWHBisuite';
+
+  const syncStatusCls = isSyncing ? 'sss-loading' : err ? 'sss-err' : hasLive ? 'sss-live' : 'sss-idle';
+  const syncStatusTxt = isSyncing
+    ? `⟳ Connessione a ${connLabel} in corso...`
+    : err
+      ? '⚠ ' + err
+      : hasLive
+        ? `✓ Aggiornato alle ${ts} · ${lData[tabId].length} addetti · fonte: ${connLabel}`
+        : `Premi "⚡ Aggiorna ora" per caricare Accessori e Servizi da ${connLabel}.`;
+
+  const dbg = debugInfo[tabId];
+  const dbgHtml = dbg
+    ? `<details style="margin-top:6px;font-size:10px;color:var(--mut)">
+        <summary style="cursor:pointer">🔍 Debug risposta API</summary>
+        <div style="margin-top:4px;padding:6px 8px;background:#F8FAFC;border-radius:4px;font-family:monospace;font-size:10px;line-height:1.6">
+          acc: ${dbg.acc || '—'}<br>
+          serv: ${dbg.serv || '—'}
+        </div>
+       </details>`
+    : '';
+
+  el.innerHTML = `<div class="content">
+    <!-- CALENDAR BAR -->
+    <div class="cbar">
+      <div class="ci"><div class="v">${CAL_EL}</div><div class="l">Gg. trascorsi</div></div>
+      <div class="csep"></div>
+      <div class="ci"><div class="v">${CAL_REM}</div><div class="l">Gg. rimanenti</div></div>
+      <div class="csep"></div>
+      <div class="ci"><div class="v">${CAL_TOT}</div><div class="l">Gg. totali</div></div>
+      <div class="csep"></div>
+      <div class="ci"><div class="v" style="font-size:18px">×${(CAL_TOT/CAL_EL).toFixed(2)}</div><div class="l">Proiezione</div></div>
+      <div class="csep"></div>
+      <div class="cprog">
+        <div class="l">Avanzamento giugno 2026 — ${CAL_PCT}% · giorni lavorativi · 2 giugno escluso</div>
+        <div class="mbar"><div class="mfill" style="width:${CAL_PCT}%"></div></div>
+      </div>
+    </div>
+
+    <!-- NOTICES -->
+    ${isDemo ? `<div class="notice n-demo">📊 Dati di esempio attivi. Carica il template per visualizzare i dati reali.</div>` : `<div class="notice n-ok">✓ File caricato · ${rows.length} addetti</div>`}
+
+    <!-- CONTROLS: upload + sync -->
+    <div class="controls">
+
+      <!-- UPLOAD -->
+      <input type="file" id="fi-${tabId}" accept=".xlsx,.xls,.csv" onchange="handleFile(event,'${tabId}')">
+      <div class="upload-box ${mData[tabId] ? 'loaded' : ''}"
+           onclick="document.getElementById('fi-${tabId}').click()"
+           ondragover="event.preventDefault();this.classList.add('over')"
+           ondragleave="this.classList.remove('over')"
+           ondrop="event.preventDefault();this.classList.remove('over');handleFile({target:{files:event.dataTransfer.files,value:''}},'${tabId}')">
+        <div class="ub-inner">
+          <span class="ub-ico">📊</span>
+          <div>
+            <div class="ub-title">Template piste — 8 metriche</div>
+            <div class="ub-sub">${fileLabel}</div>
+            ${mData[tabId] ? `<div class="ub-ok">✓ ${rows.length} addetti caricati · clicca per aggiornare</div>` : `<div class="ub-sub">Trascina qui oppure clicca per selezionare</div>`}
+          </div>
+        </div>
+      </div>
+
+      <!-- SYNC PANEL -->
+      <div class="sync-panel">
+        <div class="sync-top">
+          <div class="sync-info">
+            <div class="si-title">Accessori e Servizi · live da ${connLabel}</div>
+            <div class="si-desc">
+              2 chiamate parallele a <b>${connName}</b> per il periodo ${PERIOD_FROM} / ${PERIOD_TO}.<br>
+              Una per Accessori, una per Servizi. Aggrega per addetto in JS.
+            </div>
+            <div class="sync-cats">
+              <span class="cat-chip cc-blue">Accessori</span>
+              <span class="cat-chip cc-gray">ACCESSORI (13) + GARANZIE (3)</span>
+              <span class="cat-chip cc-green">Servizi</span>
+              <span class="cat-chip cc-gray">ASSISTENZA (4) + GARANTEASY (27)</span>
+            </div>
+          </div>
+          <button class="sync-btn" onclick="syncTab('${tabId}')" ${isSyncing ? 'disabled' : ''}>
+            <div class="sb-main">
+              ${isSyncing ? `<span class="spin">⟳</span> Caricamento` : '⚡ Aggiorna ora'}
+            </div>
+            <div class="sb-sub">${connLabel}</div>
+          </button>
+        </div>
+        <div class="sync-status-strip ${syncStatusCls}">${syncStatusTxt}</div>
+        ${dbgHtml}
+        <details class="api-cfg">
+          <summary>🔑 Configurazione API key (solo fuori da Claude.ai)</summary>
+          <div class="api-key-row">
+            <input type="password" id="ak-${tabId}" placeholder="sk-ant-api03-..." autocomplete="off">
+            <span class="ak-hint">Lascia vuoto se usi l'artifact in Claude.ai — la chiave è gestita automaticamente.</span>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- SUMMARY -->
+    ${emps.length ? `
+    <div class="srow">
+      <div class="sc"><div class="sl">Addetti</div><div class="sv">${emps.length}</div><div class="ss">${sec.op} ${sec.label.includes('Spec') ? 'SS' : 'SM'}</div></div>
+      <div class="sc g"><div class="sl">🟢 Premio</div><div class="sv">${g}</div><div class="ss">${sec.base}€ acquisito</div></div>
+      <div class="sc a"><div class="sl">🟡 In proiezione</div><div class="sv">${a}</div><div class="ss">raggiungibile</div></div>
+      <div class="sc r"><div class="sl">🔴 A rischio</div><div class="sv">${r}</div><div class="ss">pista critica</div></div>
+      <div class="sc"><div class="sl">💰 Base</div><div class="sv" style="font-size:18px">${sec.base}€</div><div class="ss">10 piste · ${sec.locks} 🔒</div></div>
+    </div>
+    <div class="egrid">${emps.map(e => cardHTML(e, tracks)).join('')}</div>` :
+    `<div class="cs-wrap"><span class="cs-e">📂</span><div class="cs-h">Nessun dato</div><p class="cs-p">Carica il template per visualizzare gli addetti oppure usa "Aggiorna ora" per i dati live.</p></div>`}
+  </div>`;
+}
+</script>
+</body>
+</html>
