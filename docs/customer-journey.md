@@ -136,10 +136,14 @@ un'icona matita ("Modifica") che apre un dialog per editare:
 - **PDV DESTINAZIONE**: non disponibile da BiSuite → solo manuale.
 - **IMEI del telefono**: spesso assente nei `venditaInfo` → auto-derivato se
   presente, altrimenti compilabile a mano.
-- **RATA**: non disponibile da BiSuite (`importoFinanziato` è il valore totale
-  finanziato del prodotto, non la rata mensile) → il reconcile la lascia `null`,
-  l'utente la imposta a mano. Il valore totale del prodotto resta in `importo`
-  (usato per il "valore cliente").
+- **RATA/CANONE**: campo unico mostrato nella colonna "RATA/CANONE". La rata
+  non è disponibile da BiSuite (`importoFinanziato` è il valore totale
+  finanziato del prodotto, non la rata mensile) → il reconcile lascia `rata`
+  `null`. La colonna mostra `rata` (manuale) se presente, altrimenti il
+  `canone` derivato dalla vendita (`dett.canone`, utile per le offerte
+  mobile/fisso). L'utente può comunque scrivere a mano rata o canone nel campo
+  "RATA/CANONE (€)". Il valore totale del prodotto resta in `importo` (usato
+  per il "valore cliente").
 
 Il salvataggio imposta `detailsManual = true` sull'item: da quel momento il
 reconcile **non sovrascrive più** questi quattro campi (IMEI e RATA via SQL

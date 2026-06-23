@@ -174,7 +174,7 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
       startY: afterDrivers + 14,
       head: [[
         "", "Driver", "Descrizione", "Contratto", "Addetto", "PDV",
-        "IMEI", "RATA", "Inserito", "Attivato", "Stato", "Gettone",
+        "IMEI", "RATA/CANONE", "Inserito", "Attivato", "Stato", "Gettone",
       ]],
       body: items.map((it) => [
         "",
@@ -184,7 +184,7 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
         it.addetto || "—",
         it.pdvDestinazione || it.pdvOrigine || "—",
         it.imei || "—",
-        it.rata ? `€ ${it.rata}` : "—",
+        it.rata ? `€ ${it.rata}` : it.canone ? `€ ${it.canone}` : "—",
         fmtDate(it.dataInserimento),
         fmtDate(it.dataAttivazione),
         CJ_ITEM_STATE_LABELS[it.state as keyof typeof CJ_ITEM_STATE_LABELS] || it.state,
@@ -244,7 +244,7 @@ export function exportJourneyExcel(data: JourneyExportData): void {
 
   const contractHead = [
     "", "Driver", "Descrizione", "Contratto", "Addetto", "PDV",
-    "IMEI", "RATA", "Inserito", "Attivato", "Stato", "Gettone",
+    "IMEI", "RATA/CANONE", "Inserito", "Attivato", "Stato", "Gettone",
   ];
   const contractRows: (string | number)[][] = [
     contractHead,
@@ -256,7 +256,7 @@ export function exportJourneyExcel(data: JourneyExportData): void {
       it.addetto || "—",
       it.pdvDestinazione || it.pdvOrigine || "—",
       it.imei || "—",
-      it.rata ? `€ ${it.rata}` : "—",
+      it.rata ? `€ ${it.rata}` : it.canone ? `€ ${it.canone}` : "—",
       fmtDate(it.dataInserimento),
       fmtDate(it.dataAttivazione),
       CJ_ITEM_STATE_LABELS[it.state as keyof typeof CJ_ITEM_STATE_LABELS] || it.state,

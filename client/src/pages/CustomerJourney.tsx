@@ -895,7 +895,7 @@ function JourneyDetailView({
                     <TableHead>Addetto</TableHead>
                     <TableHead>PDV</TableHead>
                     <TableHead>IMEI</TableHead>
-                    <TableHead>RATA</TableHead>
+                    <TableHead>RATA/CANONE</TableHead>
                     <TableHead>Inserito</TableHead>
                     <TableHead>Attivato</TableHead>
                     <TableHead>Stato</TableHead>
@@ -929,7 +929,7 @@ function JourneyDetailView({
                         {it.imei || "—"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs" data-testid={`text-rata-${it.id}`}>
-                        {it.rata ? `€ ${it.rata}` : "—"}
+                        {it.rata ? `€ ${it.rata}` : it.canone ? `€ ${it.canone}` : "—"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs">
                         {fmtDate(it.dataInserimento)}
@@ -1073,12 +1073,12 @@ function ItemDetailsDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="edit-rata">RATA (€)</Label>
+            <Label htmlFor="edit-rata">RATA/CANONE (€)</Label>
             <Input
               id="edit-rata"
               value={rata}
               onChange={(e) => setRata(e.target.value)}
-              placeholder="Importo rata"
+              placeholder="Importo rata o canone"
               inputMode="decimal"
               data-testid="input-rata"
             />
