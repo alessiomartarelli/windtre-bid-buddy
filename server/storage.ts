@@ -120,6 +120,7 @@ export interface IStorage {
   listCustomerJourneys(orgId: string, addettiFilter?: string[] | null): Promise<CustomerJourney[]>;
   getCustomerJourney(id: string, orgId: string): Promise<CustomerJourney | undefined>;
   getCustomerJourneyItems(journeyId: string): Promise<CustomerJourneyItem[]>;
+  getCustomerJourneyValues(journeyIds: string[]): Promise<Map<string, number>>;
   getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined>;
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
   setCustomerJourneyItemGettone(id: string, orgId: string, confirmed: boolean, userId: string | null): Promise<CustomerJourneyItem>;
@@ -792,6 +793,25 @@ export class DatabaseStorage implements IStorage {
     }
     for (const id of journeyIds) {
       out.set(id, summarizeDrivers(byJourney.get(id) ?? []));
+    }
+    return out;
+  }
+
+  // Valore cliente per-journey: somma degli importi degli item della journey.
+  // Usato dalla lista (schede cliente) per l'ordinamento per "valore cliente".
+  // `importo` è una colonna testuale (numeric as string) ⇒ parse con parseFloat.
+  async getCustomerJourneyValues(journeyIds: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (journeyIds.length === 0) return out;
+    const rows = await db.select({
+      journeyId: customerJourneyItems.journeyId,
+      importo: customerJourneyItems.importo,
+    }).from(customerJourneyItems)
+      .where(inArray(customerJourneyItems.journeyId, journeyIds));
+    for (const r of rows) {
+      const v = r.importo != null ? parseFloat(String(r.importo)) : NaN;
+      if (!Number.isFinite(v)) continue;
+      out.set(r.journeyId, (out.get(r.journeyId) ?? 0) + v);
     }
     return out;
   }

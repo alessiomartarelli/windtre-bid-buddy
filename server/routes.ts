@@ -2683,8 +2683,14 @@ export async function registerRoutes(
       // Allega a ogni scheda il riepilogo driver (attivati vs attivabili),
       // così la lista può mostrare lo stato dei 6 driver senza una chiamata
       // di dettaglio per cliente.
-      const summaries = await storage.getCustomerJourneyDriverSummaries(journeys.map((j) => j.id));
-      const withDrivers = journeys.map((j) => ({ ...j, drivers: summaries.get(j.id) ?? [] }));
+      const journeyIds = journeys.map((j) => j.id);
+      const summaries = await storage.getCustomerJourneyDriverSummaries(journeyIds);
+      const values = await storage.getCustomerJourneyValues(journeyIds);
+      const withDrivers = journeys.map((j) => ({
+        ...j,
+        drivers: summaries.get(j.id) ?? [],
+        valore: values.get(j.id) ?? 0,
+      }));
       res.json(withDrivers);
     } catch (error) {
       console.error("Customer journeys list error:", error);

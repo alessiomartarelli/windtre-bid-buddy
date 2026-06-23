@@ -148,6 +148,18 @@ preservati). Permessi: gli operatori possono editare solo i propri item
 con body `{ dataAttivazione?, pdvDestinazione?, imei?, rata? }` (valori `null`
 o stringa vuota azzerano il campo).
 
+## Ordinamento lista
+
+La lista delle schede cliente ha un selettore di ordinamento con 4 chiavi —
+**Data apertura**, **Nome cliente**, **% completamento** (driver attivati/6) e
+**Valore cliente** — più un toggle crescente/decrescente. L'ordinamento è
+client-side sulla lista già filtrata (ricerca + privato/business) e si riflette
+anche negli export PDF/Excel (l'ordine corrente è incluso nella label del
+filtro). Il **valore cliente** è la somma degli `importo` degli item della
+journey, calcolata lato server in `getCustomerJourneyValues` e allegata a ogni
+scheda dalla route `GET /api/customer-journeys` come campo `valore`; in card è
+mostrato formattato in euro (0 ⇒ "—").
+
 ## Export PDF/Excel (Task #179)
 
 Dal dettaglio di una journey i pulsanti **PDF** e **Excel** esportano il

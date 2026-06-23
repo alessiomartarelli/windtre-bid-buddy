@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Route as RouteIcon, RefreshCw, ArrowLeft, CheckCircle2, Circle,
   Search, User, Building2, Loader2, Coins, Pencil,
-  FileText, FileSpreadsheet,
+  FileText, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS,
@@ -40,7 +40,17 @@ interface DriverSummary {
   count: number;
 }
 
-type JourneyListItem = CustomerJourney & { drivers: DriverSummary[] };
+type JourneyListItem = CustomerJourney & { drivers: DriverSummary[]; valore?: number };
+
+type SortKey = "data" | "nome" | "completamento" | "valore";
+type SortDir = "asc" | "desc";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  data: "Data apertura",
+  nome: "Nome cliente",
+  completamento: "% completamento",
+  valore: "Valore cliente",
+};
 
 interface ItemDetailsPayload {
   dataAttivazione: string | null;
@@ -99,12 +109,19 @@ function fmtDate(d: string | Date | null | undefined): string {
   return date.toLocaleDateString("it-IT");
 }
 
+function fmtEuro(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v) || v === 0) return "—";
+  return v.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+}
+
 export default function CustomerJourneyPage() {
   const { profile } = useAuth();
   const { toast } = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"tutti" | "privato" | "azienda">("tutti");
+  const [sortKey, setSortKey] = useState<SortKey>("data");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [triggerDateInput, setTriggerDateInput] = useState<string>("");
 
   const isAdmin = ["super_admin", "admin"].includes(profile?.role || "");
@@ -260,18 +277,46 @@ export default function CustomerJourneyPage() {
   const countPrivato = journeys.filter((j) => j.customerType === "privato").length;
   const countAzienda = journeys.filter((j) => j.customerType === "azienda").length;
 
+  const journeyPct = (j: JourneyListItem): number => {
+    const total = CJ_DRIVER_ORDER.length;
+    const active = CJ_DRIVER_ORDER.filter(
+      (d) => j.drivers?.find((s) => s.driver === d)?.activated,
+    ).length;
+    return total > 0 ? active / total : 0;
+  };
+
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp = 0;
+    switch (sortKey) {
+      case "data":
+        cmp = new Date(a.openedAt ?? 0).getTime() - new Date(b.openedAt ?? 0).getTime();
+        break;
+      case "nome":
+        cmp = journeyTitle(a).localeCompare(journeyTitle(b), "it", { sensitivity: "base" });
+        break;
+      case "completamento":
+        cmp = journeyPct(a) - journeyPct(b);
+        break;
+      case "valore":
+        cmp = (a.valore ?? 0) - (b.valore ?? 0);
+        break;
+    }
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
   const listFilterLabel = (() => {
     const parts: string[] = [];
     if (typeFilter === "privato") parts.push("Solo privati");
     else if (typeFilter === "azienda") parts.push("Solo business");
     if (search.trim()) parts.push(`Ricerca: "${search.trim()}"`);
+    parts.push(`Ordine: ${SORT_LABELS[sortKey]} ${sortDir === "asc" ? "↑" : "↓"}`);
     return parts.join(" · ");
   })();
 
   const handleExportListPdf = async () => {
     setListPdfPending(true);
     try {
-      await exportJourneyListPdf({ journeys: filtered, filterLabel: listFilterLabel });
+      await exportJourneyListPdf({ journeys: sorted, filterLabel: listFilterLabel });
     } catch (err) {
       toast({
         title: "Errore",
@@ -285,7 +330,7 @@ export default function CustomerJourneyPage() {
 
   const handleExportListExcel = () => {
     try {
-      exportJourneyListExcel({ journeys: filtered, filterLabel: listFilterLabel });
+      exportJourneyListExcel({ journeys: sorted, filterLabel: listFilterLabel });
     } catch (err) {
       toast({
         title: "Errore",
@@ -424,11 +469,39 @@ export default function CustomerJourneyPage() {
                 </Button>
               </div>
               <div className="flex items-center gap-1.5 sm:ml-auto">
+                <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+                  <SelectTrigger className="w-[170px] h-9" data-testid="select-sort-key">
+                    <ArrowUpDown className="h-4 w-4 mr-1.5 text-muted-foreground" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                      <SelectItem key={k} value={k} data-testid={`option-sort-${k}`}>
+                        {SORT_LABELS[k]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                  title={sortDir === "asc" ? "Crescente" : "Decrescente"}
+                  aria-label={sortDir === "asc" ? "Ordine crescente" : "Ordine decrescente"}
+                  data-testid="button-sort-dir"
+                >
+                  {sortDir === "asc" ? (
+                    <ArrowUp className="h-4 w-4" />
+                  ) : (
+                    <ArrowDown className="h-4 w-4" />
+                  )}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleExportListPdf}
-                  disabled={listPdfPending || filtered.length === 0}
+                  disabled={listPdfPending || sorted.length === 0}
                   data-testid="button-export-list-pdf"
                 >
                   {listPdfPending ? (
@@ -442,7 +515,7 @@ export default function CustomerJourneyPage() {
                   variant="outline"
                   size="sm"
                   onClick={handleExportListExcel}
-                  disabled={filtered.length === 0}
+                  disabled={sorted.length === 0}
                   data-testid="button-export-list-excel"
                 >
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
@@ -455,7 +528,7 @@ export default function CustomerJourneyPage() {
               <div className="flex items-center justify-center py-16">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : filtered.length === 0 ? (
+            ) : sorted.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-muted-foreground">
                   <RouteIcon className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -469,7 +542,7 @@ export default function CustomerJourneyPage() {
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filtered.map((j) => {
+                {sorted.map((j) => {
                   const drivers = CJ_DRIVER_ORDER.map((d) => ({
                     driver: d,
                     activated: j.drivers?.find((s) => s.driver === d)?.activated ?? false,
@@ -532,6 +605,12 @@ export default function CustomerJourneyPage() {
                               className="h-full rounded-full bg-emerald-500 transition-all"
                               style={{ width: `${pct}%` }}
                             />
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">Valore cliente</span>
+                            <span className="font-semibold tabular-nums" data-testid={`text-valore-${j.id}`}>
+                              {fmtEuro(j.valore)}
+                            </span>
                           </div>
                           <div className="grid grid-cols-3 gap-1.5">
                             {drivers.map((d) => (
