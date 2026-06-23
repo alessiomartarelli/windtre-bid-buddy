@@ -127,6 +127,10 @@ export const customerJourneys = pgTable("customer_journeys", {
   nome: varchar("nome"),
   cognome: varchar("cognome"),
   ragioneSociale: varchar("ragione_sociale"),
+  // true se la ragione sociale è stata inserita/corretta a mano dall'operatore:
+  // il reconcile non la sovrascrive più con il suggerimento ricavato dall'email
+  // (BiSuite non fornisce la ragione sociale del cliente in modo strutturato).
+  ragioneSocialeManual: boolean("ragione_sociale_manual").notNull().default(false),
   nominativo: varchar("nominativo"),
   telefono: varchar("telefono"),
   codiceCliente: varchar("codice_cliente"),

@@ -137,3 +137,38 @@ export function parseVenditaInfo(dettaglio: any): {
   }
   return out;
 }
+
+// Prefissi email "generici" (caselle di reparto/servizio) che NON sono il nome
+// dell'azienda: in questi casi non proponiamo alcun suggerimento di ragione
+// sociale.
+const GENERIC_EMAIL_LOCAL_PARTS = new Set([
+  "info", "amministrazione", "amm", "ammin", "contabilita", "segreteria",
+  "direzione", "commerciale", "ufficio", "ordini", "acquisti", "vendite",
+  "mail", "posta", "pec", "noreply", "no-reply", "supporto", "assistenza",
+  "marketing", "hr", "staff", "admin", "contact", "contatti", "azienda",
+]);
+
+/**
+ * Suggerimento (best-effort) della ragione sociale del cliente business a
+ * partire dalla sua email. BiSuite NON fornisce la ragione sociale del cliente
+ * in un campo strutturato: l'unico indizio è la parte locale dell'email (es.
+ * `BLUESHARKSRL@modaroma.it` ⇒ "BLUESHARKSRL"). Il valore è solo un punto di
+ * partenza modificabile dall'operatore: non sappiamo dove vadano gli spazi.
+ * Restituisce null se l'email manca, è una casella generica di reparto, o non
+ * contiene lettere.
+ */
+export function suggestRagioneSocialeFromEmail(
+  email: string | null | undefined,
+): string | null {
+  if (!email) return null;
+  const at = String(email).indexOf("@");
+  if (at <= 0) return null;
+  const local = String(email).slice(0, at).trim();
+  if (!local) return null;
+  // scarta separatori comuni e numeri di coda (es. "info2", "amministrazione.2")
+  const base = local.replace(/[._-]?\d+$/, "").replace(/[._-]+/g, " ").trim();
+  const key = base.replace(/\s+/g, "").toLowerCase();
+  if (!key || GENERIC_EMAIL_LOCAL_PARTS.has(key)) return null;
+  if (!/[a-zA-Z]/.test(base)) return null;
+  return base.toUpperCase();
+}

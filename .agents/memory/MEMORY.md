@@ -1,6 +1,7 @@
 - [Deploy prod via workflow](deploy-prod-via-workflow.md) — `npm run build` supera 120s e i bg process vengono uccisi; lancia deploy con un workflow temporaneo.
 - [Customer Journey operator isolation](cj-operator-isolation.md) — operator-scoped queries: guard `filter != null` (empty array => []), never `filter.length > 0`, or empty addetti leaks whole tenant.
 - [Dev DB schema drift](dev-db-schema-drift.md) — se signup/login danno 500 "column ... does not exist", il DB dev è disallineato da shared/schema.ts: lancia `npm run db:push`.
+- [BiSuite ragione sociale](bisuite-ragione-sociale.md) — clienti azienda: BiSuite non dà la ragione sociale strutturata (campi vuoti, rawData=dealer); ricavala dall'email + manuale, normalizza prima del fallback `??`.
 - [XLSX readFile ESM quirk](xlsx-esm-readfile.md) — `XLSX.readFile` non esiste in ESM/tsx; leggi il buffer con fs e usa `XLSX.read(buf,{type:"buffer"})`.
 - [Drizzle sql ANY array](drizzle-sql-any-array.md) — `sql\`= ANY(${jsArray})\`` esplode in più placeholder => PG 42809; costruisci `ARRAY[...]::int[]` con `sql.join`.
 - [TanStack queryKey = URL path](tanstack-querykey-url.md) — il fetcher di default fa `queryKey.join("/")`: i segmenti diventano path, la route server deve usare path params, non query.

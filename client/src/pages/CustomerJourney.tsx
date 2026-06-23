@@ -70,10 +70,26 @@ const STATE_VARIANTS: Record<string, string> = {
   riaccreditato: "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30",
 };
 
-function journeyTitle(j: CustomerJourney): string {
-  if (j.customerType === "azienda") return j.ragioneSociale || j.nominativo || j.customerKey;
+// Referente / persona fisica del cliente (Nome Cognome, fallback nominativo).
+function journeyReferente(j: CustomerJourney): string {
   const full = [j.nome, j.cognome].filter(Boolean).join(" ").trim();
-  return full || j.nominativo || j.customerKey;
+  return full || j.nominativo || "";
+}
+
+function journeyTitle(j: CustomerJourney): string {
+  if (j.customerType === "azienda") {
+    return j.ragioneSociale || journeyReferente(j) || j.customerKey;
+  }
+  return journeyReferente(j) || j.customerKey;
+}
+
+// Riga secondaria "in secondo piano": per i business, quando il titolo è la
+// ragione sociale, mostra il referente amministrativo. Vuoto altrimenti
+// (così non si duplica il titolo).
+function journeySubtitle(j: CustomerJourney): string {
+  if (j.customerType !== "azienda" || !j.ragioneSociale) return "";
+  const ref = journeyReferente(j);
+  return ref && ref !== j.ragioneSociale ? ref : "";
 }
 
 function fmtDate(d: string | Date | null | undefined): string {
@@ -208,6 +224,25 @@ export default function CustomerJourneyPage() {
       toast({
         title: "Errore",
         description: err instanceof Error ? err.message : "Aggiornamento dettagli fallito",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const ragioneSocialeMutation = useMutation({
+    mutationFn: async ({ id, ragioneSociale }: { id: string; ragioneSociale: string | null }) => {
+      const res = await apiRequest("PATCH", `/api/customer-journeys/${id}/ragione-sociale`, { ragioneSociale });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys", selectedId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
+      toast({ title: "Ragione sociale aggiornata" });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: "Errore",
+        description: err instanceof Error ? err.message : "Aggiornamento ragione sociale fallito",
         variant: "destructive",
       });
     },
@@ -459,8 +494,18 @@ export default function CustomerJourneyPage() {
                                   <User className="h-4 w-4" />
                                 )}
                               </span>
-                              <span className="truncate" data-testid={`text-journey-name-${j.id}`}>
-                                {journeyTitle(j)}
+                              <span className="flex min-w-0 flex-col">
+                                <span className="truncate" data-testid={`text-journey-name-${j.id}`}>
+                                  {journeyTitle(j)}
+                                </span>
+                                {journeySubtitle(j) && (
+                                  <span
+                                    className="truncate text-xs font-normal text-muted-foreground"
+                                    data-testid={`text-journey-referente-${j.id}`}
+                                  >
+                                    {journeySubtitle(j)}
+                                  </span>
+                                )}
                               </span>
                             </CardTitle>
                             <Badge
@@ -540,9 +585,11 @@ export default function CustomerJourneyPage() {
                 onSetState={(id, state) => stateMutation.mutate({ id, state })}
                 onSetGettone={(id, confirmed) => gettoneMutation.mutate({ id, confirmed })}
                 onSaveDetails={(id, details) => detailsMutation.mutate({ id, details })}
+                onSaveRagioneSociale={(id, ragioneSociale) => ragioneSocialeMutation.mutate({ id, ragioneSociale })}
                 statePending={stateMutation.isPending}
                 gettonePending={gettoneMutation.isPending}
                 detailsPending={detailsMutation.isPending}
+                ragioneSocialePending={ragioneSocialeMutation.isPending}
               />
             )}
           </>
@@ -553,21 +600,25 @@ export default function CustomerJourneyPage() {
 }
 
 function JourneyDetailView({
-  detail, onSetState, onSetGettone, onSaveDetails, statePending, gettonePending, detailsPending,
+  detail, onSetState, onSetGettone, onSaveDetails, onSaveRagioneSociale, statePending, gettonePending, detailsPending, ragioneSocialePending,
 }: {
   detail: JourneyDetail;
   onSetState: (id: string, state: CjItemState) => void;
   onSetGettone: (id: string, confirmed: boolean) => void;
   onSaveDetails: (id: string, details: ItemDetailsPayload) => void;
+  onSaveRagioneSociale: (id: string, ragioneSociale: string | null) => void;
   statePending: boolean;
   gettonePending: boolean;
   detailsPending: boolean;
+  ragioneSocialePending: boolean;
 }) {
   const { journey, items, drivers } = detail;
   const driverMap = new Map(drivers.map((d) => [d.driver, d]));
   const [editItem, setEditItem] = useState<CustomerJourneyItem | null>(null);
   const { toast } = useToast();
   const [pdfPending, setPdfPending] = useState(false);
+  const [editRagioneSociale, setEditRagioneSociale] = useState(false);
+  const [ragioneSocialeDraft, setRagioneSocialeDraft] = useState(journey.ragioneSociale ?? "");
 
   const handleExportPdf = async () => {
     setPdfPending(true);
@@ -608,14 +659,76 @@ function JourneyDetailView({
                 ) : (
                   <User className="h-5 w-5 text-primary" />
                 )}
-                {journeyTitle(journey)}
+                <span data-testid="text-detail-title">{journeyTitle(journey)}</span>
               </CardTitle>
+              {journeySubtitle(journey) && (
+                <p
+                  className="mt-0.5 text-sm text-muted-foreground"
+                  data-testid="text-detail-referente"
+                >
+                  Referente: {journeySubtitle(journey)}
+                </p>
+              )}
               <CardDescription>
                 {journey.customerType === "azienda" ? "P.IVA" : "CF"}: {journey.customerKey}
                 {journey.telefono ? ` · Tel: ${journey.telefono}` : ""}
                 {journey.codiceCliente ? ` · Cod. cliente: ${journey.codiceCliente}` : ""}
                 {` · Aperta il ${fmtDate(journey.openedAt)}`}
               </CardDescription>
+              {journey.customerType === "azienda" && (
+                <div className="mt-3">
+                  {editRagioneSociale ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        value={ragioneSocialeDraft}
+                        onChange={(e) => setRagioneSocialeDraft(e.target.value)}
+                        placeholder="Ragione sociale"
+                        className="h-8 w-64 max-w-full"
+                        data-testid="input-ragione-sociale"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          onSaveRagioneSociale(journey.id, ragioneSocialeDraft.trim() || null);
+                          setEditRagioneSociale(false);
+                        }}
+                        disabled={ragioneSocialePending}
+                        data-testid="button-save-ragione-sociale"
+                      >
+                        {ragioneSocialePending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Salva"
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setRagioneSocialeDraft(journey.ragioneSociale ?? "");
+                          setEditRagioneSociale(false);
+                        }}
+                        data-testid="button-cancel-ragione-sociale"
+                      >
+                        Annulla
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setRagioneSocialeDraft(journey.ragioneSociale ?? "");
+                        setEditRagioneSociale(true);
+                      }}
+                      data-testid="button-edit-ragione-sociale"
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-2" />
+                      {journey.ragioneSociale ? "Modifica ragione sociale" : "Aggiungi ragione sociale"}
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button

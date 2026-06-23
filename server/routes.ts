@@ -2886,6 +2886,34 @@ export async function registerRoutes(
     }
   });
 
+  // Salva la ragione sociale del cliente business (BiSuite non la fornisce in
+  // modo strutturato): l'operatore può inserirla/correggerla a mano dal
+  // dettaglio journey; il valore non viene più sovrascritto dal reconcile.
+  app.patch("/api/customer-journeys/:id/ragione-sociale", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const { ragioneSociale } = req.body as { ragioneSociale?: string | null };
+      const journey = await storage.getCustomerJourney(req.params.id, profile.organizationId);
+      if (!journey) return res.status(404).json({ error: "Journey non trovata" });
+      if (profile.role === "operatore") {
+        const mine = (profile.bisuiteAddetti ?? []).map((a) => a.toLowerCase().trim()).filter(Boolean);
+        const items = await storage.getCustomerJourneyItems(journey.id);
+        const owns = items.some((it) => mine.includes(String(it.addetto || "").toLowerCase().trim()));
+        if (!owns) return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+      const updated = await storage.updateCustomerJourneyRagioneSociale(
+        req.params.id,
+        profile.organizationId,
+        ragioneSociale ?? null,
+      );
+      res.json(updated);
+    } catch (error) {
+      console.error("Customer journey ragione sociale error:", error);
+      res.status(500).json({ error: "Errore nel salvataggio della ragione sociale" });
+    }
+  });
+
   // Lightweight versione delle regole BiSuite mapping. Usata dai client
   // (Dashboard Gara Reale, MappaturaBiSuite) per inserire `rulesUpdatedAt`
   // nelle queryKey React Query: così, qualunque sia la sorgente del cambio

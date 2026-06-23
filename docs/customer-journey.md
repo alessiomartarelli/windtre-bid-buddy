@@ -104,6 +104,27 @@ Tutte le route CJ sono protette da `requireModule("customer_journey")`.
 > `ADDETTO`. Il titolo della scheda business usa quindi la ragione sociale /
 > nominativo del cliente, mai il nome dell'addetto.
 
+> **Scheda cliente business (azienda)**: BiSuite **non** fornisce la ragione
+> sociale del cliente in modo strutturato — `cliente.ragioneSociale` /
+> `denominazione` sono vuoti e il top-level `rawData.ragioneSociale` è il
+> **dealer**, non il cliente. Quindi per i clienti azienda:
+> - il reconcile propone una ragione sociale ricavata dalla parte locale
+>   dell'email del cliente (`suggestRagioneSocialeFromEmail` in
+>   `shared/customerJourney.ts`: scarta gli alias generici tipo
+>   `info`/`amministrazione`/`pec`, toglie le cifre finali, restituisce
+>   MAIUSCOLO);
+> - la scheda mostra come titolo la **ragione sociale** e, come riga
+>   secondaria "in secondo piano", il **referente amministrativo**
+>   (Nome Cognome del cliente, `journeySubtitle`/`journeyReferente` in
+>   `CustomerJourney.tsx`). Se la ragione sociale manca, il titolo è il
+>   referente e non c'è riga secondaria (niente duplicati);
+> - dal dettaglio l'operatore può inserire/correggere la ragione sociale a
+>   mano (PATCH `/api/customer-journeys/:id/ragione-sociale`). Il salvataggio
+>   marca `ragioneSocialeManual = true` e da quel momento il reconcile **non**
+>   sovrascrive più il valore (pattern `CASE WHEN ragioneSocialeManual THEN …
+>   ELSE excluded …`). Svuotare il campo azzera valore e flag, ripristinando
+>   il suggerimento automatico al reconcile successivo.
+
 ### Campi non forniti da BiSuite → compilazione manuale
 
 BiSuite non fornisce in modo affidabile alcuni campi. Sono quindi **compilabili

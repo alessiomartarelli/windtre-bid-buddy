@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
-import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, type CjDriverSummary } from "@shared/customerJourney";
+import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, suggestRagioneSocialeFromEmail, type CjDriverSummary } from "@shared/customerJourney";
 
 // Data trigger di default della customer journey: una CJ si apre solo per
 // nuove attivazioni di pista mobile a partire da questa data (Task #158).
@@ -124,6 +124,7 @@ export interface IStorage {
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
   setCustomerJourneyItemGettone(id: string, orgId: string, confirmed: boolean, userId: string | null): Promise<CustomerJourneyItem>;
   updateCustomerJourneyItemDetails(id: string, orgId: string, details: CjItemDetailsUpdate, userId: string | null): Promise<CustomerJourneyItem>;
+  updateCustomerJourneyRagioneSociale(id: string, orgId: string, ragioneSociale: string | null): Promise<CustomerJourney | undefined>;
   getCustomerJourneyTriggerDate(orgId: string): Promise<Date>;
   setCustomerJourneyTriggerDate(orgId: string, date: string | null): Promise<Date>;
   reconcileCustomerJourneys(orgId: string): Promise<{ journeys: number; items: number }>;
@@ -847,6 +848,24 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
+  // Salva la ragione sociale del cliente business inserita/corretta a mano.
+  // Marca `ragioneSocialeManual` così il reconcile non la sovrascrive più con
+  // il suggerimento derivato dall'email. Un valore vuoto azzera sia il campo
+  // sia il flag, ripristinando il suggerimento automatico al prossimo reconcile.
+  async updateCustomerJourneyRagioneSociale(id: string, orgId: string, ragioneSociale: string | null): Promise<CustomerJourney | undefined> {
+    const trimmed = ragioneSociale != null ? String(ragioneSociale).trim() : "";
+    const isManual = trimmed !== "";
+    const [row] = await db.update(customerJourneys)
+      .set({
+        ragioneSociale: isManual ? trimmed : null,
+        ragioneSocialeManual: isManual,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(customerJourneys.id, id), eq(customerJourneys.organizationId, orgId)))
+      .returning();
+    return row;
+  }
+
   /**
    * Motore di reconcile: deriva le customer journey dalle vendite BiSuite
    * dell'organizzazione. Una journey si apre quando un cliente registra una
@@ -909,11 +928,25 @@ export class DatabaseStorage implements IStorage {
       else if (piva) { customerKey = piva; customerType = "azienda"; }
       else continue; // cliente non identificabile: impossibile collegare
 
+      // BiSuite non fornisce la ragione sociale del cliente in modo
+      // strutturato (i campi cliente.ragioneSociale/denominazione sono vuoti
+      // o stringhe vuote; il top-level rawData.ragioneSociale è quello del
+      // dealer, non del cliente). Per i business proponiamo un suggerimento
+      // ricavato dalla parte locale dell'email, che l'operatore può correggere
+      // a mano. Normalizziamo i campi testuali: blank/whitespace ⇒ null, così
+      // una stringa vuota non blocca il fallback all'email.
+      const normStr = (v: unknown): string | null =>
+        typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+      const ragioneSocialeSuggerita = customerType === "azienda"
+        ? (normStr(cliente.ragioneSociale) ?? normStr(cliente.denominazione)
+            ?? suggestRagioneSocialeFromEmail(cliente.email))
+        : (normStr(cliente.ragioneSociale) ?? normStr(cliente.denominazione));
+
       const anag: Anag = {
         customerKey, customerType,
         nome: cliente.nome ?? null,
         cognome: cliente.cognome ?? null,
-        ragioneSociale: cliente.ragioneSociale ?? cliente.denominazione ?? null,
+        ragioneSociale: ragioneSocialeSuggerita,
         nominativo: cliente.nominativo ?? cliente.denominazione ?? cliente.ragioneSociale ?? null,
         telefono: cliente.tel1 ?? cliente.tel2 ?? null,
         codiceCliente: cliente.codiceEsterno != null ? String(cliente.codiceEsterno) : null,
@@ -1031,7 +1064,9 @@ export class DatabaseStorage implements IStorage {
             customerType: cand.anag.customerType,
             nome: cand.anag.nome,
             cognome: cand.anag.cognome,
-            ragioneSociale: cand.anag.ragioneSociale,
+            // Preserva la ragione sociale inserita/corretta a mano; altrimenti
+            // aggiorna con il suggerimento derivato da BiSuite/email.
+            ragioneSociale: sql`CASE WHEN ${customerJourneys.ragioneSocialeManual} THEN ${customerJourneys.ragioneSociale} ELSE excluded.ragione_sociale END`,
             nominativo: cand.anag.nominativo,
             telefono: cand.anag.telefono,
             codiceCliente: cand.anag.codiceCliente,
