@@ -989,8 +989,9 @@ export class DatabaseStorage implements IStorage {
       // Un contratto semplicemente letto dalle vendite BiSuite parte da
       // "inserito", il primo stato del processo di tracking: l'avanzamento
       // (in_lavorazione/attivato/pagato/...) è gestito a mano dall'operatore.
-      // Le vendite annullate restano "stornato".
-      const autoState: CjItemState = stato.includes("ANNULL") ? "stornato" : "inserito";
+      // Le vendite annullate vengono esitate come "annullato" (NON "stornato":
+      // lo storno è un'informazione separata che arriverà da DRMS).
+      const autoState: CjItemState = stato.includes("ANNULL") ? "annullato" : "inserito";
 
       const articoli: any[] = Array.isArray(raw.articoli) ? raw.articoli : [];
       for (const art of articoli) {
@@ -1001,7 +1002,7 @@ export class DatabaseStorage implements IStorage {
 
         // Trigger journey: nuova attivazione mobile dalla data configurata.
         if (driver === "mobile" && isMobileActivationCategory(categoria)
-            && autoState !== "stornato" && saleDate && saleDate >= triggerDate) {
+            && autoState !== "annullato" && saleDate && saleDate >= triggerDate) {
           if (!cand.hasTrigger || (cand.openedAt && saleDate < cand.openedAt)) {
             cand.hasTrigger = true;
             cand.triggerSaleId = sale.id;

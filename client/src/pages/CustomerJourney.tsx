@@ -76,6 +76,7 @@ const STATE_VARIANTS: Record<string, string> = {
   attivato: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
   ko: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
   pagato: "bg-green-600/15 text-green-700 dark:text-green-300 border-green-600/30",
+  annullato: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
   stornato: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-300 border-zinc-500/30",
   riaccreditato: "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30",
 };

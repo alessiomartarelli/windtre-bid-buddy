@@ -29,6 +29,7 @@ export const CJ_ITEM_STATE_LABELS: Record<CjItemState, string> = {
   attivato: "Attivato",
   ko: "KO",
   pagato: "Pagato",
+  annullato: "Annullato",
   stornato: "Stornato",
   riaccreditato: "Riaccreditato",
 };

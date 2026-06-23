@@ -183,7 +183,7 @@ export const customerJourneyItems = pgTable("customer_journey_items", {
   importo: varchar("importo"),
   rata: varchar("rata"),
   modVendita: varchar("mod_vendita"),
-  // Stato: 'inserito' | 'in_lavorazione' | 'attivato' | 'ko' | 'pagato' | 'stornato' | 'riaccreditato'
+  // Stato: 'inserito' | 'in_lavorazione' | 'attivato' | 'ko' | 'pagato' | 'annullato' | 'stornato' | 'riaccreditato'
   state: varchar("state").notNull().default("inserito"),
   // true se lo stato è stato impostato manualmente: il reconcile automatico
   // non lo sovrascrive più (preserva le conferme manuali del gettone, ecc.).
@@ -486,7 +486,7 @@ export const insertCustomerJourneyItemSchema = createInsertSchema(customerJourne
 });
 
 export const CJ_ITEM_STATES = [
-  "inserito", "in_lavorazione", "attivato", "ko", "pagato", "stornato", "riaccreditato",
+  "inserito", "in_lavorazione", "attivato", "ko", "pagato", "annullato", "stornato", "riaccreditato",
 ] as const;
 export type CjItemState = (typeof CJ_ITEM_STATES)[number];
 
