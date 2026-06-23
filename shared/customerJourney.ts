@@ -15,7 +15,7 @@ export const CJ_DRIVER_LABELS: Record<CjDriver, string> = {
   fisso: "Fisso",
   energia: "Energia",
   assicurazioni: "Assicurazioni",
-  telefono: "Telefono",
+  telefono: "Smartphone",
   protetti: "Windtre Protetti",
 };
 
