@@ -21,23 +21,15 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Route as RouteIcon, RefreshCw, ArrowLeft, CheckCircle2, Circle,
   Search, User, Building2, Loader2, Coins, Pencil,
-  Smartphone, Router, Zap, ShieldCheck, Phone, ShieldPlus,
-  type LucideIcon,
+  FileText, FileSpreadsheet,
 } from "lucide-react";
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS,
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES } from "@shared/schema";
 import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from "@shared/schema";
-
-const CJ_DRIVER_ICONS: Record<CjDriver, LucideIcon> = {
-  mobile: Smartphone,
-  fisso: Router,
-  energia: Zap,
-  assicurazioni: ShieldCheck,
-  telefono: Phone,
-  protetti: ShieldPlus,
-};
+import { CJ_DRIVER_ICONS } from "@/lib/customerJourneyIcons";
+import { exportJourneyPdf, exportJourneyExcel } from "@/lib/customerJourneyExport";
 
 interface DriverSummary {
   driver: string;
@@ -509,25 +501,83 @@ function JourneyDetailView({
   const { journey, items, drivers } = detail;
   const driverMap = new Map(drivers.map((d) => [d.driver, d]));
   const [editItem, setEditItem] = useState<CustomerJourneyItem | null>(null);
+  const { toast } = useToast();
+  const [pdfPending, setPdfPending] = useState(false);
+
+  const handleExportPdf = async () => {
+    setPdfPending(true);
+    try {
+      await exportJourneyPdf({ journey, items, drivers });
+    } catch (err) {
+      toast({
+        title: "Errore",
+        description: err instanceof Error ? err.message : "Export PDF fallito",
+        variant: "destructive",
+      });
+    } finally {
+      setPdfPending(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    try {
+      exportJourneyExcel({ journey, items, drivers });
+    } catch (err) {
+      toast({
+        title: "Errore",
+        description: err instanceof Error ? err.message : "Export Excel fallito",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {journey.customerType === "azienda" ? (
-              <Building2 className="h-5 w-5 text-primary" />
-            ) : (
-              <User className="h-5 w-5 text-primary" />
-            )}
-            {journeyTitle(journey)}
-          </CardTitle>
-          <CardDescription>
-            {journey.customerType === "azienda" ? "P.IVA" : "CF"}: {journey.customerKey}
-            {journey.telefono ? ` · Tel: ${journey.telefono}` : ""}
-            {journey.codiceCliente ? ` · Cod. cliente: ${journey.codiceCliente}` : ""}
-            {` · Aperta il ${fmtDate(journey.openedAt)}`}
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                {journey.customerType === "azienda" ? (
+                  <Building2 className="h-5 w-5 text-primary" />
+                ) : (
+                  <User className="h-5 w-5 text-primary" />
+                )}
+                {journeyTitle(journey)}
+              </CardTitle>
+              <CardDescription>
+                {journey.customerType === "azienda" ? "P.IVA" : "CF"}: {journey.customerKey}
+                {journey.telefono ? ` · Tel: ${journey.telefono}` : ""}
+                {journey.codiceCliente ? ` · Cod. cliente: ${journey.codiceCliente}` : ""}
+                {` · Aperta il ${fmtDate(journey.openedAt)}`}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportPdf}
+                disabled={pdfPending}
+                data-testid="button-export-pdf"
+              >
+                {pdfPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileText className="h-4 w-4 mr-2" />
+                )}
+                PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+                data-testid="button-export-excel"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Excel
+              </Button>
+            </div>
+          </div>
         </CardHeader>
       </Card>
 

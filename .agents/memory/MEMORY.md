@@ -4,3 +4,4 @@
 - [XLSX readFile ESM quirk](xlsx-esm-readfile.md) — `XLSX.readFile` non esiste in ESM/tsx; leggi il buffer con fs e usa `XLSX.read(buf,{type:"buffer"})`.
 - [Drizzle sql ANY array](drizzle-sql-any-array.md) — `sql\`= ANY(${jsArray})\`` esplode in più placeholder => PG 42809; costruisci `ARRAY[...]::int[]` con `sql.join`.
 - [TanStack queryKey = URL path](tanstack-querykey-url.md) — il fetcher di default fa `queryKey.join("/")`: i segmenti diventano path, la route server deve usare path params, non query.
+- [lucide icons in jsPDF/Excel](lucide-icons-in-jspdf.md) — rasterizza lucide via renderToStaticMarkup→canvas→PNG per il PDF; in Excel (SheetJS) usa un'emoji, niente immagini in cella.

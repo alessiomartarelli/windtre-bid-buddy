@@ -127,6 +127,17 @@ preservati). Permessi: gli operatori possono editare solo i propri item
 con body `{ dataAttivazione?, pdvDestinazione?, imei?, rata? }` (valori `null`
 o stringa vuota azzerano il campo).
 
+## Export PDF/Excel (Task #179)
+
+Dal dettaglio di una journey i pulsanti **PDF** e **Excel** esportano il
+riepilogo Driver + la tabella Contratti. L'indicatore di categoria di ogni
+driver è coerente con la UI: nel PDF è la stessa icona lucide (rasterizzata
+in PNG via `renderToStaticMarkup` → canvas), nell'Excel è l'emoji equivalente
+(SheetJS non incorpora immagini nelle celle). La mappatura icona↔driver è
+centralizzata in `client/src/lib/customerJourneyIcons.ts`
+(`CJ_DRIVER_ICONS` + `CJ_DRIVER_EMOJI`), unica fonte per UI ed export. La
+logica di export sta in `client/src/lib/customerJourneyExport.ts`.
+
 ## Dati di esempio (stato al 19/06/2026)
 
 Al momento il tenant ha vendite solo Apr–Mag 2026 (tutte **precedenti** alla
