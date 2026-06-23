@@ -285,7 +285,7 @@ test('scenario 1: manual contract fields survive a re-reconcile', async () => {
     const before = items.get(ART_MANUAL);
     assert.ok(before, 'manual phone item must exist after first reconcile');
     assert.equal(before.imei, 'AAA111', 'IMEI must come from BiSuite at first reconcile');
-    assert.equal(before.rata, '50', 'RATA must come from BiSuite at first reconcile');
+    assert.equal(before.rata, null, 'RATA is manual-only: not auto-derived from BiSuite');
     assert.equal(before.details_manual, false, 'item starts as non-manual');
 
     // (2) modifica manuale dei quattro campi.
@@ -361,7 +361,7 @@ test('scenario 2: non-manual items are refreshed with BiSuite IMEI/RATA', async 
     const before = items.get(ART_AUTO);
     assert.ok(before, 'auto phone item must exist after first reconcile');
     assert.equal(before.imei, 'BBB222');
-    assert.equal(before.rata, '60');
+    assert.equal(before.rata, null, 'RATA is manual-only: not auto-derived from BiSuite');
     assert.equal(before.details_manual, false);
 
     // BiSuite aggiorna IMEI e importo finanziato; l'item non è mai stato
@@ -376,7 +376,7 @@ test('scenario 2: non-manual items are refreshed with BiSuite IMEI/RATA', async 
     const after = items.get(ART_AUTO);
     assert.ok(after, 'auto item must still exist after re-reconcile');
     assert.equal(after.imei, 'BBB999', 'non-manual IMEI must be refreshed from BiSuite');
-    assert.equal(after.rata, '65', 'non-manual RATA must be refreshed from BiSuite');
+    assert.equal(after.rata, null, 'RATA stays manual-only: never auto-derived from BiSuite');
     assert.equal(after.details_manual, false, 'non-manual item stays non-manual');
   } finally {
     await cleanupSession(pool, session);

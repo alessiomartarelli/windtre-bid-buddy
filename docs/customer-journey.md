@@ -136,8 +136,10 @@ un'icona matita ("Modifica") che apre un dialog per editare:
 - **PDV DESTINAZIONE**: non disponibile da BiSuite → solo manuale.
 - **IMEI del telefono**: spesso assente nei `venditaInfo` → auto-derivato se
   presente, altrimenti compilabile a mano.
-- **RATA**: il reconcile valorizza solo `importoFinanziato` per le vendite in
-  finanziamento → editabile a mano per gli altri casi.
+- **RATA**: non disponibile da BiSuite (`importoFinanziato` è il valore totale
+  finanziato del prodotto, non la rata mensile) → il reconcile la lascia `null`,
+  l'utente la imposta a mano. Il valore totale del prodotto resta in `importo`
+  (usato per il "valore cliente").
 
 Il salvataggio imposta `detailsManual = true` sull'item: da quel momento il
 reconcile **non sovrascrive più** questi quattro campi (IMEI e RATA via SQL

@@ -1049,7 +1049,10 @@ export class DatabaseStorage implements IStorage {
           pod, pdr,
           imei: parsed.imei ?? null,
           importo: dett.prezzo != null ? String(dett.prezzo) : (raw.importoScontrino != null ? String(raw.importoScontrino) : null),
-          rata: isFinanziamento && dett.importoFinanziato != null ? String(dett.importoFinanziato) : null,
+          // RATA non è disponibile da BiSuite: `importoFinanziato` è il valore
+          // totale finanziato del prodotto, NON la rata mensile. Lasciamo il
+          // campo vuoto (solo-manuale, come DATA ATTIVAZIONE e PDV DESTINAZIONE).
+          rata: null,
           modVendita,
           state: autoState,
         });
