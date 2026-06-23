@@ -929,7 +929,7 @@ function JourneyDetailView({
                         {it.imei || "—"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs" data-testid={`text-rata-${it.id}`}>
-                        {it.rata ? `€ ${it.rata}` : it.canone ? `€ ${it.canone}` : "—"}
+                        {it.rata ? `€ ${it.rata}` : it.canone && it.driver !== "telefono" ? `€ ${it.canone}` : "—"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-xs">
                         {fmtDate(it.dataInserimento)}

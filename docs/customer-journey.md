@@ -141,7 +141,10 @@ un'icona matita ("Modifica") che apre un dialog per editare:
   finanziato del prodotto, non la rata mensile) → il reconcile lascia `rata`
   `null`. La colonna mostra `rata` (manuale) se presente, altrimenti il
   `canone` derivato dalla vendita (`dett.canone`, utile per le offerte
-  mobile/fisso). L'utente può comunque scrivere a mano rata o canone nel campo
+  mobile/fisso). Il fallback al `canone` è **escluso per il driver `telefono`
+  (Smartphone)**: lì il `canone` corrisponde al prezzo del dispositivo, non a
+  un canone ricorrente, quindi la colonna resta in bianco finché non si compila
+  a mano. L'utente può comunque scrivere a mano rata o canone nel campo
   "RATA/CANONE (€)". Il valore totale del prodotto resta in `importo` (usato
   per il "valore cliente").
 
