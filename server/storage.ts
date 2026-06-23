@@ -1,7 +1,7 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState } from "@shared/schema";
+import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
-import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo } from "@shared/customerJourney";
+import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, type CjDriverSummary } from "@shared/customerJourney";
 
 // Data trigger di default della customer journey: una CJ si apre solo per
 // nuove attivazioni di pista mobile a partire da questa data (Task #158).
@@ -766,6 +766,33 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(customerJourneyItems)
       .where(eq(customerJourneyItems.journeyId, journeyId))
       .orderBy(desc(customerJourneyItems.dataInserimento));
+  }
+
+  // Riepilogo driver per-journey per la lista (schede cliente): recupera in
+  // una sola query (driver, state) di tutti gli item delle journey indicate,
+  // li raggruppa per journeyId e calcola il riepilogo driver con la stessa
+  // logica del dettaglio (`summarizeDrivers`). Evita una query per scheda.
+  async getCustomerJourneyDriverSummaries(
+    journeyIds: string[],
+  ): Promise<Map<string, CjDriverSummary[]>> {
+    const out = new Map<string, CjDriverSummary[]>();
+    if (journeyIds.length === 0) return out;
+    const rows = await db.select({
+      journeyId: customerJourneyItems.journeyId,
+      driver: customerJourneyItems.driver,
+      state: customerJourneyItems.state,
+    }).from(customerJourneyItems)
+      .where(inArray(customerJourneyItems.journeyId, journeyIds));
+    const byJourney = new Map<string, { driver: CjDriver; state: CjItemState }[]>();
+    for (const r of rows) {
+      const list = byJourney.get(r.journeyId) ?? [];
+      list.push({ driver: r.driver as CjDriver, state: r.state as CjItemState });
+      byJourney.set(r.journeyId, list);
+    }
+    for (const id of journeyIds) {
+      out.set(id, summarizeDrivers(byJourney.get(id) ?? []));
+    }
+    return out;
   }
 
   async getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined> {

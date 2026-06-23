@@ -33,6 +33,34 @@ export const CJ_ITEM_STATE_LABELS: Record<CjItemState, string> = {
   riaccreditato: "Riaccreditato",
 };
 
+// Un driver è "attivato" se ha almeno un item in uno di questi stati (cioè
+// non KO e non stornato). Centralizzato qui per essere riusato sia dal
+// dettaglio journey sia dal riepilogo per-scheda nella lista.
+export const CJ_ACTIVE_STATES = new Set<CjItemState>([
+  "inserito", "in_lavorazione", "attivato", "pagato", "riaccreditato",
+]);
+
+export interface CjDriverSummary {
+  driver: CjDriver;
+  activated: boolean;
+  count: number;
+}
+
+/**
+ * Riepilogo per-driver (attivato sì/no + conteggio item) per un insieme di
+ * item di una journey. L'energia distingue gas/luce a livello di item ma per
+ * il riepilogo conta come singolo driver. L'ordine segue `CJ_DRIVER_ORDER`.
+ */
+export function summarizeDrivers(
+  items: { driver: CjDriver; state: CjItemState }[],
+): CjDriverSummary[] {
+  return CJ_DRIVER_ORDER.map((driver) => {
+    const driverItems = items.filter((it) => it.driver === driver);
+    const activated = driverItems.some((it) => CJ_ACTIVE_STATES.has(it.state));
+    return { driver, activated, count: driverItems.length };
+  });
+}
+
 const MOBILE_CATEGORIES = new Set([
   "UNTIED", "TIED CF", "TIED IVA", "ALTRE GA", "ADD-ON GA", "VERY MOBILE",
 ]);

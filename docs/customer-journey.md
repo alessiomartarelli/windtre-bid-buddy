@@ -71,7 +71,7 @@ manuale previsto.
 
 | Metodo | Endpoint | Note |
 |---|---|---|
-| GET | `/api/customer-journeys` | lista (operatore: filtrata sui suoi addetti) |
+| GET | `/api/customer-journeys` | lista (operatore: filtrata sui suoi addetti); ogni journey porta `drivers` (riepilogo 6 driver attivato/conteggio) per le schede cliente |
 | GET | `/api/customer-journeys/:id` | dettaglio: `{ journey, items, drivers }` |
 | POST | `/api/customer-journeys/reconcile` | rigenera dalle vendite (solo admin) |
 | PATCH | `/api/customer-journey-items/:id/state` | `{ state }` |

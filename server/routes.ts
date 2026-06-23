@@ -8,8 +8,8 @@ import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
-import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState } from "@shared/schema";
-import { driverFromCategory, CJ_DRIVER_ORDER } from "@shared/customerJourney";
+import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver } from "@shared/schema";
+import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
 import { registerCdgRoutes } from "./cdgRoutes";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
@@ -2680,7 +2680,12 @@ export async function registerRoutes(
       if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
       const addettiFilter = profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null;
       const journeys = await storage.listCustomerJourneys(profile.organizationId, addettiFilter);
-      res.json(journeys);
+      // Allega a ogni scheda il riepilogo driver (attivati vs attivabili),
+      // così la lista può mostrare lo stato dei 6 driver senza una chiamata
+      // di dettaglio per cliente.
+      const summaries = await storage.getCustomerJourneyDriverSummaries(journeys.map((j) => j.id));
+      const withDrivers = journeys.map((j) => ({ ...j, drivers: summaries.get(j.id) ?? [] }));
+      res.json(withDrivers);
     } catch (error) {
       console.error("Customer journeys list error:", error);
       res.status(500).json({ error: "Errore nel recupero delle customer journey" });
@@ -2707,12 +2712,7 @@ export async function registerRoutes(
       // Un driver è "attivato" se ha almeno un item in stato non KO e non
       // stornato. L'energia distingue gas/luce ma per il riepilogo conta come
       // singolo driver attivabile.
-      const activeStates = new Set(["inserito", "in_lavorazione", "attivato", "pagato", "riaccreditato"]);
-      const drivers = CJ_DRIVER_ORDER.map((driver) => {
-        const driverItems = items.filter((it) => it.driver === driver);
-        const activated = driverItems.some((it) => activeStates.has(it.state));
-        return { driver, activated, count: driverItems.length };
-      });
+      const drivers = summarizeDrivers(items.map((it) => ({ driver: it.driver as CjDriver, state: it.state as CjItemState })));
 
       res.json({ journey, items, drivers });
     } catch (error) {

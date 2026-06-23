@@ -34,6 +34,8 @@ interface DriverSummary {
   count: number;
 }
 
+type JourneyListItem = CustomerJourney & { drivers: DriverSummary[] };
+
 interface ItemDetailsPayload {
   dataAttivazione: string | null;
   pdvDestinazione: string | null;
@@ -85,7 +87,7 @@ export default function CustomerJourneyPage() {
 
   const isAdmin = ["super_admin", "admin"].includes(profile?.role || "");
 
-  const journeysQuery = useQuery<CustomerJourney[]>({
+  const journeysQuery = useQuery<JourneyListItem[]>({
     queryKey: ["/api/customer-journeys"],
   });
 
@@ -364,35 +366,83 @@ export default function CustomerJourneyPage() {
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filtered.map((j) => (
-                  <Card
-                    key={j.id}
-                    className="cursor-pointer hover-elevate transition-all"
-                    onClick={() => setSelectedId(j.id)}
-                    data-testid={`card-journey-${j.id}`}
-                  >
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        {j.customerType === "azienda" ? (
-                          <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                        ) : (
-                          <User className="h-4 w-4 text-muted-foreground shrink-0" />
-                        )}
-                        <span className="truncate" data-testid={`text-journey-name-${j.id}`}>
-                          {journeyTitle(j)}
-                        </span>
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        {j.customerKey} · aperta il {fmtDate(j.openedAt)}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <Badge variant="outline" className="text-xs">
-                        {j.status === "aperta" ? "Aperta" : "Chiusa"}
-                      </Badge>
-                    </CardContent>
-                  </Card>
-                ))}
+                {filtered.map((j) => {
+                  const drivers = CJ_DRIVER_ORDER.map((d) => ({
+                    driver: d,
+                    activated: j.drivers?.find((s) => s.driver === d)?.activated ?? false,
+                  }));
+                  const activeCount = drivers.filter((d) => d.activated).length;
+                  const total = drivers.length;
+                  const pct = Math.round((activeCount / total) * 100);
+                  return (
+                      <Card
+                        key={j.id}
+                        className="cursor-pointer hover-elevate transition-all flex flex-col"
+                        onClick={() => setSelectedId(j.id)}
+                        data-testid={`card-journey-${j.id}`}
+                      >
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <CardTitle className="text-base flex items-center gap-2 min-w-0">
+                              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${j.customerType === "azienda" ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300" : "bg-sky-500/15 text-sky-600 dark:text-sky-300"}`}>
+                                {j.customerType === "azienda" ? (
+                                  <Building2 className="h-4 w-4" />
+                                ) : (
+                                  <User className="h-4 w-4" />
+                                )}
+                              </span>
+                              <span className="truncate" data-testid={`text-journey-name-${j.id}`}>
+                                {journeyTitle(j)}
+                              </span>
+                            </CardTitle>
+                            <Badge
+                              variant="outline"
+                              className={`text-xs shrink-0 ${j.status === "aperta" ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`}
+                              data-testid={`badge-status-${j.id}`}
+                            >
+                              {j.status === "aperta" ? "Aperta" : "Chiusa"}
+                            </Badge>
+                          </div>
+                          <CardDescription className="text-xs">
+                            {j.customerKey} · aperta il {fmtDate(j.openedAt)}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="mt-auto space-y-3">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">Driver attivati</span>
+                            <span className="font-semibold tabular-nums" data-testid={`text-driver-count-${j.id}`}>
+                              {activeCount}/{total}
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-emerald-500 transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {drivers.map((d) => (
+                              <div
+                                key={d.driver}
+                                className={`flex items-center gap-1 rounded-md border px-1.5 py-1 ${d.activated ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-dashed border-border bg-muted/30 text-muted-foreground"}`}
+                                data-testid={`card-driver-${d.driver}-${j.id}`}
+                                title={`${CJ_DRIVER_LABELS[d.driver]}: ${d.activated ? "attivato" : "attivabile"}`}
+                              >
+                                {d.activated ? (
+                                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                ) : (
+                                  <Circle className="h-3 w-3 shrink-0 opacity-50" />
+                                )}
+                                <span className="truncate text-[10px] font-medium leading-tight">
+                                  {CJ_DRIVER_LABELS[d.driver]}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                  );
+                })}
               </div>
             )}
           </>
