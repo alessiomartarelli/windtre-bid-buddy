@@ -21,12 +21,23 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Route as RouteIcon, RefreshCw, ArrowLeft, CheckCircle2, Circle,
   Search, User, Building2, Loader2, Coins, Pencil,
+  Smartphone, Router, Zap, ShieldCheck, Phone, ShieldPlus,
+  type LucideIcon,
 } from "lucide-react";
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS,
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES } from "@shared/schema";
-import type { CustomerJourney, CustomerJourneyItem, CjItemState } from "@shared/schema";
+import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from "@shared/schema";
+
+const CJ_DRIVER_ICONS: Record<CjDriver, LucideIcon> = {
+  mobile: Smartphone,
+  fisso: Router,
+  energia: Zap,
+  assicurazioni: ShieldCheck,
+  telefono: Phone,
+  protetti: ShieldPlus,
+};
 
 interface DriverSummary {
   driver: string;
@@ -433,6 +444,10 @@ export default function CustomerJourneyPage() {
                                 ) : (
                                   <Circle className="h-3 w-3 shrink-0 opacity-50" />
                                 )}
+                                {(() => {
+                                  const Icon = CJ_DRIVER_ICONS[d.driver as CjDriver];
+                                  return Icon ? <Icon className="h-3 w-3 shrink-0" /> : null;
+                                })()}
                                 <span className="truncate text-[10px] font-medium leading-tight">
                                   {CJ_DRIVER_LABELS[d.driver]}
                                 </span>
@@ -534,7 +549,13 @@ function JourneyDetailView({
                   ) : (
                     <Circle className="h-6 w-6 text-muted-foreground/40" />
                   )}
-                  <span className="text-xs font-medium leading-tight">
+                  <span className="flex items-center gap-1.5 text-xs font-medium leading-tight">
+                    {(() => {
+                      const Icon = CJ_DRIVER_ICONS[driver];
+                      return Icon ? (
+                        <Icon className={`h-4 w-4 shrink-0 ${activated ? "text-emerald-500" : "text-muted-foreground"}`} />
+                      ) : null;
+                    })()}
                     {CJ_DRIVER_LABELS[driver]}
                   </span>
                   <span className="text-[10px] text-muted-foreground">
