@@ -21,6 +21,11 @@ export interface JourneyExportData {
   drivers: DriverSummary[];
 }
 
+export interface JourneyListExportData {
+  journeys: (CustomerJourney & { drivers: DriverSummary[] })[];
+  filterLabel?: string;
+}
+
 function fmtDate(d: string | Date | null | undefined): string {
   if (!d) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
@@ -266,4 +271,128 @@ export function exportJourneyExcel(data: JourneyExportData): void {
   XLSX.utils.book_append_sheet(workbook, wsContracts, "Contratti");
 
   XLSX.writeFile(workbook, `customer_journey_${safeFileName(journeyTitle(journey))}.xlsx`);
+}
+
+function journeyDriverMap(
+  j: CustomerJourney & { drivers: DriverSummary[] },
+): Map<string, DriverSummary> {
+  return new Map((j.drivers ?? []).map((d) => [d.driver, d]));
+}
+
+function activeDriverCount(j: CustomerJourney & { drivers: DriverSummary[] }): number {
+  const m = journeyDriverMap(j);
+  return CJ_DRIVER_ORDER.filter((d) => m.get(d)?.activated).length;
+}
+
+// Numero di colonne fisse (non-driver) prima delle colonne per-driver,
+// usato per mappare l'indice colonna ↔ driver nei callback di disegno.
+const LIST_FIXED_COLS = 5;
+
+export async function exportJourneyListPdf(data: JourneyListExportData): Promise<void> {
+  const { journeys, filterLabel } = data;
+  const iconMap = await buildIconMap();
+  const doc = new jsPDF({ orientation: "landscape" });
+
+  doc.setFontSize(18);
+  doc.setTextColor(40, 40, 40);
+  doc.text("Customer Journey — Elenco", 14, 18);
+
+  doc.setFontSize(10);
+  doc.setTextColor(110, 110, 110);
+  const subtitle = [
+    `${journeys.length} journey`,
+    filterLabel,
+    `Esportato il ${fmtDate(new Date())}`,
+  ].filter(Boolean).join("  ·  ");
+  doc.text(subtitle, 14, 25);
+
+  const totalDrivers = CJ_DRIVER_ORDER.length;
+  autoTable(doc, {
+    startY: 30,
+    head: [[
+      "Cliente", "Tipo", "CF/P.IVA", "Stato", "Driver",
+      ...CJ_DRIVER_ORDER.map(() => ""),
+    ]],
+    body: journeys.map((j) => {
+      const m = journeyDriverMap(j);
+      return [
+        journeyTitle(j),
+        j.customerType === "azienda" ? "Business" : "Privato",
+        j.customerKey,
+        j.status === "aperta" ? "Aperta" : "Chiusa",
+        `${activeDriverCount(j)}/${totalDrivers}`,
+        ...CJ_DRIVER_ORDER.map((d) => (m.get(d)?.activated ? "Si" : "")),
+      ];
+    }),
+    styles: { fontSize: 8, cellPadding: 1.8, valign: "middle", overflow: "linebreak" },
+    headStyles: { fillColor: [99, 102, 241], fontSize: 8, halign: "center", minCellHeight: 9 },
+    columnStyles: {
+      0: { cellWidth: 50 },
+      1: { cellWidth: 20 },
+      3: { cellWidth: 18 },
+      4: { cellWidth: 16, halign: "center" },
+      ...Object.fromEntries(
+        CJ_DRIVER_ORDER.map((_, i) => [LIST_FIXED_COLS + i, { cellWidth: 16, halign: "center" }]),
+      ),
+    },
+    didDrawCell: (hook) => {
+      const driverIdx = hook.column.index - LIST_FIXED_COLS;
+      if (driverIdx < 0 || driverIdx >= totalDrivers) return;
+      if (hook.section === "head") {
+        const png = iconMap[CJ_DRIVER_ORDER[driverIdx]];
+        if (!png) return;
+        const size = 5;
+        const x = hook.cell.x + (hook.cell.width - size) / 2;
+        const y = hook.cell.y + (hook.cell.height - size) / 2;
+        doc.addImage(png, "PNG", x, y, size, size);
+      }
+    },
+  });
+
+  doc.save("customer_journey_elenco.pdf");
+}
+
+export function exportJourneyListExcel(data: JourneyListExportData): void {
+  const { journeys, filterLabel } = data;
+  const workbook = XLSX.utils.book_new();
+  const totalDrivers = CJ_DRIVER_ORDER.length;
+
+  const headerRows: (string | number)[][] = [
+    ["Customer Journey — Elenco"],
+    [`${journeys.length} journey`],
+  ];
+  if (filterLabel) headerRows.push([filterLabel]);
+  headerRows.push([`Esportato il ${fmtDate(new Date())}`]);
+  headerRows.push([]);
+
+  const tableHead = [
+    "Cliente", "Tipo", "CF/P.IVA", "Telefono", "Stato", "Driver attivati",
+    ...CJ_DRIVER_ORDER.map((d) => CJ_DRIVER_EMOJI[d] || driverLabel(d)),
+  ];
+
+  const rows: (string | number)[][] = [
+    ...headerRows,
+    tableHead,
+    ...journeys.map((j) => {
+      const m = journeyDriverMap(j);
+      return [
+        journeyTitle(j),
+        j.customerType === "azienda" ? "Business" : "Privato",
+        j.customerKey,
+        j.telefono || "—",
+        j.status === "aperta" ? "Aperta" : "Chiusa",
+        `${activeDriverCount(j)}/${totalDrivers}`,
+        ...CJ_DRIVER_ORDER.map((d) => (m.get(d)?.activated ? "Sì" : "")),
+      ];
+    }),
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [
+    { wch: 32 }, { wch: 10 }, { wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 14 },
+    ...CJ_DRIVER_ORDER.map(() => ({ wch: 6 })),
+  ];
+  XLSX.utils.book_append_sheet(workbook, ws, "Elenco");
+
+  XLSX.writeFile(workbook, "customer_journey_elenco.xlsx");
 }

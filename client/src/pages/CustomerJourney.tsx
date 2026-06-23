@@ -29,7 +29,10 @@ import {
 import { CJ_ITEM_STATES } from "@shared/schema";
 import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from "@shared/schema";
 import { CJ_DRIVER_ICONS } from "@/lib/customerJourneyIcons";
-import { exportJourneyPdf, exportJourneyExcel } from "@/lib/customerJourneyExport";
+import {
+  exportJourneyPdf, exportJourneyExcel,
+  exportJourneyListPdf, exportJourneyListExcel,
+} from "@/lib/customerJourneyExport";
 
 interface DriverSummary {
   driver: string;
@@ -89,6 +92,7 @@ export default function CustomerJourneyPage() {
   const [triggerDateInput, setTriggerDateInput] = useState<string>("");
 
   const isAdmin = ["super_admin", "admin"].includes(profile?.role || "");
+  const [listPdfPending, setListPdfPending] = useState(false);
 
   const journeysQuery = useQuery<JourneyListItem[]>({
     queryKey: ["/api/customer-journeys"],
@@ -221,6 +225,41 @@ export default function CustomerJourneyPage() {
   const countPrivato = journeys.filter((j) => j.customerType === "privato").length;
   const countAzienda = journeys.filter((j) => j.customerType === "azienda").length;
 
+  const listFilterLabel = (() => {
+    const parts: string[] = [];
+    if (typeFilter === "privato") parts.push("Solo privati");
+    else if (typeFilter === "azienda") parts.push("Solo business");
+    if (search.trim()) parts.push(`Ricerca: "${search.trim()}"`);
+    return parts.join(" · ");
+  })();
+
+  const handleExportListPdf = async () => {
+    setListPdfPending(true);
+    try {
+      await exportJourneyListPdf({ journeys: filtered, filterLabel: listFilterLabel });
+    } catch (err) {
+      toast({
+        title: "Errore",
+        description: err instanceof Error ? err.message : "Export PDF fallito",
+        variant: "destructive",
+      });
+    } finally {
+      setListPdfPending(false);
+    }
+  };
+
+  const handleExportListExcel = () => {
+    try {
+      exportJourneyListExcel({ journeys: filtered, filterLabel: listFilterLabel });
+    } catch (err) {
+      toast({
+        title: "Errore",
+        description: err instanceof Error ? err.message : "Export Excel fallito",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen">
       <AppNavbar title="Customer Journey" />
@@ -347,6 +386,32 @@ export default function CustomerJourneyPage() {
                   <Building2 className="h-4 w-4 mr-1.5" />
                   Business
                   <Badge variant="secondary" className="ml-2">{countAzienda}</Badge>
+                </Button>
+              </div>
+              <div className="flex items-center gap-1.5 sm:ml-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportListPdf}
+                  disabled={listPdfPending || filtered.length === 0}
+                  data-testid="button-export-list-pdf"
+                >
+                  {listPdfPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4 mr-2" />
+                  )}
+                  PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportListExcel}
+                  disabled={filtered.length === 0}
+                  data-testid="button-export-list-excel"
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Excel
                 </Button>
               </div>
             </div>
