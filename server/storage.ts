@@ -933,9 +933,11 @@ export class DatabaseStorage implements IStorage {
 
       const saleDate: Date | null = sale.dataVendita ?? null;
       const stato = String(sale.stato || "").toUpperCase();
-      const autoState: CjItemState = stato.includes("ANNULL")
-        ? "stornato"
-        : (stato.includes("FINALIZZAT") || stato.includes("ATTIV")) ? "attivato" : "inserito";
+      // Un contratto semplicemente letto dalle vendite BiSuite parte da
+      // "inserito", il primo stato del processo di tracking: l'avanzamento
+      // (in_lavorazione/attivato/pagato/...) è gestito a mano dall'operatore.
+      // Le vendite annullate restano "stornato".
+      const autoState: CjItemState = stato.includes("ANNULL") ? "stornato" : "inserito";
 
       const articoli: any[] = Array.isArray(raw.articoli) ? raw.articoli : [];
       for (const art of articoli) {
