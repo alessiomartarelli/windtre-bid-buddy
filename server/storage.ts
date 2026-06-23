@@ -914,10 +914,13 @@ export class DatabaseStorage implements IStorage {
         nome: cliente.nome ?? null,
         cognome: cliente.cognome ?? null,
         ragioneSociale: cliente.ragioneSociale ?? cliente.denominazione ?? null,
-        nominativo: raw.addetto?.nominativo ?? sale.nomeAddetto ?? null,
+        nominativo: cliente.nominativo ?? cliente.denominazione ?? cliente.ragioneSociale ?? null,
         telefono: cliente.tel1 ?? cliente.tel2 ?? null,
         codiceCliente: cliente.codiceEsterno != null ? String(cliente.codiceEsterno) : null,
       };
+
+      // L'addetto vendita è per-vendita, non è un campo anagrafico del cliente.
+      const saleAddetto: string | null = raw.addetto?.nominativo ?? sale.nomeAddetto ?? null;
 
       let cand = byCustomer.get(customerKey);
       if (!cand) {
@@ -985,7 +988,7 @@ export class DatabaseStorage implements IStorage {
           canone: dett.canone != null ? String(dett.canone) : null,
           dataInserimento: saleDate,
           dataAttivazione: null,
-          addetto: anag.nominativo,
+          addetto: saleAddetto,
           pdvOrigine: raw.attivita?.nominativo ?? sale.nomeNegozio ?? null,
           pdvDestinazione: null,
           pod, pdr,

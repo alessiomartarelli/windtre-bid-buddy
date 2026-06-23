@@ -97,6 +97,13 @@ Tutte le route CJ sono protette da `requireModule("customer_journey")`.
 | MOD. VENDITA | `dettaglio.tipologiaVendita` |
 | CODICE CONTRATTO / POD / PDR / ICCID / IMEI | parse da `venditaInfo1..5` (free-text) |
 
+> **Nota anagrafica journey**: i campi a livello di journey `NOMINATIVO` /
+> `RAGIONE SOCIALE` provengono dal **cliente** (`cliente.nominativo`, con
+> fallback `denominazione`/`ragioneSociale`), **non** dall'addetto vendita.
+> L'addetto vendita (`addetto.nominativo`) popola solo il campo per-item
+> `ADDETTO`. Il titolo della scheda business usa quindi la ragione sociale /
+> nominativo del cliente, mai il nome dell'addetto.
+
 ### Campi non forniti da BiSuite → compilazione manuale
 
 BiSuite non fornisce in modo affidabile alcuni campi. Sono quindi **compilabili
