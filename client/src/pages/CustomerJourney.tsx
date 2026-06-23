@@ -80,6 +80,7 @@ export default function CustomerJourneyPage() {
   const { toast } = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"tutti" | "privato" | "azienda">("tutti");
   const [triggerDateInput, setTriggerDateInput] = useState<string>("");
 
   const isAdmin = ["super_admin", "admin"].includes(profile?.role || "");
@@ -205,12 +206,15 @@ export default function CustomerJourneyPage() {
 
   const journeys = journeysQuery.data ?? [];
   const filtered = journeys.filter((j) => {
+    if (typeFilter !== "tutti" && j.customerType !== typeFilter) return false;
     if (!search.trim()) return true;
     const hay = [
       journeyTitle(j), j.customerKey, j.telefono, j.codiceCliente,
     ].filter(Boolean).join(" ").toLowerCase();
     return hay.includes(search.toLowerCase().trim());
   });
+  const countPrivato = journeys.filter((j) => j.customerType === "privato").length;
+  const countAzienda = journeys.filter((j) => j.customerType === "azienda").length;
 
   return (
     <div className="min-h-screen">
@@ -298,15 +302,48 @@ export default function CustomerJourneyPage() {
               </Card>
             )}
 
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Cerca cliente, CF/P.IVA, telefono…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-                data-testid="input-search-journey"
-              />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="relative w-full sm:max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Cerca cliente, CF/P.IVA, telefono…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-search-journey"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant={typeFilter === "tutti" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTypeFilter("tutti")}
+                  data-testid="button-filter-tutti"
+                >
+                  Tutti
+                  <Badge variant="secondary" className="ml-2">{journeys.length}</Badge>
+                </Button>
+                <Button
+                  variant={typeFilter === "privato" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTypeFilter("privato")}
+                  data-testid="button-filter-privato"
+                >
+                  <User className="h-4 w-4 mr-1.5" />
+                  Privati
+                  <Badge variant="secondary" className="ml-2">{countPrivato}</Badge>
+                </Button>
+                <Button
+                  variant={typeFilter === "azienda" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTypeFilter("azienda")}
+                  data-testid="button-filter-azienda"
+                >
+                  <Building2 className="h-4 w-4 mr-1.5" />
+                  Business
+                  <Badge variant="secondary" className="ml-2">{countAzienda}</Badge>
+                </Button>
+              </div>
             </div>
 
             {journeysQuery.isLoading ? (
