@@ -160,6 +160,63 @@ async function updateSaleRaw(pool, saleId, cf, addetto, phones) {
   ]);
 }
 
+// Costruisce il rawData di una vendita con un'anagrafica cliente arbitraria
+// (`cliente`) e un addetto vendita (`addetto`) distinti. Serve a verificare
+// che la journey salvi i dati del CLIENTE (nominativo/ragione sociale) mentre
+// l'item conservi il nome dell'ADDETTO vendita (Task #178).
+function buildRawDataCliente(cliente, addetto) {
+  return {
+    cliente,
+    addetto: { nominativo: addetto },
+    attivita: { nominativo: 'PDV ORIGINE' },
+    importoScontrino: 1400,
+    articoli: [
+      {
+        id: ART_TRIGGER,
+        categoria: { nome: 'UNTIED' },
+        tipologia: { nome: 'RICARICABILE' },
+        descrizione: 'Nuova SIM mobile',
+        dettaglio: { prezzo: 0 },
+      },
+    ],
+  };
+}
+
+async function insertSaleCliente(pool, orgId, cliente, addetto) {
+  const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
+  const raw = buildRawDataCliente(cliente, addetto);
+  const res = await pool.query(
+    `INSERT INTO bisuite_sales
+       (organization_id, bisuite_id, data_vendita, nome_addetto, stato, raw_data)
+     VALUES ($1, $2, $3, $4, 'ATTIVO', $5::jsonb)
+     RETURNING id`,
+    [orgId, bisuiteId, SALE_DATE, addetto, JSON.stringify(raw)],
+  );
+  return res.rows[0].id;
+}
+
+// Legge la (singola) journey dell'org dal DB.
+async function journeyOf(pool, orgId) {
+  const r = await pool.query(
+    `SELECT customer_key, customer_type, nome, cognome, ragione_sociale, nominativo
+       FROM customer_journeys
+      WHERE organization_id = $1`,
+    [orgId],
+  );
+  return r.rows;
+}
+
+// Legge gli item della journey dell'org (per asserire l'addetto vendita).
+async function itemsOf(pool, orgId) {
+  const r = await pool.query(
+    `SELECT bisuite_article_id, addetto, nome, cognome, piva, cf
+       FROM customer_journey_items
+      WHERE organization_id = $1`,
+    [orgId],
+  );
+  return r.rows;
+}
+
 // Mappa gli item della journey per bisuite_article_id, leggendo dal DB.
 async function itemsByArticle(pool, orgId) {
   const r = await pool.query(
@@ -321,6 +378,96 @@ test('scenario 2: non-manual items are refreshed with BiSuite IMEI/RATA', async 
     assert.equal(after.imei, 'BBB999', 'non-manual IMEI must be refreshed from BiSuite');
     assert.equal(after.rata, '65', 'non-manual RATA must be refreshed from BiSuite');
     assert.equal(after.details_manual, false, 'non-manual item stays non-manual');
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 3: cliente AZIENDA (GIURIDICA) — la journey deve mostrare il
+// CLIENTE (ragione sociale / nominativo), NON l'addetto vendita; l'item deve
+// conservare il nome dell'addetto vendita nel campo `addetto`. Regressione del
+// fix Task #178 che separa l'anagrafica della journey dall'addetto per-item.
+// ===========================================================================
+test('scenario 3: business journey shows the customer, item keeps the addetto', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  const piva = uniq('PIVA').toUpperCase();
+  const ragioneSociale = 'ACME COSTRUZIONI SRL';
+  const addetto = 'GIANNI BIANCHI';
+  try {
+    const cliente = {
+      piva,
+      clienteTipo: 'GIURIDICA',
+      ragioneSociale,
+      nominativo: ragioneSociale,
+      tel1: '0612345678',
+      codiceEsterno: 'AZ999',
+    };
+    await insertSaleCliente(pool, session.orgId, cliente, addetto);
+
+    await reconcile(session);
+
+    const journeys = await journeyOf(pool, session.orgId);
+    assert.equal(journeys.length, 1, 'exactly one business journey expected');
+    const j = journeys[0];
+    assert.equal(j.customer_type, 'azienda', 'GIURIDICA client => customer_type azienda');
+    assert.equal(j.customer_key, piva, 'business journey keyed by piva');
+    assert.equal(j.nominativo, ragioneSociale, 'journey nominativo must be the CUSTOMER, not the addetto');
+    assert.equal(j.ragione_sociale, ragioneSociale, 'journey ragione_sociale must be the customer');
+    assert.notEqual(j.nominativo, addetto, 'journey nominativo must NOT be the addetto');
+
+    const items = await itemsOf(pool, session.orgId);
+    assert.ok(items.length >= 1, 'business journey must have at least one item');
+    for (const it of items) {
+      assert.equal(it.addetto, addetto, 'item addetto must be the sales addetto');
+      assert.equal(it.piva, piva, 'item piva must be the customer piva');
+    }
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 4: cliente PRIVATO (FISICA) — regressione: la journey salva
+// Nome+Cognome del cliente e l'item conserva l'addetto vendita distinto.
+// ===========================================================================
+test('scenario 4: private journey shows the customer name, item keeps the addetto', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  const cf = uniq('NREANN').toUpperCase();
+  const addetto = 'CARLO GIALLI';
+  try {
+    const cliente = {
+      codiceFiscale: cf,
+      clienteTipo: 'FISICA',
+      nome: 'Anna',
+      cognome: 'Neri',
+      tel1: '3339876543',
+      codiceEsterno: 'CLI777',
+    };
+    await insertSaleCliente(pool, session.orgId, cliente, addetto);
+
+    await reconcile(session);
+
+    const journeys = await journeyOf(pool, session.orgId);
+    assert.equal(journeys.length, 1, 'exactly one private journey expected');
+    const j = journeys[0];
+    assert.equal(j.customer_type, 'privato', 'FISICA client => customer_type privato');
+    assert.equal(j.customer_key, cf, 'private journey keyed by codice fiscale');
+    assert.equal(j.nome, 'Anna', 'journey nome must be the customer first name');
+    assert.equal(j.cognome, 'Neri', 'journey cognome must be the customer last name');
+    assert.notEqual(j.nome, addetto, 'journey nome must NOT be the addetto');
+
+    const items = await itemsOf(pool, session.orgId);
+    assert.ok(items.length >= 1, 'private journey must have at least one item');
+    for (const it of items) {
+      assert.equal(it.addetto, addetto, 'item addetto must be the sales addetto');
+      assert.equal(it.cf, cf, 'item cf must be the customer cf');
+      assert.equal(it.nome, 'Anna', 'item nome must be the customer first name');
+    }
   } finally {
     await cleanupSession(pool, session);
     await pool.end().catch(() => {});

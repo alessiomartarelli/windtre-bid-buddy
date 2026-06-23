@@ -138,7 +138,7 @@ mantenere snello questo file:
   (`bash scripts/run-customer-journey-authz-tests.sh`); richiede il
   workflow "Start application" attivo. Run completo in ~1s.
 - **Customer Journey reconcile tests** (`tests/customer-journey-reconcile.test.mjs`):
-  2 scenari (Task #164) sulla preservazione dei campi manuali nel reconcile.
+  4 scenari (Task #164 + Task #180) sul reconcile.
   Setup: signup admin + org, inserisce una vendita BiSuite (`bisuite_sales`)
   con un'attivazione mobile (categoria UNTIED, `data_vendita ≥ 01/07/2026`,
   innesca la journey) e due dispositivi TELEFONIA finanziati (IMEI + RATA
@@ -149,6 +149,12 @@ mantenere snello questo file:
   sovrascritti da un reconcile successivo anche se cambiano IMEI/importo
   finanziato della vendita; (2) gli item NON modificati a mano vengono
   comunque aggiornati con IMEI/RATA derivati da BiSuite (ramo `ELSE excluded`).
+  (3) cliente AZIENDA (GIURIDICA, keyed by piva): la journey salva
+  `nominativo`/`ragione_sociale` dal CLIENTE (non dall'addetto vendita) e
+  ogni item conserva `addetto` = addetto vendita; (4) cliente PRIVATO
+  (FISICA): regressione che la journey salvi Nome+Cognome del cliente e
+  l'item l'addetto distinto. Gli scenari 3-4 (Task #180) proteggono il fix
+  Task #178 che separa l'anagrafica journey dall'addetto per-item.
   Lanciali via lo step di validation `cj-reconcile-tests`
   (`bash scripts/run-customer-journey-reconcile-tests.sh`); richiede il
   workflow "Start application" attivo. Run completo in ~4s.
