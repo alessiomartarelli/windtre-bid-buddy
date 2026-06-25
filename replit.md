@@ -158,6 +158,22 @@ mantenere snello questo file:
   Lanciali via lo step di validation `cj-reconcile-tests`
   (`bash scripts/run-customer-journey-reconcile-tests.sh`); richiede il
   workflow "Start application" attivo. Run completo in ~4s.
+- **Customer Journey timeline tests**
+  (`tests/customer-journey-timeline.test.mjs`): 16 test sulla logica pura del
+  tracciamento temporale della scheda cliente (Task #185/#186). La logica è
+  stata estratta dal componente React in `client/src/lib/customerJourneyTimeline.ts`
+  (solo `import type`, nessun import a runtime) così è caricabile via loader
+  `tsx` senza dev server né DB. Coprono i rami delicati: (1) contratti senza
+  alcuna data ⇒ timeline vuota (`empty`); (2) driver sconosciuto ⇒ fallback
+  colore grigio `cjDriverColor` + nessun crash; (3) rilevamento T0 — trigger
+  BiSuite (`triggerSaleId`/`triggerBisuiteId`), fallback prima attivazione
+  mobile, fallback primo evento in assoluto, `openedAt` esplicito; (4) stati
+  ko/stornato/annullato attenuati (`isFadedState`); (5) asse mesi esteso oltre
+  T0–T6 (eventi dopo T6 e prima di T0) + label mese a cavallo d'anno;
+  (6) raggruppamento per PDV (destinazione→origine→N/D) ordinato per conteggio;
+  (7) `itemEventDate` (attivazione→inserimento→null, data malformata ⇒ null).
+  Lanciali via lo step di validation `cj-timeline-tests`
+  (`bash scripts/run-customer-journey-timeline-tests.sh`). Run completo in ~1s.
 - **Incentivazione interna tests** (`tests/incentivazione.test.mjs`):
   18 test sulla logica pura di `shared/incentivazione.ts` (gare addetto nel
   tempo). Sono funzioni pure: NON serve né dev server né DB, il modulo TS è

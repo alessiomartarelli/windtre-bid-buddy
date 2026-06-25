@@ -32,6 +32,10 @@ import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from
 import type { CjReportRow } from "@shared/customerJourney";
 import { CJ_DRIVER_ICONS, CJ_DRIVER_COLORS } from "@/lib/customerJourneyIcons";
 import {
+  computeTimeline, groupByNegozio, cjDriverColor, isFadedState,
+  monthIndex, monthIndexLabel, itemNegozio,
+} from "@/lib/customerJourneyTimeline";
+import {
   exportJourneyPdf, exportJourneyExcel,
   exportJourneyListPdf, exportJourneyListExcel,
 } from "@/lib/customerJourneyExport";
@@ -1042,40 +1046,8 @@ function ReportView({
 }
 
 // === Grafico di tracciamento temporale (Task #185) ===
-// Stati di un item "non più validi": vengono mostrati attenuati nella timeline.
-const CJ_FADED_STATES = new Set<CjItemState>(["ko", "stornato", "annullato"]);
-
-const MESI_IT_SHORT = [
-  "Gen", "Feb", "Mar", "Apr", "Mag", "Giu",
-  "Lug", "Ago", "Set", "Ott", "Nov", "Dic",
-];
-
-function toDateOrNull(d: string | Date | null | undefined): Date | null {
-  if (!d) return null;
-  const date = typeof d === "string" ? new Date(d) : d;
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-// Data dell'evento di un item: data attivazione, fallback data inserimento.
-function itemEventDate(it: CustomerJourneyItem): Date | null {
-  return toDateOrNull(it.dataAttivazione) ?? toDateOrNull(it.dataInserimento);
-}
-
-// Indice mese assoluto (anno*12 + mese) per ordinare/diffare i mesi.
-function monthIndex(d: Date): number {
-  return d.getFullYear() * 12 + d.getMonth();
-}
-
-function monthIndexLabel(mi: number): string {
-  const y = Math.floor(mi / 12);
-  const m = ((mi % 12) + 12) % 12;
-  return `${MESI_IT_SHORT[m]} ${y}`;
-}
-
-// Negozio (PDV) di un item: destinazione, fallback origine, fallback "N/D".
-function itemNegozio(it: CustomerJourneyItem): string {
-  return it.pdvDestinazione || it.pdvOrigine || "N/D";
-}
+// La logica pura (asse mesi, rilevamento T0, raggruppamento PDV) vive in
+// `@/lib/customerJourneyTimeline` ed è coperta da test (Task #186).
 
 function CustomerJourneyTimeline({
   journey, items,
@@ -1083,21 +1055,9 @@ function CustomerJourneyTimeline({
   journey: CustomerJourney;
   items: CustomerJourneyItem[];
 }) {
-  const withDate = items
-    .map((it) => ({ it, date: itemEventDate(it) }))
-    .filter((d): d is { it: CustomerJourneyItem; date: Date } => d.date !== null);
+  const model = computeTimeline(journey, items);
 
-  // T0 = mese di apertura journey; fallback alla prima attivazione mobile, poi
-  // al primo evento in assoluto.
-  const t0Date =
-    toDateOrNull(journey.openedAt) ??
-    withDate
-      .filter((d) => d.it.driver === "mobile")
-      .sort((a, b) => a.date.getTime() - b.date.getTime())[0]?.date ??
-    [...withDate].sort((a, b) => a.date.getTime() - b.date.getTime())[0]?.date ??
-    null;
-
-  if (!t0Date || withDate.length === 0) {
+  if (model.empty) {
     return (
       <Card data-testid="card-timeline">
         <CardHeader>
@@ -1117,36 +1077,7 @@ function CustomerJourneyTimeline({
     );
   }
 
-  const t0mi = monthIndex(t0Date);
-  const t6mi = t0mi + 6;
-  const eventMis = withDate.map((d) => monthIndex(d.date));
-  const startMi = Math.min(t0mi, ...eventMis);
-  const endMi = Math.max(t6mi, ...eventMis);
-  const months: number[] = [];
-  for (let mi = startMi; mi <= endMi; mi++) months.push(mi);
-
-  // Item che ha aperto la journey (T0): match sui riferimenti BiSuite del
-  // trigger, fallback alla prima attivazione mobile per data.
-  const t0ItemId = (() => {
-    const byTrigger = items.find(
-      (it) =>
-        (journey.triggerSaleId && it.bisuiteSaleId === journey.triggerSaleId) ||
-        (journey.triggerBisuiteId != null && it.bisuiteId === journey.triggerBisuiteId),
-    );
-    if (byTrigger) return byTrigger.id;
-    const firstMobile = withDate
-      .filter((d) => d.it.driver === "mobile")
-      .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
-    if (firstMobile) return firstMobile.it.id;
-    // Fallback: nessun trigger né mobile ⇒ marca il primo evento in assoluto.
-    const firstEvent = [...withDate].sort(
-      (a, b) => a.date.getTime() - b.date.getTime(),
-    )[0];
-    return firstEvent?.it.id;
-  })();
-
-  // Una riga per contratto, ordinata per data evento.
-  const rows = [...withDate].sort((a, b) => a.date.getTime() - b.date.getTime());
+  const { t0mi, months, t0ItemId, rows } = model;
 
   return (
     <Card data-testid="card-timeline">
@@ -1194,8 +1125,8 @@ function CustomerJourneyTimeline({
             </thead>
             <tbody>
               {rows.map(({ it, date }) => {
-                const color = CJ_DRIVER_COLORS[it.driver as CjDriver] ?? "#6B7280";
-                const faded = CJ_FADED_STATES.has(it.state as CjItemState);
+                const color = cjDriverColor(it.driver, CJ_DRIVER_COLORS);
+                const faded = isFadedState(it.state);
                 const isT0 = it.id === t0ItemId;
                 const eventMi = monthIndex(date);
                 const stateLabel = CJ_ITEM_STATE_LABELS[it.state as CjItemState] || it.state;
@@ -1280,16 +1211,7 @@ function JourneyBreakdown({
   drivers: DriverSummary[];
 }) {
   // Raggruppamento per negozio (PDV).
-  const negozioMap = new Map<string, CustomerJourneyItem[]>();
-  for (const it of items) {
-    const key = itemNegozio(it);
-    const arr = negozioMap.get(key);
-    if (arr) arr.push(it);
-    else negozioMap.set(key, [it]);
-  }
-  const negozi = Array.from(negozioMap.entries()).sort(
-    (a, b) => b[1].length - a[1].length,
-  );
+  const negozi = groupByNegozio(items);
   const attivati = drivers.filter((d) => d.activated).length;
   const isAzienda = journey.customerType === "azienda";
 

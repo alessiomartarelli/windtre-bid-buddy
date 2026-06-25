@@ -64,6 +64,10 @@ args = "incentivazione-accservizi-tests"
 task = "workflow.run"
 args = "inc-dashboard-authz-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-timeline-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -146,6 +150,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-incentivazione-dashboard-authz-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-timeline-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-timeline-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
