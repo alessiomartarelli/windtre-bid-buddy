@@ -2678,6 +2678,16 @@ export async function registerRoutes(
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      // Le vendite già scaricate da altre pagine (Vendite BiSuite, Incentivazione,
+      // scheduler) vengono riconciliate automaticamente in customer journey, così
+      // compaiono senza dover premere "Rigenera da BiSuite". Il reconcile parte solo
+      // se le vendite locali sono cambiate dall'ultimo (watermark), quindi i load
+      // successivi restano leggeri. Eventuali errori non bloccano la lista.
+      try {
+        await storage.reconcileCustomerJourneysIfStale(profile.organizationId);
+      } catch (e) {
+        console.error("Customer journeys auto-reconcile error:", e);
+      }
       const addettiFilter = profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null;
       const journeys = await storage.listCustomerJourneys(profile.organizationId, addettiFilter);
       // Allega a ogni scheda il riepilogo driver (attivati vs attivabili),

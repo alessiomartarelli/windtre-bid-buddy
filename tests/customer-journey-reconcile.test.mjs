@@ -239,6 +239,26 @@ async function reconcile(session) {
   return r.body;
 }
 
+// GET della lista journey: questa route fa il reconcile automatico (stale-check)
+// PRIMA di rispondere, così le vendite già nel DB compaiono senza "Rigenera".
+async function listJourneys(session) {
+  const r = await jsonReq(`${BASE}/api/customer-journeys`, {
+    headers: { Cookie: session.cookie },
+  });
+  assert.equal(r.status, 200, `list failed: ${JSON.stringify(r.body)}`);
+  return r.body;
+}
+
+// Legge il watermark dell'ultimo reconcile dall'org config.
+async function reconciledWatermark(pool, orgId) {
+  const r = await pool.query(
+    `SELECT config->>'customerJourneyReconciledAt' AS at
+       FROM organization_config WHERE organization_id = $1`,
+    [orgId],
+  );
+  return r.rows[0]?.at ?? null;
+}
+
 async function cleanupSession(pool, session) {
   for (const q of [
     [`DELETE FROM customer_journey_items WHERE organization_id = $1`, [session.orgId]],
@@ -468,6 +488,53 @@ test('scenario 4: private journey shows the customer name, item keeps the addett
       assert.equal(it.cf, cf, 'item cf must be the customer cf');
       assert.equal(it.nome, 'Anna', 'item nome must be the customer first name');
     }
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 5: reconcile automatico al load. Una vendita già nel DB (come se
+// scaricata da un'altra pagina) deve comparire nella lista journey al primo
+// GET /api/customer-journeys, SENZA chiamare il reconcile manuale. Un secondo
+// GET non ricostruisce di nuovo (watermark stabile finché le vendite non
+// cambiano); l'inserimento di una nuova vendita fa avanzare il watermark e
+// compare la seconda journey.
+// ===========================================================================
+test('scenario 5: sales already in DB appear on list via auto-reconcile (no manual rigenera)', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  const cf1 = uniq('AUTORC').toUpperCase();
+  const cf2 = uniq('AUTOR2').toUpperCase();
+  const phones = {
+    manual: { imei: '111111111111111', importoFinanziato: '800' },
+    auto: { imei: '222222222222222', importoFinanziato: '600' },
+  };
+  try {
+    // Vendita presente nel DB (nessun reconcile manuale chiamato).
+    await insertSale(pool, session.orgId, cf1, 'ADD AUTO', phones);
+
+    // Prima del load non c'è ancora alcun reconcile né journey.
+    assert.equal(await reconciledWatermark(pool, session.orgId), null, 'no watermark before first load');
+
+    // Il GET della lista riconcilia automaticamente e ritorna la journey.
+    const list1 = await listJourneys(session);
+    assert.equal(list1.length, 1, 'auto-reconcile must surface the existing sale as a journey');
+    const wm1 = await reconciledWatermark(pool, session.orgId);
+    assert.ok(wm1, 'watermark must be set after the auto-reconcile');
+
+    // Secondo GET: niente di nuovo nelle vendite => watermark invariato.
+    const list2 = await listJourneys(session);
+    assert.equal(list2.length, 1, 'no new journeys on a stale load');
+    assert.equal(await reconciledWatermark(pool, session.orgId), wm1, 'watermark unchanged when no new sales');
+
+    // Nuova vendita (altra pagina) => il load successivo la riconcilia.
+    await insertSale(pool, session.orgId, cf2, 'ADD AUTO 2', phones);
+    const list3 = await listJourneys(session);
+    assert.equal(list3.length, 2, 'new sale must appear on the next load without manual rigenera');
+    const wm3 = await reconciledWatermark(pool, session.orgId);
+    assert.ok(wm3 && wm3 >= wm1, 'watermark advances after a newer sale');
   } finally {
     await cleanupSession(pool, session);
     await pool.end().catch(() => {});

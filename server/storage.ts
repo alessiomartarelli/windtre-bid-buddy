@@ -131,6 +131,9 @@ export interface IStorage {
   getCustomerJourneyTriggerDate(orgId: string): Promise<Date>;
   setCustomerJourneyTriggerDate(orgId: string, date: string | null): Promise<Date>;
   reconcileCustomerJourneys(orgId: string): Promise<{ journeys: number; items: number }>;
+  reconcileCustomerJourneysIfStale(orgId: string): Promise<{ reconciled: boolean }>;
+  getCustomerJourneyReconciledAt(orgId: string): Promise<Date | null>;
+  setCustomerJourneyReconciledAt(orgId: string, at: Date | null): Promise<void>;
 
   // BiSuite Sync Notifications
   createBisuiteSyncNotification(notif: InsertBisuiteSyncNotification): Promise<BisuiteSyncNotification>;
@@ -1259,7 +1262,46 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    // Salva il "watermark" dell'ultima riconciliazione = istante dell'ultima
+    // vendita vista (max last_seen_at). Serve a `reconcileCustomerJourneysIfStale`
+    // per capire se le vendite locali sono cambiate dall'ultimo reconcile e
+    // ricostruire le journey automaticamente, senza che l'utente debba premere
+    // "Rigenera da BiSuite".
+    await this.setCustomerJourneyReconciledAt(orgId, await this.getLastBisuiteSync(orgId));
+
     return { journeys: journeyCount, items: itemCount };
+  }
+
+  // Watermark dell'ultimo reconcile (ISO string in org config). null se mai.
+  async getCustomerJourneyReconciledAt(orgId: string): Promise<Date | null> {
+    const cfg = await this.getOrgConfig(orgId);
+    const raw = (cfg?.config as Record<string, unknown> | null | undefined)?.customerJourneyReconciledAt;
+    if (typeof raw !== "string" || !raw) return null;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  async setCustomerJourneyReconciledAt(orgId: string, at: Date | null): Promise<void> {
+    const cfg = await this.getOrgConfig(orgId);
+    const config: Record<string, unknown> = { ...((cfg?.config as Record<string, unknown> | null) || {}) };
+    if (at) config.customerJourneyReconciledAt = at.toISOString();
+    else delete config.customerJourneyReconciledAt;
+    await this.upsertOrgConfig(orgId, config, cfg?.configVersion || "2.0");
+  }
+
+  // Riconcilia le journey solo se le vendite locali sono cambiate dall'ultimo
+  // reconcile (confronto fra max last_seen_at e il watermark salvato). Così le
+  // vendite già presenti nel DB perché scaricate da altre pagine compaiono
+  // automaticamente nella Customer Journey, senza un reconcile a ogni load.
+  async reconcileCustomerJourneysIfStale(orgId: string): Promise<{ reconciled: boolean }> {
+    const lastSync = await this.getLastBisuiteSync(orgId);
+    if (!lastSync) return { reconciled: false }; // nessuna vendita: niente da fare
+    const watermark = await this.getCustomerJourneyReconciledAt(orgId);
+    if (watermark && lastSync.getTime() <= watermark.getTime()) {
+      return { reconciled: false }; // già allineato
+    }
+    await this.reconcileCustomerJourneys(orgId);
+    return { reconciled: true };
   }
 
   // BiSuite Sync Notifications

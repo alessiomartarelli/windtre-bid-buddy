@@ -92,6 +92,20 @@ attive oltre alla SIM che ha aperto la journey. La tabella a scaglioni
   (`pisteAttive / CJ_MAX_PISTE`). Logica pura `simSaturationPct` +
   `gettoneDetailByKey` in `shared/customerJourney.ts`.
 
+## Reconcile automatico al load (vendite già scaricate)
+
+Le vendite già presenti in `bisuite_sales` perché scaricate da altre pagine
+(Vendite BiSuite "Allinea", Incentivazione, scheduler giornaliero) compaiono
+**automaticamente** nella Customer Journey, senza che l'utente debba premere
+"Rigenera da BiSuite". Il `GET /api/customer-journeys` invoca
+`reconcileCustomerJourneysIfStale(orgId)`, che riconcilia **solo** se le vendite
+locali sono cambiate dall'ultimo reconcile: confronta `max(last_seen_at)` di
+`bisuite_sales` con un watermark salvato in org config
+(`customerJourneyReconciledAt`, aggiornato a fine di ogni
+`reconcileCustomerJourneys`). Quando sono allineati il load resta leggero (nessun
+reconcile). Errori del reconcile non bloccano la lista (vengono loggati). Il
+pulsante "Rigenera da BiSuite" (admin) resta come forzatura manuale.
+
 ## Visibilità (per ruolo)
 
 - **operatore**: vede SOLO le journey dei propri clienti. Il legame è dato dal
