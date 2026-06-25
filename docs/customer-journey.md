@@ -68,16 +68,24 @@ attive oltre alla SIM che ha aperto la journey. La tabella a scaglioni
 - Una pista è "attiva" se ha ≥1 item in uno stato attivo (`CJ_ACTIVE_STATES`:
   inserito/in_lavorazione/attivato/pagato/riaccreditato; ko/annullato/stornato
   esclusi).
+- **Cohort** = solo i clienti con **SIM mobile attiva** la cui attivazione cade
+  nel periodo: le journey con mobile non attivo (ko/stornato/annullato) o senza
+  mobile sono escluse (`buildGettoneJourneys` filtra `simAttive ≥ 1`).
+- **KPI** (riferiti alla coorte): **N. SIM attivate** = volume item-level delle
+  SIM mobile attive (`simAttivate`), distinto da **N. clienti con SIM attiva** =
+  journey distinte (`clienti`); **% clienti con +prodotti** (≥1 pista cross-sell
+  attiva) vs **% senza +prodotti** (`crossSellPercentuali`).
 - **Fatturato maturato** = somma dei gettoni as-is. **Potenziale non espresso**
   = `(gettone pieno a 5 piste − gettone attuale)` per journey, scalato per una
   **percentuale di saturazione attesa** (25/50/75/100%) scelta dall'utente.
 - L'analisi è guidata da un filtro **da–a sulla data di attivazione SIM**
-  (`customerJourneys.openedAt`, la coorte T0) e aggrega per **negozio** o
-  **addetto** oltre ai totali, rispettando l'isolamento per operatore (riusa
+  (`customerJourneys.openedAt`, la coorte T0; confronto per sola data UTC) e
+  aggrega per **negozio**, **addetto** o **ragione sociale/cliente** oltre ai
+  totali, rispettando l'isolamento per operatore (riusa
   `GET /api/customer-journeys/report`). Logica pura in
   `shared/customerJourney.ts` (`buildGettoneJourneys`, `filterGettoneByDate`,
-  `aggregateGettone`, `gettoneTotals`), UI nella sotto-vista *Analisi gettoni*
-  della tab Reportistica.
+  `aggregateGettone`, `gettoneTotals`, `crossSellPercentuali`), UI nella
+  sotto-vista *Analisi gettoni* della tab Reportistica.
 
 ## Visibilità (per ruolo)
 

@@ -237,6 +237,9 @@ export interface CjGettoneJourney {
   addetto: string;
   // Data attivazione SIM (T0), ISO string o null.
   openedAt: string | null;
+  // N. SIM mobile ATTIVE del cliente (volume item-level, >= 1: la cohort
+  // include solo clienti con almeno una SIM mobile attiva).
+  simAttive: number;
   // Piste NON-mobile distinte attive (0..CJ_MAX_PISTE).
   pisteAttive: number;
   // Gettone maturato (fatturato as-is) = gettoneForPiste(pisteAttive).
@@ -248,10 +251,12 @@ export interface CjGettoneJourney {
 
 /**
  * Costruisce una `CjGettoneJourney` per ogni journey distinta a partire dalle
- * righe item-level della reportistica. Le piste attive contano i driver
- * NON-mobile distinti con almeno un item in uno stato attivo
- * (`CJ_ACTIVE_STATES`). L'energia (gas/luce) conta come una sola pista perché
- * la riga report porta già il driver aggregato.
+ * righe item-level della reportistica. La COHORT include solo i clienti con
+ * almeno una SIM mobile in stato attivo (`CJ_ACTIVE_STATES`): le journey con
+ * mobile non attivo (ko/stornato/annullato) o senza mobile sono escluse.
+ * Le piste attive contano i driver NON-mobile distinti con almeno un item in
+ * uno stato attivo. L'energia (gas/luce) conta come una sola pista perché la
+ * riga report porta già il driver aggregato.
  */
 export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
   const map = new Map<string, {
@@ -259,6 +264,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     mobilePdv: string; mobileAddetto: string;
     anyPdv: string; anyAddetto: string;
     openedAt: string | null;
+    simAttive: number;
     activeDrivers: Set<CjDriver>;
   }>();
   for (const r of rows) {
@@ -267,7 +273,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
       e = {
         cliente: r.cliente, customerType: r.customerType,
         mobilePdv: "", mobileAddetto: "", anyPdv: "", anyAddetto: "",
-        openedAt: r.openedAt ?? null, activeDrivers: new Set<CjDriver>(),
+        openedAt: r.openedAt ?? null, simAttive: 0, activeDrivers: new Set<CjDriver>(),
       };
       map.set(r.journeyId, e);
     }
@@ -280,27 +286,32 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     if (r.driver === "mobile") {
       e.mobilePdv = minNonEmpty(e.mobilePdv, r.pdv);
       e.mobileAddetto = minNonEmpty(e.mobileAddetto, r.addetto);
+      if (CJ_ACTIVE_STATES.has(r.state)) e.simAttive += 1;
     }
     if (!e.openedAt && r.openedAt) e.openedAt = r.openedAt;
     if (r.driver !== "mobile" && CJ_ACTIVE_STATES.has(r.state)) {
       e.activeDrivers.add(r.driver);
     }
   }
-  return Array.from(map.entries()).map(([journeyId, e]) => {
-    const pisteAttive = e.activeDrivers.size;
-    const fatturato = gettoneForPiste(pisteAttive);
-    return {
-      journeyId,
-      cliente: e.cliente,
-      customerType: e.customerType,
-      pdv: e.mobilePdv || e.anyPdv,
-      addetto: e.mobileAddetto || e.anyAddetto,
-      openedAt: e.openedAt,
-      pisteAttive,
-      fatturato,
-      potenzialePieno: Math.max(0, gettoneForPiste(CJ_MAX_PISTE) - fatturato),
-    };
-  });
+  return Array.from(map.entries())
+    // Cohort: solo clienti con SIM mobile attiva.
+    .filter(([, e]) => e.simAttive >= 1)
+    .map(([journeyId, e]) => {
+      const pisteAttive = e.activeDrivers.size;
+      const fatturato = gettoneForPiste(pisteAttive);
+      return {
+        journeyId,
+        cliente: e.cliente,
+        customerType: e.customerType,
+        pdv: e.mobilePdv || e.anyPdv,
+        addetto: e.mobileAddetto || e.anyAddetto,
+        openedAt: e.openedAt,
+        simAttive: e.simAttive,
+        pisteAttive,
+        fatturato,
+        potenzialePieno: Math.max(0, gettoneForPiste(CJ_MAX_PISTE) - fatturato),
+      };
+    });
 }
 
 /**
@@ -330,12 +341,15 @@ export function filterGettoneByDate(
   });
 }
 
-// Gruppo dell'analisi gettoni lungo una dimensione (negozio / addetto).
+// Gruppo dell'analisi gettoni lungo una dimensione (negozio / addetto /
+// ragione sociale).
 export interface CjGettoneGroup {
   key: string;
   label: string;
-  // N. SIM attivate = journey distinte del gruppo (una per cliente).
-  sim: number;
+  // N. SIM mobile attivate nel periodo (volume item-level).
+  simAttivate: number;
+  // N. clienti distinti con SIM attiva (journey distinte del gruppo).
+  clienti: number;
   // Clienti con almeno una pista cross-sell attiva ("+prodotti").
   conProdotti: number;
   // Fatturato maturato (€) = somma dei gettoni as-is.
@@ -345,7 +359,10 @@ export interface CjGettoneGroup {
 }
 
 export interface CjGettoneTotals {
-  sim: number;
+  // N. SIM mobile attivate nel periodo (volume item-level).
+  simAttivate: number;
+  // N. clienti distinti con SIM attiva.
+  clienti: number;
   conProdotti: number;
   fatturato: number;
   potenziale: number;
@@ -357,7 +374,7 @@ export interface CjGettoneTotals {
  * Aggrega le journey dell'analisi lungo una dimensione (`keyFn`). Il
  * `potenziale` non espresso è il gettone pieno residuo scalato per la
  * percentuale di saturazione attesa (`saturationPct`, 0..100). Ordina per
- * fatturato↓, poi SIM↓, poi label (it).
+ * fatturato↓, poi clienti↓, poi label (it).
  */
 export function aggregateGettone(
   journeys: CjGettoneJourney[],
@@ -366,16 +383,18 @@ export function aggregateGettone(
 ): CjGettoneGroup[] {
   const s = clampSaturation(saturationPct) / 100;
   const map = new Map<string, {
-    label: string; sim: number; conProdotti: number; fatturato: number; potenzialePieno: number;
+    label: string; simAttivate: number; clienti: number; conProdotti: number;
+    fatturato: number; potenzialePieno: number;
   }>();
   for (const j of journeys) {
     const { key, label } = keyFn(j);
     let e = map.get(key);
     if (!e) {
-      e = { label, sim: 0, conProdotti: 0, fatturato: 0, potenzialePieno: 0 };
+      e = { label, simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, potenzialePieno: 0 };
       map.set(key, e);
     }
-    e.sim += 1;
+    e.simAttivate += j.simAttive;
+    e.clienti += 1;
     if (j.pisteAttive >= 1) e.conProdotti += 1;
     e.fatturato += j.fatturato;
     e.potenzialePieno += j.potenzialePieno;
@@ -384,12 +403,13 @@ export function aggregateGettone(
     .map(([key, e]) => ({
       key,
       label: e.label,
-      sim: e.sim,
+      simAttivate: e.simAttivate,
+      clienti: e.clienti,
       conProdotti: e.conProdotti,
       fatturato: e.fatturato,
       potenziale: e.potenzialePieno * s,
     }))
-    .sort((a, b) => b.fatturato - a.fatturato || b.sim - a.sim || a.label.localeCompare(b.label, "it"));
+    .sort((a, b) => b.fatturato - a.fatturato || b.clienti - a.clienti || a.label.localeCompare(b.label, "it"));
 }
 
 /** Totali aggregati dell'analisi gettoni con saturazione applicata. */
@@ -398,15 +418,31 @@ export function gettoneTotals(
   saturationPct: number,
 ): CjGettoneTotals {
   const s = clampSaturation(saturationPct) / 100;
-  let sim = 0, conProdotti = 0, fatturato = 0, potenzialePieno = 0, pisteAttive = 0;
+  let simAttivate = 0, clienti = 0, conProdotti = 0, fatturato = 0, potenzialePieno = 0, pisteAttive = 0;
   for (const j of journeys) {
-    sim += 1;
+    simAttivate += j.simAttive;
+    clienti += 1;
     if (j.pisteAttive >= 1) conProdotti += 1;
     fatturato += j.fatturato;
     potenzialePieno += j.potenzialePieno;
     pisteAttive += j.pisteAttive;
   }
-  return { sim, conProdotti, fatturato, potenziale: potenzialePieno * s, pisteAttive };
+  return { simAttivate, clienti, conProdotti, fatturato, potenziale: potenzialePieno * s, pisteAttive };
+}
+
+/**
+ * Percentuali clienti CON vs SENZA prodotti aggiuntivi (almeno 1 pista
+ * cross-sell attiva oltre la SIM). `clienti` = totale cohort. Con cohort vuota
+ * ritorna 0/0. Le due percentuali sommano sempre a 100 (salvo cohort vuota).
+ */
+export function crossSellPercentuali(
+  clienti: number,
+  conProdotti: number,
+): { conPct: number; senzaPct: number } {
+  if (!clienti || clienti <= 0) return { conPct: 0, senzaPct: 0 };
+  const con = Math.max(0, Math.min(clienti, conProdotti));
+  const conPct = (con / clienti) * 100;
+  return { conPct, senzaPct: 100 - conPct };
 }
 
 /**

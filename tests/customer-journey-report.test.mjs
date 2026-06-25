@@ -27,6 +27,7 @@ const {
   filterGettoneByDate,
   aggregateGettone,
   gettoneTotals,
+  crossSellPercentuali,
 } = await import('../shared/customerJourney.ts');
 
 // Helper: costruisce una riga report con default sensati.
@@ -333,12 +334,13 @@ test('buildGettoneJourneys: pdv/addetto dalla mobile, fallback su qualunque item
   assert.equal(withMobile[0].pdv, 'Roma', 'pdv della mobile');
   assert.equal(withMobile[0].addetto, 'Anna', 'addetto della mobile');
 
-  // nessuna mobile con pdv/addetto: fallback sul primo item incontrato
-  const noMobile = buildGettoneJourneys([
+  // mobile attiva senza pdv/addetto: fallback su qualunque item valorizzato
+  const noMobilePdv = buildGettoneJourneys([
+    row({ journeyId: 'j2', driver: 'mobile', state: 'attivato', pdv: '', addetto: '' }),
     row({ journeyId: 'j2', driver: 'fisso', state: 'attivato', pdv: 'Napoli', addetto: 'Carla' }),
   ]);
-  assert.equal(noMobile[0].pdv, 'Napoli');
-  assert.equal(noMobile[0].addetto, 'Carla');
+  assert.equal(noMobilePdv[0].pdv, 'Napoli');
+  assert.equal(noMobilePdv[0].addetto, 'Carla');
 });
 
 // --- buildGettoneJourneys: attribuzione deterministica con più mobile ---
@@ -413,12 +415,14 @@ test('aggregateGettone: per negozio, fatturato e potenziale a saturazione', () =
   // ordinato per fatturato↓: Milano (40) prima di Roma (20)
   assert.deepEqual(g.map((x) => x.label), ['Milano', 'Roma']);
   const milano = g.find((x) => x.label === 'Milano');
-  assert.equal(milano.sim, 1);
+  assert.equal(milano.clienti, 1);
+  assert.equal(milano.simAttivate, 1);
   assert.equal(milano.conProdotti, 1);
   assert.equal(milano.fatturato, 40);
   assert.equal(milano.potenziale, 80, 'saturazione 100% => pieno residuo');
   const roma = g.find((x) => x.label === 'Roma');
-  assert.equal(roma.sim, 2, 'due journey nello stesso PDV');
+  assert.equal(roma.clienti, 2, 'due journey nello stesso PDV');
+  assert.equal(roma.simAttivate, 2, 'due SIM attive nello stesso PDV');
   assert.equal(roma.conProdotti, 1, 'solo una journey ha piste cross-sell');
   assert.equal(roma.fatturato, 20);
   assert.equal(roma.potenziale, 220, '(100 + 120) * 100%');
@@ -440,14 +444,15 @@ test('aggregateGettone: saturazione scala il potenziale, non il fatturato', () =
 });
 
 // --- gettoneTotals: totali con saturazione ---
-test('gettoneTotals: totali sim/conProdotti/fatturato/potenziale', () => {
+test('gettoneTotals: totali sim/clienti/conProdotti/fatturato/potenziale', () => {
   const js = buildGettoneJourneys([
     row({ journeyId: 'j1', driver: 'mobile', state: 'attivato' }),
     row({ journeyId: 'j1', driver: 'fisso', state: 'attivato' }),
     row({ journeyId: 'j2', driver: 'mobile', state: 'attivato' }),
   ]);
   const t = gettoneTotals(js, 100);
-  assert.equal(t.sim, 2);
+  assert.equal(t.clienti, 2);
+  assert.equal(t.simAttivate, 2);
   assert.equal(t.conProdotti, 1);
   assert.equal(t.fatturato, 20, 'j1=20 + j2=0');
   assert.equal(t.pisteAttive, 1);
@@ -457,9 +462,54 @@ test('gettoneTotals: totali sim/conProdotti/fatturato/potenziale', () => {
   assert.equal(t25.potenziale, 55, '220 * 25%');
 });
 
+// --- cohort: solo clienti con SIM mobile attiva ---
+test('buildGettoneJourneys: cohort esclude mobile non attivo o assente', () => {
+  const js = buildGettoneJourneys([
+    // a: mobile attivo => IN cohort
+    row({ journeyId: 'a', driver: 'mobile', state: 'attivato' }),
+    // b: mobile KO + fisso attivo => mobile non attivo => FUORI cohort
+    row({ journeyId: 'b', driver: 'mobile', state: 'ko' }),
+    row({ journeyId: 'b', driver: 'fisso', state: 'attivato' }),
+    // c: solo fisso, nessun mobile => FUORI cohort
+    row({ journeyId: 'c', driver: 'fisso', state: 'attivato' }),
+  ]);
+  assert.deepEqual(js.map((j) => j.journeyId), ['a'], 'solo la journey con SIM mobile attiva');
+});
+
+// --- SIM volume vs clienti distinti ---
+test('buildGettoneJourneys/totals: SIM attive (volume) vs clienti distinti', () => {
+  const js = buildGettoneJourneys([
+    // un cliente con 2 SIM mobile attive + 1 mobile KO (non conta) + 1 pista
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato' }),
+    row({ journeyId: 'j1', driver: 'mobile', state: 'pagato' }),
+    row({ journeyId: 'j1', driver: 'mobile', state: 'ko' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato' }),
+  ]);
+  assert.equal(js.length, 1, 'un solo cliente');
+  assert.equal(js[0].simAttive, 2, 'due SIM mobile attive (la KO non conta)');
+  const t = gettoneTotals(js, 100);
+  assert.equal(t.clienti, 1, 'un cliente distinto');
+  assert.equal(t.simAttivate, 2, 'due SIM attivate (volume)');
+  assert.equal(t.conProdotti, 1);
+});
+
+// --- crossSellPercentuali: math + edge case cohort vuota ---
+test('crossSellPercentuali: percentuali con/senza prodotti e cohort vuota', () => {
+  assert.deepEqual(crossSellPercentuali(0, 0), { conPct: 0, senzaPct: 0 }, 'cohort vuota => 0/0');
+  assert.deepEqual(crossSellPercentuali(4, 1), { conPct: 25, senzaPct: 75 });
+  const full = crossSellPercentuali(4, 4);
+  assert.equal(full.conPct, 100);
+  assert.equal(full.senzaPct, 0);
+  // le due percentuali sommano sempre a 100 con cohort non vuota
+  const p = crossSellPercentuali(3, 2);
+  assert.ok(Math.abs(p.conPct + p.senzaPct - 100) < 1e-9, 'con + senza = 100');
+  // clamp se conProdotti > clienti (input incoerente)
+  assert.deepEqual(crossSellPercentuali(2, 5), { conPct: 100, senzaPct: 0 });
+});
+
 // --- aggregateGettone / gettoneTotals: input vuoto ---
 test('analisi gettoni: input vuoto => zero', () => {
   assert.deepEqual(aggregateGettone([], (j) => ({ key: j.pdv, label: j.pdv }), 100), []);
   const t = gettoneTotals([], 100);
-  assert.deepEqual(t, { sim: 0, conProdotti: 0, fatturato: 0, potenziale: 0, pisteAttive: 0 });
+  assert.deepEqual(t, { simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, potenziale: 0, pisteAttive: 0 });
 });

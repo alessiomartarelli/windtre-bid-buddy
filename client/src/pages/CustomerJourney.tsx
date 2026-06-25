@@ -29,6 +29,7 @@ import {
   aggregateReport, matchesCjFilters,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
   buildGettoneJourneys, filterGettoneByDate, aggregateGettone, gettoneTotals,
+  crossSellPercentuali,
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES } from "@shared/schema";
 import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from "@shared/schema";
@@ -66,7 +67,7 @@ type SortDir = "asc" | "desc";
 type CjView = "schede" | "report";
 type ReportDim = "negozio" | "addetto" | "cliente";
 type ReportTab = "analisi" | "dettaglio";
-type GettoneDim = "negozio" | "addetto";
+type GettoneDim = "negozio" | "addetto" | "cliente";
 
 const SORT_LABELS: Record<SortKey, string> = {
   data: "Data apertura",
@@ -136,6 +137,11 @@ function fmtDate(d: string | Date | null | undefined): string {
 function fmtEuro(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v) || v === 0) return "—";
   return v.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+}
+
+function fmtPct(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `${v.toLocaleString("it-IT", { maximumFractionDigits: 1 })}%`;
 }
 
 export default function CustomerJourneyPage() {
@@ -392,9 +398,11 @@ export default function CustomerJourneyPage() {
   const gettoneTot = gettoneTotals(gettoneJourneys, saturation);
   const gettoneGroups = aggregateGettone(
     gettoneJourneys,
-    (j) => gettoneDim === "negozio"
-      ? { key: j.pdv || "—", label: j.pdv || "Senza negozio" }
-      : { key: j.addetto || "—", label: j.addetto || "Senza addetto" },
+    (j) => {
+      if (gettoneDim === "negozio") return { key: j.pdv || "—", label: j.pdv || "Senza negozio" };
+      if (gettoneDim === "addetto") return { key: j.addetto || "—", label: j.addetto || "Senza addetto" };
+      return { key: (j.cliente || "—").toLowerCase(), label: j.cliente || "Senza nominativo" };
+    },
     saturation,
   );
 
@@ -1112,9 +1120,10 @@ function AnalisiView({
     );
   }
 
-  const dims: GettoneDim[] = ["negozio", "addetto"];
-  const dimLabel: Record<GettoneDim, string> = { negozio: "Negozio", addetto: "Addetto" };
+  const dims: GettoneDim[] = ["negozio", "addetto", "cliente"];
+  const dimLabel: Record<GettoneDim, string> = { negozio: "Negozio", addetto: "Addetto", cliente: "Ragione sociale" };
   const satOptions = [25, 50, 75, 100];
+  const { conPct, senzaPct } = crossSellPercentuali(totals.clienti, totals.conProdotti);
 
   return (
     <div className="space-y-4">
@@ -1173,27 +1182,37 @@ function AnalisiView({
       </Card>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
         <Card data-testid="card-gettone-sim">
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <RouteIcon className="h-3.5 w-3.5" /> SIM attivate
             </p>
             <p className="text-2xl font-bold tabular-nums" data-testid="text-gettone-sim">
-              {totals.sim}
+              {totals.simAttivate}
             </p>
           </CardContent>
         </Card>
-        <Card data-testid="card-gettone-conprodotti">
+        <Card data-testid="card-gettone-clienti">
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Coins className="h-3.5 w-3.5" /> Clienti +prodotti
+              <Coins className="h-3.5 w-3.5" /> Clienti con SIM attiva
             </p>
-            <p className="text-2xl font-bold tabular-nums" data-testid="text-gettone-conprodotti">
-              {totals.conProdotti}
-              <span className="text-sm font-normal text-muted-foreground ml-1">
-                / {totals.sim}
-              </span>
+            <p className="text-2xl font-bold tabular-nums" data-testid="text-gettone-clienti">
+              {totals.clienti}
+            </p>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-gettone-crosssell">
+          <CardContent className="py-4">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <TrendingUp className="h-3.5 w-3.5" /> Clienti +prodotti
+            </p>
+            <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-gettone-conpct">
+              {fmtPct(conPct)}
+            </p>
+            <p className="text-xs text-muted-foreground" data-testid="text-gettone-senzapct">
+              senza +prodotti {fmtPct(senzaPct)}
             </p>
           </CardContent>
         </Card>
@@ -1250,6 +1269,7 @@ function AnalisiView({
                 <TableRow>
                   <TableHead>{dimLabel[dim]}</TableHead>
                   <TableHead className="text-right">SIM</TableHead>
+                  <TableHead className="text-right">Clienti</TableHead>
                   <TableHead className="text-right">+prodotti</TableHead>
                   <TableHead className="text-right">Fatturato</TableHead>
                   <TableHead className="text-right">Potenziale</TableHead>
@@ -1262,7 +1282,10 @@ function AnalisiView({
                       {g.label}
                     </TableCell>
                     <TableCell className="text-right tabular-nums" data-testid={`text-gettone-sim-${g.key}`}>
-                      {g.sim}
+                      {g.simAttivate}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums" data-testid={`text-gettone-clienti-${g.key}`}>
+                      {g.clienti}
                     </TableCell>
                     <TableCell className="text-right tabular-nums" data-testid={`text-gettone-conprodotti-${g.key}`}>
                       {g.conProdotti}

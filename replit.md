@@ -234,7 +234,7 @@ mantenere snello questo file:
   (`bash scripts/run-incentivazione-accessori-servizi-tests.sh`). Run
   completo in ~5s.
 - **Customer Journey reportistica + filtri condivisi tests**
-  (`tests/customer-journey-report.test.mjs`): 23 test sulla logica pura di
+  (`tests/customer-journey-report.test.mjs`): 28 test sulla logica pura di
   `shared/customerJourney.ts` (Task #189 + Task #192). Sono funzioni pure: NON serve né
   dev server né DB, il modulo TS è caricato via loader `tsx`. La pagina
   Customer Journey ha due viste ("Schede clienti" e "Reportistica") che
