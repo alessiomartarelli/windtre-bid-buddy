@@ -76,6 +76,10 @@ args = "cj-report-tests"
 task = "workflow.run"
 args = "cj-export-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-gettone-ui-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -191,6 +195,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-customer-journey-export-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-gettone-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-gettone-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

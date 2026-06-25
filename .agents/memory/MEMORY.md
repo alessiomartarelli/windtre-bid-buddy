@@ -8,3 +8,4 @@
 - [TanStack queryKey = URL path](tanstack-querykey-url.md) — il fetcher di default fa `queryKey.join("/")`: i segmenti diventano path, la route server deve usare path params, non query.
 - [lucide icons in jsPDF/Excel](lucide-icons-in-jspdf.md) — rasterizza lucide via renderToStaticMarkup→canvas→PNG per il PDF; in Excel (SheetJS) usa un'emoji, niente immagini in cella.
 - [Pure logic in shared/ for tsx tests](pure-logic-for-tsx-tests.md) — i test tsx non risolvono alias @shared/@ né caricano react/jsPDF/xlsx; estrai logica pura in shared/ (import relativi) o lib con solo import type.
+- [Playwright UI tests](playwright-tsx-ui-tests.md) — browser test via playwright-core + system chromium (resolve path at runtime), cookie from signup, seed/cleanup via pg; only for React behavior pure tests can't reach.

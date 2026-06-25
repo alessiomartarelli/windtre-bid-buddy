@@ -272,6 +272,30 @@ mantenere snello questo file:
   rimossa). Lanciali via lo step di validation
   `cj-report-tests` (`bash scripts/run-customer-journey-report-tests.sh`).
   Run completo in ~1s.
+- **Customer Journey Analisi gettoni UI tests**
+  (`tests/customer-journey-gettone-ui.test.mjs`): 2 scenari Playwright
+  (Task #194) sull'espansione del dettaglio dell'Analisi gettoni. A
+  differenza dei test puri, questo guida un vero browser headless (chromium
+  di sistema via Nix + `playwright-core`) per proteggere il rendering React
+  che la logica pura non copre: il toggle `useState` che apre/chiude la
+  sotto-tabella in `AnalisiView` e la proiezione delle colonne (Cliente /
+  SIM attive / Piste attive / % saturazione / Fatturato). Setup: signup
+  admin+org, poi semina DIRETTAMENTE via SQL due journey con item (mobile
+  attiva + cross-sell) — deterministico e con pieno controllo su
+  driver/stato/PDV/addetto, così i valori attesi (Mario: 2 piste ⇒ 40%
+  saturazione / 30€; Luigi: 1 pista ⇒ 20€) sono prevedibili; la vista
+  gettone consuma comunque l'output di `/api/customer-journeys/report`,
+  identico al percorso reconcile (già coperto altrove). Il cookie di
+  sessione viene iniettato nel context Playwright. Coprono: (1) admin —
+  espande la riga addetto, verifica i valori aggregati e la sotto-tabella
+  (nome cliente, % saturazione, piste 2/5, intestazioni), poi la richiude
+  (`row-gettone-detail-*` rimossa); (2) operatore con `bisuite_addetti`
+  associato a un solo addetto — vede SOLO la propria riga, niente leakage
+  dell'altro addetto. Cleanup completo del dev DB alla fine. Lanciali via lo
+  step di validation `cj-gettone-ui-tests`
+  (`bash scripts/run-customer-journey-gettone-ui-tests.sh`); richiede il
+  workflow "Start application" attivo, `DATABASE_URL` e chromium di sistema.
+  Run completo in ~25s.
 
 ## External Dependencies
 
