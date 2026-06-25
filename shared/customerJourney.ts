@@ -446,6 +446,60 @@ export function crossSellPercentuali(
 }
 
 /**
+ * Percentuale di saturazione cross-sell di una singola journey (SIM che ha
+ * attivato la CJ): quante delle `CJ_MAX_PISTE` piste cross-sell sono attive,
+ * 0..100, con clamp.
+ */
+export function simSaturationPct(pisteAttive: number): number {
+  const p = Math.max(0, Math.min(CJ_MAX_PISTE, pisteAttive));
+  return (p / CJ_MAX_PISTE) * 100;
+}
+
+// Riga di dettaglio dell'analisi gettoni: una per cliente/SIM che ha attivato
+// la CJ, con la sua percentuale di saturazione cross-sell.
+export interface CjGettoneDetailRow {
+  journeyId: string;
+  cliente: string;
+  // N. SIM mobile attive del cliente.
+  simAttive: number;
+  // N. piste cross-sell attive (0..CJ_MAX_PISTE).
+  pisteAttive: number;
+  // % saturazione cross-sell della singola SIM/cliente (0..100).
+  saturazionePct: number;
+  // Gettone maturato (€).
+  fatturato: number;
+}
+
+/**
+ * Raggruppa le journey per chiave (`keyFn`, es. PDV o addetto) e ritorna, per
+ * ogni chiave, l'elenco di dettaglio dei clienti/SIM con la loro % saturazione
+ * cross-sell. Ogni elenco è ordinato per saturazione↓ poi nominativo (it).
+ */
+export function gettoneDetailByKey(
+  journeys: CjGettoneJourney[],
+  keyFn: (j: CjGettoneJourney) => string,
+): Map<string, CjGettoneDetailRow[]> {
+  const map = new Map<string, CjGettoneDetailRow[]>();
+  for (const j of journeys) {
+    const key = keyFn(j);
+    let list = map.get(key);
+    if (!list) { list = []; map.set(key, list); }
+    list.push({
+      journeyId: j.journeyId,
+      cliente: j.cliente,
+      simAttive: j.simAttive,
+      pisteAttive: j.pisteAttive,
+      saturazionePct: simSaturationPct(j.pisteAttive),
+      fatturato: j.fatturato,
+    });
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => b.saturazionePct - a.saturazionePct || a.cliente.localeCompare(b.cliente, "it"));
+  }
+  return map;
+}
+
+/**
  * Riepilogo per-driver (attivato sì/no + conteggio item) per un insieme di
  * item di una journey. L'energia distingue gas/luce a livello di item ma per
  * il riepilogo conta come singolo driver. L'ordine segue `CJ_DRIVER_ORDER`.

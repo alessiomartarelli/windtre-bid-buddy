@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,19 +23,20 @@ import {
   Search, User, Building2, Loader2, Coins, Pencil,
   FileText, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
   LayoutGrid, BarChart3, Store, Users, TrendingUp, Wallet, Calendar,
+  ChevronRight, ChevronDown,
 } from "lucide-react";
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ACTIVE_STATES,
   aggregateReport, matchesCjFilters,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
   buildGettoneJourneys, filterGettoneByDate, aggregateGettone, gettoneTotals,
-  crossSellPercentuali,
+  crossSellPercentuali, gettoneDetailByKey,
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES } from "@shared/schema";
 import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from "@shared/schema";
 import type {
   CjReportRow, CjReportGroup, CjListFilters,
-  CjGettoneGroup, CjGettoneTotals,
+  CjGettoneGroup, CjGettoneTotals, CjGettoneJourney, CjGettoneDetailRow,
 } from "@shared/customerJourney";
 import { CJ_DRIVER_ICONS, CJ_DRIVER_COLORS } from "@/lib/customerJourneyIcons";
 import {
@@ -67,7 +68,7 @@ type SortDir = "asc" | "desc";
 type CjView = "schede" | "report";
 type ReportDim = "negozio" | "addetto" | "cliente";
 type ReportTab = "analisi" | "dettaglio";
-type GettoneDim = "negozio" | "addetto" | "cliente";
+type GettoneDim = "negozio" | "addetto";
 
 const SORT_LABELS: Record<SortKey, string> = {
   data: "Data apertura",
@@ -396,15 +397,20 @@ export default function CustomerJourneyPage() {
     dateTo || null,
   );
   const gettoneTot = gettoneTotals(gettoneJourneys, saturation);
+  const gettoneKeyFn = (j: CjGettoneJourney) =>
+    gettoneDim === "negozio" ? (j.pdv || "—") : (j.addetto || "—");
   const gettoneGroups = aggregateGettone(
     gettoneJourneys,
-    (j) => {
-      if (gettoneDim === "negozio") return { key: j.pdv || "—", label: j.pdv || "Senza negozio" };
-      if (gettoneDim === "addetto") return { key: j.addetto || "—", label: j.addetto || "Senza addetto" };
-      return { key: (j.cliente || "—").toLowerCase(), label: j.cliente || "Senza nominativo" };
-    },
+    (j) => ({
+      key: gettoneKeyFn(j),
+      label: gettoneDim === "negozio"
+        ? (j.pdv || "Senza negozio")
+        : (j.addetto || "Senza addetto"),
+    }),
     saturation,
   );
+  // Dettaglio per gruppo (clienti/SIM con % saturazione) per la riga espandibile.
+  const gettoneDetail = gettoneDetailByKey(gettoneJourneys, gettoneKeyFn);
 
   const hasActiveFilters =
     typeFilter !== "tutti" || pdvFilter !== "tutti" ||
@@ -772,6 +778,7 @@ export default function CustomerJourneyPage() {
                     isLoading={reportQuery.isLoading}
                     totals={gettoneTot}
                     groups={gettoneGroups}
+                    detail={gettoneDetail}
                     dim={gettoneDim}
                     onDimChange={setGettoneDim}
                     dateFrom={dateFrom}
@@ -1091,6 +1098,7 @@ function AnalisiView({
   isLoading,
   totals,
   groups,
+  detail,
   dim,
   onDimChange,
   dateFrom,
@@ -1103,6 +1111,7 @@ function AnalisiView({
   isLoading: boolean;
   totals: CjGettoneTotals;
   groups: CjGettoneGroup[];
+  detail: Map<string, CjGettoneDetailRow[]>;
   dim: GettoneDim;
   onDimChange: (d: GettoneDim) => void;
   dateFrom: string;
@@ -1112,6 +1121,7 @@ function AnalisiView({
   saturation: number;
   onSaturationChange: (v: number) => void;
 }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -1120,8 +1130,8 @@ function AnalisiView({
     );
   }
 
-  const dims: GettoneDim[] = ["negozio", "addetto", "cliente"];
-  const dimLabel: Record<GettoneDim, string> = { negozio: "Negozio", addetto: "Addetto", cliente: "Ragione sociale" };
+  const dims: GettoneDim[] = ["negozio", "addetto"];
+  const dimLabel: Record<GettoneDim, string> = { negozio: "Negozio", addetto: "Addetto" };
   const satOptions = [25, 50, 75, 100];
   const { conPct, senzaPct } = crossSellPercentuali(totals.clienti, totals.conProdotti);
 
@@ -1267,6 +1277,7 @@ function AnalisiView({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8"></TableHead>
                   <TableHead>{dimLabel[dim]}</TableHead>
                   <TableHead className="text-right">SIM</TableHead>
                   <TableHead className="text-right">Clienti</TableHead>
@@ -1276,28 +1287,85 @@ function AnalisiView({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {groups.map((g) => (
-                  <TableRow key={g.key} data-testid={`row-gettone-${g.key}`}>
-                    <TableCell className="font-medium" data-testid={`text-gettone-label-${g.key}`}>
-                      {g.label}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums" data-testid={`text-gettone-sim-${g.key}`}>
-                      {g.simAttivate}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums" data-testid={`text-gettone-clienti-${g.key}`}>
-                      {g.clienti}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums" data-testid={`text-gettone-conprodotti-${g.key}`}>
-                      {g.conProdotti}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400" data-testid={`text-gettone-fatturato-${g.key}`}>
-                      {fmtEuro(g.fatturato)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-amber-600 dark:text-amber-400" data-testid={`text-gettone-potenziale-${g.key}`}>
-                      {fmtEuro(g.potenziale)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {groups.map((g) => {
+                  const isOpen = expanded === g.key;
+                  const rows = detail.get(g.key) ?? [];
+                  return (
+                  <Fragment key={g.key}>
+                    <TableRow
+                      className="cursor-pointer"
+                      onClick={() => setExpanded(isOpen ? null : g.key)}
+                      data-testid={`row-gettone-${g.key}`}
+                    >
+                      <TableCell className="pr-0 text-muted-foreground">
+                        {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </TableCell>
+                      <TableCell className="font-medium" data-testid={`text-gettone-label-${g.key}`}>
+                        {g.label}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid={`text-gettone-sim-${g.key}`}>
+                        {g.simAttivate}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid={`text-gettone-clienti-${g.key}`}>
+                        {g.clienti}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid={`text-gettone-conprodotti-${g.key}`}>
+                        {g.conProdotti}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400" data-testid={`text-gettone-fatturato-${g.key}`}>
+                        {fmtEuro(g.fatturato)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-amber-600 dark:text-amber-400" data-testid={`text-gettone-potenziale-${g.key}`}>
+                        {fmtEuro(g.potenziale)}
+                      </TableCell>
+                    </TableRow>
+                    {isOpen && (
+                      <TableRow data-testid={`row-gettone-detail-${g.key}`}>
+                        <TableCell colSpan={7} className="bg-muted/40 p-0">
+                          <div className="px-4 py-3">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">
+                              {g.clienti} {g.clienti === 1 ? "cliente attivo" : "clienti attivi"} nella CJ ·
+                              {" "}saturazione cross-sell per SIM
+                            </p>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Cliente</TableHead>
+                                  <TableHead className="text-right">SIM attive</TableHead>
+                                  <TableHead className="text-right">Piste attive</TableHead>
+                                  <TableHead className="text-right">% saturazione</TableHead>
+                                  <TableHead className="text-right">Fatturato</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {rows.map((r) => (
+                                  <TableRow key={r.journeyId} data-testid={`row-gettone-sim-${r.journeyId}`}>
+                                    <TableCell className="font-medium" data-testid={`text-gettone-sim-cliente-${r.journeyId}`}>
+                                      {r.cliente || "Senza nominativo"}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                      {r.simAttive}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                      {r.pisteAttive}/{CJ_MAX_PISTE}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums font-semibold" data-testid={`text-gettone-sim-saturazione-${r.journeyId}`}>
+                                      {fmtPct(r.saturazionePct)}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                                      {fmtEuro(r.fatturato)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

@@ -28,6 +28,8 @@ const {
   aggregateGettone,
   gettoneTotals,
   crossSellPercentuali,
+  simSaturationPct,
+  gettoneDetailByKey,
 } = await import('../shared/customerJourney.ts');
 
 // Helper: costruisce una riga report con default sensati.
@@ -512,4 +514,47 @@ test('analisi gettoni: input vuoto => zero', () => {
   assert.deepEqual(aggregateGettone([], (j) => ({ key: j.pdv, label: j.pdv }), 100), []);
   const t = gettoneTotals([], 100);
   assert.deepEqual(t, { simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, potenziale: 0, pisteAttive: 0 });
+});
+
+// --- simSaturationPct: percentuale di saturazione cross-sell per SIM ---
+test('simSaturationPct: piste/CJ_MAX_PISTE con clamp', () => {
+  assert.equal(simSaturationPct(0), 0, 'nessuna pista => 0%');
+  assert.equal(simSaturationPct(CJ_MAX_PISTE), 100, 'tutte le piste => 100%');
+  assert.equal(simSaturationPct(CJ_MAX_PISTE / 2), 50, 'metà piste => 50%');
+  assert.equal(simSaturationPct(-3), 0, 'clamp negativo => 0%');
+  assert.equal(simSaturationPct(999), 100, 'clamp oltre il massimo => 100%');
+});
+
+// --- gettoneDetailByKey: dettaglio clienti/SIM per gruppo (click sul PDV) ---
+test('gettoneDetailByKey: raggruppa per PDV con saturazione per cliente, ordinata', () => {
+  const js = buildGettoneJourneys([
+    // Roma j1: 1 pista attiva => 20% saturazione (1/5)
+    row({ journeyId: 'j1', cliente: 'Anna', driver: 'mobile', state: 'attivato', pdv: 'Roma' }),
+    row({ journeyId: 'j1', cliente: 'Anna', driver: 'fisso', state: 'attivato', pdv: 'Roma' }),
+    // Roma j2: 0 piste => 0% saturazione, ma 2 SIM attive
+    row({ journeyId: 'j2', cliente: 'Bea', driver: 'mobile', state: 'attivato', pdv: 'Roma' }),
+    row({ journeyId: 'j2', cliente: 'Bea', driver: 'mobile', state: 'pagato', pdv: 'Roma' }),
+    // Milano j3: 3 piste => 60%
+    row({ journeyId: 'j3', cliente: 'Carlo', driver: 'mobile', state: 'attivato', pdv: 'Milano' }),
+    row({ journeyId: 'j3', cliente: 'Carlo', driver: 'fisso', state: 'attivato', pdv: 'Milano' }),
+    row({ journeyId: 'j3', cliente: 'Carlo', driver: 'energia', state: 'attivato', pdv: 'Milano' }),
+    row({ journeyId: 'j3', cliente: 'Carlo', driver: 'telefono', state: 'attivato', pdv: 'Milano' }),
+  ]);
+  const byPdv = (j) => j.pdv || '—';
+  const detail = gettoneDetailByKey(js, byPdv);
+  // Roma: due clienti, ordinati per saturazione↓ (Anna 20% prima di Bea 0%)
+  const roma = detail.get('Roma');
+  assert.equal(roma.length, 2, 'due clienti su Roma');
+  assert.deepEqual(roma.map((r) => r.cliente), ['Anna', 'Bea'], 'ordine per saturazione↓');
+  assert.equal(roma[0].saturazionePct, 20, 'Anna 1/5 => 20%');
+  assert.equal(roma[0].pisteAttive, 1);
+  assert.equal(roma[0].fatturato, 20);
+  assert.equal(roma[1].saturazionePct, 0, 'Bea senza piste => 0%');
+  assert.equal(roma[1].simAttive, 2, 'Bea ha 2 SIM attive');
+  // Milano: un cliente con 3 piste => 60%
+  const milano = detail.get('Milano');
+  assert.equal(milano.length, 1);
+  assert.equal(milano[0].saturazionePct, 60, 'Carlo 3/5 => 60%');
+  // input vuoto => mappa vuota
+  assert.equal(gettoneDetailByKey([], byPdv).size, 0);
 });

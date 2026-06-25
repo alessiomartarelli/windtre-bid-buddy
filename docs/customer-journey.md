@@ -80,12 +80,17 @@ attive oltre alla SIM che ha aperto la journey. La tabella a scaglioni
   **percentuale di saturazione attesa** (25/50/75/100%) scelta dall'utente.
 - L'analisi è guidata da un filtro **da–a sulla data di attivazione SIM**
   (`customerJourneys.openedAt`, la coorte T0; confronto per sola data UTC) e
-  aggrega per **negozio**, **addetto** o **ragione sociale/cliente** oltre ai
-  totali, rispettando l'isolamento per operatore (riusa
-  `GET /api/customer-journeys/report`). Logica pura in
-  `shared/customerJourney.ts` (`buildGettoneJourneys`, `filterGettoneByDate`,
-  `aggregateGettone`, `gettoneTotals`, `crossSellPercentuali`), UI nella
-  sotto-vista *Analisi gettoni* della tab Reportistica.
+  aggrega per **negozio** o **addetto** oltre ai totali, rispettando
+  l'isolamento per operatore (riusa `GET /api/customer-journeys/report`).
+  Logica pura in `shared/customerJourney.ts` (`buildGettoneJourneys`,
+  `filterGettoneByDate`, `aggregateGettone`, `gettoneTotals`,
+  `crossSellPercentuali`), UI nella sotto-vista *Analisi gettoni* della tab
+  Reportistica.
+- **Dettaglio per riga (click)**: ogni riga (negozio/addetto) è espandibile;
+  cliccandola mostra quanti clienti sono attivi nella CJ e, per ogni singola SIM
+  che ha attivato la CJ, la **% di saturazione cross-sell**
+  (`pisteAttive / CJ_MAX_PISTE`). Logica pura `simSaturationPct` +
+  `gettoneDetailByKey` in `shared/customerJourney.ts`.
 
 ## Visibilità (per ruolo)
 

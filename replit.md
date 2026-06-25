@@ -263,7 +263,12 @@ mantenere snello questo file:
   senza limiti); (9) `aggregateGettone` (somma fatturato + potenziale alla
   saturazione, ordinamento per fatturato↓, la saturazione scala solo il
   potenziale e viene clampata a 0..100); (10) `gettoneTotals` + input vuoto.
-  Lanciali via lo step di validation
+  (11) `simSaturationPct` (% saturazione cross-sell per singola SIM =
+  `pisteAttive/CJ_MAX_PISTE`, con clamp 0..100); (12) `gettoneDetailByKey`
+  (dettaglio per riga PDV/addetto col click: clienti/SIM per gruppo + %
+  saturazione, ordinati per saturazione↓). L'analisi gettoni aggrega solo per
+  **negozio** o **addetto** (la dimensione "ragione sociale/cliente" è stata
+  rimossa). Lanciali via lo step di validation
   `cj-report-tests` (`bash scripts/run-customer-journey-report-tests.sh`).
   Run completo in ~1s.
 
