@@ -1178,14 +1178,24 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    let journeyCount = 0;
-    let itemCount = 0;
-    for (const cand of Array.from(byCustomer.values())) {
-      if (!cand.hasTrigger) continue;
-      journeyCount++;
+    // Upsert in BATCH invece di una query per journey + una per item: su org
+    // con molte vendite il loop sequenziale faceva centinaia/migliaia di
+    // round-trip al DB, rendendo lento il reconcile (che ora gira anche al load
+    // della pagina). Raggruppiamo gli insert in chunk per non superare il
+    // limite di parametri di Postgres (~65535).
+    const candidates = Array.from(byCustomer.values()).filter((c) => c.hasTrigger);
+    const chunk = <T>(arr: T[], size: number): T[][] => {
+      const out: T[][] = [];
+      for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+      return out;
+    };
 
-      const [journey] = await db.insert(customerJourneys)
-        .values({
+    // 1) Journey: una sola query per chunk. `.returning()` ritorna gli id anche
+    // per le righe in conflitto (DO UPDATE), così possiamo collegare gli item.
+    const keyToJourneyId = new Map<string, string>();
+    for (const part of chunk(candidates, 500)) {
+      const rows = await db.insert(customerJourneys)
+        .values(part.map((cand) => ({
           organizationId: orgId,
           customerKey: cand.anag.customerKey,
           customerType: cand.anag.customerType,
@@ -1198,69 +1208,83 @@ export class DatabaseStorage implements IStorage {
           triggerSaleId: cand.triggerSaleId,
           triggerBisuiteId: cand.triggerBisuiteId,
           openedAt: cand.openedAt,
-          status: "aperta",
-        })
+          status: "aperta" as const,
+        })))
         .onConflictDoUpdate({
           target: [customerJourneys.organizationId, customerJourneys.customerKey],
           set: {
-            customerType: cand.anag.customerType,
-            nome: cand.anag.nome,
-            cognome: cand.anag.cognome,
+            customerType: sql`excluded.customer_type`,
+            nome: sql`excluded.nome`,
+            cognome: sql`excluded.cognome`,
             // Preserva la ragione sociale inserita/corretta a mano; altrimenti
             // aggiorna con il suggerimento derivato da BiSuite/email.
             ragioneSociale: sql`CASE WHEN ${customerJourneys.ragioneSocialeManual} THEN ${customerJourneys.ragioneSociale} ELSE excluded.ragione_sociale END`,
-            nominativo: cand.anag.nominativo,
-            telefono: cand.anag.telefono,
-            codiceCliente: cand.anag.codiceCliente,
+            nominativo: sql`excluded.nominativo`,
+            telefono: sql`excluded.telefono`,
+            codiceCliente: sql`excluded.codice_cliente`,
             updatedAt: new Date(),
           },
         })
-        .returning();
+        .returning({ id: customerJourneys.id, customerKey: customerJourneys.customerKey });
+      for (const r of rows) keyToJourneyId.set(r.customerKey, r.id);
+    }
+    const journeyCount = candidates.length;
 
+    // 2) Item: collega ogni item alla sua journey e deduplica per chiave di
+    // conflitto (org, sale, articolo). In un singolo INSERT Postgres non può
+    // aggiornare due volte la stessa riga in conflitto, quindi teniamo l'ultima.
+    const itemByKey = new Map<string, InsertCustomerJourneyItem>();
+    for (const cand of candidates) {
+      const journeyId = keyToJourneyId.get(cand.anag.customerKey);
+      if (!journeyId) continue;
       for (const item of cand.items) {
-        item.journeyId = journey.id;
         if (item.bisuiteArticleId == null) continue; // serve per la unique key
-        await db.insert(customerJourneyItems)
-          .values(item)
-          .onConflictDoUpdate({
-            target: [customerJourneyItems.organizationId, customerJourneyItems.bisuiteSaleId, customerJourneyItems.bisuiteArticleId],
-            set: {
-              journeyId: sql`excluded.journey_id`,
-              driver: sql`excluded.driver`,
-              bisuiteId: sql`excluded.bisuite_id`,
-              nome: sql`excluded.nome`,
-              cognome: sql`excluded.cognome`,
-              cf: sql`excluded.cf`,
-              piva: sql`excluded.piva`,
-              telefono: sql`excluded.telefono`,
-              codiceCliente: sql`excluded.codice_cliente`,
-              codiceContratto: sql`excluded.codice_contratto`,
-              categoria: sql`excluded.categoria`,
-              tipologia: sql`excluded.tipologia`,
-              descrizione: sql`excluded.descrizione`,
-              canone: sql`excluded.canone`,
-              dataInserimento: sql`excluded.data_inserimento`,
-              addetto: sql`excluded.addetto`,
-              pdvOrigine: sql`excluded.pdv_origine`,
-              pod: sql`excluded.pod`,
-              pdr: sql`excluded.pdr`,
-              // IMEI e RATA possono essere compilati a mano (BiSuite non li
-              // fornisce in modo affidabile): se l'item è stato modificato
-              // manualmente, il reconcile li preserva. data_attivazione e
-              // pdv_destinazione sono esclusi dall'upsert per lo stesso motivo.
-              imei: sql`CASE WHEN ${customerJourneyItems.detailsManual} THEN ${customerJourneyItems.imei} ELSE excluded.imei END`,
-              importo: sql`excluded.importo`,
-              rata: sql`CASE WHEN ${customerJourneyItems.detailsManual} THEN ${customerJourneyItems.rata} ELSE excluded.rata END`,
-              modVendita: sql`excluded.mod_vendita`,
-              // Preserva lo stato impostato manualmente; altrimenti aggiorna
-              // con lo stato auto derivato dal connettore.
-              state: sql`CASE WHEN ${customerJourneyItems.stateManual} THEN ${customerJourneyItems.state} ELSE excluded.state END`,
-              updatedAt: new Date(),
-            },
-          });
-        itemCount++;
+        item.journeyId = journeyId;
+        itemByKey.set(`${item.bisuiteSaleId}::${item.bisuiteArticleId}`, item);
       }
     }
+    const allItems = Array.from(itemByKey.values());
+    for (const part of chunk(allItems, 500)) {
+      await db.insert(customerJourneyItems)
+        .values(part)
+        .onConflictDoUpdate({
+          target: [customerJourneyItems.organizationId, customerJourneyItems.bisuiteSaleId, customerJourneyItems.bisuiteArticleId],
+          set: {
+            journeyId: sql`excluded.journey_id`,
+            driver: sql`excluded.driver`,
+            bisuiteId: sql`excluded.bisuite_id`,
+            nome: sql`excluded.nome`,
+            cognome: sql`excluded.cognome`,
+            cf: sql`excluded.cf`,
+            piva: sql`excluded.piva`,
+            telefono: sql`excluded.telefono`,
+            codiceCliente: sql`excluded.codice_cliente`,
+            codiceContratto: sql`excluded.codice_contratto`,
+            categoria: sql`excluded.categoria`,
+            tipologia: sql`excluded.tipologia`,
+            descrizione: sql`excluded.descrizione`,
+            canone: sql`excluded.canone`,
+            dataInserimento: sql`excluded.data_inserimento`,
+            addetto: sql`excluded.addetto`,
+            pdvOrigine: sql`excluded.pdv_origine`,
+            pod: sql`excluded.pod`,
+            pdr: sql`excluded.pdr`,
+            // IMEI e RATA possono essere compilati a mano (BiSuite non li
+            // fornisce in modo affidabile): se l'item è stato modificato
+            // manualmente, il reconcile li preserva. data_attivazione e
+            // pdv_destinazione sono esclusi dall'upsert per lo stesso motivo.
+            imei: sql`CASE WHEN ${customerJourneyItems.detailsManual} THEN ${customerJourneyItems.imei} ELSE excluded.imei END`,
+            importo: sql`excluded.importo`,
+            rata: sql`CASE WHEN ${customerJourneyItems.detailsManual} THEN ${customerJourneyItems.rata} ELSE excluded.rata END`,
+            modVendita: sql`excluded.mod_vendita`,
+            // Preserva lo stato impostato manualmente; altrimenti aggiorna
+            // con lo stato auto derivato dal connettore.
+            state: sql`CASE WHEN ${customerJourneyItems.stateManual} THEN ${customerJourneyItems.state} ELSE excluded.state END`,
+            updatedAt: new Date(),
+          },
+        });
+    }
+    const itemCount = allItems.length;
 
     // Salva il "watermark" dell'ultima riconciliazione = istante dell'ultima
     // vendita vista (max last_seen_at). Serve a `reconcileCustomerJourneysIfStale`
