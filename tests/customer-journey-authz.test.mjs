@@ -71,7 +71,7 @@ async function signupAndLogin() {
 
 // Inserisce una journey con un singolo item gestito da `addetto`.
 // Ritorna l'id della journey creata.
-async function seedJourney(pool, orgId, { customerKey, nome, addetto, driver = 'fisso' }) {
+async function seedJourney(pool, orgId, { customerKey, nome, addetto, driver = 'fisso', pdv = null, importo = null }) {
   const cj = await pool.query(
     `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, status, opened_at)
        VALUES ($1, $2, 'privato', $3, 'aperta', now())
@@ -80,9 +80,9 @@ async function seedJourney(pool, orgId, { customerKey, nome, addetto, driver = '
   );
   const journeyId = cj.rows[0].id;
   await pool.query(
-    `INSERT INTO customer_journey_items (journey_id, organization_id, driver, addetto, state, data_inserimento)
-       VALUES ($1, $2, $3, $4, 'inserito', now())`,
-    [journeyId, orgId, driver, addetto],
+    `INSERT INTO customer_journey_items (journey_id, organization_id, driver, addetto, state, data_inserimento, pdv_destinazione, importo)
+       VALUES ($1, $2, $3, $4, 'inserito', now(), $5, $6)`,
+    [journeyId, orgId, driver, addetto, pdv, importo],
   );
   return journeyId;
 }
@@ -243,6 +243,80 @@ test('scenario 2: GET /api/customer-journeys/:id enforces per-operator ownership
     });
     assert.equal(adminDetail.status, 200, `admin detail failed: ${JSON.stringify(adminDetail.body)}`);
     assert.equal(adminDetail.body?.journey?.id, jLuigi, 'admin must access any org journey');
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 3: reportistica per-operatore (Task #187).
+// GET /api/customer-journeys/report restituisce righe item-level aggregabili.
+// Deve rispettare la stessa regola di isolamento della lista:
+//   - admin       => righe di tutte le journey dell'org
+//   - operatore senza addetti (array vuoto) => 0 righe (no leakage!)
+//   - operatore con addetto corrispondente => SOLO le proprie righe
+//   - super_admin => tutte le righe dell'org
+// ===========================================================================
+test('scenario 3: GET /api/customer-journeys/report enforces per-operator isolation', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  try {
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFMARIO').toUpperCase(),
+      nome: 'Cliente Mario',
+      addetto: 'MARIO ROSSI',
+      pdv: 'PDV Milano',
+      importo: '100.50',
+    });
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFLUIGI').toUpperCase(),
+      nome: 'Cliente Luigi',
+      addetto: 'LUIGI VERDI',
+      pdv: 'PDV Roma',
+      importo: '200.00',
+    });
+
+    // (a) admin => entrambe le righe.
+    await setRole(pool, session.profileId, 'admin');
+    const asAdmin = await jsonReq(`${BASE}/api/customer-journeys/report`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(asAdmin.status, 200, `admin report failed: ${JSON.stringify(asAdmin.body)}`);
+    assert.equal(asAdmin.body.length, 2, 'admin must see all org report rows');
+    const adminAddetti = asAdmin.body.map((r) => r.addetto).sort();
+    assert.deepEqual(adminAddetti, ['LUIGI VERDI', 'MARIO ROSSI'], 'admin report includes both addetti');
+
+    // (b) operatore SENZA addetti => 0 righe (regressione no leakage).
+    await setRole(pool, session.profileId, 'operatore', []);
+    const noAddetti = await jsonReq(`${BASE}/api/customer-journeys/report`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(noAddetti.status, 200, `operator(empty) report failed: ${JSON.stringify(noAddetti.body)}`);
+    assert.equal(
+      noAddetti.body.length,
+      0,
+      'operator WITHOUT addetti must see 0 report rows (no tenant leakage)',
+    );
+
+    // (c) operatore con addetto corrispondente (case-insensitive) => solo le sue.
+    await setRole(pool, session.profileId, 'operatore', ['mario rossi']);
+    const matching = await jsonReq(`${BASE}/api/customer-journeys/report`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(matching.status, 200, `operator(match) report failed: ${JSON.stringify(matching.body)}`);
+    assert.equal(matching.body.length, 1, 'operator must see exactly their own report rows');
+    assert.equal(matching.body[0].addetto, 'MARIO ROSSI', 'operator report row must be Mario, not Luigi');
+    assert.equal(matching.body[0].pdv, 'PDV Milano', 'report row carries the item PDV');
+    assert.equal(matching.body[0].valore, 100.5, 'report row carries the numeric valore');
+
+    // (d) super_admin => entrambe.
+    await setRole(pool, session.profileId, 'super_admin');
+    const asSuper = await jsonReq(`${BASE}/api/customer-journeys/report`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(asSuper.status, 200, `super_admin report failed: ${JSON.stringify(asSuper.body)}`);
+    assert.equal(asSuper.body.length, 2, 'super_admin must see all org report rows');
   } finally {
     await cleanupSession(pool, session);
     await pool.end().catch(() => {});

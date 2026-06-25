@@ -22,12 +22,14 @@ import {
   Route as RouteIcon, RefreshCw, ArrowLeft, CheckCircle2, Circle,
   Search, User, Building2, Loader2, Coins, Pencil,
   FileText, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
+  LayoutGrid, BarChart3, Store, Users,
 } from "lucide-react";
 import {
-  CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS,
+  CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ACTIVE_STATES,
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES } from "@shared/schema";
 import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from "@shared/schema";
+import type { CjReportRow } from "@shared/customerJourney";
 import { CJ_DRIVER_ICONS, CJ_DRIVER_COLORS } from "@/lib/customerJourneyIcons";
 import {
   exportJourneyPdf, exportJourneyExcel,
@@ -40,10 +42,62 @@ interface DriverSummary {
   count: number;
 }
 
-type JourneyListItem = CustomerJourney & { drivers: DriverSummary[]; valore?: number };
+type JourneyListItem = CustomerJourney & {
+  drivers: DriverSummary[];
+  valore?: number;
+  pdvs?: string[];
+  addetti?: string[];
+  states?: string[];
+};
 
 type SortKey = "data" | "nome" | "completamento" | "valore";
 type SortDir = "asc" | "desc";
+
+type CjView = "schede" | "report";
+type ReportDim = "negozio" | "addetto" | "cliente";
+
+interface ReportGroup {
+  key: string;
+  label: string;
+  clienti: number;
+  contratti: number;
+  attivati: number;
+  valore: number;
+}
+
+// Aggrega le righe item-level della reportistica lungo una dimensione
+// (negozio / addetto / cliente). `clienti` = journey distinte, `contratti` =
+// item, `attivati` = item in uno stato attivo, `valore` = somma importi.
+function aggregateReport(
+  rows: CjReportRow[],
+  keyFn: (r: CjReportRow) => { key: string; label: string },
+): ReportGroup[] {
+  const map = new Map<string, {
+    label: string; journeys: Set<string>; contratti: number; attivati: number; valore: number;
+  }>();
+  for (const r of rows) {
+    const { key, label } = keyFn(r);
+    let e = map.get(key);
+    if (!e) {
+      e = { label, journeys: new Set(), contratti: 0, attivati: 0, valore: 0 };
+      map.set(key, e);
+    }
+    e.journeys.add(r.journeyId);
+    e.contratti += 1;
+    e.valore += r.valore;
+    if (CJ_ACTIVE_STATES.has(r.state)) e.attivati += 1;
+  }
+  return Array.from(map.entries())
+    .map(([key, e]) => ({
+      key,
+      label: e.label,
+      clienti: e.journeys.size,
+      contratti: e.contratti,
+      attivati: e.attivati,
+      valore: e.valore,
+    }))
+    .sort((a, b) => b.valore - a.valore || b.contratti - a.contratti || a.label.localeCompare(b.label, "it"));
+}
 
 const SORT_LABELS: Record<SortKey, string> = {
   data: "Data apertura",
@@ -119,8 +173,13 @@ export default function CustomerJourneyPage() {
   const { profile } = useAuth();
   const { toast } = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<CjView>("schede");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"tutti" | "privato" | "azienda">("tutti");
+  const [pdvFilter, setPdvFilter] = useState<string>("tutti");
+  const [addettoFilter, setAddettoFilter] = useState<string>("tutti");
+  const [stateFilter, setStateFilter] = useState<string>("tutti");
+  const [reportDim, setReportDim] = useState<ReportDim>("negozio");
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [triggerDateInput, setTriggerDateInput] = useState<string>("");
@@ -135,6 +194,11 @@ export default function CustomerJourneyPage() {
   const detailQuery = useQuery<JourneyDetail>({
     queryKey: ["/api/customer-journeys", selectedId],
     enabled: !!selectedId,
+  });
+
+  const reportQuery = useQuery<CjReportRow[]>({
+    queryKey: ["/api/customer-journeys/report"],
+    enabled: !selectedId && view === "report",
   });
 
   const configQuery = useQuery<CjConfig>({
@@ -159,6 +223,7 @@ export default function CustomerJourneyPage() {
     },
     onSuccess: (data: { journeys?: number; items?: number }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
       toast({
         title: "Rigenerazione completata",
         description: `${data?.journeys ?? 0} journey, ${data?.items ?? 0} contratti elaborati.`,
@@ -202,6 +267,7 @@ export default function CustomerJourneyPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys", selectedId] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
     },
     onError: (err: unknown) => {
       toast({
@@ -267,16 +333,92 @@ export default function CustomerJourneyPage() {
   });
 
   const journeys = journeysQuery.data ?? [];
+  const reportRows = reportQuery.data ?? [];
+
+  // Opzioni dei filtri Negozio/Operatore/Stato: unione dei valori distinti
+  // presenti nelle schede (facet) e nelle righe report, così entrambe le viste
+  // condividono lo stesso menù.
+  const pdvOptions = (() => {
+    const s = new Set<string>();
+    for (const j of journeys) for (const p of j.pdvs ?? []) if (p) s.add(p);
+    for (const r of reportRows) if (r.pdv) s.add(r.pdv);
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "it"));
+  })();
+  const addettoOptions = (() => {
+    const s = new Set<string>();
+    for (const j of journeys) for (const a of j.addetti ?? []) if (a) s.add(a);
+    for (const r of reportRows) if (r.addetto) s.add(r.addetto);
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "it"));
+  })();
+  const stateOptions = (() => {
+    const s = new Set<string>();
+    for (const j of journeys) for (const st of j.states ?? []) if (st) s.add(st);
+    for (const r of reportRows) if (r.state) s.add(r.state);
+    return CJ_ITEM_STATES.filter((st) => s.has(st));
+  })();
+
+  const matchesSearch = (hay: string) =>
+    !search.trim() || hay.toLowerCase().includes(search.toLowerCase().trim());
+
   const filtered = journeys.filter((j) => {
     if (typeFilter !== "tutti" && j.customerType !== typeFilter) return false;
-    if (!search.trim()) return true;
-    const hay = [
+    if (pdvFilter !== "tutti" && !(j.pdvs ?? []).includes(pdvFilter)) return false;
+    if (addettoFilter !== "tutti" && !(j.addetti ?? []).includes(addettoFilter)) return false;
+    if (stateFilter !== "tutti" && !(j.states ?? []).includes(stateFilter)) return false;
+    return matchesSearch([
       journeyTitle(j), j.customerKey, j.telefono, j.codiceCliente,
-    ].filter(Boolean).join(" ").toLowerCase();
-    return hay.includes(search.toLowerCase().trim());
+    ].filter(Boolean).join(" "));
   });
   const countPrivato = journeys.filter((j) => j.customerType === "privato").length;
   const countAzienda = journeys.filter((j) => j.customerType === "azienda").length;
+
+  // Righe report filtrate (gli stessi filtri della lista schede).
+  const reportFiltered = reportRows.filter((r) => {
+    if (typeFilter !== "tutti" && r.customerType !== typeFilter) return false;
+    if (pdvFilter !== "tutti" && r.pdv !== pdvFilter) return false;
+    if (addettoFilter !== "tutti" && r.addetto !== addettoFilter) return false;
+    if (stateFilter !== "tutti" && r.state !== stateFilter) return false;
+    return matchesSearch([r.cliente, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(" "));
+  });
+
+  const reportGroups = aggregateReport(reportFiltered, (r) => {
+    if (reportDim === "negozio") {
+      return { key: r.pdv || "—", label: r.pdv || "Senza negozio" };
+    }
+    if (reportDim === "addetto") {
+      return { key: r.addetto || "—", label: r.addetto || "Senza addetto" };
+    }
+    return { key: r.journeyId, label: r.cliente || r.customerKey };
+  });
+
+  const reportTotals = reportFiltered.reduce(
+    (acc, r) => {
+      acc.contratti += 1;
+      acc.valore += r.valore;
+      acc.journeys.add(r.journeyId);
+      if (CJ_ACTIVE_STATES.has(r.state)) acc.attivati += 1;
+      return acc;
+    },
+    { contratti: 0, valore: 0, attivati: 0, journeys: new Set<string>() },
+  );
+
+  const hasActiveFilters =
+    typeFilter !== "tutti" || pdvFilter !== "tutti" ||
+    addettoFilter !== "tutti" || stateFilter !== "tutti" || !!search.trim();
+
+  const resetFilters = () => {
+    setTypeFilter("tutti");
+    setPdvFilter("tutti");
+    setAddettoFilter("tutti");
+    setStateFilter("tutti");
+    setSearch("");
+  };
+
+  const reportDimLabel: Record<ReportDim, string> = {
+    negozio: "Negozio",
+    addetto: "Addetto",
+    cliente: "Cliente / Ragione sociale",
+  };
 
   const journeyPct = (j: JourneyListItem): number => {
     const total = CJ_DRIVER_ORDER.length;
@@ -427,8 +569,31 @@ export default function CustomerJourneyPage() {
               </Card>
             )}
 
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="relative w-full sm:max-w-md">
+            {/* Navigazione interna: Schede clienti vs Reportistica (Task #187) */}
+            <div className="flex items-center gap-1 border-b border-border">
+              <button
+                type="button"
+                onClick={() => setView("schede")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${view === "schede" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                data-testid="tab-schede"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                Schede clienti
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("report")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${view === "report" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                data-testid="tab-report"
+              >
+                <BarChart3 className="h-4 w-4" />
+                Reportistica
+              </button>
+            </div>
+
+            {/* Filtri condivisi tra le due viste */}
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
+              <div className="relative w-full sm:max-w-xs">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Cerca cliente, CF/P.IVA, telefono…"
@@ -469,7 +634,58 @@ export default function CustomerJourneyPage() {
                   <Badge variant="secondary" className="ml-2">{countAzienda}</Badge>
                 </Button>
               </div>
-              <div className="flex items-center gap-1.5 sm:ml-auto">
+              <Select value={pdvFilter} onValueChange={setPdvFilter}>
+                <SelectTrigger className="w-full sm:w-[180px] h-9" data-testid="select-filter-negozio">
+                  <Store className="h-4 w-4 mr-1.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Negozio" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tutti" data-testid="option-negozio-tutti">Tutti i negozi</SelectItem>
+                  {pdvOptions.map((p) => (
+                    <SelectItem key={p} value={p} data-testid={`option-negozio-${p}`}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={addettoFilter} onValueChange={setAddettoFilter}>
+                <SelectTrigger className="w-full sm:w-[180px] h-9" data-testid="select-filter-operatore">
+                  <Users className="h-4 w-4 mr-1.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Operatore" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tutti" data-testid="option-operatore-tutti">Tutti gli operatori</SelectItem>
+                  {addettoOptions.map((a) => (
+                    <SelectItem key={a} value={a} data-testid={`option-operatore-${a}`}>{a}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={stateFilter} onValueChange={setStateFilter}>
+                <SelectTrigger className="w-full sm:w-[170px] h-9" data-testid="select-filter-stato">
+                  <SelectValue placeholder="Stato" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tutti" data-testid="option-stato-tutti">Tutti gli stati</SelectItem>
+                  {stateOptions.map((st) => (
+                    <SelectItem key={st} value={st} data-testid={`option-stato-${st}`}>
+                      {CJ_ITEM_STATE_LABELS[st]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetFilters}
+                  data-testid="button-reset-filters"
+                >
+                  Azzera filtri
+                </Button>
+              )}
+            </div>
+
+            {/* Controlli specifici della vista Schede: ordinamento + export */}
+            {view === "schede" && (
+              <div className="flex items-center gap-1.5 sm:justify-end">
                 <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
                   <SelectTrigger className="w-[170px] h-9" data-testid="select-sort-key">
                     <ArrowUpDown className="h-4 w-4 mr-1.5 text-muted-foreground" />
@@ -523,9 +739,23 @@ export default function CustomerJourneyPage() {
                   Excel
                 </Button>
               </div>
-            </div>
+            )}
 
-            {journeysQuery.isLoading ? (
+            {view === "report" ? (
+              <ReportView
+                isLoading={reportQuery.isLoading}
+                groups={reportGroups}
+                totals={{
+                  clienti: reportTotals.journeys.size,
+                  contratti: reportTotals.contratti,
+                  attivati: reportTotals.attivati,
+                  valore: reportTotals.valore,
+                }}
+                dim={reportDim}
+                onDimChange={setReportDim}
+                dimLabel={reportDimLabel}
+              />
+            ) : journeysQuery.isLoading ? (
               <div className="flex items-center justify-center py-16">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
@@ -675,6 +905,138 @@ export default function CustomerJourneyPage() {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+// === Vista Reportistica (Task #187) ===
+// Tabella aggregata delle journey lungo una dimensione selezionabile
+// (negozio / addetto / cliente). I dati sono già filtrati e isolati per
+// operatore lato server; qui si fa solo il rendering.
+function ReportView({
+  isLoading,
+  groups,
+  totals,
+  dim,
+  onDimChange,
+  dimLabel,
+}: {
+  isLoading: boolean;
+  groups: ReportGroup[];
+  totals: { clienti: number; contratti: number; attivati: number; valore: number };
+  dim: ReportDim;
+  onDimChange: (d: ReportDim) => void;
+  dimLabel: Record<ReportDim, string>;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const dims: ReportDim[] = ["negozio", "addetto", "cliente"];
+
+  return (
+    <div className="space-y-4">
+      {/* Card di riepilogo totali */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card data-testid="card-report-total-clienti">
+          <CardContent className="py-4">
+            <p className="text-xs text-muted-foreground">Clienti</p>
+            <p className="text-2xl font-bold tabular-nums" data-testid="text-report-total-clienti">
+              {totals.clienti}
+            </p>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-report-total-contratti">
+          <CardContent className="py-4">
+            <p className="text-xs text-muted-foreground">Contratti</p>
+            <p className="text-2xl font-bold tabular-nums" data-testid="text-report-total-contratti">
+              {totals.contratti}
+            </p>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-report-total-attivati">
+          <CardContent className="py-4">
+            <p className="text-xs text-muted-foreground">Contratti attivi</p>
+            <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-report-total-attivati">
+              {totals.attivati}
+            </p>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-report-total-valore">
+          <CardContent className="py-4">
+            <p className="text-xs text-muted-foreground">Valore totale</p>
+            <p className="text-2xl font-bold tabular-nums" data-testid="text-report-total-valore">
+              {fmtEuro(totals.valore)}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Selettore dimensione di aggregazione */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm text-muted-foreground mr-1">Raggruppa per:</span>
+        {dims.map((d) => (
+          <Button
+            key={d}
+            variant={dim === d ? "default" : "outline"}
+            size="sm"
+            onClick={() => onDimChange(d)}
+            data-testid={`button-report-dim-${d}`}
+          >
+            {dimLabel[d]}
+          </Button>
+        ))}
+      </div>
+
+      {/* Tabella aggregata */}
+      <Card>
+        <CardContent className="p-0">
+          {groups.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <BarChart3 className="h-10 w-10 mx-auto mb-3 opacity-40" />
+              <p className="font-medium">Nessun dato da mostrare</p>
+              <p className="text-sm mt-1">Modifica i filtri o rigenera le journey da BiSuite.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{dimLabel[dim]}</TableHead>
+                  <TableHead className="text-right">Clienti</TableHead>
+                  <TableHead className="text-right">Contratti</TableHead>
+                  <TableHead className="text-right">Attivi</TableHead>
+                  <TableHead className="text-right">Valore</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {groups.map((g) => (
+                  <TableRow key={g.key} data-testid={`row-report-${g.key}`}>
+                    <TableCell className="font-medium" data-testid={`text-report-label-${g.key}`}>
+                      {g.label}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums" data-testid={`text-report-clienti-${g.key}`}>
+                      {g.clienti}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums" data-testid={`text-report-contratti-${g.key}`}>
+                      {g.contratti}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400" data-testid={`text-report-attivati-${g.key}`}>
+                      {g.attivati}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold" data-testid={`text-report-valore-${g.key}`}>
+                      {fmtEuro(g.valore)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

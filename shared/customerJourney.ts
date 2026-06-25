@@ -47,6 +47,31 @@ export interface CjDriverSummary {
   count: number;
 }
 
+// Riga item-level per la reportistica Customer Journey (Task #187): un record
+// per contratto, già arricchito con l'anagrafica della journey. Usato dalla
+// pagina "Reportistica" per aggregare per negozio / addetto / ragione sociale.
+// L'isolamento per operatore (solo i propri item) è applicato lato server.
+export interface CjReportRow {
+  journeyId: string;
+  customerKey: string;
+  customerType: string;
+  cliente: string;
+  pdv: string;
+  addetto: string;
+  state: CjItemState;
+  driver: CjDriver;
+  valore: number;
+}
+
+// Facet per-journey per i filtri della lista schede cliente (Task #187):
+// i valori distinti di negozio (PDV), addetto e stato fra gli item della
+// journey. Servono a popolare i menù dei filtri e a filtrare le schede.
+export interface CjJourneyFacets {
+  pdvs: string[];
+  addetti: string[];
+  states: string[];
+}
+
 /**
  * Riepilogo per-driver (attivato sì/no + conteggio item) per un insieme di
  * item di una journey. L'energia distingue gas/luce a livello di item ma per

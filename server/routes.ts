@@ -2686,15 +2686,37 @@ export async function registerRoutes(
       const journeyIds = journeys.map((j) => j.id);
       const summaries = await storage.getCustomerJourneyDriverSummaries(journeyIds);
       const values = await storage.getCustomerJourneyValues(journeyIds);
+      // Facet (negozio/addetto/stato) per i filtri della lista schede (Task #187).
+      const facets = await storage.getCustomerJourneyItemFacets(journeyIds);
       const withDrivers = journeys.map((j) => ({
         ...j,
         drivers: summaries.get(j.id) ?? [],
         valore: values.get(j.id) ?? 0,
+        pdvs: facets.get(j.id)?.pdvs ?? [],
+        addetti: facets.get(j.id)?.addetti ?? [],
+        states: facets.get(j.id)?.states ?? [],
       }));
       res.json(withDrivers);
     } catch (error) {
       console.error("Customer journeys list error:", error);
       res.status(500).json({ error: "Errore nel recupero delle customer journey" });
+    }
+  });
+
+  // Reportistica (Task #187): righe item-level aggregabili per
+  // negozio / addetto / ragione sociale. Stessa regola di isolamento della
+  // lista: l'operatore vede SOLO gli item dei propri nominativi addetto.
+  // DEVE precedere la route `/:id` per non essere intercettata da essa.
+  app.get("/api/customer-journeys/report", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const addettiFilter = profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null;
+      const rows = await storage.getCustomerJourneyReportRows(profile.organizationId, addettiFilter);
+      res.json(rows);
+    } catch (error) {
+      console.error("Customer journey report error:", error);
+      res.status(500).json({ error: "Errore nel recupero della reportistica" });
     }
   });
 

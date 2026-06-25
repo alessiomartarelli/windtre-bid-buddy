@@ -71,7 +71,8 @@ manuale previsto.
 
 | Metodo | Endpoint | Note |
 |---|---|---|
-| GET | `/api/customer-journeys` | lista (operatore: filtrata sui suoi addetti); ogni journey porta `drivers` (riepilogo 6 driver attivato/conteggio) per le schede cliente |
+| GET | `/api/customer-journeys` | lista (operatore: filtrata sui suoi addetti); ogni journey porta `drivers` (riepilogo 6 driver attivato/conteggio) + le facet `pdvs`/`addetti`/`states` (valori distinti fra gli item) per i filtri Negozio/Operatore/Stato della lista schede |
+| GET | `/api/customer-journeys/report` | reportistica (Task #187): righe item-level `CjReportRow` (journey + cliente + pdv/addetto/stato/driver/valore) aggregabili lato client per negozio/addetto/cliente; **stessa regola di isolamento operatore** della lista (deve precedere `/:id`) |
 | GET | `/api/customer-journeys/:id` | dettaglio: `{ journey, items, drivers }` |
 | POST | `/api/customer-journeys/reconcile` | rigenera dalle vendite (solo admin) |
 | PATCH | `/api/customer-journey-items/:id/state` | `{ state }` |

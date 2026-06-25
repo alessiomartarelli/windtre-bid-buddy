@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
-import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, suggestRagioneSocialeFromEmail, type CjDriverSummary } from "@shared/customerJourney";
+import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets } from "@shared/customerJourney";
 
 // Data trigger di default della customer journey: una CJ si apre solo per
 // nuove attivazioni di pista mobile a partire da questa data (Task #158).
@@ -121,6 +121,8 @@ export interface IStorage {
   getCustomerJourney(id: string, orgId: string): Promise<CustomerJourney | undefined>;
   getCustomerJourneyItems(journeyId: string): Promise<CustomerJourneyItem[]>;
   getCustomerJourneyValues(journeyIds: string[]): Promise<Map<string, number>>;
+  getCustomerJourneyItemFacets(journeyIds: string[]): Promise<Map<string, CjJourneyFacets>>;
+  getCustomerJourneyReportRows(orgId: string, addettiFilter?: string[] | null): Promise<CjReportRow[]>;
   getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined>;
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
   setCustomerJourneyItemGettone(id: string, orgId: string, confirmed: boolean, userId: string | null): Promise<CustomerJourneyItem>;
@@ -814,6 +816,104 @@ export class DatabaseStorage implements IStorage {
       out.set(r.journeyId, (out.get(r.journeyId) ?? 0) + v);
     }
     return out;
+  }
+
+  // Facet per-journey (negozio/addetto/stato distinti fra gli item) per i
+  // filtri della lista schede cliente (Task #187). Una sola query per tutte le
+  // journey indicate; i valori vuoti sono scartati.
+  async getCustomerJourneyItemFacets(
+    journeyIds: string[],
+  ): Promise<Map<string, CjJourneyFacets>> {
+    const out = new Map<string, CjJourneyFacets>();
+    if (journeyIds.length === 0) return out;
+    const rows = await db.select({
+      journeyId: customerJourneyItems.journeyId,
+      pdvDestinazione: customerJourneyItems.pdvDestinazione,
+      pdvOrigine: customerJourneyItems.pdvOrigine,
+      addetto: customerJourneyItems.addetto,
+      state: customerJourneyItems.state,
+    }).from(customerJourneyItems)
+      .where(inArray(customerJourneyItems.journeyId, journeyIds));
+    const tmp = new Map<string, { pdvs: Set<string>; addetti: Set<string>; states: Set<string> }>();
+    for (const r of rows) {
+      let e = tmp.get(r.journeyId);
+      if (!e) {
+        e = { pdvs: new Set(), addetti: new Set(), states: new Set() };
+        tmp.set(r.journeyId, e);
+      }
+      const pdv = (r.pdvDestinazione || r.pdvOrigine || "").trim();
+      if (pdv) e.pdvs.add(pdv);
+      const addetto = (r.addetto || "").trim();
+      if (addetto) e.addetti.add(addetto);
+      if (r.state) e.states.add(r.state);
+    }
+    for (const id of journeyIds) {
+      const e = tmp.get(id);
+      out.set(id, {
+        pdvs: e ? Array.from(e.pdvs) : [],
+        addetti: e ? Array.from(e.addetti) : [],
+        states: e ? Array.from(e.states) : [],
+      });
+    }
+    return out;
+  }
+
+  // Righe item-level per la pagina Reportistica (Task #187). Una riga per
+  // contratto arricchita con l'anagrafica della journey. Isolamento per
+  // operatore: `addettiFilter != null` restituisce solo gli item dei propri
+  // nominativi addetto (array vuoto => [] per non far trapelare il tenant);
+  // `null` (admin/super_admin) restituisce tutti gli item dell'org.
+  async getCustomerJourneyReportRows(
+    orgId: string,
+    addettiFilter?: string[] | null,
+  ): Promise<CjReportRow[]> {
+    let cond;
+    if (addettiFilter != null) {
+      const lower = addettiFilter.map((a) => a.toLowerCase().trim()).filter(Boolean);
+      if (lower.length === 0) return [];
+      cond = and(
+        eq(customerJourneys.organizationId, orgId),
+        inArray(sql`lower(trim(${customerJourneyItems.addetto}))`, lower),
+      );
+    } else {
+      cond = eq(customerJourneys.organizationId, orgId);
+    }
+    const rows = await db.select({
+      journeyId: customerJourneys.id,
+      customerKey: customerJourneys.customerKey,
+      customerType: customerJourneys.customerType,
+      nome: customerJourneys.nome,
+      cognome: customerJourneys.cognome,
+      ragioneSociale: customerJourneys.ragioneSociale,
+      nominativo: customerJourneys.nominativo,
+      pdvDestinazione: customerJourneyItems.pdvDestinazione,
+      pdvOrigine: customerJourneyItems.pdvOrigine,
+      addetto: customerJourneyItems.addetto,
+      state: customerJourneyItems.state,
+      driver: customerJourneyItems.driver,
+      importo: customerJourneyItems.importo,
+    }).from(customerJourneyItems)
+      .innerJoin(customerJourneys, eq(customerJourneyItems.journeyId, customerJourneys.id))
+      .where(cond);
+
+    return rows.map((r) => {
+      const referente = [r.nome, r.cognome].filter(Boolean).join(" ").trim();
+      const cliente = r.customerType === "azienda"
+        ? (r.ragioneSociale || referente || r.nominativo || r.customerKey)
+        : (referente || r.nominativo || r.customerKey);
+      const v = r.importo != null ? parseFloat(String(r.importo)) : NaN;
+      return {
+        journeyId: r.journeyId,
+        customerKey: r.customerKey,
+        customerType: r.customerType,
+        cliente,
+        pdv: (r.pdvDestinazione || r.pdvOrigine || "").trim(),
+        addetto: (r.addetto || "").trim(),
+        state: r.state as CjItemState,
+        driver: r.driver as CjDriver,
+        valore: Number.isFinite(v) ? v : 0,
+      };
+    });
   }
 
   async getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined> {
