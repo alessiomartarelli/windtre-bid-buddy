@@ -30,3 +30,16 @@ export const CJ_DRIVER_EMOJI: Record<CjDriver, string> = {
   telefono: "☎️",
   protetti: "🚨",
 };
+
+// Colore brand per driver, usato dal grafico di tracciamento temporale della
+// scheda cliente (dot timeline + legenda) e dai chip "per negozio". Tinte fisse
+// leggibili sia in light sia in dark mode (mutuate dalla palette dei tool di
+// tracciamento Wind3). Tenere allineato 1:1 ai driver di `CJ_DRIVER_ICONS`.
+export const CJ_DRIVER_COLORS: Record<CjDriver, string> = {
+  mobile: "#3B82F6",
+  fisso: "#10B981",
+  energia: "#F59E0B",
+  assicurazioni: "#8B5CF6",
+  telefono: "#06B6D4",
+  protetti: "#EF4444",
+};

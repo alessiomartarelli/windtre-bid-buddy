@@ -28,7 +28,7 @@ import {
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES } from "@shared/schema";
 import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from "@shared/schema";
-import { CJ_DRIVER_ICONS } from "@/lib/customerJourneyIcons";
+import { CJ_DRIVER_ICONS, CJ_DRIVER_COLORS } from "@/lib/customerJourneyIcons";
 import {
   exportJourneyPdf, exportJourneyExcel,
   exportJourneyListPdf, exportJourneyListExcel,
@@ -679,6 +679,381 @@ export default function CustomerJourneyPage() {
   );
 }
 
+// === Grafico di tracciamento temporale (Task #185) ===
+// Stati di un item "non più validi": vengono mostrati attenuati nella timeline.
+const CJ_FADED_STATES = new Set<CjItemState>(["ko", "stornato", "annullato"]);
+
+const MESI_IT_SHORT = [
+  "Gen", "Feb", "Mar", "Apr", "Mag", "Giu",
+  "Lug", "Ago", "Set", "Ott", "Nov", "Dic",
+];
+
+function toDateOrNull(d: string | Date | null | undefined): Date | null {
+  if (!d) return null;
+  const date = typeof d === "string" ? new Date(d) : d;
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// Data dell'evento di un item: data attivazione, fallback data inserimento.
+function itemEventDate(it: CustomerJourneyItem): Date | null {
+  return toDateOrNull(it.dataAttivazione) ?? toDateOrNull(it.dataInserimento);
+}
+
+// Indice mese assoluto (anno*12 + mese) per ordinare/diffare i mesi.
+function monthIndex(d: Date): number {
+  return d.getFullYear() * 12 + d.getMonth();
+}
+
+function monthIndexLabel(mi: number): string {
+  const y = Math.floor(mi / 12);
+  const m = ((mi % 12) + 12) % 12;
+  return `${MESI_IT_SHORT[m]} ${y}`;
+}
+
+// Negozio (PDV) di un item: destinazione, fallback origine, fallback "N/D".
+function itemNegozio(it: CustomerJourneyItem): string {
+  return it.pdvDestinazione || it.pdvOrigine || "N/D";
+}
+
+function CustomerJourneyTimeline({
+  journey, items,
+}: {
+  journey: CustomerJourney;
+  items: CustomerJourneyItem[];
+}) {
+  const withDate = items
+    .map((it) => ({ it, date: itemEventDate(it) }))
+    .filter((d): d is { it: CustomerJourneyItem; date: Date } => d.date !== null);
+
+  // T0 = mese di apertura journey; fallback alla prima attivazione mobile, poi
+  // al primo evento in assoluto.
+  const t0Date =
+    toDateOrNull(journey.openedAt) ??
+    withDate
+      .filter((d) => d.it.driver === "mobile")
+      .sort((a, b) => a.date.getTime() - b.date.getTime())[0]?.date ??
+    [...withDate].sort((a, b) => a.date.getTime() - b.date.getTime())[0]?.date ??
+    null;
+
+  if (!t0Date || withDate.length === 0) {
+    return (
+      <Card data-testid="card-timeline">
+        <CardHeader>
+          <CardTitle className="text-base">Tracciamento temporale</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p
+            className="text-sm text-muted-foreground py-6 text-center"
+            data-testid="text-timeline-empty"
+          >
+            Nessun contratto con una data disponibile: il grafico temporale
+            sarà visibile quando i contratti avranno una data di
+            inserimento o attivazione.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const t0mi = monthIndex(t0Date);
+  const t6mi = t0mi + 6;
+  const eventMis = withDate.map((d) => monthIndex(d.date));
+  const startMi = Math.min(t0mi, ...eventMis);
+  const endMi = Math.max(t6mi, ...eventMis);
+  const months: number[] = [];
+  for (let mi = startMi; mi <= endMi; mi++) months.push(mi);
+
+  // Item che ha aperto la journey (T0): match sui riferimenti BiSuite del
+  // trigger, fallback alla prima attivazione mobile per data.
+  const t0ItemId = (() => {
+    const byTrigger = items.find(
+      (it) =>
+        (journey.triggerSaleId && it.bisuiteSaleId === journey.triggerSaleId) ||
+        (journey.triggerBisuiteId != null && it.bisuiteId === journey.triggerBisuiteId),
+    );
+    if (byTrigger) return byTrigger.id;
+    const firstMobile = withDate
+      .filter((d) => d.it.driver === "mobile")
+      .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
+    if (firstMobile) return firstMobile.it.id;
+    // Fallback: nessun trigger né mobile ⇒ marca il primo evento in assoluto.
+    const firstEvent = [...withDate].sort(
+      (a, b) => a.date.getTime() - b.date.getTime(),
+    )[0];
+    return firstEvent?.it.id;
+  })();
+
+  // Una riga per contratto, ordinata per data evento.
+  const rows = [...withDate].sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  return (
+    <Card data-testid="card-timeline">
+      <CardHeader>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <CardTitle className="text-base">Tracciamento temporale</CardTitle>
+          <div className="flex flex-wrap gap-x-3 gap-y-1.5" data-testid="timeline-legend">
+            {CJ_DRIVER_ORDER.map((driver) => (
+              <span key={driver} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: CJ_DRIVER_COLORS[driver] }}
+                />
+                {CJ_DRIVER_LABELS[driver]}
+              </span>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="border-collapse w-full">
+            <thead>
+              <tr>
+                <th className="text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-4 py-2 border-b border-border min-w-[220px]">
+                  Contratto
+                </th>
+                {months.map((mi) => {
+                  const rel = mi - t0mi;
+                  const isWindow = rel >= 0 && rel <= 6;
+                  return (
+                    <th
+                      key={mi}
+                      className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-2 py-2 border-b border-border min-w-[64px]"
+                      data-testid={`timeline-col-${mi}`}
+                    >
+                      <div>{monthIndexLabel(mi)}</div>
+                      {isWindow && (
+                        <div className="text-primary font-bold mt-0.5">T{rel}</div>
+                      )}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ it, date }) => {
+                const color = CJ_DRIVER_COLORS[it.driver as CjDriver] ?? "#6B7280";
+                const faded = CJ_FADED_STATES.has(it.state as CjItemState);
+                const isT0 = it.id === t0ItemId;
+                const eventMi = monthIndex(date);
+                const stateLabel = CJ_ITEM_STATE_LABELS[it.state as CjItemState] || it.state;
+                const driverLabel = CJ_DRIVER_LABELS[it.driver as CjDriver] || it.driver;
+                const tooltip = [
+                  driverLabel,
+                  it.descrizione || it.tipologia || it.categoria,
+                  it.codiceContratto ? `Contratto ${it.codiceContratto}` : null,
+                  `Negozio: ${itemNegozio(it)}`,
+                  it.addetto ? `Addetto: ${it.addetto}` : null,
+                  `Data: ${fmtDate(date)}`,
+                  `Stato: ${stateLabel}`,
+                ]
+                  .filter(Boolean)
+                  .join("\n");
+                return (
+                  <tr key={it.id} data-testid={`timeline-row-${it.id}`}>
+                    <td className="px-4 py-2 border-b border-border/60 align-middle">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: color, opacity: faded ? 0.4 : 1 }}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium truncate max-w-[200px]" title={it.descrizione || ""}>
+                            {driverLabel}
+                            {isT0 && (
+                              <span className="ml-1.5 text-[9px] font-bold text-primary align-middle">
+                                T0
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+                            {it.descrizione || it.tipologia || it.categoria || "—"}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground/80 truncate max-w-[200px]">
+                            {itemNegozio(it)}
+                            {it.codiceContratto ? ` · ${it.codiceContratto}` : ""}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    {months.map((mi) => (
+                      <td
+                        key={mi}
+                        className="px-2 py-2 border-b border-border/60 text-center align-middle"
+                      >
+                        {mi === eventMi ? (
+                          <span
+                            className="inline-flex items-center justify-center"
+                            title={tooltip}
+                            data-testid={`timeline-dot-${it.id}`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 border-2 ${isT0 ? "rounded-sm ring-2 ring-amber-400/70" : "rounded-full border-black/20"}`}
+                              style={{
+                                backgroundColor: color,
+                                opacity: faded ? 0.4 : 1,
+                                borderColor: isT0 ? "rgba(251,191,36,0.8)" : undefined,
+                              }}
+                            />
+                          </span>
+                        ) : null}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function JourneyBreakdown({
+  journey, items, drivers,
+}: {
+  journey: CustomerJourney;
+  items: CustomerJourneyItem[];
+  drivers: DriverSummary[];
+}) {
+  // Raggruppamento per negozio (PDV).
+  const negozioMap = new Map<string, CustomerJourneyItem[]>();
+  for (const it of items) {
+    const key = itemNegozio(it);
+    const arr = negozioMap.get(key);
+    if (arr) arr.push(it);
+    else negozioMap.set(key, [it]);
+  }
+  const negozi = Array.from(negozioMap.entries()).sort(
+    (a, b) => b[1].length - a[1].length,
+  );
+  const attivati = drivers.filter((d) => d.activated).length;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <Card data-testid="card-dettaglio-negozio">
+        <CardHeader>
+          <CardTitle className="text-base">Dettaglio per negozio</CardTitle>
+          <CardDescription>Contratti raggruppati per punto vendita.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {negozi.length === 0 ? (
+            <p className="text-sm text-muted-foreground px-6 py-6 text-center">
+              Nessun contratto da raggruppare.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Negozio</TableHead>
+                  <TableHead className="text-center">Contratti</TableHead>
+                  <TableHead>Driver</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {negozi.map(([negozio, negItems]) => {
+                  const uniqueDrivers = CJ_DRIVER_ORDER.filter((d) =>
+                    negItems.some((it) => it.driver === d),
+                  );
+                  return (
+                    <TableRow key={negozio} data-testid={`row-negozio-${negozio}`}>
+                      <TableCell className="font-medium text-sm">{negozio}</TableCell>
+                      <TableCell className="text-center text-sm" data-testid={`text-negozio-count-${negozio}`}>
+                        {negItems.length}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {uniqueDrivers.map((d) => (
+                            <span
+                              key={d}
+                              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]"
+                              style={{ borderColor: CJ_DRIVER_COLORS[d] }}
+                            >
+                              <span
+                                className="inline-block h-2 w-2 rounded-full"
+                                style={{ backgroundColor: CJ_DRIVER_COLORS[d] }}
+                              />
+                              {CJ_DRIVER_LABELS[d]}
+                            </span>
+                          ))}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-dettaglio-ragione-sociale">
+        <CardHeader>
+          <CardTitle className="text-base">Dettaglio per ragione sociale</CardTitle>
+          <CardDescription>Anagrafica del cliente e totali della journey.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                {journey.customerType === "azienda" ? "Ragione sociale" : "Cliente"}
+              </dt>
+              <dd className="font-medium" data-testid="text-rs-titolo">
+                {journeyTitle(journey)}
+              </dd>
+            </div>
+            {journeySubtitle(journey) && (
+              <div>
+                <dt className="text-xs text-muted-foreground">Referente</dt>
+                <dd className="font-medium" data-testid="text-rs-referente">
+                  {journeySubtitle(journey)}
+                </dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-xs text-muted-foreground">
+                {journey.customerType === "azienda" ? "P.IVA" : "CF"}
+              </dt>
+              <dd className="font-mono text-xs" data-testid="text-rs-key">
+                {journey.customerKey}
+              </dd>
+            </div>
+            {journey.codiceCliente && (
+              <div>
+                <dt className="text-xs text-muted-foreground">Cod. cliente</dt>
+                <dd className="font-medium" data-testid="text-rs-codice">
+                  {journey.codiceCliente}
+                </dd>
+              </div>
+            )}
+            {journey.telefono && (
+              <div>
+                <dt className="text-xs text-muted-foreground">Telefono</dt>
+                <dd className="font-medium" data-testid="text-rs-telefono">
+                  {journey.telefono}
+                </dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-xs text-muted-foreground">Contratti</dt>
+              <dd className="font-medium" data-testid="text-rs-contratti">
+                {items.length}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Driver attivati</dt>
+              <dd className="font-medium" data-testid="text-rs-attivati">
+                {attivati} / {drivers.length}
+              </dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function JourneyDetailView({
   detail, onSetState, onSetGettone, onSaveDetails, onSaveRagioneSociale, statePending, gettonePending, detailsPending, ragioneSocialePending,
 }: {
@@ -875,6 +1250,10 @@ function JourneyDetailView({
           })}
         </div>
       </div>
+
+      <CustomerJourneyTimeline journey={journey} items={items} />
+
+      <JourneyBreakdown journey={journey} items={items} drivers={drivers} />
 
       <Card>
         <CardHeader>
