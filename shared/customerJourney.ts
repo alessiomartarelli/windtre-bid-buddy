@@ -61,6 +61,10 @@ export interface CjReportRow {
   state: CjItemState;
   driver: CjDriver;
   valore: number;
+  // Data di attivazione della SIM mobile che ha aperto la journey
+  // (`customerJourneys.openedAt`, ISO string) o null. È il "T0" del cliente:
+  // serve come coorte per il filtro a intervallo di date dell'analisi gettoni.
+  openedAt: string | null;
 }
 
 // Facet per-journey per i filtri della lista schede cliente (Task #187):
@@ -168,6 +172,241 @@ export function aggregateReport(
       valore: e.valore,
     }))
     .sort((a, b) => b.valore - a.valore || b.contratti - a.contratti || a.label.localeCompare(b.label, "it"));
+}
+
+// === Analisi gettoni e fatturato cross-sell (Task #192) ===
+// Il "gettone" di un cliente dipende da QUANTE piste NON-mobile sono attive
+// nella sua journey (oltre alla SIM mobile che l'ha aperta). La tabella
+// premiante è a scaglioni: più piste cross-sell = gettone più alto.
+//
+//   0 piste (solo mobile) =>   0 €
+//   1 pista               =>  20 €
+//   2 piste               =>  30 €
+//   3 piste               =>  40 €
+//   4 piste               => 100 €
+//   5 piste               => 120 €
+//
+// L'indice dell'array è il numero di piste non-mobile attive.
+export const CJ_GETTONE_TABLE: number[] = [0, 20, 30, 40, 100, 120];
+
+// I 5 driver NON-mobile che concorrono al gettone (la mobile è il trigger,
+// non conta come pista cross-sell).
+export const CJ_NON_MOBILE_DRIVERS: CjDriver[] = [
+  "fisso", "energia", "assicurazioni", "telefono", "protetti",
+];
+
+// Numero massimo di piste cross-sell saturabili (= journey "piena").
+export const CJ_MAX_PISTE = CJ_GETTONE_TABLE.length - 1;
+
+/** Gettone (€) per `n` piste non-mobile attive, con clamp a [0, CJ_MAX_PISTE]. */
+export function gettoneForPiste(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  const i = Math.max(0, Math.min(CJ_MAX_PISTE, Math.round(n)));
+  return CJ_GETTONE_TABLE[i];
+}
+
+function clampSaturation(pct: number): number {
+  if (!Number.isFinite(pct)) return 100;
+  return Math.max(0, Math.min(100, pct));
+}
+
+// Fra due stringhe tiene il minimo lessicografico ignorando i valori vuoti
+// (commutativa => attribuzione indipendente dall'ordine delle righe).
+function minNonEmpty(cur: string, val: string): string {
+  if (!val) return cur;
+  if (!cur) return val;
+  return val < cur ? val : cur;
+}
+
+// Estrae la data (YYYY-MM-DD, in UTC) da un timestamp ISO. `openedAt` deriva
+// dalla data vendita (mezzanotte UTC), quindi i primi 10 caratteri sono la
+// data corretta senza ambiguità di fuso orario. Ritorna null se malformato.
+function isoDateOnly(iso: string): string | null {
+  const d = iso.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+}
+
+// Sintesi per-journey usata dall'analisi gettoni. Una riga per cliente.
+export interface CjGettoneJourney {
+  journeyId: string;
+  cliente: string;
+  customerType: string;
+  // Attribuzione negozio/addetto: quelli della SIM mobile (trigger) se
+  // disponibili, altrimenti il primo item incontrato.
+  pdv: string;
+  addetto: string;
+  // Data attivazione SIM (T0), ISO string o null.
+  openedAt: string | null;
+  // Piste NON-mobile distinte attive (0..CJ_MAX_PISTE).
+  pisteAttive: number;
+  // Gettone maturato (fatturato as-is) = gettoneForPiste(pisteAttive).
+  fatturato: number;
+  // Potenziale "pieno": gettone aggiuntivo se la journey arrivasse a
+  // saturazione completa (tutte le piste attive). Sempre >= 0.
+  potenzialePieno: number;
+}
+
+/**
+ * Costruisce una `CjGettoneJourney` per ogni journey distinta a partire dalle
+ * righe item-level della reportistica. Le piste attive contano i driver
+ * NON-mobile distinti con almeno un item in uno stato attivo
+ * (`CJ_ACTIVE_STATES`). L'energia (gas/luce) conta come una sola pista perché
+ * la riga report porta già il driver aggregato.
+ */
+export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
+  const map = new Map<string, {
+    cliente: string; customerType: string;
+    mobilePdv: string; mobileAddetto: string;
+    anyPdv: string; anyAddetto: string;
+    openedAt: string | null;
+    activeDrivers: Set<CjDriver>;
+  }>();
+  for (const r of rows) {
+    let e = map.get(r.journeyId);
+    if (!e) {
+      e = {
+        cliente: r.cliente, customerType: r.customerType,
+        mobilePdv: "", mobileAddetto: "", anyPdv: "", anyAddetto: "",
+        openedAt: r.openedAt ?? null, activeDrivers: new Set<CjDriver>(),
+      };
+      map.set(r.journeyId, e);
+    }
+    // Attribuzione deterministica (indipendente dall'ordine delle righe, che
+    // la query report non garantisce): fra i valori non vuoti teniamo il
+    // minimo lessicografico. Nel caso normale la journey ha un'unica
+    // attivazione mobile, quindi il valore è univoco.
+    e.anyPdv = minNonEmpty(e.anyPdv, r.pdv);
+    e.anyAddetto = minNonEmpty(e.anyAddetto, r.addetto);
+    if (r.driver === "mobile") {
+      e.mobilePdv = minNonEmpty(e.mobilePdv, r.pdv);
+      e.mobileAddetto = minNonEmpty(e.mobileAddetto, r.addetto);
+    }
+    if (!e.openedAt && r.openedAt) e.openedAt = r.openedAt;
+    if (r.driver !== "mobile" && CJ_ACTIVE_STATES.has(r.state)) {
+      e.activeDrivers.add(r.driver);
+    }
+  }
+  return Array.from(map.entries()).map(([journeyId, e]) => {
+    const pisteAttive = e.activeDrivers.size;
+    const fatturato = gettoneForPiste(pisteAttive);
+    return {
+      journeyId,
+      cliente: e.cliente,
+      customerType: e.customerType,
+      pdv: e.mobilePdv || e.anyPdv,
+      addetto: e.mobileAddetto || e.anyAddetto,
+      openedAt: e.openedAt,
+      pisteAttive,
+      fatturato,
+      potenzialePieno: Math.max(0, gettoneForPiste(CJ_MAX_PISTE) - fatturato),
+    };
+  });
+}
+
+/**
+ * Filtra le journey per data di attivazione SIM (coorte). `from`/`to` sono
+ * stringhe `YYYY-MM-DD` (estremi inclusi) o vuote/null per nessun limite.
+ * Una journey senza `openedAt` passa solo se NON c'è alcun limite di data
+ * (non collocabile in una coorte temporale).
+ */
+export function filterGettoneByDate(
+  journeys: CjGettoneJourney[],
+  from?: string | null,
+  to?: string | null,
+): CjGettoneJourney[] {
+  const f = from || null;
+  const t = to || null;
+  const hasRange = f != null || t != null;
+  return journeys.filter((j) => {
+    if (!j.openedAt) return !hasRange;
+    // Confronto per sola data (UTC) per evitare ambiguità di fuso orario sui
+    // bordi: gli estremi `from`/`to` sono YYYY-MM-DD e li confrontiamo come
+    // stringhe con la data UTC dell'attivazione.
+    const d = isoDateOnly(j.openedAt);
+    if (d == null) return false;
+    if (f != null && d < f) return false;
+    if (t != null && d > t) return false;
+    return true;
+  });
+}
+
+// Gruppo dell'analisi gettoni lungo una dimensione (negozio / addetto).
+export interface CjGettoneGroup {
+  key: string;
+  label: string;
+  // N. SIM attivate = journey distinte del gruppo (una per cliente).
+  sim: number;
+  // Clienti con almeno una pista cross-sell attiva ("+prodotti").
+  conProdotti: number;
+  // Fatturato maturato (€) = somma dei gettoni as-is.
+  fatturato: number;
+  // Potenziale non espresso (€) alla saturazione scelta.
+  potenziale: number;
+}
+
+export interface CjGettoneTotals {
+  sim: number;
+  conProdotti: number;
+  fatturato: number;
+  potenziale: number;
+  // Totale piste cross-sell attive (per eventuale media).
+  pisteAttive: number;
+}
+
+/**
+ * Aggrega le journey dell'analisi lungo una dimensione (`keyFn`). Il
+ * `potenziale` non espresso è il gettone pieno residuo scalato per la
+ * percentuale di saturazione attesa (`saturationPct`, 0..100). Ordina per
+ * fatturato↓, poi SIM↓, poi label (it).
+ */
+export function aggregateGettone(
+  journeys: CjGettoneJourney[],
+  keyFn: (j: CjGettoneJourney) => { key: string; label: string },
+  saturationPct: number,
+): CjGettoneGroup[] {
+  const s = clampSaturation(saturationPct) / 100;
+  const map = new Map<string, {
+    label: string; sim: number; conProdotti: number; fatturato: number; potenzialePieno: number;
+  }>();
+  for (const j of journeys) {
+    const { key, label } = keyFn(j);
+    let e = map.get(key);
+    if (!e) {
+      e = { label, sim: 0, conProdotti: 0, fatturato: 0, potenzialePieno: 0 };
+      map.set(key, e);
+    }
+    e.sim += 1;
+    if (j.pisteAttive >= 1) e.conProdotti += 1;
+    e.fatturato += j.fatturato;
+    e.potenzialePieno += j.potenzialePieno;
+  }
+  return Array.from(map.entries())
+    .map(([key, e]) => ({
+      key,
+      label: e.label,
+      sim: e.sim,
+      conProdotti: e.conProdotti,
+      fatturato: e.fatturato,
+      potenziale: e.potenzialePieno * s,
+    }))
+    .sort((a, b) => b.fatturato - a.fatturato || b.sim - a.sim || a.label.localeCompare(b.label, "it"));
+}
+
+/** Totali aggregati dell'analisi gettoni con saturazione applicata. */
+export function gettoneTotals(
+  journeys: CjGettoneJourney[],
+  saturationPct: number,
+): CjGettoneTotals {
+  const s = clampSaturation(saturationPct) / 100;
+  let sim = 0, conProdotti = 0, fatturato = 0, potenzialePieno = 0, pisteAttive = 0;
+  for (const j of journeys) {
+    sim += 1;
+    if (j.pisteAttive >= 1) conProdotti += 1;
+    fatturato += j.fatturato;
+    potenzialePieno += j.potenzialePieno;
+    pisteAttive += j.pisteAttive;
+  }
+  return { sim, conProdotti, fatturato, potenziale: potenzialePieno * s, pisteAttive };
 }
 
 /**

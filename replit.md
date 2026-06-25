@@ -234,8 +234,8 @@ mantenere snello questo file:
   (`bash scripts/run-incentivazione-accessori-servizi-tests.sh`). Run
   completo in ~5s.
 - **Customer Journey reportistica + filtri condivisi tests**
-  (`tests/customer-journey-report.test.mjs`): 13 test sulla logica pura di
-  `shared/customerJourney.ts` (Task #189). Sono funzioni pure: NON serve né
+  (`tests/customer-journey-report.test.mjs`): 23 test sulla logica pura di
+  `shared/customerJourney.ts` (Task #189 + Task #192). Sono funzioni pure: NON serve né
   dev server né DB, il modulo TS è caricato via loader `tsx`. La pagina
   Customer Journey ha due viste ("Schede clienti" e "Reportistica") che
   condividono gli stessi filtri (tipo cliente, negozio/PDV, addetto, stato,
@@ -252,7 +252,18 @@ mantenere snello questo file:
   match per `includes`) sia su una riga report (singolo valore wrappato in
   array), filtri "tutti" = nessun vincolo, combinazione AND, facet vuoti
   esclusi da filtro specifico; (5) coerenza schede/report: stesso predicato,
-  granularità journey vs item. Lanciali via lo step di validation
+  granularità journey vs item. Task #192 aggiunge 10 test sull'analisi
+  gettoni cross-sell: (6) `gettoneForPiste` (tabella a scaglioni
+  `[0,20,30,40,100,120]`, clamp 0..5, round dei decimali, NaN ⇒ 0);
+  (7) `buildGettoneJourneys` (piste = driver NON-mobile distinti in stato
+  attivo, energia gas/luce conta una volta, stati ko/annullato/stornato non
+  contano, attribuzione pdv/addetto dalla SIM mobile con fallback al primo
+  item); (8) `filterGettoneByDate` (coorte per data attivazione SIM, estremi
+  inclusi, solo-from/solo-to/nessun range, journey senza `openedAt` passa solo
+  senza limiti); (9) `aggregateGettone` (somma fatturato + potenziale alla
+  saturazione, ordinamento per fatturato↓, la saturazione scala solo il
+  potenziale e viene clampata a 0..100); (10) `gettoneTotals` + input vuoto.
+  Lanciali via lo step di validation
   `cj-report-tests` (`bash scripts/run-customer-journey-report-tests.sh`).
   Run completo in ~1s.
 

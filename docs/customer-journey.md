@@ -44,10 +44,40 @@ quelli ancora attivabili, e traccia ogni contratto attraverso i suoi stati.
 
 ## Gettone
 
-La **formula del gettone NON è cablata** in questa fase. Ogni item ha solo un
+A livello **item** la formula del gettone NON è cablata: ogni item ha solo un
 flag di **conferma manuale** (`gettoneConfirmed`) con relativi
-`gettoneConfirmedAt` / `gettoneConfirmedBy`. È l'unico punto di conferma
-manuale previsto.
+`gettoneConfirmedAt` / `gettoneConfirmedBy`.
+
+A livello **reportistica** (analisi gettoni cross-sell, Task #192) il gettone è
+calcolato per **cliente** (journey) in base a quante piste NON-mobile sono
+attive oltre alla SIM che ha aperto la journey. La tabella a scaglioni
+(`CJ_GETTONE_TABLE` in `shared/customerJourney.ts`) è:
+
+| Nº piste cross-sell attive | Gettone |
+|---|---|
+| 0 (solo mobile) | 0 € |
+| 1 | 20 € |
+| 2 | 30 € |
+| 3 | 40 € |
+| 4 | 100 € |
+| 5 | 120 € |
+
+- Le 5 piste cross-sell sono `fisso`, `energia`, `assicurazioni`, `telefono`,
+  `protetti` (`CJ_NON_MOBILE_DRIVERS`). L'`energia` (gas/luce) conta come una
+  sola pista.
+- Una pista è "attiva" se ha ≥1 item in uno stato attivo (`CJ_ACTIVE_STATES`:
+  inserito/in_lavorazione/attivato/pagato/riaccreditato; ko/annullato/stornato
+  esclusi).
+- **Fatturato maturato** = somma dei gettoni as-is. **Potenziale non espresso**
+  = `(gettone pieno a 5 piste − gettone attuale)` per journey, scalato per una
+  **percentuale di saturazione attesa** (25/50/75/100%) scelta dall'utente.
+- L'analisi è guidata da un filtro **da–a sulla data di attivazione SIM**
+  (`customerJourneys.openedAt`, la coorte T0) e aggrega per **negozio** o
+  **addetto** oltre ai totali, rispettando l'isolamento per operatore (riusa
+  `GET /api/customer-journeys/report`). Logica pura in
+  `shared/customerJourney.ts` (`buildGettoneJourneys`, `filterGettoneByDate`,
+  `aggregateGettone`, `gettoneTotals`), UI nella sotto-vista *Analisi gettoni*
+  della tab Reportistica.
 
 ## Visibilità (per ruolo)
 
@@ -72,7 +102,7 @@ manuale previsto.
 | Metodo | Endpoint | Note |
 |---|---|---|
 | GET | `/api/customer-journeys` | lista (operatore: filtrata sui suoi addetti); ogni journey porta `drivers` (riepilogo 6 driver attivato/conteggio) + le facet `pdvs`/`addetti`/`states` (valori distinti fra gli item) per i filtri Negozio/Operatore/Stato della lista schede |
-| GET | `/api/customer-journeys/report` | reportistica (Task #187): righe item-level `CjReportRow` (journey + cliente + pdv/addetto/stato/driver/valore) aggregabili lato client per negozio/addetto/cliente; **stessa regola di isolamento operatore** della lista (deve precedere `/:id`) |
+| GET | `/api/customer-journeys/report` | reportistica (Task #187/#192): righe item-level `CjReportRow` (journey + cliente + pdv/addetto/stato/driver/valore + `openedAt` data attivazione SIM) aggregabili lato client per negozio/addetto/cliente **e** per l'analisi gettoni cross-sell; **stessa regola di isolamento operatore** della lista (deve precedere `/:id`) |
 | GET | `/api/customer-journeys/:id` | dettaglio: `{ journey, items, drivers }` |
 | POST | `/api/customer-journeys/reconcile` | rigenera dalle vendite (solo admin) |
 | PATCH | `/api/customer-journey-items/:id/state` | `{ state }` |

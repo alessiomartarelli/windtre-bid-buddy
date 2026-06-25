@@ -22,15 +22,20 @@ import {
   Route as RouteIcon, RefreshCw, ArrowLeft, CheckCircle2, Circle,
   Search, User, Building2, Loader2, Coins, Pencil,
   FileText, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
-  LayoutGrid, BarChart3, Store, Users,
+  LayoutGrid, BarChart3, Store, Users, TrendingUp, Wallet, Calendar,
 } from "lucide-react";
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ACTIVE_STATES,
   aggregateReport, matchesCjFilters,
+  CJ_GETTONE_TABLE, CJ_MAX_PISTE,
+  buildGettoneJourneys, filterGettoneByDate, aggregateGettone, gettoneTotals,
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES } from "@shared/schema";
 import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from "@shared/schema";
-import type { CjReportRow, CjReportGroup, CjListFilters } from "@shared/customerJourney";
+import type {
+  CjReportRow, CjReportGroup, CjListFilters,
+  CjGettoneGroup, CjGettoneTotals,
+} from "@shared/customerJourney";
 import { CJ_DRIVER_ICONS, CJ_DRIVER_COLORS } from "@/lib/customerJourneyIcons";
 import {
   computeTimeline, groupByNegozio, cjDriverColor, isFadedState,
@@ -60,6 +65,8 @@ type SortDir = "asc" | "desc";
 
 type CjView = "schede" | "report";
 type ReportDim = "negozio" | "addetto" | "cliente";
+type ReportTab = "analisi" | "dettaglio";
+type GettoneDim = "negozio" | "addetto";
 
 const SORT_LABELS: Record<SortKey, string> = {
   data: "Data apertura",
@@ -142,6 +149,11 @@ export default function CustomerJourneyPage() {
   const [addettoFilter, setAddettoFilter] = useState<string>("tutti");
   const [stateFilter, setStateFilter] = useState<string>("tutti");
   const [reportDim, setReportDim] = useState<ReportDim>("negozio");
+  const [reportTab, setReportTab] = useState<ReportTab>("analisi");
+  const [gettoneDim, setGettoneDim] = useState<GettoneDim>("negozio");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [saturation, setSaturation] = useState<number>(100);
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [triggerDateInput, setTriggerDateInput] = useState<string>("");
@@ -366,6 +378,24 @@ export default function CustomerJourneyPage() {
       return acc;
     },
     { contratti: 0, valore: 0, attivati: 0, journeys: new Set<string>() },
+  );
+
+  // Analisi gettoni/fatturato (Task #192): dalle stesse righe filtrate
+  // costruiamo una journey per cliente, la filtriamo per coorte (data
+  // attivazione SIM) e aggreghiamo i gettoni maturati + il potenziale non
+  // espresso alla saturazione scelta.
+  const gettoneJourneys = filterGettoneByDate(
+    buildGettoneJourneys(reportFiltered),
+    dateFrom || null,
+    dateTo || null,
+  );
+  const gettoneTot = gettoneTotals(gettoneJourneys, saturation);
+  const gettoneGroups = aggregateGettone(
+    gettoneJourneys,
+    (j) => gettoneDim === "negozio"
+      ? { key: j.pdv || "—", label: j.pdv || "Senza negozio" }
+      : { key: j.addetto || "—", label: j.addetto || "Senza addetto" },
+    saturation,
   );
 
   const hasActiveFilters =
@@ -708,19 +738,57 @@ export default function CustomerJourneyPage() {
             )}
 
             {view === "report" ? (
-              <ReportView
-                isLoading={reportQuery.isLoading}
-                groups={reportGroups}
-                totals={{
-                  clienti: reportTotals.journeys.size,
-                  contratti: reportTotals.contratti,
-                  attivati: reportTotals.attivati,
-                  valore: reportTotals.valore,
-                }}
-                dim={reportDim}
-                onDimChange={setReportDim}
-                dimLabel={reportDimLabel}
-              />
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant={reportTab === "analisi" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setReportTab("analisi")}
+                    data-testid="button-report-tab-analisi"
+                  >
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Analisi gettoni
+                  </Button>
+                  <Button
+                    variant={reportTab === "dettaglio" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setReportTab("dettaglio")}
+                    data-testid="button-report-tab-dettaglio"
+                  >
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Dettaglio
+                  </Button>
+                </div>
+                {reportTab === "analisi" ? (
+                  <AnalisiView
+                    isLoading={reportQuery.isLoading}
+                    totals={gettoneTot}
+                    groups={gettoneGroups}
+                    dim={gettoneDim}
+                    onDimChange={setGettoneDim}
+                    dateFrom={dateFrom}
+                    dateTo={dateTo}
+                    onDateFromChange={setDateFrom}
+                    onDateToChange={setDateTo}
+                    saturation={saturation}
+                    onSaturationChange={setSaturation}
+                  />
+                ) : (
+                  <ReportView
+                    isLoading={reportQuery.isLoading}
+                    groups={reportGroups}
+                    totals={{
+                      clienti: reportTotals.journeys.size,
+                      contratti: reportTotals.contratti,
+                      attivati: reportTotals.attivati,
+                      valore: reportTotals.valore,
+                    }}
+                    dim={reportDim}
+                    onDimChange={setReportDim}
+                    dimLabel={reportDimLabel}
+                  />
+                )}
+              </div>
             ) : journeysQuery.isLoading ? (
               <div className="flex items-center justify-center py-16">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -1003,6 +1071,224 @@ function ReportView({
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// === Analisi gettoni e fatturato cross-sell (Task #192) ===
+// Prima sotto-vista della Reportistica: cruscotto gettoni guidato dal filtro
+// per data di attivazione SIM (coorte). La logica pura vive in
+// `@shared/customerJourney` ed è coperta da test (`cj-report-tests`).
+function AnalisiView({
+  isLoading,
+  totals,
+  groups,
+  dim,
+  onDimChange,
+  dateFrom,
+  dateTo,
+  onDateFromChange,
+  onDateToChange,
+  saturation,
+  onSaturationChange,
+}: {
+  isLoading: boolean;
+  totals: CjGettoneTotals;
+  groups: CjGettoneGroup[];
+  dim: GettoneDim;
+  onDimChange: (d: GettoneDim) => void;
+  dateFrom: string;
+  dateTo: string;
+  onDateFromChange: (v: string) => void;
+  onDateToChange: (v: string) => void;
+  saturation: number;
+  onSaturationChange: (v: number) => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const dims: GettoneDim[] = ["negozio", "addetto"];
+  const dimLabel: Record<GettoneDim, string> = { negozio: "Negozio", addetto: "Addetto" };
+  const satOptions = [25, 50, 75, 100];
+
+  return (
+    <div className="space-y-4">
+      {/* Filtro per data attivazione SIM + saturazione attesa */}
+      <Card>
+        <CardContent className="py-4 flex flex-wrap items-end gap-4">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+              <Calendar className="h-3.5 w-3.5" /> Attivazione SIM dal
+            </Label>
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => onDateFromChange(e.target.value)}
+              className="w-[170px]"
+              data-testid="input-gettone-date-from"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">al</Label>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => onDateToChange(e.target.value)}
+              className="w-[170px]"
+              data-testid="input-gettone-date-to"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Saturazione attesa</Label>
+            <Select
+              value={String(saturation)}
+              onValueChange={(v) => onSaturationChange(Number(v))}
+            >
+              <SelectTrigger className="w-[130px]" data-testid="select-gettone-saturation">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {satOptions.map((s) => (
+                  <SelectItem key={s} value={String(s)}>{s}%</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {(dateFrom || dateTo) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { onDateFromChange(""); onDateToChange(""); }}
+              data-testid="button-gettone-reset-date"
+            >
+              Azzera date
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card data-testid="card-gettone-sim">
+          <CardContent className="py-4">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <RouteIcon className="h-3.5 w-3.5" /> SIM attivate
+            </p>
+            <p className="text-2xl font-bold tabular-nums" data-testid="text-gettone-sim">
+              {totals.sim}
+            </p>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-gettone-conprodotti">
+          <CardContent className="py-4">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Coins className="h-3.5 w-3.5" /> Clienti +prodotti
+            </p>
+            <p className="text-2xl font-bold tabular-nums" data-testid="text-gettone-conprodotti">
+              {totals.conProdotti}
+              <span className="text-sm font-normal text-muted-foreground ml-1">
+                / {totals.sim}
+              </span>
+            </p>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-gettone-fatturato">
+          <CardContent className="py-4">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Wallet className="h-3.5 w-3.5" /> Fatturato maturato
+            </p>
+            <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-gettone-fatturato">
+              {fmtEuro(totals.fatturato)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-gettone-potenziale">
+          <CardContent className="py-4">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <TrendingUp className="h-3.5 w-3.5" /> Potenziale non espresso
+            </p>
+            <p className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="text-gettone-potenziale">
+              {fmtEuro(totals.potenziale)}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Selettore dimensione di aggregazione */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm text-muted-foreground mr-1">Raggruppa per:</span>
+        {dims.map((d) => (
+          <Button
+            key={d}
+            variant={dim === d ? "default" : "outline"}
+            size="sm"
+            onClick={() => onDimChange(d)}
+            data-testid={`button-gettone-dim-${d}`}
+          >
+            {dimLabel[d]}
+          </Button>
+        ))}
+      </div>
+
+      {/* Tabella aggregata gettoni */}
+      <Card>
+        <CardContent className="p-0">
+          {groups.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <TrendingUp className="h-10 w-10 mx-auto mb-3 opacity-40" />
+              <p className="font-medium">Nessun dato da mostrare</p>
+              <p className="text-sm mt-1">Modifica i filtri o l'intervallo di date.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{dimLabel[dim]}</TableHead>
+                  <TableHead className="text-right">SIM</TableHead>
+                  <TableHead className="text-right">+prodotti</TableHead>
+                  <TableHead className="text-right">Fatturato</TableHead>
+                  <TableHead className="text-right">Potenziale</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {groups.map((g) => (
+                  <TableRow key={g.key} data-testid={`row-gettone-${g.key}`}>
+                    <TableCell className="font-medium" data-testid={`text-gettone-label-${g.key}`}>
+                      {g.label}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums" data-testid={`text-gettone-sim-${g.key}`}>
+                      {g.sim}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums" data-testid={`text-gettone-conprodotti-${g.key}`}>
+                      {g.conProdotti}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400" data-testid={`text-gettone-fatturato-${g.key}`}>
+                      {fmtEuro(g.fatturato)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-amber-600 dark:text-amber-400" data-testid={`text-gettone-potenziale-${g.key}`}>
+                      {fmtEuro(g.potenziale)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Legenda scaglioni gettone */}
+      <p className="text-xs text-muted-foreground">
+        Scaglioni gettone per nº piste cross-sell attive (oltre la SIM):{" "}
+        {CJ_GETTONE_TABLE.map((g, i) => i === 0 ? null : `${i}=${g}€`)
+          .filter(Boolean)
+          .join(" · ")}
+        . Saturazione completa = {CJ_MAX_PISTE} piste ({fmtEuro(CJ_GETTONE_TABLE[CJ_MAX_PISTE])}).
+      </p>
     </div>
   );
 }

@@ -899,6 +899,7 @@ export class DatabaseStorage implements IStorage {
       cognome: customerJourneys.cognome,
       ragioneSociale: customerJourneys.ragioneSociale,
       nominativo: customerJourneys.nominativo,
+      openedAt: customerJourneys.openedAt,
       pdvDestinazione: customerJourneyItems.pdvDestinazione,
       pdvOrigine: customerJourneyItems.pdvOrigine,
       addetto: customerJourneyItems.addetto,
@@ -925,6 +926,7 @@ export class DatabaseStorage implements IStorage {
         state: r.state as CjItemState,
         driver: r.driver as CjDriver,
         valore: Number.isFinite(v) ? v : 0,
+        openedAt: r.openedAt ? r.openedAt.toISOString() : null,
       };
     });
   }

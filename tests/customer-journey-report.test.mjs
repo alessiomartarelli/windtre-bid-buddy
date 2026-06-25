@@ -20,6 +20,13 @@ const {
   matchesCjFilters,
   cjSearchMatches,
   CJ_ACTIVE_STATES,
+  CJ_GETTONE_TABLE,
+  CJ_MAX_PISTE,
+  gettoneForPiste,
+  buildGettoneJourneys,
+  filterGettoneByDate,
+  aggregateGettone,
+  gettoneTotals,
 } = await import('../shared/customerJourney.ts');
 
 // Helper: costruisce una riga report con default sensati.
@@ -253,4 +260,206 @@ test('coerenza schede/report: stesso predicato, granularità journey vs item', (
   const passed = reportRows.filter((r) => matchesCjFilters(r, filter));
   assert.equal(passed.length, 1, 'solo la riga del PDV filtrato passa');
   assert.deepEqual(passed[0].pdvs, ['PDV Milano']);
+});
+
+// ===========================================================================
+// ANALISI GETTONI E FATTURATO CROSS-SELL (Task #192)
+// Logica pura `shared/customerJourney.ts`: dal numero di piste NON-mobile
+// attive in una journey ricava il gettone (tabella a scaglioni), aggrega per
+// negozio/addetto e calcola il potenziale non espresso alla saturazione scelta.
+// ===========================================================================
+
+// --- gettoneForPiste: tabella a scaglioni + clamp/round ---
+test('gettoneForPiste: tabella a scaglioni 0..5 con clamp e round', () => {
+  assert.deepEqual(CJ_GETTONE_TABLE, [0, 20, 30, 40, 100, 120]);
+  assert.equal(CJ_MAX_PISTE, 5);
+  assert.equal(gettoneForPiste(0), 0);
+  assert.equal(gettoneForPiste(1), 20);
+  assert.equal(gettoneForPiste(2), 30);
+  assert.equal(gettoneForPiste(3), 40);
+  assert.equal(gettoneForPiste(4), 100);
+  assert.equal(gettoneForPiste(5), 120);
+  // clamp oltre il massimo e sotto zero
+  assert.equal(gettoneForPiste(9), 120);
+  assert.equal(gettoneForPiste(-3), 0);
+  // round dei decimali
+  assert.equal(gettoneForPiste(2.4), 30);
+  assert.equal(gettoneForPiste(2.6), 40);
+  // valore non finito => 0
+  assert.equal(gettoneForPiste(NaN), 0);
+});
+
+// --- buildGettoneJourneys: piste = driver NON-mobile distinti attivi ---
+test('buildGettoneJourneys: conta driver non-mobile distinti attivi', () => {
+  const rows = [
+    // journey con mobile (non conta) + fisso attivo + energia attivo => 2 piste
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', pdv: 'Roma', addetto: 'Anna', openedAt: '2026-07-05T00:00:00.000Z' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato', pdv: 'Roma', addetto: 'Anna', openedAt: '2026-07-05T00:00:00.000Z' }),
+    row({ journeyId: 'j1', driver: 'energia', state: 'pagato', pdv: 'Roma', addetto: 'Anna', openedAt: '2026-07-05T00:00:00.000Z' }),
+    // energia duplicata (gas+luce) => conta una sola volta
+    row({ journeyId: 'j1', driver: 'energia', state: 'inserito', pdv: 'Roma', addetto: 'Anna', openedAt: '2026-07-05T00:00:00.000Z' }),
+  ];
+  const js = buildGettoneJourneys(rows);
+  assert.equal(js.length, 1);
+  assert.equal(js[0].pisteAttive, 2, 'fisso + energia (energia non duplica)');
+  assert.equal(js[0].fatturato, 30, '2 piste => 30€');
+  assert.equal(js[0].potenzialePieno, 90, '120 - 30');
+  assert.equal(js[0].pdv, 'Roma');
+  assert.equal(js[0].addetto, 'Anna');
+  assert.equal(js[0].openedAt, '2026-07-05T00:00:00.000Z');
+});
+
+// --- buildGettoneJourneys: stati KO non contano come pista attiva ---
+test('buildGettoneJourneys: piste in stato non-attivo non contano', () => {
+  const rows = [
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'ko' }),
+    row({ journeyId: 'j1', driver: 'energia', state: 'annullato' }),
+    row({ journeyId: 'j1', driver: 'telefono', state: 'stornato' }),
+  ];
+  const js = buildGettoneJourneys(rows);
+  assert.equal(js[0].pisteAttive, 0, 'tutte le piste cross-sell sono KO/annullate/stornate');
+  assert.equal(js[0].fatturato, 0);
+  assert.equal(js[0].potenzialePieno, 120, 'journey solo-mobile: pieno potenziale residuo');
+});
+
+// --- buildGettoneJourneys: attribuzione pdv/addetto dalla SIM mobile ---
+test('buildGettoneJourneys: pdv/addetto dalla mobile, fallback su qualunque item', () => {
+  // mobile con pdv/addetto valorizzati: prevalgono
+  const withMobile = buildGettoneJourneys([
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato', pdv: 'Milano', addetto: 'Bruno' }),
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', pdv: 'Roma', addetto: 'Anna' }),
+  ]);
+  assert.equal(withMobile[0].pdv, 'Roma', 'pdv della mobile');
+  assert.equal(withMobile[0].addetto, 'Anna', 'addetto della mobile');
+
+  // nessuna mobile con pdv/addetto: fallback sul primo item incontrato
+  const noMobile = buildGettoneJourneys([
+    row({ journeyId: 'j2', driver: 'fisso', state: 'attivato', pdv: 'Napoli', addetto: 'Carla' }),
+  ]);
+  assert.equal(noMobile[0].pdv, 'Napoli');
+  assert.equal(noMobile[0].addetto, 'Carla');
+});
+
+// --- buildGettoneJourneys: attribuzione deterministica con più mobile ---
+test('buildGettoneJourneys: pdv/addetto deterministici a prescindere dall ordine', () => {
+  const a = row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', pdv: 'Roma', addetto: 'Bob' });
+  const b = row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', pdv: 'Milano', addetto: 'Anna' });
+  const r1 = buildGettoneJourneys([a, b])[0];
+  const r2 = buildGettoneJourneys([b, a])[0];
+  // minimo lessicografico, indipendente dall'ordine di input
+  assert.equal(r1.pdv, 'Milano');
+  assert.equal(r1.addetto, 'Anna');
+  assert.deepEqual({ pdv: r1.pdv, addetto: r1.addetto }, { pdv: r2.pdv, addetto: r2.addetto });
+});
+
+// --- filterGettoneByDate: bordi vicino alla mezzanotte (UTC) ---
+test('filterGettoneByDate: confronto per data UTC sui bordi mezzanotte', () => {
+  const js = buildGettoneJourneys([
+    // 22:00 UTC del 31/07 (in Europe/Rome è già 01/08): la data UTC resta 31/07
+    row({ journeyId: 'a', driver: 'mobile', state: 'attivato', openedAt: '2026-07-31T22:00:00.000Z' }),
+    // mezzanotte UTC del 01/08: fuori dal range luglio
+    row({ journeyId: 'b', driver: 'mobile', state: 'attivato', openedAt: '2026-08-01T00:00:00.000Z' }),
+  ]);
+  const lug = filterGettoneByDate(js, '2026-07-01', '2026-07-31');
+  assert.deepEqual(lug.map((j) => j.journeyId), ['a'], 'solo la a (data UTC 2026-07-31) rientra in luglio');
+});
+
+// --- filterGettoneByDate: estremi inclusi, senza range passano tutte ---
+test('filterGettoneByDate: filtra per coorte data attivazione (estremi inclusi)', () => {
+  const js = buildGettoneJourneys([
+    row({ journeyId: 'a', driver: 'mobile', state: 'attivato', openedAt: '2026-07-01T08:00:00.000Z' }),
+    row({ journeyId: 'b', driver: 'mobile', state: 'attivato', openedAt: '2026-07-15T23:30:00.000Z' }),
+    row({ journeyId: 'c', driver: 'mobile', state: 'attivato', openedAt: '2026-08-02T00:00:00.000Z' }),
+  ]);
+  // range luglio
+  const lug = filterGettoneByDate(js, '2026-07-01', '2026-07-31');
+  assert.deepEqual(lug.map((j) => j.journeyId).sort(), ['a', 'b']);
+  // solo "from"
+  const dal15 = filterGettoneByDate(js, '2026-07-15', null);
+  assert.deepEqual(dal15.map((j) => j.journeyId).sort(), ['b', 'c']);
+  // solo "to"
+  const fino1 = filterGettoneByDate(js, null, '2026-07-01');
+  assert.deepEqual(fino1.map((j) => j.journeyId), ['a']);
+  // nessun range => tutte
+  assert.equal(filterGettoneByDate(js, '', '').length, 3);
+});
+
+// --- filterGettoneByDate: journey senza openedAt solo senza range ---
+test('filterGettoneByDate: journey senza openedAt passa solo senza limiti', () => {
+  const js = buildGettoneJourneys([
+    row({ journeyId: 'x', driver: 'mobile', state: 'attivato', openedAt: null }),
+  ]);
+  assert.equal(filterGettoneByDate(js, null, null).length, 1, 'senza range: passa');
+  assert.equal(filterGettoneByDate(js, '2026-07-01', null).length, 0, 'con range: esclusa');
+});
+
+// --- aggregateGettone: somma fatturato + potenziale alla saturazione ---
+test('aggregateGettone: per negozio, fatturato e potenziale a saturazione', () => {
+  const js = buildGettoneJourneys([
+    // Roma: journey con 1 pista attiva => 20€, potenziale pieno 100
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', pdv: 'Roma' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato', pdv: 'Roma' }),
+    // Roma: journey solo-mobile => 0€, potenziale pieno 120
+    row({ journeyId: 'j2', driver: 'mobile', state: 'attivato', pdv: 'Roma' }),
+    // Milano: journey con 3 piste => 40€, potenziale pieno 80
+    row({ journeyId: 'j3', driver: 'mobile', state: 'attivato', pdv: 'Milano' }),
+    row({ journeyId: 'j3', driver: 'fisso', state: 'attivato', pdv: 'Milano' }),
+    row({ journeyId: 'j3', driver: 'energia', state: 'attivato', pdv: 'Milano' }),
+    row({ journeyId: 'j3', driver: 'telefono', state: 'attivato', pdv: 'Milano' }),
+  ]);
+  const byPdvG = (j) => ({ key: j.pdv || '—', label: j.pdv || 'Senza negozio' });
+  const g = aggregateGettone(js, byPdvG, 100);
+  // ordinato per fatturato↓: Milano (40) prima di Roma (20)
+  assert.deepEqual(g.map((x) => x.label), ['Milano', 'Roma']);
+  const milano = g.find((x) => x.label === 'Milano');
+  assert.equal(milano.sim, 1);
+  assert.equal(milano.conProdotti, 1);
+  assert.equal(milano.fatturato, 40);
+  assert.equal(milano.potenziale, 80, 'saturazione 100% => pieno residuo');
+  const roma = g.find((x) => x.label === 'Roma');
+  assert.equal(roma.sim, 2, 'due journey nello stesso PDV');
+  assert.equal(roma.conProdotti, 1, 'solo una journey ha piste cross-sell');
+  assert.equal(roma.fatturato, 20);
+  assert.equal(roma.potenziale, 220, '(100 + 120) * 100%');
+});
+
+// --- aggregateGettone: la saturazione scala solo il potenziale ---
+test('aggregateGettone: saturazione scala il potenziale, non il fatturato', () => {
+  const js = buildGettoneJourneys([
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', addetto: 'Anna' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato', addetto: 'Anna' }),
+  ]);
+  const byAddettoG = (j) => ({ key: j.addetto || '—', label: j.addetto || 'Senza addetto' });
+  const g50 = aggregateGettone(js, byAddettoG, 50);
+  assert.equal(g50[0].fatturato, 20, 'fatturato invariato dalla saturazione');
+  assert.equal(g50[0].potenziale, 50, '100 * 50%');
+  // clamp della saturazione fuori range
+  const gOver = aggregateGettone(js, byAddettoG, 999);
+  assert.equal(gOver[0].potenziale, 100, 'saturazione clampata a 100%');
+});
+
+// --- gettoneTotals: totali con saturazione ---
+test('gettoneTotals: totali sim/conProdotti/fatturato/potenziale', () => {
+  const js = buildGettoneJourneys([
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato' }),
+    row({ journeyId: 'j2', driver: 'mobile', state: 'attivato' }),
+  ]);
+  const t = gettoneTotals(js, 100);
+  assert.equal(t.sim, 2);
+  assert.equal(t.conProdotti, 1);
+  assert.equal(t.fatturato, 20, 'j1=20 + j2=0');
+  assert.equal(t.pisteAttive, 1);
+  assert.equal(t.potenziale, 220, '(100 + 120) * 100%');
+  // saturazione 25%
+  const t25 = gettoneTotals(js, 25);
+  assert.equal(t25.potenziale, 55, '220 * 25%');
+});
+
+// --- aggregateGettone / gettoneTotals: input vuoto ---
+test('analisi gettoni: input vuoto => zero', () => {
+  assert.deepEqual(aggregateGettone([], (j) => ({ key: j.pdv, label: j.pdv }), 100), []);
+  const t = gettoneTotals([], 100);
+  assert.deepEqual(t, { sim: 0, conProdotti: 0, fatturato: 0, potenziale: 0, pisteAttive: 0 });
 });
