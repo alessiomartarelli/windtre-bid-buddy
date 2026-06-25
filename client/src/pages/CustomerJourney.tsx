@@ -26,10 +26,11 @@ import {
 } from "lucide-react";
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ACTIVE_STATES,
+  aggregateReport, matchesCjFilters,
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES } from "@shared/schema";
 import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from "@shared/schema";
-import type { CjReportRow } from "@shared/customerJourney";
+import type { CjReportRow, CjReportGroup, CjListFilters } from "@shared/customerJourney";
 import { CJ_DRIVER_ICONS, CJ_DRIVER_COLORS } from "@/lib/customerJourneyIcons";
 import {
   computeTimeline, groupByNegozio, cjDriverColor, isFadedState,
@@ -59,49 +60,6 @@ type SortDir = "asc" | "desc";
 
 type CjView = "schede" | "report";
 type ReportDim = "negozio" | "addetto" | "cliente";
-
-interface ReportGroup {
-  key: string;
-  label: string;
-  clienti: number;
-  contratti: number;
-  attivati: number;
-  valore: number;
-}
-
-// Aggrega le righe item-level della reportistica lungo una dimensione
-// (negozio / addetto / cliente). `clienti` = journey distinte, `contratti` =
-// item, `attivati` = item in uno stato attivo, `valore` = somma importi.
-function aggregateReport(
-  rows: CjReportRow[],
-  keyFn: (r: CjReportRow) => { key: string; label: string },
-): ReportGroup[] {
-  const map = new Map<string, {
-    label: string; journeys: Set<string>; contratti: number; attivati: number; valore: number;
-  }>();
-  for (const r of rows) {
-    const { key, label } = keyFn(r);
-    let e = map.get(key);
-    if (!e) {
-      e = { label, journeys: new Set(), contratti: 0, attivati: 0, valore: 0 };
-      map.set(key, e);
-    }
-    e.journeys.add(r.journeyId);
-    e.contratti += 1;
-    e.valore += r.valore;
-    if (CJ_ACTIVE_STATES.has(r.state)) e.attivati += 1;
-  }
-  return Array.from(map.entries())
-    .map(([key, e]) => ({
-      key,
-      label: e.label,
-      clienti: e.journeys.size,
-      contratti: e.contratti,
-      attivati: e.attivati,
-      valore: e.valore,
-    }))
-    .sort((a, b) => b.valore - a.valore || b.contratti - a.contratti || a.label.localeCompare(b.label, "it"));
-}
 
 const SORT_LABELS: Record<SortKey, string> = {
   data: "Data apertura",
@@ -361,29 +319,33 @@ export default function CustomerJourneyPage() {
     return CJ_ITEM_STATES.filter((st) => s.has(st));
   })();
 
-  const matchesSearch = (hay: string) =>
-    !search.trim() || hay.toLowerCase().includes(search.toLowerCase().trim());
+  const activeFilters: CjListFilters = {
+    typeFilter, pdvFilter, addettoFilter, stateFilter, search,
+  };
 
-  const filtered = journeys.filter((j) => {
-    if (typeFilter !== "tutti" && j.customerType !== typeFilter) return false;
-    if (pdvFilter !== "tutti" && !(j.pdvs ?? []).includes(pdvFilter)) return false;
-    if (addettoFilter !== "tutti" && !(j.addetti ?? []).includes(addettoFilter)) return false;
-    if (stateFilter !== "tutti" && !(j.states ?? []).includes(stateFilter)) return false;
-    return matchesSearch([
+  // Lista schede: una journey espone gli array di facet (PDV/addetti/stati)
+  // raccolti fra i suoi item.
+  const filtered = journeys.filter((j) => matchesCjFilters({
+    customerType: j.customerType,
+    pdvs: j.pdvs ?? [],
+    addetti: j.addetti ?? [],
+    states: j.states ?? [],
+    searchHay: [
       journeyTitle(j), j.customerKey, j.telefono, j.codiceCliente,
-    ].filter(Boolean).join(" "));
-  });
+    ].filter(Boolean).join(" "),
+  }, activeFilters));
   const countPrivato = journeys.filter((j) => j.customerType === "privato").length;
   const countAzienda = journeys.filter((j) => j.customerType === "azienda").length;
 
-  // Righe report filtrate (gli stessi filtri della lista schede).
-  const reportFiltered = reportRows.filter((r) => {
-    if (typeFilter !== "tutti" && r.customerType !== typeFilter) return false;
-    if (pdvFilter !== "tutti" && r.pdv !== pdvFilter) return false;
-    if (addettoFilter !== "tutti" && r.addetto !== addettoFilter) return false;
-    if (stateFilter !== "tutti" && r.state !== stateFilter) return false;
-    return matchesSearch([r.cliente, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(" "));
-  });
+  // Righe report filtrate con gli stessi filtri della lista schede: una riga
+  // item-level ha un singolo PDV/addetto/stato (wrappati in array).
+  const reportFiltered = reportRows.filter((r) => matchesCjFilters({
+    customerType: r.customerType,
+    pdvs: r.pdv ? [r.pdv] : [],
+    addetti: r.addetto ? [r.addetto] : [],
+    states: r.state ? [r.state] : [],
+    searchHay: [r.cliente, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(" "),
+  }, activeFilters));
 
   const reportGroups = aggregateReport(reportFiltered, (r) => {
     if (reportDim === "negozio") {
@@ -926,7 +888,7 @@ function ReportView({
   dimLabel,
 }: {
   isLoading: boolean;
-  groups: ReportGroup[];
+  groups: CjReportGroup[];
   totals: { clienti: number; contratti: number; attivati: number; valore: number };
   dim: ReportDim;
   onDimChange: (d: ReportDim) => void;

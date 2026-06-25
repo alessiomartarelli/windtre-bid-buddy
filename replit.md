@@ -213,6 +213,28 @@ mantenere snello questo file:
   Lanciali via lo step di validation `incentivazione-accservizi-tests`
   (`bash scripts/run-incentivazione-accessori-servizi-tests.sh`). Run
   completo in ~5s.
+- **Customer Journey reportistica + filtri condivisi tests**
+  (`tests/customer-journey-report.test.mjs`): 13 test sulla logica pura di
+  `shared/customerJourney.ts` (Task #189). Sono funzioni pure: NON serve né
+  dev server né DB, il modulo TS è caricato via loader `tsx`. La pagina
+  Customer Journey ha due viste ("Schede clienti" e "Reportistica") che
+  condividono gli stessi filtri (tipo cliente, negozio/PDV, addetto, stato,
+  ricerca); la logica era inline in `CustomerJourney.tsx` ed è stata estratta
+  in shared per essere testabile e usata da entrambe le viste. Coprono:
+  (1) `CJ_ACTIVE_STATES` (gli stati che contano come "attivati");
+  (2) `aggregateReport` per dimensione negozio/addetto/cliente — `clienti` =
+  journey distinte (Set su journeyId, non item), `contratti` = numero item,
+  `attivati` = item in stato attivo (ko/annullato/stornato esclusi), `valore`
+  = somma importi; ordinamento per valore↓ poi contratti↓ poi label (it),
+  tie-break e input vuoto ⇒ []; (3) `cjSearchMatches` (ricerca
+  case-insensitive, vuota ⇒ match); (4) `matchesCjFilters` — predicato
+  condiviso che agisce sia su una journey (array di facet PDV/addetti/stati,
+  match per `includes`) sia su una riga report (singolo valore wrappato in
+  array), filtri "tutti" = nessun vincolo, combinazione AND, facet vuoti
+  esclusi da filtro specifico; (5) coerenza schede/report: stesso predicato,
+  granularità journey vs item. Lanciali via lo step di validation
+  `cj-report-tests` (`bash scripts/run-customer-journey-report-tests.sh`).
+  Run completo in ~1s.
 
 ## External Dependencies
 

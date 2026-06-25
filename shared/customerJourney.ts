@@ -72,6 +72,104 @@ export interface CjJourneyFacets {
   states: string[];
 }
 
+// === Filtri condivisi fra "Schede clienti" e "Reportistica" (Task #189) ===
+// I due tab della pagina Customer Journey condividono gli stessi filtri
+// (tipo cliente, negozio/PDV, addetto, stato, ricerca testuale). La logica di
+// matching è centralizzata qui per garantire che agisca in modo identico sulle
+// due viste e per essere coperta da test unitari.
+export interface CjListFilters {
+  // "tutti" | "privato" | "azienda"
+  typeFilter: string;
+  // "tutti" | <pdv>
+  pdvFilter: string;
+  // "tutti" | <addetto>
+  addettoFilter: string;
+  // "tutti" | <stato item>
+  stateFilter: string;
+  search: string;
+}
+
+/** Ricerca testuale case-insensitive, vuota => sempre match. */
+export function cjSearchMatches(hay: string, search: string): boolean {
+  const q = (search || "").trim().toLowerCase();
+  if (!q) return true;
+  return (hay || "").toLowerCase().includes(q);
+}
+
+// Forma minima filtrabile: una journey espone array di PDV/addetti/stati fra i
+// suoi item, una riga report espone un singolo valore (wrappato in array dal
+// chiamante). Così lo stesso predicato copre entrambe le viste.
+export interface CjFilterable {
+  customerType: string;
+  pdvs: string[];
+  addetti: string[];
+  states: string[];
+  searchHay: string;
+}
+
+/**
+ * true se l'entità (journey o riga report) supera tutti i filtri attivi. Un
+ * filtro impostato a "tutti" è ignorato. Negozio/addetto/stato usano
+ * `includes` sull'array di facet (una journey può avere più PDV/addetti/stati;
+ * una riga report ne ha uno solo).
+ */
+export function matchesCjFilters(v: CjFilterable, f: CjListFilters): boolean {
+  if (f.typeFilter !== "tutti" && v.customerType !== f.typeFilter) return false;
+  if (f.pdvFilter !== "tutti" && !v.pdvs.includes(f.pdvFilter)) return false;
+  if (f.addettoFilter !== "tutti" && !v.addetti.includes(f.addettoFilter)) return false;
+  if (f.stateFilter !== "tutti" && !v.states.includes(f.stateFilter)) return false;
+  return cjSearchMatches(v.searchHay, f.search);
+}
+
+// === Aggregazione reportistica (Task #189) ===
+// Gruppo di report lungo una dimensione (negozio / addetto / cliente).
+export interface CjReportGroup {
+  key: string;
+  label: string;
+  clienti: number;
+  contratti: number;
+  attivati: number;
+  valore: number;
+}
+
+/**
+ * Aggrega le righe item-level della reportistica lungo una dimensione scelta
+ * dal chiamante (`keyFn`). `clienti` = journey distinte (Set su journeyId),
+ * `contratti` = numero di item, `attivati` = item in uno stato attivo
+ * (`CJ_ACTIVE_STATES`), `valore` = somma degli importi. Ordina per valore
+ * decrescente, poi contratti, poi label (it).
+ */
+export function aggregateReport(
+  rows: CjReportRow[],
+  keyFn: (r: CjReportRow) => { key: string; label: string },
+): CjReportGroup[] {
+  const map = new Map<string, {
+    label: string; journeys: Set<string>; contratti: number; attivati: number; valore: number;
+  }>();
+  for (const r of rows) {
+    const { key, label } = keyFn(r);
+    let e = map.get(key);
+    if (!e) {
+      e = { label, journeys: new Set(), contratti: 0, attivati: 0, valore: 0 };
+      map.set(key, e);
+    }
+    e.journeys.add(r.journeyId);
+    e.contratti += 1;
+    e.valore += r.valore;
+    if (CJ_ACTIVE_STATES.has(r.state)) e.attivati += 1;
+  }
+  return Array.from(map.entries())
+    .map(([key, e]) => ({
+      key,
+      label: e.label,
+      clienti: e.journeys.size,
+      contratti: e.contratti,
+      attivati: e.attivati,
+      valore: e.valore,
+    }))
+    .sort((a, b) => b.valore - a.valore || b.contratti - a.contratti || a.label.localeCompare(b.label, "it"));
+}
+
 /**
  * Riepilogo per-driver (attivato sì/no + conteggio item) per un insieme di
  * item di una journey. L'energia distingue gas/luce a livello di item ma per
