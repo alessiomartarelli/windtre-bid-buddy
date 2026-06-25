@@ -87,6 +87,15 @@ async function seedJourney(pool, orgId, { customerKey, nome, addetto, driver = '
   return journeyId;
 }
 
+// Aggiunge un altro item (di un addetto/pdv diverso) a una journey esistente.
+async function addItem(pool, orgId, journeyId, { addetto, driver = 'energia', pdv = null, importo = null, state = 'inserito' }) {
+  await pool.query(
+    `INSERT INTO customer_journey_items (journey_id, organization_id, driver, addetto, state, data_inserimento, pdv_destinazione, importo)
+       VALUES ($1, $2, $3, $4, $5, now(), $6, $7)`,
+    [journeyId, orgId, driver, addetto, state, pdv, importo],
+  );
+}
+
 async function setRole(pool, profileId, role, addetti = []) {
   await pool.query(
     `UPDATE profiles SET role = $2, bisuite_addetti = $3::text[] WHERE id = $1`,
@@ -317,6 +326,61 @@ test('scenario 3: GET /api/customer-journeys/report enforces per-operator isolat
     });
     assert.equal(asSuper.status, 200, `super_admin report failed: ${JSON.stringify(asSuper.body)}`);
     assert.equal(asSuper.body.length, 2, 'super_admin must see all org report rows');
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SCENARIO 4: facet della lista isolate su journey con item di più addetti
+// (Task #187). Una stessa journey contiene item di Mario e Luigi: un operatore
+// con solo l'addetto Mario NON deve vedere il PDV/addetto/stato di Luigi nelle
+// facet usate dai filtri della lista schede. Admin vede entrambi.
+// ---------------------------------------------------------------------------
+test('scenario 4: list facets isolate per-operator on a mixed-addetto journey', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  try {
+    // Journey condivisa: item Mario (PDV Milano) + item Luigi (PDV Roma).
+    const jid = await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFMIX').toUpperCase(),
+      nome: 'Cliente Misto',
+      addetto: 'MARIO ROSSI',
+      driver: 'fisso',
+      pdv: 'PDV Milano',
+      importo: '100.50',
+    });
+    await addItem(pool, session.orgId, jid, {
+      addetto: 'LUIGI VERDI',
+      driver: 'energia',
+      pdv: 'PDV Roma',
+      importo: '50.00',
+      state: 'attivato',
+    });
+
+    // (a) admin => facet con entrambi gli addetti / PDV / stati.
+    await setRole(pool, session.profileId, 'admin');
+    const asAdmin = await jsonReq(`${BASE}/api/customer-journeys`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(asAdmin.status, 200, `admin list failed: ${JSON.stringify(asAdmin.body)}`);
+    const adminJ = asAdmin.body.find((j) => j.id === jid);
+    assert.ok(adminJ, 'admin must see the mixed journey');
+    assert.deepEqual([...adminJ.addetti].sort(), ['LUIGI VERDI', 'MARIO ROSSI'], 'admin facet has both addetti');
+    assert.deepEqual([...adminJ.pdvs].sort(), ['PDV Milano', 'PDV Roma'], 'admin facet has both PDVs');
+
+    // (b) operatore con solo MARIO => facet con solo i suoi valori, niente Luigi.
+    await setRole(pool, session.profileId, 'operatore', ['MARIO ROSSI']);
+    const asOp = await jsonReq(`${BASE}/api/customer-journeys`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(asOp.status, 200, `operator list failed: ${JSON.stringify(asOp.body)}`);
+    const opJ = asOp.body.find((j) => j.id === jid);
+    assert.ok(opJ, 'operator with matching addetto must still see the journey');
+    assert.deepEqual(opJ.addetti, ['MARIO ROSSI'], 'operator facet must NOT leak Luigi addetto');
+    assert.deepEqual(opJ.pdvs, ['PDV Milano'], 'operator facet must NOT leak PDV Roma');
+    assert.ok(!opJ.states.includes('attivato'), 'operator facet must NOT leak Luigi item state');
   } finally {
     await cleanupSession(pool, session);
     await pool.end().catch(() => {});

@@ -2687,7 +2687,9 @@ export async function registerRoutes(
       const summaries = await storage.getCustomerJourneyDriverSummaries(journeyIds);
       const values = await storage.getCustomerJourneyValues(journeyIds);
       // Facet (negozio/addetto/stato) per i filtri della lista schede (Task #187).
-      const facets = await storage.getCustomerJourneyItemFacets(journeyIds);
+      // Stesso isolamento operatore: un operatore vede solo i valori dei propri
+      // item, anche su journey con item di addetti diversi.
+      const facets = await storage.getCustomerJourneyItemFacets(journeyIds, addettiFilter);
       const withDrivers = journeys.map((j) => ({
         ...j,
         drivers: summaries.get(j.id) ?? [],

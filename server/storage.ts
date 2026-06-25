@@ -121,7 +121,7 @@ export interface IStorage {
   getCustomerJourney(id: string, orgId: string): Promise<CustomerJourney | undefined>;
   getCustomerJourneyItems(journeyId: string): Promise<CustomerJourneyItem[]>;
   getCustomerJourneyValues(journeyIds: string[]): Promise<Map<string, number>>;
-  getCustomerJourneyItemFacets(journeyIds: string[]): Promise<Map<string, CjJourneyFacets>>;
+  getCustomerJourneyItemFacets(journeyIds: string[], addettiFilter?: string[] | null): Promise<Map<string, CjJourneyFacets>>;
   getCustomerJourneyReportRows(orgId: string, addettiFilter?: string[] | null): Promise<CjReportRow[]>;
   getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined>;
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
@@ -823,9 +823,22 @@ export class DatabaseStorage implements IStorage {
   // journey indicate; i valori vuoti sono scartati.
   async getCustomerJourneyItemFacets(
     journeyIds: string[],
+    addettiFilter?: string[] | null,
   ): Promise<Map<string, CjJourneyFacets>> {
     const out = new Map<string, CjJourneyFacets>();
     if (journeyIds.length === 0) return out;
+    // Isolamento operatore identico a listCustomerJourneys/getCustomerJourneyReportRows:
+    // `addettiFilter != null` => solo gli item dei propri nominativi addetto
+    // (array vuoto => nessun item, niente facet del tenant); `null` => tutti.
+    let whereClause = inArray(customerJourneyItems.journeyId, journeyIds);
+    if (addettiFilter != null) {
+      const lower = addettiFilter.map((a) => a.toLowerCase().trim()).filter(Boolean);
+      if (lower.length === 0) return out;
+      whereClause = and(
+        inArray(customerJourneyItems.journeyId, journeyIds),
+        inArray(sql`lower(trim(${customerJourneyItems.addetto}))`, lower),
+      )!;
+    }
     const rows = await db.select({
       journeyId: customerJourneyItems.journeyId,
       pdvDestinazione: customerJourneyItems.pdvDestinazione,
@@ -833,7 +846,7 @@ export class DatabaseStorage implements IStorage {
       addetto: customerJourneyItems.addetto,
       state: customerJourneyItems.state,
     }).from(customerJourneyItems)
-      .where(inArray(customerJourneyItems.journeyId, journeyIds));
+      .where(whereClause);
     const tmp = new Map<string, { pdvs: Set<string>; addetti: Set<string>; states: Set<string> }>();
     for (const r of rows) {
       let e = tmp.get(r.journeyId);

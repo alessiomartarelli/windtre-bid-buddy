@@ -41,3 +41,8 @@ multiple logins.
 selected month, so a future/current month yields a partial date window. To make
 seeded BiSuite sales fall inside the live aggregation range, pick a month fully
 in the past (the test uses the previous calendar month).
+
+## Facet/metadata paths leak too
+Any per-journey aggregate exposed on the list response (e.g. facet sets `pdvs`/`addetti`/`states` for filter dropdowns) must apply the SAME operator `addettiFilter` as the row query. A journey can hold items from multiple addetti, so fetching items by journeyId alone leaks another operator's PDV/addetto/state values even when the row-level list is already filtered.
+**Why:** code review caught this on the report feature — list rows were filtered but the facet helper queried items by journeyId with no addetto filter.
+**How to apply:** thread `addettiFilter` into every helper that reads `customer_journey_items` for an operator-visible response; empty array => return empty.
