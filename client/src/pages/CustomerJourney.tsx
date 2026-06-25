@@ -929,9 +929,10 @@ function JourneyBreakdown({
     (a, b) => b[1].length - a[1].length,
   );
   const attivati = drivers.filter((d) => d.activated).length;
+  const isAzienda = journey.customerType === "azienda";
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className={`grid grid-cols-1 gap-6 ${isAzienda ? "lg:grid-cols-2" : ""}`}>
       <Card data-testid="card-dettaglio-negozio">
         <CardHeader>
           <CardTitle className="text-base">Dettaglio per negozio</CardTitle>
@@ -988,6 +989,7 @@ function JourneyBreakdown({
         </CardContent>
       </Card>
 
+      {isAzienda && (
       <Card data-testid="card-dettaglio-ragione-sociale">
         <CardHeader>
           <CardTitle className="text-base">Dettaglio per ragione sociale</CardTitle>
@@ -1050,6 +1052,7 @@ function JourneyBreakdown({
           </dl>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }
