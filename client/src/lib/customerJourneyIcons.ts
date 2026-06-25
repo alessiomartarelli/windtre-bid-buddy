@@ -19,17 +19,9 @@ export const CJ_DRIVER_ICONS: Record<CjDriver, LucideIcon> = {
   protetti: ShieldPlus,
 };
 
-// Equivalente testuale dell'icona, usato come indicatore visivo negli export
-// Excel (le celle XLSX non possono contenere immagini con SheetJS). Resta
-// allineato 1:1 ai driver di `CJ_DRIVER_ICONS`.
-export const CJ_DRIVER_EMOJI: Record<CjDriver, string> = {
-  mobile: "📱",
-  fisso: "📡",
-  energia: "⚡",
-  assicurazioni: "🛡️",
-  telefono: "☎️",
-  protetti: "🚨",
-};
+// Nota: l'equivalente testuale (emoji) dell'icona per gli export Excel vive in
+// `shared/customerJourneyExport.ts` (CJ_DRIVER_EMOJI), così la logica di
+// serializzazione resta caricabile nei test senza trascinare lucide-react.
 
 // Colore brand per driver, usato dal grafico di tracciamento temporale della
 // scheda cliente (dot timeline + legenda) e dai chip "per negozio". Tinte fisse

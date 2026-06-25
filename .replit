@@ -72,6 +72,10 @@ args = "cj-timeline-tests"
 task = "workflow.run"
 args = "cj-report-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-export-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -176,6 +180,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-customer-journey-report-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-export-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-export-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

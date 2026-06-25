@@ -174,6 +174,26 @@ mantenere snello questo file:
   (7) `itemEventDate` (attivazione→inserimento→null, data malformata ⇒ null).
   Lanciali via lo step di validation `cj-timeline-tests`
   (`bash scripts/run-customer-journey-timeline-tests.sh`). Run completo in ~1s.
+- **Customer Journey export (PDF/Excel) tests**
+  (`tests/customer-journey-export.test.mjs`): 26 test sulla logica pura di
+  costruzione righe/colonne degli export (Task #190). La logica è stata
+  estratta da `client/src/lib/customerJourneyExport.ts` in
+  `shared/customerJourneyExport.ts` (import RELATIVI, niente runtime
+  jsPDF/xlsx/react) così è caricabile via loader `tsx` senza dev server né DB;
+  il file di rendering ora consuma quei builder. Coprono: (1) helper di
+  formattazione (`fmtDate` it-IT/"—", `journeyTitle` azienda↔privato con
+  fallback, `safeFileName`/`detailFileBase`, `driverLabel`/`itemStateLabel`/
+  `itemDescription` con fallback, `rataCanone` con canone escluso per
+  `telefono`, `activeDriverCount`, `detailMeta` CF↔P.IVA); (2) dettaglio —
+  `driverTableHead/Body` (ordine `CJ_DRIVER_ORDER`, col 0 vuota nel PDF vs
+  emoji nell'Excel), `contractsHead/Body` (12 colonne, PDV destinazione→origine,
+  gettone Sì/No), `detailExcelHeaderRows`; (3) elenco — `listSubtitle`/
+  `listExcelHeaderRows` con `filterLabel` opzionale, `listPdfHead/Body`
+  (5 colonne fisse + driver, "Si"/""), `listExcelHead/Body` (colonna Telefono +
+  emoji, "Sì"/""). I test bloccano le differenze volute di shape fra PDF ed
+  Excel così che un cambio accidentale alle colonne non rompa silenziosamente
+  gli export. Lanciali via lo step di validation `cj-export-tests`
+  (`bash scripts/run-customer-journey-export-tests.sh`). Run completo in ~1s.
 - **Incentivazione interna tests** (`tests/incentivazione.test.mjs`):
   18 test sulla logica pura di `shared/incentivazione.ts` (gare addetto nel
   tempo). Sono funzioni pure: NON serve né dev server né DB, il modulo TS è

@@ -6,3 +6,4 @@
 - [Drizzle sql ANY array](drizzle-sql-any-array.md) — `sql\`= ANY(${jsArray})\`` esplode in più placeholder => PG 42809; costruisci `ARRAY[...]::int[]` con `sql.join`.
 - [TanStack queryKey = URL path](tanstack-querykey-url.md) — il fetcher di default fa `queryKey.join("/")`: i segmenti diventano path, la route server deve usare path params, non query.
 - [lucide icons in jsPDF/Excel](lucide-icons-in-jspdf.md) — rasterizza lucide via renderToStaticMarkup→canvas→PNG per il PDF; in Excel (SheetJS) usa un'emoji, niente immagini in cella.
+- [Pure logic in shared/ for tsx tests](pure-logic-for-tsx-tests.md) — i test tsx non risolvono alias @shared/@ né caricano react/jsPDF/xlsx; estrai logica pura in shared/ (import relativi) o lib con solo import type.

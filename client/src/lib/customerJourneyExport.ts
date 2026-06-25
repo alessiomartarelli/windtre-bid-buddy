@@ -3,17 +3,20 @@ import { renderToStaticMarkup } from "react-dom/server";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
-import {
-  CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS,
-} from "@shared/customerJourney";
+import { CJ_DRIVER_ORDER } from "@shared/customerJourney";
 import type { CustomerJourney, CustomerJourneyItem, CjDriver } from "@shared/schema";
-import { CJ_DRIVER_ICONS, CJ_DRIVER_EMOJI } from "./customerJourneyIcons";
+import {
+  CJ_DRIVER_EMOJI, LIST_FIXED_COLS,
+  type CjExportDriverSummary, type CjListJourney,
+  journeyTitle, detailMeta, detailFileBase,
+  driverTableHead, driverTableBody, contractsHead, contractsBody,
+  detailExcelHeaderRows,
+  listSubtitle, listPdfHead, listPdfBody,
+  listExcelHeaderRows, listExcelHead, listExcelBody,
+} from "@shared/customerJourneyExport";
+import { CJ_DRIVER_ICONS } from "./customerJourneyIcons";
 
-interface DriverSummary {
-  driver: string;
-  activated: boolean;
-  count: number;
-}
+export type DriverSummary = CjExportDriverSummary;
 
 export interface JourneyExportData {
   journey: CustomerJourney;
@@ -22,25 +25,8 @@ export interface JourneyExportData {
 }
 
 export interface JourneyListExportData {
-  journeys: (CustomerJourney & { drivers: DriverSummary[] })[];
+  journeys: CjListJourney[];
   filterLabel?: string;
-}
-
-function fmtDate(d: string | Date | null | undefined): string {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("it-IT");
-}
-
-function journeyTitle(j: CustomerJourney): string {
-  if (j.customerType === "azienda") return j.ragioneSociale || j.nominativo || j.customerKey;
-  const full = [j.nome, j.cognome].filter(Boolean).join(" ").trim();
-  return full || j.nominativo || j.customerKey;
-}
-
-function safeFileName(s: string): string {
-  return s.replace(/[^\w.-]+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "") || "journey";
 }
 
 // Rasterizza un'icona lucide (la stessa mostrata a schermo) in un PNG dataURL,
@@ -99,14 +85,6 @@ async function buildIconMap(): Promise<Record<string, string>> {
   return map;
 }
 
-function driverLabel(driver: string): string {
-  return CJ_DRIVER_LABELS[driver as CjDriver] || driver;
-}
-
-function itemDescription(it: CustomerJourneyItem): string {
-  return it.descrizione || it.tipologia || it.categoria || "—";
-}
-
 export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
   const { journey, items, drivers } = data;
   const iconMap = await buildIconMap();
@@ -122,15 +100,7 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
 
   doc.setFontSize(10);
   doc.setTextColor(110, 110, 110);
-  const meta = [
-    `${journey.customerType === "azienda" ? "P.IVA" : "CF"}: ${journey.customerKey}`,
-    journey.telefono ? `Tel: ${journey.telefono}` : "",
-    journey.codiceCliente ? `Cod. cliente: ${journey.codiceCliente}` : "",
-    `Aperta il ${fmtDate(journey.openedAt)}`,
-  ].filter(Boolean).join("  ·  ");
-  doc.text(meta, 14, 34);
-
-  const driverMap = new Map(drivers.map((d) => [d.driver, d]));
+  doc.text(detailMeta(journey), 14, 34);
 
   // Sezione Driver: icona + nome + stato.
   doc.setFontSize(13);
@@ -139,16 +109,8 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
 
   autoTable(doc, {
     startY: 48,
-    head: [["", "Driver", "Stato", "Contratti"]],
-    body: CJ_DRIVER_ORDER.map((driver) => {
-      const s = driverMap.get(driver);
-      return [
-        "",
-        driverLabel(driver),
-        s?.activated ? "Attivato" : "Attivabile",
-        String(s?.count ?? 0),
-      ];
-    }),
+    head: [driverTableHead()],
+    body: driverTableBody(drivers, false),
     styles: { fontSize: 9, cellPadding: 2, valign: "middle" },
     headStyles: { fillColor: [99, 102, 241] },
     columnStyles: { 0: { cellWidth: 10 } },
@@ -172,24 +134,8 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
   if (items.length > 0) {
     autoTable(doc, {
       startY: afterDrivers + 14,
-      head: [[
-        "", "Driver", "Descrizione", "Contratto", "Addetto", "PDV",
-        "IMEI", "RATA/CANONE", "Inserito", "Attivato", "Stato", "Gettone",
-      ]],
-      body: items.map((it) => [
-        "",
-        driverLabel(it.driver),
-        itemDescription(it),
-        it.codiceContratto || "—",
-        it.addetto || "—",
-        it.pdvDestinazione || it.pdvOrigine || "—",
-        it.imei || "—",
-        it.rata ? `€ ${it.rata}` : it.canone && it.driver !== "telefono" ? `€ ${it.canone}` : "—",
-        fmtDate(it.dataInserimento),
-        fmtDate(it.dataAttivazione),
-        CJ_ITEM_STATE_LABELS[it.state as keyof typeof CJ_ITEM_STATE_LABELS] || it.state,
-        it.gettoneConfirmed ? "Sì" : "No",
-      ]),
+      head: [contractsHead()],
+      body: contractsBody(items, false),
       styles: { fontSize: 7.5, cellPadding: 1.5, valign: "middle", overflow: "linebreak" },
       headStyles: { fillColor: [99, 102, 241], fontSize: 7.5 },
       columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 32 } },
@@ -207,61 +153,25 @@ export async function exportJourneyPdf(data: JourneyExportData): Promise<void> {
   }
 
   void pageW;
-  doc.save(`customer_journey_${safeFileName(journeyTitle(journey))}.pdf`);
+  doc.save(`${detailFileBase(journey)}.pdf`);
 }
 
 export function exportJourneyExcel(data: JourneyExportData): void {
   const { journey, items, drivers } = data;
-  const driverMap = new Map(drivers.map((d) => [d.driver, d]));
   const workbook = XLSX.utils.book_new();
 
-  const headerRows: (string | number)[][] = [
-    ["Customer Journey"],
-    [journeyTitle(journey)],
-    [`${journey.customerType === "azienda" ? "P.IVA" : "CF"}`, journey.customerKey],
-    ["Telefono", journey.telefono || "—"],
-    ["Cod. cliente", journey.codiceCliente || "—"],
-    ["Aperta il", fmtDate(journey.openedAt)],
-    [],
-  ];
-
   const driverRows: (string | number)[][] = [
-    ...headerRows,
-    ["", "Driver", "Stato", "Contratti"],
-    ...CJ_DRIVER_ORDER.map((driver) => {
-      const s = driverMap.get(driver);
-      return [
-        CJ_DRIVER_EMOJI[driver] || "",
-        driverLabel(driver),
-        s?.activated ? "Attivato" : "Attivabile",
-        s?.count ?? 0,
-      ];
-    }),
+    ...detailExcelHeaderRows(journey),
+    driverTableHead(),
+    ...driverTableBody(drivers, true),
   ];
   const wsDriver = XLSX.utils.aoa_to_sheet(driverRows);
   wsDriver["!cols"] = [{ wch: 4 }, { wch: 18 }, { wch: 14 }, { wch: 10 }];
   XLSX.utils.book_append_sheet(workbook, wsDriver, "Driver");
 
-  const contractHead = [
-    "", "Driver", "Descrizione", "Contratto", "Addetto", "PDV",
-    "IMEI", "RATA/CANONE", "Inserito", "Attivato", "Stato", "Gettone",
-  ];
   const contractRows: (string | number)[][] = [
-    contractHead,
-    ...items.map((it) => [
-      CJ_DRIVER_EMOJI[it.driver as CjDriver] || "",
-      driverLabel(it.driver),
-      itemDescription(it),
-      it.codiceContratto || "—",
-      it.addetto || "—",
-      it.pdvDestinazione || it.pdvOrigine || "—",
-      it.imei || "—",
-      it.rata ? `€ ${it.rata}` : it.canone && it.driver !== "telefono" ? `€ ${it.canone}` : "—",
-      fmtDate(it.dataInserimento),
-      fmtDate(it.dataAttivazione),
-      CJ_ITEM_STATE_LABELS[it.state as keyof typeof CJ_ITEM_STATE_LABELS] || it.state,
-      it.gettoneConfirmed ? "Sì" : "No",
-    ]),
+    contractsHead(),
+    ...contractsBody(items, true),
   ];
   const wsContracts = XLSX.utils.aoa_to_sheet(contractRows);
   wsContracts["!cols"] = [
@@ -270,23 +180,8 @@ export function exportJourneyExcel(data: JourneyExportData): void {
   ];
   XLSX.utils.book_append_sheet(workbook, wsContracts, "Contratti");
 
-  XLSX.writeFile(workbook, `customer_journey_${safeFileName(journeyTitle(journey))}.xlsx`);
+  XLSX.writeFile(workbook, `${detailFileBase(journey)}.xlsx`);
 }
-
-function journeyDriverMap(
-  j: CustomerJourney & { drivers: DriverSummary[] },
-): Map<string, DriverSummary> {
-  return new Map((j.drivers ?? []).map((d) => [d.driver, d]));
-}
-
-function activeDriverCount(j: CustomerJourney & { drivers: DriverSummary[] }): number {
-  const m = journeyDriverMap(j);
-  return CJ_DRIVER_ORDER.filter((d) => m.get(d)?.activated).length;
-}
-
-// Numero di colonne fisse (non-driver) prima delle colonne per-driver,
-// usato per mappare l'indice colonna ↔ driver nei callback di disegno.
-const LIST_FIXED_COLS = 5;
 
 export async function exportJourneyListPdf(data: JourneyListExportData): Promise<void> {
   const { journeys, filterLabel } = data;
@@ -299,31 +194,13 @@ export async function exportJourneyListPdf(data: JourneyListExportData): Promise
 
   doc.setFontSize(10);
   doc.setTextColor(110, 110, 110);
-  const subtitle = [
-    `${journeys.length} journey`,
-    filterLabel,
-    `Esportato il ${fmtDate(new Date())}`,
-  ].filter(Boolean).join("  ·  ");
-  doc.text(subtitle, 14, 25);
+  doc.text(listSubtitle(journeys, filterLabel, new Date()), 14, 25);
 
   const totalDrivers = CJ_DRIVER_ORDER.length;
   autoTable(doc, {
     startY: 30,
-    head: [[
-      "Cliente", "Tipo", "CF/P.IVA", "Stato", "Driver",
-      ...CJ_DRIVER_ORDER.map(() => ""),
-    ]],
-    body: journeys.map((j) => {
-      const m = journeyDriverMap(j);
-      return [
-        journeyTitle(j),
-        j.customerType === "azienda" ? "Business" : "Privato",
-        j.customerKey,
-        j.status === "aperta" ? "Aperta" : "Chiusa",
-        `${activeDriverCount(j)}/${totalDrivers}`,
-        ...CJ_DRIVER_ORDER.map((d) => (m.get(d)?.activated ? "Si" : "")),
-      ];
-    }),
+    head: [listPdfHead()],
+    body: listPdfBody(journeys),
     styles: { fontSize: 8, cellPadding: 1.8, valign: "middle", overflow: "linebreak" },
     headStyles: { fillColor: [99, 102, 241], fontSize: 8, halign: "center", minCellHeight: 9 },
     columnStyles: {
@@ -355,36 +232,11 @@ export async function exportJourneyListPdf(data: JourneyListExportData): Promise
 export function exportJourneyListExcel(data: JourneyListExportData): void {
   const { journeys, filterLabel } = data;
   const workbook = XLSX.utils.book_new();
-  const totalDrivers = CJ_DRIVER_ORDER.length;
-
-  const headerRows: (string | number)[][] = [
-    ["Customer Journey — Elenco"],
-    [`${journeys.length} journey`],
-  ];
-  if (filterLabel) headerRows.push([filterLabel]);
-  headerRows.push([`Esportato il ${fmtDate(new Date())}`]);
-  headerRows.push([]);
-
-  const tableHead = [
-    "Cliente", "Tipo", "CF/P.IVA", "Telefono", "Stato", "Driver attivati",
-    ...CJ_DRIVER_ORDER.map((d) => CJ_DRIVER_EMOJI[d] || driverLabel(d)),
-  ];
 
   const rows: (string | number)[][] = [
-    ...headerRows,
-    tableHead,
-    ...journeys.map((j) => {
-      const m = journeyDriverMap(j);
-      return [
-        journeyTitle(j),
-        j.customerType === "azienda" ? "Business" : "Privato",
-        j.customerKey,
-        j.telefono || "—",
-        j.status === "aperta" ? "Aperta" : "Chiusa",
-        `${activeDriverCount(j)}/${totalDrivers}`,
-        ...CJ_DRIVER_ORDER.map((d) => (m.get(d)?.activated ? "Sì" : "")),
-      ];
-    }),
+    ...listExcelHeaderRows(journeys, filterLabel, new Date()),
+    listExcelHead(),
+    ...listExcelBody(journeys),
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
