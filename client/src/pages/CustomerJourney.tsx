@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useCallback, memo, Fragment } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, memo, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AppNavbar } from "@/components/AppNavbar";
@@ -174,6 +175,208 @@ const EMPTY_REPORT_ROWS: CjReportRow[] = [];
 const ReportView = memo(ReportViewImpl);
 const AnalisiView = memo(AnalisiViewImpl);
 const JourneyDetailView = memo(JourneyDetailViewImpl);
+
+// Numero di colonne della griglia schede in base alla larghezza viewport,
+// allineato ai breakpoint Tailwind usati nel layout (md=768, lg=1024).
+function colsForWidth(w: number): number {
+  if (w >= 1024) return 3;
+  if (w >= 768) return 2;
+  return 1;
+}
+
+function useResponsiveColumns(): number {
+  const [cols, setCols] = useState(() =>
+    typeof window === "undefined" ? 3 : colsForWidth(window.innerWidth),
+  );
+  useEffect(() => {
+    const onResize = () => setCols(colsForWidth(window.innerWidth));
+    window.addEventListener("resize", onResize);
+    onResize();
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return cols;
+}
+
+// Offset assoluto (dal top del documento) di un elemento, ricalcolato al resize
+// e ad ogni layout: serve come `scrollMargin` per i window virtualizer, così la
+// finestra virtuale è ancorata alla posizione reale della lista/tabella anche
+// quando i controlli sopra cambiano altezza (filtri, banner, ecc.).
+function useDocumentOffset<T extends HTMLElement>(ref: React.RefObject<T>): number {
+  const [offset, setOffset] = useState(0);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = ref.current;
+      if (el) setOffset(el.getBoundingClientRect().top + window.scrollY);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  });
+  return offset;
+}
+
+// Card singola di una scheda cliente, memoizzata: con la virtualizzazione si
+// montano/smontano molte card durante lo scroll, quindi evitiamo di
+// ri-renderizzare quelle invariate (onSelect è stabile via useCallback).
+const JourneyCard = memo(function JourneyCard({
+  j,
+  onSelect,
+}: {
+  j: JourneyListItem;
+  onSelect: (id: string) => void;
+}) {
+  const drivers = CJ_DRIVER_ORDER.map((d) => ({
+    driver: d,
+    activated: j.drivers?.find((s) => s.driver === d)?.activated ?? false,
+  }));
+  const activeCount = drivers.filter((d) => d.activated).length;
+  const total = drivers.length;
+  const pct = Math.round((activeCount / total) * 100);
+  return (
+    <Card
+      className="cursor-pointer hover-elevate transition-all flex flex-col"
+      onClick={() => onSelect(j.id)}
+      data-testid={`card-journey-${j.id}`}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2 min-w-0">
+            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${j.customerType === "azienda" ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300" : "bg-sky-500/15 text-sky-600 dark:text-sky-300"}`}>
+              {j.customerType === "azienda" ? (
+                <Building2 className="h-4 w-4" />
+              ) : (
+                <User className="h-4 w-4" />
+              )}
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate" data-testid={`text-journey-name-${j.id}`}>
+                {journeyTitle(j)}
+              </span>
+              {journeySubtitle(j) && (
+                <span
+                  className="truncate text-xs font-normal text-muted-foreground"
+                  data-testid={`text-journey-referente-${j.id}`}
+                >
+                  {journeySubtitle(j)}
+                </span>
+              )}
+            </span>
+          </CardTitle>
+          <Badge
+            variant="outline"
+            className={`text-xs shrink-0 ${j.status === "aperta" ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`}
+            data-testid={`badge-status-${j.id}`}
+          >
+            {j.status === "aperta" ? "Aperta" : "Chiusa"}
+          </Badge>
+        </div>
+        <CardDescription className="text-xs">
+          {j.customerKey} · aperta il {fmtDate(j.openedAt)}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="mt-auto space-y-3">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Driver attivati</span>
+          <span className="font-semibold tabular-nums" data-testid={`text-driver-count-${j.id}`}>
+            {activeCount}/{total}
+          </span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-emerald-500 transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Valore cliente</span>
+          <span className="font-semibold tabular-nums" data-testid={`text-valore-${j.id}`}>
+            {fmtEuro(j.valore)}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          {drivers.map((d) => (
+            <div
+              key={d.driver}
+              className={`flex items-center gap-1 rounded-md border px-1.5 py-1 ${d.activated ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-dashed border-border bg-muted/30 text-muted-foreground"}`}
+              data-testid={`card-driver-${d.driver}-${j.id}`}
+              title={`${CJ_DRIVER_LABELS[d.driver]}: ${d.activated ? "attivato" : "attivabile"}`}
+            >
+              {d.activated ? (
+                <CheckCircle2 className="h-3 w-3 shrink-0" />
+              ) : (
+                <Circle className="h-3 w-3 shrink-0 opacity-50" />
+              )}
+              {(() => {
+                const Icon = CJ_DRIVER_ICONS[d.driver as CjDriver];
+                return Icon ? <Icon className="h-3 w-3 shrink-0" /> : null;
+              })()}
+              <span className="truncate text-[10px] font-medium leading-tight">
+                {CJ_DRIVER_LABELS[d.driver]}
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
+// Griglia schede virtualizzata sullo scroll della finestra: renderizza solo le
+// righe (di `cols` card) visibili + overscan, così migliaia di schede non
+// montano migliaia di nodi DOM tutti insieme. Le altezze variabili (sottotitolo
+// referente) sono misurate via `measureElement`.
+function VirtualJourneyGrid({
+  journeys,
+  onSelect,
+}: {
+  journeys: JourneyListItem[];
+  onSelect: (id: string) => void;
+}) {
+  const cols = useResponsiveColumns();
+  const parentRef = useRef<HTMLDivElement>(null);
+  const scrollMargin = useDocumentOffset(parentRef);
+  const rowCount = Math.ceil(journeys.length / cols);
+  const virtualizer = useWindowVirtualizer({
+    count: rowCount,
+    estimateSize: () => 236,
+    overscan: 3,
+    scrollMargin,
+  });
+  return (
+    <div
+      ref={parentRef}
+      style={{ position: "relative", height: virtualizer.getTotalSize() }}
+    >
+      {virtualizer.getVirtualItems().map((vr) => {
+        const start = vr.index * cols;
+        const rowItems = journeys.slice(start, start + cols);
+        return (
+          <div
+            key={vr.key}
+            data-index={vr.index}
+            ref={virtualizer.measureElement}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              transform: `translateY(${vr.start - scrollMargin}px)`,
+            }}
+          >
+            <div
+              className="grid gap-3 pb-3"
+              style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+            >
+              {rowItems.map((j) => (
+                <JourneyCard key={j.id} j={j} onSelect={onSelect} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function CustomerJourneyPage() {
   const { profile } = useAuth();
@@ -875,105 +1078,7 @@ export default function CustomerJourneyPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {sorted.map((j) => {
-                  const drivers = CJ_DRIVER_ORDER.map((d) => ({
-                    driver: d,
-                    activated: j.drivers?.find((s) => s.driver === d)?.activated ?? false,
-                  }));
-                  const activeCount = drivers.filter((d) => d.activated).length;
-                  const total = drivers.length;
-                  const pct = Math.round((activeCount / total) * 100);
-                  return (
-                      <Card
-                        key={j.id}
-                        className="cursor-pointer hover-elevate transition-all flex flex-col"
-                        onClick={() => setSelectedId(j.id)}
-                        data-testid={`card-journey-${j.id}`}
-                      >
-                        <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <CardTitle className="text-base flex items-center gap-2 min-w-0">
-                              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${j.customerType === "azienda" ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300" : "bg-sky-500/15 text-sky-600 dark:text-sky-300"}`}>
-                                {j.customerType === "azienda" ? (
-                                  <Building2 className="h-4 w-4" />
-                                ) : (
-                                  <User className="h-4 w-4" />
-                                )}
-                              </span>
-                              <span className="flex min-w-0 flex-col">
-                                <span className="truncate" data-testid={`text-journey-name-${j.id}`}>
-                                  {journeyTitle(j)}
-                                </span>
-                                {journeySubtitle(j) && (
-                                  <span
-                                    className="truncate text-xs font-normal text-muted-foreground"
-                                    data-testid={`text-journey-referente-${j.id}`}
-                                  >
-                                    {journeySubtitle(j)}
-                                  </span>
-                                )}
-                              </span>
-                            </CardTitle>
-                            <Badge
-                              variant="outline"
-                              className={`text-xs shrink-0 ${j.status === "aperta" ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`}
-                              data-testid={`badge-status-${j.id}`}
-                            >
-                              {j.status === "aperta" ? "Aperta" : "Chiusa"}
-                            </Badge>
-                          </div>
-                          <CardDescription className="text-xs">
-                            {j.customerKey} · aperta il {fmtDate(j.openedAt)}
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="mt-auto space-y-3">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Driver attivati</span>
-                            <span className="font-semibold tabular-nums" data-testid={`text-driver-count-${j.id}`}>
-                              {activeCount}/{total}
-                            </span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                            <div
-                              className="h-full rounded-full bg-emerald-500 transition-all"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Valore cliente</span>
-                            <span className="font-semibold tabular-nums" data-testid={`text-valore-${j.id}`}>
-                              {fmtEuro(j.valore)}
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-3 gap-1.5">
-                            {drivers.map((d) => (
-                              <div
-                                key={d.driver}
-                                className={`flex items-center gap-1 rounded-md border px-1.5 py-1 ${d.activated ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-dashed border-border bg-muted/30 text-muted-foreground"}`}
-                                data-testid={`card-driver-${d.driver}-${j.id}`}
-                                title={`${CJ_DRIVER_LABELS[d.driver]}: ${d.activated ? "attivato" : "attivabile"}`}
-                              >
-                                {d.activated ? (
-                                  <CheckCircle2 className="h-3 w-3 shrink-0" />
-                                ) : (
-                                  <Circle className="h-3 w-3 shrink-0 opacity-50" />
-                                )}
-                                {(() => {
-                                  const Icon = CJ_DRIVER_ICONS[d.driver as CjDriver];
-                                  return Icon ? <Icon className="h-3 w-3 shrink-0" /> : null;
-                                })()}
-                                <span className="truncate text-[10px] font-medium leading-tight">
-                                  {CJ_DRIVER_LABELS[d.driver]}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                  );
-                })}
-              </div>
+              <VirtualJourneyGrid journeys={sorted} onSelect={setSelectedId} />
             )}
           </>
         ) : (
@@ -1009,6 +1114,78 @@ export default function CustomerJourneyPage() {
         )}
       </main>
     </div>
+  );
+}
+
+// Riga singola della tabella Dettaglio, estratta per essere riusata sia nel
+// rendering normale sia in quello virtualizzato.
+function ReportRow({ g }: { g: CjReportGroup }) {
+  return (
+    <TableRow data-testid={`row-report-${g.key}`}>
+      <TableCell className="font-medium" data-testid={`text-report-label-${g.key}`}>
+        {g.label}
+      </TableCell>
+      <TableCell className="text-right tabular-nums" data-testid={`text-report-clienti-${g.key}`}>
+        {g.clienti}
+      </TableCell>
+      <TableCell className="text-right tabular-nums" data-testid={`text-report-contratti-${g.key}`}>
+        {g.contratti}
+      </TableCell>
+      <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400" data-testid={`text-report-attivati-${g.key}`}>
+        {g.attivati}
+      </TableCell>
+      <TableCell className="text-right tabular-nums font-semibold" data-testid={`text-report-valore-${g.key}`}>
+        {fmtEuro(g.valore)}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// Oltre questa soglia (tipicamente la dimensione "Cliente", una riga per
+// journey) la tabella Dettaglio viene virtualizzata. Sotto soglia si renderizza
+// normalmente, così le viste piccole (negozio/addetto) restano identiche.
+const REPORT_VIRTUALIZE_THRESHOLD = 150;
+const REPORT_ROW_HEIGHT = 49;
+
+// Corpo tabella Dettaglio virtualizzato sullo scroll della finestra: solo le
+// righe visibili (+ overscan) sono montate; due righe spacer in alto e in basso
+// preservano l'altezza/scrollbar. Le righe sono a riga singola, quindi basta
+// un'altezza stimata fissa (niente measureElement).
+function VirtualReportRows({ groups }: { groups: CjReportGroup[] }) {
+  const sentinelRef = useRef<HTMLTableRowElement>(null);
+  const scrollMargin = useDocumentOffset(sentinelRef);
+  const virtualizer = useWindowVirtualizer({
+    count: groups.length,
+    estimateSize: () => REPORT_ROW_HEIGHT,
+    overscan: 10,
+    scrollMargin,
+  });
+  const items = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
+  const paddingTop = items.length ? items[0].start - scrollMargin : 0;
+  const paddingBottom = items.length
+    ? totalSize - items[items.length - 1].end + scrollMargin
+    : 0;
+  return (
+    <>
+      {/* sentinella a altezza 0 in cima: misura il top reale del corpo tabella */}
+      <tr ref={sentinelRef} aria-hidden style={{ height: 0 }}>
+        <td style={{ padding: 0, border: 0 }} colSpan={5} />
+      </tr>
+      {paddingTop > 0 && (
+        <tr aria-hidden>
+          <td style={{ height: paddingTop, padding: 0, border: 0 }} colSpan={5} />
+        </tr>
+      )}
+      {items.map((vi) => (
+        <ReportRow key={groups[vi.index].key} g={groups[vi.index]} />
+      ))}
+      {paddingBottom > 0 && (
+        <tr aria-hidden>
+          <td style={{ height: paddingBottom, padding: 0, border: 0 }} colSpan={5} />
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -1116,25 +1293,11 @@ function ReportViewImpl({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {groups.map((g) => (
-                  <TableRow key={g.key} data-testid={`row-report-${g.key}`}>
-                    <TableCell className="font-medium" data-testid={`text-report-label-${g.key}`}>
-                      {g.label}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums" data-testid={`text-report-clienti-${g.key}`}>
-                      {g.clienti}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums" data-testid={`text-report-contratti-${g.key}`}>
-                      {g.contratti}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400" data-testid={`text-report-attivati-${g.key}`}>
-                      {g.attivati}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold" data-testid={`text-report-valore-${g.key}`}>
-                      {fmtEuro(g.valore)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {groups.length > REPORT_VIRTUALIZE_THRESHOLD ? (
+                  <VirtualReportRows groups={groups} />
+                ) : (
+                  groups.map((g) => <ReportRow key={g.key} g={g} />)
+                )}
               </TableBody>
             </Table>
           )}
