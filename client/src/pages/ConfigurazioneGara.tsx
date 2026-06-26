@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useGaraConfig, GaraConfigPdv, GaraConfigData } from '@/hooks/useGaraConfig';
-import { CLUSTER_OPTIONS, CLUSTER_PIVA_OPTIONS, WEEKDAY_LABELS, ClusterCode } from '@/types/preventivatore';
+import { CLUSTER_OPTIONS, CLUSTER_PIVA_OPTIONS, WEEKDAY_LABELS, ClusterCode, type ClusterPIvaCode } from '@/types/preventivatore';
 import { getDefaultTarget100, calculateTarget80, calculatePremio80 } from '@/types/partnership-reward';
 import { getThresholdsByCluster, mapClusterMobileToClusterPista, getDefaultFissoThresholds, mapClusterFissoToNumber } from '@/utils/preventivatore-helpers';
 import { calcolaSoglieDefaultPerRS as calcolaSoglieEnergiaDefault } from '@/types/energia';
@@ -690,7 +690,7 @@ export default function ConfigurazioneGara() {
       if (cfg.importedFiles?.length) setImportedFiles(cfg.importedFiles as Array<{ label: string; type: PdfType; fileName: string }>);
       else setImportedFiles([]);
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
-      setExtraGaraIvaSogliePerRS(cfg.extraGaraIvaSogliePerRS || {});
+      setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
     }
     setIsDirty(false);
     setInitialLoaded(true);
@@ -768,7 +768,7 @@ export default function ConfigurazioneGara() {
         setImportedFiles([]);
       }
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
-      setExtraGaraIvaSogliePerRS(cfg.extraGaraIvaSogliePerRS || {});
+      setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
     } else {
       setConfigName('');
       setTipologiaGara('gara_operatore');
@@ -1188,7 +1188,7 @@ export default function ConfigurazioneGara() {
       };
 
       if (pdfData.soglieExtraPIva) {
-        updatedSoglie[targetRS].clusterPIva = pdfData.soglieExtraPIva.cluster;
+        updatedSoglie[targetRS].clusterPIva = pdfData.soglieExtraPIva.cluster as ClusterPIvaCode;
         updatedSoglie[targetRS].s1 = pdfData.soglieExtraPIva.s1;
         updatedSoglie[targetRS].s2 = pdfData.soglieExtraPIva.s2;
         updatedSoglie[targetRS].s3 = pdfData.soglieExtraPIva.s3;

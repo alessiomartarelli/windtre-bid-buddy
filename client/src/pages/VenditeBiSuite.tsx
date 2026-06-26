@@ -812,12 +812,12 @@ export default function VenditeBiSuite() {
     XLSX.writeFile(wb, `vendite_per_addetto_${fromDate}_${toDate}.xlsx`);
   }, [addettoSummaries, allDomande, fromDate, toDate]);
 
-  const formatCurrency = (val: number) =>
+  const formatCurrency = (val: number | string) =>
     new Intl.NumberFormat("it-IT", {
       style: "currency",
       currency: "EUR",
       maximumFractionDigits: 2,
-    }).format(val);
+    }).format(typeof val === "string" ? parseFloat(val) || 0 : val);
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "-";

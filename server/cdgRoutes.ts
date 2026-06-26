@@ -615,7 +615,7 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     // Helper: codice logico effettivo (codicePos || nome). Usato sia per il
     // matching dell'entry che per propagare il rename alle spese quando cambia
     // solo `nome` su una entry priva di `codicePos`.
-    const effCode = (p: Record<string, unknown>) => {
+    const effCode = (p: PuntoVendita) => {
       const codicePos = String(p?.codicePos || "").trim();
       const nomePdv = String(p?.nome || "").trim();
       return codicePos || nomePdv;

@@ -3095,6 +3095,7 @@ export async function registerRoutes(
         pezzi: number;
         canone: number;
         ruleType: 'base' | 'additional';
+        descriptions?: Record<string, number>;
       };
 
       type AddonItem = {
