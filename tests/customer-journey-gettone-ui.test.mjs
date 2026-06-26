@@ -65,6 +65,12 @@ const LUIGI_PDV = `PDV ROMA ${crypto.randomBytes(3).toString('hex')}`.toUpperCas
 // errore l'annullato, Anna avrebbe 2 piste / 40% / 30€ invece di 1 / 20% / 20€.
 const ANNA_ADDETTO = `ANNA NERI ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
 const ANNA_PDV = `PDV TORINO ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
+// Addetto/PDV dedicati allo scenario 7 (SIM mobile annullata): la journey ha la
+// SIM mobile in stato "annullato" + cross-sell ATTIVI. Poiché la cohort gettone
+// richiede simAttive >= 1, l'intera journey deve essere ESCLUSA dall'Analisi
+// gettoni. Se la cohort la ammettesse per errore, Gina comparirebbe come riga.
+const GINA_ADDETTO = `GINA BLU ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
+const GINA_PDV = `PDV GENOVA ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
 
 // Apre la pagina Customer Journey autenticata con il cookie di sessione e
 // naviga fino alla vista Analisi gettoni raggruppata per addetto.
@@ -609,6 +615,79 @@ test('scenario 6: i contratti annullati/rifiutati sono esclusi da attivi, satura
       (await page.getByTestId(`text-report-attivati-${ANNA_ADDETTO}`).innerText()).trim(),
       '2', 'riga report Anna: 2 contratti attivi (fisso annullato escluso)',
     );
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 7 (Task #200): un cliente la cui SIM MOBILE è annullata/rifiutata è
+// escluso dall'intera coorte gettone. Lo scenario 6 copre un cross-sell
+// annullato accanto a una SIM ATTIVA; qui invece è la SIM mobile stessa ad
+// essere in stato non attivo ("annullato"). `buildGettoneJourneys` richiede
+// almeno una SIM mobile attiva (`simAttive >= 1`) perché una journey entri
+// nella coorte: una regressione che ammettesse questi clienti li farebbe
+// comparire come riga nell'Analisi gettoni. La logica pura è coperta dai test
+// di `customer-journey-report.test.mjs`, ma NESSUN test UI verificava il
+// rendering React di questa esclusione. Seminiamo Gina (SIM mobile annullata +
+// cross-sell energia ATTIVO) accanto a Mario (SIM attiva): solo Mario deve
+// comparire.
+// ===========================================================================
+test('scenario 7: a customer whose mobile SIM is cancelled is excluded from the gettone cohort', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
+  const browser = await launchBrowser();
+  try {
+    // Mario: SIM mobile ATTIVA + cross-sell => entra nella coorte.
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFMARIO').toUpperCase(),
+      nome: 'Cliente Mario',
+      addetto: MARIO_ADDETTO,
+      pdv: MARIO_PDV,
+      items: [
+        { driver: 'mobile', state: 'inserito' },
+        { driver: 'energia', state: 'inserito', importo: '50.00' },
+        { driver: 'fisso', state: 'inserito', importo: '20.00' },
+      ],
+    });
+    // Gina: SIM mobile ANNULLATA + cross-sell ATTIVO => esclusa dalla coorte.
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFGINA').toUpperCase(),
+      nome: 'Cliente Gina',
+      addetto: GINA_ADDETTO,
+      pdv: GINA_PDV,
+      items: [
+        { driver: 'mobile', state: 'annullato' },
+        { driver: 'energia', state: 'inserito', importo: '30.00' },
+      ],
+    });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await openAnalisiByAddetto(context);
+
+    // Mario (SIM attiva) compare nell'Analisi gettoni...
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 15000 });
+    // ...mentre Gina (SIM mobile annullata) è esclusa dalla coorte.
+    assert.equal(
+      await page.getByTestId(`row-gettone-${GINA_ADDETTO}`).count(),
+      0, 'Gina (cancelled mobile SIM) must NOT appear in the gettone analysis',
+    );
+
+    // Solo una riga gettone totale presente (quella di Mario).
+    const allRows = await page.locator('[data-testid^="row-gettone-"]:not([data-testid^="row-gettone-detail-"]):not([data-testid^="row-gettone-sim-"])').count();
+    assert.equal(allRows, 1, 'exactly one gettone row (Mario); the cancelled-SIM customer is excluded');
+
+    // Sanity check sulla tab "Dettaglio": Gina è comunque presente come riga
+    // report (i suoi contratti esistono), così l'esclusione è specifica della
+    // coorte gettone e non un effetto di un filtro globale.
+    await page.getByTestId('button-report-tab-dettaglio').click();
+    await page.getByTestId('button-report-dim-addetto').click();
+    await page.getByTestId(`row-report-${GINA_ADDETTO}`).waitFor({ state: 'visible', timeout: 15000 });
 
     await page.close();
     await context.close();
