@@ -1,8 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { execSync } from 'node:child_process';
-import { chromium } from 'playwright-core';
+import {
+  BASE,
+  uniq,
+  signup,
+  newPool,
+  launchBrowser,
+  newAuthedContext,
+  setRole,
+  seedJourney,
+  cleanupOrg,
+} from './helpers/uiTest.mjs';
 
 // Test suite UI per l'espansione del dettaglio dell'Analisi gettoni
 // (Task #194). Protegge da regressioni l'interazione di espansione/chiusura
@@ -28,8 +37,10 @@ import { chromium } from 'playwright-core';
 // Playwright e guidiamo la UI. Per l'isolamento mutiamo `role`/`bisuite_addetti`
 // del profilo (la route rilegge il profilo ad ogni richiesta) e ricarichiamo
 // la pagina. Cleanup completo del dev DB alla fine.
-
-const BASE = process.env.FINPLAN_BASE_URL || 'http://localhost:5000';
+//
+// Il boilerplate (chromium path, launch browser, signup + cookie injection,
+// pool pg, seed/cleanup, setRole) vive ora in `tests/helpers/uiTest.mjs`,
+// condiviso con gli altri test UI/DB-backed.
 
 // Driver/stato attesi -> 2 piste cross-sell per Mario (energia + fisso) e 1
 // per Luigi (energia). gettoneForPiste: [0,20,30,40,100,120], CJ_MAX_PISTE=5.
@@ -37,105 +48,6 @@ const BASE = process.env.FINPLAN_BASE_URL || 'http://localhost:5000';
 // Luigi: 1 pista  => fatturato 20€, saturazione 1/5 = 20%.
 const MARIO_ADDETTO = `MARIO ROSSI ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
 const LUIGI_ADDETTO = `LUIGI VERDI ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
-
-function uniq(prefix) {
-  return `${prefix}_${crypto.randomBytes(4).toString('hex')}`;
-}
-
-async function jsonReq(url, opts = {}) {
-  const r = await fetch(url, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-  });
-  let body = null;
-  const ct = r.headers.get('content-type') || '';
-  if (ct.includes('application/json')) body = await r.json().catch(() => null);
-  else body = await r.text().catch(() => null);
-  return { status: r.status, headers: r.headers, body };
-}
-
-// Estrae la prima coppia name=value dei cookie di sessione di Set-Cookie.
-function pickSessionCookie(headers) {
-  const sc = headers.getSetCookie?.() || headers.raw?.()['set-cookie'] || [];
-  const arr = Array.isArray(sc) ? sc : [sc];
-  const first = arr.map((c) => c.split(';')[0]).filter(Boolean)[0];
-  assert.ok(first, 'no session cookie returned by signup');
-  const eq = first.indexOf('=');
-  return { name: first.slice(0, eq), value: first.slice(eq + 1) };
-}
-
-async function signup() {
-  const email = `${uniq('cj_gettone_ui')}@example.com`;
-  const r = await jsonReq(`${BASE}/api/auth/signup`, {
-    method: 'POST',
-    body: JSON.stringify({
-      email,
-      password: 'Pa55word!',
-      fullName: 'CJ Gettone UI Test',
-      organizationName: uniq('CJGettoneUI'),
-    }),
-  });
-  assert.equal(r.status, 201, `signup failed: ${JSON.stringify(r.body)}`);
-  const cookie = pickSessionCookie(r.headers);
-  const profileId = r.body?.id;
-  const orgId = r.body?.organization?.id || r.body?.organizationId;
-  assert.ok(profileId && orgId, `missing ids in signup response: ${JSON.stringify(r.body)}`);
-  return { cookie, profileId, orgId };
-}
-
-// Crea una journey privata con N item. `items` = [{driver, state}], pdv/addetto
-// per item presi dai parametri. Ritorna l'id (uuid) della journey.
-async function seedJourney(pool, orgId, { customerKey, nome, addetto, pdv, items }) {
-  const cj = await pool.query(
-    `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, status, opened_at)
-       VALUES ($1, $2, 'privato', $3, 'aperta', now())
-     RETURNING id`,
-    [orgId, customerKey, nome],
-  );
-  const journeyId = cj.rows[0].id;
-  for (const it of items) {
-    await pool.query(
-      `INSERT INTO customer_journey_items
-         (journey_id, organization_id, driver, addetto, state, data_inserimento, pdv_destinazione, importo)
-       VALUES ($1, $2, $3, $4, $5, now(), $6, $7)`,
-      [journeyId, orgId, it.driver, addetto, it.state, pdv, it.importo ?? null],
-    );
-  }
-  return journeyId;
-}
-
-async function setRole(pool, profileId, role, addetti = []) {
-  await pool.query(
-    `UPDATE profiles SET role = $2, bisuite_addetti = $3::text[] WHERE id = $1`,
-    [profileId, role, addetti],
-  );
-}
-
-async function cleanup(pool, session) {
-  for (const q of [
-    [`DELETE FROM customer_journey_items WHERE organization_id = $1`, [session.orgId]],
-    [`DELETE FROM customer_journeys WHERE organization_id = $1`, [session.orgId]],
-    [`DELETE FROM profiles WHERE id = $1`, [session.profileId]],
-    [`DELETE FROM organizations WHERE id = $1`, [session.orgId]],
-  ]) {
-    await pool.query(q[0], q[1]).catch(() => {});
-  }
-}
-
-function newPool() {
-  return import('pg').then((pgMod) => {
-    const Pool = pgMod.default?.Pool || pgMod.Pool;
-    assert.ok(process.env.DATABASE_URL, 'DATABASE_URL must be set for this test');
-    return new Pool({ connectionString: process.env.DATABASE_URL });
-  });
-}
-
-function chromiumPath() {
-  if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
-  const out = execSync('which chromium-browser || which chromium', { encoding: 'utf8' }).trim();
-  assert.ok(out, 'chromium executable not found on PATH');
-  return out;
-}
 
 // Apre la pagina Customer Journey autenticata con il cookie di sessione e
 // naviga fino alla vista Analisi gettoni raggruppata per addetto.
@@ -154,12 +66,8 @@ async function openAnalisiByAddetto(context) {
 // ===========================================================================
 test('scenario 1: admin can expand a gettone row and see the saturation detail', async () => {
   const pool = await newPool();
-  const session = await signup();
-  const browser = await chromium.launch({
-    executablePath: chromiumPath(),
-    headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-  });
+  const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
+  const browser = await launchBrowser();
   try {
     const jMario = await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFMARIO').toUpperCase(),
@@ -183,10 +91,7 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
       ],
     });
 
-    const context = await browser.newContext();
-    await context.addCookies([
-      { name: session.cookie.name, value: session.cookie.value, domain: 'localhost', path: '/' },
-    ]);
+    const context = await newAuthedContext(browser, session);
     const page = await openAnalisiByAddetto(context);
 
     // Entrambe le righe addetto sono presenti.
@@ -250,7 +155,7 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
     await context.close();
   } finally {
     await browser.close().catch(() => {});
-    await cleanup(pool, session);
+    await cleanupOrg(pool, session);
     await pool.end().catch(() => {});
   }
 });
@@ -260,12 +165,8 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
 // ===========================================================================
 test('scenario 2: operator sees only their own clients in the gettone analysis', async () => {
   const pool = await newPool();
-  const session = await signup();
-  const browser = await chromium.launch({
-    executablePath: chromiumPath(),
-    headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-  });
+  const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
+  const browser = await launchBrowser();
   try {
     await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFMARIO').toUpperCase(),
@@ -292,10 +193,7 @@ test('scenario 2: operator sees only their own clients in the gettone analysis',
     // L'operatore è associato SOLO all'addetto di Mario (match case-insensitive).
     await setRole(pool, session.profileId, 'operatore', [MARIO_ADDETTO.toLowerCase()]);
 
-    const context = await browser.newContext();
-    await context.addCookies([
-      { name: session.cookie.name, value: session.cookie.value, domain: 'localhost', path: '/' },
-    ]);
+    const context = await newAuthedContext(browser, session);
     const page = await openAnalisiByAddetto(context);
 
     // Vede la riga di Mario...
@@ -314,7 +212,7 @@ test('scenario 2: operator sees only their own clients in the gettone analysis',
     await context.close();
   } finally {
     await browser.close().catch(() => {});
-    await cleanup(pool, session);
+    await cleanupOrg(pool, session);
     await pool.end().catch(() => {});
   }
 });
