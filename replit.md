@@ -200,6 +200,31 @@ mantenere snello questo file:
   (7) `itemEventDate` (attivazione→inserimento→null, data malformata ⇒ null).
   Lanciali via lo step di validation `cj-timeline-tests`
   (`bash scripts/run-customer-journey-timeline-tests.sh`). Run completo in ~1s.
+- **Customer Journey badge↔gettone parity tests**
+  (`tests/customer-journey-validity-gettone-parity.test.mjs`): 8 test
+  incrociati (Task #216) che blindano l'allineamento fra il badge "Conta/Non
+  conta" della scheda (`computeItemValidity` in
+  `client/src/lib/customerJourneyTimeline.ts`) e il conteggio piste del gettone
+  (`buildGettoneJourneys` in `shared/customerJourney.ts`). Le due logiche
+  condividono gli helper (mesi UTC, regola T0, finestra) ma restano funzioni
+  separate che partono da shape diverse (scheda da `CustomerJourneyItem`,
+  gettone da `CjReportRow`): un test incrociato impedisce che divergano in
+  silenzio (regressione del caso storico "30€ vs 40€"). Ogni scenario costruisce
+  UN dataset sintetico di contratti e da quell'unica sorgente deriva entrambe le
+  shape, poi verifica che il numero di badge `counts: true` == `pisteAttive`
+  della stessa journey. Coprono: (1) base mobile+1 pista; (2) pista del mese
+  prima di T0 (fuori finestra in entrambe); (3) driver duplicato gas+luce = una
+  pista; (4) stati ko/annullato/stornato esclusi; (5) trigger su contratto
+  NON-mobile (la timeline lo marca T0 ma conta come pista, come il gettone che
+  esclude solo i driver mobile — è il ramo che storicamente faceva divergere i
+  numeri); (6) dataset combinato con tutti i rami limite insieme; (7) confine
+  cohort — journey senza SIM mobile attiva esclusa del tutto dal gettone (regola
+  voluta, non divergenza, perciò la parità si asserisce solo dentro la cohort);
+  (8) indipendenza dall'ordine delle righe. Sono funzioni pure: NON serve né dev
+  server né DB, i moduli TS sono caricati via loader `tsx`. Lanciali via lo step
+  di validation `cj-validity-gettone-parity-tests`
+  (`bash scripts/run-customer-journey-validity-gettone-parity-tests.sh`). Run
+  completo in ~1s.
 - **Customer Journey export (PDF/Excel) tests**
   (`tests/customer-journey-export.test.mjs`): 26 test sulla logica pura di
   costruzione righe/colonne degli export (Task #190). La logica è stata
