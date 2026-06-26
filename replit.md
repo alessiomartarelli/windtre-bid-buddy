@@ -139,9 +139,10 @@ mantenere snello questo file:
   (`bash scripts/run-customer-journey-authz-tests.sh`); richiede il
   workflow "Start application" attivo. Run completo in ~1s.
 - **Admin role/org boundary tests** (`tests/admin-authz.test.mjs`):
-  2 scenari security-critical (Task #211) che bloccano la regressione dei
-  controlli aggiunti in Task #207 contro l'escalation di ruolo/org da parte
-  di un admin di tenant. (1) `POST /api/admin/create-user` fatta da un admin:
+  4 scenari security-critical (Task #211 + Task #213) che bloccano la
+  regressione dei controlli aggiunti in Task #207 contro l'escalation di
+  ruolo/org da parte di un admin di tenant. (1) `POST /api/admin/create-user`
+  fatta da un admin:
   `role="super_admin"` forzato nel payload ⇒ 403 e nessun super_admin creato;
   un `organization_id`/`organizationId` di un'altra org nel payload viene
   ignorato e l'utente è creato nella org dell'admin. (2)
@@ -149,7 +150,14 @@ mantenere snello questo file:
   403 per l'admin (cross-org negato), mentre il super_admin supera il
   controllo cross-org e raggiunge il lookup credenziali (400 perché la org
   estranea non ha credenziali BiSuite ⇒ prova che non è bloccato dal vincolo
-  di org). Stessa strategia degli altri authz test: signup admin + cookie, la
+  di org). (3) `POST /api/admin/update-user` (Task #213): un admin che fa
+  update con `role="super_admin"` ⇒ 403 e il ruolo del target NON cambia,
+  mentre il super_admin promuove con successo (200). (4) stesso update-user
+  ma cross-org: un admin che modifica un utente di un'altra org ⇒ 403
+  ("Cannot update users outside your organization") e il target resta
+  invariato, mentre il super_admin aggiorna con successo (200, no vincolo
+  org). Gli scenari 3-4 usano l'helper `createTargetUser` (insert profilo via
+  SQL in una data org). Stessa strategia degli altri authz test: signup admin + cookie, la
   route rilegge il profilo ad ogni richiesta quindi si muta `role` via
   `setRole`; una seconda org "estranea" è creata via SQL per i tentativi
   cross-org e ripulita nel `finally`. Lanciali via lo step di validation

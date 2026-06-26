@@ -44,6 +44,17 @@ async function createForeignOrg(pool) {
   return r.rows[0].id;
 }
 
+// Crea un profilo bersaglio via SQL in una data org. Ritorna l'id.
+async function createTargetUser(pool, orgId, role = 'operatore') {
+  const id = uniq('target_user');
+  await pool.query(
+    `INSERT INTO profiles (id, email, full_name, organization_id, role)
+       VALUES ($1, $2, $3, $4, $5)`,
+    [id, `${id}@example.com`, 'Target User', orgId, role],
+  );
+  return id;
+}
+
 // ===========================================================================
 // SCENARIO 1: POST /api/admin/create-user — un admin non può scavalcare
 //   ruolo (super_admin) né organizzazione.
@@ -166,6 +177,139 @@ test('scenario 2: bisuite-api is org-scoped for admin but cross-org for super_ad
       `super_admin reaches the creds lookup (missing creds => 400), got ${asSuper.status}: ${JSON.stringify(asSuper.body)}`,
     );
   } finally {
+    if (foreignOrgId) {
+      await pool.query(`DELETE FROM organizations WHERE id = $1`, [foreignOrgId]).catch(() => {});
+    }
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 3: POST /api/admin/update-user — un admin non può promuovere un
+//   utente a `super_admin` (mentre il super_admin può).
+//   (a) admin che fa update con role="super_admin" => 403, il ruolo NON cambia.
+//   (b) super_admin con lo stesso update => 200, il ruolo diventa super_admin.
+// ===========================================================================
+test('scenario 3: admin cannot promote a user to super_admin on update-user', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  let targetId;
+  try {
+    targetId = await createTargetUser(pool, session.orgId, 'operatore');
+
+    // (a) admin tenta di promuovere a super_admin => 403.
+    await setRole(pool, session.profileId, 'admin');
+    const escalate = await jsonReq(`${BASE}/api/admin/update-user`, {
+      method: 'POST',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ user_id: targetId, role: 'super_admin' }),
+    });
+    assert.equal(
+      escalate.status,
+      403,
+      `admin promoting a user to super_admin must be 403, got ${escalate.status}: ${JSON.stringify(escalate.body)}`,
+    );
+    assert.equal(
+      escalate.body?.error,
+      'Non puoi assegnare il ruolo super_admin',
+      `unexpected error message on forbidden promotion: ${JSON.stringify(escalate.body)}`,
+    );
+    const afterAdmin = await pool.query(`SELECT role FROM profiles WHERE id = $1`, [targetId]);
+    assert.equal(
+      afterAdmin.rows[0]?.role,
+      'operatore',
+      'target role must NOT change after a forbidden admin promotion',
+    );
+
+    // (b) super_admin promuove lo stesso utente => 200.
+    await setRole(pool, session.profileId, 'super_admin');
+    const allowed = await jsonReq(`${BASE}/api/admin/update-user`, {
+      method: 'POST',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ user_id: targetId, role: 'super_admin' }),
+    });
+    assert.equal(
+      allowed.status,
+      200,
+      `super_admin promoting a user must be 200, got ${allowed.status}: ${JSON.stringify(allowed.body)}`,
+    );
+    const afterSuper = await pool.query(`SELECT role FROM profiles WHERE id = $1`, [targetId]);
+    assert.equal(
+      afterSuper.rows[0]?.role,
+      'super_admin',
+      'super_admin must be able to promote a user to super_admin',
+    );
+  } finally {
+    if (targetId) {
+      await pool.query(`DELETE FROM profiles WHERE id = $1`, [targetId]).catch(() => {});
+    }
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 4: POST /api/admin/update-user — scoping per organizzazione.
+//   (a) admin che modifica un utente di un'altra org => 403
+//       ("Cannot update users outside your organization"), nessuna modifica.
+//   (b) super_admin sullo stesso utente estraneo => 200 (nessun vincolo di org).
+// ===========================================================================
+test('scenario 4: update-user is org-scoped for admin but cross-org for super_admin', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  let foreignOrgId;
+  let foreignUserId;
+  try {
+    foreignOrgId = await createForeignOrg(pool);
+    foreignUserId = await createTargetUser(pool, foreignOrgId, 'operatore');
+
+    // (a) admin tenta di modificare un utente di un'altra org => 403.
+    await setRole(pool, session.profileId, 'admin');
+    const asAdmin = await jsonReq(`${BASE}/api/admin/update-user`, {
+      method: 'POST',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ user_id: foreignUserId, full_name: 'Hacked By Admin' }),
+    });
+    assert.equal(
+      asAdmin.status,
+      403,
+      `admin updating a user of another org must be 403, got ${asAdmin.status}: ${JSON.stringify(asAdmin.body)}`,
+    );
+    assert.equal(
+      asAdmin.body?.message,
+      'Cannot update users outside your organization',
+      `unexpected error message on cross-org update: ${JSON.stringify(asAdmin.body)}`,
+    );
+    const afterAdmin = await pool.query(`SELECT full_name FROM profiles WHERE id = $1`, [foreignUserId]);
+    assert.equal(
+      afterAdmin.rows[0]?.full_name,
+      'Target User',
+      'foreign user must NOT be modified by a cross-org admin',
+    );
+
+    // (b) super_admin modifica lo stesso utente estraneo => 200.
+    await setRole(pool, session.profileId, 'super_admin');
+    const asSuper = await jsonReq(`${BASE}/api/admin/update-user`, {
+      method: 'POST',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ user_id: foreignUserId, full_name: 'Renamed By Super' }),
+    });
+    assert.equal(
+      asSuper.status,
+      200,
+      `super_admin must NOT be blocked cross-org, got ${asSuper.status}: ${JSON.stringify(asSuper.body)}`,
+    );
+    const afterSuper = await pool.query(`SELECT full_name FROM profiles WHERE id = $1`, [foreignUserId]);
+    assert.equal(
+      afterSuper.rows[0]?.full_name,
+      'Renamed By Super',
+      'super_admin must be able to update a user in any organization',
+    );
+  } finally {
+    if (foreignUserId) {
+      await pool.query(`DELETE FROM profiles WHERE id = $1`, [foreignUserId]).catch(() => {});
+    }
     if (foreignOrgId) {
       await pool.query(`DELETE FROM organizations WHERE id = $1`, [foreignOrgId]).catch(() => {});
     }
