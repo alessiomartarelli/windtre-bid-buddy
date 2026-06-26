@@ -544,8 +544,8 @@ export function gettoneDetailByKey(
       fatturato: j.fatturato,
     });
   }
-  for (const list of map.values()) {
-    list.sort((a, b) => b.saturazionePct - a.saturazionePct || a.cliente.localeCompare(b.cliente, "it"));
+  for (const list of Array.from(map.values())) {
+    list.sort((a: CjGettoneDetailRow, b: CjGettoneDetailRow) => b.saturazionePct - a.saturazionePct || a.cliente.localeCompare(b.cliente, "it"));
   }
   return map;
 }
