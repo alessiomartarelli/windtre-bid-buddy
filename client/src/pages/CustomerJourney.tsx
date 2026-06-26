@@ -1797,6 +1797,15 @@ function CustomerJourneyTimeline({
                             {itemNegozio(it)}
                             {it.codiceContratto ? ` · ${it.codiceContratto}` : ""}
                           </div>
+                          {it.addetto && (
+                            <div
+                              className="text-[10px] text-muted-foreground/80 truncate max-w-[200px]"
+                              title={it.addetto}
+                              data-testid={`timeline-addetto-${it.id}`}
+                            >
+                              Addetto: {it.addetto}
+                            </div>
+                          )}
                           {(() => {
                             const v = validity.get(it.id);
                             if (!v) return null;
