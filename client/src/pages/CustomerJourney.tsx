@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useMemo, useCallback, memo, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -144,6 +144,36 @@ function fmtPct(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
   return `${v.toLocaleString("it-IT", { maximumFractionDigits: 1 })}%`;
 }
+
+// Percentuale di completamento driver di una scheda (driver attivati / totale).
+// Funzione pura a livello di modulo: usata dall'ordinamento della lista schede.
+function journeyPct(j: JourneyListItem): number {
+  const total = CJ_DRIVER_ORDER.length;
+  const active = CJ_DRIVER_ORDER.filter(
+    (d) => j.drivers?.find((s) => s.driver === d)?.activated,
+  ).length;
+  return total > 0 ? active / total : 0;
+}
+
+const REPORT_DIM_LABEL: Record<ReportDim, string> = {
+  negozio: "Negozio",
+  addetto: "Addetto",
+  cliente: "Cliente / Ragione sociale",
+};
+
+// Default vuoti a riferimento stabile: usarli al posto di `?? []` evita di
+// generare un nuovo array a ogni render quando la query non ha ancora dati,
+// così i useMemo a valle non si invalidano inutilmente.
+const EMPTY_JOURNEYS: JourneyListItem[] = [];
+const EMPTY_REPORT_ROWS: CjReportRow[] = [];
+
+// Sotto-viste memoizzate: si ri-renderizzano solo quando cambiano le loro
+// props (riferimenti stabili grazie ai useMemo/useCallback nel componente
+// pagina), così l'apertura di una scheda o la digitazione nei filtri non le
+// ricalcola inutilmente. Le dichiarazioni `*Impl` sono hoisted.
+const ReportView = memo(ReportViewImpl);
+const AnalisiView = memo(AnalisiViewImpl);
+const JourneyDetailView = memo(JourneyDetailViewImpl);
 
 export default function CustomerJourneyPage() {
   const { profile } = useAuth();
@@ -313,38 +343,38 @@ export default function CustomerJourneyPage() {
     },
   });
 
-  const journeys = journeysQuery.data ?? [];
-  const reportRows = reportQuery.data ?? [];
+  const journeys = journeysQuery.data ?? EMPTY_JOURNEYS;
+  const reportRows = reportQuery.data ?? EMPTY_REPORT_ROWS;
 
   // Opzioni dei filtri Negozio/Operatore/Stato: unione dei valori distinti
   // presenti nelle schede (facet) e nelle righe report, così entrambe le viste
   // condividono lo stesso menù.
-  const pdvOptions = (() => {
+  const pdvOptions = useMemo(() => {
     const s = new Set<string>();
     for (const j of journeys) for (const p of j.pdvs ?? []) if (p) s.add(p);
     for (const r of reportRows) if (r.pdv) s.add(r.pdv);
     return Array.from(s).sort((a, b) => a.localeCompare(b, "it"));
-  })();
-  const addettoOptions = (() => {
+  }, [journeys, reportRows]);
+  const addettoOptions = useMemo(() => {
     const s = new Set<string>();
     for (const j of journeys) for (const a of j.addetti ?? []) if (a) s.add(a);
     for (const r of reportRows) if (r.addetto) s.add(r.addetto);
     return Array.from(s).sort((a, b) => a.localeCompare(b, "it"));
-  })();
-  const stateOptions = (() => {
+  }, [journeys, reportRows]);
+  const stateOptions = useMemo(() => {
     const s = new Set<string>();
     for (const j of journeys) for (const st of j.states ?? []) if (st) s.add(st);
     for (const r of reportRows) if (r.state) s.add(r.state);
     return CJ_ITEM_STATES.filter((st) => s.has(st));
-  })();
+  }, [journeys, reportRows]);
 
-  const activeFilters: CjListFilters = {
+  const activeFilters: CjListFilters = useMemo(() => ({
     typeFilter, pdvFilter, addettoFilter, stateFilter, search,
-  };
+  }), [typeFilter, pdvFilter, addettoFilter, stateFilter, search]);
 
   // Lista schede: una journey espone gli array di facet (PDV/addetti/stati)
   // raccolti fra i suoi item.
-  const filtered = journeys.filter((j) => matchesCjFilters({
+  const filtered = useMemo(() => journeys.filter((j) => matchesCjFilters({
     customerType: j.customerType,
     pdvs: j.pdvs ?? [],
     addetti: j.addetti ?? [],
@@ -352,21 +382,27 @@ export default function CustomerJourneyPage() {
     searchHay: [
       journeyTitle(j), j.customerKey, j.telefono, j.codiceCliente,
     ].filter(Boolean).join(" "),
-  }, activeFilters));
-  const countPrivato = journeys.filter((j) => j.customerType === "privato").length;
-  const countAzienda = journeys.filter((j) => j.customerType === "azienda").length;
+  }, activeFilters)), [journeys, activeFilters]);
+  const countPrivato = useMemo(
+    () => journeys.filter((j) => j.customerType === "privato").length,
+    [journeys],
+  );
+  const countAzienda = useMemo(
+    () => journeys.filter((j) => j.customerType === "azienda").length,
+    [journeys],
+  );
 
   // Righe report filtrate con gli stessi filtri della lista schede: una riga
   // item-level ha un singolo PDV/addetto/stato (wrappati in array).
-  const reportFiltered = reportRows.filter((r) => matchesCjFilters({
+  const reportFiltered = useMemo(() => reportRows.filter((r) => matchesCjFilters({
     customerType: r.customerType,
     pdvs: r.pdv ? [r.pdv] : [],
     addetti: r.addetto ? [r.addetto] : [],
     states: r.state ? [r.state] : [],
     searchHay: [r.cliente, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(" "),
-  }, activeFilters));
+  }, activeFilters)), [reportRows, activeFilters]);
 
-  const reportGroups = aggregateReport(reportFiltered, (r) => {
+  const reportGroups = useMemo(() => aggregateReport(reportFiltered, (r) => {
     if (reportDim === "negozio") {
       return { key: r.pdv || "—", label: r.pdv || "Senza negozio" };
     }
@@ -374,9 +410,9 @@ export default function CustomerJourneyPage() {
       return { key: r.addetto || "—", label: r.addetto || "Senza addetto" };
     }
     return { key: r.journeyId, label: r.cliente || r.customerKey };
-  });
+  }), [reportFiltered, reportDim]);
 
-  const reportTotals = reportFiltered.reduce(
+  const reportTotals = useMemo(() => reportFiltered.reduce(
     (acc, r) => {
       acc.contratti += 1;
       acc.valore += r.valore;
@@ -385,21 +421,34 @@ export default function CustomerJourneyPage() {
       return acc;
     },
     { contratti: 0, valore: 0, attivati: 0, journeys: new Set<string>() },
-  );
+  ), [reportFiltered]);
+  // Totali in forma serializzabile per ReportView (riferimento stabile per memo).
+  const reportTotalsView = useMemo(() => ({
+    clienti: reportTotals.journeys.size,
+    contratti: reportTotals.contratti,
+    attivati: reportTotals.attivati,
+    valore: reportTotals.valore,
+  }), [reportTotals]);
 
   // Analisi gettoni/fatturato (Task #192): dalle stesse righe filtrate
   // costruiamo una journey per cliente, la filtriamo per coorte (data
   // attivazione SIM) e aggreghiamo i gettoni maturati + il potenziale non
   // espresso alla saturazione scelta.
-  const gettoneJourneys = filterGettoneByDate(
+  const gettoneJourneys = useMemo(() => filterGettoneByDate(
     buildGettoneJourneys(reportFiltered),
     dateFrom || null,
     dateTo || null,
+  ), [reportFiltered, dateFrom, dateTo]);
+  const gettoneTot = useMemo(
+    () => gettoneTotals(gettoneJourneys, saturation),
+    [gettoneJourneys, saturation],
   );
-  const gettoneTot = gettoneTotals(gettoneJourneys, saturation);
-  const gettoneKeyFn = (j: CjGettoneJourney) =>
-    gettoneDim === "negozio" ? (j.pdv || "—") : (j.addetto || "—");
-  const gettoneGroups = aggregateGettone(
+  const gettoneKeyFn = useCallback(
+    (j: CjGettoneJourney) =>
+      gettoneDim === "negozio" ? (j.pdv || "—") : (j.addetto || "—"),
+    [gettoneDim],
+  );
+  const gettoneGroups = useMemo(() => aggregateGettone(
     gettoneJourneys,
     (j) => ({
       key: gettoneKeyFn(j),
@@ -408,37 +457,26 @@ export default function CustomerJourneyPage() {
         : (j.addetto || "Senza addetto"),
     }),
     saturation,
-  );
+  ), [gettoneJourneys, gettoneKeyFn, gettoneDim, saturation]);
   // Dettaglio per gruppo (clienti/SIM con % saturazione) per la riga espandibile.
-  const gettoneDetail = gettoneDetailByKey(gettoneJourneys, gettoneKeyFn);
+  const gettoneDetail = useMemo(
+    () => gettoneDetailByKey(gettoneJourneys, gettoneKeyFn),
+    [gettoneJourneys, gettoneKeyFn],
+  );
 
   const hasActiveFilters =
     typeFilter !== "tutti" || pdvFilter !== "tutti" ||
     addettoFilter !== "tutti" || stateFilter !== "tutti" || !!search.trim();
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setTypeFilter("tutti");
     setPdvFilter("tutti");
     setAddettoFilter("tutti");
     setStateFilter("tutti");
     setSearch("");
-  };
+  }, []);
 
-  const reportDimLabel: Record<ReportDim, string> = {
-    negozio: "Negozio",
-    addetto: "Addetto",
-    cliente: "Cliente / Ragione sociale",
-  };
-
-  const journeyPct = (j: JourneyListItem): number => {
-    const total = CJ_DRIVER_ORDER.length;
-    const active = CJ_DRIVER_ORDER.filter(
-      (d) => j.drivers?.find((s) => s.driver === d)?.activated,
-    ).length;
-    return total > 0 ? active / total : 0;
-  };
-
-  const sorted = [...filtered].sort((a, b) => {
+  const sorted = useMemo(() => [...filtered].sort((a, b) => {
     let cmp = 0;
     switch (sortKey) {
       case "data":
@@ -455,18 +493,18 @@ export default function CustomerJourneyPage() {
         break;
     }
     return sortDir === "asc" ? cmp : -cmp;
-  });
+  }), [filtered, sortKey, sortDir]);
 
-  const listFilterLabel = (() => {
+  const listFilterLabel = useMemo(() => {
     const parts: string[] = [];
     if (typeFilter === "privato") parts.push("Solo privati");
     else if (typeFilter === "azienda") parts.push("Solo business");
     if (search.trim()) parts.push(`Ricerca: "${search.trim()}"`);
     parts.push(`Ordine: ${SORT_LABELS[sortKey]} ${sortDir === "asc" ? "↑" : "↓"}`);
     return parts.join(" · ");
-  })();
+  }, [typeFilter, search, sortKey, sortDir]);
 
-  const handleExportListPdf = async () => {
+  const handleExportListPdf = useCallback(async () => {
     setListPdfPending(true);
     try {
       await exportJourneyListPdf({ journeys: sorted, filterLabel: listFilterLabel });
@@ -479,9 +517,9 @@ export default function CustomerJourneyPage() {
     } finally {
       setListPdfPending(false);
     }
-  };
+  }, [sorted, listFilterLabel, toast]);
 
-  const handleExportListExcel = () => {
+  const handleExportListExcel = useCallback(() => {
     try {
       exportJourneyListExcel({ journeys: sorted, filterLabel: listFilterLabel });
     } catch (err) {
@@ -491,7 +529,28 @@ export default function CustomerJourneyPage() {
         variant: "destructive",
       });
     }
-  };
+  }, [sorted, listFilterLabel, toast]);
+
+  // Callback stabili per JourneyDetailView: le funzioni mutate di react-query
+  // hanno identità stabile, quindi questi handler non cambiano fra i render e
+  // rendono efficace il React.memo sulla scheda di dettaglio.
+  const handleSetState = useCallback(
+    (id: string, state: CjItemState) => stateMutation.mutate({ id, state }),
+    [stateMutation],
+  );
+  const handleSetGettone = useCallback(
+    (id: string, confirmed: boolean) => gettoneMutation.mutate({ id, confirmed }),
+    [gettoneMutation],
+  );
+  const handleSaveDetails = useCallback(
+    (id: string, details: ItemDetailsPayload) => detailsMutation.mutate({ id, details }),
+    [detailsMutation],
+  );
+  const handleSaveRagioneSociale = useCallback(
+    (id: string, ragioneSociale: string | null) =>
+      ragioneSocialeMutation.mutate({ id, ragioneSociale }),
+    [ragioneSocialeMutation],
+  );
 
   return (
     <div className="min-h-screen">
@@ -792,15 +851,10 @@ export default function CustomerJourneyPage() {
                   <ReportView
                     isLoading={reportQuery.isLoading}
                     groups={reportGroups}
-                    totals={{
-                      clienti: reportTotals.journeys.size,
-                      contratti: reportTotals.contratti,
-                      attivati: reportTotals.attivati,
-                      valore: reportTotals.valore,
-                    }}
+                    totals={reportTotalsView}
                     dim={reportDim}
                     onDimChange={setReportDim}
-                    dimLabel={reportDimLabel}
+                    dimLabel={REPORT_DIM_LABEL}
                   />
                 )}
               </div>
@@ -941,10 +995,10 @@ export default function CustomerJourneyPage() {
             ) : (
               <JourneyDetailView
                 detail={detailQuery.data}
-                onSetState={(id, state) => stateMutation.mutate({ id, state })}
-                onSetGettone={(id, confirmed) => gettoneMutation.mutate({ id, confirmed })}
-                onSaveDetails={(id, details) => detailsMutation.mutate({ id, details })}
-                onSaveRagioneSociale={(id, ragioneSociale) => ragioneSocialeMutation.mutate({ id, ragioneSociale })}
+                onSetState={handleSetState}
+                onSetGettone={handleSetGettone}
+                onSaveDetails={handleSaveDetails}
+                onSaveRagioneSociale={handleSaveRagioneSociale}
                 statePending={stateMutation.isPending}
                 gettonePending={gettoneMutation.isPending}
                 detailsPending={detailsMutation.isPending}
@@ -962,7 +1016,7 @@ export default function CustomerJourneyPage() {
 // Tabella aggregata delle journey lungo una dimensione selezionabile
 // (negozio / addetto / cliente). I dati sono già filtrati e isolati per
 // operatore lato server; qui si fa solo il rendering.
-function ReportView({
+function ReportViewImpl({
   isLoading,
   groups,
   totals,
@@ -1094,7 +1148,7 @@ function ReportView({
 // Prima sotto-vista della Reportistica: cruscotto gettoni guidato dal filtro
 // per data di attivazione SIM (coorte). La logica pura vive in
 // `@shared/customerJourney` ed è coperta da test (`cj-report-tests`).
-function AnalisiView({
+function AnalisiViewImpl({
   isLoading,
   totals,
   groups,
@@ -1680,7 +1734,7 @@ function JourneyBreakdown({
   );
 }
 
-function JourneyDetailView({
+function JourneyDetailViewImpl({
   detail, onSetState, onSetGettone, onSaveDetails, onSaveRagioneSociale, statePending, gettonePending, detailsPending, ragioneSocialePending,
 }: {
   detail: JourneyDetail;
