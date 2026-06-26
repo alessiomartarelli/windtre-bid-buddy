@@ -80,6 +80,10 @@ args = "cj-export-tests"
 task = "workflow.run"
 args = "cj-gettone-ui-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "admin-authz-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -206,6 +210,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-customer-journey-gettone-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "admin-authz-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-admin-authz-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

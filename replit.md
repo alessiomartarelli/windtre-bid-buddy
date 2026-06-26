@@ -138,6 +138,23 @@ mantenere snello questo file:
   step di validation `cj-authz-tests`
   (`bash scripts/run-customer-journey-authz-tests.sh`); richiede il
   workflow "Start application" attivo. Run completo in ~1s.
+- **Admin role/org boundary tests** (`tests/admin-authz.test.mjs`):
+  2 scenari security-critical (Task #211) che bloccano la regressione dei
+  controlli aggiunti in Task #207 contro l'escalation di ruolo/org da parte
+  di un admin di tenant. (1) `POST /api/admin/create-user` fatta da un admin:
+  `role="super_admin"` forzato nel payload ⇒ 403 e nessun super_admin creato;
+  un `organization_id`/`organizationId` di un'altra org nel payload viene
+  ignorato e l'utente è creato nella org dell'admin. (2)
+  `POST /api/admin/bisuite-api` con un `organization_id` di un'altra org ⇒
+  403 per l'admin (cross-org negato), mentre il super_admin supera il
+  controllo cross-org e raggiunge il lookup credenziali (400 perché la org
+  estranea non ha credenziali BiSuite ⇒ prova che non è bloccato dal vincolo
+  di org). Stessa strategia degli altri authz test: signup admin + cookie, la
+  route rilegge il profilo ad ogni richiesta quindi si muta `role` via
+  `setRole`; una seconda org "estranea" è creata via SQL per i tentativi
+  cross-org e ripulita nel `finally`. Lanciali via lo step di validation
+  `admin-authz-tests` (`bash scripts/run-admin-authz-tests.sh`); richiede il
+  workflow "Start application" attivo. Run completo in ~1s.
 - **Customer Journey reconcile tests** (`tests/customer-journey-reconcile.test.mjs`):
   4 scenari (Task #164 + Task #180) sul reconcile.
   Setup: signup admin + org, inserisce una vendita BiSuite (`bisuite_sales`)
