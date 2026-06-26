@@ -298,8 +298,20 @@ mantenere snello questo file:
   Task #195): verifica che le righe aggregate `row-report-*` rendano i
   valori attesi (label/clienti/contratti/attivi) e che il selettore di
   dimensione (`button-report-dim-*`) cambi il grouping a runtime
-  (negozio⇒addetto, le righe PDV spariscono). Cleanup completo del dev DB
-  alla fine. Lanciali via lo step di validation `cj-gettone-ui-tests`
+  (negozio⇒addetto, le righe PDV spariscono). Task #199 aggiunge 2 scenari
+  che verificano il wiring dei filtri condivisi con le tabelle renderizzate
+  (la logica pura del predicato è già coperta da `cj-report-tests`):
+  (4) il filtro Negozio/PDV (`select-filter-negozio`) applicato via il
+  controllo `<Select>` restringe SIA la tab Dettaglio (la riga PDV non
+  selezionata sparisce) SIA l'Analisi gettoni — il filtro è condiviso fra le
+  viste — e `button-reset-filters` ripristina tutte le righe; (5) il filtro
+  per data attivazione SIM dell'Analisi gettoni
+  (`input-gettone-date-from`/`input-gettone-date-to`) restringe la coorte:
+  due journey seminate con `opened_at` (T0) a marzo vs gennaio, un "dal
+  2026-02-01" tiene solo marzo, un "al 2026-02-01" solo gennaio,
+  `button-gettone-reset-date` ripristina entrambe. Lo scenario 5 sfrutta il
+  parametro `openedAt` aggiunto a `seedJourney` in `tests/helpers/uiTest.mjs`.
+  Cleanup completo del dev DB alla fine. Lanciali via lo step di validation `cj-gettone-ui-tests`
   (`bash scripts/run-customer-journey-gettone-ui-tests.sh`); richiede il
   workflow "Start application" attivo, `DATABASE_URL` e chromium di sistema.
   Run completo in ~25s.

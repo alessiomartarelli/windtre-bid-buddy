@@ -369,3 +369,161 @@ test('scenario 3: admin sees the Dettaglio report rows and the dimension switche
     await pool.end().catch(() => {});
   }
 });
+
+// ===========================================================================
+// SCENARIO 4 (Task #199): i filtri condivisi (negozio/PDV) narrowano davvero
+// le tabelle report. La logica del predicato `matchesCjFilters` è coperta dai
+// test puri di `customer-journey-report.test.mjs`, ma nessun test verificava
+// che interagire col CONTROLLO di filtro nella barra condivisa re-renderizzi
+// le tabelle Dettaglio e Analisi gettoni con il sottoinsieme corretto. Una
+// regressione di wiring tra il <Select> negozio e la tabella renderizzata
+// passerebbe inosservata.
+// ===========================================================================
+test('scenario 4: the shared store (PDV) filter narrows both the Dettaglio and gettone tables', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
+  const browser = await launchBrowser();
+  try {
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFMARIO').toUpperCase(),
+      nome: 'Cliente Mario',
+      addetto: MARIO_ADDETTO,
+      pdv: MARIO_PDV,
+      items: [
+        { driver: 'mobile', state: 'inserito' },
+        { driver: 'energia', state: 'inserito', importo: '50.00' },
+        { driver: 'fisso', state: 'inserito', importo: '20.00' },
+      ],
+    });
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFLUIGI').toUpperCase(),
+      nome: 'Cliente Luigi',
+      addetto: LUIGI_ADDETTO,
+      pdv: LUIGI_PDV,
+      items: [
+        { driver: 'mobile', state: 'inserito' },
+        { driver: 'energia', state: 'inserito', importo: '30.00' },
+      ],
+    });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/customer-journey`, { waitUntil: 'networkidle' });
+    await page.getByTestId('tab-report').click();
+    await page.getByTestId('button-report-tab-dettaglio').click();
+
+    // Entrambi i PDV sono presenti prima di filtrare.
+    await page.getByTestId(`row-report-${MARIO_PDV}`).waitFor({ state: 'visible', timeout: 15000 });
+    await page.getByTestId(`row-report-${LUIGI_PDV}`).waitFor({ state: 'visible', timeout: 10000 });
+
+    // Applica il filtro Negozio = PDV di Mario tramite il controllo <Select>.
+    await page.getByTestId('select-filter-negozio').click();
+    await page.getByTestId(`option-negozio-${MARIO_PDV}`).click();
+
+    // La tabella Dettaglio si restringe alla sola riga di Mario.
+    await page.getByTestId(`row-report-${MARIO_PDV}`).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByTestId(`row-report-${LUIGI_PDV}`).waitFor({ state: 'detached', timeout: 10000 });
+    assert.equal(
+      await page.getByTestId(`row-report-${LUIGI_PDV}`).count(),
+      0, 'Luigi PDV report row must disappear once the store filter is applied',
+    );
+
+    // Il filtro è condiviso: anche l'Analisi gettoni (per addetto) si restringe.
+    await page.getByTestId('button-report-tab-analisi').click();
+    await page.getByTestId('button-gettone-dim-addetto').click();
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(
+      await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).count(),
+      0, 'Luigi gettone row must disappear under the active store filter',
+    );
+
+    // Azzerando il filtro torna anche Luigi.
+    await page.getByTestId('button-reset-filters').click();
+    await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 5 (Task #199): il filtro per data attivazione SIM dell'Analisi
+// gettoni (`input-gettone-date-from`/`input-gettone-date-to`) narra davvero la
+// coorte renderizzata. `filterGettoneByDate` è coperta dai test puri, ma il
+// wiring tra gli <Input type="date"> e la tabella gettone re-renderizzata no.
+// Seminiamo due journey con date di attivazione SIM (T0 = opened_at) diverse e
+// verifichiamo che impostare il range escluda la coorte fuori intervallo.
+// ===========================================================================
+test('scenario 5: the SIM-activation date range filter narrows the gettone cohort', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
+  const browser = await launchBrowser();
+  try {
+    // Mario attiva a marzo, Luigi a gennaio: un range a febbraio li separa.
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFMARIO').toUpperCase(),
+      nome: 'Cliente Mario',
+      addetto: MARIO_ADDETTO,
+      pdv: MARIO_PDV,
+      openedAt: '2026-03-15T10:00:00Z',
+      items: [
+        { driver: 'mobile', state: 'inserito' },
+        { driver: 'energia', state: 'inserito', importo: '50.00' },
+        { driver: 'fisso', state: 'inserito', importo: '20.00' },
+      ],
+    });
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFLUIGI').toUpperCase(),
+      nome: 'Cliente Luigi',
+      addetto: LUIGI_ADDETTO,
+      pdv: LUIGI_PDV,
+      openedAt: '2026-01-10T10:00:00Z',
+      items: [
+        { driver: 'mobile', state: 'inserito' },
+        { driver: 'energia', state: 'inserito', importo: '30.00' },
+      ],
+    });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await openAnalisiByAddetto(context);
+
+    // Senza filtro entrambe le coorti sono presenti.
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 15000 });
+    await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+
+    // "dal 2026-02-01" => resta solo Mario (marzo), Luigi (gennaio) esce.
+    await page.getByTestId('input-gettone-date-from').fill('2026-02-01');
+    await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).waitFor({ state: 'detached', timeout: 10000 });
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(
+      await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).count(),
+      0, 'Luigi (Jan) must be excluded by a "from 2026-02-01" filter',
+    );
+
+    // Azzera le date: tornano entrambe.
+    await page.getByTestId('button-gettone-reset-date').click();
+    await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+
+    // "al 2026-02-01" => resta solo Luigi (gennaio), Mario (marzo) esce.
+    await page.getByTestId('input-gettone-date-to').fill('2026-02-01');
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'detached', timeout: 10000 });
+    await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(
+      await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).count(),
+      0, 'Mario (Mar) must be excluded by a "to 2026-02-01" filter',
+    );
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});

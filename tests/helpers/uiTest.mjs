@@ -120,13 +120,14 @@ export async function setRole(pool, profileId, role, addetti = []) {
 
 // Inserisce una journey privata con N item. `items` = [{driver, state, importo?,
 // addetto?, pdv?}]; addetto/pdv di default presi dai parametri della journey.
-// Ritorna l'id (uuid) della journey.
-export async function seedJourney(pool, orgId, { customerKey, nome, addetto = null, pdv = null, items = [] }) {
+// `openedAt` (opzionale, ISO date string o Date) imposta la data di attivazione
+// SIM (T0); default `now()`. Ritorna l'id (uuid) della journey.
+export async function seedJourney(pool, orgId, { customerKey, nome, addetto = null, pdv = null, openedAt = null, items = [] }) {
   const cj = await pool.query(
     `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, status, opened_at)
-       VALUES ($1, $2, 'privato', $3, 'aperta', now())
+       VALUES ($1, $2, 'privato', $3, 'aperta', COALESCE($4::timestamptz, now()))
      RETURNING id`,
-    [orgId, customerKey, nome],
+    [orgId, customerKey, nome, openedAt],
   );
   const journeyId = cj.rows[0].id;
   for (const it of items) {
