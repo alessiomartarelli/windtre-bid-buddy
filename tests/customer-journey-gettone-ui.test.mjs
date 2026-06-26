@@ -60,6 +60,11 @@ const LUIGI_ADDETTO = `LUIGI VERDI ${crypto.randomBytes(3).toString('hex')}`.toU
 // PDV univoci per testare la dimensione NEGOZIO senza collisioni di test-id.
 const MARIO_PDV = `PDV MILANO ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
 const LUIGI_PDV = `PDV ROMA ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
+// Addetto/PDV dedicati allo scenario 4 (contratti annullati): hanno una pista
+// cross-sell ATTIVA (energia) + una ANNULLATA (fisso). Se la vista contasse per
+// errore l'annullato, Anna avrebbe 2 piste / 40% / 30€ invece di 1 / 20% / 20€.
+const ANNA_ADDETTO = `ANNA NERI ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
+const ANNA_PDV = `PDV TORINO ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
 
 // Apre la pagina Customer Journey autenticata con il cookie di sessione e
 // naviga fino alla vista Analisi gettoni raggruppata per addetto.
@@ -517,6 +522,92 @@ test('scenario 5: the SIM-activation date range filter narrows the gettone cohor
     assert.equal(
       await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).count(),
       0, 'Mario (Mar) must be excluded by a "to 2026-02-01" filter',
+    );
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 6 (Task #198): contratti ANNULLATI/KO esclusi da attivi/saturazione/
+// fatturato. I report e l'Analisi gettoni escludono per design gli item in stato
+// ko/stornato/annullato (CJ_ACTIVE_STATES in shared/customerJourney.ts). Una
+// regressione che li contasse di nuovo nella sotto-tabella gettone o nella riga
+// Dettaglio NON sarebbe rilevata dagli scenari 1-3 (che seminano solo item
+// attivi). Qui seminiamo una journey con una pista cross-sell ATTIVA (energia)
+// e una ANNULLATA (fisso) accanto alla SIM mobile: la vista deve contare 1
+// pista (20% / 20€), non 2 (40% / 30€), e la riga Dettaglio 2 contratti attivi
+// su 3, non 3.
+// ===========================================================================
+test('scenario 6: i contratti annullati/rifiutati sono esclusi da attivi, saturazione e fatturato', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
+  const browser = await launchBrowser();
+  try {
+    const jAnna = await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFANNA').toUpperCase(),
+      nome: 'Cliente Anna',
+      addetto: ANNA_ADDETTO,
+      pdv: ANNA_PDV,
+      items: [
+        { driver: 'mobile', state: 'inserito' },
+        { driver: 'energia', state: 'inserito', importo: '50.00' },
+        // Contratto cross-sell ANNULLATO: NON deve contare come pista attiva.
+        { driver: 'fisso', state: 'annullato', importo: '20.00' },
+      ],
+    });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await openAnalisiByAddetto(context);
+
+    // --- Analisi gettoni: la riga addetto conta 1 cliente con cross-sell.
+    const annaRow = page.getByTestId(`row-gettone-${ANNA_ADDETTO}`);
+    await annaRow.waitFor({ state: 'visible', timeout: 15000 });
+    assert.equal(
+      (await page.getByTestId(`text-gettone-clienti-${ANNA_ADDETTO}`).innerText()).trim(),
+      '1', 'riga Anna: 1 cliente',
+    );
+    assert.equal(
+      (await page.getByTestId(`text-gettone-conprodotti-${ANNA_ADDETTO}`).innerText()).trim(),
+      '1', 'riga Anna: 1 cliente con cross-sell (solo energia, fisso annullato escluso)',
+    );
+    // Fatturato = 20€ (1 pista), NON 30€ (che sarebbe 2 piste se contasse l'annullato).
+    const fatturato = (await page.getByTestId(`text-gettone-fatturato-${ANNA_ADDETTO}`).innerText()).trim();
+    assert.ok(fatturato.includes('20'), `il fatturato di Anna deve essere 20€ (1 pista), trovato "${fatturato}"`);
+    assert.ok(!fatturato.includes('30'), `il fatturato di Anna NON deve essere 30€ (annullato conteggiato), trovato "${fatturato}"`);
+
+    // Espandi la riga: la sotto-tabella mostra 1/5 piste e 20% saturazione.
+    await annaRow.click();
+    const detail = page.getByTestId(`row-gettone-detail-${ANNA_ADDETTO}`);
+    await detail.waitFor({ state: 'visible', timeout: 10000 });
+    const simRow = detail.getByTestId(`row-gettone-sim-${jAnna}`);
+    await simRow.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(
+      (await detail.getByTestId(`text-gettone-sim-saturazione-${jAnna}`).innerText()).trim(),
+      '20%', 'la riga di dettaglio mostra 20% di saturazione (1/5 piste, fisso annullato escluso)',
+    );
+    const detailText = await detail.innerText();
+    assert.ok(detailText.includes('1/5'), 'la riga di dettaglio mostra 1/5 piste attive (non 2/5)');
+    assert.ok(!detailText.includes('2/5'), 'la riga di dettaglio NON deve mostrare 2/5 piste (annullato conteggiato)');
+    assert.ok(!detailText.includes('40%'), 'la riga di dettaglio NON deve mostrare 40% di saturazione (annullato conteggiato)');
+
+    // --- Tab "Dettaglio" (ReportView): 3 contratti totali, ma solo 2 attivi.
+    await page.getByTestId('button-report-tab-dettaglio').click();
+    await page.getByTestId('button-report-dim-addetto').click();
+    const reportRow = page.getByTestId(`row-report-${ANNA_ADDETTO}`);
+    await reportRow.waitFor({ state: 'visible', timeout: 15000 });
+    assert.equal(
+      (await page.getByTestId(`text-report-contratti-${ANNA_ADDETTO}`).innerText()).trim(),
+      '3', 'riga report Anna: 3 contratti totali (mobile + energia + fisso)',
+    );
+    assert.equal(
+      (await page.getByTestId(`text-report-attivati-${ANNA_ADDETTO}`).innerText()).trim(),
+      '2', 'riga report Anna: 2 contratti attivi (fisso annullato escluso)',
     );
 
     await page.close();
