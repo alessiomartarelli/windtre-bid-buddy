@@ -146,15 +146,38 @@ export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto =
   );
 }
 
-// Rimuove tutti i dati di test creati per una sessione (item, journey,
-// profilo, org). Tollerante agli errori per essere usato in `finally`.
+// Rimuove TUTTI i dati di test creati per una sessione (ogni tabella
+// con FK su organizations + l'org stessa). L'ordine cancella prima
+// tutti i figli, così il DELETE finale dell'org non può fallire per
+// vincolo di FK lasciando l'org orfana nel DB (causa storica delle
+// "UITestOrg" superflue accumulate: l'org delete falliva in silenzio
+// quando la sessione aveva seminato bisuite_sales/config/ecc.).
+// Tollerante agli errori per essere usato in `finally`.
 export async function cleanupOrg(pool, session) {
-  for (const q of [
-    [`DELETE FROM customer_journey_items WHERE organization_id = $1`, [session.orgId]],
-    [`DELETE FROM customer_journeys WHERE organization_id = $1`, [session.orgId]],
-    [`DELETE FROM profiles WHERE id = $1`, [session.profileId]],
-    [`DELETE FROM organizations WHERE id = $1`, [session.orgId]],
-  ]) {
-    await pool.query(q[0], q[1]).catch(() => {});
+  const orgId = session.orgId;
+  // Cancella i figli in ordine di dipendenza (più interni prima), poi l'org.
+  // Le tabelle con FK ON DELETE CASCADE (finplan_data,
+  // bisuite_sync_notifications) vengono rimosse dall'ultimo DELETE.
+  const childTables = [
+    'customer_journey_items',
+    'customer_journeys',
+    'cdg_spese',
+    'cdg_pdv_manuali',
+    'cdg_categorie',
+    'cdg_fornitori',
+    'cdg_ragioni_sociali',
+    'bisuite_sales',
+    'drms_uploads',
+    'gara_config',
+    'incentivazione_valenze',
+    'incentivazione_config',
+    'pdv_configurations',
+    'organization_config',
+    'preventivi',
+    'profiles',
+  ];
+  for (const t of childTables) {
+    await pool.query(`DELETE FROM ${t} WHERE organization_id = $1`, [orgId]).catch(() => {});
   }
+  await pool.query(`DELETE FROM organizations WHERE id = $1`, [orgId]).catch(() => {});
 }
