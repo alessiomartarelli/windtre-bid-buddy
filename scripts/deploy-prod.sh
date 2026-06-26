@@ -19,13 +19,16 @@ set -euo pipefail
 #      ONLY (we use the name, not the numeric id, because the id can
 #      change after a `pm2 delete`+`start`).
 #
-# The quality gate runs ONLY the pure suites (typecheck, cj-timeline,
-# cj-validity-gettone-parity, cj-export, incentivazione, cj-report) because
-# they need neither the dev server nor the DB, so they run unattended in a
-# couple of seconds. The dev-server / DB-backed suites (authz, reconcile,
-# gettone-ui, finplan, accessori-servizi, dashboard-authz, trigger-date)
-# are NOT run here — they require the "Start application" workflow and/or
-# DATABASE_URL. Set SKIP_QUALITY_GATE=1 to bypass the gate in an emergency.
+# The quality gate has two stages. Stage 1a runs the pure suites
+# (typecheck, cj-timeline, cj-validity-gettone-parity, cj-export,
+# incentivazione, cj-report): they need neither the dev server nor the DB,
+# so they run unattended in a couple of seconds. Stage 1b (Task #221) runs
+# the dev-server / DB-backed suites (authz, reconcile, gettone-ui, finplan,
+# accessori-servizi, dashboard-authz, trigger-date) via
+# run-deploy-integration-tests.sh, which starts the app ephemerally (or
+# reuses a running one) against DATABASE_URL and tears it down afterwards.
+# Set SKIP_QUALITY_GATE=1 to bypass the whole gate (1a+1b) in an emergency,
+# or SKIP_INTEGRATION_TESTS=1 to skip only the heavier stage 1b.
 #
 # Requirements: VPS_PASSWORD env var, sshpass, scp, ssh, npx.
 # NEVER touches pm2 id 9 (easycashflows) or id 12 (protecta).
@@ -50,7 +53,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ "${SKIP_QUALITY_GATE:-0}" == "1" ]]; then
   echo "==> [1/6] Quality gate SKIPPED (SKIP_QUALITY_GATE=1)."
 else
-  echo "==> [1/6] Quality gate: type-check + pure test suites..."
+  echo "==> [1/6] Quality gate (1a): type-check + pure test suites..."
   # Each step exits non-zero on failure; `set -e` aborts the whole deploy.
   QUALITY_STEPS=(
     "run-typecheck.sh"
@@ -64,7 +67,21 @@ else
     echo "    -> ${step}"
     bash "${SCRIPT_DIR}/${step}"
   done
-  echo "==> [1/6] Quality gate passed."
+  echo "==> [1/6] Quality gate (1a) passed."
+
+  # Task #221: chiude il buco di copertura del cancello precedente, che
+  # girava SOLO le suite pure. Questo step avvia l'app + usa il DB di dev
+  # in modo effimero ed esegue le suite dev-server/DB-backed (authz,
+  # reconcile, gettone-ui, finplan, accessori-servizi, dashboard-authz,
+  # trigger-date), poi fa teardown pulito. Bypass mirato:
+  # SKIP_INTEGRATION_TESTS=1 (salta SOLO queste suite, tiene le pure).
+  if [[ "${SKIP_INTEGRATION_TESTS:-0}" == "1" ]]; then
+    echo "==> [1/6] Quality gate (1b) integration tests SKIPPED (SKIP_INTEGRATION_TESTS=1)."
+  else
+    echo "==> [1/6] Quality gate (1b): dev-server / DB-backed test suites..."
+    bash "${SCRIPT_DIR}/run-deploy-integration-tests.sh"
+    echo "==> [1/6] Quality gate (1b) passed."
+  fi
 fi
 
 echo "==> [2/6] Building bundle..."

@@ -66,13 +66,33 @@ Preferred communication style: Simple, everyday language.
   `run-incentivazione-tests.sh`,
   `run-customer-journey-report-tests.sh`. Se una qualsiasi fallisce
   (`set -e`) il deploy si ferma prima di toccare la prod, così non si
-  pubblica codice con errori di tipo o regressioni di logica pura. Le
-  suite che richiedono il workflow "Start application" e/o `DATABASE_URL`
-  (authz, reconcile, gettone-ui, finplan, accessori-servizi,
-  dashboard-authz, trigger-date) NON girano nel cancello (non sono
-  eseguibili headless in fase di deploy). Bypass d'emergenza:
-  `SKIP_QUALITY_GATE=1`. Le suite restano lanciabili singolarmente via i
-  rispettivi step di validation (vedi sezione Testing).
+  pubblica codice con errori di tipo o regressioni di logica pura. Questo
+  è lo step **1a** del cancello.
+- **Quality gate pre-deploy — integration (Task #221)**: lo step **1b**
+  del cancello (subito dopo 1a, prima di build/scp/restart) lancia ANCHE
+  le suite che richiedono il workflow "Start application" e/o
+  `DATABASE_URL`, chiudendo il buco di copertura che il cancello di
+  Task #220 lasciava aperto. È orchestrato da
+  `scripts/run-deploy-integration-tests.sh`, che: (1) richiede
+  `DATABASE_URL` (riusa il DB di dev — ogni suite semina/pulisce i propri
+  dati con prefissi univoci, quindi non serve un DB separato e non resta
+  sporco); (2) se l'app NON risponde già su `localhost:5000` avvia
+  `npm run dev` in background in modo **effimero**, attende la readiness
+  (fino a `APP_READY_TIMEOUT`, default 90s) e la **ferma con teardown
+  pulito dell'intero albero di processi** al termine (trap EXIT); se
+  l'app è già su (workflow attivo) la **riusa e NON la ferma**;
+  (3) esegue in sequenza `run-customer-journey-authz-tests.sh`,
+  `run-admin-authz-tests.sh`, `run-customer-journey-reconcile-tests.sh`,
+  `run-customer-journey-trigger-date-tests.sh`,
+  `run-incentivazione-dashboard-authz-tests.sh`,
+  `run-incentivazione-accessori-servizi-tests.sh`,
+  `run-finplan-tests.sh`,
+  `run-customer-journey-gettone-ui-tests.sh` (Playwright + chromium di
+  sistema, la più lenta, per ultima); al primo fallimento (`set -e`) il
+  deploy si ferma. Bypass: `SKIP_QUALITY_GATE=1` salta TUTTO il cancello
+  (1a + 1b); `SKIP_INTEGRATION_TESTS=1` salta SOLO lo step 1b tenendo le
+  suite pure. Le suite restano lanciabili singolarmente via i rispettivi
+  step di validation (vedi sezione Testing).
 - **Mechanism**: client `BASE_PATH` constant + `apiUrl()` helper, server sub-app mounting, base href injection.
 - **Backup DB prod (Task #153)**: sorgenti in repo:
   `scripts/incentive-w3-backup.sh` (lo script che gira sul VPS) e
@@ -388,6 +408,22 @@ mantenere snello questo file:
   NON serve né dev server né DB. Fallisce (exit != 0) se compare anche un solo
   errore di tipo, così blocca la ricomparsa degli errori di tipo che Task #218
   aveva ripulito. Run completo in ~10-20s.
+- **Integration suites orchestrator** (Task #221): step di validation
+  `integration-tests` (`bash scripts/run-deploy-integration-tests.sh`) +
+  step **1b** del cancello di qualità pre-deploy. Esegue in un colpo solo
+  tutte le suite che richiedono il dev server e/o `DATABASE_URL` —
+  `cj-authz`, `admin-authz`, `cj-reconcile`, `cj-trigger-date`,
+  `inc-dashboard-authz`, `incentivazione-accservizi`, `finplan`,
+  `cj-gettone-ui` — che prima andavano lanciate a mano. Richiede
+  `DATABASE_URL` (riusa il DB di dev: ogni suite semina/pulisce i propri
+  dati con prefissi univoci). Se l'app non è già su `localhost:5000`,
+  avvia `npm run dev` in modo effimero, attende la readiness (fino a
+  `APP_READY_TIMEOUT`, default 90s) e la ferma con teardown pulito
+  dell'intero albero di processi al termine; se è già su (workflow "Start
+  application" attivo) la riusa e NON la ferma. Fail-fast (`set -e`) alla
+  prima suite che fallisce. La suite Playwright `cj-gettone-ui` (chromium
+  di sistema) gira per ultima perché è la più lenta. Run completo
+  ~70-90s con app già avviata (più ~10-20s di startup se effimera).
 
 ## External Dependencies
 
