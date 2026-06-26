@@ -56,6 +56,23 @@ Preferred communication style: Simple, everyday language.
 - **Env vars di prod**: caricate da `/var/www/incentive-w3/ecosystem.config.cjs` (NON da `.env` — l'app non usa dotenv). Per modificarle: editare ecosystem + `pm2 delete incentive-w3 && pm2 start ecosystem.config.cjs && pm2 save`. Variabili presenti: `NODE_ENV`, `PORT=3001`, `DATABASE_URL`, `SESSION_SECRET`, `SMTP_SECRET_KEY` (chiave AES per cifrare password SMTP e `client_secret` BiSuite — **mai cambiarla**, altrimenti i segreti cifrati nel DB diventano illeggibili).
 - **Deploy**: usa `scripts/deploy-prod.sh` (richiede `VPS_PASSWORD`). Lo script: build → tar → scp → **sync schema sul DB di prod via tunnel SSH (`drizzle-kit push`) PRIMA del restart** → swap dist → `pm2 restart incentive-w3 --update-env`. Lo step di schema sync evita i 500 "column does not exist" che si presentavano quando il `db:push` post-merge in dev non veniva replicato in prod.
 - **Deploy manuale (fallback)**: `npm run build` → `tar czf /tmp/incentivew3-deploy.tgz -C dist public index.cjs` → scp → ssh: `cd /var/www/incentive-w3 && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart incentive-w3 --update-env`. Se il deploy include modifiche a `shared/schema.ts`, applica anche a mano le ALTER/CREATE sul DB prod (`PGPASSWORD=… psql -U incentive_w3 -d incentive_w3 -h localhost`).
+- **Quality gate pre-deploy (Task #220)**: `scripts/deploy-prod.sh`
+  esegue come **step 1** (prima di build/scp/restart) un cancello di
+  qualità che lancia il type-check + le suite di test **pure** (senza dev
+  server né DB): `run-typecheck.sh`,
+  `run-customer-journey-timeline-tests.sh`,
+  `run-customer-journey-validity-gettone-parity-tests.sh`,
+  `run-customer-journey-export-tests.sh`,
+  `run-incentivazione-tests.sh`,
+  `run-customer-journey-report-tests.sh`. Se una qualsiasi fallisce
+  (`set -e`) il deploy si ferma prima di toccare la prod, così non si
+  pubblica codice con errori di tipo o regressioni di logica pura. Le
+  suite che richiedono il workflow "Start application" e/o `DATABASE_URL`
+  (authz, reconcile, gettone-ui, finplan, accessori-servizi,
+  dashboard-authz, trigger-date) NON girano nel cancello (non sono
+  eseguibili headless in fase di deploy). Bypass d'emergenza:
+  `SKIP_QUALITY_GATE=1`. Le suite restano lanciabili singolarmente via i
+  rispettivi step di validation (vedi sezione Testing).
 - **Mechanism**: client `BASE_PATH` constant + `apiUrl()` helper, server sub-app mounting, base href injection.
 - **Backup DB prod (Task #153)**: sorgenti in repo:
   `scripts/incentive-w3-backup.sh` (lo script che gira sul VPS) e
