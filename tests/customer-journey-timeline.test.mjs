@@ -27,6 +27,9 @@ const {
   monthIndexLabel,
   CJ_DEFAULT_DRIVER_COLOR,
   CJ_FADED_STATES,
+  computeItemValidity,
+  CJ_VALIDITY_LABELS,
+  CJ_VALIDITY_REASONS,
 } = await import('../client/src/lib/customerJourneyTimeline.ts');
 
 // Mappa colori driver "finta" (1:1 con quella reale ma senza trascinare
@@ -291,4 +294,115 @@ test('scenario 7: itemEventDate prefers attivazione, then inserimento', () => {
   assert.equal(itemEventDate(item({})), null, 'no dates => null');
   // Data malformata => null (nessun crash).
   assert.equal(itemEventDate(item({ dataAttivazione: 'not-a-date' })), null);
+});
+
+// ===========================================================================
+// SCENARIO 8: computeItemValidity (Task #215) — validità per il gettone.
+// La SIM mobile che apre la journey è "attivante"; le piste cross-sell sono
+// "valida" solo se attive, dal mese di T0 in poi e prime del loro driver.
+// ===========================================================================
+test('scenario 8: computeItemValidity classifica attivante/valida/non-valida', () => {
+  const trig = item({ id: 'trig', driver: 'mobile', state: 'attivato',
+    bisuiteSaleId: 'S1', dataAttivazione: '2026-07-05T00:00:00.000Z' });
+  const fissoPre = item({ id: 'pre', driver: 'fisso', state: 'attivato',
+    dataAttivazione: '2026-06-20T00:00:00.000Z' }); // mese prima di T0
+  const energia = item({ id: 'ene', driver: 'energia', state: 'attivato',
+    dataAttivazione: '2026-07-10T00:00:00.000Z' });
+  const energiaDup = item({ id: 'ene2', driver: 'energia', state: 'attivato',
+    dataAttivazione: '2026-07-12T00:00:00.000Z' }); // stesso driver => duplicato
+  const ko = item({ id: 'ko', driver: 'protezione', state: 'ko',
+    dataAttivazione: '2026-08-01T00:00:00.000Z' });
+  const mobileExtra = item({ id: 'm2', driver: 'mobile', state: 'attivato',
+    dataAttivazione: '2026-08-02T00:00:00.000Z' }); // SIM aggiuntiva
+
+  const j = journey({ triggerSaleId: 'S1', openedAt: '2026-07-05T00:00:00.000Z' });
+  const model = computeTimeline(
+    j,
+    [trig, fissoPre, energia, energiaDup, ko, mobileExtra],
+  );
+  const v = computeItemValidity(model, j);
+
+  assert.equal(v.get('trig').kind, 'attivante');
+  assert.equal(v.get('trig').counts, false, 'la SIM trigger non è una pista');
+  assert.equal(v.get('pre').kind, 'fuori_periodo');
+  assert.equal(v.get('pre').counts, false);
+  assert.equal(v.get('ene').kind, 'valida');
+  assert.equal(v.get('ene').counts, true);
+  assert.equal(v.get('ene2').kind, 'driver_duplicato');
+  assert.equal(v.get('ene2').counts, false);
+  assert.equal(v.get('ko').kind, 'stato_non_valido');
+  assert.equal(v.get('ko').counts, false);
+  assert.equal(v.get('m2').kind, 'non_pista');
+  assert.equal(v.get('m2').counts, false);
+
+  // Una sola pista valida in totale.
+  const valide = [...v.values()].filter((x) => x.counts).length;
+  assert.equal(valide, 1, 'solo energia conta come pista');
+});
+
+test('scenario 8b: computeItemValidity su timeline vuota => mappa vuota', () => {
+  const j = journey();
+  const model = computeTimeline(j, []);
+  const v = computeItemValidity(model, j);
+  assert.equal(v.size, 0);
+});
+
+// SCENARIO 8d (Task #215): parità con il gettone — il fallback di T0 usa la
+// prima SIM mobile ATTIVA (non la prima mobile in assoluto) quando manca
+// openedAt, e la finestra usa i mesi UTC. Una mobile KO di giugno NON deve
+// abbassare T0: la pista di giugno resta fuori periodo perché la prima mobile
+// attiva è di luglio.
+test('scenario 8d: T0 fallback su prima mobile ATTIVA (parità gettone)', () => {
+  const mobileKo = item({ id: 'mko', driver: 'mobile', state: 'ko',
+    dataAttivazione: '2026-06-01T00:00:00.000Z' });
+  const mobileOk = item({ id: 'mok', driver: 'mobile', state: 'attivato',
+    dataAttivazione: '2026-07-01T00:00:00.000Z' });
+  const fissoGiu = item({ id: 'fg', driver: 'fisso', state: 'attivato',
+    dataAttivazione: '2026-06-15T00:00:00.000Z' }); // prima della mobile attiva
+  const energiaLug = item({ id: 'el', driver: 'energia', state: 'attivato',
+    dataAttivazione: '2026-07-01T00:00:00.000Z' }); // stesso mese di T0 (UTC)
+
+  // openedAt assente => T0 deriva dal fallback (prima mobile ATTIVA = luglio).
+  const j = journey({ openedAt: null });
+  const model = computeTimeline(j, [mobileKo, mobileOk, fissoGiu, energiaLug]);
+  const v = computeItemValidity(model, j);
+
+  assert.equal(v.get('fg').kind, 'fuori_periodo',
+    'il fisso di giugno è prima della prima mobile attiva (luglio)');
+  assert.equal(v.get('el').kind, 'valida',
+    'energia del 1° luglio (mezzanotte UTC) è dentro la finestra di T0');
+  assert.equal(v.get('el').counts, true);
+});
+
+// SCENARIO 8e (Task #215): parità — se il T0 della timeline cade su un contratto
+// NON-mobile (nessuna mobile, fallback al primo evento), quell'item NON va
+// escluso come "attivante" ma conta come pista, esattamente come nel gettone che
+// esclude solo i driver mobile.
+test('scenario 8e: T0 non-mobile conta come pista (non "attivante")', () => {
+  const fisso = item({ id: 'f1', driver: 'fisso', state: 'attivato',
+    dataAttivazione: '2026-07-01T00:00:00.000Z' });
+  const energia = item({ id: 'e1', driver: 'energia', state: 'attivato',
+    dataAttivazione: '2026-07-10T00:00:00.000Z' });
+
+  // Nessuna mobile, nessun openedAt: T0 = primo evento (il fisso, non-mobile).
+  const j = journey({ openedAt: null });
+  const model = computeTimeline(j, [fisso, energia]);
+  const v = computeItemValidity(model, j);
+
+  assert.equal(model.t0ItemId, 'f1', 'il T0 della timeline è il primo evento (fisso)');
+  assert.equal(v.get('f1').kind, 'valida', 'il fisso T0 non-mobile conta come pista');
+  assert.equal(v.get('f1').counts, true);
+  assert.equal(v.get('e1').kind, 'valida');
+  assert.equal(v.get('e1').counts, true);
+});
+
+test('scenario 8c: CJ_VALIDITY_LABELS/REASONS coprono tutti i kind', () => {
+  const kinds = ['attivante', 'valida', 'non_pista', 'stato_non_valido',
+    'fuori_periodo', 'driver_duplicato'];
+  for (const k of kinds) {
+    assert.equal(typeof CJ_VALIDITY_LABELS[k], 'string', `label ${k}`);
+    assert.ok(CJ_VALIDITY_LABELS[k].length > 0, `label ${k} non vuota`);
+    assert.equal(typeof CJ_VALIDITY_REASONS[k], 'string', `reason ${k}`);
+    assert.ok(CJ_VALIDITY_REASONS[k].length > 0, `reason ${k} non vuota`);
+  }
 });

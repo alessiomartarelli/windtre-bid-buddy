@@ -1,10 +1,14 @@
 import type { CustomerJourney, CustomerJourneyItem } from "@shared/schema";
+import { CJ_ACTIVE_STATES, monthOfIso, pisteInWindow } from "../../../shared/customerJourney";
 
 // === Logica pura del tracciamento temporale Customer Journey (Task #185) ===
 // Estratta dal componente React (`CustomerJourney.tsx`) per poterla testare a
-// unità senza renderizzare la UI (Task #186). NON deve avere import a runtime
-// (solo `import type`), così il loader `tsx` può caricarla nei test senza
-// trascinare lucide-react / componenti React.
+// unità senza renderizzare la UI (Task #186). Gli unici import a runtime sono
+// helper puri di `shared/customerJourney` (`CJ_ACTIVE_STATES`, `monthOfIso`,
+// `pisteInWindow`) — nessuna dipendenza React/UI — importati per via relativa
+// così il loader `tsx` li risolve nei test senza configurare gli alias. Riusare
+// questi helper garantisce che la validità mostrata nella scheda usi ESATTAMENTE
+// la stessa regola (e gli stessi mesi UTC) del conteggio gettone condiviso.
 
 // Stati di un item "non più validi": vengono mostrati attenuati nella timeline.
 export const CJ_FADED_STATES: Set<string> = new Set([
@@ -156,6 +160,119 @@ export function computeTimeline(
     rows,
   };
 }
+
+// === Validità degli item per la scheda cliente (Task #215) ===
+// Indica, per ogni contratto mostrato nella timeline, se conta per la
+// journey/gettone o meno, con la stessa regola del gettone condiviso:
+//   - "attivante": la SIM mobile che ha aperto la journey (T0). È il trigger,
+//     non una pista cross-sell.
+//   - "valida": pista cross-sell che conta (driver non-mobile, stato attivo,
+//     contratto dal mese di T0 in poi, primo del suo driver in finestra).
+//   - "non_pista": SIM mobile aggiuntiva (non è una pista cross-sell).
+//   - "stato_non_valido": stato ko/annullato/stornato.
+//   - "fuori_periodo": contratto di un mese precedente a T0.
+//   - "driver_duplicato": pista già conteggiata per quel driver (es. 2ª
+//     fornitura energia o 2º contratto stesso driver in finestra).
+export type CjItemValidityKind =
+  | "attivante"
+  | "valida"
+  | "non_pista"
+  | "stato_non_valido"
+  | "fuori_periodo"
+  | "driver_duplicato";
+
+export interface CjItemValidity {
+  kind: CjItemValidityKind;
+  // true solo per le piste che aumentano il gettone (kind === "valida").
+  counts: boolean;
+}
+
+// Calcola la validità di ogni item mostrato nella timeline (gli item con data).
+// Usa ESATTAMENTE il criterio del gettone condiviso (`buildGettoneJourneys`):
+// piste = driver non-mobile distinti attivi con data evento nel mese di T0 o
+// successivo (`pisteInWindow`, mesi UTC via `monthOfIso`). Il mese di T0 segue la
+// stessa precedenza del gettone: apertura journey, poi prima SIM mobile ATTIVA,
+// poi primo evento in assoluto. La SIM mobile che apre la journey (trigger
+// mostrato dalla timeline) è "attivante", non una pista cross-sell.
+export function computeItemValidity(
+  model: TimelineModel,
+  journey: CustomerJourney,
+): Map<string, CjItemValidity> {
+  const out = new Map<string, CjItemValidity>();
+  const isoOf = (d: Date | null): string | null => (d ? d.toISOString() : null);
+
+  // Mesi (UTC) per il fallback di T0, raccolti come nel gettone: dalle SIM
+  // mobile ATTIVE e da tutti gli eventi datati.
+  const mobileMonths: number[] = [];
+  const allMonths: number[] = [];
+  for (const { it, date } of model.rows) {
+    const m = monthOfIso(isoOf(date));
+    if (m == null) continue;
+    allMonths.push(m);
+    if (it.driver === "mobile" && CJ_ACTIVE_STATES.has(it.state as never)) {
+      mobileMonths.push(m);
+    }
+  }
+  const t0Month =
+    monthOfIso(isoOf(toDateOrNull(journey.openedAt))) ??
+    (mobileMonths.length ? Math.min(...mobileMonths) : null) ??
+    (allMonths.length ? Math.min(...allMonths) : null);
+
+  // Driver già conteggiati come pista in finestra: il primo (per data, perché
+  // `model.rows` è ordinato) vince, gli altri dello stesso driver sono
+  // "driver_duplicato" (es. gas + luce = una pista sola).
+  const counted = new Set<string>();
+  for (const { it, date } of model.rows) {
+    // "Attivante" SOLO se l'item T0 è la SIM mobile trigger. Se per dati sporchi
+    // o fallback il T0 della timeline è un contratto non-mobile, NON va escluso:
+    // deve cadere nella normale classificazione pista come nel gettone (che
+    // esclude solo i driver mobile), così le label non possono divergere dal
+    // conteggio.
+    if (it.id === model.t0ItemId && it.driver === "mobile") {
+      out.set(it.id, { kind: "attivante", counts: false });
+      continue;
+    }
+    if (it.driver === "mobile") {
+      out.set(it.id, { kind: "non_pista", counts: false });
+      continue;
+    }
+    if (!CJ_ACTIVE_STATES.has(it.state as never)) {
+      out.set(it.id, { kind: "stato_non_valido", counts: false });
+      continue;
+    }
+    if (!pisteInWindow(isoOf(date), t0Month)) {
+      out.set(it.id, { kind: "fuori_periodo", counts: false });
+      continue;
+    }
+    if (counted.has(it.driver)) {
+      out.set(it.id, { kind: "driver_duplicato", counts: false });
+      continue;
+    }
+    counted.add(it.driver);
+    out.set(it.id, { kind: "valida", counts: true });
+  }
+  return out;
+}
+
+// Etichetta breve della validità per la UI (e i test). Italiano.
+export const CJ_VALIDITY_LABELS: Record<CjItemValidityKind, string> = {
+  attivante: "Attivante",
+  valida: "Conta",
+  non_pista: "Non conta",
+  stato_non_valido: "Non conta",
+  fuori_periodo: "Non conta",
+  driver_duplicato: "Non conta",
+};
+
+// Spiegazione estesa del perché un contratto conta o no (tooltip della scheda).
+export const CJ_VALIDITY_REASONS: Record<CjItemValidityKind, string> = {
+  attivante: "SIM mobile che ha aperto la journey (T0): è il trigger, non una pista cross-sell.",
+  valida: "Pista cross-sell valida: conta per la journey e per il gettone.",
+  non_pista: "SIM mobile aggiuntiva: non è una pista cross-sell.",
+  stato_non_valido: "Stato ko/annullato/stornato: non conta per il gettone.",
+  fuori_periodo: "Contratto di un mese precedente all'attivazione SIM: non conta per il gettone.",
+  driver_duplicato: "Pista dello stesso tipo già conteggiata per questo cliente.",
+};
 
 // Raggruppa gli item per negozio (PDV), ordinati per numero di contratti
 // decrescente. Usato dalla sezione "Dettaglio per negozio".

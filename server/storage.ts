@@ -909,6 +909,8 @@ export class DatabaseStorage implements IStorage {
       state: customerJourneyItems.state,
       driver: customerJourneyItems.driver,
       importo: customerJourneyItems.importo,
+      dataAttivazione: customerJourneyItems.dataAttivazione,
+      dataInserimento: customerJourneyItems.dataInserimento,
     }).from(customerJourneyItems)
       .innerJoin(customerJourneys, eq(customerJourneyItems.journeyId, customerJourneys.id))
       .where(cond);
@@ -930,6 +932,9 @@ export class DatabaseStorage implements IStorage {
         driver: r.driver as CjDriver,
         valore: Number.isFinite(v) ? v : 0,
         openedAt: r.openedAt ? r.openedAt.toISOString() : null,
+        eventDate: r.dataAttivazione
+          ? r.dataAttivazione.toISOString()
+          : (r.dataInserimento ? r.dataInserimento.toISOString() : null),
       };
     });
   }

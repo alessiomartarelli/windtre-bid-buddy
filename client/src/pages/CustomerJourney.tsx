@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Route as RouteIcon, RefreshCw, ArrowLeft, CheckCircle2, Circle,
+  Route as RouteIcon, RefreshCw, ArrowLeft, ArrowRight, CheckCircle2, Circle,
   Search, User, Building2, Loader2, Coins, Pencil,
   FileText, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
   LayoutGrid, BarChart3, Store, Users, TrendingUp, Wallet, Calendar,
@@ -43,6 +43,7 @@ import { CJ_DRIVER_ICONS, CJ_DRIVER_COLORS } from "@/lib/customerJourneyIcons";
 import {
   computeTimeline, groupByNegozio, cjDriverColor, isFadedState,
   monthIndex, monthIndexLabel, itemNegozio,
+  computeItemValidity, CJ_VALIDITY_LABELS, CJ_VALIDITY_REASONS,
 } from "@/lib/customerJourneyTimeline";
 import {
   exportJourneyPdf, exportJourneyExcel,
@@ -698,6 +699,47 @@ export default function CustomerJourneyPage() {
     return sortDir === "asc" ? cmp : -cmp;
   }), [filtered, sortKey, sortDir]);
 
+  // Indice della scheda aperta nell'elenco ordinato/filtrato: serve per la
+  // navigazione precedente/successiva senza chiudere la scheda (Task #215).
+  const selectedIndex = useMemo(
+    () => (selectedId ? sorted.findIndex((j) => j.id === selectedId) : -1),
+    [sorted, selectedId],
+  );
+  const goToOffset = useCallback(
+    (delta: number) => {
+      if (selectedIndex < 0) return;
+      const next = selectedIndex + delta;
+      if (next < 0 || next >= sorted.length) return;
+      setSelectedId(sorted[next].id);
+    },
+    [selectedIndex, sorted],
+  );
+
+  // Frecce sinistra/destra per scorrere le schede. Ignora gli eventi mentre si
+  // digita in un campo o un dialog è aperto, così non si naviga per sbaglio.
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        t?.isContentEditable ||
+        t?.closest('[role="dialog"]')
+      ) {
+        return;
+      }
+      e.preventDefault();
+      goToOffset(e.key === "ArrowLeft" ? -1 : 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId, goToOffset]);
+
   const listFilterLabel = useMemo(() => {
     const parts: string[] = [];
     if (typeFilter === "privato") parts.push("Solo privati");
@@ -1083,15 +1125,47 @@ export default function CustomerJourneyPage() {
           </>
         ) : (
           <>
-            <Button
-              variant="ghost"
-              onClick={() => setSelectedId(null)}
-              className="-ml-2"
-              data-testid="button-back"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Tutte le journey
-            </Button>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <Button
+                variant="ghost"
+                onClick={() => setSelectedId(null)}
+                className="-ml-2"
+                data-testid="button-back"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Tutte le journey
+              </Button>
+              <div className="flex items-center gap-1.5">
+                {selectedIndex >= 0 && (
+                  <span
+                    className="text-xs text-muted-foreground tabular-nums"
+                    data-testid="text-journey-position"
+                  >
+                    {selectedIndex + 1} / {sorted.length}
+                  </span>
+                )}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToOffset(-1)}
+                  disabled={selectedIndex <= 0}
+                  title="Scheda precedente (←)"
+                  data-testid="button-journey-prev"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToOffset(1)}
+                  disabled={selectedIndex < 0 || selectedIndex >= sorted.length - 1}
+                  title="Scheda successiva (→)"
+                  data-testid="button-journey-next"
+                >
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
 
             {detailQuery.isLoading || !detailQuery.data ? (
               <div className="flex items-center justify-center py-16">
@@ -1634,6 +1708,7 @@ function CustomerJourneyTimeline({
   }
 
   const { t0mi, months, t0ItemId, rows } = model;
+  const validity = computeItemValidity(model, journey);
 
   return (
     <Card data-testid="card-timeline">
@@ -1722,6 +1797,26 @@ function CustomerJourneyTimeline({
                             {itemNegozio(it)}
                             {it.codiceContratto ? ` · ${it.codiceContratto}` : ""}
                           </div>
+                          {(() => {
+                            const v = validity.get(it.id);
+                            if (!v) return null;
+                            const cls =
+                              v.kind === "valida"
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                : v.kind === "attivante"
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                : "bg-muted text-muted-foreground";
+                            return (
+                              <span
+                                className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold ${cls}`}
+                                title={CJ_VALIDITY_REASONS[v.kind]}
+                                data-testid={`timeline-validity-${it.id}`}
+                                data-validity={v.kind}
+                              >
+                                {CJ_VALIDITY_LABELS[v.kind]}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
                     </td>

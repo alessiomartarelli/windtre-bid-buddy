@@ -357,6 +357,57 @@ test('buildGettoneJourneys: pdv/addetto deterministici a prescindere dall ordine
   assert.deepEqual({ pdv: r1.pdv, addetto: r1.addetto }, { pdv: r2.pdv, addetto: r2.addetto });
 });
 
+// --- buildGettoneJourneys: finestra T0 — i contratti dei mesi precedenti
+// all'attivazione della SIM (T0) NON contano per il gettone (Task #215). ---
+test('buildGettoneJourneys: piste prima del mese di T0 non contano', () => {
+  // SIM mobile (T0) a luglio 2026. Un fisso a GIUGNO (prima di T0) non deve
+  // contare; energia a luglio e telefono ad agosto contano => 2 piste = 30€
+  // (non 40€ come sarebbe contando anche il fisso pre-T0).
+  const rows = [
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', openedAt: '2026-07-05T00:00:00.000Z', eventDate: '2026-07-05T00:00:00.000Z' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato', openedAt: '2026-07-05T00:00:00.000Z', eventDate: '2026-06-20T00:00:00.000Z' }),
+    row({ journeyId: 'j1', driver: 'energia', state: 'attivato', openedAt: '2026-07-05T00:00:00.000Z', eventDate: '2026-07-10T00:00:00.000Z' }),
+    row({ journeyId: 'j1', driver: 'telefono', state: 'attivato', openedAt: '2026-07-05T00:00:00.000Z', eventDate: '2026-08-01T00:00:00.000Z' }),
+  ];
+  const js = buildGettoneJourneys(rows);
+  assert.equal(js.length, 1);
+  assert.equal(js[0].pisteAttive, 2, 'fisso di giugno escluso, energia+telefono contano');
+  assert.equal(js[0].fatturato, 30, '2 piste => 30€ (non 40)');
+});
+
+// --- buildGettoneJourneys: stesso mese di T0 conta (estremo incluso) ---
+test('buildGettoneJourneys: contratto nello stesso mese di T0 conta', () => {
+  const rows = [
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', openedAt: '2026-07-20T00:00:00.000Z', eventDate: '2026-07-20T00:00:00.000Z' }),
+    // fisso a inizio luglio, PRIMA della SIM ma stesso mese => conta (finestra
+    // a granularità mese, estremo incluso).
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato', openedAt: '2026-07-20T00:00:00.000Z', eventDate: '2026-07-03T00:00:00.000Z' }),
+  ];
+  const js = buildGettoneJourneys(rows);
+  assert.equal(js[0].pisteAttive, 1, 'fisso stesso mese di T0 conta');
+});
+
+// --- buildGettoneJourneys: T0 da min(mobile) se openedAt assente ---
+test('buildGettoneJourneys: senza openedAt, T0 = mese della prima mobile', () => {
+  const rows = [
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', openedAt: null, eventDate: '2026-07-15T00:00:00.000Z' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato', openedAt: null, eventDate: '2026-06-01T00:00:00.000Z' }),
+    row({ journeyId: 'j1', driver: 'energia', state: 'attivato', openedAt: null, eventDate: '2026-08-01T00:00:00.000Z' }),
+  ];
+  const js = buildGettoneJourneys(rows);
+  assert.equal(js[0].pisteAttive, 1, 'fisso pre-luglio escluso, solo energia conta');
+});
+
+// --- buildGettoneJourneys: eventDate assente => nessuna penalità (conta) ---
+test('buildGettoneJourneys: eventDate nullo non penalizza la pista', () => {
+  const rows = [
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', openedAt: '2026-07-05T00:00:00.000Z', eventDate: '2026-07-05T00:00:00.000Z' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato', openedAt: '2026-07-05T00:00:00.000Z', eventDate: null }),
+  ];
+  const js = buildGettoneJourneys(rows);
+  assert.equal(js[0].pisteAttive, 1, 'pista senza data conta comunque');
+});
+
 // --- filterGettoneByDate: bordi vicino alla mezzanotte (UTC) ---
 test('filterGettoneByDate: confronto per data UTC sui bordi mezzanotte', () => {
   const js = buildGettoneJourneys([

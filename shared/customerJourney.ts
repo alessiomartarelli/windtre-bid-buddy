@@ -65,6 +65,10 @@ export interface CjReportRow {
   // (`customerJourneys.openedAt`, ISO string) o null. È il "T0" del cliente:
   // serve come coorte per il filtro a intervallo di date dell'analisi gettoni.
   openedAt: string | null;
+  // Data evento dell'item (data attivazione, fallback data inserimento), ISO
+  // string o null. Serve a stabilire se il contratto rientra nella finestra del
+  // gettone (dal mese di T0 in poi).
+  eventDate: string | null;
 }
 
 // Facet per-journey per i filtri della lista schede cliente (Task #187):
@@ -226,6 +230,30 @@ function isoDateOnly(iso: string): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
 }
 
+// Indice mese assoluto (anno*12 + mese, mese 0-based) da un timestamp ISO, in
+// UTC. Ritorna null se mancante o malformato. Serve a confrontare il mese di un
+// contratto con il mese di T0 (apertura journey).
+export function monthOfIso(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const d = isoDateOnly(iso);
+  if (d == null) return null;
+  const year = Number(d.slice(0, 4));
+  const month = Number(d.slice(5, 7)) - 1;
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+  return year * 12 + month;
+}
+
+// Una pista cross-sell rientra nella finestra del gettone se il suo contratto è
+// del mese di T0 (apertura journey) o successivo. I contratti dei mesi
+// precedenti NON contano. In assenza di T0 o di data evento (dato non
+// collocabile) non si penalizza: la pista conta comunque.
+export function pisteInWindow(eventDate: string | null, t0Month: number | null): boolean {
+  if (t0Month == null) return true;
+  const m = monthOfIso(eventDate);
+  if (m == null) return true;
+  return m >= t0Month;
+}
+
 // Sintesi per-journey usata dall'analisi gettoni. Una riga per cliente.
 export interface CjGettoneJourney {
   journeyId: string;
@@ -265,7 +293,13 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     anyPdv: string; anyAddetto: string;
     openedAt: string | null;
     simAttive: number;
-    activeDrivers: Set<CjDriver>;
+    // Candidati pista: driver non-mobile attivi con la loro data evento.
+    // Il conteggio distinto in-finestra avviene dopo aver fissato T0.
+    candidates: { driver: CjDriver; eventDate: string | null }[];
+    // Mesi degli item (mobile attivi e tutti) per il fallback di T0 quando
+    // `openedAt` è assente.
+    mobileMonths: number[];
+    allMonths: number[];
   }>();
   for (const r of rows) {
     let e = map.get(r.journeyId);
@@ -273,7 +307,8 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
       e = {
         cliente: r.cliente, customerType: r.customerType,
         mobilePdv: "", mobileAddetto: "", anyPdv: "", anyAddetto: "",
-        openedAt: r.openedAt ?? null, simAttive: 0, activeDrivers: new Set<CjDriver>(),
+        openedAt: r.openedAt ?? null, simAttive: 0,
+        candidates: [], mobileMonths: [], allMonths: [],
       };
       map.set(r.journeyId, e);
     }
@@ -283,21 +318,37 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     // attivazione mobile, quindi il valore è univoco.
     e.anyPdv = minNonEmpty(e.anyPdv, r.pdv);
     e.anyAddetto = minNonEmpty(e.anyAddetto, r.addetto);
+    const eventMonth = monthOfIso(r.eventDate ?? null);
+    if (eventMonth != null) e.allMonths.push(eventMonth);
     if (r.driver === "mobile") {
       e.mobilePdv = minNonEmpty(e.mobilePdv, r.pdv);
       e.mobileAddetto = minNonEmpty(e.mobileAddetto, r.addetto);
-      if (CJ_ACTIVE_STATES.has(r.state)) e.simAttive += 1;
+      if (CJ_ACTIVE_STATES.has(r.state)) {
+        e.simAttive += 1;
+        if (eventMonth != null) e.mobileMonths.push(eventMonth);
+      }
     }
     if (!e.openedAt && r.openedAt) e.openedAt = r.openedAt;
     if (r.driver !== "mobile" && CJ_ACTIVE_STATES.has(r.state)) {
-      e.activeDrivers.add(r.driver);
+      e.candidates.push({ driver: r.driver, eventDate: r.eventDate ?? null });
     }
   }
   return Array.from(map.entries())
     // Cohort: solo clienti con SIM mobile attiva.
     .filter(([, e]) => e.simAttive >= 1)
     .map(([journeyId, e]) => {
-      const pisteAttive = e.activeDrivers.size;
+      // T0 = mese di apertura journey; fallback alla prima SIM mobile attiva,
+      // poi al primo evento in assoluto. Solo i contratti dal mese di T0 in poi
+      // contano come pista cross-sell.
+      const t0Month =
+        monthOfIso(e.openedAt) ??
+        (e.mobileMonths.length ? Math.min(...e.mobileMonths) : null) ??
+        (e.allMonths.length ? Math.min(...e.allMonths) : null);
+      const activeDrivers = new Set<CjDriver>();
+      for (const c of e.candidates) {
+        if (pisteInWindow(c.eventDate, t0Month)) activeDrivers.add(c.driver);
+      }
+      const pisteAttive = activeDrivers.size;
       const fatturato = gettoneForPiste(pisteAttive);
       return {
         journeyId,
