@@ -273,8 +273,8 @@ mantenere snello questo file:
   `cj-report-tests` (`bash scripts/run-customer-journey-report-tests.sh`).
   Run completo in ~1s.
 - **Customer Journey Analisi gettoni UI tests**
-  (`tests/customer-journey-gettone-ui.test.mjs`): 2 scenari Playwright
-  (Task #194) sull'espansione del dettaglio dell'Analisi gettoni. A
+  (`tests/customer-journey-gettone-ui.test.mjs`): 3 scenari Playwright
+  (Task #194 + Task #195) sulle tabelle report interattive. A
   differenza dei test puri, questo guida un vero browser headless (chromium
   di sistema via Nix + `playwright-core`) per proteggere il rendering React
   che la logica pura non copre: il toggle `useState` che apre/chiude la
@@ -285,14 +285,21 @@ mantenere snello questo file:
   driver/stato/PDV/addetto, così i valori attesi (Mario: 2 piste ⇒ 40%
   saturazione / 30€; Luigi: 1 pista ⇒ 20€) sono prevedibili; la vista
   gettone consuma comunque l'output di `/api/customer-journeys/report`,
-  identico al percorso reconcile (già coperto altrove). Il cookie di
-  sessione viene iniettato nel context Playwright. Coprono: (1) admin —
-  espande la riga addetto, verifica i valori aggregati e la sotto-tabella
-  (nome cliente, % saturazione, piste 2/5, intestazioni), poi la richiude
+  identico al percorso reconcile (già coperto altrove). I PDV sono nomi
+  univoci per evitare collisioni di test-id nella dimensione negozio. Il
+  cookie di sessione viene iniettato nel context Playwright. Coprono:
+  (1) admin — Analisi gettoni: espande la riga **addetto** E la riga
+  **negozio/PDV** (`button-gettone-dim-negozio`, Task #195), verifica per
+  entrambe i valori aggregati e la sotto-tabella (nome cliente, %
+  saturazione, piste 2/5, intestazioni), poi le richiude
   (`row-gettone-detail-*` rimossa); (2) operatore con `bisuite_addetti`
   associato a un solo addetto — vede SOLO la propria riga, niente leakage
-  dell'altro addetto. Cleanup completo del dev DB alla fine. Lanciali via lo
-  step di validation `cj-gettone-ui-tests`
+  dell'altro addetto; (3) admin — tab **"Dettaglio"** (ReportView,
+  Task #195): verifica che le righe aggregate `row-report-*` rendano i
+  valori attesi (label/clienti/contratti/attivi) e che il selettore di
+  dimensione (`button-report-dim-*`) cambi il grouping a runtime
+  (negozio⇒addetto, le righe PDV spariscono). Cleanup completo del dev DB
+  alla fine. Lanciali via lo step di validation `cj-gettone-ui-tests`
   (`bash scripts/run-customer-journey-gettone-ui-tests.sh`); richiede il
   workflow "Start application" attivo, `DATABASE_URL` e chromium di sistema.
   Run completo in ~25s.
