@@ -1636,12 +1636,23 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Email e nome sono obbligatori" });
       }
 
+      // L'admin di tenant non può assegnare il ruolo super_admin (solo il
+      // super_admin può creare altri super_admin).
+      if (adminProfile.role === "admin" && resolvedRole === "super_admin") {
+        return res.status(403).json({ error: "Non puoi assegnare il ruolo super_admin" });
+      }
+
       const existing = await storage.getProfileByEmail(resolvedEmail);
       if (existing) {
         return res.status(400).json({ error: "Esiste già un utente con questa email" });
       }
 
-      let resolvedOrgId = organizationId || organization_id || adminProfile.organizationId;
+      // Scoping organizzazione: l'admin crea utenti SOLO nella propria org
+      // (ignora qualsiasi organizationId passato dal client). Il super_admin
+      // può indicare un'org esplicita o crearne una nuova al volo.
+      let resolvedOrgId = adminProfile.role === "super_admin"
+        ? (organizationId || organization_id || adminProfile.organizationId)
+        : adminProfile.organizationId;
 
       if (organizationName && adminProfile.role === "super_admin") {
         const newOrg = await storage.createOrganization({ name: organizationName });
@@ -2144,8 +2155,8 @@ export async function registerRoutes(
   app.post("/api/admin/bisuite-api", isAuthenticated, requireModule(["vendite_bisuite", "customer_journey"]), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
-      if (!profile || profile.role !== "super_admin") {
-        return res.status(403).json({ error: "Solo il super admin può utilizzare l'API BiSuite" });
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo gli amministratori possono utilizzare l'API BiSuite" });
       }
 
       const { action, organization_id, start_date, end_date, api_url, client_id, client_secret } = req.body;
@@ -2162,6 +2173,11 @@ export async function registerRoutes(
         cId = client_id;
         cSecret = client_secret;
       } else if (organization_id) {
+        // L'admin di tenant può operare solo sulla propria organizzazione;
+        // il super_admin su qualsiasi org.
+        if (profile.role !== "super_admin" && organization_id !== profile.organizationId) {
+          return res.status(403).json({ error: "Non puoi utilizzare l'API BiSuite di un'altra organizzazione" });
+        }
         const orgConfig = await storage.getOrgConfig(organization_id);
         const cfg = orgConfig?.config as Record<string, unknown> | undefined;
         const creds = cfg?.bisuiteCredentials as Record<string, string> | undefined;

@@ -122,12 +122,20 @@ export default function AdminPanel() {
   const [addettiUser, setAddettiUser] = useState<TeamMember | null>(null);
   const [addettiSelected, setAddettiSelected] = useState<string[]>([]);
   const [addettiSaving, setAddettiSaving] = useState(false);
+  const [addettiSearch, setAddettiSearch] = useState('');
 
   const openAddettiDialog = (member: TeamMember) => {
     setAddettiUser(member);
     setAddettiSelected(Array.isArray(member.bisuiteAddetti) ? member.bisuiteAddetti : []);
+    setAddettiSearch('');
     setAddettiDialogOpen(true);
   };
+
+  const filteredAddetti = useMemo(() => {
+    const q = addettiSearch.trim().toLowerCase();
+    if (!q) return dipendenti;
+    return dipendenti.filter((d) => d.nome.toLowerCase().includes(q));
+  }, [dipendenti, addettiSearch]);
 
   const toggleAddetto = (nome: string) => {
     setAddettiSelected((prev) =>
@@ -719,8 +727,20 @@ export default function AdminPanel() {
                   Nessun addetto disponibile dalle vendite BiSuite.
                 </p>
               ) : (
+                <>
+                <Input
+                  placeholder="Cerca addetto per nome..."
+                  value={addettiSearch}
+                  onChange={(e) => setAddettiSearch(e.target.value)}
+                  data-testid="input-addetti-search"
+                />
+                {filteredAddetti.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center" data-testid="text-addetti-no-results">
+                    Nessun addetto corrisponde a "{addettiSearch}".
+                  </p>
+                ) : (
                 <div className="max-h-72 overflow-y-auto space-y-1 pr-1">
-                  {dipendenti.map((d) => (
+                  {filteredAddetti.map((d) => (
                     <label
                       key={d.nome}
                       className="flex items-center gap-3 rounded-md px-2 py-2 hover-elevate cursor-pointer"
@@ -735,6 +755,8 @@ export default function AdminPanel() {
                     </label>
                   ))}
                 </div>
+                )}
+                </>
               )}
               <Button
                 className="w-full"
