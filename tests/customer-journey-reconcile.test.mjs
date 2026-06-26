@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
+
+import {
+  BASE,
+  uniq,
+  jsonReq,
+  signup,
+  cleanupOrg,
+  newPool,
+} from './helpers/uiTest.mjs';
 
 // Test suite Customer Journey reconcile / preservazione campi manuali (Task #164).
 //
@@ -25,61 +33,11 @@ import crypto from 'node:crypto';
 // PATCH dettagli via HTTP; leggiamo lo stato finale degli item dal DB per
 // asserzioni precise sui singoli campi.
 
-const BASE = process.env.FINPLAN_BASE_URL || 'http://localhost:5000';
-
 // Deve combaciare con CJ_TRIGGER_DATE in server/storage.ts: la journey si
 // apre solo per attivazioni mobile da questa data in poi.
 const SALE_DATE = '2026-07-15T10:00:00.000Z';
 
-function uniq(prefix) {
-  return `${prefix}_${crypto.randomBytes(4).toString('hex')}`;
-}
-
-async function jsonReq(url, opts = {}) {
-  const r = await fetch(url, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(opts.headers || {}),
-    },
-  });
-  let body = null;
-  const ct = r.headers.get('content-type') || '';
-  if (ct.includes('application/json')) body = await r.json().catch(() => null);
-  else body = await r.text().catch(() => null);
-  return { status: r.status, headers: r.headers, body };
-}
-
-function pickCookie(headers) {
-  const sc = headers.getSetCookie?.() || headers.raw?.()['set-cookie'] || [];
-  const arr = Array.isArray(sc) ? sc : [sc];
-  return arr
-    .map((c) => c.split(';')[0])
-    .filter(Boolean)
-    .join('; ');
-}
-
-async function signupAndLogin() {
-  const email = `${uniq('cj_reconcile_test')}@example.com`;
-  const password = 'Pa55word!';
-  const orgName = uniq('CJReconcile');
-  const r = await jsonReq(`${BASE}/api/auth/signup`, {
-    method: 'POST',
-    body: JSON.stringify({
-      email,
-      password,
-      fullName: 'CJ Reconcile Test',
-      organizationName: orgName,
-    }),
-  });
-  assert.equal(r.status, 201, `signup failed: ${JSON.stringify(r.body)}`);
-  const cookie = pickCookie(r.headers);
-  assert.ok(cookie, 'no session cookie returned by signup');
-  const profileId = r.body?.id;
-  const orgId = r.body?.organization?.id || r.body?.organizationId;
-  assert.ok(profileId && orgId, `missing ids in signup response: ${JSON.stringify(r.body)}`);
-  return { email, password, cookie, profileId, orgId };
-}
+const signupAndLogin = () => signup({ prefix: 'cj_reconcile_test', fullName: 'CJ Reconcile Test' });
 
 // Article id costanti del fixture: 1000 è l'attivazione mobile che innesca la
 // journey; 1001 e 1002 sono i due dispositivi finanziati (IMEI + RATA).
@@ -233,7 +191,7 @@ async function itemsByArticle(pool, orgId) {
 async function reconcile(session) {
   const r = await jsonReq(`${BASE}/api/customer-journeys/reconcile`, {
     method: 'POST',
-    headers: { Cookie: session.cookie },
+    headers: { Cookie: session.cookieHeader },
   });
   assert.equal(r.status, 200, `reconcile failed: ${JSON.stringify(r.body)}`);
   return r.body;
@@ -243,7 +201,7 @@ async function reconcile(session) {
 // PRIMA di rispondere, così le vendite già nel DB compaiono senza "Rigenera".
 async function listJourneys(session) {
   const r = await jsonReq(`${BASE}/api/customer-journeys`, {
-    headers: { Cookie: session.cookie },
+    headers: { Cookie: session.cookieHeader },
   });
   assert.equal(r.status, 200, `list failed: ${JSON.stringify(r.body)}`);
   return r.body;
@@ -259,24 +217,13 @@ async function reconciledWatermark(pool, orgId) {
   return r.rows[0]?.at ?? null;
 }
 
+// cleanupOrg condiviso copre item/journey/profilo/org; qui ripuliamo prima
+// le vendite BiSuite specifiche di questa suite.
 async function cleanupSession(pool, session) {
-  for (const q of [
-    [`DELETE FROM customer_journey_items WHERE organization_id = $1`, [session.orgId]],
-    [`DELETE FROM customer_journeys WHERE organization_id = $1`, [session.orgId]],
-    [`DELETE FROM bisuite_sales WHERE organization_id = $1`, [session.orgId]],
-    [`DELETE FROM profiles WHERE id = $1`, [session.profileId]],
-    [`DELETE FROM organizations WHERE id = $1`, [session.orgId]],
-  ]) {
-    await pool.query(q[0], q[1]).catch(() => {});
-  }
-}
-
-function newPool() {
-  return import('pg').then((pgMod) => {
-    const Pool = pgMod.default?.Pool || pgMod.Pool;
-    assert.ok(process.env.DATABASE_URL, 'DATABASE_URL must be set for this test');
-    return new Pool({ connectionString: process.env.DATABASE_URL });
-  });
+  await pool
+    .query(`DELETE FROM bisuite_sales WHERE organization_id = $1`, [session.orgId])
+    .catch(() => {});
+  await cleanupOrg(pool, session);
 }
 
 // ===========================================================================
@@ -313,7 +260,7 @@ test('scenario 1: manual contract fields survive a re-reconcile', async () => {
       `${BASE}/api/customer-journey-items/${before.id}/details`,
       {
         method: 'PATCH',
-        headers: { Cookie: session.cookie },
+        headers: { Cookie: session.cookieHeader },
         body: JSON.stringify({
           dataAttivazione: '2026-08-01',
           pdvDestinazione: 'PDV DESTINAZIONE MANUALE',

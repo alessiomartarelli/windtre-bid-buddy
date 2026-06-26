@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
+
+import {
+  BASE,
+  uniq,
+  jsonReq,
+  signup,
+  cleanupOrg,
+  newPool,
+} from './helpers/uiTest.mjs';
 
 // Test suite Customer Journey: data trigger configurabile per org (Task #167).
 //
@@ -15,8 +23,6 @@ import crypto from 'node:crypto';
 //   - con la config di default la journey NON si apre (data < 2026-07-01);
 //   - dopo aver anticipato la data trigger a 2026-01-01 la journey si apre.
 
-const BASE = process.env.FINPLAN_BASE_URL || 'http://localhost:5000';
-
 // Datata prima del default 2026-07-01: con il default NON apre la journey.
 const EARLY_SALE_DATE = '2026-05-15T10:00:00.000Z';
 const DEFAULT_TRIGGER = '2026-07-01';
@@ -24,47 +30,7 @@ const EARLIER_TRIGGER = '2026-01-01';
 
 const ART_TRIGGER = 1000;
 
-function uniq(prefix) {
-  return `${prefix}_${crypto.randomBytes(4).toString('hex')}`;
-}
-
-async function jsonReq(url, opts = {}) {
-  const r = await fetch(url, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-  });
-  let body = null;
-  const ct = r.headers.get('content-type') || '';
-  if (ct.includes('application/json')) body = await r.json().catch(() => null);
-  else body = await r.text().catch(() => null);
-  return { status: r.status, headers: r.headers, body };
-}
-
-function pickCookie(headers) {
-  const sc = headers.getSetCookie?.() || headers.raw?.()['set-cookie'] || [];
-  const arr = Array.isArray(sc) ? sc : [sc];
-  return arr.map((c) => c.split(';')[0]).filter(Boolean).join('; ');
-}
-
-async function signupAndLogin() {
-  const email = `${uniq('cj_trigger_test')}@example.com`;
-  const r = await jsonReq(`${BASE}/api/auth/signup`, {
-    method: 'POST',
-    body: JSON.stringify({
-      email,
-      password: 'Pa55word!',
-      fullName: 'CJ Trigger Test',
-      organizationName: uniq('CJTrigger'),
-    }),
-  });
-  assert.equal(r.status, 201, `signup failed: ${JSON.stringify(r.body)}`);
-  const cookie = pickCookie(r.headers);
-  assert.ok(cookie, 'no session cookie returned by signup');
-  const profileId = r.body?.id;
-  const orgId = r.body?.organization?.id || r.body?.organizationId;
-  assert.ok(profileId && orgId, `missing ids in signup response: ${JSON.stringify(r.body)}`);
-  return { email, cookie, profileId, orgId };
-}
+const signupAndLogin = () => signup({ prefix: 'cj_trigger_test', fullName: 'CJ Trigger Test' });
 
 function buildRawData(cf) {
   return {
@@ -106,31 +72,22 @@ async function insertSale(pool, orgId, cf) {
 async function reconcile(session) {
   const r = await jsonReq(`${BASE}/api/customer-journeys/reconcile`, {
     method: 'POST',
-    headers: { Cookie: session.cookie },
+    headers: { Cookie: session.cookieHeader },
   });
   assert.equal(r.status, 200, `reconcile failed: ${JSON.stringify(r.body)}`);
   return r.body;
 }
 
+// cleanupOrg condiviso copre item/journey/profilo/org; qui ripuliamo prima
+// le vendite BiSuite e la config org specifiche di questa suite.
 async function cleanupSession(pool, session) {
   for (const q of [
-    [`DELETE FROM customer_journey_items WHERE organization_id = $1`, [session.orgId]],
-    [`DELETE FROM customer_journeys WHERE organization_id = $1`, [session.orgId]],
     [`DELETE FROM bisuite_sales WHERE organization_id = $1`, [session.orgId]],
     [`DELETE FROM organization_config WHERE organization_id = $1`, [session.orgId]],
-    [`DELETE FROM profiles WHERE id = $1`, [session.profileId]],
-    [`DELETE FROM organizations WHERE id = $1`, [session.orgId]],
   ]) {
     await pool.query(q[0], q[1]).catch(() => {});
   }
-}
-
-function newPool() {
-  return import('pg').then((pgMod) => {
-    const Pool = pgMod.default?.Pool || pgMod.Pool;
-    assert.ok(process.env.DATABASE_URL, 'DATABASE_URL must be set for this test');
-    return new Pool({ connectionString: process.env.DATABASE_URL });
-  });
+  await cleanupOrg(pool, session);
 }
 
 // ===========================================================================
@@ -146,7 +103,7 @@ test('scenario 1: configurable trigger date drives journey opening', async () =>
 
     // GET di default: triggerDate == default.
     const cfg0 = await jsonReq(`${BASE}/api/customer-journey-config`, {
-      headers: { Cookie: session.cookie },
+      headers: { Cookie: session.cookieHeader },
     });
     assert.equal(cfg0.status, 200, `config GET failed: ${JSON.stringify(cfg0.body)}`);
     assert.equal(cfg0.body.triggerDate, DEFAULT_TRIGGER, 'default triggerDate must be 2026-07-01');
@@ -159,7 +116,7 @@ test('scenario 1: configurable trigger date drives journey opening', async () =>
     // (2) anticipa la data trigger.
     const put = await jsonReq(`${BASE}/api/customer-journey-config`, {
       method: 'PUT',
-      headers: { Cookie: session.cookie },
+      headers: { Cookie: session.cookieHeader },
       body: JSON.stringify({ triggerDate: EARLIER_TRIGGER }),
     });
     assert.equal(put.status, 200, `config PUT failed: ${JSON.stringify(put.body)}`);
@@ -173,7 +130,7 @@ test('scenario 1: configurable trigger date drives journey opening', async () =>
     // vendite anteriori; verifichiamo solo che il GET rifletta il reset.
     const reset = await jsonReq(`${BASE}/api/customer-journey-config`, {
       method: 'PUT',
-      headers: { Cookie: session.cookie },
+      headers: { Cookie: session.cookieHeader },
       body: JSON.stringify({ triggerDate: null }),
     });
     assert.equal(reset.status, 200, `config reset failed: ${JSON.stringify(reset.body)}`);
@@ -194,13 +151,13 @@ test('scenario 2: invalid trigger date is rejected', async () => {
   try {
     const bad = await jsonReq(`${BASE}/api/customer-journey-config`, {
       method: 'PUT',
-      headers: { Cookie: session.cookie },
+      headers: { Cookie: session.cookieHeader },
       body: JSON.stringify({ triggerDate: '15-05-2026' }),
     });
     assert.equal(bad.status, 400, 'malformed date must be rejected with 400');
 
     const cfg = await jsonReq(`${BASE}/api/customer-journey-config`, {
-      headers: { Cookie: session.cookie },
+      headers: { Cookie: session.cookieHeader },
     });
     assert.equal(cfg.status, 200);
     assert.equal(cfg.body.triggerDate, DEFAULT_TRIGGER, 'config must remain at default after a rejected PUT');
