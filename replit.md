@@ -365,6 +365,12 @@ mantenere snello questo file:
   (`bash scripts/run-customer-journey-gettone-ui-tests.sh`); richiede il
   workflow "Start application" attivo, `DATABASE_URL` e chromium di sistema.
   Run completo in ~25s.
+- **Type-check** (Task #219): step di validation `typecheck`
+  (`bash scripts/run-typecheck.sh`) che esegue `npx tsc --noEmit` su tutto il
+  repo usando `tsconfig.json` (target ES2020, strict). È un check statico puro:
+  NON serve né dev server né DB. Fallisce (exit != 0) se compare anche un solo
+  errore di tipo, così blocca la ricomparsa degli errori di tipo che Task #218
+  aveva ripulito. Run completo in ~10-20s.
 
 ## External Dependencies
 

@@ -88,6 +88,10 @@ args = "admin-authz-tests"
 task = "workflow.run"
 args = "cj-validity-gettone-parity-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "typecheck"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -236,6 +240,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-customer-journey-validity-gettone-parity-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "typecheck"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-typecheck.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
