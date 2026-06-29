@@ -92,6 +92,10 @@ args = "cj-validity-gettone-parity-tests"
 task = "workflow.run"
 args = "typecheck"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "inc-sort-ui-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -251,6 +255,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-typecheck.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "inc-sort-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-incentivazione-sort-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

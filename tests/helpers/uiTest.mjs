@@ -136,6 +136,20 @@ export async function seedJourney(pool, orgId, { customerKey, nome, addetto = nu
   return journeyId;
 }
 
+// Semina le valenze di una sezione per (org, month, year). `rows` = array di
+// oggetti { name, <trackId>: number|null, ... } come quelli prodotti dal parse
+// Excel lato client. Upsert sull'indice unico (org, month, year, section) così
+// è ripetibile. Usato dai test UI dell'Incentivazione interna.
+export async function seedValenze(pool, orgId, { month, year, sectionId, rows, fileName = 'valenze-test.xlsx' }) {
+  await pool.query(
+    `INSERT INTO incentivazione_valenze (organization_id, month, year, section_id, file_name, rows)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+     ON CONFLICT (organization_id, month, year, section_id)
+       DO UPDATE SET rows = EXCLUDED.rows, file_name = EXCLUDED.file_name, uploaded_at = now()`,
+    [orgId, month, year, sectionId, fileName, JSON.stringify(rows)],
+  );
+}
+
 // Aggiunge un singolo item a una journey esistente.
 export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, importo = null, state = 'inserito' }) {
   await pool.query(

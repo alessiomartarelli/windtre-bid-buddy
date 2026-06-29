@@ -108,6 +108,7 @@ SUITES=(
   "run-incentivazione-dashboard-authz-tests.sh"
   "run-incentivazione-accessori-servizi-tests.sh"
   "run-finplan-tests.sh"
+  "run-incentivazione-sort-ui-tests.sh"
   "run-customer-journey-gettone-ui-tests.sh"
 )
 

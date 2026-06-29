@@ -87,6 +87,7 @@ Preferred communication style: Simple, everyday language.
   `run-incentivazione-dashboard-authz-tests.sh`,
   `run-incentivazione-accessori-servizi-tests.sh`,
   `run-finplan-tests.sh`,
+  `run-incentivazione-sort-ui-tests.sh` (Playwright),
   `run-customer-journey-gettone-ui-tests.sh` (Playwright + chromium di
   sistema, la più lenta, per ultima); al primo fallimento (`set -e`) il
   deploy si ferma. Bypass: `SKIP_QUALITY_GATE=1` salta TUTTO il cancello
@@ -402,6 +403,37 @@ mantenere snello questo file:
   (`bash scripts/run-customer-journey-gettone-ui-tests.sh`); richiede il
   workflow "Start application" attivo, `DATABASE_URL` e chromium di sistema.
   Run completo in ~25s.
+- **Incentivazione interna sort/filter UI tests**
+  (`tests/incentivazione-sort-ui.test.mjs`): 2 scenari Playwright (Task #226)
+  sul wiring dei controlli di ordinamento della pagina Incentivazione interna.
+  La logica pura `sortEmps` (`shared/incentivazione.ts`) è già coperta dai test
+  puri (`incentivazione-tests`); qui si protegge il rendering React che quella
+  non raggiunge: la scelta del criterio (`select-sort-key`/`option-sort-*`) +
+  il toggle direzione (`button-sort-dir`) che si combinano coi filtri, il reset
+  (`button-reset-filters`) che riporta a Stato/desc, e il fallback a "Stato"
+  quando si cambia sezione e la pista scelta non esiste lì (`effectiveSortKey`).
+  Setup: signup admin+org (modulo `incentivazione_interna` abilitato di
+  default), poi semina SOLO le righe valenze via SQL
+  (`incentivazione_valenze`, helper `seedValenze` in `tests/helpers/uiTest.mjs`)
+  con valori `mobile`/`fisso_pt` deterministici per il mese/anno correnti (la
+  pagina apre di default sul periodo corrente). La config NON è seminata: la
+  pagina usa `defaultConfig` (sezioni W3/Vodafone già "ready"). Coprono:
+  (1) ordina per la pista "mobile" desc (30,20,10) → inverte in asc (10,20,30)
+  → applica la ricerca "rossi" (sottoinsieme, ordine asc preservato:
+  filtro+sort convivono) → "Azzera filtri" ripristina 3 schede, ricerca vuota,
+  criterio "Stato" e il bottone reset sparisce; (2) impostato il sort per
+  "mobile" in W3, il cambio tab su Vodafone (dove "mobile" non è una pista)
+  ricade su "Stato" e l'ordine schede lo DIMOSTRA: lo scenario opera su un mese
+  passato (`el==tot` ⇒ stati semaforo deterministici) e semina la sezione
+  Vodafone così che l'ordine per Stato/desc `[UNO(r), DUE(g)]` differisca
+  dall'ordine per nome `[DUE, UNO]` (che si otterrebbe se il fallback non
+  scattasse, pista assente ⇒ tie-break per nome); inverte poi la direzione e
+  verifica `[DUE(g), UNO(r)]` (l'ordinamento risponde alla direzione ⇒ è davvero
+  un sort per Stato, non un ordine per nome invariante), il tutto senza crash.
+  L'ordine schede è letto via i data-testid `card-addetto-*` nel DOM. Lanciali via lo step di validation `inc-sort-ui-tests`
+  (`bash scripts/run-incentivazione-sort-ui-tests.sh`); richiede il workflow
+  "Start application" attivo, `DATABASE_URL` e chromium di sistema. Run completo
+  in ~25s.
 - **Type-check** (Task #219): step di validation `typecheck`
   (`bash scripts/run-typecheck.sh`) che esegue `npx tsc --noEmit` su tutto il
   repo usando `tsconfig.json` (target ES2020, strict). È un check statico puro:
@@ -414,7 +446,7 @@ mantenere snello questo file:
   tutte le suite che richiedono il dev server e/o `DATABASE_URL` —
   `cj-authz`, `admin-authz`, `cj-reconcile`, `cj-trigger-date`,
   `inc-dashboard-authz`, `incentivazione-accservizi`, `finplan`,
-  `cj-gettone-ui` — che prima andavano lanciate a mano. Richiede
+  `inc-sort-ui`, `cj-gettone-ui` — che prima andavano lanciate a mano. Richiede
   `DATABASE_URL` (riusa il DB di dev: ogni suite semina/pulisce i propri
   dati con prefissi univoci). Se l'app non è già su `localhost:5000`,
   avvia `npm run dev` in modo effimero, attende la readiness (fino a
