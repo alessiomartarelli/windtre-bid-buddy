@@ -20,12 +20,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
-  buildEmps, fmtV, normalizeConfig, parseValenzeAoa, defaultConfig,
+  buildEmps, fmtV, normalizeConfig, parseValenzeAoa, defaultConfig, sortEmps,
   type IncentivazioneConfig, type Section, type Track, type LiveAddetto,
   type ValenzaRow, type CalendarInfo, type Employee, type Semaforo,
+  type IncSortKey, type IncSortDir,
 } from "@shared/incentivazione";
 import {
   Upload, Settings, Unlock, Lock, Trash2, Plus, RefreshCw, AlertCircle, FileDown,
+  ArrowDown, ArrowUp,
 } from "lucide-react";
 import { exportIncentivazionePdf } from "@/lib/incentivazioneExport";
 
@@ -79,6 +81,8 @@ export default function IncentivazioneInterna() {
   const [statusFilter, setStatusFilter] = useState<"all" | Semaforo>("all");
   const [unlockOnly, setUnlockOnly] = useState(false);
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<IncSortKey>("status");
+  const [sortDir, setSortDir] = useState<IncSortDir>("desc");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadTarget, setUploadTarget] = useState<string | null>(null);
@@ -112,14 +116,29 @@ export default function IncentivazioneInterna() {
     return { g, a, r, unlock };
   }, [emps]);
 
+  // Se il criterio scelto è una pista assente nella sezione corrente (es. dopo
+  // un cambio sezione) si ricade su "Stato" per non ordinare per chiave fantasma.
+  const effectiveSortKey: IncSortKey = useMemo(() => {
+    if (sortKey === "status") return "status";
+    return section?.tracks.some((t) => !t.sub && t.id === sortKey) ? sortKey : "status";
+  }, [sortKey, section]);
+
   const filteredEmps = useMemo(() => {
-    return emps.filter((e) => {
+    const f = emps.filter((e) => {
       if (unlockOnly && !e.unlockProjected) return false;
       if (statusFilter !== "all" && e.status !== statusFilter) return false;
       if (search.trim() && !e.name.toLowerCase().includes(search.toLowerCase().trim())) return false;
       return true;
     });
-  }, [emps, statusFilter, unlockOnly, search]);
+    return sortEmps(f, effectiveSortKey, sortDir);
+  }, [emps, statusFilter, unlockOnly, search, effectiveSortKey, sortDir]);
+
+  // L'export rispetta l'ordinamento corrente ma resta sull'intero organico
+  // (i conteggi di riepilogo si riferiscono a tutti gli addetti).
+  const sortedAll = useMemo(
+    () => sortEmps(emps, effectiveSortKey, sortDir),
+    [emps, effectiveSortKey, sortDir],
+  );
 
   // ── Upload valenze (admin) ──────────────────────────────────────────────
   const saveValenze = useMutation({
@@ -269,7 +288,7 @@ export default function IncentivazioneInterna() {
                   section={s}
                   calendar={calendar}
                   emps={filteredEmps}
-                  exportEmps={emps}
+                  exportEmps={sortedAll}
                   counts={counts}
                   totalEmps={emps.length}
                   liveCount={live.length}
@@ -282,6 +301,10 @@ export default function IncentivazioneInterna() {
                   setUnlockOnly={setUnlockOnly}
                   search={search}
                   setSearch={setSearch}
+                  sortKey={sortKey}
+                  setSortKey={setSortKey}
+                  sortDir={sortDir}
+                  setSortDir={setSortDir}
                   onUpload={() => triggerUpload(s.id)}
                   onDeleteValenze={() => deleteValenze.mutate(s.id)}
                   uploading={saveValenze.isPending}
@@ -315,6 +338,10 @@ function SectionView(props: {
   setUnlockOnly: (b: boolean) => void;
   search: string;
   setSearch: (s: string) => void;
+  sortKey: IncSortKey;
+  setSortKey: (k: IncSortKey) => void;
+  sortDir: IncSortDir;
+  setSortDir: (d: IncSortDir) => void;
   onUpload: () => void;
   onDeleteValenze: () => void;
   uploading: boolean;
@@ -324,8 +351,11 @@ function SectionView(props: {
   const {
     section, calendar, emps, exportEmps, counts, totalEmps, liveCount, lastBisuiteSync, valenzeInfo, isAdmin,
     statusFilter, setStatusFilter, unlockOnly, setUnlockOnly, search, setSearch,
+    sortKey, setSortKey, sortDir, setSortDir,
     onUpload, onDeleteValenze, uploading, month, year,
   } = props;
+  const sortTracks = section.tracks.filter((t) => !t.sub);
+  const sortDefault = sortKey === "status" && sortDir === "desc";
   const { toast } = useToast();
   const [pdfPending, setPdfPending] = useState(false);
 
@@ -430,8 +460,34 @@ function SectionView(props: {
           className="max-w-xs"
           data-testid="input-search-addetto"
         />
-        {(statusFilter !== "all" || unlockOnly || search) && (
-          <Button variant="ghost" size="sm" onClick={() => { setStatusFilter("all"); setUnlockOnly(false); setSearch(""); }}>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground hidden sm:inline">Ordina per</span>
+          <Select value={sortKey} onValueChange={(v) => setSortKey(v as IncSortKey)}>
+            <SelectTrigger className="h-9 w-[180px]" data-testid="select-sort-key">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="status" data-testid="option-sort-status">Stato</SelectItem>
+              {sortTracks.map((t) => (
+                <SelectItem key={t.id} value={t.id} data-testid={`option-sort-${t.id}`}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9"
+            onClick={() => setSortDir(sortDir === "desc" ? "asc" : "desc")}
+            title={sortDir === "desc" ? "Decrescente" : "Crescente"}
+            data-testid="button-sort-dir"
+          >
+            {sortDir === "desc" ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
+          </Button>
+        </div>
+        {(statusFilter !== "all" || unlockOnly || search || !sortDefault) && (
+          <Button variant="ghost" size="sm" data-testid="button-reset-filters" onClick={() => { setStatusFilter("all"); setUnlockOnly(false); setSearch(""); setSortKey("status"); setSortDir("desc"); }}>
             Azzera filtri
           </Button>
         )}

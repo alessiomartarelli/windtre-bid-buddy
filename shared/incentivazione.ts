@@ -355,6 +355,55 @@ export function buildEmps(
   return emps.sort((a, b) => (STATUS_ORDER[a.status] || 0) - (STATUS_ORDER[b.status] || 0));
 }
 
+// ── Ordinamento addetti ─────────────────────────────────────────────────────
+/** Criterio di ordinamento: "status" (semaforo) oppure l'id di una pista. */
+export type IncSortKey = "status" | string;
+/** Direzione: "asc" crescente ↑, "desc" decrescente ↓. */
+export type IncSortDir = "asc" | "desc";
+
+/**
+ * Riordina (immutabile) gli addetti secondo il criterio scelto.
+ * - "status": ordine semaforo; "desc" (default) = peggiori prima, identico a
+ *   `buildEmps` (sort STABILE: a parità di stato si conserva l'ordine di
+ *   ingresso, niente riordino per nome), "asc" = migliori prima.
+ * - pista: chiave = valore attuale dell'addetto per quella pista (proiezione
+ *   come tie-break); "desc" = valori più alti prima, "asc" = più bassi prima.
+ * Gli addetti senza valore per la pista finiscono SEMPRE in coda,
+ * indipendentemente dalla direzione. Tie-break finale per nome (it-IT) solo
+ * per le piste (nessun ordinamento pregresso da preservare).
+ */
+export function sortEmps(
+  emps: Employee[],
+  key: IncSortKey,
+  dir: IncSortDir,
+): Employee[] {
+  const arr = [...emps];
+  const byName = (a: Employee, b: Employee) => a.name.localeCompare(b.name, "it");
+  if (key === "status") {
+    // Sort stabile: a parità di stato l'ordine di ingresso è preservato, così
+    // "Stato/desc" coincide esattamente con l'ordinamento di `buildEmps`.
+    arr.sort((a, b) => {
+      const d = (STATUS_ORDER[a.status] || 0) - (STATUS_ORDER[b.status] || 0);
+      return dir === "desc" ? d : -d;
+    });
+    return arr;
+  }
+  const factor = dir === "desc" ? -1 : 1;
+  arr.sort((a, b) => {
+    const av = a.tds[key]?.actual ?? null;
+    const bv = b.tds[key]?.actual ?? null;
+    if (av === null && bv === null) return byName(a, b);
+    if (av === null) return 1; // valori mancanti sempre in coda
+    if (bv === null) return -1;
+    if (av !== bv) return (av - bv) * factor;
+    const ap = a.tds[key]?.proj ?? null;
+    const bp = b.tds[key]?.proj ?? null;
+    if (ap !== null && bp !== null && ap !== bp) return (ap - bp) * factor;
+    return byName(a, b);
+  });
+  return arr;
+}
+
 // ── Formattazione ───────────────────────────────────────────────────────────
 export function fmtV(v: number | null, unit: string): string {
   if (v === null) return "—";

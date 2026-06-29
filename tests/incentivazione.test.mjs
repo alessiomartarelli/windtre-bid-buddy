@@ -23,6 +23,7 @@ const {
   projV,
   semOf,
   buildEmps,
+  sortEmps,
   colIdx,
   parseValenzeAoa,
 } = await import('../shared/incentivazione.ts');
@@ -199,6 +200,97 @@ test('buildEmps: employees sorted worst-status first', () => {
   const emps = buildEmps(TRACKS, rows, [], CAL);
   assert.equal(emps[0].name, 'Rosso', 'worst status (r) sorts first');
   assert.equal(emps[1].name, 'Verde');
+});
+
+// ===========================================================================
+// sortEmps — helper per costruire addetti con valori espliciti per pista.
+// ===========================================================================
+function emp(name, vals) {
+  const tds = {};
+  for (const [id, actual] of Object.entries(vals)) {
+    tds[id] = { actual, proj: actual, sem: 'g', target: 10 };
+  }
+  return { name, tds, locks: [], status: 'g', unlockProjected: false };
+}
+
+// ===========================================================================
+// sortEmps — pista decrescente: valori più alti prima, nulli sempre in coda.
+// ===========================================================================
+test('sortEmps: track descending puts highest first, nulls last', () => {
+  const list = [
+    emp('Bassa', { mobile: 5 }),
+    emp('Alta', { mobile: 50 }),
+    emp('SenzaValore', { mobile: null }),
+    emp('Media', { mobile: 20 }),
+  ];
+  const out = sortEmps(list, 'mobile', 'desc').map((e) => e.name);
+  assert.deepEqual(out, ['Alta', 'Media', 'Bassa', 'SenzaValore']);
+});
+
+// ===========================================================================
+// sortEmps — pista crescente: valori più bassi prima, ma i nulli restano
+// SEMPRE in coda (indipendentemente dalla direzione).
+// ===========================================================================
+test('sortEmps: track ascending puts lowest first, nulls still last', () => {
+  const list = [
+    emp('Bassa', { mobile: 5 }),
+    emp('Alta', { mobile: 50 }),
+    emp('SenzaValore', { mobile: null }),
+    emp('Media', { mobile: 20 }),
+  ];
+  const out = sortEmps(list, 'mobile', 'asc').map((e) => e.name);
+  assert.deepEqual(out, ['Bassa', 'Media', 'Alta', 'SenzaValore']);
+});
+
+// ===========================================================================
+// sortEmps — pista: la proiezione fa da tie-break a parità di valore attuale.
+// ===========================================================================
+test('sortEmps: track ties broken by projection', () => {
+  const a = emp('A', { mobile: 10 });
+  a.tds.mobile.proj = 12;
+  const b = emp('B', { mobile: 10 });
+  b.tds.mobile.proj = 30;
+  const out = sortEmps([a, b], 'mobile', 'desc').map((e) => e.name);
+  assert.deepEqual(out, ['B', 'A'], 'higher projection first on equal actual');
+});
+
+// ===========================================================================
+// sortEmps — immutabilità: l'array di input non viene mutato.
+// ===========================================================================
+test('sortEmps: does not mutate the input array', () => {
+  const list = [emp('B', { mobile: 5 }), emp('A', { mobile: 50 })];
+  const before = list.map((e) => e.name);
+  sortEmps(list, 'mobile', 'desc');
+  assert.deepEqual(list.map((e) => e.name), before, 'input order preserved');
+});
+
+// ===========================================================================
+// sortEmps — "Stato" decrescente (default) = stesso ordine di buildEmps
+// (peggiori prima); "asc" inverte (migliori prima).
+// ===========================================================================
+test('sortEmps: status default desc mirrors buildEmps, asc reverses', () => {
+  const rows = [
+    { name: 'Verde', mobile: 60, assicurazione: 7, iva: 12, accessori: 200 }, // g
+    { name: 'Rosso', mobile: 1, assicurazione: 7, iva: 1, accessori: 1 }, // r
+  ];
+  const built = buildEmps(TRACKS, rows, [], CAL);
+  const desc = sortEmps(built, 'status', 'desc').map((e) => e.name);
+  assert.deepEqual(desc, ['Rosso', 'Verde'], 'desc = worst first (like buildEmps)');
+  const asc = sortEmps(built, 'status', 'asc').map((e) => e.name);
+  assert.deepEqual(asc, ['Verde', 'Rosso'], 'asc = best first');
+});
+
+// ===========================================================================
+// sortEmps — "Stato" è un sort STABILE: a parità di stato conserva l'ordine di
+// ingresso (NON riordina per nome), così coincide con `buildEmps`.
+// ===========================================================================
+test('sortEmps: status sort is stable on equal-status ties', () => {
+  const same = (name) => ({ name, tds: {}, locks: [], status: 'g', unlockProjected: false });
+  const list = [same('Zelda'), same('Anna'), same('Mario')];
+  const desc = sortEmps(list, 'status', 'desc').map((e) => e.name);
+  assert.deepEqual(desc, ['Zelda', 'Anna', 'Mario'], 'input order preserved, no name sort');
+  const asc = sortEmps(list, 'status', 'asc').map((e) => e.name);
+  assert.deepEqual(asc, ['Zelda', 'Anna', 'Mario'], 'still stable in asc direction');
 });
 
 // ===========================================================================
