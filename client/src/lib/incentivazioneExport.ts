@@ -89,9 +89,9 @@ function cardHtml(emp: Employee, tracks: Track[]): string {
   const rows = tracks.filter((t) => !t.sub).map((t) => trackRowHtml(emp, t)).join("");
   return `
     <div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;background:#fff;break-inside:avoid;">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <div style="font-weight:700;font-size:12px;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(emp.name)}</div>
-        <span style="font-size:9px;font-weight:600;padding:3px 8px;border-radius:999px;background:${pill.bg};color:${pill.fg};white-space:nowrap;">${esc(pill.label)}</span>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="flex:1;min-width:0;font-weight:700;font-size:12px;line-height:1.25;color:#0f172a;word-break:break-word;">${esc(emp.name)}</div>
+        <span style="flex-shrink:0;font-size:9px;font-weight:600;padding:3px 8px;border-radius:999px;background:${pill.bg};color:${pill.fg};white-space:nowrap;">${esc(pill.label)}</span>
       </div>
       ${locksHtml(emp)}
       <div style="margin-top:8px;">${rows}</div>
