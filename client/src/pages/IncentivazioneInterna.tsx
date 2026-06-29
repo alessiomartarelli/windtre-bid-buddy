@@ -29,7 +29,7 @@ import {
   Upload, Settings, Unlock, Lock, Trash2, Plus, RefreshCw, AlertCircle, FileDown,
   ArrowDown, ArrowUp,
 } from "lucide-react";
-import { exportIncentivazionePdf } from "@/lib/incentivazioneExport";
+import { exportIncentivazionePdf, exportIncentivazioneExcel, exportIncentivazioneHtml } from "@/lib/incentivazioneExport";
 
 interface DashboardResp {
   month: number;
@@ -370,6 +370,22 @@ function SectionView(props: {
     }
   };
 
+  const handleExportExcel = () => {
+    try {
+      exportIncentivazioneExcel({ section, emps: exportEmps, calendar, counts, totalEmps, month, year });
+    } catch (e: any) {
+      toast({ title: "Errore export Excel", description: String(e?.message || e), variant: "destructive" });
+    }
+  };
+
+  const handleExportHtml = () => {
+    try {
+      exportIncentivazioneHtml({ section, emps: exportEmps, calendar, counts, totalEmps, month, year });
+    } catch (e: any) {
+      toast({ title: "Errore export HTML", description: String(e?.message || e), variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Calendar bar */}
@@ -500,6 +516,24 @@ function SectionView(props: {
           data-testid="button-export-pdf"
         >
           <FileDown className="h-4 w-4 mr-1" /> {pdfPending ? "Genero…" : "Esporta PDF"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={exportEmps.length === 0}
+          onClick={handleExportExcel}
+          data-testid="button-export-excel"
+        >
+          <FileDown className="h-4 w-4 mr-1" /> Esporta Excel
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={exportEmps.length === 0}
+          onClick={handleExportHtml}
+          data-testid="button-export-html"
+        >
+          <FileDown className="h-4 w-4 mr-1" /> Esporta HTML
         </Button>
       </div>
 
