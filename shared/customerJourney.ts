@@ -69,6 +69,10 @@ export interface CjReportRow {
   // string o null. Serve a stabilire se il contratto rientra nella finestra del
   // gettone (dal mese di T0 in poi).
   eventDate: string | null;
+  // Data di INSERIMENTO dell'item (`dataInserimento`), ISO string o null.
+  // Distinta da `eventDate`/`openedAt` (che usano l'attivazione): l'analisi
+  // gettoni filtra la coorte per data di inserimento della SIM mobile.
+  insertedAt: string | null;
 }
 
 // Facet per-journey per i filtri della lista schede cliente (Task #187):
@@ -292,6 +296,8 @@ export interface CjGettoneJourney {
   addetto: string;
   // Data attivazione SIM (T0), ISO string o null.
   openedAt: string | null;
+  // Data di inserimento SIM (coorte del filtro a intervallo), ISO o null.
+  insertedAt: string | null;
   // N. SIM mobile ATTIVE del cliente (volume item-level, >= 1: la cohort
   // include solo clienti con almeno una SIM mobile attiva).
   simAttive: number;
@@ -319,6 +325,10 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     mobilePdv: string; mobileAddetto: string;
     anyPdv: string; anyAddetto: string;
     openedAt: string | null;
+    // Data di inserimento della coorte: la più vecchia fra le SIM mobile
+    // attive (fallback: prima riga mobile attiva incontrata). Serve al filtro
+    // a intervallo dell'analisi gettoni, che ragiona per data inserimento.
+    insertedAt: string | null;
     simAttive: number;
     // Candidati pista: driver non-mobile attivi con la loro data evento.
     // Il conteggio distinto in-finestra avviene dopo aver fissato T0.
@@ -334,7 +344,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
       e = {
         cliente: r.cliente, customerType: r.customerType,
         mobilePdv: "", mobileAddetto: "", anyPdv: "", anyAddetto: "",
-        openedAt: r.openedAt ?? null, simAttive: 0,
+        openedAt: r.openedAt ?? null, insertedAt: null, simAttive: 0,
         candidates: [], mobileMonths: [], allMonths: [],
       };
       map.set(r.journeyId, e);
@@ -353,6 +363,17 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
       if (CJ_ACTIVE_STATES.has(r.state)) {
         e.simAttive += 1;
         if (eventMonth != null) e.mobileMonths.push(eventMonth);
+        // Coorte per data inserimento: teniamo la SIM mobile attiva più
+        // vecchia (confronto per sola data UTC).
+        const ins = r.insertedAt ?? null;
+        if (ins != null) {
+          const cur = e.insertedAt;
+          if (cur == null) e.insertedAt = ins;
+          else {
+            const a = isoDateOnly(ins), b = isoDateOnly(cur);
+            if (a != null && (b == null || a < b)) e.insertedAt = ins;
+          }
+        }
       }
     }
     if (!e.openedAt && r.openedAt) e.openedAt = r.openedAt;
@@ -384,6 +405,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
         pdv: e.mobilePdv || e.anyPdv,
         addetto: e.mobileAddetto || e.anyAddetto,
         openedAt: e.openedAt,
+        insertedAt: e.insertedAt,
         simAttive: e.simAttive,
         pisteAttive,
         fatturato,
@@ -412,6 +434,32 @@ export function filterGettoneByDate(
     // bordi: gli estremi `from`/`to` sono YYYY-MM-DD e li confrontiamo come
     // stringhe con la data UTC dell'attivazione.
     const d = isoDateOnly(j.openedAt);
+    if (d == null) return false;
+    if (f != null && d < f) return false;
+    if (t != null && d > t) return false;
+    return true;
+  });
+}
+
+/**
+ * Filtra le journey per data di INSERIMENTO della SIM (coorte). Stessa logica
+ * a estremi inclusi di `filterGettoneByDate`, ma usa `insertedAt` invece di
+ * `openedAt`. È il filtro a intervallo usato dall'analisi gettoni nella UI:
+ * il pavimento per data attivazione (config Customer Journey) resta separato
+ * e applicato a parte. Una journey senza `insertedAt` passa solo se NON c'è
+ * alcun limite di data.
+ */
+export function filterGettoneByInsertDate(
+  journeys: CjGettoneJourney[],
+  from?: string | null,
+  to?: string | null,
+): CjGettoneJourney[] {
+  const f = from || null;
+  const t = to || null;
+  const hasRange = f != null || t != null;
+  return journeys.filter((j) => {
+    if (!j.insertedAt) return !hasRange;
+    const d = isoDateOnly(j.insertedAt);
     if (d == null) return false;
     if (f != null && d < f) return false;
     if (t != null && d > t) return false;

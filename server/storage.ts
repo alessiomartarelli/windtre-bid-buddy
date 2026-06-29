@@ -935,6 +935,7 @@ export class DatabaseStorage implements IStorage {
         eventDate: r.dataAttivazione
           ? r.dataAttivazione.toISOString()
           : (r.dataInserimento ? r.dataInserimento.toISOString() : null),
+        insertedAt: r.dataInserimento ? r.dataInserimento.toISOString() : null,
       };
     });
   }

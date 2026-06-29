@@ -30,6 +30,9 @@ const {
   computeItemValidity,
   CJ_VALIDITY_LABELS,
   CJ_VALIDITY_REASONS,
+  cjT6Deadline,
+  cjDaysToT6,
+  cjScadenzaSortValue,
 } = await import('../client/src/lib/customerJourneyTimeline.ts');
 
 // Mappa colori driver "finta" (1:1 con quella reale ma senza trascinare
@@ -405,4 +408,67 @@ test('scenario 8c: CJ_VALIDITY_LABELS/REASONS coprono tutti i kind', () => {
     assert.equal(typeof CJ_VALIDITY_REASONS[k], 'string', `reason ${k}`);
     assert.ok(CJ_VALIDITY_REASONS[k].length > 0, `reason ${k} non vuota`);
   }
+});
+
+// ===========================================================================
+// Scadenza T6 (Task #232): cjT6Deadline / cjDaysToT6 / cjScadenzaSortValue.
+// La finestra cross-sell va da T0 (mese di apertura) a T6 incluso; la scadenza
+// è l'ULTIMO giorno del mese di T6. Calcoli in UTC.
+// ===========================================================================
+test('cjT6Deadline: ultimo giorno del mese di T0+6 (UTC)', () => {
+  // T0 = luglio 2026 => T6 = gennaio 2027 => scadenza 31/01/2027.
+  const dl = cjT6Deadline('2026-07-15T10:00:00.000Z');
+  assert.equal(dl.getUTCFullYear(), 2027);
+  assert.equal(dl.getUTCMonth(), 0, 'gennaio');
+  assert.equal(dl.getUTCDate(), 31, 'ultimo giorno di gennaio');
+});
+
+test('cjT6Deadline: gestisce il mese a 30 giorni e l anno bisestile', () => {
+  // T0 = agosto 2027 => T6 = febbraio 2028 (bisestile) => 29/02/2028.
+  const dl = cjT6Deadline('2027-08-01T00:00:00.000Z');
+  assert.equal(dl.getUTCMonth(), 1, 'febbraio');
+  assert.equal(dl.getUTCDate(), 29, 'febbraio 2028 bisestile');
+});
+
+test('cjT6Deadline: null senza data di apertura', () => {
+  assert.equal(cjT6Deadline(null), null);
+  assert.equal(cjT6Deadline(undefined), null);
+  assert.equal(cjT6Deadline(''), null);
+});
+
+test('cjDaysToT6: positivo prima, 0 il giorno, negativo dopo la scadenza', () => {
+  // T0 luglio 2026 => scadenza il 31/01/2027 (confronto per sola data).
+  const before = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-01-21T00:00:00.000Z'));
+  assert.equal(before, 10, '10 giorni residui (date-only) dal 21/01 al 31/01');
+  const sameDay = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-01-31T08:00:00.000Z'));
+  assert.equal(sameDay, 0, 'ultimo giorno utile => scade oggi (0), non 1');
+  const after = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-02-01T00:00:00.000Z'));
+  assert.equal(after, -1, 'il giorno dopo => scaduta da 1 giorno');
+});
+
+test('cjDaysToT6: null senza data', () => {
+  assert.equal(cjDaysToT6(null, new Date('2027-01-01T00:00:00.000Z')), null);
+});
+
+test('cjScadenzaSortValue: journey sature finiscono in fondo (+Infinity)', () => {
+  const v = cjScadenzaSortValue({
+    openedAt: '2026-07-15T00:00:00.000Z', pisteAttive: 5, maxPiste: 5,
+    now: new Date('2027-01-01T00:00:00.000Z'),
+  });
+  assert.equal(v, Number.POSITIVE_INFINITY);
+});
+
+test('cjScadenzaSortValue: journey aperte ordinate per giorni residui', () => {
+  const now = new Date('2027-01-01T00:00:00.000Z');
+  const urgente = cjScadenzaSortValue({ openedAt: '2026-07-15T00:00:00.000Z', pisteAttive: 1, maxPiste: 5, now });
+  const rilassata = cjScadenzaSortValue({ openedAt: '2026-09-15T00:00:00.000Z', pisteAttive: 1, maxPiste: 5, now });
+  assert.ok(urgente < rilassata, 'meno giorni residui = più urgente = valore minore');
+});
+
+test('cjScadenzaSortValue: scadute o senza data in fondo (+Infinity)', () => {
+  const now = new Date('2027-03-01T00:00:00.000Z');
+  const scaduta = cjScadenzaSortValue({ openedAt: '2026-07-15T00:00:00.000Z', pisteAttive: 1, maxPiste: 5, now });
+  assert.equal(scaduta, Number.POSITIVE_INFINITY, 'scaduta => in fondo');
+  const senzaData = cjScadenzaSortValue({ openedAt: null, pisteAttive: 1, maxPiste: 5, now });
+  assert.equal(senzaData, Number.POSITIVE_INFINITY, 'senza data => in fondo');
 });

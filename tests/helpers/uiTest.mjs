@@ -118,11 +118,28 @@ export async function setRole(pool, profileId, role, addetti = []) {
   );
 }
 
+// Imposta la data trigger Customer Journey dell'org (config JSONB
+// `customerJourneyTriggerDate`). I test seminano journey con date "now()" o
+// pre-cutover: abbassare il trigger evita che il floor dell'analisi gettoni
+// (che mostra solo le SIM dal trigger in poi) le escluda. `date` = stringa ISO
+// 'YYYY-MM-DD' (o null per ripristinare il default di sistema).
+export async function setCjTriggerDate(pool, orgId, date) {
+  await pool.query(
+    `INSERT INTO organization_config (organization_id, config, config_version)
+       VALUES ($1, jsonb_build_object('customerJourneyTriggerDate', $2::text), '2.0')
+     ON CONFLICT (organization_id)
+       DO UPDATE SET config = COALESCE(organization_config.config, '{}'::jsonb)
+                       || jsonb_build_object('customerJourneyTriggerDate', $2::text),
+                     updated_at = now()`,
+    [orgId, date],
+  );
+}
+
 // Inserisce una journey privata con N item. `items` = [{driver, state, importo?,
 // addetto?, pdv?}]; addetto/pdv di default presi dai parametri della journey.
 // `openedAt` (opzionale, ISO date string o Date) imposta la data di attivazione
 // SIM (T0); default `now()`. Ritorna l'id (uuid) della journey.
-export async function seedJourney(pool, orgId, { customerKey, nome, addetto = null, pdv = null, openedAt = null, items = [] }) {
+export async function seedJourney(pool, orgId, { customerKey, nome, addetto = null, pdv = null, openedAt = null, dataInserimento = null, items = [] }) {
   const cj = await pool.query(
     `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, status, opened_at)
        VALUES ($1, $2, 'privato', $3, 'aperta', COALESCE($4::timestamptz, now()))
@@ -131,7 +148,9 @@ export async function seedJourney(pool, orgId, { customerKey, nome, addetto = nu
   );
   const journeyId = cj.rows[0].id;
   for (const it of items) {
-    await addJourneyItem(pool, orgId, journeyId, { addetto, pdv, ...it });
+    // `dataInserimento` di journey come default per gli item (override per-item
+    // possibile); serve al filtro a intervallo per data inserimento.
+    await addJourneyItem(pool, orgId, journeyId, { addetto, pdv, dataInserimento, ...it });
   }
   return journeyId;
 }
@@ -151,12 +170,12 @@ export async function seedValenze(pool, orgId, { month, year, sectionId, rows, f
 }
 
 // Aggiunge un singolo item a una journey esistente.
-export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, importo = null, state = 'inserito' }) {
+export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, importo = null, state = 'inserito', dataInserimento = null }) {
   await pool.query(
     `INSERT INTO customer_journey_items
        (journey_id, organization_id, driver, addetto, state, data_inserimento, pdv_destinazione, importo)
-     VALUES ($1, $2, $3, $4, $5, now(), $6, $7)`,
-    [journeyId, orgId, driver, addetto, state, pdv, importo],
+     VALUES ($1, $2, $3, $4, $5, COALESCE($8::timestamptz, now()), $6, $7)`,
+    [journeyId, orgId, driver, addetto, state, pdv, importo, dataInserimento],
   );
 }
 

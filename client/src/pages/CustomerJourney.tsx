@@ -30,7 +30,8 @@ import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ACTIVE_STATES,
   aggregateReport, matchesCjFilters,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
-  buildGettoneJourneys, filterGettoneByDate, aggregateGettone, gettoneTotals,
+  buildGettoneJourneys, filterGettoneByDate, filterGettoneByInsertDate,
+  aggregateGettone, gettoneTotals,
   crossSellPercentuali, gettoneDetailByKey,
 } from "@shared/customerJourney";
 import { CJ_ITEM_STATES } from "@shared/schema";
@@ -44,6 +45,7 @@ import {
   computeTimeline, groupByNegozio, cjDriverColor, isFadedState,
   monthIndex, monthIndexLabel, itemNegozio,
   computeItemValidity, CJ_VALIDITY_LABELS, CJ_VALIDITY_REASONS,
+  cjDaysToT6, cjT6Deadline, cjScadenzaSortValue,
 } from "@/lib/customerJourneyTimeline";
 import {
   exportJourneyPdf, exportJourneyExcel,
@@ -64,7 +66,7 @@ type JourneyListItem = CustomerJourney & {
   states?: string[];
 };
 
-type SortKey = "data" | "nome" | "completamento" | "valore";
+type SortKey = "data" | "nome" | "completamento" | "valore" | "scadenza";
 type SortDir = "asc" | "desc";
 
 type CjView = "schede" | "report";
@@ -77,6 +79,7 @@ const SORT_LABELS: Record<SortKey, string> = {
   nome: "Nome cliente",
   completamento: "% completamento",
   valore: "Valore cliente",
+  scadenza: "In scadenza (T6)",
 };
 
 interface ItemDetailsPayload {
@@ -155,6 +158,15 @@ function journeyPct(j: JourneyListItem): number {
     (d) => j.drivers?.find((s) => s.driver === d)?.activated,
   ).length;
   return total > 0 ? active / total : 0;
+}
+
+// Numero di piste cross-sell (driver NON-mobile) attive di una scheda. Una
+// journey è "chiusa" quando arriva a CJ_MAX_PISTE. Usata dall'ordinamento
+// "In scadenza" per dare priorità alle journey ancora aperte.
+function journeyPisteAttive(j: JourneyListItem): number {
+  return CJ_DRIVER_ORDER.filter(
+    (d) => d !== "mobile" && j.drivers?.find((s) => s.driver === d)?.activated,
+  ).length;
 }
 
 const REPORT_DIM_LABEL: Record<ReportDim, string> = {
@@ -417,9 +429,11 @@ export default function CustomerJourneyPage() {
     enabled: !selectedId && view === "report",
   });
 
+  // Caricata per TUTTI i ruoli (non solo admin): il floor dell'Analisi gettoni
+  // alla data trigger deve valere anche per gli operatori, altrimenti vedrebbero
+  // SIM antecedenti al cutover. La modifica del valore resta admin-only (PUT).
   const configQuery = useQuery<CjConfig>({
     queryKey: ["/api/customer-journey-config"],
-    enabled: isAdmin,
   });
 
   useEffect(() => {
@@ -639,11 +653,16 @@ export default function CustomerJourneyPage() {
   // costruiamo una journey per cliente, la filtriamo per coorte (data
   // attivazione SIM) e aggreghiamo i gettoni maturati + il potenziale non
   // espresso alla saturazione scelta.
-  const gettoneJourneys = useMemo(() => filterGettoneByDate(
-    buildGettoneJourneys(reportFiltered),
-    dateFrom || null,
-    dateTo || null,
-  ), [reportFiltered, dateFrom, dateTo]);
+  // Coorte gettoni: (1) pavimento per data di ATTIVAZIONE SIM = la data
+  // Customer Journey impostata in config (mostriamo solo le SIM fatte da quella
+  // data in poi); (2) filtro a intervallo dell'utente per data di INSERIMENTO.
+  const gettoneJourneys = useMemo(() => {
+    const all = buildGettoneJourneys(reportFiltered);
+    const floored = configQuery.data?.triggerDate
+      ? filterGettoneByDate(all, configQuery.data.triggerDate, null)
+      : all;
+    return filterGettoneByInsertDate(floored, dateFrom || null, dateTo || null);
+  }, [reportFiltered, configQuery.data?.triggerDate, dateFrom, dateTo]);
   const gettoneTot = useMemo(
     () => gettoneTotals(gettoneJourneys, saturation, extraProdotti),
     [gettoneJourneys, saturation, extraProdotti],
@@ -697,6 +716,17 @@ export default function CustomerJourneyPage() {
       case "valore":
         cmp = (a.valore ?? 0) - (b.valore ?? 0);
         break;
+      case "scadenza": {
+        const va = cjScadenzaSortValue({
+          openedAt: a.openedAt, pisteAttive: journeyPisteAttive(a), maxPiste: CJ_MAX_PISTE,
+        });
+        const vb = cjScadenzaSortValue({
+          openedAt: b.openedAt, pisteAttive: journeyPisteAttive(b), maxPiste: CJ_MAX_PISTE,
+        });
+        // Guard Infinity - Infinity = NaN (journey sature/senza data/scadute).
+        cmp = va === vb ? 0 : va - vb;
+        break;
+      }
     }
     return sortDir === "asc" ? cmp : -cmp;
   }), [filtered, sortKey, sortDir]);
@@ -1095,6 +1125,7 @@ export default function CustomerJourneyPage() {
                     onSaturationChange={setSaturation}
                     extraProdotti={extraProdotti}
                     onExtraProdottiChange={setExtraProdotti}
+                    onOpenJourney={setSelectedId}
                   />
                 ) : (
                   <ReportView
@@ -1404,6 +1435,7 @@ function AnalisiViewImpl({
   onSaturationChange,
   extraProdotti,
   onExtraProdottiChange,
+  onOpenJourney,
 }: {
   isLoading: boolean;
   totals: CjGettoneTotals;
@@ -1419,6 +1451,7 @@ function AnalisiViewImpl({
   onSaturationChange: (v: number) => void;
   extraProdotti: number;
   onExtraProdottiChange: (v: number) => void;
+  onOpenJourney: (journeyId: string) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   if (isLoading) {
@@ -1442,7 +1475,7 @@ function AnalisiViewImpl({
         <CardContent className="py-4 flex flex-wrap items-end gap-4">
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground flex items-center gap-1">
-              <Calendar className="h-3.5 w-3.5" /> Attivazione SIM dal
+              <Calendar className="h-3.5 w-3.5" /> Inserimento SIM dal
             </Label>
             <Input
               type="date"
@@ -1675,8 +1708,17 @@ function AnalisiViewImpl({
                               <TableBody>
                                 {rows.map((r) => (
                                   <TableRow key={r.journeyId} data-testid={`row-gettone-sim-${r.journeyId}`}>
-                                    <TableCell className="font-medium" data-testid={`text-gettone-sim-cliente-${r.journeyId}`}>
-                                      {r.cliente || "Senza nominativo"}
+                                    <TableCell className="font-medium">
+                                      <button
+                                        type="button"
+                                        className="text-left text-primary hover:underline"
+                                        onClick={() => onOpenJourney(r.journeyId)}
+                                        data-testid={`button-gettone-open-${r.journeyId}`}
+                                      >
+                                        <span data-testid={`text-gettone-sim-cliente-${r.journeyId}`}>
+                                          {r.cliente || "Senza nominativo"}
+                                        </span>
+                                      </button>
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums">
                                       {r.simAttive}
@@ -2060,6 +2102,9 @@ function JourneyDetailViewImpl({
 }) {
   const { journey, items, drivers } = detail;
   const driverMap = new Map(drivers.map((d) => [d.driver, d]));
+  // Scadenza T6: giorni residui per chiudere il cross-sell (fine mese di T6).
+  const daysToT6 = cjDaysToT6(journey.openedAt);
+  const t6Deadline = cjT6Deadline(journey.openedAt);
   const [editItem, setEditItem] = useState<CustomerJourneyItem | null>(null);
   const { toast } = useToast();
   const [pdfPending, setPdfPending] = useState(false);
@@ -2121,6 +2166,29 @@ function JourneyDetailViewImpl({
                 {journey.codiceCliente ? ` · Cod. cliente: ${journey.codiceCliente}` : ""}
                 {` · Aperta il ${fmtDate(journey.openedAt)}`}
               </CardDescription>
+              {daysToT6 != null && (
+                <div className="mt-2">
+                  <Badge
+                    variant="outline"
+                    className={
+                      daysToT6 < 0
+                        ? "border-red-500/40 text-red-600 dark:text-red-400"
+                        : daysToT6 <= 30
+                          ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
+                          : "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                    }
+                    data-testid="badge-scadenza-t6"
+                  >
+                    <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                    {daysToT6 < 0
+                      ? `Scaduta da ${Math.abs(daysToT6)} ${Math.abs(daysToT6) === 1 ? "giorno" : "giorni"}`
+                      : daysToT6 === 0
+                        ? "Scade oggi"
+                        : `Scade tra ${daysToT6} ${daysToT6 === 1 ? "giorno" : "giorni"}`}
+                    {t6Deadline ? ` · T6 ${fmtDate(t6Deadline.toISOString())}` : ""}
+                  </Badge>
+                </div>
+              )}
               {journey.customerType === "azienda" && (
                 <div className="mt-3">
                   {editRagioneSociale ? (

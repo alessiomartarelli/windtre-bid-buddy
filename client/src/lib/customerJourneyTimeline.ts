@@ -274,6 +274,57 @@ export const CJ_VALIDITY_REASONS: Record<CjItemValidityKind, string> = {
   driver_duplicato: "Pista dello stesso tipo già conteggiata per questo cliente.",
 };
 
+// === Scadenza T6 della journey (Task #232) ===
+// La finestra cross-sell di una journey va da T0 (mese di apertura/attivazione
+// SIM) a T6 incluso (T0 + 6 mesi): un contratto nel mese di T6 conta ancora.
+// La "scadenza" per chiudere il cross-sell è quindi l'ULTIMO giorno del mese
+// di T6. Calcoli in UTC, coerenti con `monthOfIso`.
+
+// Ultimo istante utile per chiudere il cross-sell: fine del mese di T6
+// (T0 + 6 mesi). null se manca la data di apertura.
+export function cjT6Deadline(openedAt: string | Date | null | undefined): Date | null {
+  const t0 = toDateOrNull(openedAt);
+  if (!t0) return null;
+  const y = t0.getUTCFullYear();
+  const m = t0.getUTCMonth();
+  // Giorno 0 del mese (m+7) = ultimo giorno del mese (m+6) = mese di T6.
+  return new Date(Date.UTC(y, m + 7, 0, 23, 59, 59, 999));
+}
+
+// Giorni residui (interi) fino alla scadenza T6. Confronto per sola data UTC
+// (entrambi gli estremi azzerati a mezzanotte), così l'ULTIMO giorno utile dà
+// 0 ("scade oggi") e non 1: evita lo sfasamento di un giorno dovuto al fatto
+// che la deadline è a fine giornata. Positivo = mancano N giorni; 0 = scade
+// oggi; negativo = scaduta da N giorni. null se manca la data di apertura.
+export function cjDaysToT6(
+  openedAt: string | Date | null | undefined,
+  now: Date = new Date(),
+): number | null {
+  const dl = cjT6Deadline(openedAt);
+  if (!dl) return null;
+  const dlDay = Date.UTC(dl.getUTCFullYear(), dl.getUTCMonth(), dl.getUTCDate());
+  const nowDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((dlDay - nowDay) / 86_400_000);
+}
+
+// Valore di ordinamento per il criterio "In scadenza" della lista schede.
+// Priorità (valore più basso = più urgente) alle journey NON ancora chiuse
+// (meno di `maxPiste` piste cross-sell) con meno giorni residui a T6. Le
+// journey già sature, senza data o GIÀ scadute (non più chiudibili) finiscono
+// in fondo (+Infinity), così la modalità ascendente mostra prima ciò su cui
+// vale la pena lavorare.
+export function cjScadenzaSortValue(opts: {
+  openedAt: string | Date | null | undefined;
+  pisteAttive: number;
+  maxPiste: number;
+  now?: Date;
+}): number {
+  if (opts.pisteAttive >= opts.maxPiste) return Number.POSITIVE_INFINITY;
+  const days = cjDaysToT6(opts.openedAt, opts.now ?? new Date());
+  if (days == null || days < 0) return Number.POSITIVE_INFINITY;
+  return days;
+}
+
 // Raggruppa gli item per negozio (PDV), ordinati per numero di contratti
 // decrescente. Usato dalla sezione "Dettaglio per negozio".
 export function groupByNegozio(

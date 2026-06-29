@@ -1,6 +1,7 @@
 - [Deploy prod via workflow](deploy-prod-via-workflow.md) — `npm run build` supera 120s e i bg process vengono uccisi; lancia deploy con un workflow temporaneo.
 - [Customer Journey operator isolation](cj-operator-isolation.md) — operator-scoped queries: guard `filter != null` (empty array => []), never `filter.length > 0`, or empty addetti leaks whole tenant.
 - [Dev DB schema drift](dev-db-schema-drift.md) — se signup/login danno 500 "column ... does not exist", il DB dev è disallineato da shared/schema.ts: lancia `npm run db:push`.
+- [CJ gettone analysis floor](cj-gettone-floor.md) — Analisi gettoni floored per data trigger per TUTTI i ruoli; non gating config su isAdmin; test che seminano now() devono abbassare il trigger.
 - [Test org cleanup leak](test-org-cleanup-leak.md) — cleanupOrg deve cancellare TUTTI i figli org-scoped prima dell'org; FK NO ACTION + .catch silenzioso = org di test vuote che restano nel DB dev.
 - [CJ validità ↔ gettone parity](cj-validity-gettone-parity.md) — scheda badges e gettone DEVONO condividere helper UTC + regole T0; "attivante" solo se driver mobile.
 - [CustomerJourney page perf](cj-page-perf-memoization.md) — keep derived data memoized; use stable EMPTY_* module constants (not `?? []`) so memos don't bust; useCallback handlers so sub-view memo works.

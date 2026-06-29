@@ -26,6 +26,7 @@ const {
   gettoneIncremento,
   buildGettoneJourneys,
   filterGettoneByDate,
+  filterGettoneByInsertDate,
   aggregateGettone,
   gettoneTotals,
   crossSellPercentuali,
@@ -448,6 +449,50 @@ test('filterGettoneByDate: journey senza openedAt passa solo senza limiti', () =
   ]);
   assert.equal(filterGettoneByDate(js, null, null).length, 1, 'senza range: passa');
   assert.equal(filterGettoneByDate(js, '2026-07-01', null).length, 0, 'con range: esclusa');
+});
+
+// --- buildGettoneJourneys: insertedAt = SIM mobile attiva più vecchia ---
+test('buildGettoneJourneys: insertedAt è la SIM mobile attiva più vecchia', () => {
+  const js = buildGettoneJourneys([
+    // due SIM mobile attive con inserimento diverso => tiene la più vecchia
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', insertedAt: '2026-07-20T00:00:00.000Z' }),
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', insertedAt: '2026-07-05T00:00:00.000Z' }),
+    // SIM ko: non concorre a insertedAt anche se più vecchia
+    row({ journeyId: 'j1', driver: 'mobile', state: 'ko', insertedAt: '2026-06-01T00:00:00.000Z' }),
+  ]);
+  assert.equal(js[0].insertedAt, '2026-07-05T00:00:00.000Z');
+});
+
+test('buildGettoneJourneys: insertedAt null se nessuna SIM porta la data', () => {
+  const js = buildGettoneJourneys([
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato' }),
+  ]);
+  assert.equal(js[0].insertedAt, null);
+});
+
+// --- filterGettoneByInsertDate: coorte per data INSERIMENTO (estremi inclusi) ---
+test('filterGettoneByInsertDate: filtra per data inserimento (estremi inclusi)', () => {
+  const js = buildGettoneJourneys([
+    row({ journeyId: 'a', driver: 'mobile', state: 'attivato', insertedAt: '2026-07-01T08:00:00.000Z' }),
+    row({ journeyId: 'b', driver: 'mobile', state: 'attivato', insertedAt: '2026-07-15T23:30:00.000Z' }),
+    row({ journeyId: 'c', driver: 'mobile', state: 'attivato', insertedAt: '2026-08-02T00:00:00.000Z' }),
+  ]);
+  const lug = filterGettoneByInsertDate(js, '2026-07-01', '2026-07-31');
+  assert.deepEqual(lug.map((j) => j.journeyId).sort(), ['a', 'b']);
+  const dal15 = filterGettoneByInsertDate(js, '2026-07-15', null);
+  assert.deepEqual(dal15.map((j) => j.journeyId).sort(), ['b', 'c']);
+  const fino1 = filterGettoneByInsertDate(js, null, '2026-07-01');
+  assert.deepEqual(fino1.map((j) => j.journeyId), ['a']);
+  assert.equal(filterGettoneByInsertDate(js, '', '').length, 3);
+});
+
+test('filterGettoneByInsertDate: journey senza insertedAt passa solo senza limiti', () => {
+  const js = buildGettoneJourneys([
+    row({ journeyId: 'x', driver: 'mobile', state: 'attivato' }),
+  ]);
+  assert.equal(js[0].insertedAt, null);
+  assert.equal(filterGettoneByInsertDate(js, null, null).length, 1, 'senza range: passa');
+  assert.equal(filterGettoneByInsertDate(js, '2026-07-01', null).length, 0, 'con range: esclusa');
 });
 
 // --- aggregateGettone: somma fatturato + potenziale alla saturazione ---

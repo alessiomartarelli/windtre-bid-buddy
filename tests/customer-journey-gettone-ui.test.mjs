@@ -10,6 +10,7 @@ import {
   newAuthedContext,
   setRole,
   seedJourney,
+  setCjTriggerDate,
   cleanupOrg,
 } from './helpers/uiTest.mjs';
 
@@ -92,6 +93,9 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
   const browser = await launchBrowser();
   try {
+    // Le journey sono seminate con data "now()": abbassiamo il trigger così
+    // il floor dell'Analisi gettoni (SIM dal trigger in poi) non le esclude.
+    await setCjTriggerDate(pool, session.orgId, '2026-01-01');
     const jMario = await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFMARIO').toUpperCase(),
       nome: 'Cliente Mario',
@@ -245,6 +249,9 @@ test('scenario 2: operator sees only their own clients in the gettone analysis',
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
   const browser = await launchBrowser();
   try {
+    // Trigger abbassato: il floor dell'Analisi gettoni vale ANCHE per gli
+    // operatori, quindi senza questo le journey "now()" verrebbero escluse.
+    await setCjTriggerDate(pool, session.orgId, '2026-01-01');
     await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFMARIO').toUpperCase(),
       nome: 'Cliente Mario',
@@ -395,6 +402,8 @@ test('scenario 4: the shared store (PDV) filter narrows both the Dettaglio and g
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
   const browser = await launchBrowser();
   try {
+    // Journey con data "now()": trigger abbassato così il floor gettone non le esclude.
+    await setCjTriggerDate(pool, session.orgId, '2026-01-01');
     await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFMARIO').toUpperCase(),
       nome: 'Cliente Mario',
@@ -463,25 +472,32 @@ test('scenario 4: the shared store (PDV) filter narrows both the Dettaglio and g
 });
 
 // ===========================================================================
-// SCENARIO 5 (Task #199): il filtro per data attivazione SIM dell'Analisi
-// gettoni (`input-gettone-date-from`/`input-gettone-date-to`) narra davvero la
-// coorte renderizzata. `filterGettoneByDate` è coperta dai test puri, ma il
-// wiring tra gli <Input type="date"> e la tabella gettone re-renderizzata no.
-// Seminiamo due journey con date di attivazione SIM (T0 = opened_at) diverse e
-// verifichiamo che impostare il range escluda la coorte fuori intervallo.
+// SCENARIO 5 (Task #199, aggiornato Task #232): il filtro a intervallo
+// dell'Analisi gettoni (`input-gettone-date-from`/`input-gettone-date-to`) ora
+// ragiona per data di INSERIMENTO della SIM, non per data attivazione.
+// `filterGettoneByInsertDate` è coperta dai test puri, ma il wiring tra gli
+// <Input type="date"> e la tabella gettone re-renderizzata no. Seminiamo due
+// journey con date di inserimento SIM diverse e verifichiamo che impostare il
+// range escluda la coorte fuori intervallo.
 // ===========================================================================
-test('scenario 5: the SIM-activation date range filter narrows the gettone cohort', async () => {
+test('scenario 5: the SIM-insertion date range filter narrows the gettone cohort', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
   const browser = await launchBrowser();
   try {
-    // Mario attiva a marzo, Luigi a gennaio: un range a febbraio li separa.
+    // Mario inserisce a marzo, Luigi a gennaio: un range a febbraio li separa.
+    // `dataInserimento` di journey si applica a tutti gli item (la coorte usa
+    // la SIM mobile più vecchia). `openedAt` resta coerente per la finestra T0.
+    // Trigger abbassato a inizio gennaio così il floor (per data attivazione)
+    // non esclude nessuna delle due: il test isola il filtro per inserimento.
+    await setCjTriggerDate(pool, session.orgId, '2026-01-01');
     await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFMARIO').toUpperCase(),
       nome: 'Cliente Mario',
       addetto: MARIO_ADDETTO,
       pdv: MARIO_PDV,
       openedAt: '2026-03-15T10:00:00Z',
+      dataInserimento: '2026-03-15T10:00:00Z',
       items: [
         { driver: 'mobile', state: 'inserito' },
         { driver: 'energia', state: 'inserito', importo: '50.00' },
@@ -494,6 +510,7 @@ test('scenario 5: the SIM-activation date range filter narrows the gettone cohor
       addetto: LUIGI_ADDETTO,
       pdv: LUIGI_PDV,
       openedAt: '2026-01-10T10:00:00Z',
+      dataInserimento: '2026-01-10T10:00:00Z',
       items: [
         { driver: 'mobile', state: 'inserito' },
         { driver: 'energia', state: 'inserito', importo: '30.00' },
@@ -555,6 +572,8 @@ test('scenario 6: i contratti annullati/rifiutati sono esclusi da attivi, satura
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
   const browser = await launchBrowser();
   try {
+    // Journey con data "now()": trigger abbassato così il floor gettone non le esclude.
+    await setCjTriggerDate(pool, session.orgId, '2026-01-01');
     const jAnna = await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFANNA').toUpperCase(),
       nome: 'Cliente Anna',
@@ -643,6 +662,8 @@ test('scenario 7: a customer whose mobile SIM is cancelled is excluded from the 
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
   const browser = await launchBrowser();
   try {
+    // Journey con data "now()": trigger abbassato così il floor gettone non le esclude.
+    await setCjTriggerDate(pool, session.orgId, '2026-01-01');
     // Mario: SIM mobile ATTIVA + cross-sell => entra nella coorte.
     await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFMARIO').toUpperCase(),
@@ -716,6 +737,8 @@ test('scenario 8: the gettone scenario simulator recomputes the projected potent
   const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
   const browser = await launchBrowser();
   try {
+    // Journey con data "now()": trigger abbassato così il floor gettone non le esclude.
+    await setCjTriggerDate(pool, session.orgId, '2026-01-01');
     await seedJourney(pool, session.orgId, {
       customerKey: uniq('CFMARIO').toUpperCase(),
       nome: 'Cliente Mario',
@@ -796,6 +819,75 @@ test('scenario 8: the gettone scenario simulator recomputes the projected potent
     assert.equal(
       await page.getByTestId('button-gettone-reset-scenario').count(),
       0, 'il pulsante "Azzera scenario" non è mostrato nello scenario base',
+    );
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 9 (regressione del bug "floor solo per admin"): il floor alla data
+// trigger dell'Analisi gettoni deve valere ANCHE per gli operatori. Storicamente
+// `configQuery` era `enabled: isAdmin`, quindi gli operatori non caricavano la
+// config e vedevano SIM antecedenti al cutover. Qui semina, per lo stesso
+// operatore, una journey PRE-trigger (deve sparire) e una POST-trigger (deve
+// restare): se il floor non fosse applicato all'operatore comparirebbero
+// entrambe le righe addetto.
+// ===========================================================================
+test('scenario 9: the gettone trigger floor is enforced for operators too', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
+  const browser = await launchBrowser();
+  // Addetti dedicati: uno PRE-trigger, uno POST-trigger, entrambi dell'operatore.
+  const PRE_ADDETTO = `PRE FLOOR ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
+  const POST_ADDETTO = `POST FLOOR ${crypto.randomBytes(3).toString('hex')}`.toUpperCase();
+  try {
+    // Trigger al 2026-06-15: la SIM attivata prima è fuori cohort, quella dopo dentro.
+    await setCjTriggerDate(pool, session.orgId, '2026-06-15');
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFPRE').toUpperCase(),
+      nome: 'Cliente Pre',
+      addetto: PRE_ADDETTO,
+      pdv: MARIO_PDV,
+      openedAt: '2026-06-01', // attivazione SIM PRIMA del trigger => floored out
+      items: [
+        { driver: 'mobile', state: 'inserito' },
+        { driver: 'energia', state: 'inserito', importo: '30.00' },
+      ],
+    });
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFPOST').toUpperCase(),
+      nome: 'Cliente Post',
+      addetto: POST_ADDETTO,
+      pdv: LUIGI_PDV,
+      openedAt: '2026-06-20', // attivazione SIM DOPO il trigger => in cohort
+      items: [
+        { driver: 'mobile', state: 'inserito' },
+        { driver: 'energia', state: 'inserito', importo: '30.00' },
+      ],
+    });
+
+    // Operatore associato a ENTRAMBI gli addetti: la sola cosa che esclude la
+    // riga PRE è il floor, non l'isolamento per addetto.
+    await setRole(pool, session.profileId, 'operatore', [
+      PRE_ADDETTO.toLowerCase(),
+      POST_ADDETTO.toLowerCase(),
+    ]);
+
+    const context = await newAuthedContext(browser, session);
+    const page = await openAnalisiByAddetto(context);
+
+    // La riga POST-trigger c'è...
+    await page.getByTestId(`row-gettone-${POST_ADDETTO}`).waitFor({ state: 'visible', timeout: 15000 });
+    // ...la PRE-trigger NO (floored anche per l'operatore).
+    assert.equal(
+      await page.getByTestId(`row-gettone-${PRE_ADDETTO}`).count(),
+      0, 'la riga PRE-trigger deve essere esclusa dal floor anche per l\'operatore',
     );
 
     await page.close();
