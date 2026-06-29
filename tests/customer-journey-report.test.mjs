@@ -23,6 +23,7 @@ const {
   CJ_GETTONE_TABLE,
   CJ_MAX_PISTE,
   gettoneForPiste,
+  gettoneIncremento,
   buildGettoneJourneys,
   filterGettoneByDate,
   aggregateGettone,
@@ -494,6 +495,96 @@ test('aggregateGettone: saturazione scala il potenziale, non il fatturato', () =
   // clamp della saturazione fuori range
   const gOver = aggregateGettone(js, byAddettoG, 999);
   assert.equal(gOver[0].potenziale, 100, 'saturazione clampata a 100%');
+});
+
+// ===========================================================================
+// SIMULATORE SCENARI GETTONE (Task #229)
+// `gettoneIncremento` + il parametro `addProducts` di aggregateGettone /
+// gettoneTotals: simulano "il X% dei clienti attiva +N prodotti". Il default
+// `addProducts = CJ_MAX_PISTE` deve riprodurre il comportamento storico
+// (potenziale pieno residuo fino alla saturazione completa).
+// ===========================================================================
+
+// --- gettoneIncremento: incremento di gettone per +N piste con cap/clamp ---
+test('gettoneIncremento: +N piste con cap a CJ_MAX_PISTE e mai negativo', () => {
+  // 1 pista attiva (20€). +1 => 2 piste = 30€ => incremento 10.
+  assert.equal(gettoneIncremento(1, 20, 1), 10);
+  // 1 pista, +2 => 3 piste = 40€ => incremento 20.
+  assert.equal(gettoneIncremento(1, 20, 2), 20);
+  // 1 pista, +5 (cap a 5) => 5 piste = 120€ => incremento 100 (= potenziale pieno).
+  assert.equal(gettoneIncremento(1, 20, 5), 100);
+  // 3 piste (40€), +5 cap a 5 => 120€ => incremento 80.
+  assert.equal(gettoneIncremento(3, 40, 5), 80);
+  // journey già a saturazione: nessun incremento possibile.
+  assert.equal(gettoneIncremento(5, 120, 3), 0);
+  // addProducts 0 => nessun incremento.
+  assert.equal(gettoneIncremento(2, 30, 0), 0);
+  // addProducts non finito => default CJ_MAX_PISTE (saturazione completa).
+  assert.equal(gettoneIncremento(1, 20, NaN), 100);
+  // addProducts oltre il massimo => clamp a CJ_MAX_PISTE.
+  assert.equal(gettoneIncremento(0, 0, 99), 120);
+});
+
+// --- aggregateGettone: scenario "+N prodotti" scala il potenziale ---
+test('aggregateGettone: scenario +N prodotti per il X% dei clienti', () => {
+  const js = buildGettoneJourneys([
+    // Anna: 1 pista attiva => 20€ maturato.
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', addetto: 'Anna' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato', addetto: 'Anna' }),
+  ]);
+  const byAddettoG = (j) => ({ key: j.addetto || '—', label: j.addetto || 'Senza addetto' });
+  // 100% dei clienti con +1: incremento pieno = 10 (1->2 piste).
+  assert.equal(aggregateGettone(js, byAddettoG, 100, 1)[0].potenziale, 10);
+  // 50% dei clienti con +1 => 10 * 50% = 5.
+  assert.equal(aggregateGettone(js, byAddettoG, 50, 1)[0].potenziale, 5);
+  // 100% con +5 => potenziale pieno residuo (100), come lo storico default.
+  assert.equal(aggregateGettone(js, byAddettoG, 100, 5)[0].potenziale, 100);
+  // default (addProducts omesso) == +5: backward-compat.
+  assert.equal(
+    aggregateGettone(js, byAddettoG, 100)[0].potenziale,
+    aggregateGettone(js, byAddettoG, 100, 5)[0].potenziale,
+    'default addProducts = saturazione completa',
+  );
+  // 0% dei clienti => nessun potenziale anche con +5.
+  assert.equal(aggregateGettone(js, byAddettoG, 0, 5)[0].potenziale, 0);
+});
+
+// --- aggregateGettone: +N clampa a saturazione per chi è già avanti ---
+test('aggregateGettone: +N somma per gruppo con cap a saturazione per cliente', () => {
+  const js = buildGettoneJourneys([
+    // Roma j1: 1 pista (20€). +2 => 3 piste = 40€ => +20.
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato', pdv: 'Roma' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato', pdv: 'Roma' }),
+    // Roma j2: 4 piste (100€). +2 cap a 5 => 120€ => +20.
+    row({ journeyId: 'j2', driver: 'mobile', state: 'attivato', pdv: 'Roma' }),
+    row({ journeyId: 'j2', driver: 'fisso', state: 'attivato', pdv: 'Roma' }),
+    row({ journeyId: 'j2', driver: 'energia', state: 'attivato', pdv: 'Roma' }),
+    row({ journeyId: 'j2', driver: 'telefono', state: 'attivato', pdv: 'Roma' }),
+    row({ journeyId: 'j2', driver: 'assicurazione', state: 'attivato', pdv: 'Roma' }),
+  ]);
+  const byPdvG = (j) => ({ key: j.pdv || '—', label: j.pdv || 'Senza negozio' });
+  // incremento totale Roma con +2 al 100% = 20 (j1) + 20 (j2 cap) = 40.
+  assert.equal(aggregateGettone(js, byPdvG, 100, 2)[0].potenziale, 40);
+  // fatturato maturato invariato dallo scenario.
+  assert.equal(aggregateGettone(js, byPdvG, 100, 2)[0].fatturato, 120, '20 (j1) + 100 (j2)');
+});
+
+// --- gettoneTotals: scenario +N + cohort vuota ---
+test('gettoneTotals: scenario +N prodotti e input vuoto', () => {
+  const js = buildGettoneJourneys([
+    row({ journeyId: 'j1', driver: 'mobile', state: 'attivato' }),
+    row({ journeyId: 'j1', driver: 'fisso', state: 'attivato' }),
+    row({ journeyId: 'j2', driver: 'mobile', state: 'attivato' }),
+  ]);
+  // j1: 1 pista (20€) +1 => +10. j2: 0 piste (0€) +1 => 20€ => +20. Tot 30.
+  assert.equal(gettoneTotals(js, 100, 1).potenziale, 30);
+  // 50% => 15.
+  assert.equal(gettoneTotals(js, 50, 1).potenziale, 15);
+  // default == +5: backward-compat (220 come i test storici).
+  assert.equal(gettoneTotals(js, 100).potenziale, 220);
+  assert.equal(gettoneTotals(js, 100, 5).potenziale, 220);
+  // cohort vuota => potenziale 0 a prescindere dallo scenario.
+  assert.equal(gettoneTotals([], 100, 3).potenziale, 0);
 });
 
 // --- gettoneTotals: totali con saturazione ---

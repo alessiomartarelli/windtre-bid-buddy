@@ -697,3 +697,92 @@ test('scenario 7: a customer whose mobile SIM is cancelled is excluded from the 
     await pool.end().catch(() => {});
   }
 });
+
+// ===========================================================================
+// SCENARIO 8 (Task #229): il simulatore di scenari gettone. Accanto a
+// "Saturazione attesa" (% clienti) c'è un selettore "Prodotti in più / cliente"
+// (+1..+5). Combinati simulano "il X% dei clienti attiva +N prodotti" e il
+// "Potenziale non espresso" si ricalcola di conseguenza. La logica pura
+// (`gettoneIncremento` + il parametro `addProducts`) è coperta dai test puri di
+// `customer-journey-report.test.mjs`; qui si protegge il WIRING React: lo stato
+// `extraProdotti` threaded da parent a `AnalisiView`, le useMemo che rialimentano
+// `gettoneTotals`, e il re-render della card Potenziale. Seminiamo un cliente con
+// 2 piste cross-sell attive (energia + fisso) => 30€ maturato. Default (+5,
+// 100%) => potenziale pieno residuo 120-30 = 90€. Con +1 (=> 3 piste, 40€) il
+// potenziale scende a 10€; al 50% si dimezza.
+// ===========================================================================
+test('scenario 8: the gettone scenario simulator recomputes the projected potential', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'cj_gettone_ui', fullName: 'CJ Gettone UI Test', organizationName: uniq('CJGettoneUI') });
+  const browser = await launchBrowser();
+  try {
+    await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFMARIO').toUpperCase(),
+      nome: 'Cliente Mario',
+      addetto: MARIO_ADDETTO,
+      pdv: MARIO_PDV,
+      items: [
+        { driver: 'mobile', state: 'inserito' },
+        { driver: 'energia', state: 'inserito', importo: '50.00' },
+        { driver: 'fisso', state: 'inserito', importo: '20.00' },
+      ],
+    });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await openAnalisiByAddetto(context);
+
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 15000 });
+
+    const potenzialeText = () => page.getByTestId('text-gettone-potenziale').innerText();
+
+    // Default (+5, 100%): potenziale pieno residuo 90€.
+    assert.ok(
+      (await potenzialeText()).includes('90'),
+      `il potenziale di default (+5, 100%) deve essere 90€, trovato "${await potenzialeText()}"`,
+    );
+
+    // Cambia "Prodotti in più" a +1 => 3 piste (40€) => potenziale 10€.
+    await page.getByTestId('select-gettone-prodotti').click();
+    await page.getByTestId('option-gettone-prodotti-1').click();
+    await assert.doesNotReject(async () => {
+      await page.getByText('Potenziale non espresso').waitFor({ state: 'visible', timeout: 5000 });
+    });
+    // attende l'aggiornamento del valore (10€), non più 90€.
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector('[data-testid="text-gettone-potenziale"]');
+        return !!el && el.textContent.includes('10') && !el.textContent.includes('90');
+      },
+      { timeout: 10000 },
+    );
+
+    // Lo scenario è descritto in chiaro.
+    const scenarioText = (await page.getByTestId('text-gettone-scenario').innerText()).trim();
+    assert.ok(scenarioText.includes('+1'), `il testo scenario deve citare +1, trovato "${scenarioText}"`);
+    assert.ok(scenarioText.includes('100%'), `il testo scenario deve citare 100%, trovato "${scenarioText}"`);
+
+    // Riduci la saturazione al 50% (resta +1): potenziale 10€ * 50% = 5€.
+    await page.getByTestId('select-gettone-saturation').click();
+    await page.getByText('50%', { exact: true }).click();
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector('[data-testid="text-gettone-potenziale"]');
+        return !!el && el.textContent.includes('5') && !el.textContent.includes('10');
+      },
+      { timeout: 10000 },
+    );
+
+    // Il fatturato maturato resta invariato dallo scenario (30€): è già maturato.
+    assert.ok(
+      (await page.getByTestId('text-gettone-fatturato').innerText()).includes('30'),
+      'il fatturato maturato non cambia con lo scenario',
+    );
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});

@@ -214,6 +214,33 @@ function clampSaturation(pct: number): number {
   return Math.max(0, Math.min(100, pct));
 }
 
+// Numero di prodotti (piste cross-sell) aggiuntivi simulati per cliente, con
+// clamp a [0, CJ_MAX_PISTE]. Valore non finito => CJ_MAX_PISTE (saturazione
+// completa = comportamento storico dello scenario "+5").
+function clampAddProducts(n: number): number {
+  if (!Number.isFinite(n)) return CJ_MAX_PISTE;
+  return Math.max(0, Math.min(CJ_MAX_PISTE, Math.round(n)));
+}
+
+/**
+ * Incremento di gettone (€) per una journey con `pisteAttive` piste cross-sell
+ * attive e `fatturato` maturato, nello scenario in cui guadagnasse
+ * `addProducts` piste in più (cap a CJ_MAX_PISTE). Sempre >= 0. Con
+ * `addProducts = CJ_MAX_PISTE` (o più) equivale al potenziale pieno residuo
+ * fino alla saturazione completa: è il caso che riproduce il comportamento
+ * storico ("+5").
+ */
+export function gettoneIncremento(
+  pisteAttive: number,
+  fatturato: number,
+  addProducts: number,
+): number {
+  const add = clampAddProducts(addProducts);
+  const piste = Number.isFinite(pisteAttive) ? Math.max(0, pisteAttive) : 0;
+  const target = Math.min(CJ_MAX_PISTE, piste + add);
+  return Math.max(0, gettoneForPiste(target) - fatturato);
+}
+
 // Fra due stringhe tiene il minimo lessicografico ignorando i valori vuoti
 // (commutativa => attribuzione indipendente dall'ordine delle righe).
 function minNonEmpty(cur: string, val: string): string {
@@ -423,32 +450,36 @@ export interface CjGettoneTotals {
 
 /**
  * Aggrega le journey dell'analisi lungo una dimensione (`keyFn`). Il
- * `potenziale` non espresso è il gettone pieno residuo scalato per la
- * percentuale di saturazione attesa (`saturationPct`, 0..100). Ordina per
- * fatturato↓, poi clienti↓, poi label (it).
+ * `potenziale` non espresso è il gettone incrementale dello scenario simulato,
+ * scalato per la percentuale di clienti attesa (`saturationPct`, 0..100). Lo
+ * scenario assume che ogni cliente guadagni `addProducts` piste cross-sell in
+ * più (cap a CJ_MAX_PISTE); con il default `addProducts = CJ_MAX_PISTE` lo
+ * scenario è la saturazione completa e il calcolo coincide col potenziale
+ * pieno residuo storico. Ordina per fatturato↓, poi clienti↓, poi label (it).
  */
 export function aggregateGettone(
   journeys: CjGettoneJourney[],
   keyFn: (j: CjGettoneJourney) => { key: string; label: string },
   saturationPct: number,
+  addProducts: number = CJ_MAX_PISTE,
 ): CjGettoneGroup[] {
   const s = clampSaturation(saturationPct) / 100;
   const map = new Map<string, {
     label: string; simAttivate: number; clienti: number; conProdotti: number;
-    fatturato: number; potenzialePieno: number;
+    fatturato: number; incremento: number;
   }>();
   for (const j of journeys) {
     const { key, label } = keyFn(j);
     let e = map.get(key);
     if (!e) {
-      e = { label, simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, potenzialePieno: 0 };
+      e = { label, simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, incremento: 0 };
       map.set(key, e);
     }
     e.simAttivate += j.simAttive;
     e.clienti += 1;
     if (j.pisteAttive >= 1) e.conProdotti += 1;
     e.fatturato += j.fatturato;
-    e.potenzialePieno += j.potenzialePieno;
+    e.incremento += gettoneIncremento(j.pisteAttive, j.fatturato, addProducts);
   }
   return Array.from(map.entries())
     .map(([key, e]) => ({
@@ -458,27 +489,34 @@ export function aggregateGettone(
       clienti: e.clienti,
       conProdotti: e.conProdotti,
       fatturato: e.fatturato,
-      potenziale: e.potenzialePieno * s,
+      potenziale: e.incremento * s,
     }))
     .sort((a, b) => b.fatturato - a.fatturato || b.clienti - a.clienti || a.label.localeCompare(b.label, "it"));
 }
 
-/** Totali aggregati dell'analisi gettoni con saturazione applicata. */
+/**
+ * Totali aggregati dell'analisi gettoni per lo scenario simulato: il
+ * `potenziale` è l'incremento di gettone se ogni cliente guadagnasse
+ * `addProducts` piste in più (cap a CJ_MAX_PISTE), scalato per la percentuale
+ * di clienti `saturationPct`. Default `addProducts = CJ_MAX_PISTE` =
+ * saturazione completa (comportamento storico).
+ */
 export function gettoneTotals(
   journeys: CjGettoneJourney[],
   saturationPct: number,
+  addProducts: number = CJ_MAX_PISTE,
 ): CjGettoneTotals {
   const s = clampSaturation(saturationPct) / 100;
-  let simAttivate = 0, clienti = 0, conProdotti = 0, fatturato = 0, potenzialePieno = 0, pisteAttive = 0;
+  let simAttivate = 0, clienti = 0, conProdotti = 0, fatturato = 0, incremento = 0, pisteAttive = 0;
   for (const j of journeys) {
     simAttivate += j.simAttive;
     clienti += 1;
     if (j.pisteAttive >= 1) conProdotti += 1;
     fatturato += j.fatturato;
-    potenzialePieno += j.potenzialePieno;
+    incremento += gettoneIncremento(j.pisteAttive, j.fatturato, addProducts);
     pisteAttive += j.pisteAttive;
   }
-  return { simAttivate, clienti, conProdotti, fatturato, potenziale: potenzialePieno * s, pisteAttive };
+  return { simAttivate, clienti, conProdotti, fatturato, potenziale: incremento * s, pisteAttive };
 }
 
 /**

@@ -395,6 +395,7 @@ export default function CustomerJourneyPage() {
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [saturation, setSaturation] = useState<number>(100);
+  const [extraProdotti, setExtraProdotti] = useState<number>(CJ_MAX_PISTE);
   const [sortKey, setSortKey] = useState<SortKey>("data");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [triggerDateInput, setTriggerDateInput] = useState<string>("");
@@ -644,8 +645,8 @@ export default function CustomerJourneyPage() {
     dateTo || null,
   ), [reportFiltered, dateFrom, dateTo]);
   const gettoneTot = useMemo(
-    () => gettoneTotals(gettoneJourneys, saturation),
-    [gettoneJourneys, saturation],
+    () => gettoneTotals(gettoneJourneys, saturation, extraProdotti),
+    [gettoneJourneys, saturation, extraProdotti],
   );
   const gettoneKeyFn = useCallback(
     (j: CjGettoneJourney) =>
@@ -661,7 +662,8 @@ export default function CustomerJourneyPage() {
         : (j.addetto || "Senza addetto"),
     }),
     saturation,
-  ), [gettoneJourneys, gettoneKeyFn, gettoneDim, saturation]);
+    extraProdotti,
+  ), [gettoneJourneys, gettoneKeyFn, gettoneDim, saturation, extraProdotti]);
   // Dettaglio per gruppo (clienti/SIM con % saturazione) per la riga espandibile.
   const gettoneDetail = useMemo(
     () => gettoneDetailByKey(gettoneJourneys, gettoneKeyFn),
@@ -1091,6 +1093,8 @@ export default function CustomerJourneyPage() {
                     onDateToChange={setDateTo}
                     saturation={saturation}
                     onSaturationChange={setSaturation}
+                    extraProdotti={extraProdotti}
+                    onExtraProdottiChange={setExtraProdotti}
                   />
                 ) : (
                   <ReportView
@@ -1398,6 +1402,8 @@ function AnalisiViewImpl({
   onDateToChange,
   saturation,
   onSaturationChange,
+  extraProdotti,
+  onExtraProdottiChange,
 }: {
   isLoading: boolean;
   totals: CjGettoneTotals;
@@ -1411,6 +1417,8 @@ function AnalisiViewImpl({
   onDateToChange: (v: string) => void;
   saturation: number;
   onSaturationChange: (v: number) => void;
+  extraProdotti: number;
+  onExtraProdottiChange: (v: number) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   if (isLoading) {
@@ -1424,6 +1432,7 @@ function AnalisiViewImpl({
   const dims: GettoneDim[] = ["negozio", "addetto"];
   const dimLabel: Record<GettoneDim, string> = { negozio: "Negozio", addetto: "Addetto" };
   const satOptions = [25, 50, 75, 100];
+  const prodOptions = Array.from({ length: CJ_MAX_PISTE }, (_, i) => i + 1);
   const { conPct, senzaPct } = crossSellPercentuali(totals.clienti, totals.conProdotti);
 
   return (
@@ -1469,6 +1478,27 @@ function AnalisiViewImpl({
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Prodotti in più / cliente</Label>
+            <Select
+              value={String(extraProdotti)}
+              onValueChange={(v) => onExtraProdottiChange(Number(v))}
+            >
+              <SelectTrigger className="w-[130px]" data-testid="select-gettone-prodotti">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {prodOptions.map((p) => (
+                  <SelectItem key={p} value={String(p)} data-testid={`option-gettone-prodotti-${p}`}>+{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground basis-full" data-testid="text-gettone-scenario">
+            Scenario: il {saturation}% dei clienti attiva +{extraProdotti}{" "}
+            {extraProdotti === 1 ? "prodotto" : "prodotti"} (fino a {CJ_MAX_PISTE} piste).
+            Il potenziale stimato si aggiorna di conseguenza.
+          </p>
           {(dateFrom || dateTo) && (
             <Button
               variant="ghost"
