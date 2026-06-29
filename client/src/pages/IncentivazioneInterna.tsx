@@ -25,8 +25,9 @@ import {
   type ValenzaRow, type CalendarInfo, type Employee, type Semaforo,
 } from "@shared/incentivazione";
 import {
-  Upload, Settings, Unlock, Lock, Trash2, Plus, RefreshCw, AlertCircle,
+  Upload, Settings, Unlock, Lock, Trash2, Plus, RefreshCw, AlertCircle, FileDown,
 } from "lucide-react";
+import { exportIncentivazionePdf } from "@/lib/incentivazioneExport";
 
 interface DashboardResp {
   month: number;
@@ -268,6 +269,7 @@ export default function IncentivazioneInterna() {
                   section={s}
                   calendar={calendar}
                   emps={filteredEmps}
+                  exportEmps={emps}
                   counts={counts}
                   totalEmps={emps.length}
                   liveCount={live.length}
@@ -300,6 +302,7 @@ function SectionView(props: {
   section: Section;
   calendar?: CalendarInfo;
   emps: Employee[];
+  exportEmps: Employee[];
   counts: { g: number; a: number; r: number; unlock: number };
   totalEmps: number;
   liveCount: number;
@@ -319,9 +322,9 @@ function SectionView(props: {
   year: number;
 }) {
   const {
-    section, calendar, emps, counts, totalEmps, liveCount, lastBisuiteSync, valenzeInfo, isAdmin,
+    section, calendar, emps, exportEmps, counts, totalEmps, liveCount, lastBisuiteSync, valenzeInfo, isAdmin,
     statusFilter, setStatusFilter, unlockOnly, setUnlockOnly, search, setSearch,
-    onUpload, onDeleteValenze, uploading,
+    onUpload, onDeleteValenze, uploading, month, year,
   } = props;
 
   return (
@@ -419,6 +422,18 @@ function SectionView(props: {
             Azzera filtri
           </Button>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto"
+          disabled={exportEmps.length === 0}
+          onClick={() => exportIncentivazionePdf({
+            section, emps: exportEmps, calendar, counts, totalEmps, month, year,
+          })}
+          data-testid="button-export-pdf"
+        >
+          <FileDown className="h-4 w-4 mr-1" /> Esporta PDF
+        </Button>
       </div>
 
       {/* Employee grid */}
