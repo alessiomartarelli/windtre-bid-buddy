@@ -95,6 +95,14 @@ Preferred communication style: Simple, everyday language.
   suite pure. Le suite restano lanciabili singolarmente via i rispettivi
   step di validation (vedi sezione Testing).
 - **Mechanism**: client `BASE_PATH` constant + `apiUrl()` helper, server sub-app mounting, base href injection.
+- **Cache anti-pagina-bianca (Task #230)**: il fallback SPA in
+  `server/static.ts` serve `index.html` con
+  `Cache-Control: no-cache, no-store, must-revalidate` (gli asset hashati
+  `/assets/*` restano `immutable` 1 anno), così dopo un deploy il browser
+  ricarica sempre il manifest aggiornato e non punta a chunk rimossi.
+  In più `client/src/main.tsx` ascolta `vite:preloadError` e ricarica la
+  pagina una sola volta (flag sessionStorage) per le schede aperte prima
+  del deploy. Nginx fa da reverse proxy e inoltra questi header.
 - **Backup DB prod (Task #153)**: sorgenti in repo:
   `scripts/incentive-w3-backup.sh` (lo script che gira sul VPS) e
   `scripts/install-prod-backup.sh` (deploy idempotente — richiede

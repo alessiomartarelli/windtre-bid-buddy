@@ -58,6 +58,20 @@ export function serveStatic(app: Express) {
       html = html.replaceAll('href="/assets/', `href="${BASE_PATH}/assets/`);
       html = html.replaceAll('href="/favicon', `href="${BASE_PATH}/favicon`);
     }
-    res.status(200).set({ "Content-Type": "text/html" }).end(html);
+    // `index.html` è il manifest che punta ai bundle Vite hashati. Dopo un
+    // deploy i vecchi chunk vengono rimossi: se il browser riusa un
+    // `index.html` cacheato finisce per richiedere chunk inesistenti e
+    // mostra la pagina bianca ("Failed to fetch dynamically imported
+    // module"). Forziamo quindi la rivalidazione del manifest a ogni load,
+    // mentre gli asset hashati sotto `/assets/*` restano `immutable` 1 anno.
+    res
+      .status(200)
+      .set({
+        "Content-Type": "text/html",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      })
+      .end(html);
   });
 }
