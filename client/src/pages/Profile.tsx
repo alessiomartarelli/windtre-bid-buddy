@@ -3,6 +3,7 @@ import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
 import { apiUrl } from "@/lib/basePath";
 import { apiRequest } from '@/lib/queryClient';
+import { Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,7 +15,7 @@ import { AppNavbar } from '@/components/AppNavbar';
 
 export default function Profile() {
   const [, setLocation] = useLocation();
-  const { user, profile, organization, loading: authLoading } = useAuth();
+  const { user, profile, organization, loading: authLoading, refreshUser } = useAuth();
   const { toast } = useToast();
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -26,11 +27,54 @@ export default function Profile() {
   const [emailDisabled, setEmailDisabled] = useState<boolean>(false);
   const [savingEmailPref, setSavingEmailPref] = useState(false);
 
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [savingInfo, setSavingInfo] = useState(false);
+
   const isAdminLike = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   useEffect(() => {
     setEmailDisabled(!!profile?.emailNotificationsDisabled);
   }, [profile]);
+
+  const startEditInfo = () => {
+    setEditName(profile?.full_name || '');
+    setEditEmail(user?.email || '');
+    setEditingInfo(true);
+  };
+
+  const handleSaveInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) {
+      toast({ title: 'Errore', description: 'Il nome non può essere vuoto', variant: 'destructive' });
+      return;
+    }
+    if (!editEmail.trim()) {
+      toast({ title: 'Errore', description: "L'email non può essere vuota", variant: 'destructive' });
+      return;
+    }
+    setSavingInfo(true);
+    try {
+      const res = await fetch(apiUrl('/api/auth/profile'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ fullName: editName.trim(), email: editEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || data?.error) {
+        toast({ title: 'Errore', description: data?.error || "Errore nell'aggiornamento", variant: 'destructive' });
+      } else {
+        toast({ title: 'Informazioni aggiornate', description: 'I tuoi dati sono stati salvati' });
+        setEditingInfo(false);
+        await refreshUser();
+      }
+    } catch {
+      toast({ title: 'Errore', description: 'Errore di connessione', variant: 'destructive' });
+    }
+    setSavingInfo(false);
+  };
 
   const handleToggleEmailPref = async (disabled: boolean) => {
     setSavingEmailPref(true);
@@ -98,31 +142,90 @@ export default function Profile() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Profilo utente
-            </CardTitle>
-            <CardDescription>
-              Le tue informazioni personali
-            </CardDescription>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Profilo utente
+                </CardTitle>
+                <CardDescription>
+                  Le tue informazioni personali
+                </CardDescription>
+              </div>
+              {!editingInfo && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={startEditInfo}
+                  data-testid="button-edit-info"
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Modifica
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label className="text-muted-foreground text-sm">Nome</Label>
-                <p className="font-medium" data-testid="text-profile-name">{profile?.full_name || 'Non specificato'}</p>
+            {editingInfo ? (
+              <form onSubmit={handleSaveInfo} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-name">Nome</Label>
+                  <Input
+                    id="edit-name"
+                    data-testid="input-edit-name"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Il tuo nome completo"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-email">Email</Label>
+                  <Input
+                    id="edit-email"
+                    data-testid="input-edit-email"
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    placeholder="La tua email"
+                    required
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={savingInfo} data-testid="button-save-info">
+                    {savingInfo ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</>
+                    ) : 'Salva'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={savingInfo}
+                    onClick={() => setEditingInfo(false)}
+                    data-testid="button-cancel-info"
+                  >
+                    Annulla
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground text-sm">Nome</Label>
+                  <p className="font-medium" data-testid="text-profile-name">{profile?.full_name || 'Non specificato'}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Email</Label>
+                  <p className="font-medium" data-testid="text-profile-email">{user?.email}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground text-sm">Ruolo</Label>
+                  <p className="font-medium capitalize" data-testid="text-profile-role">
+                    {profile?.role === 'super_admin' ? 'Super Admin' : profile?.role === 'admin' ? 'Amministratore' : 'Operatore'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <Label className="text-muted-foreground text-sm">Email</Label>
-                <p className="font-medium" data-testid="text-profile-email">{user?.email}</p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground text-sm">Ruolo</Label>
-                <p className="font-medium capitalize" data-testid="text-profile-role">
-                  {profile?.role === 'super_admin' ? 'Super Admin' : profile?.role === 'admin' ? 'Amministratore' : 'Operatore'}
-                </p>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 

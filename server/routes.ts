@@ -1906,6 +1906,51 @@ export async function registerRoutes(
     }
   });
 
+  // === USER: Modifica le proprie informazioni (nome, email) ===
+  // Self-service per QUALSIASI utente autenticato (operatore/admin/super_admin)
+  // limitato al proprio profilo. Il ruolo NON è modificabile da qui (resta una
+  // competenza admin via /api/admin/update-user).
+  app.patch("/api/auth/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "Profilo non trovato" });
+      }
+      const { fullName, full_name, email } = req.body ?? {};
+      const resolvedFullName = fullName ?? full_name;
+      const updateData: { fullName?: string; email?: string } = {};
+
+      if (typeof resolvedFullName === "string" && resolvedFullName.trim()) {
+        updateData.fullName = resolvedFullName.trim();
+      }
+
+      if (typeof email === "string" && email.trim()) {
+        const newEmail = email.trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+          return res.status(400).json({ error: "Email non valida" });
+        }
+        if (newEmail !== profile.email) {
+          const existing = await storage.getProfileByEmail(newEmail);
+          if (existing && existing.id !== userId) {
+            return res.status(400).json({ error: "Esiste già un utente con questa email" });
+          }
+          updateData.email = newEmail;
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: "Nessun dato da aggiornare" });
+      }
+
+      const updated = await storage.updateProfile(userId, updateData);
+      res.json({ ...updated, passwordHash: undefined });
+    } catch (error) {
+      console.error("Error updating own profile:", error);
+      res.status(500).json({ error: "Errore nell'aggiornamento del profilo" });
+    }
+  });
+
   // === Profilo: preferenza notifiche email ===
   app.patch("/api/auth/email-preferences", isAuthenticated, async (req: any, res) => {
     try {

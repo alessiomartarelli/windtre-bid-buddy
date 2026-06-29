@@ -153,5 +153,6 @@ export function useAuth() {
     signIn,
     signUp,
     signOut,
+    refreshUser: fetchUser,
   };
 }
