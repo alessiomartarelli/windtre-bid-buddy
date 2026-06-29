@@ -778,6 +778,26 @@ test('scenario 8: the gettone scenario simulator recomputes the projected potent
       'il fatturato maturato non cambia con lo scenario',
     );
 
+    // "Azzera scenario" riporta saturazione=100% e prodotti=+5 (potenziale 90€).
+    await page.getByTestId('button-gettone-reset-scenario').click();
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector('[data-testid="text-gettone-potenziale"]');
+        return !!el && el.textContent.includes('90');
+      },
+      { timeout: 10000 },
+    );
+    const baseScenario = (await page.getByTestId('text-gettone-scenario').innerText()).trim();
+    assert.ok(
+      baseScenario.toLowerCase().includes('base'),
+      `dopo l'azzeramento il testo deve indicare lo scenario base, trovato "${baseScenario}"`,
+    );
+    // Il pulsante di reset sparisce quando si è tornati al base.
+    assert.equal(
+      await page.getByTestId('button-gettone-reset-scenario').count(),
+      0, 'il pulsante "Azzera scenario" non è mostrato nello scenario base',
+    );
+
     await page.close();
     await context.close();
   } finally {

@@ -1494,10 +1494,24 @@ function AnalisiViewImpl({
               </SelectContent>
             </Select>
           </div>
+          {(saturation !== 100 || extraProdotti !== CJ_MAX_PISTE) && (
+            <div className="space-y-1 flex flex-col justify-end">
+              <Label className="text-xs text-muted-foreground">&nbsp;</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { onSaturationChange(100); onExtraProdottiChange(CJ_MAX_PISTE); }}
+                data-testid="button-gettone-reset-scenario"
+              >
+                Azzera scenario
+              </Button>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground basis-full" data-testid="text-gettone-scenario">
-            Scenario: il {saturation}% dei clienti attiva +{extraProdotti}{" "}
-            {extraProdotti === 1 ? "prodotto" : "prodotti"} (fino a {CJ_MAX_PISTE} piste).
-            Il potenziale stimato si aggiorna di conseguenza.
+            {saturation === 100 && extraProdotti === CJ_MAX_PISTE
+              ? `Scenario base: potenziale pieno residuo (tutti i clienti fino a ${CJ_MAX_PISTE} piste).`
+              : `Scenario: il ${saturation}% dei clienti attiva +${extraProdotti} ${extraProdotti === 1 ? "prodotto" : "prodotti"} (fino a ${CJ_MAX_PISTE} piste).`}
+            {" "}Il potenziale stimato si aggiorna di conseguenza.
           </p>
           {(dateFrom || dateTo) && (
             <Button
