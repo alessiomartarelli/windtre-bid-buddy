@@ -38,10 +38,6 @@ args = "Start application"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "finplan-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "cj-authz-tests"
 
 [[workflows.workflow.tasks]]
@@ -50,23 +46,7 @@ args = "cj-reconcile-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "cj-trigger-date-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "incentivazione-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "incentivazione-accservizi-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "inc-dashboard-authz-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "cj-timeline-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
@@ -82,19 +62,39 @@ args = "cj-gettone-ui-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "admin-authz-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "cj-validity-gettone-parity-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "typecheck"
+args = "inc-sort-ui-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "inc-sort-ui-tests"
+args = "finplan-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-trigger-date-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "inc-dashboard-authz-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "incentivazione-accservizi-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-timeline-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "admin-authz-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "typecheck"
 
 [[workflows.workflow]]
 name = "Start application"
@@ -104,17 +104,6 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
-
-[[workflows.workflow]]
-name = "finplan-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-finplan-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
 
 [[workflows.workflow]]
 name = "cj-authz-tests"
@@ -139,56 +128,12 @@ args = "bash scripts/run-customer-journey-reconcile-tests.sh"
 isValidation = true
 
 [[workflows.workflow]]
-name = "cj-trigger-date-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-customer-journey-trigger-date-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
 name = "incentivazione-tests"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-incentivazione-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
-name = "incentivazione-accservizi-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-incentivazione-accessori-servizi-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
-name = "inc-dashboard-authz-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-incentivazione-dashboard-authz-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
-name = "cj-timeline-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-customer-journey-timeline-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
@@ -227,17 +172,6 @@ args = "bash scripts/run-customer-journey-gettone-ui-tests.sh"
 isValidation = true
 
 [[workflows.workflow]]
-name = "admin-authz-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-admin-authz-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
 name = "cj-validity-gettone-parity-tests"
 author = "agent"
 
@@ -249,23 +183,89 @@ args = "bash scripts/run-customer-journey-validity-gettone-parity-tests.sh"
 isValidation = true
 
 [[workflows.workflow]]
-name = "typecheck"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-typecheck.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
 name = "inc-sort-ui-tests"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-incentivazione-sort-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "finplan-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-finplan-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-trigger-date-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-trigger-date-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "inc-dashboard-authz-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-incentivazione-dashboard-authz-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "incentivazione-accservizi-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-incentivazione-accessori-servizi-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-timeline-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-timeline-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "admin-authz-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-admin-authz-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "typecheck"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-typecheck.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
