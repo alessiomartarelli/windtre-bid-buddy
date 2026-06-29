@@ -326,6 +326,19 @@ function SectionView(props: {
     statusFilter, setStatusFilter, unlockOnly, setUnlockOnly, search, setSearch,
     onUpload, onDeleteValenze, uploading, month, year,
   } = props;
+  const { toast } = useToast();
+  const [pdfPending, setPdfPending] = useState(false);
+
+  const handleExportPdf = async () => {
+    setPdfPending(true);
+    try {
+      await exportIncentivazionePdf({ section, emps: exportEmps, calendar, counts, totalEmps, month, year });
+    } catch (e: any) {
+      toast({ title: "Errore export PDF", description: String(e?.message || e), variant: "destructive" });
+    } finally {
+      setPdfPending(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -426,13 +439,11 @@ function SectionView(props: {
           variant="outline"
           size="sm"
           className="ml-auto"
-          disabled={exportEmps.length === 0}
-          onClick={() => exportIncentivazionePdf({
-            section, emps: exportEmps, calendar, counts, totalEmps, month, year,
-          })}
+          disabled={exportEmps.length === 0 || pdfPending}
+          onClick={handleExportPdf}
           data-testid="button-export-pdf"
         >
-          <FileDown className="h-4 w-4 mr-1" /> Esporta PDF
+          <FileDown className="h-4 w-4 mr-1" /> {pdfPending ? "Genero…" : "Esporta PDF"}
         </Button>
       </div>
 
