@@ -360,6 +360,89 @@ test('parseValenzeAoa: real Excel — ignores projection + extra columns', () =>
 });
 
 // ===========================================================================
+// parseValenzeAoa — file punti Vodafone Store Specialist REALE (foglio
+// "Riepilogo" del report_valenze). Fixture stabile tests/fixtures/valenze-vdf-ss.xlsx.
+// Layout diverso dal W3: A=Addetto, B=Mobile, C=Fisso, D=CB, E=Energia Fastweb,
+// F=TNP (solo vis), G=IVA, H=Totale piste consumer, (sep vuoto), poi 7 colonne
+// "Proiezione". Verifica che il mapping per posizione fissa (excelCol)
+// estragga SOLO le 5 piste a punteggio (mobile_pt/fisso_pt/energia/tnp/
+// iva_voci), escluda CB + Totale piste consumer + le Proiezione e NON mappi le
+// sotto-piste a pezzi (fisso_pz/mobile_pz/iva_fissi, dal connettore BiSuite).
+// ===========================================================================
+function loadValenzeVdfFixture() {
+  const buf = readFileSync(new URL('./fixtures/valenze-vdf-ss.xlsx', import.meta.url));
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+}
+
+const VDF_SS_TRACKS = defaultSections().find((s) => s.id === 'ss_vdf').tracks;
+
+test('parseValenzeAoa: Vodafone SS Excel — header layout', () => {
+  const aoa = loadValenzeVdfFixture();
+  assert.ok(aoa.length >= 2, 'fixture must have a header + data rows');
+  const header = aoa[0].map((h) => String(h).trim());
+  assert.equal(header[0], 'Addetto');
+  assert.deepEqual(header.slice(1, 8), [
+    'PISTA MOBILE', 'PISTA FISSO', 'PISTA CB', 'ENERGIA FASTWEB',
+    'PISTA TNP (SOLO VIS)', 'PISTA IVA', 'TOTALE PISTE CONSUMER',
+  ]);
+  assert.equal(header[8], '', 'col I is the empty separator');
+  assert.ok(header.slice(9).every((h) => /Proiezione$/.test(h)),
+    'cols from J onward are computed "Proiezione" columns');
+});
+
+test('parseValenzeAoa: Vodafone SS Excel — values mapped by fixed position', () => {
+  const rows = parseValenzeAoa(loadValenzeVdfFixture(), VDF_SS_TRACKS);
+  assert.equal(rows.length, 27, 'file has 27 addetti (no Totale/Media rows)');
+
+  const magro = rows.find((r) => r.name === 'MAGRO GIUSEPPE');
+  assert.ok(magro, 'MAGRO GIUSEPPE present');
+  assert.equal(magro.mobile_pt, 53.9, 'col B = PISTA MOBILE');
+  assert.equal(magro.fisso_pt, 32.8, 'col C = PISTA FISSO');
+  assert.equal(magro.energia, 10, 'col E = ENERGIA FASTWEB');
+  assert.equal(magro.tnp, 36, 'col F = PISTA TNP (SOLO VIS)');
+  assert.equal(magro.iva_voci, 6, 'col G = PISTA IVA');
+  // CB (col D) e Totale piste consumer (col H) non sono mappati.
+  assert.ok(!('cb' in magro) && !('cb_rete' in magro), 'PISTA CB not mapped');
+});
+
+test('parseValenzeAoa: Vodafone SS Excel — only the 5 scored piste are mapped', () => {
+  const rows = parseValenzeAoa(loadValenzeVdfFixture(), VDF_SS_TRACKS);
+  const keys = Object.keys(rows[0]).filter((k) => k !== 'name');
+  // Solo le 5 piste a punteggio con excelCol. Le sotto-piste a pezzi
+  // (fisso_pz/mobile_pz/iva_fissi) e le live (accessori/servizi) vengono dal
+  // connettore BiSuite e NON devono comparire; il separatore vuoto (col I)
+  // non deve essere catturato dal fallback per keyword (guard `!h`).
+  assert.deepEqual(
+    keys.sort(),
+    ['energia', 'fisso_pt', 'iva_voci', 'mobile_pt', 'tnp'],
+  );
+});
+
+// ===========================================================================
+// parseValenzeAoa — guard separatore: una colonna con header vuoto NON deve mai
+// essere catturata dal fallback per keyword (`hint.includes("")` sarebbe sempre
+// true). Una sotto-pista senza excelCol né header corrispondente resta non
+// mappata invece di agganciare la colonna separatore.
+// ===========================================================================
+test('parseValenzeAoa: empty-header separator column is never matched by fallback', () => {
+  const aoa = [
+    ['Nome', 'Mobile', '', 'Fisso'],
+    ['Mario', '10', 'SEP', '5'],
+  ];
+  const tracks = [
+    { id: 'mobile', name: 'Mobile', target: 10, unit: 'pt', isLock: false, excelCol: 'B' },
+    // pezzi senza excelCol né header dedicato: deve restare NON mappato, non
+    // agganciare la colonna C vuota.
+    { id: 'mobile_pz', name: 'Mobile pz', target: 5, unit: 'pz', isLock: false },
+  ];
+  const rows = parseValenzeAoa(aoa, tracks);
+  assert.deepEqual(rows[0], { name: 'Mario', mobile: 10 });
+  assert.equal('mobile_pz' in rows[0], false, 'sub-track must stay unmapped, not grab the empty column');
+});
+
+// ===========================================================================
 // colIdx — lettera colonna Excel => indice 0-based (incluse colonne doppie).
 // ===========================================================================
 test('colIdx: column letter to 0-based index', () => {

@@ -24,7 +24,23 @@ Modulo abilitabile per organizzazione con chiave
   - `sub` — sotto-pista, non incide sullo stato complessivo.
   - `live` — valore preso dal connettore BiSuite (Accessori/Servizi),
     non dall'Excel.
-  - `excelCol` — lettera colonna Excel per il mapping valenze.
+  - `excelCol` — lettera colonna Excel per il mapping valenze. Quando
+    assente, `parseValenzeAoa` prova un match per keyword sull'header (le
+    colonne con header vuoto — es. il separatore — vengono saltate, mai
+    catturate dal fallback).
+
+### Mapping valenze Vodafone Store Specialist
+
+Il file punti mensile Vodafone SS (`report_valenze`, foglio "Riepilogo")
+ha un layout fisso: `A=Addetto`, `B=PISTA MOBILE`, `C=PISTA FISSO`,
+`D=PISTA CB`, `E=ENERGIA FASTWEB`, `F=PISTA TNP (SOLO VIS)`,
+`G=PISTA IVA`, `H=TOTALE PISTE CONSUMER`, colonna separatrice vuota,
+poi le colonne "Proiezione". La sezione `ss_vdf` mappa via `excelCol`
+**solo le 5 piste a punteggio** (`mobile_pt→B`, `fisso_pt→C`,
+`energia→E`, `tnp→F`, `iva_voci→G`); CB (D) e Totale piste consumer (H)
+sono esclusi di proposito. Le sotto-piste a pezzi (`fisso_pz`,
+`mobile_pz`, `iva_fissi`) e i conteggi `live` arrivano da BiSuite e NON
+sono nel file punti.
 - **Calendario** (`buildCalendar`): giorni lavorativi del mese (esclusi
   weekend e festività italiane), con `el`/`tot`/`rem`, `pct` e `mult`
   (moltiplicatore di proiezione `tot/el`).

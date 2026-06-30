@@ -104,6 +104,21 @@ const W3_COL: Record<string, string> = {
   extra_marginalita: "J",
 };
 
+// Layout del file punti Vodafone "report_valenze" (foglio "Riepilogo"):
+// A=Addetto, B=Mobile, C=Fisso, D=CB (escluso), E=Energia Fastweb,
+// F=TNP (solo vis), G=IVA, H=Totale piste consumer (escluso); da I in poi
+// separatore vuoto + colonne "Proiezione" calcolate, ignorate. Mappiamo per
+// posizione fissa SOLO le 5 piste a punteggio del file. I pezzi Fisso/Mobile,
+// i fissi IVA e Accessori/Servizi NON sono nel file: arrivano dal connettore
+// BiSuite (vedi flag `live` e l'aggregazione lato server).
+const VDF_COL: Record<string, string> = {
+  mobile_pt: "B",
+  fisso_pt: "C",
+  energia: "E",
+  tnp: "F",
+  iva_voci: "G",
+};
+
 export function defaultSections(): Section[] {
   return [
     {
@@ -146,14 +161,14 @@ export function defaultSections(): Section[] {
       locks: 4,
       ready: true,
       tracks: [
-        { id: "fisso_pt", name: "Fisso (S6) pt", target: 20, unit: "pt", isLock: true },
+        { id: "fisso_pt", name: "Fisso (S6) pt", target: 20, unit: "pt", isLock: true, excelCol: VDF_COL.fisso_pt },
         { id: "fisso_pz", name: "Fisso (S6) pz", target: 15, unit: "pz", isLock: true, sub: true },
-        { id: "mobile_pt", name: "Mobile (S7) pt", target: 45, unit: "pt", isLock: false },
+        { id: "mobile_pt", name: "Mobile (S7) pt", target: 45, unit: "pt", isLock: false, excelCol: VDF_COL.mobile_pt },
         { id: "mobile_pz", name: "Mobile (S7) pz", target: 30, unit: "pz", isLock: false, sub: true },
-        { id: "iva_voci", name: "IVA voci (S3)", target: 8, unit: "voci", isLock: true },
+        { id: "iva_voci", name: "IVA voci (S3)", target: 8, unit: "voci", isLock: true, excelCol: VDF_COL.iva_voci },
         { id: "iva_fissi", name: "IVA fissi (S3)", target: 3, unit: "fissi", isLock: true, sub: true },
-        { id: "tnp", name: "TNP/Smartphone", target: 16, unit: "pz", isLock: true, note: "≥65% fin." },
-        { id: "energia", name: "Energia", target: 12, unit: "pz", isLock: true },
+        { id: "tnp", name: "TNP/Smartphone", target: 16, unit: "pz", isLock: true, note: "≥65% fin.", excelCol: VDF_COL.tnp },
+        { id: "energia", name: "Energia", target: 12, unit: "pz", isLock: true, excelCol: VDF_COL.energia },
         { id: "accessori", name: "Accessori", target: 427, unit: "€", isLock: false, live: true },
         { id: "servizi", name: "Servizi", target: 305, unit: "€", isLock: false, live: true },
       ],
@@ -442,6 +457,7 @@ export function parseValenzeAoa(aoa: unknown[][], tracks: Track[]): ValenzaRow[]
     for (let ci = 0; ci < header.length; ci++) {
       if (used.has(ci)) continue;
       const h = header[ci].replace(/^pista\s+/, "");
+      if (!h) continue; // colonna separatore senza header: mai un match (hint.includes("") sarebbe sempre true)
       if (hints.some((hint) => h === hint || h.includes(hint) || hint.includes(h))) {
         cmap[t.id] = ci;
         used.add(ci);
