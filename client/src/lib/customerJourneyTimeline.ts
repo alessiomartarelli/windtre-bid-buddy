@@ -291,20 +291,23 @@ export function cjT6Deadline(openedAt: string | Date | null | undefined): Date |
   return new Date(Date.UTC(y, m + 7, 0, 23, 59, 59, 999));
 }
 
-// Giorni residui (interi) fino alla scadenza T6. Confronto per sola data UTC
-// (entrambi gli estremi azzerati a mezzanotte), così l'ULTIMO giorno utile dà
-// 0 ("scade oggi") e non 1: evita lo sfasamento di un giorno dovuto al fatto
-// che la deadline è a fine giornata. Positivo = mancano N giorni; 0 = scade
-// oggi; negativo = scaduta da N giorni. null se manca la data di apertura.
+// Giorni residui (interi) fino alla scadenza T6.
+// Positivo = mancano N giorni; 0 = scade oggi; negativo = scaduta da N giorni.
+// null se manca la data di apertura.
+//
+// Si confrontano le DATE DI CALENDARIO in UTC (le stesse componenti usate per
+// visualizzare la scadenza), così il conteggio resta coerente con la data
+// mostrata e non guadagna un giorno extra per via dell'orario 23:59:59.999 UTC
+// della scadenza né per lo sfasamento di fuso orario.
 export function cjDaysToT6(
   openedAt: string | Date | null | undefined,
   now: Date = new Date(),
 ): number | null {
   const dl = cjT6Deadline(openedAt);
   if (!dl) return null;
-  const dlDay = Date.UTC(dl.getUTCFullYear(), dl.getUTCMonth(), dl.getUTCDate());
-  const nowDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return Math.round((dlDay - nowDay) / 86_400_000);
+  const deadlineDay = Date.UTC(dl.getUTCFullYear(), dl.getUTCMonth(), dl.getUTCDate());
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((deadlineDay - today) / 86_400_000);
 }
 
 // Valore di ordinamento per il criterio "In scadenza" della lista schede.

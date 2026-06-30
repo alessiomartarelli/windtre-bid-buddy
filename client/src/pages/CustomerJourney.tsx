@@ -140,6 +140,14 @@ function fmtDate(d: string | Date | null | undefined): string {
   return date.toLocaleDateString("it-IT");
 }
 
+// Formatta una data usando le sue componenti UTC: serve per le date "ancorate"
+// in UTC (es. la scadenza T6 = fine mese alle 23:59:59.999 UTC) così la
+// localizzazione italiana (UTC+1/+2) non le faccia rotolare al giorno dopo.
+function fmtDateUTC(d: Date | null | undefined): string {
+  if (!d || Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("it-IT", { timeZone: "UTC" });
+}
+
 function fmtEuro(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v) || v === 0) return "—";
   return v.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
@@ -2185,7 +2193,7 @@ function JourneyDetailViewImpl({
                       : daysToT6 === 0
                         ? "Scade oggi"
                         : `Scade tra ${daysToT6} ${daysToT6 === 1 ? "giorno" : "giorni"}`}
-                    {t6Deadline ? ` · T6 ${fmtDate(t6Deadline.toISOString())}` : ""}
+                    {t6Deadline ? ` · T6 ${fmtDateUTC(t6Deadline)}` : ""}
                   </Badge>
                 </div>
               )}

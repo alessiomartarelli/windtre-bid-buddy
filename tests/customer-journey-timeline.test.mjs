@@ -437,13 +437,61 @@ test('cjT6Deadline: null senza data di apertura', () => {
 });
 
 test('cjDaysToT6: positivo prima, 0 il giorno, negativo dopo la scadenza', () => {
-  // T0 luglio 2026 => scadenza il 31/01/2027 (confronto per sola data).
+  // T0 luglio 2026 => scadenza 31/01/2027 (mese di T6). Conteggio in giorni di
+  // CALENDARIO: dal 21/01 al 31/01 sono 10 giorni.
   const before = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-01-21T00:00:00.000Z'));
-  assert.equal(before, 10, '10 giorni residui (date-only) dal 21/01 al 31/01');
-  const sameDay = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-01-31T08:00:00.000Z'));
-  assert.equal(sameDay, 0, 'ultimo giorno utile => scade oggi (0), non 1');
-  const after = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-02-01T00:00:00.000Z'));
-  assert.equal(after, -1, 'il giorno dopo => scaduta da 1 giorno');
+  assert.equal(before, 10, '10 giorni di calendario dal 21/01 al 31/01');
+  const sameDay = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-01-31T00:00:00.000Z'));
+  assert.equal(sameDay, 0, 'il giorno della scadenza => "Scade oggi"');
+  const after = cjDaysToT6('2026-07-15T00:00:00.000Z', new Date('2027-02-05T00:00:00.000Z'));
+  assert.ok(after < 0, 'scaduta => negativo');
+});
+
+// Regressione Task #233: la scadenza T6 è ancorata alle 23:59:59.999 UTC ma va
+// VISUALIZZATA come l'ultimo giorno del mese di T6 a prescindere dal fuso. Una
+// journey aperta a giugno deve dare scadenza 31 dicembre (non 1 gennaio) e il
+// conteggio giorni non deve guadagnare un giorno extra per l'orario UTC.
+test('Task #233: journey aperta a giugno => scadenza 31/12 (no roll a 01/01)', () => {
+  // Esempio di riferimento: PATRIZIO LEONI, aperta il 29/06/2026.
+  const dl = cjT6Deadline('2026-06-29T08:00:00.000Z');
+  assert.equal(dl.getUTCFullYear(), 2026);
+  assert.equal(dl.getUTCMonth(), 11, 'dicembre (mese di T6)');
+  assert.equal(dl.getUTCDate(), 31, 'ultimo giorno di dicembre');
+  // Formattazione UTC-stable: NON deve rotolare a 01/01/2027 nemmeno con un fuso
+  // est di UTC (qui forziamo Europe/Rome via timeZone esplicito).
+  assert.equal(
+    dl.toLocaleDateString('it-IT', { timeZone: 'UTC' }),
+    '31/12/2026',
+    'la scadenza T6 mostrata è 31/12/2026',
+  );
+  // ...mentre la formattazione SBAGLIATA (locale, senza timeZone UTC) in un fuso
+  // est di UTC produrrebbe il bug 01/01/2027.
+  assert.equal(
+    dl.toLocaleDateString('it-IT', { timeZone: 'Europe/Rome' }),
+    '01/01/2027',
+    'controprova: la formattazione locale faceva rotolare la data',
+  );
+});
+
+test('Task #233: luglio => 31/01, dicembre => 30/06 anno dopo', () => {
+  const lug = cjT6Deadline('2026-07-15T23:00:00.000Z');
+  assert.equal(lug.toLocaleDateString('it-IT', { timeZone: 'UTC' }), '31/01/2027');
+  const dic = cjT6Deadline('2026-12-10T00:00:00.000Z');
+  // dicembre 2026 + 6 mesi = giugno 2027 => 30/06/2027.
+  assert.equal(dic.toLocaleDateString('it-IT', { timeZone: 'UTC' }), '30/06/2027');
+});
+
+test('Task #233: conteggio giorni indipendente dall ora del giorno (no extra)', () => {
+  // T0 giugno 2026 => scadenza 31/12/2026. Qualunque sia l'ora di "now" nello
+  // stesso giorno di calendario, il conteggio deve essere identico.
+  const opened = '2026-06-29T08:00:00.000Z';
+  const morning = cjDaysToT6(opened, new Date('2026-12-30T06:00:00.000Z'));
+  const evening = cjDaysToT6(opened, new Date('2026-12-30T22:30:00.000Z'));
+  assert.equal(morning, 1, 'dal 30/12 manca 1 giorno alla scadenza 31/12');
+  assert.equal(evening, 1, 'stesso giorno => stesso conteggio, niente giorno extra');
+  // Il giorno della scadenza, a qualsiasi ora, => 0 ("Scade oggi").
+  assert.equal(cjDaysToT6(opened, new Date('2026-12-31T00:30:00.000Z')), 0);
+  assert.equal(cjDaysToT6(opened, new Date('2026-12-31T23:30:00.000Z')), 0);
 });
 
 test('cjDaysToT6: null senza data', () => {
