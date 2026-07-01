@@ -657,7 +657,11 @@ export default function CustomerJourneyPage() {
 
   // Lista schede: una journey espone gli array di facet (PDV/addetti/stati)
   // raccolti fra i suoi item.
-  const filtered = useMemo(() => journeys.filter((j) => matchesCjFilters({
+  // Base delle schede con TUTTI i filtri tranne il tipo cliente: i chip
+  // Tutti/Privati/Business SONO il filtro tipo, quindi i loro contatori devono
+  // riflettere il set correntemente filtrato (ricerca/PDV/operatore/stato +
+  // data di inserimento), non il totale grezzo.
+  const filteredNoType = useMemo(() => journeys.filter((j) => matchesCjFilters({
     customerType: j.customerType,
     pdvs: j.pdvs ?? [],
     addetti: j.addetti ?? [],
@@ -665,15 +669,16 @@ export default function CustomerJourneyPage() {
     searchHay: [
       journeyTitle(j), j.customerKey, j.telefono, j.codiceCliente,
     ].filter(Boolean).join(" "),
-  }, activeFilters)), [journeys, activeFilters]);
+  }, { ...activeFilters, typeFilter: "tutti" })), [journeys, activeFilters]);
 
   // Filtro schede per data di INSERIMENTO SIM: riusa la stessa derivazione
   // dell'Analisi gettoni (`buildGettoneJourneys` => `insertedAt` per journey)
   // così il "dal–al" resta coerente fra le due viste. Le journey senza SIM
   // mobile attiva (fuori coorte gettone) non hanno data di inserimento: con un
   // intervallo impostato vengono escluse, senza intervallo restano visibili.
-  const simInsertFiltered = useMemo(() => {
-    if (!dateFrom && !dateTo) return filtered;
+  // Applicato sulla base senza tipo così i contatori dei chip lo includono.
+  const simInsertNoType = useMemo(() => {
+    if (!dateFrom && !dateTo) return filteredNoType;
     const allowed = new Set(
       filterGettoneByInsertDate(
         buildGettoneJourneys(reportRows),
@@ -681,16 +686,26 @@ export default function CustomerJourneyPage() {
         dateTo || null,
       ).map((g) => g.journeyId),
     );
-    return filtered.filter((j) => allowed.has(j.id));
-  }, [filtered, reportRows, dateFrom, dateTo]);
+    return filteredNoType.filter((j) => allowed.has(j.id));
+  }, [filteredNoType, reportRows, dateFrom, dateTo]);
 
+  // Lista schede effettiva: applica il filtro tipo cliente sopra la base.
+  const simInsertFiltered = useMemo(
+    () => (typeFilter === "tutti"
+      ? simInsertNoType
+      : simInsertNoType.filter((j) => j.customerType === typeFilter)),
+    [simInsertNoType, typeFilter],
+  );
+
+  // Contatori dei chip: derivati dalla base già filtrata (senza il tipo).
+  const countTutti = simInsertNoType.length;
   const countPrivato = useMemo(
-    () => journeys.filter((j) => j.customerType === "privato").length,
-    [journeys],
+    () => simInsertNoType.filter((j) => j.customerType === "privato").length,
+    [simInsertNoType],
   );
   const countAzienda = useMemo(
-    () => journeys.filter((j) => j.customerType === "azienda").length,
-    [journeys],
+    () => simInsertNoType.filter((j) => j.customerType === "azienda").length,
+    [simInsertNoType],
   );
 
   // Righe report filtrate con gli stessi filtri della lista schede: una riga
@@ -1042,7 +1057,7 @@ export default function CustomerJourneyPage() {
                   data-testid="button-filter-tutti"
                 >
                   Tutti
-                  <Badge variant="secondary" className="ml-2">{journeys.length}</Badge>
+                  <Badge variant="secondary" className="ml-2">{countTutti}</Badge>
                 </Button>
                 <Button
                   variant={typeFilter === "privato" ? "default" : "outline"}

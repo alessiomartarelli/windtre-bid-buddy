@@ -1,24 +1,25 @@
 ---
-name: CJ schede date filter semantics
-description: Which date the Customer Journey "Schede clienti" dal–al range filters on, and why it looks like it does nothing
+name: CJ schede date filter semantics & chip counts
+description: Which date the Customer Journey "Schede clienti" range filters on, and how the type-chip counters must be derived
 ---
 
-# Customer Journey "Schede clienti" date filter — filters by INSERIMENTO SIM, not "aperta il"
+# Customer Journey "Schede clienti" — date filter & chip counters
 
+## Date filter semantics
 The dal–al date range in the **Schede clienti** view (inputs `input-schede-date-from`/`-to`)
 filters journeys by **`insertedAt` = data inserimento SIM** (`customer_journey_items.data_inserimento`
 of the oldest active mobile SIM), via `filterGettoneByInsertDate` in `shared/customerJourney.ts`.
-The gettone Analisi view uses the SAME function for its dal–al range, so the two views are consistent.
+The gettone Analisi view uses the SAME function for its dal–al range, so the two views stay consistent.
 
-**This is intended.** A user report of "le date non filtrano" was diagnosed as NOT a bug:
-- The shared functions filter correctly (isolated tsx repro) and a headless-browser test on the
-  real UI narrows the schede list 2→1 when a from-date is set.
-- The confusion is that each card shows the **activation** date ("aperta il" = `openedAt`), but the
-  filter compares the **hidden insertion** date. On real data the insertion dates cluster, so a
-  month-wide range shows no visible change.
+**Why:** each card shows the **activation** date ("aperta il" = `openedAt`), but the filter
+compares the **hidden insertion** date. Asked whether to switch to the visible openedAt, the user
+explicitly chose to **keep the SIM insertion-date semantics**. Do NOT "fix" this to `openedAt`.
 
-**Why:** asked whether to switch the schede filter to the visible "aperta il" (openedAt) date, the
-user explicitly chose to **keep the SIM insertion-date semantics as-is**.
+## Type-chip counters (Tutti / Privati / Business)
+The chips ARE the customer-type filter, so their badge counts must be derived from the set with
+**all other filters applied (search/PDV/addetto/stato + insert-date range) but NOT the type filter**.
+Pattern: build `filteredNoType` (shared filters with `typeFilter:"tutti"`) → apply insert-date to get
+`simInsertNoType` → counts come from `simInsertNoType`; the visible list applies the type chip on top.
 
-**How to apply:** do NOT "fix" this by switching the schede dal–al filter to `openedAt`/filterGettoneByDate.
-If revisiting, confirm with the user first — the insertion-date behavior is a deliberate choice.
+**Why:** a bug had the badges show the raw unfiltered `journeys.length` (e.g. "Tutti 1148") while the
+date filter had narrowed the cards to 4. Counters must track the current filter context.
