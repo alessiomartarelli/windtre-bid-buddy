@@ -2047,6 +2047,12 @@ function JourneyBreakdown({
                   const uniqueDrivers = CJ_DRIVER_ORDER.filter((d) =>
                     negItems.some((it) => it.driver === d),
                   );
+                  // Driver mancanti (cross-sell non ancora attivati in questo
+                  // negozio): mostrati in grigio/tratteggiato accanto a quelli
+                  // attivi, così l'operatore vede subito cosa resta da vendere.
+                  const missingDrivers = CJ_DRIVER_ORDER.filter(
+                    (d) => !uniqueDrivers.includes(d),
+                  );
                   return (
                     <TableRow key={negozio} data-testid={`row-negozio-${negozio}`}>
                       <TableCell className="font-medium text-sm">{negozio}</TableCell>
@@ -2060,11 +2066,23 @@ function JourneyBreakdown({
                               key={d}
                               className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]"
                               style={{ borderColor: CJ_DRIVER_COLORS[d] }}
+                              data-testid={`badge-driver-attivo-${negozio}-${d}`}
                             >
                               <span
                                 className="inline-block h-2 w-2 rounded-full"
                                 style={{ backgroundColor: CJ_DRIVER_COLORS[d] }}
                               />
+                              {CJ_DRIVER_LABELS[d]}
+                            </span>
+                          ))}
+                          {missingDrivers.map((d) => (
+                            <span
+                              key={d}
+                              className="inline-flex items-center gap-1 rounded-full border border-dashed border-muted-foreground/40 px-2 py-0.5 text-[10px] text-muted-foreground/60"
+                              title={`${CJ_DRIVER_LABELS[d]}: mancante`}
+                              data-testid={`badge-driver-mancante-${negozio}-${d}`}
+                            >
+                              <span className="inline-block h-2 w-2 rounded-full bg-muted-foreground/30" />
                               {CJ_DRIVER_LABELS[d]}
                             </span>
                           ))}
