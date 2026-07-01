@@ -142,16 +142,6 @@ function fmtDate(d: string | Date | null | undefined): string {
   return date.toLocaleDateString("it-IT");
 }
 
-// Mese + anno di apertura (es. "gennaio 2026"): usato nelle schede/dettaglio
-// al posto della data completa, così l'apertura journey è espressa a livello di
-// mese come richiesto.
-function fmtMese(d: string | Date | null | undefined): string {
-  if (!d) return "—";
-  const date = typeof d === "string" ? new Date(d) : d;
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("it-IT", { month: "long", year: "numeric" });
-}
-
 // Formatta una data usando le sue componenti UTC: serve per le date "ancorate"
 // in UTC (es. la scadenza T6 = fine mese alle 23:59:59.999 UTC) così la
 // localizzazione italiana (UTC+1/+2) non le faccia rotolare al giorno dopo.
@@ -342,7 +332,7 @@ const JourneyCard = memo(function JourneyCard({
           </div>
         </div>
         <CardDescription className="text-xs">
-          {j.customerKey} · aperta a {fmtMese(j.openedAt)}
+          {j.customerKey} · aperta il {fmtDate(j.openedAt)}
         </CardDescription>
       </CardHeader>
       <CardContent className="mt-auto space-y-3">
@@ -496,7 +486,9 @@ export default function CustomerJourneyPage() {
 
   useEffect(() => {
     if (configQuery.data?.triggerDate) {
-      setTriggerDateInput(configQuery.data.triggerDate);
+      // L'input <type="month"> vuole "YYYY-MM"; la config è salvata come
+      // data completa "YYYY-MM-DD" (primo del mese), quindi tronchiamo.
+      setTriggerDateInput(configQuery.data.triggerDate.slice(0, 7));
     }
   }, [configQuery.data?.triggerDate]);
 
@@ -534,8 +526,8 @@ export default function CustomerJourneyPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journey-config"] });
       toast({
-        title: "Data aggiornata",
-        description: "Rigenera da BiSuite per applicare la nuova data.",
+        title: "Mese aggiornato",
+        description: "Rigenera da BiSuite per applicare il nuovo mese.",
       });
     },
     onError: (err: unknown) => {
@@ -936,16 +928,16 @@ export default function CustomerJourneyPage() {
                   <CardTitle className="text-base">Configurazione modulo</CardTitle>
                   <CardDescription>
                     Le customer journey si aprono dalle nuove attivazioni mobile a partire
-                    da questa data. Dopo la modifica, usa “Rigenera da BiSuite” per applicarla.
+                    da questo mese. Dopo la modifica, usa “Rigenera da BiSuite” per applicarla.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col sm:flex-row sm:items-end gap-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="cj-trigger-date">Data di apertura journey</Label>
+                      <Label htmlFor="cj-trigger-date">Mese di apertura journey</Label>
                       <Input
                         id="cj-trigger-date"
-                        type="date"
+                        type="month"
                         value={triggerDateInput}
                         onChange={(e) => setTriggerDateInput(e.target.value)}
                         className="w-full sm:w-48"
@@ -954,18 +946,18 @@ export default function CustomerJourneyPage() {
                     </div>
                     <Button
                       variant="outline"
-                      onClick={() => triggerDateInput && configMutation.mutate(triggerDateInput)}
+                      onClick={() => triggerDateInput && configMutation.mutate(`${triggerDateInput}-01`)}
                       disabled={
                         configMutation.isPending ||
                         !triggerDateInput ||
-                        triggerDateInput === configQuery.data?.triggerDate
+                        triggerDateInput === configQuery.data?.triggerDate?.slice(0, 7)
                       }
                       data-testid="button-save-trigger-date"
                     >
                       {configMutation.isPending ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       ) : null}
-                      Salva data
+                      Salva mese
                     </Button>
                     {configQuery.data?.defaultTriggerDate &&
                       configQuery.data.triggerDate !== configQuery.data.defaultTriggerDate && (
@@ -2233,7 +2225,7 @@ function JourneyDetailViewImpl({
                 {journey.customerType === "azienda" ? "P.IVA" : "CF"}: {journey.customerKey}
                 {journey.telefono ? ` · Tel: ${journey.telefono}` : ""}
                 {journey.codiceCliente ? ` · Cod. cliente: ${journey.codiceCliente}` : ""}
-                {` · Aperta a ${fmtMese(journey.openedAt)}`}
+                {` · Aperta il ${fmtDate(journey.openedAt)}`}
               </CardDescription>
               {scadenzaInfo != null && (
                 <div className="mt-2">
