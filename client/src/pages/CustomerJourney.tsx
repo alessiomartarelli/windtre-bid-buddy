@@ -2020,6 +2020,23 @@ function JourneyBreakdown({
   const negozi = groupByNegozio(items);
   const attivati = drivers.filter((d) => d.activated).length;
   const isAzienda = journey.customerType === "azienda";
+  // Validità per item (stesso criterio del gettone): serve a mostrare i
+  // "driver validi" per negozio nel formato SIM+N (SIM mobile attivante + N
+  // piste cross-sell che contano).
+  const model = computeTimeline(journey, items);
+  const validity = computeItemValidity(model, journey);
+  const drvValidiLabel = (negItems: CustomerJourneyItem[]): string => {
+    const simCount = negItems.filter(
+      (it) => it.driver === "mobile" && CJ_ACTIVE_STATES.has(it.state as CjItemState),
+    ).length;
+    const validPiste = negItems.filter(
+      (it) => validity.get(it.id)?.counts,
+    ).length;
+    if (simCount > 0) {
+      return `SIM${simCount > 1 ? `\u00d7${simCount}` : ""}+${validPiste}`;
+    }
+    return validPiste > 0 ? `+${validPiste}` : "\u2014";
+  };
 
   return (
     <div className={`grid grid-cols-1 gap-6 ${isAzienda ? "lg:grid-cols-2" : ""}`}>
@@ -2039,6 +2056,7 @@ function JourneyBreakdown({
                 <TableRow>
                   <TableHead>Negozio</TableHead>
                   <TableHead className="text-center">Contratti</TableHead>
+                  <TableHead className="text-center">Driver validi</TableHead>
                   <TableHead>Driver</TableHead>
                 </TableRow>
               </TableHeader>
@@ -2058,6 +2076,9 @@ function JourneyBreakdown({
                       <TableCell className="font-medium text-sm">{negozio}</TableCell>
                       <TableCell className="text-center text-sm" data-testid={`text-negozio-count-${negozio}`}>
                         {negItems.length}
+                      </TableCell>
+                      <TableCell className="text-center text-sm font-medium" data-testid={`text-negozio-driver-validi-${negozio}`}>
+                        {drvValidiLabel(negItems)}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
