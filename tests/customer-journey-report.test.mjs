@@ -32,6 +32,9 @@ const {
   crossSellPercentuali,
   simSaturationPct,
   gettoneDetailByKey,
+  classifyDriverPhase,
+  summarizeDriversWithPhase,
+  monthOfIso,
 } = await import('../shared/customerJourney.ts');
 
 // Helper: costruisce una riga report con default sensati.
@@ -744,4 +747,101 @@ test('gettoneDetailByKey: raggruppa per PDV con saturazione per cliente, ordinat
   assert.equal(milano[0].saturazionePct, 60, 'Carlo 3/5 => 60%');
   // input vuoto => mappa vuota
   assert.equal(gettoneDetailByKey([], byPdv).size, 0);
+});
+
+// ===========================================================================
+// classifyDriverPhase / summarizeDriversWithPhase: fase di attivazione di un
+// driver per le pastiglie colorate delle schede clienti. periodo (verde) =
+// attivato nel periodo della journey da me; altrui (viola) = attivato da un
+// altro addetto (solo operatore); precedente (giallo) = mese anteriore a T0.
+// Precedenza per singolo driver: periodo > altrui > precedente.
+// ===========================================================================
+const t0 = monthOfIso('2026-07-01'); // T0 = luglio 2026
+
+test('classifyDriverPhase: null se nessun item attivo', () => {
+  assert.equal(
+    classifyDriverPhase([{ state: 'ko', eventDate: '2026-07-10', addetto: 'Anna' }], { t0Month: t0, myAddetti: null }),
+    null,
+  );
+  assert.equal(classifyDriverPhase([], { t0Month: t0, myAddetti: null }), null);
+});
+
+test('classifyDriverPhase: admin (myAddetti null) => periodo se nel periodo, precedente se prima', () => {
+  assert.equal(
+    classifyDriverPhase([{ state: 'attivato', eventDate: '2026-07-15', addetto: 'Chiunque' }], { t0Month: t0, myAddetti: null }),
+    'periodo',
+  );
+  assert.equal(
+    classifyDriverPhase([{ state: 'attivato', eventDate: '2026-05-10', addetto: 'Chiunque' }], { t0Month: t0, myAddetti: null }),
+    'precedente',
+  );
+});
+
+test('classifyDriverPhase: operatore => altrui se addetto non è fra i miei', () => {
+  assert.equal(
+    classifyDriverPhase([{ state: 'attivato', eventDate: '2026-07-15', addetto: 'Bruno' }], { t0Month: t0, myAddetti: ['anna'] }),
+    'altrui',
+  );
+  // stesso addetto (case/trim-insensitive) nel periodo => periodo
+  assert.equal(
+    classifyDriverPhase([{ state: 'attivato', eventDate: '2026-07-15', addetto: '  ANNA ' }], { t0Month: t0, myAddetti: ['anna'] }),
+    'periodo',
+  );
+});
+
+test('classifyDriverPhase: precedenza periodo > altrui > precedente', () => {
+  // io nel periodo + altro utente => vince periodo
+  assert.equal(
+    classifyDriverPhase([
+      { state: 'attivato', eventDate: '2026-07-15', addetto: 'Anna' },
+      { state: 'attivato', eventDate: '2026-07-20', addetto: 'Bruno' },
+    ], { t0Month: t0, myAddetti: ['anna'] }),
+    'periodo',
+  );
+  // altro utente + mio precedente => vince altrui
+  assert.equal(
+    classifyDriverPhase([
+      { state: 'attivato', eventDate: '2026-07-20', addetto: 'Bruno' },
+      { state: 'attivato', eventDate: '2026-05-01', addetto: 'Anna' },
+    ], { t0Month: t0, myAddetti: ['anna'] }),
+    'altrui',
+  );
+});
+
+test('classifyDriverPhase: date/T0 mancanti => non penalizza (periodo)', () => {
+  assert.equal(
+    classifyDriverPhase([{ state: 'attivato', eventDate: null, addetto: 'Anna' }], { t0Month: t0, myAddetti: null }),
+    'periodo',
+  );
+  assert.equal(
+    classifyDriverPhase([{ state: 'attivato', eventDate: '2026-05-01', addetto: 'Anna' }], { t0Month: null, myAddetti: null }),
+    'periodo',
+  );
+});
+
+test('summarizeDriversWithPhase: activated + phase per driver, null se assente', () => {
+  const items = [
+    { driver: 'mobile', state: 'attivato', eventDate: '2026-07-01', addetto: 'Anna' },
+    { driver: 'fisso', state: 'attivato', eventDate: '2026-05-01', addetto: 'Anna' }, // precedente
+    { driver: 'energia', state: 'ko', eventDate: '2026-07-10', addetto: 'Anna' }, // non attivo
+  ];
+  const out = summarizeDriversWithPhase(items, { t0Month: t0, myAddetti: null });
+  const byDriver = Object.fromEntries(out.map((d) => [d.driver, d]));
+  assert.equal(byDriver.mobile.activated, true);
+  assert.equal(byDriver.mobile.phase, 'periodo');
+  assert.equal(byDriver.fisso.phase, 'precedente');
+  assert.equal(byDriver.energia.activated, false);
+  assert.equal(byDriver.energia.phase, null, 'driver non attivato => phase null');
+});
+
+test('classifyDriverPhase: operatore + addetto vuoto/mancante => altrui', () => {
+  // Per un operatore, un item senza addetto non è "mio" => conta come altrui.
+  assert.equal(
+    classifyDriverPhase([{ state: 'attivato', eventDate: '2026-07-15', addetto: '' }], { t0Month: t0, myAddetti: ['anna'] }),
+    'altrui',
+  );
+  assert.equal(
+    classifyDriverPhase([{ state: 'attivato', eventDate: '2026-07-15', addetto: null }], { t0Month: t0, myAddetti: ['anna'] }),
+    'altrui',
+  );
 });

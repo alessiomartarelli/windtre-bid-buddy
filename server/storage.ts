@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
-import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets } from "@shared/customerJourney";
+import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets } from "@shared/customerJourney";
 
 // Data trigger di default della customer journey: una CJ si apre solo per
 // nuove attivazioni di pista mobile a partire da questa data (Task #158).
@@ -781,23 +781,46 @@ export class DatabaseStorage implements IStorage {
   // logica del dettaglio (`summarizeDrivers`). Evita una query per scheda.
   async getCustomerJourneyDriverSummaries(
     journeyIds: string[],
+    opts?: { openedAt?: Map<string, Date | null>; myAddetti?: string[] | null },
   ): Promise<Map<string, CjDriverSummary[]>> {
     const out = new Map<string, CjDriverSummary[]>();
     if (journeyIds.length === 0) return out;
+    // Oltre a driver/stato leggiamo data attivazione/inserimento e addetto: con
+    // `opts` (lista schede) arricchiamo ogni driver con la `phase` (periodo /
+    // altrui / precedente) per colorare le pastiglie. `eventDate` = data
+    // attivazione con fallback data inserimento (stesso criterio del report).
     const rows = await db.select({
       journeyId: customerJourneyItems.journeyId,
       driver: customerJourneyItems.driver,
       state: customerJourneyItems.state,
+      dataAttivazione: customerJourneyItems.dataAttivazione,
+      dataInserimento: customerJourneyItems.dataInserimento,
+      addetto: customerJourneyItems.addetto,
     }).from(customerJourneyItems)
       .where(inArray(customerJourneyItems.journeyId, journeyIds));
-    const byJourney = new Map<string, { driver: CjDriver; state: CjItemState }[]>();
+    type PhaseItem = { driver: CjDriver; state: CjItemState; eventDate: string | null; addetto: string | null };
+    const byJourney = new Map<string, PhaseItem[]>();
     for (const r of rows) {
       const list = byJourney.get(r.journeyId) ?? [];
-      list.push({ driver: r.driver as CjDriver, state: r.state as CjItemState });
+      const evt = r.dataAttivazione ?? r.dataInserimento ?? null;
+      list.push({
+        driver: r.driver as CjDriver,
+        state: r.state as CjItemState,
+        eventDate: evt ? evt.toISOString() : null,
+        addetto: r.addetto ?? null,
+      });
       byJourney.set(r.journeyId, list);
     }
+    const myAddetti = opts?.myAddetti ?? null;
     for (const id of journeyIds) {
-      out.set(id, summarizeDrivers(byJourney.get(id) ?? []));
+      const items = byJourney.get(id) ?? [];
+      if (opts) {
+        const openedAt = opts.openedAt?.get(id) ?? null;
+        const t0Month = monthOfIso(openedAt ? openedAt.toISOString() : null);
+        out.set(id, summarizeDriversWithPhase(items, { t0Month, myAddetti }));
+      } else {
+        out.set(id, summarizeDrivers(items));
+      }
     }
     return out;
   }

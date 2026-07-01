@@ -39,6 +39,7 @@ import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from
 import type {
   CjReportRow, CjReportGroup, CjListFilters,
   CjGettoneGroup, CjGettoneTotals, CjGettoneJourney, CjGettoneDetailRow,
+  CjDriverPhase,
 } from "@shared/customerJourney";
 import { CJ_DRIVER_ICONS, CJ_DRIVER_COLORS } from "@/lib/customerJourneyIcons";
 import {
@@ -58,6 +59,7 @@ interface DriverSummary {
   driver: string;
   activated: boolean;
   count: number;
+  phase?: CjDriverPhase | null;
 }
 
 type JourneyListItem = CustomerJourney & {
@@ -252,6 +254,26 @@ const CJ_SCADENZA_RING_CLASS: Record<CjScadenzaTone, string> = {
   emerald: "",
 };
 
+// Fase di attivazione driver → stile pastiglia (bordo/sfondo/testo) + etichetta
+// per la legenda. Verde = attivato nel periodo della journey; viola = attivato
+// da un altro utente (solo per l'operatore); giallo = contratto pre-esistente
+// (attivato prima del periodo). Non attivato = tratteggiato grigio.
+const CJ_PHASE_TILE_CLASS: Record<CjDriverPhase, string> = {
+  periodo: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  altrui: "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  precedente: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+};
+const CJ_PHASE_LABEL: Record<CjDriverPhase, string> = {
+  periodo: "Attivato nel periodo",
+  altrui: "Attivato da altri",
+  precedente: "Attivato in precedenza",
+};
+const CJ_PHASE_DOT_CLASS: Record<CjDriverPhase, string> = {
+  periodo: "bg-emerald-500",
+  altrui: "bg-violet-500",
+  precedente: "bg-amber-500",
+};
+
 // Card singola di una scheda cliente, memoizzata: con la virtualizzazione si
 // montano/smontano molte card durante lo scroll, quindi evitiamo di
 // ri-renderizzare quelle invariate (onSelect è stabile via useCallback).
@@ -262,10 +284,14 @@ const JourneyCard = memo(function JourneyCard({
   j: JourneyListItem;
   onSelect: (id: string) => void;
 }) {
-  const drivers = CJ_DRIVER_ORDER.map((d) => ({
-    driver: d,
-    activated: j.drivers?.find((s) => s.driver === d)?.activated ?? false,
-  }));
+  const drivers = CJ_DRIVER_ORDER.map((d) => {
+    const s = j.drivers?.find((x) => x.driver === d);
+    return {
+      driver: d,
+      activated: s?.activated ?? false,
+      phase: s?.phase ?? null,
+    };
+  });
   const activeCount = drivers.filter((d) => d.activated).length;
   const total = drivers.length;
   const pct = Math.round((activeCount / total) * 100);
@@ -358,9 +384,10 @@ const JourneyCard = memo(function JourneyCard({
           {drivers.map((d) => (
             <div
               key={d.driver}
-              className={`flex items-center gap-1 rounded-md border px-1.5 py-1 ${d.activated ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-dashed border-border bg-muted/30 text-muted-foreground"}`}
+              className={`flex items-center gap-1 rounded-md border px-1.5 py-1 ${d.activated ? CJ_PHASE_TILE_CLASS[d.phase ?? "periodo"] : "border-dashed border-border bg-muted/30 text-muted-foreground"}`}
               data-testid={`card-driver-${d.driver}-${j.id}`}
-              title={`${CJ_DRIVER_LABELS[d.driver]}: ${d.activated ? "attivato" : "attivabile"}`}
+              data-phase={d.activated ? (d.phase ?? "periodo") : "assente"}
+              title={`${CJ_DRIVER_LABELS[d.driver]}: ${d.activated ? (d.phase ? CJ_PHASE_LABEL[d.phase] : "attivato") : "attivabile"}`}
             >
               {d.activated ? (
                 <CheckCircle2 className="h-3 w-3 shrink-0" />
@@ -1297,7 +1324,33 @@ export default function CustomerJourneyPage() {
                 </CardContent>
               </Card>
             ) : (
-              <VirtualJourneyGrid journeys={sorted} onSelect={setSelectedId} />
+              <>
+                <div
+                  className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-3 text-xs text-muted-foreground"
+                  data-testid="legend-driver-phase"
+                >
+                  <span className="font-medium text-foreground">Legenda driver:</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className={`inline-block h-2.5 w-2.5 rounded-full ${CJ_PHASE_DOT_CLASS.periodo}`} />
+                    {CJ_PHASE_LABEL.periodo}
+                  </span>
+                  {!isAdmin && (
+                    <span className="flex items-center gap-1.5">
+                      <span className={`inline-block h-2.5 w-2.5 rounded-full ${CJ_PHASE_DOT_CLASS.altrui}`} />
+                      {CJ_PHASE_LABEL.altrui}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1.5">
+                    <span className={`inline-block h-2.5 w-2.5 rounded-full ${CJ_PHASE_DOT_CLASS.precedente}`} />
+                    {CJ_PHASE_LABEL.precedente}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full border border-dashed border-muted-foreground/50" />
+                    Attivabile
+                  </span>
+                </div>
+                <VirtualJourneyGrid journeys={sorted} onSelect={setSelectedId} />
+              </>
             )}
           </>
         ) : (

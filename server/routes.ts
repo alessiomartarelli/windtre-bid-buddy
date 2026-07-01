@@ -2755,7 +2755,13 @@ export async function registerRoutes(
       // così la lista può mostrare lo stato dei 6 driver senza una chiamata
       // di dettaglio per cliente.
       const journeyIds = journeys.map((j) => j.id);
-      const summaries = await storage.getCustomerJourneyDriverSummaries(journeyIds);
+      // openedAt (T0) + addetti dell'operatore servono a classificare la fase di
+      // ogni driver (periodo/altrui/precedente) per le pastiglie colorate.
+      const openedAtMap = new Map(journeys.map((j) => [j.id, j.openedAt ?? null]));
+      const summaries = await storage.getCustomerJourneyDriverSummaries(journeyIds, {
+        openedAt: openedAtMap,
+        myAddetti: addettiFilter,
+      });
       const values = await storage.getCustomerJourneyValues(journeyIds);
       // Facet (negozio/addetto/stato) per i filtri della lista schede (Task #187).
       // Stesso isolamento operatore: un operatore vede solo i valori dei propri

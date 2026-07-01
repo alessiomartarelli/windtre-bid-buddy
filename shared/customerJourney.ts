@@ -41,10 +41,19 @@ export const CJ_ACTIVE_STATES = new Set<CjItemState>([
   "inserito", "in_lavorazione", "attivato", "pagato", "riaccreditato",
 ]);
 
+// Fase di attivazione di un driver, per evidenziare nelle schede clienti COME è
+// stato attivato: `periodo` = attivato nel periodo della journey dall'operatore
+// (o da chiunque, per admin) → verde; `altrui` = attivato da un altro
+// utente/addetto (solo per l'operatore che guarda) → viola; `precedente` =
+// contratto pre-esistente, attivato in un mese anteriore a T0 → giallo.
+export type CjDriverPhase = "periodo" | "altrui" | "precedente";
+
 export interface CjDriverSummary {
   driver: CjDriver;
   activated: boolean;
   count: number;
+  // null quando il driver non è attivato; altrimenti la fase (vedi sopra).
+  phase?: CjDriverPhase | null;
 }
 
 // Riga item-level per la reportistica Customer Journey (Task #187): un record
@@ -648,6 +657,63 @@ export function summarizeDrivers(
     const driverItems = items.filter((it) => it.driver === driver);
     const activated = driverItems.some((it) => CJ_ACTIVE_STATES.has(it.state));
     return { driver, activated, count: driverItems.length };
+  });
+}
+
+/**
+ * Classifica la fase di attivazione di un driver a partire dai suoi item.
+ * Considera solo gli item in stato attivo. Per ciascuno:
+ * - se `myAddetti` è valorizzato (operatore) e l'addetto dell'item NON è fra i
+ *   miei ⇒ candidato `altrui`;
+ * - altrimenti se il contratto è nel periodo della journey (mese >= T0, stessa
+ *   regola del gettone `pisteInWindow`) ⇒ candidato `periodo`;
+ * - altrimenti (mese anteriore a T0) ⇒ candidato `precedente`.
+ * Precedenza per il singolo driver (una sola pastiglia): periodo > altrui >
+ * precedente — se ho attivato io qualcosa nel periodo vince il verde.
+ * `myAddetti == null` (admin/super_admin) ⇒ nessun concetto di "altrui".
+ * Ritorna null se nessun item è attivo.
+ */
+export function classifyDriverPhase(
+  items: { state: CjItemState; eventDate: string | null; addetto: string | null }[],
+  opts: { t0Month: number | null; myAddetti: string[] | null },
+): CjDriverPhase | null {
+  const active = items.filter((it) => CJ_ACTIVE_STATES.has(it.state));
+  if (active.length === 0) return null;
+  const mine =
+    opts.myAddetti == null
+      ? null
+      : new Set(opts.myAddetti.map((a) => a.toLowerCase().trim()).filter(Boolean));
+  let hasPeriodo = false;
+  let hasAltrui = false;
+  let hasPrecedente = false;
+  for (const it of active) {
+    const isMine = mine == null ? true : mine.has((it.addetto ?? "").toLowerCase().trim());
+    if (!isMine) {
+      hasAltrui = true;
+      continue;
+    }
+    if (pisteInWindow(it.eventDate, opts.t0Month)) hasPeriodo = true;
+    else hasPrecedente = true;
+  }
+  if (hasPeriodo) return "periodo";
+  if (hasAltrui) return "altrui";
+  return "precedente";
+}
+
+/**
+ * Come `summarizeDrivers` ma arricchisce ogni driver attivato con la `phase`
+ * (vedi `classifyDriverPhase`). Usato dalla lista schede clienti per colorare le
+ * pastiglie driver per fase di attivazione.
+ */
+export function summarizeDriversWithPhase(
+  items: { driver: CjDriver; state: CjItemState; eventDate: string | null; addetto: string | null }[],
+  opts: { t0Month: number | null; myAddetti: string[] | null },
+): CjDriverSummary[] {
+  return CJ_DRIVER_ORDER.map((driver) => {
+    const driverItems = items.filter((it) => it.driver === driver);
+    const activated = driverItems.some((it) => CJ_ACTIVE_STATES.has(it.state));
+    const phase = activated ? classifyDriverPhase(driverItems, opts) : null;
+    return { driver, activated, count: driverItems.length, phase };
   });
 }
 
