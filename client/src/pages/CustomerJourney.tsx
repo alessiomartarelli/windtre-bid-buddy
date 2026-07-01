@@ -472,9 +472,13 @@ export default function CustomerJourneyPage() {
     enabled: !!selectedId,
   });
 
+  // Caricata sia in vista Report sia in vista Schede: la vista Schede la usa
+  // per il filtro "Inserimento SIM dal–al" (la data di inserimento SIM vive
+  // nelle righe report), così le card possono essere filtrate per coorte di
+  // inserimento senza flicker.
   const reportQuery = useQuery<CjReportRow[]>({
     queryKey: ["/api/customer-journeys/report"],
-    enabled: !selectedId && view === "report",
+    enabled: !selectedId,
   });
 
   // Caricata per TUTTI i ruoli (non solo admin): il floor dell'Analisi gettoni
@@ -662,6 +666,24 @@ export default function CustomerJourneyPage() {
       journeyTitle(j), j.customerKey, j.telefono, j.codiceCliente,
     ].filter(Boolean).join(" "),
   }, activeFilters)), [journeys, activeFilters]);
+
+  // Filtro schede per data di INSERIMENTO SIM: riusa la stessa derivazione
+  // dell'Analisi gettoni (`buildGettoneJourneys` => `insertedAt` per journey)
+  // così il "dal–al" resta coerente fra le due viste. Le journey senza SIM
+  // mobile attiva (fuori coorte gettone) non hanno data di inserimento: con un
+  // intervallo impostato vengono escluse, senza intervallo restano visibili.
+  const simInsertFiltered = useMemo(() => {
+    if (!dateFrom && !dateTo) return filtered;
+    const allowed = new Set(
+      filterGettoneByInsertDate(
+        buildGettoneJourneys(reportRows),
+        dateFrom || null,
+        dateTo || null,
+      ).map((g) => g.journeyId),
+    );
+    return filtered.filter((j) => allowed.has(j.id));
+  }, [filtered, reportRows, dateFrom, dateTo]);
+
   const countPrivato = useMemo(
     () => journeys.filter((j) => j.customerType === "privato").length,
     [journeys],
@@ -751,7 +773,8 @@ export default function CustomerJourneyPage() {
 
   const hasActiveFilters =
     typeFilter !== "tutti" || pdvFilter !== "tutti" ||
-    addettoFilter !== "tutti" || stateFilter !== "tutti" || !!search.trim();
+    addettoFilter !== "tutti" || stateFilter !== "tutti" || !!search.trim() ||
+    !!dateFrom || !!dateTo;
 
   const resetFilters = useCallback(() => {
     setTypeFilter("tutti");
@@ -759,9 +782,11 @@ export default function CustomerJourneyPage() {
     setAddettoFilter("tutti");
     setStateFilter("tutti");
     setSearch("");
+    setDateFrom("");
+    setDateTo("");
   }, []);
 
-  const sorted = useMemo(() => [...filtered].sort((a, b) => {
+  const sorted = useMemo(() => [...simInsertFiltered].sort((a, b) => {
     let cmp = 0;
     switch (sortKey) {
       case "data":
@@ -789,7 +814,7 @@ export default function CustomerJourneyPage() {
       }
     }
     return sortDir === "asc" ? cmp : -cmp;
-  }), [filtered, sortKey, sortDir]);
+  }), [simInsertFiltered, sortKey, sortDir]);
 
   // Indice della scheda aperta nell'elenco ordinato/filtrato: serve per la
   // navigazione precedente/successiva senza chiudere la scheda (Task #215).
@@ -1088,6 +1113,48 @@ export default function CustomerJourneyPage() {
                 </Button>
               )}
             </div>
+
+            {/* Filtro schede per data di inserimento SIM (coorte per data di
+                inserimento SIM). Condivide lo stato date con l'Analisi gettoni. */}
+            {view === "schede" && (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5" /> Inserimento SIM dal
+                  </Label>
+                  <Input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-[170px]"
+                    data-testid="input-schede-date-from"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">al</Label>
+                  <Input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-[170px]"
+                    data-testid="input-schede-date-to"
+                  />
+                </div>
+                {(dateFrom || dateTo) && (
+                  <div className="space-y-1 flex flex-col justify-end">
+                    <Label className="text-xs text-muted-foreground">&nbsp;</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setDateFrom(""); setDateTo(""); }}
+                      data-testid="button-schede-reset-date"
+                    >
+                      Azzera date
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Controlli specifici della vista Schede: ordinamento + export */}
             {view === "schede" && (
