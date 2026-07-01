@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Route as RouteIcon, RefreshCw, ArrowLeft, ArrowRight, CheckCircle2, Circle,
+  Route as RouteIcon, RefreshCw, ArrowLeft, ArrowRight, CheckCircle2, Circle, CircleDot,
   Search, User, Building2, Loader2, Coins, Pencil,
   FileText, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
   LayoutGrid, BarChart3, Store, Users, TrendingUp, Wallet, Calendar,
@@ -2268,6 +2268,23 @@ function JourneyDetailViewImpl({
 }) {
   const { journey, items, drivers } = detail;
   const driverMap = new Map(drivers.map((d) => [d.driver, d]));
+  // Distinzione driver ATTIVI vs VALIDI: un driver è "attivo" se il cliente ha
+  // un contratto di quel driver, ma conta come "valido" (pista cross-sell che
+  // matura il gettone) solo con lo stesso criterio del gettone. Es. la SIM che
+  // apre la journey è attiva ma NON valida (è il trigger). Riusa
+  // computeItemValidity così le card non divergono da timeline/gettone.
+  const driverValidityModel = computeTimeline(journey, items);
+  const driverItemValidity = computeItemValidity(driverValidityModel, journey);
+  const validDrivers = new Set<string>();
+  for (const it of items) {
+    if (driverItemValidity.get(it.id)?.counts) validDrivers.add(it.driver);
+  }
+  const driverValidiCount = CJ_DRIVER_ORDER.filter((d) => validDrivers.has(d)).length;
+  // "Attivi" nel conteggio/legenda = driver ATTIVI ma NON validi (il sottoinsieme
+  // amber delle card), così l'header non si sovrappone ai "validi".
+  const driverAttiviCount = CJ_DRIVER_ORDER.filter(
+    (d) => driverMap.get(d)?.activated && !validDrivers.has(d),
+  ).length;
   // Scadenza T6: giorni residui per chiudere il cross-sell (fine mese di T6).
   const daysToT6 = cjDaysToT6(journey.openedAt);
   const t6Deadline = cjT6Deadline(journey.openedAt);
@@ -2431,35 +2448,98 @@ function JourneyDetailViewImpl({
       </Card>
 
       <div>
-        <h3 className="text-sm font-semibold text-foreground mb-3">Driver</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <h3 className="text-sm font-semibold text-foreground">Driver</h3>
+          <div className="flex items-center gap-3 text-xs">
+            <span
+              className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium"
+              data-testid="text-driver-validi-count"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {driverValidiCount} validi
+            </span>
+            <span
+              className="flex items-center gap-1 text-amber-600 dark:text-amber-400"
+              data-testid="text-driver-attivi-count"
+            >
+              <CircleDot className="h-3.5 w-3.5" />
+              {driverAttiviCount} attivi
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          <span className="font-medium text-emerald-600 dark:text-emerald-400">Validi</span> = piste
+          cross-sell che contano per il gettone.{" "}
+          <span className="font-medium text-amber-600 dark:text-amber-400">Attivi</span> = driver
+          presenti che non contano (es. la SIM che ha aperto la journey o contratti fuori finestra).
+        </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {CJ_DRIVER_ORDER.map((driver) => {
             const summary = driverMap.get(driver);
             const activated = summary?.activated ?? false;
+            const counts = validDrivers.has(driver);
+            const status: "valido" | "attivo" | "assente" = counts
+              ? "valido"
+              : activated
+                ? "attivo"
+                : "assente";
+            const Icon = CJ_DRIVER_ICONS[driver];
+            const borderCls =
+              status === "valido"
+                ? "border-emerald-500/50"
+                : status === "attivo"
+                  ? "border-amber-500/50"
+                  : "border-dashed opacity-80";
+            const markCls =
+              status === "valido"
+                ? "text-emerald-500"
+                : status === "attivo"
+                  ? "text-amber-500"
+                  : "text-muted-foreground/40";
+            const iconCls =
+              status === "valido"
+                ? "text-emerald-500"
+                : status === "attivo"
+                  ? "text-amber-500"
+                  : "text-muted-foreground";
+            const badgeText =
+              status === "valido"
+                ? "Valido · conta"
+                : status === "attivo"
+                  ? driver === "mobile"
+                    ? "Attivo · attivante"
+                    : "Attivo · non conta"
+                  : "Attivabile";
+            const badgeCls =
+              status === "valido"
+                ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                : status === "attivo"
+                  ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
+                  : "text-muted-foreground";
             return (
               <Card
                 key={driver}
-                className={activated ? "border-emerald-500/40" : "border-dashed opacity-80"}
+                className={borderCls}
                 data-testid={`driver-${driver}`}
+                data-status={status}
               >
                 <CardContent className="p-3 flex flex-col items-center text-center gap-1.5">
-                  {activated ? (
-                    <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                  {status === "assente" ? (
+                    <Circle className={`h-6 w-6 ${markCls}`} />
                   ) : (
-                    <Circle className="h-6 w-6 text-muted-foreground/40" />
+                    <CheckCircle2 className={`h-6 w-6 ${markCls}`} />
                   )}
                   <span className="flex items-center gap-1.5 text-xs font-medium leading-tight">
-                    {(() => {
-                      const Icon = CJ_DRIVER_ICONS[driver];
-                      return Icon ? (
-                        <Icon className={`h-4 w-4 shrink-0 ${activated ? "text-emerald-500" : "text-muted-foreground"}`} />
-                      ) : null;
-                    })()}
+                    {Icon ? <Icon className={`h-4 w-4 shrink-0 ${iconCls}`} /> : null}
                     {CJ_DRIVER_LABELS[driver]}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {activated ? "Attivato" : "Attivabile"}
-                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] px-1.5 py-0 font-normal ${badgeCls}`}
+                    data-testid={`driver-validity-${driver}`}
+                  >
+                    {badgeText}
+                  </Badge>
                 </CardContent>
               </Card>
             );
