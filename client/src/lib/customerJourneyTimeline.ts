@@ -354,6 +354,23 @@ export function cjScadenzaInfo(
   };
 }
 
+// Vero se una journey va mostrata data la "Data di apertura journey" configurata:
+// solo le journey aperte a partire da quella data (mezzanotte inclusa) passano,
+// così le journey residue di mesi precedenti restano nascoste. Senza data
+// configurata (o data non valida) non filtra nulla; una journey senza `openedAt`
+// passa sempre (non abbiamo modo di escluderla).
+export function cjOpenedFromTriggerDate(
+  openedAt: string | Date | null | undefined,
+  triggerDate: string | null | undefined,
+): boolean {
+  if (!triggerDate) return true;
+  const floor = new Date(triggerDate).getTime();
+  if (Number.isNaN(floor)) return true;
+  if (openedAt == null) return true;
+  const t = new Date(openedAt).getTime();
+  return Number.isNaN(t) || t >= floor;
+}
+
 // Valore di ordinamento per il criterio "In scadenza" della lista schede.
 // Priorità (valore più basso = più urgente) alle journey NON ancora chiuse
 // (meno di `maxPiste` piste cross-sell) con meno giorni residui a T6. Le

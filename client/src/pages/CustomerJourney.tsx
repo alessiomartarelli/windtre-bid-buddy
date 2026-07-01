@@ -46,6 +46,7 @@ import {
   monthIndex, monthIndexLabel, itemNegozio,
   computeItemValidity, CJ_VALIDITY_LABELS, CJ_VALIDITY_REASONS,
   cjDaysToT6, cjT6Deadline, cjScadenzaSortValue, cjScadenzaInfo,
+  cjOpenedFromTriggerDate,
   type CjScadenzaTone,
 } from "@/lib/customerJourneyTimeline";
 import {
@@ -139,6 +140,16 @@ function fmtDate(d: string | Date | null | undefined): string {
   const date = typeof d === "string" ? new Date(d) : d;
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString("it-IT");
+}
+
+// Mese + anno di apertura (es. "gennaio 2026"): usato nelle schede/dettaglio
+// al posto della data completa, così l'apertura journey è espressa a livello di
+// mese come richiesto.
+function fmtMese(d: string | Date | null | undefined): string {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("it-IT", { month: "long", year: "numeric" });
 }
 
 // Formatta una data usando le sue componenti UTC: serve per le date "ancorate"
@@ -331,7 +342,7 @@ const JourneyCard = memo(function JourneyCard({
           </div>
         </div>
         <CardDescription className="text-xs">
-          {j.customerKey} · aperta il {fmtDate(j.openedAt)}
+          {j.customerKey} · aperta a {fmtMese(j.openedAt)}
         </CardDescription>
       </CardHeader>
       <CardContent className="mt-auto space-y-3">
@@ -609,8 +620,18 @@ export default function CustomerJourneyPage() {
     },
   });
 
-  const journeys = journeysQuery.data ?? EMPTY_JOURNEYS;
+  const allJourneys = journeysQuery.data ?? EMPTY_JOURNEYS;
   const reportRows = reportQuery.data ?? EMPTY_REPORT_ROWS;
+
+  // Mostra SOLO le journey aperte a partire dalla data configurata: le journey
+  // residue di mesi precedenti (dati storici anteriori all'ultimo cambio della
+  // "Data di apertura journey") restano nascoste, coerentemente con "le journey
+  // si aprono da questa data". Il floor è la mezzanotte della data configurata.
+  const triggerDate = configQuery.data?.triggerDate;
+  const journeys = useMemo(
+    () => allJourneys.filter((j) => cjOpenedFromTriggerDate(j.openedAt, triggerDate)),
+    [allJourneys, triggerDate],
+  );
 
   // Opzioni dei filtri Negozio/Operatore/Stato: unione dei valori distinti
   // presenti nelle schede (facet) e nelle righe report, così entrambe le viste
@@ -2212,7 +2233,7 @@ function JourneyDetailViewImpl({
                 {journey.customerType === "azienda" ? "P.IVA" : "CF"}: {journey.customerKey}
                 {journey.telefono ? ` · Tel: ${journey.telefono}` : ""}
                 {journey.codiceCliente ? ` · Cod. cliente: ${journey.codiceCliente}` : ""}
-                {` · Aperta il ${fmtDate(journey.openedAt)}`}
+                {` · Aperta a ${fmtMese(journey.openedAt)}`}
               </CardDescription>
               {scadenzaInfo != null && (
                 <div className="mt-2">

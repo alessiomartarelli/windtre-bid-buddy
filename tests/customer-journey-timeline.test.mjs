@@ -34,6 +34,7 @@ const {
   cjDaysToT6,
   cjScadenzaSortValue,
   cjScadenzaInfo,
+  cjOpenedFromTriggerDate,
 } = await import('../client/src/lib/customerJourneyTimeline.ts');
 
 // Mappa colori driver "finta" (1:1 con quella reale ma senza trascinare
@@ -561,4 +562,28 @@ test('cjScadenzaInfo: oltre 30 giorni => emerald, NON urgente', () => {
   assert.equal(rilassata.tone, 'emerald');
   assert.equal(rilassata.urgent, false);
   assert.equal(rilassata.label, 'Scade tra 31 giorni');
+});
+
+// cjOpenedFromTriggerDate: filtro lista schede per "Data di apertura journey".
+test('cjOpenedFromTriggerDate: nasconde le journey di mesi precedenti', () => {
+  const trigger = '2026-07-01';
+  assert.equal(cjOpenedFromTriggerDate('2026-01-31T10:00:00.000Z', trigger), false);
+  assert.equal(cjOpenedFromTriggerDate('2026-06-30T23:00:00.000Z', trigger), false);
+  assert.equal(cjOpenedFromTriggerDate('2026-07-01T00:00:00.000Z', trigger), true);
+  assert.equal(cjOpenedFromTriggerDate('2026-08-15T09:00:00.000Z', trigger), true);
+});
+
+test('cjOpenedFromTriggerDate: senza data configurata non filtra', () => {
+  assert.equal(cjOpenedFromTriggerDate('2020-01-01T00:00:00.000Z', null), true);
+  assert.equal(cjOpenedFromTriggerDate('2020-01-01T00:00:00.000Z', undefined), true);
+  assert.equal(cjOpenedFromTriggerDate('2020-01-01T00:00:00.000Z', ''), true);
+});
+
+test('cjOpenedFromTriggerDate: data trigger non valida non filtra', () => {
+  assert.equal(cjOpenedFromTriggerDate('2020-01-01T00:00:00.000Z', 'non-una-data'), true);
+});
+
+test('cjOpenedFromTriggerDate: journey senza openedAt passa sempre', () => {
+  assert.equal(cjOpenedFromTriggerDate(null, '2026-07-01'), true);
+  assert.equal(cjOpenedFromTriggerDate(undefined, '2026-07-01'), true);
 });
