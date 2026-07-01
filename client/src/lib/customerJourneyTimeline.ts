@@ -310,6 +310,50 @@ export function cjDaysToT6(
   return Math.round((deadlineDay - today) / 86_400_000);
 }
 
+// Tono grafico + etichetta della scadenza T6, derivati dai giorni residui.
+// Unica sorgente di verità condivisa fra la card della lista e la scheda di
+// dettaglio, così i due punti non divergono. `urgent` = da contattare
+// (scaduta, scade oggi o entro 30 giorni); i casi non urgenti (>30 giorni)
+// restano "emerald" e non urgenti.
+export type CjScadenzaTone = "red" | "amber" | "emerald";
+export interface CjScadenzaInfo {
+  tone: CjScadenzaTone;
+  label: string;
+  urgent: boolean;
+  days: number;
+}
+export function cjScadenzaInfo(
+  daysToT6: number | null | undefined,
+): CjScadenzaInfo | null {
+  if (daysToT6 == null) return null;
+  if (daysToT6 < 0) {
+    const n = Math.abs(daysToT6);
+    return {
+      tone: "red",
+      label: `Scaduta da ${n} ${n === 1 ? "giorno" : "giorni"}`,
+      urgent: true,
+      days: daysToT6,
+    };
+  }
+  if (daysToT6 === 0) {
+    return { tone: "amber", label: "Scade oggi", urgent: true, days: 0 };
+  }
+  if (daysToT6 <= 30) {
+    return {
+      tone: "amber",
+      label: `Scade tra ${daysToT6} ${daysToT6 === 1 ? "giorno" : "giorni"}`,
+      urgent: true,
+      days: daysToT6,
+    };
+  }
+  return {
+    tone: "emerald",
+    label: `Scade tra ${daysToT6} giorni`,
+    urgent: false,
+    days: daysToT6,
+  };
+}
+
 // Valore di ordinamento per il criterio "In scadenza" della lista schede.
 // Priorità (valore più basso = più urgente) alle journey NON ancora chiuse
 // (meno di `maxPiste` piste cross-sell) con meno giorni residui a T6. Le

@@ -33,6 +33,7 @@ const {
   cjT6Deadline,
   cjDaysToT6,
   cjScadenzaSortValue,
+  cjScadenzaInfo,
 } = await import('../client/src/lib/customerJourneyTimeline.ts');
 
 // Mappa colori driver "finta" (1:1 con quella reale ma senza trascinare
@@ -519,4 +520,45 @@ test('cjScadenzaSortValue: scadute o senza data in fondo (+Infinity)', () => {
   assert.equal(scaduta, Number.POSITIVE_INFINITY, 'scaduta => in fondo');
   const senzaData = cjScadenzaSortValue({ openedAt: null, pisteAttive: 1, maxPiste: 5, now });
   assert.equal(senzaData, Number.POSITIVE_INFINITY, 'senza data => in fondo');
+});
+
+// cjScadenzaInfo: tono+etichetta+urgenza condivisi fra card lista e dettaglio.
+test('cjScadenzaInfo: null quando i giorni sono null/undefined', () => {
+  assert.equal(cjScadenzaInfo(null), null);
+  assert.equal(cjScadenzaInfo(undefined), null);
+});
+
+test('cjScadenzaInfo: scaduta => rosso, urgente, singolare/plurale', () => {
+  const uno = cjScadenzaInfo(-1);
+  assert.equal(uno.tone, 'red');
+  assert.equal(uno.urgent, true);
+  assert.equal(uno.label, 'Scaduta da 1 giorno');
+  const molti = cjScadenzaInfo(-5);
+  assert.equal(molti.label, 'Scaduta da 5 giorni');
+  assert.equal(molti.tone, 'red');
+});
+
+test('cjScadenzaInfo: scade oggi => ambra, urgente', () => {
+  const oggi = cjScadenzaInfo(0);
+  assert.equal(oggi.tone, 'amber');
+  assert.equal(oggi.urgent, true);
+  assert.equal(oggi.label, 'Scade oggi');
+});
+
+test('cjScadenzaInfo: entro 30 giorni => ambra, urgente, singolare/plurale', () => {
+  const uno = cjScadenzaInfo(1);
+  assert.equal(uno.tone, 'amber');
+  assert.equal(uno.urgent, true);
+  assert.equal(uno.label, 'Scade tra 1 giorno');
+  const trenta = cjScadenzaInfo(30);
+  assert.equal(trenta.tone, 'amber');
+  assert.equal(trenta.urgent, true);
+  assert.equal(trenta.label, 'Scade tra 30 giorni');
+});
+
+test('cjScadenzaInfo: oltre 30 giorni => emerald, NON urgente', () => {
+  const rilassata = cjScadenzaInfo(31);
+  assert.equal(rilassata.tone, 'emerald');
+  assert.equal(rilassata.urgent, false);
+  assert.equal(rilassata.label, 'Scade tra 31 giorni');
 });

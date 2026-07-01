@@ -45,7 +45,8 @@ import {
   computeTimeline, groupByNegozio, cjDriverColor, isFadedState,
   monthIndex, monthIndexLabel, itemNegozio,
   computeItemValidity, CJ_VALIDITY_LABELS, CJ_VALIDITY_REASONS,
-  cjDaysToT6, cjT6Deadline, cjScadenzaSortValue,
+  cjDaysToT6, cjT6Deadline, cjScadenzaSortValue, cjScadenzaInfo,
+  type CjScadenzaTone,
 } from "@/lib/customerJourneyTimeline";
 import {
   exportJourneyPdf, exportJourneyExcel,
@@ -236,6 +237,20 @@ function useDocumentOffset<T extends HTMLElement>(ref: React.RefObject<T>): numb
   return offset;
 }
 
+// Classi Tailwind per tono scadenza T6 (bordo+testo), condivise fra card lista
+// e scheda di dettaglio così i colori restano allineati.
+const CJ_SCADENZA_TONE_CLASS: Record<CjScadenzaTone, string> = {
+  red: "border-red-500/40 text-red-600 dark:text-red-400",
+  amber: "border-amber-500/40 text-amber-600 dark:text-amber-400",
+  emerald: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+};
+// Anello di evidenza per le card urgenti (da contattare) nella griglia.
+const CJ_SCADENZA_RING_CLASS: Record<CjScadenzaTone, string> = {
+  red: "ring-1 ring-red-500/50",
+  amber: "ring-1 ring-amber-500/50",
+  emerald: "",
+};
+
 // Card singola di una scheda cliente, memoizzata: con la virtualizzazione si
 // montano/smontano molte card durante lo scroll, quindi evitiamo di
 // ri-renderizzare quelle invariate (onSelect è stabile via useCallback).
@@ -253,9 +268,15 @@ const JourneyCard = memo(function JourneyCard({
   const activeCount = drivers.filter((d) => d.activated).length;
   const total = drivers.length;
   const pct = Math.round((activeCount / total) * 100);
+  // Scadenza T6: mostrata solo per le journey ancora "aperte" e SOLO quando è
+  // urgente (scaduta, oggi o entro 30 giorni) → così in lista si notano subito
+  // i clienti in scadenza da contattare, senza rumore sulle altre.
+  const scadenza =
+    j.status === "aperta" ? cjScadenzaInfo(cjDaysToT6(j.openedAt)) : null;
+  const scadenzaUrgente = scadenza?.urgent ? scadenza : null;
   return (
     <Card
-      className="cursor-pointer hover-elevate transition-all flex flex-col"
+      className={`cursor-pointer hover-elevate transition-all flex flex-col ${scadenzaUrgente ? CJ_SCADENZA_RING_CLASS[scadenzaUrgente.tone] : ""}`}
       onClick={() => onSelect(j.id)}
       data-testid={`card-journey-${j.id}`}
     >
@@ -283,13 +304,26 @@ const JourneyCard = memo(function JourneyCard({
               )}
             </span>
           </CardTitle>
-          <Badge
-            variant="outline"
-            className={`text-xs shrink-0 ${j.status === "aperta" ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`}
-            data-testid={`badge-status-${j.id}`}
-          >
-            {j.status === "aperta" ? "Aperta" : "Chiusa"}
-          </Badge>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <Badge
+              variant="outline"
+              className={`text-xs ${j.status === "aperta" ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`}
+              data-testid={`badge-status-${j.id}`}
+            >
+              {j.status === "aperta" ? "Aperta" : "Chiusa"}
+            </Badge>
+            {scadenzaUrgente && (
+              <Badge
+                variant="outline"
+                className={`text-xs ${CJ_SCADENZA_TONE_CLASS[scadenzaUrgente.tone]}`}
+                data-testid={`badge-scadenza-${j.id}`}
+                title="Cliente in scadenza da contattare (T6)"
+              >
+                <Calendar className="h-3 w-3 mr-1" />
+                {scadenzaUrgente.label}
+              </Badge>
+            )}
+          </div>
         </div>
         <CardDescription className="text-xs">
           {j.customerKey} · aperta il {fmtDate(j.openedAt)}
@@ -2113,6 +2147,7 @@ function JourneyDetailViewImpl({
   // Scadenza T6: giorni residui per chiudere il cross-sell (fine mese di T6).
   const daysToT6 = cjDaysToT6(journey.openedAt);
   const t6Deadline = cjT6Deadline(journey.openedAt);
+  const scadenzaInfo = cjScadenzaInfo(daysToT6);
   const [editItem, setEditItem] = useState<CustomerJourneyItem | null>(null);
   const { toast } = useToast();
   const [pdfPending, setPdfPending] = useState(false);
@@ -2174,25 +2209,15 @@ function JourneyDetailViewImpl({
                 {journey.codiceCliente ? ` · Cod. cliente: ${journey.codiceCliente}` : ""}
                 {` · Aperta il ${fmtDate(journey.openedAt)}`}
               </CardDescription>
-              {daysToT6 != null && (
+              {scadenzaInfo != null && (
                 <div className="mt-2">
                   <Badge
                     variant="outline"
-                    className={
-                      daysToT6 < 0
-                        ? "border-red-500/40 text-red-600 dark:text-red-400"
-                        : daysToT6 <= 30
-                          ? "border-amber-500/40 text-amber-600 dark:text-amber-400"
-                          : "border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
-                    }
+                    className={CJ_SCADENZA_TONE_CLASS[scadenzaInfo.tone]}
                     data-testid="badge-scadenza-t6"
                   >
                     <Calendar className="h-3.5 w-3.5 mr-1.5" />
-                    {daysToT6 < 0
-                      ? `Scaduta da ${Math.abs(daysToT6)} ${Math.abs(daysToT6) === 1 ? "giorno" : "giorni"}`
-                      : daysToT6 === 0
-                        ? "Scade oggi"
-                        : `Scade tra ${daysToT6} ${daysToT6 === 1 ? "giorno" : "giorni"}`}
+                    {scadenzaInfo.label}
                     {t6Deadline ? ` · T6 ${fmtDateUTC(t6Deadline)}` : ""}
                   </Badge>
                 </div>
