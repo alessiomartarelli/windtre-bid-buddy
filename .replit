@@ -38,31 +38,7 @@ args = "Start application"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "cj-authz-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "cj-reconcile-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "incentivazione-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "cj-report-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "cj-export-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "cj-gettone-ui-tests"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "cj-validity-gettone-parity-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
@@ -96,6 +72,30 @@ args = "admin-authz-tests"
 task = "workflow.run"
 args = "typecheck"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-authz-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-reconcile-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "incentivazione-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-report-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-export-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-validity-gettone-parity-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -106,78 +106,12 @@ args = "npm run dev"
 waitForPort = 5000
 
 [[workflows.workflow]]
-name = "cj-authz-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-customer-journey-authz-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
-name = "cj-reconcile-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-customer-journey-reconcile-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
-name = "incentivazione-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-incentivazione-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
-name = "cj-report-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-customer-journey-report-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
-name = "cj-export-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-customer-journey-export-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
 name = "cj-gettone-ui-tests"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-customer-journey-gettone-ui-tests.sh"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow]]
-name = "cj-validity-gettone-parity-tests"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash scripts/run-customer-journey-validity-gettone-parity-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
@@ -266,6 +200,72 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-typecheck.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-authz-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-authz-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-reconcile-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-reconcile-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "incentivazione-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-incentivazione-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-report-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-report-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-export-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-export-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-validity-gettone-parity-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-validity-gettone-parity-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

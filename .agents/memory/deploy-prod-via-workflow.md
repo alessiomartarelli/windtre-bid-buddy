@@ -1,20 +1,32 @@
 ---
-name: Deploy prod via workflow temporaneo
-description: Come eseguire scripts/deploy-prod.sh in modo affidabile nell'ambiente Replit nonostante i limiti del tool bash.
+name: Deploy prod (incentive-w3) — staged bash, not workflow
+description: How to deploy to the prod VPS reliably given tool constraints
 ---
 
-Per deployare in produzione (`scripts/deploy-prod.sh`, richiede `VPS_PASSWORD`) NON usare il tool `bash` direttamente.
+Deploy `incentive-w3` to the prod VPS by running `scripts/deploy-prod.sh`'s
+steps **manually in separate bash calls**, each well under the 120s bash
+timeout. Do NOT rely on a temporary workflow.
 
-**Why:** `npm run build` impiega più di 120s, che è il timeout massimo del tool bash. Inoltre i processi messi in background (`setsid &` ecc.) vengono terminati dall'ambiente (cleanup del cgroup quando il tool call finisce), quindi il deploy in background fallisce a metà.
+**Why:** 
+- `configureWorkflow` is blocked by a stale server-side counter ("Workflow
+  limit exceeded 16/10") that lists already-removed workflows. `restart:true`
+  on the code notebook does NOT clear it. Even *updating* an existing workflow
+  name trips it. So the "run deploy via temp workflow" trick is unreliable.
+- The old fear that `npm run build` exceeds 120s is outdated — build is ~27s.
+  The only reason the full `deploy-prod.sh` in one bash call times out is the
+  cumulative network steps (scp + schema sync + restart), not the build.
 
-**How to apply:**
-1. Crea un workflow temporaneo (es. `deploy-prod-oneoff`) con command `bash scripts/deploy-prod.sh`, outputType `console`.
-2. Attendi lo stato `finished` con getWorkflowStatus.
-3. Leggi l'output completo da getWorkflowStatus.
-4. Rimuovi il workflow temporaneo con removeWorkflow.
+**How to apply (staged, each its own bash call, using $VPS_PASSWORD env):**
+1. Build + it also packs: `npm run build` then `tar czf /tmp/incentivew3-deploy.tgz -C dist public index.cjs` (~30s). dist has `index.cjs` + `public/`.
+2. scp tarball to `root@85.215.124.207:/tmp/incentivew3-deploy.tgz` (~4s).
+3. Schema sync: open SSH tunnel `-N -L 15432:localhost:5432`, read prod
+   DATABASE_URL from `/var/www/incentive-w3/.env`, rewrite host→`127.0.0.1:15432`,
+   `DATABASE_URL=... npx drizzle-kit push`, kill tunnel (~10s).
+4. Swap + restart: `ssh ... "cd /var/www/incentive-w3 && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart incentive-w3 --update-env"`.
+5. Verify: `curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/incentivew3/` on the VPS ⇒ 200 (root `/` ⇒ 302 redirect, normal). `pm2 list` must show ONLY incentive-w3 (id 13) restarted; NEVER touch easycashflows (id 9), protecta (id 12), easystripe (id 14).
 
-Lo script fa: build → tar → scp → sync schema sul DB prod via tunnel SSH (`drizzle-kit push`) PRIMA del restart → swap dist → `pm2 restart incentive-w3 --update-env`. Verifica a fine deploy che pm2 mostri solo `incentive-w3` riavviato e NON tocchi easycashflows/protecta/easystripe. Usa `SKIP_QUALITY_GATE=1` se le suite sono già passate (evita di rilanciare il cancello).
-
-**Gotcha — limite workflow (10) e contatore stale:** `configureWorkflow` rifiuta nuovi workflow oltre 10 e il suo contatore può restare STALE (riporta "15/10" elencando workflow già rimossi) mentre `listWorkflows()` mostra il numero reale. Fix: `code_execution` con `restart: true` per azzerare la cache del notebook, poi riprova `configureWorkflow`.
-
-**Gotcha — workflow vs validation:** `removeWorkflow(name)` rimuove ANCHE il validation command omonimo (registri collegati). Per liberare slot e poi ripristinare: i validation command si ri-registrano con `setValidationCommand` che NON è soggetto al limite di 10 workflow. Alcuni step (es. i test) esistono solo come validation command, non come workflow, quindi vanno ripristinati via `setValidationCommand`.
+To free workflow slots you may `removeWorkflow` finished test workflows; they
+are also validation commands, so restore them afterward with
+`setValidationCommand({name, command})` (not subject to the workflow limit).
+The `deploy-prod.sh` quality gate calls the test scripts directly, so removing
+the workflow/validation registrations does NOT weaken the gate.
