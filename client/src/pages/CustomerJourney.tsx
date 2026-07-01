@@ -268,9 +268,10 @@ const JourneyCard = memo(function JourneyCard({
   const activeCount = drivers.filter((d) => d.activated).length;
   const total = drivers.length;
   const pct = Math.round((activeCount / total) * 100);
-  // Scadenza T6: mostrata solo per le journey ancora "aperte" e SOLO quando è
-  // urgente (scaduta, oggi o entro 30 giorni) → così in lista si notano subito
-  // i clienti in scadenza da contattare, senza rumore sulle altre.
+  // Scadenza T6: badge sempre visibile per le journey ancora "aperte" (verde se
+  // c'è tempo), con anello di evidenza SOLO quando è urgente (scaduta, oggi o
+  // entro 30 giorni) → così si notano subito i clienti in scadenza da
+  // contattare senza nascondere l'informazione sugli altri.
   const scadenza =
     j.status === "aperta" ? cjScadenzaInfo(cjDaysToT6(j.openedAt)) : null;
   const scadenzaUrgente = scadenza?.urgent ? scadenza : null;
@@ -312,15 +313,19 @@ const JourneyCard = memo(function JourneyCard({
             >
               {j.status === "aperta" ? "Aperta" : "Chiusa"}
             </Badge>
-            {scadenzaUrgente && (
+            {scadenza && (
               <Badge
                 variant="outline"
-                className={`text-xs ${CJ_SCADENZA_TONE_CLASS[scadenzaUrgente.tone]}`}
+                className={`text-xs ${CJ_SCADENZA_TONE_CLASS[scadenza.tone]}`}
                 data-testid={`badge-scadenza-${j.id}`}
-                title="Cliente in scadenza da contattare (T6)"
+                title={
+                  scadenza.urgent
+                    ? "Cliente in scadenza da contattare (T6)"
+                    : "Scadenza per completare il cross-sell (T6)"
+                }
               >
                 <Calendar className="h-3 w-3 mr-1" />
-                {scadenzaUrgente.label}
+                {scadenza.label}
               </Badge>
             )}
           </div>
