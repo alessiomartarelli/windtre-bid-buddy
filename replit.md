@@ -119,6 +119,22 @@ Preferred communication style: Simple, everyday language.
   >1MB), log `dump complete, size=15457480 bytes` + `done`.
   Restore: `gunzip -c <file>.sql.gz | PGPASSWORD=… psql -U incentive_w3 -d <target> -h localhost`.
   Run manuale: `ssh root@85.215.124.207 /usr/local/bin/incentive-w3-backup.sh`.
+- **Rotazione log prod (Task #245)**: su prod `out.log` era arrivato a
+  8,8 GB (nessuna rotazione). Ora esiste `/etc/logrotate.d/incentive-w3`
+  (installato via `scripts/install-prod-logrotate.sh`, idempotente,
+  richiede `VPS_PASSWORD` + `sshpass`): daily, `maxsize 50M`, `rotate 7`,
+  `compress` + `delaycompress`, **`copytruncate`** (obbligatorio: pm2
+  tiene il fd aperto, la rotazione per rename senza truncate
+  lascerebbe pm2 a scrivere sul file ruotato). Scoped SOLO su
+  `/var/log/incentive-w3/*.log` — non tocca easycashflows (pm2 id 9) né
+  protecta (pm2 id 12). Il timer di sistema `logrotate.timer` (daily,
+  mezzanotte UTC) applica la config. Il file da 8,8 GB è stato troncato
+  in sicurezza (`truncate -s 0`, fd pm2 intatto) salvando prima gli
+  ultimi 20 MB compressi in `out.log.pre-task245-tail.gz`; disco da 24 GB
+  a 15 GB usati. Il logger API (`server/index.ts`) tronca già i body a
+  2000 char (Task #239), quindi nessuna modifica al codice server.
+  Rotazione forzata manuale:
+  `ssh root@85.215.124.207 'logrotate -f /etc/logrotate.d/incentive-w3'`.
 
 ## Documentazione di dettaglio
 
