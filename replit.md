@@ -372,9 +372,11 @@ mantenere snello questo file:
   rimossa). Lanciali via lo step di validation
   `cj-report-tests` (`bash scripts/run-customer-journey-report-tests.sh`).
   Run completo in ~1s.
-- **Telegram report tests** (`tests/telegram-report.test.mjs`): 15 test
+- **Telegram report tests** (`tests/telegram-report.test.mjs`): 23 test
   puri (Task #239) su aggregati e messaggio del report vendite Telegram
-  (`shared/venditeReport.ts`) + orari scheduler e risoluzione config
+  (`shared/venditeReport.ts`) + orari scheduler DST-safe (incl. cambio
+  ora legale marzo 23h / ottobre 25h), redazione segreti nei log e
+  risoluzione config
   (`server/telegramReportScheduler.ts`). Niente server né DB, loader tsx.
   Lancio: `bash scripts/run-telegram-report-tests.sh` (nessun workflow
   dedicato: limite workflow raggiunto). Inclusa nello step 1a del quality

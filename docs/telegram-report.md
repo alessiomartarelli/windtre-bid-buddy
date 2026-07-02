@@ -71,7 +71,9 @@ pulsanti "Invia report di prova" e "Salva configurazione".
 
 ## Test
 
-`tests/telegram-report.test.mjs` (15 test puri, niente server né DB, via
+`tests/telegram-report.test.mjs` (23 test puri, inclusi 4 sui cambi
+ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
+niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV, input
 malformati), formattazione euro/date, messaggio (sezioni, escape HTML,
 giorno vuoto), orari scheduler (`msUntilNextSend` a cavallo dei due orari

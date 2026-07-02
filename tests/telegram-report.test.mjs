@@ -208,6 +208,52 @@ if (msUntilNextSend) {
     assert.ok(Math.abs(delayMs - expected) < 60_000);
   });
 
+  // ── DST (Task #239 review): la notte del cambio ora ha 23h/25h — il
+  // delay deve essere calcolato su epoch assoluti, non su giorni da 24h.
+  await test("DST marzo (29/03/2026, giorno da 23h): 22:35 sab → 13:30 dom = ~13h55m", () => {
+    // Sabato 28/03/2026 22:35 Roma = 21:35 UTC (CET, +1).
+    const now = new Date(Date.UTC(2026, 2, 28, 21, 35, 0));
+    const { delayMs, label } = msUntilNextSend(now);
+    assert.equal(label, "13:30");
+    // Domenica 29/03 13:30 Roma = 11:30 UTC (CEST, +2) ⇒ 13h55m reali.
+    const expected = (13 * 60 + 55) * 60 * 1000;
+    assert.ok(
+      Math.abs(delayMs - expected) < 60_000,
+      `delay ${delayMs} lontano da ${expected} (un calcolo a 24h fisse darebbe 14h55m)`,
+    );
+  });
+
+  await test("DST ottobre (25/10/2026, giorno da 25h): 22:35 sab → 13:30 dom = ~15h55m", () => {
+    // Sabato 24/10/2026 22:35 Roma = 20:35 UTC (CEST, +2).
+    const now = new Date(Date.UTC(2026, 9, 24, 20, 35, 0));
+    const { delayMs, label } = msUntilNextSend(now);
+    assert.equal(label, "13:30");
+    // Domenica 25/10 13:30 Roma = 12:30 UTC (CET, +1) ⇒ 15h55m reali.
+    const expected = (15 * 60 + 55) * 60 * 1000;
+    assert.ok(
+      Math.abs(delayMs - expected) < 60_000,
+      `delay ${delayMs} lontano da ${expected} (un calcolo a 24h fisse darebbe 14h55m)`,
+    );
+  });
+
+  await test("DST: anche 13:30 → 22:30 nello STESSO giorno del cambio resta 9h", () => {
+    // Domenica 29/03/2026 14:00 Roma = 12:00 UTC (CEST già attivo).
+    const now = new Date(Date.UTC(2026, 2, 29, 12, 0, 0));
+    const { delayMs, label } = msUntilNextSend(now);
+    assert.equal(label, "22:30");
+    const expected = 8.5 * 3600 * 1000; // 22:30 - 14:00, nessuna transizione in mezzo
+    assert.ok(Math.abs(delayMs - expected) < 60_000, `delay ${delayMs} lontano da ${expected}`);
+  });
+
+  await test("rollover fine mese/anno: 31/12 23:00 → 13:30 dell'1/1", () => {
+    // 31/12/2026 23:00 Roma = 22:00 UTC (CET).
+    const now = new Date(Date.UTC(2026, 11, 31, 22, 0, 0));
+    const { delayMs, label } = msUntilNextSend(now);
+    assert.equal(label, "13:30");
+    const expected = 14.5 * 3600 * 1000;
+    assert.ok(Math.abs(delayMs - expected) < 60_000, `delay ${delayMs} lontano da ${expected}`);
+  });
+
   const { resolveTelegramConfig } = await import("../server/telegramReportScheduler.ts");
 
   await test("resolveTelegramConfig: null/disabled/incompleta ⇒ null", () => {

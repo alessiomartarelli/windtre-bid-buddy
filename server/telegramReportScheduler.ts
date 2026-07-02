@@ -27,7 +27,13 @@ export interface TelegramReportConfig {
   chat_id?: string;
 }
 
-function romeNowParts(now: Date = new Date()): { ymd: string; secondsOfDay: number } {
+function romeParts(now: Date = new Date()): {
+  ymd: string;
+  year: number;
+  month: number;
+  day: number;
+  secondsOfDay: number;
+} {
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: ROME_TZ,
     year: "numeric",
@@ -46,27 +52,74 @@ function romeNowParts(now: Date = new Date()): { ymd: string; secondsOfDay: numb
   const s = parseInt(get("second"), 10);
   return {
     ymd: `${get("year")}-${get("month")}-${get("day")}`,
+    year: parseInt(get("year"), 10),
+    month: parseInt(get("month"), 10),
+    day: parseInt(get("day"), 10),
     secondsOfDay: h * 3600 + m * 60 + s,
   };
+}
+
+function romeNowParts(now: Date = new Date()): { ymd: string; secondsOfDay: number } {
+  const { ymd, secondsOfDay } = romeParts(now);
+  return { ymd, secondsOfDay };
+}
+
+// Offset UTC di Roma (in ms) all'istante dato: differenza fra il wall time
+// di Roma reinterpretato come UTC e l'epoch reale.
+function romeOffsetMs(at: Date): number {
+  const p = romeParts(at);
+  const h = Math.floor(p.secondsOfDay / 3600);
+  const m = Math.floor((p.secondsOfDay % 3600) / 60);
+  const s = p.secondsOfDay % 60;
+  const asUTC = Date.UTC(p.year, p.month - 1, p.day, h, m, s);
+  // Tronchiamo i ms dell'istante reale per confrontare a parità di secondi.
+  const truncated = Math.floor(at.getTime() / 1000) * 1000;
+  return asUTC - truncated;
+}
+
+/**
+ * Converte un wall time di Roma (anno/mese/giorno/minuti dalla mezzanotte)
+ * nell'epoch UTC reale, tenendo conto dell'offset vigente QUEL giorno
+ * (CET +1 o CEST +2). Doppio passaggio per convergere a cavallo del cambio
+ * ora; 13:30/22:30 non cadono mai nella finestra di transizione (02:00-03:00),
+ * quindi il risultato è sempre univoco.
+ */
+function romeWallTimeToEpoch(year: number, month: number, day: number, minutes: number): number {
+  const wallUTC = Date.UTC(year, month - 1, day, Math.floor(minutes / 60), minutes % 60, 0);
+  let epoch = wallUTC - romeOffsetMs(new Date(wallUTC));
+  epoch = wallUTC - romeOffsetMs(new Date(epoch));
+  return epoch;
 }
 
 /**
  * Calcola il prossimo orario di invio: ms di attesa + label dell'orario.
  * Se entrambi gli orari di oggi sono già passati, punta al primo di domani.
+ * DST-safe: ogni candidato (oggi 13:30, oggi 22:30, domani 13:30) è
+ * convertito in epoch assoluto col SUO offset Europe/Rome, così l'attesa
+ * resta corretta anche quando attraversa il cambio ora legale (giorni da
+ * 23h/25h), senza assumere giornate da 24h fisse.
  */
 export function msUntilNextSend(now: Date = new Date()): { delayMs: number; label: string } {
-  const { secondsOfDay } = romeNowParts(now);
-  for (const t of SEND_TIMES) {
-    const target = t.minutes * 60;
-    if (secondsOfDay < target) {
-      // +5s di margine per non arrivare un attimo prima dell'orario.
-      return { delayMs: (target - secondsOfDay) * 1000 + 5_000, label: t.label };
+  const p = romeParts(now);
+  const nowMs = now.getTime();
+  const candidates: Array<{ epoch: number; label: string }> = [];
+  for (const dayOffset of [0, 1]) {
+    for (const t of SEND_TIMES) {
+      candidates.push({
+        // Date.UTC normalizza l'overflow del giorno (es. 31+1 ⇒ 1 del mese dopo).
+        epoch: romeWallTimeToEpoch(p.year, p.month, p.day + dayOffset, t.minutes),
+        label: t.label,
+      });
     }
   }
-  // Primo invio di domani (13:30): resto del giorno + orario target.
-  const dayS = 24 * 3600;
-  const target = SEND_TIMES[0].minutes * 60;
-  return { delayMs: (dayS - secondsOfDay + target) * 1000 + 5_000, label: SEND_TIMES[0].label };
+  for (const c of candidates) {
+    if (c.epoch > nowMs) {
+      // +5s di margine per non arrivare un attimo prima dell'orario.
+      return { delayMs: c.epoch - nowMs + 5_000, label: c.label };
+    }
+  }
+  // Irraggiungibile (domani 13:30 è sempre nel futuro), fallback difensivo.
+  return { delayMs: 60_000, label: SEND_TIMES[0].label };
 }
 
 function formatRomeNow(): string {
