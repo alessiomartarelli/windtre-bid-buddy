@@ -15,10 +15,24 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   PDV; ANNULLATA escluse, coerente con la pagina Vendite BiSuite) e
   `buildTelegramReportMessage` (messaggio HTML compatto per Telegram, con
   escape dei caratteri speciali e sezioni solo per le voci > 0).
+- **`shared/venditeReportHtml.ts`** (Task #248) — logica PURA:
+  `buildVenditeReportHtml` genera il **file HTML allegato** al messaggio,
+  che replica la scheda "Vendite BiSuite" (KPI card, badge colorati per
+  tipo/pista con la stessa palette dei badge Tailwind dell'app tradotta
+  in CSS inline, tabella per PDV ordinata per importo, sezione per
+  addetto). Documento standalone: CSS inline nel `<head>`, nessuna
+  risorsa esterna, layout responsive, escape HTML di tutti i valori
+  dinamici. `reportHtmlFileName` produce il nome file
+  `report-vendite-<org-slug>-<YYYY-MM-DD>[-<hhmm>].html`. La sezione per
+  addetto usa il nuovo aggregato `perAddetto` di `aggregateDailyReport`
+  (grouping case-insensitive sul nominativo, `N/D` per mancante).
 - **`server/telegram.ts`** — `sendTelegramMessage(token, chatId, text)`:
   fetch nativo verso `api.telegram.org/bot<token>/sendMessage`
   (parse_mode HTML, troncamento a 4096 caratteri). Non lancia mai:
-  ritorna `{ ok, error }`.
+  ritorna `{ ok, error }`. `sendTelegramDocument(token, chatId, fileName,
+  content, {caption})` (Task #248): invio allegato via `sendDocument`
+  con FormData/Blob nativi (multipart, nessuna dipendenza nuova), stessa
+  semantica never-throw.
 - **`server/telegramReportScheduler.ts`** — scheduler con lo stesso
   pattern Intl/Europe/Rome di `bisuiteScheduler.ts`: `msUntilNextSend`
   calcola il prossimo orario fra 13:30/22:30, setTimeout ricalcolato dopo
@@ -26,7 +40,11 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   giorno corrente (se le credenziali sono configurate; un errore di sync
   NON blocca l'invio) → lettura vendite di oggi dal DB → invio. Errori
   loggati per-org senza bloccare le altre. Avviato da `server/index.ts`
-  SOLO in produzione (come lo scheduler BiSuite).
+  SOLO in produzione (come lo scheduler BiSuite). Dopo il messaggio di
+  testo, `sendDailyReportForOrg` invia anche l'**allegato HTML**
+  (Task #248): se l'allegato fallisce il report NON è considerato
+  fallito — warn nel log, `docError` nel risultato (l'endpoint di prova
+  lo espone come `warning`), scheduler mai bloccato.
 
 ## Config per-organizzazione
 
@@ -52,7 +70,9 @@ sceglie l'org.
   token salvato" nella card); per abilitare servono token (nuovo o
   salvato) + chat id.
 - `POST /api/admin/telegram-report-test` — invia SUBITO il report di oggi
-  usando le credenziali nel body (o quelle salvate come fallback), senza sync.
+  (messaggio + allegato HTML) usando le credenziali nel body (o quelle
+  salvate come fallback), senza sync. Se solo l'allegato fallisce risponde
+  `{success: true, warning}`.
 
 Difesa in profondità: il logger delle risposte `/api/*` in
 `server/index.ts` usa `logJsonReplacer` (`server/logRedact.ts`) che
@@ -71,12 +91,15 @@ pulsanti "Invia report di prova" e "Salva configurazione".
 
 ## Test
 
-`tests/telegram-report.test.mjs` (23 test puri, inclusi 4 sui cambi
+`tests/telegram-report.test.mjs` (29 test puri, inclusi 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
-loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV, input
-malformati), formattazione euro/date, messaggio (sezioni, escape HTML,
-giorno vuoto), orari scheduler (`msUntilNextSend` a cavallo dei due orari
+loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,
+input malformati), formattazione euro/date, messaggio (sezioni, escape
+HTML, giorno vuoto), report HTML allegato (Task #248: struttura KPI/
+badge/tabelle, giorno vuoto senza sezioni, escape valori dinamici,
+nessuna risorsa esterna, `escapeHtml`, nome file slugificato), orari
+scheduler (`msUntilNextSend` a cavallo dei due orari
 e di mezzanotte) e `resolveTelegramConfig`. Lancio:
 `bash scripts/run-telegram-report-tests.sh`. La suite è inclusa nello
 step 1a del quality gate di `scripts/deploy-prod.sh`. (Niente workflow

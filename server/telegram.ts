@@ -58,3 +58,46 @@ export async function sendTelegramMessage(
     return { ok: false, error: msg };
   }
 }
+
+/**
+ * Invia un documento (file allegato) alla chat indicata via sendDocument
+ * (multipart/form-data con FormData/Blob nativi di Node 18+). Usato per il
+ * report HTML giornaliero (Task #248). Non lancia mai: ritorna { ok, error }
+ * — un fallimento dell'allegato NON deve bloccare il messaggio di testo.
+ */
+export async function sendTelegramDocument(
+  botToken: string,
+  chatId: string,
+  fileName: string,
+  content: string,
+  options?: { caption?: string; mimeType?: string },
+): Promise<TelegramSendResult> {
+  if (!botToken || !chatId) {
+    return { ok: false, error: "Bot token o chat ID mancante" };
+  }
+  try {
+    const form = new FormData();
+    form.append("chat_id", chatId);
+    if (options?.caption) form.append("caption", options.caption.slice(0, 1024));
+    form.append(
+      "document",
+      new Blob([content], { type: options?.mimeType ?? "text/html" }),
+      fileName,
+    );
+    const resp = await fetch(`${TELEGRAM_API_BASE}/bot${botToken}/sendDocument`, {
+      method: "POST",
+      body: form,
+    });
+    const data = (await resp.json().catch(() => null)) as
+      | { ok?: boolean; description?: string }
+      | null;
+    if (!resp.ok || !data?.ok) {
+      const desc = data?.description || `HTTP ${resp.status}`;
+      return { ok: false, error: desc };
+    }
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
+  }
+}

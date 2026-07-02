@@ -2339,6 +2339,15 @@ export async function registerRoutes(
       if (!result.ok) {
         return res.status(400).json({ error: `Invio Telegram fallito: ${result.error}` });
       }
+      // Il messaggio di testo è arrivato; se l'allegato HTML è fallito lo
+      // segnaliamo senza considerare il test fallito (stessa semantica dello
+      // scheduler: l'allegato non blocca il report).
+      if (result.docError) {
+        return res.json({
+          success: true,
+          warning: `Messaggio inviato, ma allegato HTML fallito: ${result.docError}`,
+        });
+      }
       res.json({ success: true });
     } catch (error) {
       console.error("Error sending Telegram test report:", error);

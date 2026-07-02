@@ -11,6 +11,11 @@ const {
   fmtEuro,
   fmtReportDate,
 } = await import("../shared/venditeReport.ts");
+const {
+  buildVenditeReportHtml,
+  reportHtmlFileName,
+  escapeHtml,
+} = await import("../shared/venditeReportHtml.ts");
 
 let passed = 0;
 let failed = 0;
@@ -27,12 +32,13 @@ async function test(name, fn) {
 }
 
 // Helper: costruisce una vendita con articoli BiSuite-shaped.
-function sale({ stato = "COMPLETATA", totale = "0", codicePos = "POS1", nomeNegozio = "Negozio 1", articoli = [] } = {}) {
+function sale({ stato = "COMPLETATA", totale = "0", codicePos = "POS1", nomeNegozio = "Negozio 1", nomeAddetto = null, articoli = [] } = {}) {
   return {
     stato,
     totale,
     codicePos,
     nomeNegozio,
+    nomeAddetto,
     rawData: { articoli },
   };
 }
@@ -101,6 +107,23 @@ await test("totale malformato ⇒ 0, non NaN", () => {
   assert.equal(a.vendite, 2);
 });
 
+await test("per-addetto: grouping case-insensitive, N/D per mancante, ordina per importo↓", () => {
+  const a = aggregateDailyReport([
+    sale({ nomeAddetto: "Mario Rossi", totale: "10" }),
+    sale({ nomeAddetto: "MARIO ROSSI ", totale: "15" }),
+    sale({ nomeAddetto: "Luigi Verdi", totale: "100" }),
+    sale({ nomeAddetto: null, totale: "1" }),
+    sale({ nomeAddetto: "  ", totale: "2", stato: "ANNULLATA" }), // esclusa
+  ]);
+  assert.deepEqual(a.perAddetto.map((x) => x.nomeAddetto), ["Luigi Verdi", "Mario Rossi", "N/D"]);
+  const mario = a.perAddetto.find((x) => x.nomeAddetto === "Mario Rossi");
+  assert.equal(mario.vendite, 2);
+  assert.equal(mario.importo, 25);
+  const nd = a.perAddetto.find((x) => x.nomeAddetto === "N/D");
+  assert.equal(nd.vendite, 1);
+  assert.equal(nd.importo, 1);
+});
+
 await test("rawData senza articoli non crasha", () => {
   const a = aggregateDailyReport([
     { stato: "OK", totale: "5", codicePos: "X", nomeNegozio: "X", rawData: null },
@@ -166,6 +189,94 @@ await test("messaggio completo: totali, sezioni tipo/pista/PDV, solo voci > 0", 
   // Escape HTML di nomi con caratteri speciali
   assert.ok(msg.includes("Org &amp; Co &lt;srl&gt;"));
   assert.ok(!msg.includes("<srl>"));
+});
+
+console.log("\n— buildVenditeReportHtml / reportHtmlFileName —");
+
+await test("HTML: documento completo con KPI, badge tipo/pista, tabelle PDV e addetti", () => {
+  const aggregates = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario Rossi", totale: "130", articoli: [art("UNTIED", 30), art("TELEFONIA", 100)] }),
+    sale({ codicePos: "P2", nomeNegozio: "Mare", nomeAddetto: "Luigi Verdi", totale: "20", articoli: [art("ENERGIA W3", 20)] }),
+  ]);
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-02",
+    timeLabel: "13:30",
+    aggregates,
+  });
+  assert.ok(html.startsWith("<!doctype html>"));
+  assert.ok(html.includes("Report vendite 02/07/2026"));
+  assert.ok(html.includes("Org Test"));
+  assert.ok(html.includes("ore 13:30"));
+  // KPI
+  assert.ok(html.includes(">Vendite</div><div class=\"kpi-value\">2</div>"));
+  assert.ok(html.includes("Importo totale"));
+  assert.ok(html.includes("150,00 €"));
+  // Badge tipo: solo voci > 0 (niente Servizi)
+  assert.ok(html.includes("Canvass <b>2 pz</b>"));
+  assert.ok(html.includes("Prodotti <b>1 pz</b>"));
+  assert.ok(!html.includes("Servizi <b>"));
+  // Badge pista con colori inline
+  assert.ok(html.includes("Mobile <b>1 pz</b>"));
+  assert.ok(html.includes("Energia <b>1 pz</b>"));
+  assert.ok(!html.includes("Fisso <b>"));
+  assert.ok(html.includes("rgba(59,130,246,.10)")); // colore pista mobile
+  // Tabella PDV ordinata per importo↓
+  assert.ok(html.includes("Per punto vendita"));
+  assert.ok(html.indexOf("Centro") < html.indexOf("Mare"));
+  assert.ok(html.includes("<td class=\"mono\">P1</td>"));
+  // Tabella addetti
+  assert.ok(html.includes("Per addetto"));
+  assert.ok(html.indexOf("Mario Rossi") > -1 && html.indexOf("Luigi Verdi") > -1);
+  assert.ok(html.indexOf("Mario Rossi") < html.indexOf("Luigi Verdi")); // 130 > 20
+  // Nessuna risorsa esterna
+  assert.ok(!html.includes("http://") && !html.includes("https://"));
+});
+
+await test("HTML: giorno senza vendite ⇒ card vuota, niente tabelle", () => {
+  const html = buildVenditeReportHtml({
+    orgName: "Org",
+    dateYMD: "2026-07-02",
+    aggregates: aggregateDailyReport([]),
+  });
+  assert.ok(html.includes("Nessuna vendita registrata oggi."));
+  assert.ok(!html.includes("Per punto vendita"));
+  assert.ok(!html.includes("Per addetto"));
+  // La classe esiste nel CSS del <head>: verifichiamo l'assenza del markup KPI.
+  assert.ok(!html.includes('<div class="kpi-value">'));
+});
+
+await test("HTML: escape dei valori dinamici (org, negozio, addetto)", () => {
+  const aggregates = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Negozio <b>&", nomeAddetto: "Addetto \"X\" <script>", totale: "10" }),
+  ]);
+  const html = buildVenditeReportHtml({
+    orgName: "Org & Co <srl>",
+    dateYMD: "2026-07-02",
+    aggregates,
+  });
+  assert.ok(html.includes("Org &amp; Co &lt;srl&gt;"));
+  assert.ok(html.includes("Negozio &lt;b&gt;&amp;"));
+  assert.ok(html.includes("Addetto &quot;X&quot; &lt;script&gt;"));
+  assert.ok(!html.includes("<script>"));
+});
+
+await test("escapeHtml: tutti i 5 caratteri speciali", () => {
+  assert.equal(escapeHtml(`&<>"'`), "&amp;&lt;&gt;&quot;&#39;");
+  assert.equal(escapeHtml("ok"), "ok");
+});
+
+await test("reportHtmlFileName: slug org + data + orario, accenti e simboli rimossi", () => {
+  assert.equal(
+    reportHtmlFileName("WindTre Admin", "2026-07-02", "13:30"),
+    "report-vendite-windtre-admin-2026-07-02-1330.html",
+  );
+  assert.equal(
+    reportHtmlFileName("Càffè & Co!!", "2026-07-02"),
+    "report-vendite-caffe-co-2026-07-02.html",
+  );
+  // Org vuota/solo simboli ⇒ fallback "org"
+  assert.equal(reportHtmlFileName("***", "2026-07-02"), "report-vendite-org-2026-07-02.html");
 });
 
 console.log("\n— scheduler: msUntilNextSend / resolveTelegramConfig —");

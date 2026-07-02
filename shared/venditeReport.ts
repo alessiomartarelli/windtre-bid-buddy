@@ -18,12 +18,21 @@ export interface VenditaReportRow {
   totale: string | null;
   codicePos: string | null;
   nomeNegozio: string | null;
+  /** Addetto vendita (opzionale: usato dal report HTML per addetto). */
+  nomeAddetto?: string | null;
   rawData: unknown;
 }
 
 export interface PdvReportAggregate {
   codicePos: string;
   nomeNegozio: string;
+  vendite: number;
+  importo: number;
+}
+
+export interface AddettoReportAggregate {
+  /** Grafia visualizzata (prima occorrenza incontrata). */
+  nomeAddetto: string;
   vendite: number;
   importo: number;
 }
@@ -39,6 +48,11 @@ export interface DailyReportAggregates {
   amountByPista: Partial<Record<PistaCanvass, number>>;
   /** Aggregato per punto vendita, ordinato per importo decrescente. */
   perPdv: PdvReportAggregate[];
+  /**
+   * Aggregato per addetto (grouping case-insensitive sul nominativo),
+   * ordinato per importo decrescente. Usato dal report HTML allegato.
+   */
+  perAddetto: AddettoReportAggregate[];
 }
 
 function isAnnullata(stato: string | null | undefined): boolean {
@@ -63,6 +77,7 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
   const countByPista: Partial<Record<PistaCanvass, number>> = {};
   const amountByPista: Partial<Record<PistaCanvass, number>> = {};
   const pdvMap = new Map<string, PdvReportAggregate>();
+  const addettoMap = new Map<string, AddettoReportAggregate>();
   let vendite = 0;
   let importo = 0;
 
@@ -96,13 +111,28 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
         importo: tot,
       });
     }
+
+    // Per addetto: grouping case-insensitive (le grafie diverse dello
+    // stesso nominativo si fondono, come nelle gare addetto).
+    const addettoName = (row.nomeAddetto ?? "").trim() || "N/D";
+    const addettoKey = addettoName.toLowerCase();
+    const existingAdd = addettoMap.get(addettoKey);
+    if (existingAdd) {
+      existingAdd.vendite++;
+      existingAdd.importo += tot;
+    } else {
+      addettoMap.set(addettoKey, { nomeAddetto: addettoName, vendite: 1, importo: tot });
+    }
   }
 
   const perPdv = Array.from(pdvMap.values()).sort(
     (a, b) => b.importo - a.importo || b.vendite - a.vendite || a.codicePos.localeCompare(b.codicePos, "it"),
   );
+  const perAddetto = Array.from(addettoMap.values()).sort(
+    (a, b) => b.importo - a.importo || b.vendite - a.vendite || a.nomeAddetto.localeCompare(b.nomeAddetto, "it"),
+  );
 
-  return { vendite, importo, countByType, amountByType, countByPista, amountByPista, perPdv };
+  return { vendite, importo, countByType, amountByType, countByPista, amountByPista, perPdv, perAddetto };
 }
 
 // Ordine fisso delle piste nel messaggio (stesso ordine della UI).

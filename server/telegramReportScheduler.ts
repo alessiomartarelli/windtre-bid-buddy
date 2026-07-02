@@ -1,8 +1,9 @@
 import { storage } from "./storage";
 import { runBisuiteFetchForOrg } from "./bisuiteFetch";
-import { sendTelegramMessage } from "./telegram";
+import { sendTelegramMessage, sendTelegramDocument } from "./telegram";
 import { decryptSecret, isEncrypted } from "./cryptoSecret";
-import { aggregateDailyReport, buildTelegramReportMessage } from "@shared/venditeReport";
+import { aggregateDailyReport, buildTelegramReportMessage, fmtReportDate } from "@shared/venditeReport";
+import { buildVenditeReportHtml, reportHtmlFileName } from "@shared/venditeReportHtml";
 
 /**
  * Scheduler del report vendite giornaliero su Telegram (Task #239).
@@ -166,7 +167,7 @@ export async function sendDailyReportForOrg(params: {
   chatId: string;
   timeLabel?: string;
   syncFirst?: boolean;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; docError?: string }> {
   const { ymd } = romeNowParts();
 
   if (params.syncFirst !== false) {
@@ -199,6 +200,26 @@ export async function sendDailyReportForOrg(params: {
   const result = await sendTelegramMessage(params.botToken, params.chatId, message);
   if (!result.ok) {
     return { ok: false, error: result.error };
+  }
+
+  // Allegato HTML (Task #248): replica leggibile della pagina Vendite
+  // BiSuite. Un fallimento dell'allegato NON blocca il report: il testo è
+  // già arrivato, logghiamo e segnaliamo docError al chiamante.
+  const html = buildVenditeReportHtml({
+    orgName: params.orgName,
+    dateYMD: ymd,
+    timeLabel: params.timeLabel,
+    aggregates,
+  });
+  const fileName = reportHtmlFileName(params.orgName, ymd, params.timeLabel);
+  const docResult = await sendTelegramDocument(params.botToken, params.chatId, fileName, html, {
+    caption: `Report vendite ${fmtReportDate(ymd)} — versione leggibile`,
+  });
+  if (!docResult.ok) {
+    console.warn(
+      `[telegram-report] allegato HTML FALLITO org=${params.orgId} (${params.orgName}): ${docResult.error} — il messaggio di testo è stato comunque inviato`,
+    );
+    return { ok: true, docError: docResult.error };
   }
   return { ok: true };
 }
