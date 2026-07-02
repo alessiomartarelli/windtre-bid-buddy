@@ -17,3 +17,4 @@
 - [API log secret redaction](api-log-secret-redaction.md) — il logger /api/* serializza i body JSON: mai restituire segreti in chiaro nelle risposte; redactor condiviso in server/logRedact.ts.
 - [UTC-anchored date display](utc-anchored-date-display.md) — date ancorate a fine giorno UTC (es. scadenza T6) vanno formattate con timeZone:"UTC" e il day-count su date UTC, o rotolano al giorno dopo in IT.
 - [CJ schede date filter](cj-schede-date-filter.md) — il dal–al delle Schede filtra per data INSERIMENTO SIM (non "aperta il"/openedAt); scelta voluta dall'utente, non è un bug: non switchare a openedAt.
+- [Prod SMTP_SECRET_KEY differs](prod-secret-key-differs.md) — segreti per il DB di prod vanno cifrati SUL VPS (chiave diversa da dev); plaintext via stdin, verifica round-trip.

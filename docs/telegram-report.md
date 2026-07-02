@@ -81,3 +81,20 @@ e di mezzanotte) e `resolveTelegramConfig`. Lancio:
 `bash scripts/run-telegram-report-tests.sh`. La suite è inclusa nello
 step 1a del quality gate di `scripts/deploy-prod.sh`. (Niente workflow
 dedicato: limite workflow del workspace raggiunto.)
+
+## Verifica end-to-end e attivazione in prod (Task #240)
+
+Il 02/07/2026 è stato fatto un test reale con il bot **@CmsWindTrebot**
+nel gruppo Telegram "Windtre test" (chat id nel config di prod): vendite
+sintetiche seminate nel DB dev (2 attive + 1 ANNULLATA esclusa), invio
+via `POST /api/admin/telegram-report-test` ⇒ 200 e messaggio arrivato
+leggibile (conferma dell'utente). Un invio 200 implica anche HTML
+valido: Telegram rifiuta i messaggi con parse_mode HTML malformato.
+
+In produzione l'invio automatico è ATTIVO per l'org **WindTre Admin**
+(`org-admin-windtre`): `config.telegramReport = {enabled, bot_token,
+chat_id}` scritto nel DB di prod con token cifrato **sul VPS** usando la
+`SMTP_SECRET_KEY` di prod (che è DIVERSA da quella dev: mai cifrare in
+dev un segreto destinato al DB di prod), con verifica round-trip del
+decrypt. Dopo il deploy il log PM2 conferma lo scheduler:
+`[telegram-report] prossimo report 13:30 programmato per …`.
