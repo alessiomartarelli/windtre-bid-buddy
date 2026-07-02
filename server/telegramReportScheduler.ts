@@ -2,7 +2,14 @@ import { storage } from "./storage";
 import { runBisuiteFetchForOrg } from "./bisuiteFetch";
 import { sendTelegramMessage, sendTelegramDocument } from "./telegram";
 import { decryptSecret, isEncrypted } from "./cryptoSecret";
-import { aggregateDailyReport, buildTelegramReportMessage, fmtReportDate } from "@shared/venditeReport";
+import {
+  addYmdDays,
+  aggregateDailyReport,
+  buildDailyTrend,
+  buildTelegramReportMessage,
+  fmtReportDate,
+  trendYmdOf,
+} from "@shared/venditeReport";
 import { buildVenditeReportHtml, reportHtmlFileName } from "@shared/venditeReportHtml";
 
 /**
@@ -189,8 +196,15 @@ export async function sendDailyReportForOrg(params: {
     }
   }
 
-  const rows = await storage.getBisuiteSalesByItalianDateRange(params.orgId, ymd, ymd, false);
-  const aggregates = aggregateDailyReport(rows);
+  // Finestra di trend (Task #250): 14 giorni compreso oggi. Serve al report
+  // HTML per grafico di andamento, sparkline per pista e confronti
+  // oggi/ieri/media 7 gg. Il messaggio di testo usa SOLO le vendite di oggi.
+  const TREND_DAYS = 14;
+  const fromYmd = addYmdDays(ymd, -(TREND_DAYS - 1));
+  const rows = await storage.getBisuiteSalesByItalianDateRange(params.orgId, fromYmd, ymd, false);
+  const todayRows = rows.filter((r) => trendYmdOf(r.dataVendita) === ymd);
+  const aggregates = aggregateDailyReport(todayRows);
+  const trend = buildDailyTrend(rows, fromYmd, ymd);
   const message = buildTelegramReportMessage({
     orgName: params.orgName,
     dateYMD: ymd,
@@ -210,6 +224,7 @@ export async function sendDailyReportForOrg(params: {
     dateYMD: ymd,
     timeLabel: params.timeLabel,
     aggregates,
+    trend,
   });
   const fileName = reportHtmlFileName(params.orgName, ymd, params.timeLabel);
   const docResult = await sendTelegramDocument(params.botToken, params.chatId, fileName, html, {

@@ -23,6 +23,10 @@ toggle, column projection). UI tests are ~25s vs ~1s for pure ones.
   SET role=..., bisuite_addetti=$arr::text[]` then reload the page.
 - The wrapper script must wait for `localhost:5000` (app workflow must be running) before
   launching, like the other run-*.sh scripts.
+- Same stack works for one-off VISUAL checks of standalone HTML (e.g. the Telegram
+  report attachment): write the file to /tmp, `page.goto('file:///tmp/x.html')`,
+  `page.screenshot({fullPage:true})`, then read the PNG. Headless chromium lacks emoji
+  fonts — emoji render as tofu boxes in screenshots; that's the container, not a bug.
 - Incentivazione interna page opens on the CURRENT month/year by default, so seed
   `incentivazione_valenze` for `new Date()`'s month/year (not a fixed date) or the page
   shows no cards. Config need NOT be seeded — the page uses `defaultConfig` (W3/Vodafone

@@ -10,11 +10,16 @@ const {
   buildTelegramReportMessage,
   fmtEuro,
   fmtReportDate,
+  buildDailyTrend,
+  pctDelta,
+  addYmdDays,
+  trendYmdOf,
 } = await import("../shared/venditeReport.ts");
 const {
   buildVenditeReportHtml,
   reportHtmlFileName,
   escapeHtml,
+  svgAreaChart,
 } = await import("../shared/venditeReportHtml.ts");
 
 let passed = 0;
@@ -193,7 +198,7 @@ await test("messaggio completo: totali, sezioni tipo/pista/PDV, solo voci > 0", 
 
 console.log("\n— buildVenditeReportHtml / reportHtmlFileName —");
 
-await test("HTML: documento completo con KPI, badge tipo/pista, tabelle PDV e addetti", () => {
+await test("HTML: dashboard completa con hero, card piste, tipi, classifiche PDV e addetti", () => {
   const aggregates = aggregateDailyReport([
     sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario Rossi", totale: "130", articoli: [art("UNTIED", 30), art("TELEFONIA", 100)] }),
     sale({ codicePos: "P2", nomeNegozio: "Mare", nomeAddetto: "Luigi Verdi", totale: "20", articoli: [art("ENERGIA W3", 20)] }),
@@ -208,42 +213,98 @@ await test("HTML: documento completo con KPI, badge tipo/pista, tabelle PDV e ad
   assert.ok(html.includes("Report vendite 02/07/2026"));
   assert.ok(html.includes("Org Test"));
   assert.ok(html.includes("ore 13:30"));
-  // KPI
-  assert.ok(html.includes(">Vendite</div><div class=\"kpi-value\">2</div>"));
+  // Hero: numero grande + importo totale
+  assert.ok(html.includes('<div class="hero-num">2</div>'));
   assert.ok(html.includes("Importo totale"));
   assert.ok(html.includes("150,00 €"));
-  // Badge tipo: solo voci > 0 (niente Servizi)
-  assert.ok(html.includes("Canvass <b>2 pz</b>"));
-  assert.ok(html.includes("Prodotti <b>1 pz</b>"));
-  assert.ok(!html.includes("Servizi <b>"));
-  // Badge pista con colori inline
-  assert.ok(html.includes("Mobile <b>1 pz</b>"));
-  assert.ok(html.includes("Energia <b>1 pz</b>"));
-  assert.ok(!html.includes("Fisso <b>"));
-  assert.ok(html.includes("rgba(59,130,246,.10)")); // colore pista mobile
-  // Tabella PDV ordinata per importo↓
+  // Card piste: solo piste con pezzi > 0, con tema colorato inline
+  assert.ok(html.includes(">Mobile</div>"));
+  assert.ok(html.includes(">Energia</div>"));
+  assert.ok(!html.includes(">Fisso</div>"));
+  assert.ok(html.includes("border-color:#2563eb")); // tema pista mobile
+  // Breakdown categorie dentro la card pista
+  assert.ok(html.includes("<span>UNTIED</span><b>1</b>"));
+  // Tipi: solo voci > 0 (niente Servizi)
+  assert.ok(html.includes(">Canvass</div>"));
+  assert.ok(html.includes(">Prodotti</div>"));
+  assert.ok(!html.includes(">Servizi</div>"));
+  // Classifica PDV ordinata per importo↓ con barre
   assert.ok(html.includes("Per punto vendita"));
   assert.ok(html.indexOf("Centro") < html.indexOf("Mare"));
-  assert.ok(html.includes("<td class=\"mono\">P1</td>"));
-  // Tabella addetti
+  assert.ok(html.includes('<span class="mono">P1</span>'));
+  assert.ok(html.includes('<div class="bar">'));
+  // Classifica addetti con medaglie top 3
   assert.ok(html.includes("Per addetto"));
-  assert.ok(html.indexOf("Mario Rossi") > -1 && html.indexOf("Luigi Verdi") > -1);
+  assert.ok(html.includes("🥇 Mario Rossi"));
+  assert.ok(html.includes("🥈 Luigi Verdi"));
   assert.ok(html.indexOf("Mario Rossi") < html.indexOf("Luigi Verdi")); // 130 > 20
+  // Senza trend: nessun grafico né KPI comparativi
+  assert.ok(!html.includes("<svg"));
+  assert.ok(!html.includes(">Ieri</div>"));
   // Nessuna risorsa esterna
   assert.ok(!html.includes("http://") && !html.includes("https://"));
 });
 
-await test("HTML: giorno senza vendite ⇒ card vuota, niente tabelle", () => {
+await test("HTML con trend: KPI oggi/ieri/media, grafico andamento e sparkline pista", () => {
+  const aggregates = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario Rossi", totale: "30", articoli: [art("UNTIED", 30)] }),
+  ]);
+  const trend = [
+    { ymd: "2026-06-30", vendite: 4, importo: 100, countByPista: { mobile: 2 } },
+    { ymd: "2026-07-01", vendite: 2, importo: 50, countByPista: { mobile: 1 } },
+    { ymd: "2026-07-02", vendite: 1, importo: 30, countByPista: { mobile: 1 } },
+  ];
+  const html = buildVenditeReportHtml({
+    orgName: "Org",
+    dateYMD: "2026-07-02",
+    aggregates,
+    trend,
+  });
+  // KPI comparativi
+  assert.ok(html.includes(">Oggi</div>"));
+  assert.ok(html.includes(">Ieri</div>"));
+  assert.ok(html.includes(">Media 7 gg</div>"));
+  // Delta: oggi(1) vs ieri(2) = -50% ▼; media 7gg = (4+2)/2 = 3 ⇒ -67% ▼
+  assert.ok(html.includes("▼ 50% oggi vs ieri"));
+  assert.ok(html.includes("▼ 67% oggi vs media"));
+  // Grafico andamento + assi con date
+  assert.ok(html.includes("Andamento — vendite ultimi 3 giorni"));
+  assert.ok(html.includes("<svg"));
+  assert.ok(html.includes("30/06"));
+  assert.ok(html.includes("max 4"));
+  // Sparkline dentro la card pista mobile
+  assert.ok(html.includes("Andamento Mobile"));
+  // Delta pista: oggi(1) vs media 7gg pista (2+1)/2=1.5 ⇒ -33% ▼
+  assert.ok(html.includes("▼ 33% vs media 7 gg"));
+});
+
+await test("HTML: giorno senza vendite ⇒ hero a 0 + card vuota, niente classifiche", () => {
   const html = buildVenditeReportHtml({
     orgName: "Org",
     dateYMD: "2026-07-02",
     aggregates: aggregateDailyReport([]),
   });
+  assert.ok(html.includes('<div class="hero-num">0</div>'));
   assert.ok(html.includes("Nessuna vendita registrata oggi."));
   assert.ok(!html.includes("Per punto vendita"));
   assert.ok(!html.includes("Per addetto"));
-  // La classe esiste nel CSS del <head>: verifichiamo l'assenza del markup KPI.
   assert.ok(!html.includes('<div class="kpi-value">'));
+});
+
+await test("HTML: giorno vuoto MA con trend ⇒ il grafico di andamento resta", () => {
+  const trend = [
+    { ymd: "2026-07-01", vendite: 3, importo: 90, countByPista: {} },
+    { ymd: "2026-07-02", vendite: 0, importo: 0, countByPista: {} },
+  ];
+  const html = buildVenditeReportHtml({
+    orgName: "Org",
+    dateYMD: "2026-07-02",
+    aggregates: aggregateDailyReport([]),
+    trend,
+  });
+  assert.ok(html.includes("Nessuna vendita registrata oggi."));
+  assert.ok(html.includes("Andamento — vendite ultimi 2 giorni"));
+  assert.ok(html.includes("<svg"));
 });
 
 await test("HTML: escape dei valori dinamici (org, negozio, addetto)", () => {
@@ -277,6 +338,78 @@ await test("reportHtmlFileName: slug org + data + orario, accenti e simboli rimo
   );
   // Org vuota/solo simboli ⇒ fallback "org"
   assert.equal(reportHtmlFileName("***", "2026-07-02"), "report-vendite-org-2026-07-02.html");
+});
+
+console.log("\n— buildDailyTrend / pctDelta / helper trend —");
+
+await test("buildDailyTrend: bucketing per giorno, zero-fill e annullate escluse", () => {
+  const rows = [
+    { ...sale({ totale: "30", articoli: [art("UNTIED", 30)] }), dataVendita: new Date(2026, 5, 30, 10, 15) },
+    { ...sale({ totale: "20", articoli: [art("ENERGIA W3", 20)] }), dataVendita: "2026-06-30 18:00:00" },
+    { ...sale({ stato: "ANNULLATA", totale: "99" }), dataVendita: "2026-06-30" },
+    { ...sale({ totale: "50" }), dataVendita: "2026-07-02T09:00:00" },
+    { ...sale({ totale: "77" }), dataVendita: "2026-06-01" }, // fuori intervallo
+    { ...sale({ totale: "11" }), dataVendita: null }, // senza data
+  ];
+  const trend = buildDailyTrend(rows, "2026-06-30", "2026-07-02");
+  assert.equal(trend.length, 3);
+  assert.deepEqual(trend.map((d) => d.ymd), ["2026-06-30", "2026-07-01", "2026-07-02"]);
+  assert.equal(trend[0].vendite, 2); // Date + stringa, annullata esclusa
+  assert.equal(trend[0].importo, 50);
+  assert.equal(trend[0].countByPista.mobile, 1);
+  assert.equal(trend[0].countByPista.energia, 1);
+  assert.equal(trend[1].vendite, 0); // giorno mancante riempito a zero
+  assert.equal(trend[1].importo, 0);
+  assert.equal(trend[2].vendite, 1);
+  assert.equal(trend[2].importo, 50);
+});
+
+await test("buildDailyTrend: intervallo non valido o rovesciato ⇒ []", () => {
+  assert.deepEqual(buildDailyTrend([], "2026-07-02", "2026-06-30"), []);
+  assert.deepEqual(buildDailyTrend([], "not-a-date", "2026-07-02"), []);
+});
+
+await test("pctDelta: variazione arrotondata, base non positiva ⇒ null", () => {
+  assert.equal(pctDelta(110, 100), 10);
+  assert.equal(pctDelta(90, 100), -10);
+  assert.equal(pctDelta(1, 3), -67);
+  assert.equal(pctDelta(5, 5), 0);
+  assert.equal(pctDelta(5, 0), null);
+  assert.equal(pctDelta(5, -2), null);
+  assert.equal(pctDelta(5, NaN), null);
+});
+
+await test("addYmdDays e trendYmdOf: aritmetica giorni e parsing date", () => {
+  assert.equal(addYmdDays("2026-07-01", -1), "2026-06-30");
+  assert.equal(addYmdDays("2026-06-19", 13), "2026-07-02"); // cambio mese
+  assert.equal(addYmdDays("2026-12-31", 1), "2027-01-01"); // cambio anno
+  assert.equal(trendYmdOf(new Date(2026, 6, 2, 23, 59)), "2026-07-02");
+  assert.equal(trendYmdOf("2026-07-02 13:30:00"), "2026-07-02");
+  assert.equal(trendYmdOf("boh"), null);
+  assert.equal(trendYmdOf(null), null);
+  assert.equal(trendYmdOf(new Date("invalid")), null);
+});
+
+await test("svgAreaChart: SVG inline con path e punto finale, <2 valori ⇒ vuoto", () => {
+  const svg = svgAreaChart([1, 3, 2], { w: 320, h: 96, color: "#f97316" });
+  assert.ok(svg.startsWith("<svg"));
+  assert.ok(svg.includes('viewBox="0 0 320 96"'));
+  assert.ok(svg.includes("<path"));
+  assert.ok(svg.includes("<circle"));
+  assert.ok(svg.includes("#f97316"));
+  assert.equal(svgAreaChart([5], { w: 320, h: 96, color: "#000" }), "");
+  assert.equal(svgAreaChart([], { w: 320, h: 96, color: "#000" }), "");
+});
+
+await test("aggregateDailyReport: categorieByPista ordinate per pezzi decrescenti", () => {
+  const a = aggregateDailyReport([
+    sale({ articoli: [art("UNTIED", 10), art("UNTIED", 10), art("TIED CF", 10)] }),
+    sale({ articoli: [art("UNTIED", 10)] }),
+  ]);
+  const mobile = a.categorieByPista.mobile;
+  assert.ok(Array.isArray(mobile));
+  assert.deepEqual(mobile[0], { categoria: "UNTIED", pezzi: 3 });
+  assert.deepEqual(mobile[1], { categoria: "TIED CF", pezzi: 1 });
 });
 
 console.log("\n— scheduler: msUntilNextSend / resolveTelegramConfig —");

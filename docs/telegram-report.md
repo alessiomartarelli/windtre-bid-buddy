@@ -12,19 +12,33 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   path client resta come re-export, gli import esistenti non cambiano.
 - **`shared/venditeReport.ts`** — logica PURA: `aggregateDailyReport`
   (aggregati del giorno: vendite/importo totale, per tipo, per pista, per
-  PDV; ANNULLATA escluse, coerente con la pagina Vendite BiSuite) e
+  PDV, breakdown `categorieByPista` per le card pista; ANNULLATA escluse,
+  coerente con la pagina Vendite BiSuite) e
   `buildTelegramReportMessage` (messaggio HTML compatto per Telegram, con
   escape dei caratteri speciali e sezioni solo per le voci > 0).
-- **`shared/venditeReportHtml.ts`** (Task #248) — logica PURA:
-  `buildVenditeReportHtml` genera il **file HTML allegato** al messaggio,
-  che replica la scheda "Vendite BiSuite" (KPI card, badge colorati per
-  tipo/pista con la stessa palette dei badge Tailwind dell'app tradotta
-  in CSS inline, tabella per PDV ordinata per importo, sezione per
-  addetto). Documento standalone: CSS inline nel `<head>`, nessuna
-  risorsa esterna, layout responsive, escape HTML di tutti i valori
-  dinamici. `reportHtmlFileName` produce il nome file
+  Per il trend (Task #250): `buildDailyTrend(rows, fromYMD, toYMD)`
+  (serie per-giorno zero-filled, `TrendDay {ymd, vendite, importo,
+  countByPista}`, ANNULLATA e righe senza data/fuori intervallo escluse),
+  `trendYmdOf` (giorno YYYY-MM-DD da Date con getter locali o prefisso
+  stringa), `addYmdDays` (aritmetica giorni UTC) e `pctDelta` (variazione
+  % arrotondata, base non positiva ⇒ null).
+- **`shared/venditeReportHtml.ts`** (Task #248, redesign Task #250) —
+  logica PURA: `buildVenditeReportHtml` genera il **file HTML allegato**
+  in stile dashboard mobile: hero con gradiente arancione (numero grande
+  vendite + importo), KPI comparativi oggi/ieri/media 7 gg con chip
+  delta ▲/▼%, grafico di andamento 14 giorni ad area (SVG inline via
+  `svgAreaChart`), una card per pista con bordo/tinta a tema
+  (`PISTA_THEME`), pezzi, delta vs media 7 gg, importo, breakdown per
+  categoria (top 5 da `categorieByPista`) e sparkline dedicata; mini-card
+  per tipo, classifiche PDV e addetti (medaglie top 3) con barre
+  proporzionali all'importo. Documento standalone: CSS + SVG inline,
+  nessuna risorsa esterna, escape HTML di tutti i valori dinamici. Il
+  parametro `trend?: TrendDay[]` è opzionale: con meno di 2 giorni le
+  sezioni comparative e i grafici semplicemente non compaiono. Giorno
+  senza vendite ⇒ hero a 0 + card "Nessuna vendita" (+ grafico andamento
+  se c'è il trend). `reportHtmlFileName` produce il nome file
   `report-vendite-<org-slug>-<YYYY-MM-DD>[-<hhmm>].html`. La sezione per
-  addetto usa il nuovo aggregato `perAddetto` di `aggregateDailyReport`
+  addetto usa l'aggregato `perAddetto` di `aggregateDailyReport`
   (grouping case-insensitive sul nominativo, `N/D` per mancante).
 - **`server/telegram.ts`** — `sendTelegramMessage(token, chatId, text)`:
   fetch nativo verso `api.telegram.org/bot<token>/sendMessage`
@@ -44,7 +58,12 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   testo, `sendDailyReportForOrg` invia anche l'**allegato HTML**
   (Task #248): se l'allegato fallisce il report NON è considerato
   fallito — warn nel log, `docError` nel risultato (l'endpoint di prova
-  lo espone come `warning`), scheduler mai bloccato.
+  lo espone come `warning`), scheduler mai bloccato. Per il trend
+  (Task #250) `sendDailyReportForOrg` legge **14 giorni** di vendite in
+  una sola query (`getBisuiteSalesByItalianDateRange(orgId, oggi-13,
+  oggi)`), filtra le righe di oggi con `trendYmdOf` per gli aggregati e
+  il messaggio di testo (che resta SOLO sul giorno corrente) e passa
+  `buildDailyTrend` al builder HTML.
 
 ## Config per-organizzazione
 
@@ -91,14 +110,18 @@ pulsanti "Invia report di prova" e "Salva configurazione".
 
 ## Test
 
-`tests/telegram-report.test.mjs` (29 test puri, inclusi 4 sui cambi
+`tests/telegram-report.test.mjs` (37 test puri, inclusi 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,
-input malformati), formattazione euro/date, messaggio (sezioni, escape
-HTML, giorno vuoto), report HTML allegato (Task #248: struttura KPI/
-badge/tabelle, giorno vuoto senza sezioni, escape valori dinamici,
-nessuna risorsa esterna, `escapeHtml`, nome file slugificato), orari
+`categorieByPista` ordinato per pezzi, input malformati), formattazione
+euro/date, messaggio (sezioni, escape HTML, giorno vuoto), report HTML
+allegato (redesign Task #250: hero/card piste a tema/tipi/classifiche
+con barre e medaglie, KPI e delta con trend, sparkline per pista,
+giorno vuoto con e senza trend, escape valori dinamici, nessuna risorsa
+esterna, `escapeHtml`, nome file slugificato), helper trend
+(`buildDailyTrend` bucketing/zero-fill/intervallo invalido, `pctDelta`,
+`addYmdDays`/`trendYmdOf`, `svgAreaChart`), orari
 scheduler (`msUntilNextSend` a cavallo dei due orari
 e di mezzanotte) e `resolveTelegramConfig`. Lancio:
 `bash scripts/run-telegram-report-tests.sh`. La suite è inclusa nello
