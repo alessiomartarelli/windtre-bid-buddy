@@ -1,0 +1,231 @@
+import { storage } from "./storage";
+import { runBisuiteFetchForOrg } from "./bisuiteFetch";
+import { sendTelegramMessage } from "./telegram";
+import { decryptSecret, isEncrypted } from "./cryptoSecret";
+import { aggregateDailyReport, buildTelegramReportMessage } from "@shared/venditeReport";
+
+/**
+ * Scheduler del report vendite giornaliero su Telegram (Task #239).
+ * Due invii al giorno alle 13:30 e alle 22:30 ora italiana (Europe/Rome,
+ * corretto anche col cambio ora legale). Per ogni organizzazione con il
+ * bot configurato e abilitato: sync BiSuite del giorno corrente e invio
+ * del riepilogo nel gruppo. Errori loggati senza bloccare le altre org.
+ */
+
+const ROME_TZ = "Europe/Rome";
+
+// Orari di invio (ora italiana), in minuti dalla mezzanotte.
+const SEND_TIMES: Array<{ label: string; minutes: number }> = [
+  { label: "13:30", minutes: 13 * 60 + 30 },
+  { label: "22:30", minutes: 22 * 60 + 30 },
+];
+
+// Config Telegram per-organizzazione salvata in organization_config.config.
+export interface TelegramReportConfig {
+  enabled?: boolean;
+  bot_token?: string; // cifrato at-rest (enc:v1:...)
+  chat_id?: string;
+}
+
+function romeNowParts(now: Date = new Date()): { ymd: string; secondsOfDay: number } {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ROME_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "0";
+  // en-CA con hour12:false può restituire "24" per mezzanotte: normalizziamo.
+  const h = parseInt(get("hour"), 10) % 24;
+  const m = parseInt(get("minute"), 10);
+  const s = parseInt(get("second"), 10);
+  return {
+    ymd: `${get("year")}-${get("month")}-${get("day")}`,
+    secondsOfDay: h * 3600 + m * 60 + s,
+  };
+}
+
+/**
+ * Calcola il prossimo orario di invio: ms di attesa + label dell'orario.
+ * Se entrambi gli orari di oggi sono già passati, punta al primo di domani.
+ */
+export function msUntilNextSend(now: Date = new Date()): { delayMs: number; label: string } {
+  const { secondsOfDay } = romeNowParts(now);
+  for (const t of SEND_TIMES) {
+    const target = t.minutes * 60;
+    if (secondsOfDay < target) {
+      // +5s di margine per non arrivare un attimo prima dell'orario.
+      return { delayMs: (target - secondsOfDay) * 1000 + 5_000, label: t.label };
+    }
+  }
+  // Primo invio di domani (13:30): resto del giorno + orario target.
+  const dayS = 24 * 3600;
+  const target = SEND_TIMES[0].minutes * 60;
+  return { delayMs: (dayS - secondsOfDay + target) * 1000 + 5_000, label: SEND_TIMES[0].label };
+}
+
+function formatRomeNow(): string {
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: ROME_TZ,
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(new Date());
+}
+
+/**
+ * Risolve la config Telegram di un'org: token decifrato + chat id.
+ * Ritorna null se assente, disabilitata o non decifrabile.
+ */
+export function resolveTelegramConfig(
+  raw: unknown,
+): { botToken: string; chatId: string } | null {
+  const cfg = raw as TelegramReportConfig | undefined | null;
+  if (!cfg || !cfg.enabled) return null;
+  const chatId = (cfg.chat_id ?? "").trim();
+  const stored = cfg.bot_token ?? "";
+  if (!chatId || !stored) return null;
+  let botToken: string;
+  if (isEncrypted(stored)) {
+    const dec = decryptSecret(stored);
+    if (dec === null) return null;
+    botToken = dec;
+  } else {
+    botToken = stored;
+  }
+  return botToken ? { botToken, chatId } : null;
+}
+
+/**
+ * Costruisce e invia il report del giorno corrente per una singola org.
+ * `syncFirst` esegue prima una sync BiSuite del giorno (se le credenziali
+ * sono configurate); un errore di sync NON blocca l'invio: il report parte
+ * comunque con i dati già presenti nel DB.
+ */
+export async function sendDailyReportForOrg(params: {
+  orgId: string;
+  orgName: string;
+  botToken: string;
+  chatId: string;
+  timeLabel?: string;
+  syncFirst?: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { ymd } = romeNowParts();
+
+  if (params.syncFirst !== false) {
+    try {
+      const orgConfig = await storage.getOrgConfig(params.orgId);
+      const cfg = orgConfig?.config as Record<string, unknown> | undefined;
+      const creds = cfg?.bisuiteCredentials as
+        | { client_id?: string; client_secret?: string }
+        | undefined;
+      if (creds?.client_id && creds?.client_secret) {
+        await runBisuiteFetchForOrg(params.orgId, { startDate: ymd, endDate: ymd });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[telegram-report] sync giorno corrente fallita org=${params.orgId} (${params.orgName}), ` +
+          `invio comunque il report con i dati presenti: ${msg}`,
+      );
+    }
+  }
+
+  const rows = await storage.getBisuiteSalesByItalianDateRange(params.orgId, ymd, ymd, false);
+  const aggregates = aggregateDailyReport(rows);
+  const message = buildTelegramReportMessage({
+    orgName: params.orgName,
+    dateYMD: ymd,
+    timeLabel: params.timeLabel,
+    aggregates,
+  });
+  const result = await sendTelegramMessage(params.botToken, params.chatId, message);
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+  return { ok: true };
+}
+
+async function runScheduledSend(timeLabel: string): Promise<void> {
+  const orgs = await storage.getOrganizations();
+  let sent = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const org of orgs) {
+    try {
+      const orgConfig = await storage.getOrgConfig(org.id);
+      const cfg = orgConfig?.config as Record<string, unknown> | undefined;
+      const tg = resolveTelegramConfig(cfg?.telegramReport);
+      if (!tg) {
+        skipped++;
+        continue;
+      }
+      const r = await sendDailyReportForOrg({
+        orgId: org.id,
+        orgName: org.name,
+        botToken: tg.botToken,
+        chatId: tg.chatId,
+        timeLabel,
+        syncFirst: true,
+      });
+      if (r.ok) {
+        sent++;
+        console.log(`[telegram-report] inviato report ${timeLabel} org=${org.id} (${org.name})`);
+      } else {
+        failed++;
+        console.error(
+          `[telegram-report] invio FALLITO ${timeLabel} org=${org.id} (${org.name}): ${r.error}`,
+        );
+      }
+    } catch (err) {
+      failed++;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[telegram-report] errore report ${timeLabel} org=${org.id} (${org.name}): ${msg}`,
+      );
+    }
+  }
+  console.log(
+    `[telegram-report] run ${timeLabel} completata — inviati: ${sent}, falliti: ${failed}, ` +
+      `org senza bot: ${skipped}`,
+  );
+}
+
+let started = false;
+
+/**
+ * Avvia lo scheduler dei report Telegram. Idempotente: chiamandolo più
+ * volte parte una sola volta. Come lo scheduler BiSuite usa setTimeout
+ * ricalcolato dopo ogni run sul fuso Europe/Rome, così gli orari restano
+ * corretti anche con il cambio ora legale.
+ */
+export function startTelegramReportScheduler(): void {
+  if (started) return;
+  started = true;
+
+  const scheduleNext = () => {
+    const { delayMs, label } = msUntilNextSend();
+    const nextRun = new Date(Date.now() + delayMs);
+    console.log(
+      `[telegram-report] prossimo report ${label} programmato per ` +
+        `${nextRun.toISOString()} (tra ~${Math.round(delayMs / 60000)} min, ora attuale Roma: ${formatRomeNow()})`,
+    );
+    setTimeout(async () => {
+      try {
+        console.log(`[telegram-report] avvio run ${label} (Roma: ${formatRomeNow()})`);
+        await runScheduledSend(label);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[telegram-report] errore fatale durante la run ${label}: ${msg}`);
+      } finally {
+        scheduleNext();
+      }
+    }, delayMs).unref?.();
+  };
+
+  scheduleNext();
+}

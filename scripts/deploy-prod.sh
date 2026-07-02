@@ -62,6 +62,7 @@ else
     "run-customer-journey-export-tests.sh"
     "run-incentivazione-tests.sh"
     "run-customer-journey-report-tests.sh"
+    "run-telegram-report-tests.sh"
   )
   for step in "${QUALITY_STEPS[@]}"; do
     echo "    -> ${step}"

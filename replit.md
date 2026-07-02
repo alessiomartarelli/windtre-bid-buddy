@@ -153,6 +153,10 @@ mantenere snello questo file:
   driver attivati/attivabili, stati item, gettone manuale, addetti per
   operatore, gap campi BiSuite, reconcile automatico al load (le vendite già
   scaricate da altre pagine compaiono senza "Rigenera", via watermark).
+- [`docs/telegram-report.md`](docs/telegram-report.md) — Report vendite
+  giornaliero su Telegram: bot per-org (token cifrato), scheduler
+  13:30/22:30 Europe/Rome, aggregati condivisi con Vendite BiSuite,
+  API admin + card di config, test puri.
 - [`docs/incentivazione-interna.md`](docs/incentivazione-interna.md) —
   Modulo Incentivazione interna (gare addetto): valenze piste da Excel +
   Accessori/Servizi live BiSuite, config admin per-mese (sezioni/piste/
@@ -368,6 +372,13 @@ mantenere snello questo file:
   rimossa). Lanciali via lo step di validation
   `cj-report-tests` (`bash scripts/run-customer-journey-report-tests.sh`).
   Run completo in ~1s.
+- **Telegram report tests** (`tests/telegram-report.test.mjs`): 15 test
+  puri (Task #239) su aggregati e messaggio del report vendite Telegram
+  (`shared/venditeReport.ts`) + orari scheduler e risoluzione config
+  (`server/telegramReportScheduler.ts`). Niente server né DB, loader tsx.
+  Lancio: `bash scripts/run-telegram-report-tests.sh` (nessun workflow
+  dedicato: limite workflow raggiunto). Inclusa nello step 1a del quality
+  gate di deploy. Dettagli in `docs/telegram-report.md`. Run ~1s.
 - **Customer Journey Analisi gettoni UI tests**
   (`tests/customer-journey-gettone-ui.test.mjs`): 3 scenari Playwright
   (Task #194 + Task #195) sulle tabelle report interattive. A

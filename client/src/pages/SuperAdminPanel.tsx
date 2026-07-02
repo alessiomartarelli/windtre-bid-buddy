@@ -13,6 +13,7 @@ import { Loader2, Plus, Users, Building2, Trash2, Settings2 } from 'lucide-react
 import { AppNavbar } from '@/components/AppNavbar';
 import { ModulesDialog } from '@/components/ModulesDialog';
 import { BiSuiteConnectionForm } from '@/components/BiSuiteConnectionForm';
+import { TelegramReportForm } from '@/components/TelegramReportForm';
 import { BiSuiteSalesTest } from '@/components/BiSuiteSalesTest';
 import { SmtpConfigForm } from '@/components/SmtpConfigForm';
 import { z } from 'zod';
@@ -544,6 +545,9 @@ export default function SuperAdminPanel() {
             console.log('BiSuite credentials saved');
           }}
         />
+
+        {/* Telegram daily sales report */}
+        <TelegramReportForm organizations={organizations} />
 
         {/* BiSuite Sales Test */}
         <BiSuiteSalesTest organizations={organizations} />

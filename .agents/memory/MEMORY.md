@@ -14,5 +14,6 @@
 - [Pure logic in shared/ for tsx tests](pure-logic-for-tsx-tests.md) — i test tsx non risolvono alias @shared/@ né caricano react/jsPDF/xlsx; estrai logica pura in shared/ (import relativi) o lib con solo import type.
 - [Playwright UI tests](playwright-tsx-ui-tests.md) — browser test via playwright-core + system chromium (resolve path at runtime), cookie from signup, seed/cleanup via pg; only for React behavior pure tests can't reach.
 - [CJ virtual scrolling](cj-virtual-scroll.md) — CJ page usa useWindowVirtualizer (schede grid + report table); la tabella report è gated da soglia per non rompere i selettori dei test cj-gettone-ui.
+- [API log secret redaction](api-log-secret-redaction.md) — il logger /api/* serializza i body JSON: mai restituire segreti in chiaro nelle risposte; redactor condiviso in server/logRedact.ts.
 - [UTC-anchored date display](utc-anchored-date-display.md) — date ancorate a fine giorno UTC (es. scadenza T6) vanno formattate con timeZone:"UTC" e il day-count su date UTC, o rotolano al giorno dopo in IT.
 - [CJ schede date filter](cj-schede-date-filter.md) — il dal–al delle Schede filtra per data INSERIMENTO SIM (non "aperta il"/openedAt); scelta voluta dall'utente, non è un bug: non switchare a openedAt.

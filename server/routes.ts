@@ -22,6 +22,7 @@ import {
   type SmtpConfig,
 } from "./email";
 import { decryptSecret, encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
+import { sendDailyReportForOrg } from "./telegramReportScheduler";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 // FinPlan PRELOAD: rimosso in Task #148 (cutover finale). Le route
@@ -2193,6 +2194,155 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating BiSuite credentials:", error);
       res.status(500).json({ error: "Errore nell'aggiornamento delle credenziali" });
+    }
+  });
+
+  // ── Telegram report vendite giornaliero (Task #239) ─────────────
+  // GET config: token decifrato per il form admin (stesso pattern delle
+  // credenziali BiSuite qui sopra).
+  app.get("/api/admin/telegram-report", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo gli amministratori possono accedere alla configurazione Telegram" });
+      }
+      const orgId = profile.role === "super_admin"
+        ? (req.query.org_id as string)
+        : (profile.organizationId ?? undefined);
+      if (!orgId) return res.status(400).json({ error: "org_id è obbligatorio" });
+      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+        return res.status(403).json({ error: "Non puoi accedere alla configurazione di un'altra organizzazione" });
+      }
+
+      const orgConfig = await storage.getOrgConfig(orgId);
+      const cfg = orgConfig?.config as Record<string, unknown> | undefined;
+      const tg = cfg?.telegramReport as Record<string, unknown> | undefined;
+      if (!tg) return res.json(null);
+
+      // MAI restituire il token in chiaro: il logger API serializza i
+      // body JSON delle risposte e il token finirebbe nei log. La UI
+      // riceve solo il flag has_token; per cambiarlo si digita un token
+      // nuovo, per mantenerlo si lascia il campo vuoto.
+      const rawToken = typeof tg.bot_token === "string" ? tg.bot_token : "";
+      res.json({
+        enabled: tg.enabled === true,
+        has_token: rawToken.length > 0,
+        chat_id: typeof tg.chat_id === "string" ? tg.chat_id : "",
+      });
+    } catch (error) {
+      console.error("Error loading Telegram report config:", error);
+      res.status(500).json({ error: "Errore nel caricamento della configurazione Telegram" });
+    }
+  });
+
+  // POST config: salva token (cifrato), chat id e flag abilitazione.
+  app.post("/api/admin/telegram-report", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo gli amministratori possono gestire la configurazione Telegram" });
+      }
+      const { organization_id, enabled, bot_token, chat_id, clear_token } = req.body ?? {};
+      if (!organization_id || typeof organization_id !== "string") {
+        return res.status(400).json({ error: "organization_id è obbligatorio" });
+      }
+      if (profile.role !== "super_admin" && organization_id !== profile.organizationId) {
+        return res.status(403).json({ error: "Non puoi gestire la configurazione di un'altra organizzazione" });
+      }
+      const token = typeof bot_token === "string" ? bot_token.trim() : "";
+      const chatId = typeof chat_id === "string" ? chat_id.trim() : "";
+      const isEnabled = enabled === true;
+      const clearToken = clear_token === true;
+      if (token && !getSecretKey()) {
+        return res.status(500).json({
+          error:
+            "SMTP_SECRET_KEY non configurata sul server: impossibile salvare il bot token cifrato. Configura la variabile d'ambiente e riprova.",
+        });
+      }
+
+      const orgConfig = await storage.getOrgConfig(organization_id);
+      const existingConfig = (orgConfig?.config as Record<string, unknown>) || {};
+      // Token vuoto nel payload = mantieni quello già salvato (la GET non
+      // lo restituisce mai in chiaro, quindi la UI non può rimandarlo).
+      // clear_token: true = rimozione esplicita del token salvato.
+      const existingTg = existingConfig.telegramReport as Record<string, unknown> | undefined;
+      const existingToken = typeof existingTg?.bot_token === "string" ? existingTg.bot_token : "";
+      const encToken = clearToken
+        ? ""
+        : token
+          ? (isEncrypted(token) ? token : encryptSecret(token))
+          : existingToken;
+      if (isEnabled && (!encToken || !chatId)) {
+        return res.status(400).json({ error: "Per abilitare il report servono bot token e chat ID" });
+      }
+      const updatedConfig = {
+        ...existingConfig,
+        telegramReport: { enabled: isEnabled, bot_token: encToken, chat_id: chatId },
+      };
+      await storage.upsertOrgConfig(
+        organization_id,
+        updatedConfig,
+        orgConfig?.configVersion || "2.0",
+      );
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving Telegram report config:", error);
+      res.status(500).json({ error: "Errore nel salvataggio della configurazione Telegram" });
+    }
+  });
+
+  // POST test: invia SUBITO il report del giorno corrente al gruppo usando
+  // le credenziali passate nel body (così l'admin testa la config appena
+  // digitata, anche prima di salvarla). Niente sync BiSuite: usa i dati
+  // già presenti nel DB per dare una risposta rapida.
+  app.post("/api/admin/telegram-report-test", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Solo gli amministratori possono inviare il test Telegram" });
+      }
+      const { organization_id, bot_token, chat_id } = req.body ?? {};
+      if (!organization_id || typeof organization_id !== "string") {
+        return res.status(400).json({ error: "organization_id è obbligatorio" });
+      }
+      if (profile.role !== "super_admin" && organization_id !== profile.organizationId) {
+        return res.status(403).json({ error: "Non puoi inviare test per un'altra organizzazione" });
+      }
+      let token = typeof bot_token === "string" ? bot_token.trim() : "";
+      let chatId = typeof chat_id === "string" ? chat_id.trim() : "";
+      // Fallback alla config salvata se il body non fornisce le credenziali.
+      if (!token || !chatId) {
+        const orgConfig = await storage.getOrgConfig(organization_id);
+        const cfg = orgConfig?.config as Record<string, unknown> | undefined;
+        const tg = cfg?.telegramReport as Record<string, unknown> | undefined;
+        if (!token && typeof tg?.bot_token === "string" && tg.bot_token) {
+          token = isEncrypted(tg.bot_token) ? (decryptSecret(tg.bot_token) ?? "") : tg.bot_token;
+        }
+        if (!chatId && typeof tg?.chat_id === "string") chatId = tg.chat_id.trim();
+      }
+      if (isEncrypted(token)) {
+        token = decryptSecret(token) ?? "";
+      }
+      if (!token || !chatId) {
+        return res.status(400).json({ error: "Bot token e chat ID sono obbligatori per il test" });
+      }
+
+      const org = await storage.getOrganization(organization_id);
+      const result = await sendDailyReportForOrg({
+        orgId: organization_id,
+        orgName: org?.name ?? "Organizzazione",
+        botToken: token,
+        chatId,
+        timeLabel: "test",
+        syncFirst: false,
+      });
+      if (!result.ok) {
+        return res.status(400).json({ error: `Invio Telegram fallito: ${result.error}` });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error sending Telegram test report:", error);
+      res.status(500).json({ error: "Errore nell'invio del report di test" });
     }
   });
 

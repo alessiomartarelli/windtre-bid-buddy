@@ -18,6 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, Store, Building2, ChevronRight, UserCheck, Edit2, Image as ImageIcon, UserCog, Link2 } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
 import { BiSuiteConnectionForm } from '@/components/BiSuiteConnectionForm';
+import { TelegramReportForm } from '@/components/TelegramReportForm';
 import { PageLoadingSkeleton } from '@/components/skeletons';
 import { z } from 'zod';
 import {
@@ -1291,9 +1292,14 @@ export default function AdminPanel() {
                 </p>
               </div>
               {organization ? (
-                <BiSuiteConnectionForm
-                  organizations={[{ id: organization.id, name: organization.name }]}
-                />
+                <>
+                  <BiSuiteConnectionForm
+                    organizations={[{ id: organization.id, name: organization.name }]}
+                  />
+                  <TelegramReportForm
+                    organizations={[{ id: organization.id, name: organization.name }]}
+                  />
+                </>
               ) : (
                 <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div>
               )}

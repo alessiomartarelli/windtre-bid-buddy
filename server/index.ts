@@ -4,6 +4,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startBisuiteDailyScheduler } from "./bisuiteScheduler";
+import { startTelegramReportScheduler } from "./telegramReportScheduler";
+import { logJsonReplacer } from "./logRedact";
 
 const isProduction = process.env.NODE_ENV === "production";
 const BASE_PATH = isProduction ? "/incentivew3" : "";
@@ -70,12 +72,10 @@ app.use((req, res, next) => {
     if (path.includes("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        const redacted = JSON.stringify(capturedJsonResponse, (key, value) => {
-          if (typeof value === "string" && value.length > 200 && /^data:image\//i.test(value)) {
-            return `[dataURL ${value.length} bytes redacted]`;
-          }
-          return value;
-        });
+        // Task #239: replacer condiviso che maschera i campi sensibili
+        // (token, secret, password...) oltre a troncare i data URL, così
+        // le route che restituiscono segreti non li spillano nei log.
+        const redacted = JSON.stringify(capturedJsonResponse, logJsonReplacer);
         logLine += ` :: ${redacted.length > 2000 ? redacted.slice(0, 2000) + "…[truncated]" : redacted}`;
       }
 
@@ -123,6 +123,7 @@ app.use((req, res, next) => {
       res.redirect(BASE_PATH + "/");
     });
     startBisuiteDailyScheduler();
+    startTelegramReportScheduler();
   } else {
     await registerRoutes(httpServer, app);
 
