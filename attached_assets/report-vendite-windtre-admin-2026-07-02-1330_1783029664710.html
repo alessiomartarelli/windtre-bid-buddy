@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report vendite 02/07/2026 — WindTre Admin</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         background: #f1f5f9; color: #0f172a; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  header { margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #475569; font-size: 14px; margin: 0; }
+  .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px;
+          margin-bottom: 12px; box-shadow: 0 1px 2px rgba(15,23,42,.05); }
+  .card.empty { text-align: center; color: #475569; padding: 32px 16px; }
+  .kpis { display: flex; gap: 12px; flex-wrap: wrap; }
+  .kpi { flex: 1 1 160px; margin-bottom: 12px; }
+  .kpi-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; }
+  .kpi-value { font-size: 26px; font-weight: 700; margin-top: 2px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; margin: 0 0 10px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge { display: inline-block; border: 1px solid; border-radius: 999px; padding: 4px 12px;
+           font-size: 13px; white-space: nowrap; }
+  .badge b { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #64748b;
+       padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
+  td { padding: 8px; border-bottom: 1px solid #f1f5f9; }
+  tbody tr:last-child td { border-bottom: none; }
+  .num { text-align: right; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: #475569; }
+  .strong { font-weight: 600; }
+  footer { color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>📊 Report vendite 02/07/2026</h1>
+      <p class="sub">WindTre Admin — ore verifica scheduler (prova pre-13:30)</p>
+    </header>
+    <div class="kpis">
+      <div class="card kpi"><div class="kpi-label">Vendite</div><div class="kpi-value">176</div></div>
+      <div class="card kpi"><div class="kpi-label">Importo totale</div><div class="kpi-value">12.259,71 €</div></div>
+    </div>
+    <div class="card"><h2>Per tipo</h2><div class="badges">
+        <span class="badge" style="background:rgba(249,115,22,.10);border-color:rgba(249,115,22,.25);color:#c2410c">Canvass <b>147 pz</b> · 0,00 €</span>
+        <span class="badge" style="background:rgba(100,116,139,.10);border-color:rgba(100,116,139,.25);color:#334155">Prodotti <b>198 pz</b> · 12.019,70 €</span>
+        <span class="badge" style="background:rgba(6,182,212,.10);border-color:rgba(6,182,212,.25);color:#0e7490">Servizi <b>32 pz</b> · 380,00 €</span>
+    </div></div>
+    <div class="card"><h2>Per pista</h2><div class="badges">
+        <span class="badge" style="background:rgba(59,130,246,.10);border-color:rgba(59,130,246,.25);color:#1d4ed8">Mobile <b>62 pz</b> · 0,00 €</span>
+        <span class="badge" style="background:rgba(168,85,247,.10);border-color:rgba(168,85,247,.25);color:#7e22ce">Fisso <b>21 pz</b> · 0,00 €</span>
+        <span class="badge" style="background:rgba(245,158,11,.10);border-color:rgba(245,158,11,.25);color:#b45309">CB <b>37 pz</b> · 0,00 €</span>
+        <span class="badge" style="background:rgba(20,184,166,.10);border-color:rgba(20,184,166,.25);color:#0f766e">Assicurazioni <b>7 pz</b> · 0,00 €</span>
+        <span class="badge" style="background:rgba(34,197,94,.10);border-color:rgba(34,197,94,.25);color:#15803d">Energia <b>20 pz</b> · 0,00 €</span>
+    </div></div>
+    <div class="card"><h2>Per punto vendita</h2>
+      <table>
+        <thead><tr><th>Negozio</th><th>Codice POS</th><th class="num">Vendite</th><th class="num">Importo</th></tr></thead>
+        <tbody>
+          <tr><td>WINDTRE ANCONA CONERO</td><td class="mono">010101</td><td class="num">22</td><td class="num strong">3.518,71 €</td></tr>
+          <tr><td>WindTre Fiumicino</td><td class="mono">9001046475</td><td class="num">10</td><td class="num strong">2.479,93 €</td></tr>
+          <tr><td>WindTre Store Prenestina</td><td class="mono">9001402980</td><td class="num">8</td><td class="num strong">982,70 €</td></tr>
+          <tr><td>WINDTRE SAN CESAREO</td><td class="mono">9001393090</td><td class="num">13</td><td class="num strong">924,22 €</td></tr>
+          <tr><td>WINDTRE senigallia</td><td class="mono">900.</td><td class="num">10</td><td class="num strong">822,32 €</td></tr>
+          <tr><td>WindTre PORTA DI ROMA P.ZERO</td><td class="mono">9001288594</td><td class="num">9</td><td class="num strong">762,22 €</td></tr>
+          <tr><td>WindTre Pomezia</td><td class="mono">9001290392</td><td class="num">26</td><td class="num strong">498,90 €</td></tr>
+          <tr><td>WindTre Tiburtina</td><td class="mono">9001408227</td><td class="num">10</td><td class="num strong">475,69 €</td></tr>
+          <tr><td>W3 PESARO ROSSINI</td><td class="mono">1234</td><td class="num">2</td><td class="num strong">389,90 €</td></tr>
+          <tr><td>WindTre Tuscolana 1007-A</td><td class="mono">9001212651</td><td class="num">9</td><td class="num strong">360,81 €</td></tr>
+          <tr><td>WindTre Civitavecchia</td><td class="mono">9001412252</td><td class="num">5</td><td class="num strong">332,52 €</td></tr>
+          <tr><td>WindTre Candia</td><td class="mono">9001408258</td><td class="num">8</td><td class="num strong">201,00 €</td></tr>
+          <tr><td>WindTre Store Miralfiore</td><td class="mono">9001409452</td><td class="num">8</td><td class="num strong">174,89 €</td></tr>
+          <tr><td>WindTre Store Jesi</td><td class="mono">9001401037</td><td class="num">11</td><td class="num strong">140,90 €</td></tr>
+          <tr><td>WindTre Parco Leonardo</td><td class="mono">9001060855</td><td class="num">10</td><td class="num strong">130,00 €</td></tr>
+          <tr><td>WINDTRE CAMERANO</td><td class="mono">020202</td><td class="num">5</td><td class="num strong">45,00 €</td></tr>
+          <tr><td>windtre cc cinecittà 2</td><td class="mono">9001426892</td><td class="num">4</td><td class="num strong">20,00 €</td></tr>
+          <tr><td>BACK OFFICE WINDTRE PARTNER</td><td class="mono">1</td><td class="num">5</td><td class="num strong">0,00 €</td></tr>
+          <tr><td>W3 PESARO BRANCA</td><td class="mono">9001409453</td><td class="num">1</td><td class="num strong">0,00 €</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card"><h2>Per addetto</h2>
+      <table>
+        <thead><tr><th>Addetto</th><th class="num">Vendite</th><th class="num">Importo</th></tr></thead>
+        <tbody>
+          <tr><td>Vitiello Marco</td><td class="num">8</td><td class="num strong">2.448,98 €</td></tr>
+          <tr><td>CANNONE SABRINA</td><td class="num">9</td><td class="num strong">1.959,17 €</td></tr>
+          <tr><td>FUMAROLA MIRKO</td><td class="num">11</td><td class="num strong">1.429,64 €</td></tr>
+          <tr><td>ARLIA IVAN</td><td class="num">7</td><td class="num strong">929,70 €</td></tr>
+          <tr><td>LUZIETTI ALEX</td><td class="num">5</td><td class="num strong">657,42 €</td></tr>
+          <tr><td>Cacace Giulia</td><td class="num">26</td><td class="num strong">498,90 €</td></tr>
+          <tr><td>elia arianna</td><td class="num">4</td><td class="num strong">437,42 €</td></tr>
+          <tr><td>MUNZI NICOLA</td><td class="num">2</td><td class="num strong">389,90 €</td></tr>
+          <tr><td>CAMPANARO ALESSANDRA</td><td class="num">5</td><td class="num strong">379,69 €</td></tr>
+          <tr><td>Fiorentino Lucia Stella</td><td class="num">4</td><td class="num strong">339,90 €</td></tr>
+          <tr><td>CROCIANI GIUSEPPE</td><td class="num">5</td><td class="num strong">332,52 €</td></tr>
+          <tr><td>Caltagirone Alessandro</td><td class="num">4</td><td class="num strong">324,80 €</td></tr>
+          <tr><td>SCAROZZA CHRISTIAN</td><td class="num">3</td><td class="num strong">319,52 €</td></tr>
+          <tr><td>FEDERICO BENINATO</td><td class="num">6</td><td class="num strong">264,80 €</td></tr>
+          <tr><td>BONORA MATTEO</td><td class="num">5</td><td class="num strong">209,90 €</td></tr>
+          <tr><td>MANSOURI GADA</td><td class="num">8</td><td class="num strong">174,89 €</td></tr>
+          <tr><td>Acerbi matteo</td><td class="num">5</td><td class="num strong">164,90 €</td></tr>
+          <tr><td>Martullo Luca</td><td class="num">4</td><td class="num strong">150,91 €</td></tr>
+          <tr><td>SHALA DINO</td><td class="num">2</td><td class="num strong">129,90 €</td></tr>
+          <tr><td>Orazzo Salvatore</td><td class="num">4</td><td class="num strong">105,00 €</td></tr>
+          <tr><td>RICCIOLI EMANUELE</td><td class="num">5</td><td class="num strong">96,00 €</td></tr>
+          <tr><td>MILLAURO DESIREE</td><td class="num">4</td><td class="num strong">85,00 €</td></tr>
+          <tr><td>PATRIZZI LORENZO</td><td class="num">3</td><td class="num strong">76,00 €</td></tr>
+          <tr><td>rizzo daniela</td><td class="num">6</td><td class="num strong">71,00 €</td></tr>
+          <tr><td>Ramos luca</td><td class="num">5</td><td class="num strong">69,90 €</td></tr>
+          <tr><td>MORGANTE CRISTIANO</td><td class="num">1</td><td class="num strong">53,00 €</td></tr>
+          <tr><td>OUESLATI INES</td><td class="num">2</td><td class="num strong">30,95 €</td></tr>
+          <tr><td>spatrisano giorgia</td><td class="num">3</td><td class="num strong">30,00 €</td></tr>
+          <tr><td>VINCIGUERRA EMANUELE</td><td class="num">4</td><td class="num strong">25,00 €</td></tr>
+          <tr><td>MAZZACRELLI DANIELE</td><td class="num">1</td><td class="num strong">20,00 €</td></tr>
+          <tr><td>orlando francesco</td><td class="num">1</td><td class="num strong">20,00 €</td></tr>
+          <tr><td>Rea riccardo</td><td class="num">3</td><td class="num strong">15,00 €</td></tr>
+          <tr><td>PIO SERGI FRANCESCO</td><td class="num">3</td><td class="num strong">10,00 €</td></tr>
+          <tr><td>SOMENZI MATTIA</td><td class="num">1</td><td class="num strong">10,00 €</td></tr>
+          <tr><td>GRAZIANI LAURA</td><td class="num">3</td><td class="num strong">0,00 €</td></tr>
+          <tr><td>GUZZO raffaella</td><td class="num">2</td><td class="num strong">0,00 €</td></tr>
+          <tr><td>Benvenuto Flavio</td><td class="num">1</td><td class="num strong">0,00 €</td></tr>
+          <tr><td>losco antonella</td><td class="num">1</td><td class="num strong">0,00 €</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <footer>Report generato automaticamente — vendite ANNULLATA escluse.</footer>
+  </div>
+</body>
+</html>
