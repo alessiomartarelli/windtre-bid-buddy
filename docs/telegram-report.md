@@ -98,3 +98,29 @@ chat_id}` scritto nel DB di prod con token cifrato **sul VPS** usando la
 dev un segreto destinato al DB di prod), con verifica round-trip del
 decrypt. Dopo il deploy il log PM2 conferma lo scheduler:
 `[telegram-report] prossimo report 13:30 programmato per …`.
+
+## Verifica del percorso schedulato (Task #242)
+
+Il pulsante "Invia report di prova" NON copre il percorso schedulato
+completo (salta la sync BiSuite). Per provarlo senza aspettare l'orario
+c'è `scripts/verify-telegram-scheduled-path.mts`: replica
+`runScheduledSend` — di default per **TUTTE** le org con bot attivo,
+esattamente come lo scheduler (usa `ORG_ID=<id>` per limitarlo a una
+sola org) — `resolveTelegramConfig` (decrypt del token dal DB) +
+`sendDailyReportForOrg` con `syncFirst: true` (sync BiSuite del giorno →
+aggregazione → invio REALE nel gruppo). Va lanciato con `DATABASE_URL`
+puntato al DB di prod via tunnel SSH e `SMTP_SECRET_KEY` di prod
+(recuperata dal VPS senza stamparla):
+
+```bash
+# tunnel: ssh -f -N -L 15433:localhost:5432 root@VPS
+DATABASE_URL=<prod via tunnel> SMTP_SECRET_KEY=<prod> \
+  ORG_ID=org-admin-windtre \
+  npx tsx scripts/verify-telegram-scheduled-path.mts
+```
+
+Eseguito con successo il 02/07/2026 sera: sync 177 vendite del giorno,
+reconcile journey, messaggio arrivato nel gruppo "Windtre test" con
+label "verifica scheduler (prova pre-13:30)". Il timer di prod resta
+armato (log PM2: `prossimo report 13:30 programmato per
+2026-07-03T11:30:05Z`).
