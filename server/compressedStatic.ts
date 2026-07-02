@@ -3,6 +3,10 @@ import fs from "fs";
 import path from "path";
 import zlib from "zlib";
 import crypto from "crypto";
+import { promisify } from "util";
+
+const gzipAsync = promisify(zlib.gzip);
+const brotliAsync = promisify(zlib.brotliCompress);
 
 interface CacheEntry {
   raw: Buffer;
@@ -28,23 +32,117 @@ function shouldGzip(p: string, size: number): boolean {
   return COMPRESSIBLE.test(p);
 }
 
+// Estensioni dei sidecar precompressi generati in fase di BUILD
+// (scripts/precompress-dist.mjs). Se accanto a `foo.js` esistono
+// `foo.js.gz` e `foo.js.br` freschi (mtime >= dell'originale, con 2s di
+// tolleranza per l'arrotondamento di tar), li carichiamo da disco invece
+// di ricomprimere: leggere ~1 MB costa millisecondi, brotli quality 11
+// su un bundle da 3 MB costa secondi. È questo che tiene il boot di
+// prod sotto il budget (Task #243).
+const SIDECAR_MTIME_SLACK_MS = 2000;
+
+function readFreshSidecar(
+  filePath: string,
+  ext: ".gz" | ".br",
+  minMtimeMs: number,
+): Buffer | null {
+  try {
+    const p = filePath + ext;
+    const st = fs.statSync(p);
+    if (!st.isFile()) return null;
+    if (st.mtimeMs + SIDECAR_MTIME_SLACK_MS < minMtimeMs) return null;
+    return fs.readFileSync(p);
+  } catch {
+    return null;
+  }
+}
+
+/** Verifica che il sidecar decomprima esattamente al raw atteso
+ * (guardia contro sidecar corrotti o generati da un'altra build).
+ * La decompressione è ~10x più veloce della compressione, quindi il
+ * costo al boot resta trascurabile. */
+function sidecarMatchesRaw(
+  buf: Buffer,
+  ext: ".gz" | ".br",
+  raw: Buffer,
+): boolean {
+  try {
+    const out =
+      ext === ".gz" ? zlib.gunzipSync(buf) : zlib.brotliDecompressSync(buf);
+    return out.length === raw.length && out.equals(raw);
+  } catch {
+    return false;
+  }
+}
+
+function compressRaw(raw: Buffer): { gz: Buffer; br: Buffer } {
+  const gz = zlib.gzipSync(raw, { level: 9 });
+  const br = zlib.brotliCompressSync(raw, {
+    params: {
+      [zlib.constants.BROTLI_PARAM_QUALITY]: zlib.constants.BROTLI_MAX_QUALITY,
+      [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+    },
+  });
+  return { gz, br };
+}
+
+function entryFromParts(
+  raw: Buffer,
+  gz: Buffer | null,
+  br: Buffer | null,
+  mtimeMs: number,
+): CacheEntry {
+  const etag = '"' + crypto.createHash("sha1").update(raw).digest("hex") + '"';
+  return { raw, gz, br, etag, mtimeMs, size: raw.length };
+}
+
 function buildEntry(filePath: string, mtimeMs: number): CacheEntry | null {
   try {
     const raw = fs.readFileSync(filePath);
-    const compressible = shouldGzip(filePath, raw.length);
-    const gz = compressible ? zlib.gzipSync(raw, { level: 9 }) : null;
-    const br = compressible
-      ? zlib.brotliCompressSync(raw, {
-          params: {
-            [zlib.constants.BROTLI_PARAM_QUALITY]:
-              zlib.constants.BROTLI_MAX_QUALITY,
-            [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
-          },
-        })
-      : null;
-    const etag =
-      '"' + crypto.createHash("sha1").update(raw).digest("hex") + '"';
-    return { raw, gz, br, etag, mtimeMs, size: raw.length };
+    if (!shouldGzip(filePath, raw.length)) {
+      return entryFromParts(raw, null, null, mtimeMs);
+    }
+    // Preferisci i sidecar `.gz`/`.br` generati in fase di build: se
+    // entrambi esistono, sono freschi e decomprimono al raw atteso, non
+    // paghiamo alcuna compressione.
+    const gzSidecar = readFreshSidecar(filePath, ".gz", mtimeMs);
+    const brSidecar = readFreshSidecar(filePath, ".br", mtimeMs);
+    if (
+      gzSidecar &&
+      brSidecar &&
+      sidecarMatchesRaw(gzSidecar, ".gz", raw) &&
+      sidecarMatchesRaw(brSidecar, ".br", raw)
+    ) {
+      return entryFromParts(raw, gzSidecar, brSidecar, mtimeMs);
+    }
+    const { gz, br } = compressRaw(raw);
+    return entryFromParts(raw, gz, br, mtimeMs);
+  } catch {
+    return null;
+  }
+}
+
+/** Come `buildEntry` ma con compressione ASINCRONA (zlib threadpool):
+ * usato dal warm-up in background al boot per i file senza sidecar,
+ * così l'event loop resta libero e l'app risponde subito. */
+async function buildEntryAsync(
+  filePath: string,
+  mtimeMs: number,
+): Promise<CacheEntry | null> {
+  try {
+    const raw = await fs.promises.readFile(filePath);
+    if (!shouldGzip(filePath, raw.length)) {
+      return entryFromParts(raw, null, null, mtimeMs);
+    }
+    const gz = (await gzipAsync(raw, { level: 9 })) as Buffer;
+    const br = (await brotliAsync(raw, {
+      params: {
+        [zlib.constants.BROTLI_PARAM_QUALITY]:
+          zlib.constants.BROTLI_MAX_QUALITY,
+        [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+      },
+    })) as Buffer;
+    return entryFromParts(raw, gz, br, mtimeMs);
   } catch {
     return null;
   }
@@ -145,6 +243,7 @@ export function precompressStatic(
   opts: { skip?: RegExp } = {},
 ): {
   files: number;
+  deferred: number;
   bytesRaw: number;
   bytesGz: number;
   bytesBr: number;
@@ -157,6 +256,25 @@ export function precompressStatic(
   let bytesRaw = 0;
   let bytesGz = 0;
   let bytesBr = 0;
+  // File compressibili SENZA sidecar di build: comprimerli in sync al
+  // boot è quello che causava i 15s di avvio lento (Task #243). Li
+  // rimandiamo a un warm-up asincrono in background (zlib threadpool):
+  // l'app risponde subito e, se un client arriva prima che il warm-up
+  // finisca, il primo hit paga la compressione lazy come da sempre.
+  const deferred: Array<{ full: string; mtimeMs: number }> = [];
+
+  const hasFreshSidecars = (full: string, mtimeMs: number): boolean => {
+    try {
+      for (const ext of [".gz", ".br"] as const) {
+        const st = fs.statSync(full + ext);
+        if (!st.isFile()) return false;
+        if (st.mtimeMs + SIDECAR_MTIME_SLACK_MS < mtimeMs) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const walk = (dir: string) => {
     let entries: fs.Dirent[];
@@ -172,6 +290,9 @@ export function precompressStatic(
         continue;
       }
       if (!e.isFile()) continue;
+      // I sidecar `.gz`/`.br` non sono asset da servire: vengono letti
+      // da `buildEntry` accanto al file originale.
+      if (/\.(gz|br)$/i.test(e.name)) continue;
       if (skip) {
         const urlPath = "/" + path.relative(absRoot, full).split(path.sep).join("/");
         if (skip.test(urlPath)) continue;
@@ -185,6 +306,10 @@ export function precompressStatic(
       if (!COMPRESSIBLE.test(full) && stat.size > MAX_CACHED_RAW_BYTES) {
         continue;
       }
+      if (shouldGzip(full, stat.size) && !hasFreshSidecars(full, stat.mtimeMs)) {
+        deferred.push({ full, mtimeMs: stat.mtimeMs });
+        continue;
+      }
       const entry = buildEntry(full, stat.mtimeMs);
       if (!entry) continue;
       cache.set(full, entry);
@@ -196,7 +321,42 @@ export function precompressStatic(
   };
 
   walk(absRoot);
-  return { files, bytesRaw, bytesGz, bytesBr, ms: Date.now() - start };
+
+  if (deferred.length > 0) {
+    void (async () => {
+      for (const { full, mtimeMs } of deferred) {
+        // Se un hit lazy l'ha già messo in cache, non rifare il lavoro.
+        const cached = cache.get(full);
+        if (cached && cached.mtimeMs === mtimeMs) continue;
+        const entry = await buildEntryAsync(full, mtimeMs);
+        if (!entry) continue;
+        // Non sovrascrivere entry più fresche nel frattempo.
+        const again = cache.get(full);
+        if (again && again.mtimeMs !== mtimeMs) continue;
+        cache.set(full, entry);
+      }
+      // eslint-disable-next-line no-console
+      console.log(
+        `[static] background warm-up: compressed ${deferred.length} file(s) senza sidecar di build`,
+      );
+    })().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[static] background warm-up failed (gli asset restano serviti ` +
+          `via compressione lazy al primo hit):`,
+        err,
+      );
+    });
+  }
+
+  return {
+    files,
+    deferred: deferred.length,
+    bytesRaw,
+    bytesGz,
+    bytesBr,
+    ms: Date.now() - start,
+  };
 }
 
 /**
@@ -250,6 +410,10 @@ export function mountCompressedStatic(
     if (!rel) return next();
     if (rel.includes("..")) return next();
     if (skip && skip.test(req.path)) return next();
+    // I sidecar `.gz`/`.br` di build non sono asset pubblici: servono
+    // solo a `buildEntry` come precompressi da caricare accanto al file
+    // originale. Non li esponiamo come URL.
+    if (/\.(gz|br)$/i.test(rel)) return next();
 
     const safe = path.normalize(rel);
     const candidate = path.join(root, safe);

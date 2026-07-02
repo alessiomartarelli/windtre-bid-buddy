@@ -88,6 +88,13 @@ fi
 echo "==> [2/6] Building bundle..."
 npm run build
 
+# Task #243: precomprimi gli asset in fase di build (sidecar .gz/.br
+# accanto a ogni file di dist/public). Il server di prod li carica da
+# disco al boot invece di ricomprimere tutto: senza questo passo il
+# restart PM2 pagava ~15s di compressione sincrona prima di rispondere.
+echo "==> [2b/6] Precompressing static assets (.gz/.br sidecars)..."
+node "${SCRIPT_DIR}/precompress-dist.mjs" dist/public
+
 echo "==> [3/6] Packing tarball..."
 # Task #148: niente più preload FinPlan server-side, il tar contiene solo
 # `dist/public` e `dist/index.cjs`. La directory `dist/server-data` non

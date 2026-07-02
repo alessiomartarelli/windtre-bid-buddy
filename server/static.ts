@@ -33,7 +33,10 @@ export function serveStatic(app: Express) {
     console.log(
       `[static] precompressed ${report.files} file(s), ` +
         `${mb(report.bytesRaw)} MB raw → ${mb(report.bytesGz)} MB gzip / ` +
-        `${mb(report.bytesBr)} MB brotli in ${report.ms} ms`,
+        `${mb(report.bytesBr)} MB brotli in ${report.ms} ms` +
+        (report.deferred > 0
+          ? ` (${report.deferred} senza sidecar di build → warm-up in background)`
+          : ""),
     );
     if (report.ms > BOOT_BUDGET_MS) {
       // eslint-disable-next-line no-console
