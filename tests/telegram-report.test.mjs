@@ -11,6 +11,9 @@ const {
   fmtEuro,
   fmtReportDate,
   buildDailyTrend,
+  buildDailyHistory,
+  monthStartYmd,
+  monthLabelOf,
   pctDelta,
   addYmdDays,
   trendYmdOf,
@@ -409,6 +412,134 @@ await test("aggregateDailyReport: categorieByPista ordinate per pezzi decrescent
   assert.ok(Array.isArray(mobile));
   assert.deepEqual(mobile[0], { categoria: "UNTIED", pezzi: 3 });
   assert.deepEqual(mobile[1], { categoria: "TIED CF", pezzi: 1 });
+});
+
+console.log("\n— storico navigabile + totale mese —");
+
+await test("monthStartYmd e monthLabelOf: inizio mese ed etichetta italiana", () => {
+  assert.equal(monthStartYmd("2026-07-15"), "2026-07-01");
+  assert.equal(monthStartYmd("2026-07-01"), "2026-07-01");
+  assert.equal(monthStartYmd("boh"), "boh"); // passthrough input non valido
+  assert.equal(monthLabelOf("2026-07-03"), "luglio 2026");
+  assert.equal(monthLabelOf("2026-12-31"), "dicembre 2026");
+  assert.equal(monthLabelOf("boh"), "boh");
+});
+
+await test("buildDailyHistory: aggregati completi per giorno, zero-fill, ordine crescente", () => {
+  const rows = [
+    { ...sale({ totale: "100", articoli: [art("UNTIED", 50)] }), dataVendita: "2026-07-01 10:00:00" },
+    { ...sale({ totale: "30", nomeAddetto: "Mario" }), dataVendita: "2026-07-03 09:00:00" },
+    { ...sale({ totale: "70" }), dataVendita: "2026-06-30 12:00:00" }, // fuori intervallo
+    { ...sale({ totale: "999" }), dataVendita: null }, // senza data
+  ];
+  const h = buildDailyHistory(rows, "2026-07-01", "2026-07-03");
+  assert.equal(h.length, 3);
+  assert.deepEqual(h.map((d) => d.ymd), ["2026-07-01", "2026-07-02", "2026-07-03"]);
+  assert.equal(h[0].aggregates.vendite, 1);
+  assert.equal(h[0].aggregates.importo, 100);
+  assert.equal(h[0].aggregates.countByPista.mobile, 1); // aggregato COMPLETO, non solo conteggi
+  assert.equal(h[1].aggregates.vendite, 0); // zero-fill
+  assert.equal(h[2].aggregates.perAddetto[0].nomeAddetto, "Mario");
+});
+
+await test("buildDailyHistory: intervallo non valido o rovesciato ⇒ []", () => {
+  assert.deepEqual(buildDailyHistory([], "2026-07-03", "2026-07-01"), []);
+  assert.deepEqual(buildDailyHistory([], "boh", "2026-07-01"), []);
+});
+
+await test("HTML navigabile: una pagina per giorno, nav ‹ ›, solo l'ultima visibile", () => {
+  const mk = (n) => aggregateDailyReport(Array.from({ length: n }, () => sale({ totale: "10", articoli: [art("UNTIED", 10)] })));
+  const history = [
+    { ymd: "2026-07-01", aggregates: mk(3) },
+    { ymd: "2026-07-02", aggregates: mk(5) },
+    { ymd: "2026-07-03", aggregates: mk(0) },
+  ];
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-03",
+    aggregates: history[2].aggregates,
+    trend: history.map((h) => ({ ymd: h.ymd, vendite: h.aggregates.vendite, importo: h.aggregates.importo, countByPista: h.aggregates.countByPista })),
+    history,
+  });
+  // Tre pagine giorno, solo l'ultima senza hidden.
+  assert.ok(html.includes('data-page="d0" hidden'));
+  assert.ok(html.includes('data-page="d1" hidden'));
+  assert.ok(html.includes('data-page="d2">'));
+  assert.ok(!html.includes('data-page="d2" hidden'));
+  // Barra di navigazione + JS inline.
+  assert.ok(html.includes('id="nav-prev"'));
+  assert.ok(html.includes('id="nav-next"'));
+  assert.ok(html.includes('id="nav-label"'));
+  assert.ok(html.includes("<script>"));
+  // Etichette hero: oggi vs giorni passati.
+  assert.ok(html.includes("Vendite di oggi"));
+  assert.ok(html.includes("Vendite di mer 01/07"));
+  // Delta della pagina storica calcolati sul "presente" di quel giorno.
+  assert.ok(html.includes("vs giorno prima"));
+  // Nessuna risorsa esterna.
+  assert.ok(!/src\s*=\s*"http/.test(html));
+  assert.ok(!/href\s*=\s*"http/.test(html));
+});
+
+await test("HTML: pagina Totale mese con hero, gara piste mese e bottone Mese", () => {
+  const monthAgg = aggregateDailyReport([
+    sale({ totale: "100", articoli: [art("UNTIED", 50)] }),
+    sale({ totale: "200", articoli: [art("LUCE", 80)] }),
+  ]);
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-03",
+    aggregates: aggregateDailyReport([]),
+    history: [
+      { ymd: "2026-07-02", aggregates: aggregateDailyReport([sale({ totale: "100" })]) },
+      { ymd: "2026-07-03", aggregates: aggregateDailyReport([]) },
+    ],
+    month: { label: "luglio 2026", aggregates: monthAgg },
+  });
+  assert.ok(html.includes('data-page="month" hidden'));
+  assert.ok(html.includes("Totale luglio 2026"));
+  assert.ok(html.includes("La gara delle piste · mese"));
+  assert.ok(html.includes('id="nav-month"'));
+  assert.ok(html.includes("Tocca per il totale del mese"));
+  assert.ok(html.includes("Tocca per tornare al giorno"));
+});
+
+await test("HTML: history/trend disallineati ⇒ pagina senza trend, nessun crash, JSON label safe", () => {
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-03",
+    aggregates: aggregateDailyReport([sale({ totale: "10" })]),
+    // trend NON copre i giorni dello storico (finestre diverse).
+    trend: [
+      { ymd: "2026-06-01", vendite: 1, importo: 10, countByPista: {} },
+      { ymd: "2026-06-02", vendite: 2, importo: 20, countByPista: {} },
+    ],
+    history: [
+      { ymd: "2026-07-02", aggregates: aggregateDailyReport([sale({ totale: "5" })]) },
+      { ymd: "2026-07-03", aggregates: aggregateDailyReport([sale({ totale: "10" })]) },
+    ],
+  });
+  assert.ok(html.includes('data-page="d1">'));
+  assert.ok(!html.includes("Andamento ·")); // trendSlice assente ⇒ niente grafico
+  // ymd ostile non può chiudere il tag <script> (escape \u003c nel JSON).
+  const evil = buildVenditeReportHtml({
+    orgName: "Org",
+    dateYMD: "2026-07-03",
+    aggregates: aggregateDailyReport([]),
+    history: [{ ymd: "</script><script>alert(1)//", aggregates: aggregateDailyReport([]) }],
+  });
+  assert.ok(!evil.includes("</script><script>alert"));
+});
+
+await test("HTML retrocompatibile: senza history niente nav né script", () => {
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-02",
+    aggregates: aggregateDailyReport([sale({ totale: "50" })]),
+  });
+  assert.ok(!html.includes('id="nav-prev"'));
+  assert.ok(!html.includes("<script>"));
+  assert.ok(html.includes('data-page="d0"'));
 });
 
 console.log("\n— scheduler: msUntilNextSend / resolveTelegramConfig —");

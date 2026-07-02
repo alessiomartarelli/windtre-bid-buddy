@@ -41,7 +41,19 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   parametro `trend?: TrendDay[]` è opzionale: con meno di 2 giorni le
   sezioni comparative e i grafici semplicemente non compaiono. Giorno
   senza vendite ⇒ hero a 0 + card "Nessuna vendita" (+ grafico andamento
-  se c'è il trend). `reportHtmlFileName` produce il nome file
+  se c'è il trend). **Navigazione multi-pagina**: con `history?:
+  DayHistoryEntry[]` (da `buildDailyHistory`, crescente, ultimo = oggi)
+  il documento diventa navigabile — una pagina pre-renderizzata per
+  giorno (`data-page="d0..dN"`, solo l'ultima visibile), barra sticky
+  ‹ data › con JS vanilla inline (nessuna risorsa esterna, funziona
+  offline da Telegram); i delta e il grafico di ogni pagina storica sono
+  calcolati sullo slice del trend fino a quel giorno ("vs giorno prima").
+  Con `month?: {label, aggregates}` compare la pagina **"Totale mese"**
+  (`data-page="month"`): bottone "Mese" nella nav o tocco sull'hero per
+  entrarci/uscirne; contiene hero totale, highlights, andamento dei
+  giorni del mese, "La gara delle piste · mese", mix e classifiche.
+  Senza `history` il documento resta a pagina singola senza script
+  (retrocompatibile). `reportHtmlFileName` produce il nome file
   `report-vendite-<org-slug>-<YYYY-MM-DD>[-<hhmm>].html`. La sezione per
   addetto usa l'aggregato `perAddetto` di `aggregateDailyReport`
   (grouping case-insensitive sul nominativo, `N/D` per mancante).
@@ -64,11 +76,14 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   (Task #248): se l'allegato fallisce il report NON è considerato
   fallito — warn nel log, `docError` nel risultato (l'endpoint di prova
   lo espone come `warning`), scheduler mai bloccato. Per il trend
-  (Task #250) `sendDailyReportForOrg` legge **14 giorni** di vendite in
-  una sola query (`getBisuiteSalesByItalianDateRange(orgId, oggi-13,
-  oggi)`), filtra le righe di oggi con `trendYmdOf` per gli aggregati e
-  il messaggio di testo (che resta SOLO sul giorno corrente) e passa
-  `buildDailyTrend` al builder HTML.
+  (Task #250) e per la navigazione dell'allegato, `sendDailyReportForOrg`
+  legge le vendite in **una sola query** dal più lontano fra inizio mese
+  (`monthStartYmd`) e inizio finestra trend (oggi-13), poi deriva:
+  righe di oggi con `trendYmdOf` per gli aggregati e il messaggio di
+  testo (che resta SOLO sul giorno corrente), `buildDailyTrend` sui 14
+  giorni, `buildDailyHistory` (aggregati completi per giorno, pagine
+  navigabili) e il totale mese (`aggregateDailyReport` sulle righe da
+  inizio mese + `monthLabelOf`), tutti passati al builder HTML.
 
 ## Config per-organizzazione
 
@@ -115,7 +130,7 @@ pulsanti "Invia report di prova" e "Salva configurazione".
 
 ## Test
 
-`tests/telegram-report.test.mjs` (37 test puri, inclusi 4 sui cambi
+`tests/telegram-report.test.mjs` (44 test puri, inclusi 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,
@@ -124,7 +139,12 @@ euro/date, messaggio (sezioni, escape HTML, giorno vuoto), report HTML
 allegato (redesign Task #250: hero/card piste a tema/tipi/classifiche
 con barre e medaglie, KPI e delta con trend, sparkline per pista,
 giorno vuoto con e senza trend, escape valori dinamici, nessuna risorsa
-esterna, `escapeHtml`, nome file slugificato), helper trend
+esterna, `escapeHtml`, nome file slugificato), navigazione multi-pagina
+(`monthStartYmd`/`monthLabelOf`, `buildDailyHistory` aggregati completi
+per giorno con zero-fill/intervallo invalido, pagine `d0..dN` con solo
+l'ultima visibile + barra nav ‹ › + JS inline, pagina "Totale mese" con
+gara piste del mese e bottone Mese, retrocompatibilità senza `history` ⇒
+niente nav né script), helper trend
 (`buildDailyTrend` bucketing/zero-fill/intervallo invalido, `pctDelta`,
 `addYmdDays`/`trendYmdOf`, `svgAreaChart`), orari
 scheduler (`msUntilNextSend` a cavallo dei due orari

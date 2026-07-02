@@ -5,9 +5,12 @@ import { decryptSecret, isEncrypted } from "./cryptoSecret";
 import {
   addYmdDays,
   aggregateDailyReport,
+  buildDailyHistory,
   buildDailyTrend,
   buildTelegramReportMessage,
   fmtReportDate,
+  monthLabelOf,
+  monthStartYmd,
   trendYmdOf,
 } from "@shared/venditeReport";
 import { buildVenditeReportHtml, reportHtmlFileName } from "@shared/venditeReportHtml";
@@ -196,15 +199,33 @@ export async function sendDailyReportForOrg(params: {
     }
   }
 
-  // Finestra di trend (Task #250): 14 giorni compreso oggi. Serve al report
-  // HTML per grafico di andamento, sparkline per pista e confronti
-  // oggi/ieri/media 7 gg. Il messaggio di testo usa SOLO le vendite di oggi.
+  // Finestra dati per l'allegato HTML navigabile: 14 giorni di trend +
+  // storico per-giorno (frecce ‹ ›) + totale del mese in corso (pagina
+  // "Totale mese"). Un'unica query dal più lontano fra inizio mese e
+  // inizio finestra trend. Il messaggio di testo usa SOLO le vendite di
+  // oggi.
   const TREND_DAYS = 14;
-  const fromYmd = addYmdDays(ymd, -(TREND_DAYS - 1));
+  const trendFromYmd = addYmdDays(ymd, -(TREND_DAYS - 1));
+  const monthFromYmd = monthStartYmd(ymd);
+  const fromYmd = trendFromYmd < monthFromYmd ? trendFromYmd : monthFromYmd;
   const rows = await storage.getBisuiteSalesByItalianDateRange(params.orgId, fromYmd, ymd, false);
+  const trendRows = rows.filter((r) => {
+    const d = trendYmdOf(r.dataVendita);
+    return d !== null && d >= trendFromYmd;
+  });
+  const monthRows = rows.filter((r) => {
+    const d = trendYmdOf(r.dataVendita);
+    return d !== null && d >= monthFromYmd;
+  });
   const todayRows = rows.filter((r) => trendYmdOf(r.dataVendita) === ymd);
   const aggregates = aggregateDailyReport(todayRows);
-  const trend = buildDailyTrend(rows, fromYmd, ymd);
+  const trend = buildDailyTrend(trendRows, trendFromYmd, ymd);
+  const history = buildDailyHistory(trendRows, trendFromYmd, ymd);
+  // Le righe sono già senza ANNULLATA (includeAnnullate=false in query).
+  const month = {
+    label: monthLabelOf(ymd),
+    aggregates: aggregateDailyReport(monthRows),
+  };
   const message = buildTelegramReportMessage({
     orgName: params.orgName,
     dateYMD: ymd,
@@ -225,6 +246,8 @@ export async function sendDailyReportForOrg(params: {
     timeLabel: params.timeLabel,
     aggregates,
     trend,
+    history,
+    month,
   });
   const fileName = reportHtmlFileName(params.orgName, ymd, params.timeLabel);
   const docResult = await sendTelegramDocument(params.botToken, params.chatId, fileName, html, {

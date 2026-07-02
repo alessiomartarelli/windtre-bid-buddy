@@ -247,6 +247,55 @@ export function buildDailyTrend(rows: VenditaTrendRow[], fromYMD: string, toYMD:
   return Array.from(byDay.values());
 }
 
+/** Primo giorno del mese di un YYYY-MM-DD (es. "2026-07-15" ⇒ "2026-07-01"). */
+export function monthStartYmd(ymd: string): string {
+  const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(ymd.trim());
+  return m ? `${m[1]}-${m[2]}-01` : ymd;
+}
+
+/** Etichetta italiana del mese di un YYYY-MM-DD (es. "luglio 2026"). */
+export function monthLabelOf(ymd: string): string {
+  const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(ymd.trim());
+  if (!m) return ymd;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, 1));
+  return d.toLocaleDateString("it-IT", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+export interface DayHistoryEntry {
+  ymd: string;
+  aggregates: DailyReportAggregates;
+}
+
+/**
+ * Storico per-giorno con aggregati COMPLETI (stessa shape del report
+ * giornaliero) nell'intervallo [fromYMD..toYMD]: estremi inclusi, giorni
+ * senza vendite presenti con aggregati a zero, ordine crescente. Serve
+ * alle pagine navigabili dell'allegato HTML. Intervallo non valido o
+ * rovesciato ⇒ [].
+ */
+export function buildDailyHistory(
+  rows: VenditaTrendRow[],
+  fromYMD: string,
+  toYMD: string,
+): DayHistoryEntry[] {
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  if (!re.test(fromYMD.trim()) || !re.test(toYMD.trim()) || fromYMD > toYMD) return [];
+
+  const byDay = new Map<string, VenditaTrendRow[]>();
+  for (let ymd = fromYMD; ymd <= toYMD; ymd = addYmdDays(ymd, 1)) {
+    byDay.set(ymd, []);
+  }
+  for (const row of rows) {
+    const ymd = trendYmdOf(row.dataVendita);
+    if (!ymd) continue;
+    byDay.get(ymd)?.push(row);
+  }
+  return Array.from(byDay.entries()).map(([ymd, dayRows]) => ({
+    ymd,
+    aggregates: aggregateDailyReport(dayRows),
+  }));
+}
+
 /**
  * Variazione percentuale arrotondata di `current` rispetto a `previous`.
  * `previous` non positivo o non finito ⇒ null (delta non calcolabile).

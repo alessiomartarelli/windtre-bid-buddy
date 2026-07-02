@@ -388,7 +388,7 @@ mantenere snello questo file:
   rimossa). Lanciali via lo step di validation
   `cj-report-tests` (`bash scripts/run-customer-journey-report-tests.sh`).
   Run completo in ~1s.
-- **Telegram report tests** (`tests/telegram-report.test.mjs`): 37 test
+- **Telegram report tests** (`tests/telegram-report.test.mjs`): 44 test
   puri (Task #239 + #248 + #250) su aggregati (incl. per-addetto e
   `categorieByPista`), trend per-giorno (`buildDailyTrend`/`pctDelta`) e
   messaggio del report vendite Telegram (`shared/venditeReport.ts`),

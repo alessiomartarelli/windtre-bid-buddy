@@ -5,11 +5,16 @@
 // WindTre, hero con delta integrati, riga "highlights" del giorno (top
 // PDV/addetto/pista), piste come gara a barre orizzontali con chip per
 // categoria, donut chart per il mix tipi, classifiche PDV/addetti.
-// Tutti i grafici sono SVG inline: nessuna risorsa esterna, il file si
-// apre offline da Telegram. Logica PURA: nessun import React/server, solo
-// import relativi — caricabile via loader tsx nei test.
+// Con `history` il file diventa NAVIGABILE: una pagina per ogni giorno
+// (frecce ‹ › per andare indietro/avanti) + una pagina "Totale mese"
+// raggiungibile toccando l'hero o il bottone "Mese". Tutto embedded:
+// pagine pre-renderizzate + piccolo JS vanilla inline, nessuna risorsa
+// esterna, il file si apre offline da Telegram. Logica PURA: nessun
+// import React/server, solo import relativi — caricabile via loader tsx
+// nei test.
 import {
   type DailyReportAggregates,
+  type DayHistoryEntry,
   type TrendDay,
   REPORT_PISTA_ORDER,
   REPORT_TYPE_ORDER,
@@ -80,6 +85,17 @@ export interface VenditeReportHtmlParams {
    * 2 giorni ⇒ le sezioni di trend non compaiono.
    */
   trend?: TrendDay[];
+  /**
+   * Storico per-giorno con aggregati completi (crescente, ultimo giorno
+   * = `dateYMD`): abilita la navigazione ‹ › fra i giorni, una pagina
+   * per giorno. Assente ⇒ documento a pagina singola come prima.
+   */
+  history?: DayHistoryEntry[];
+  /**
+   * Totale del mese in corso: abilita la pagina "Totale mese"
+   * raggiungibile toccando l'hero o il bottone "Mese".
+   */
+  month?: { label: string; aggregates: DailyReportAggregates };
 }
 
 // ---------------------------------------------------------------------------
@@ -178,20 +194,30 @@ function deltaChip(delta: number | null, suffix: string): string {
 // Sezioni
 // ---------------------------------------------------------------------------
 
-function heroSection(a: DailyReportAggregates, trend: TrendDay[] | undefined): string {
+interface HeroOpts {
+  label: string;
+  /** Suffissi delta: "oggi vs ieri" per la pagina di oggi, "vs giorno prima" per lo storico. */
+  vsPrevLabel?: string;
+  clickHint?: string;
+}
+
+function heroSection(a: DailyReportAggregates, trend: TrendDay[] | undefined, opts: HeroOpts): string {
   let chips = "";
   if (trend && trend.length >= 2) {
     const ieri = trend[trend.length - 2];
     const prev = trend.slice(0, -1).slice(-7);
     const media7 = prev.length > 0 ? prev.reduce((s, d) => s + d.vendite, 0) / prev.length : 0;
-    chips = `<div class="hero-chips">${deltaChip(pctDelta(a.vendite, ieri.vendite), "oggi vs ieri")}${deltaChip(pctDelta(a.vendite, media7), "oggi vs media 7 gg")}</div>`;
+    const vsPrev = opts.vsPrevLabel ?? "oggi vs ieri";
+    const vsMedia = opts.vsPrevLabel ? "vs media 7 gg" : "oggi vs media 7 gg";
+    chips = `<div class="hero-chips">${deltaChip(pctDelta(a.vendite, ieri.vendite), vsPrev)}${deltaChip(pctDelta(a.vendite, media7), vsMedia)}</div>`;
   }
+  const hint = opts.clickHint ? `<div class="hero-hint">${escapeHtml(opts.clickHint)}</div>` : "";
   return `<div class="hero">
       <div class="hero-glow"></div>
-      <div class="hero-label">Vendite di oggi</div>
+      <div class="hero-label">${escapeHtml(opts.label)}</div>
       <div class="hero-num">${a.vendite}</div>
       <div class="hero-sub">${escapeHtml(fmtEuro(a.importo))} <span class="hero-sub-dim">di importo totale</span></div>
-      ${chips}
+      ${chips}${hint}
     </div>`;
 }
 
@@ -227,7 +253,7 @@ function trendSection(trend: TrendDay[] | undefined): string {
     </div>`;
 }
 
-function pisteSection(a: DailyReportAggregates, trend: TrendDay[] | undefined): string {
+function pisteSection(a: DailyReportAggregates, trend: TrendDay[] | undefined, titolo = "La gara delle piste"): string {
   const active = REPORT_PISTA_ORDER.filter((p) => (a.countByPista[p] ?? 0) > 0);
   if (active.length === 0) return "";
   const maxCount = Math.max(...active.map((p) => a.countByPista[p] ?? 0), 1);
@@ -259,7 +285,7 @@ function pisteSection(a: DailyReportAggregates, trend: TrendDay[] | undefined): 
       </div>`;
     })
     .join("\n        ");
-  return `<div class="card"><h2>La gara delle piste</h2>
+  return `<div class="card"><h2>${escapeHtml(titolo)}</h2>
         ${rows}
     </div>`;
 }
@@ -325,10 +351,66 @@ function addettiSection(a: DailyReportAggregates): string {
     </div>`;
 }
 
+/** Sezioni complete di una giornata (hero + card), riusate per ogni pagina. */
+function daySections(
+  a: DailyReportAggregates,
+  trendSlice: TrendDay[] | undefined,
+  hero: HeroOpts,
+): string {
+  const parts: string[] = [heroSection(a, trendSlice, hero)];
+  if (a.vendite === 0) {
+    parts.push(`<div class="card empty">Nessuna vendita registrata in questa giornata.</div>`);
+    parts.push(trendSection(trendSlice));
+  } else {
+    parts.push(highlightsSection(a));
+    parts.push(trendSection(trendSlice));
+    parts.push(pisteSection(a, trendSlice));
+    parts.push(tipiSection(a));
+    parts.push(pdvSection(a));
+    parts.push(addettiSection(a));
+  }
+  return parts.filter(Boolean).join("\n    ");
+}
+
+function monthSections(month: { label: string; aggregates: DailyReportAggregates }, history: DayHistoryEntry[] | undefined): string {
+  const a = month.aggregates;
+  const parts: string[] = [
+    heroSection(a, undefined, {
+      label: `Totale ${month.label}`,
+      clickHint: "‹ Tocca per tornare al giorno",
+    }),
+  ];
+  if (a.vendite === 0) {
+    parts.push(`<div class="card empty">Nessuna vendita registrata nel mese.</div>`);
+  } else {
+    parts.push(highlightsSection(a));
+    // Andamento del mese: giorni dello storico che appartengono al mese.
+    if (history && history.length >= 2) {
+      const monthDays = history.filter((h) => h.ymd.slice(0, 7) === history[history.length - 1].ymd.slice(0, 7));
+      if (monthDays.length >= 2) {
+        const asTrend: TrendDay[] = monthDays.map((h) => ({
+          ymd: h.ymd,
+          vendite: h.aggregates.vendite,
+          importo: h.aggregates.importo,
+          countByPista: h.aggregates.countByPista,
+        }));
+        parts.push(trendSection(asTrend));
+      }
+    }
+    parts.push(pisteSection(a, undefined, "La gara delle piste · mese"));
+    parts.push(tipiSection(a));
+    parts.push(pdvSection(a));
+    parts.push(addettiSection(a));
+  }
+  return parts.filter(Boolean).join("\n    ");
+}
+
 /**
  * Costruisce il documento HTML standalone del report giornaliero: tema
- * scuro glass, accento arancione WindTre, grafici SVG inline. Tutti i
- * valori dinamici sono escapati; nessuna risorsa esterna.
+ * scuro glass, accento arancione WindTre, grafici SVG inline. Con
+ * `history` il documento è navigabile per giorno (‹ ›) e con `month`
+ * espone la pagina "Totale mese" (tocca l'hero o il bottone "Mese").
+ * Tutti i valori dinamici sono escapati; nessuna risorsa esterna.
  */
 export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
   const a = p.aggregates;
@@ -337,18 +419,58 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
   const trend = p.trend && p.trend.length >= 2 ? p.trend : undefined;
   const when = p.timeLabel ? `${escapeHtml(dateLabel)} · ore ${escapeHtml(p.timeLabel)}` : escapeHtml(dateLabel);
 
-  const sections: string[] = [];
-  sections.push(heroSection(a, trend));
-  if (a.vendite === 0) {
-    sections.push(`<div class="card empty">Nessuna vendita registrata oggi.</div>`);
-    sections.push(trendSection(trend));
+  const history = p.history && p.history.length > 0 ? p.history : undefined;
+  const navigable = Boolean(history);
+
+  let body: string;
+  let nav = "";
+  let script = "";
+
+  if (!navigable) {
+    // Pagina singola (comportamento originale, usato anche dai test puri).
+    const hero: HeroOpts = { label: "Vendite di oggi", clickHint: p.month ? "Tocca per il totale del mese ›" : undefined };
+    const sections: string[] = [heroSection(a, trend, hero)];
+    if (a.vendite === 0) {
+      sections.push(`<div class="card empty">Nessuna vendita registrata oggi.</div>`);
+      sections.push(trendSection(trend));
+    } else {
+      sections.push(highlightsSection(a));
+      sections.push(trendSection(trend));
+      sections.push(pisteSection(a, trend));
+      sections.push(tipiSection(a));
+      sections.push(pdvSection(a));
+      sections.push(addettiSection(a));
+    }
+    body = `<div class="page" data-page="d0">${sections.filter(Boolean).join("\n    ")}</div>`;
+    if (p.month) {
+      body += `\n    <div class="page" data-page="month" hidden>${monthSections(p.month, undefined)}</div>`;
+      script = navScript([{ ymd: p.dateYMD }], true);
+      nav = navBar(true);
+    }
   } else {
-    sections.push(highlightsSection(a));
-    sections.push(trendSection(trend));
-    sections.push(pisteSection(a, trend));
-    sections.push(tipiSection(a));
-    sections.push(pdvSection(a));
-    sections.push(addettiSection(a));
+    const days = history!;
+    const pages = days.map((day, i) => {
+      const isLast = i === days.length - 1;
+      // Slice del trend fino al giorno della pagina: i delta e il grafico
+      // sono coerenti col "presente" di quella giornata.
+      let trendSlice: TrendDay[] | undefined;
+      if (trend) {
+        const idx = trend.findIndex((t) => t.ymd === day.ymd);
+        trendSlice = idx >= 1 ? trend.slice(0, idx + 1) : undefined;
+      }
+      const hero: HeroOpts = {
+        label: isLast ? "Vendite di oggi" : `Vendite di ${fmtDayShort(day.ymd)}`,
+        vsPrevLabel: isLast ? undefined : "vs giorno prima",
+        clickHint: p.month ? "Tocca per il totale del mese ›" : undefined,
+      };
+      return `<div class="page" data-page="d${i}"${isLast ? "" : " hidden"}>${daySections(day.aggregates, trendSlice, hero)}</div>`;
+    });
+    if (p.month) {
+      pages.push(`<div class="page" data-page="month" hidden>${monthSections(p.month, days)}</div>`);
+    }
+    body = pages.join("\n    ");
+    nav = navBar(Boolean(p.month));
+    script = navScript(days.map((d) => ({ ymd: d.ymd })), Boolean(p.month));
   }
 
   return `<!doctype html>
@@ -365,13 +487,24 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
          color: #e2e8f0; }
   .wrap { max-width: 640px; margin: 0 auto; }
   header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-           margin: 4px 2px 14px; flex-wrap: wrap; }
+           margin: 4px 2px 10px; flex-wrap: wrap; }
   .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; color: #f8fafc; }
   .brand-dot { width: 10px; height: 10px; border-radius: 999px;
                background: linear-gradient(135deg, #ffb347, ${ORANGE}); box-shadow: 0 0 12px ${ORANGE}aa; }
   .when { color: #94a3b8; font-size: 13px; }
+  .nav { display: flex; align-items: center; gap: 8px; margin: 0 0 12px;
+         background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
+         border-radius: 14px; padding: 6px; position: sticky; top: 8px; z-index: 5;
+         backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .nav button { font: inherit; color: #f8fafc; background: rgba(255,255,255,.07);
+                border: 1px solid rgba(255,255,255,.12); border-radius: 10px;
+                padding: 7px 13px; cursor: pointer; font-weight: 700; }
+  .nav button:disabled { opacity: .35; cursor: default; }
+  .nav .nav-label { flex: 1 1 auto; text-align: center; font-weight: 700; font-size: 14px; color: #fdba74; }
+  .nav .nav-month { background: linear-gradient(135deg, ${ORANGE}33, ${ORANGE}22); border-color: ${ORANGE}66; }
+  .nav .nav-month.active { background: linear-gradient(135deg, ${ORANGE}, #ffb347); color: #1a1006; }
   .hero { position: relative; overflow: hidden; text-align: center; padding: 30px 18px 24px;
-          border-radius: 22px; margin-bottom: 12px;
+          border-radius: 22px; margin-bottom: 12px; cursor: pointer;
           background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); }
   .hero-glow { position: absolute; inset: -40% -20% auto; height: 150%; pointer-events: none;
                background: radial-gradient(closest-side, ${ORANGE}55, transparent 70%); }
@@ -382,6 +515,7 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
   .hero-sub { position: relative; font-size: 16px; font-weight: 700; color: #f8fafc; }
   .hero-sub-dim { font-weight: 400; color: #94a3b8; font-size: 13px; }
   .hero-chips { position: relative; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+  .hero-hint { position: relative; margin-top: 10px; font-size: 11px; color: #64748b; }
   .delta { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 3px 10px; }
   .delta.up { color: #4ade80; background: rgba(74,222,128,.12); border: 1px solid rgba(74,222,128,.3); }
   .delta.down { color: #f87171; background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.3); }
@@ -435,10 +569,70 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
       <div class="brand"><span class="brand-dot"></span>${escapeHtml(p.orgName)}</div>
       <div class="when">${when}</div>
     </header>
-    ${sections.filter(Boolean).join("\n    ")}
+    ${nav}
+    ${body}
     <footer>Report vendite generato automaticamente · vendite ANNULLATA escluse</footer>
   </div>
-</body>
+${script}</body>
 </html>
 `;
+}
+
+function navBar(withMonth: boolean): string {
+  const monthBtn = withMonth
+    ? `<button type="button" class="nav-month" id="nav-month">Mese</button>`
+    : "";
+  return `<div class="nav">
+      <button type="button" id="nav-prev" aria-label="Giorno precedente">‹</button>
+      <span class="nav-label" id="nav-label"></span>
+      <button type="button" id="nav-next" aria-label="Giorno successivo">›</button>
+      ${monthBtn}
+    </div>`;
+}
+
+/**
+ * JS vanilla inline per la navigazione: stato = indice giorno corrente o
+ * modalità "mese". Le etichette dei giorni sono derivate SOLO da date
+ * YYYY-MM-DD già validate (nessun dato utente nel JS).
+ */
+function navScript(days: Array<{ ymd: string }>, withMonth: boolean): string {
+  const labels = days.map((d) => fmtDayShort(d.ymd));
+  // Difesa in profondità: le ymd arrivano validate dallo scheduler, ma un
+  // eventuale chiamante futuro non deve poter rompere il contesto <script>
+  // (JSON.stringify non escapa "</script>"): "<" ⇒ \u003c.
+  const labelsJson = JSON.stringify(labels).replace(/</g, "\\u003c");
+  return `<script>
+(function () {
+  var labels = ${labelsJson};
+  var n = labels.length;
+  var i = n - 1;
+  var month = false;
+  var prevBtn = document.getElementById("nav-prev");
+  var nextBtn = document.getElementById("nav-next");
+  var label = document.getElementById("nav-label");
+  var monthBtn = document.getElementById("nav-month");
+  function show() {
+    var pages = document.querySelectorAll(".page");
+    for (var k = 0; k < pages.length; k++) {
+      var id = pages[k].getAttribute("data-page");
+      var visible = month ? id === "month" : id === "d" + i;
+      if (visible) pages[k].removeAttribute("hidden");
+      else pages[k].setAttribute("hidden", "");
+    }
+    if (label) label.textContent = month ? "Totale mese" : labels[i] + (i === n - 1 ? " · oggi" : "");
+    if (prevBtn) prevBtn.disabled = month || i === 0;
+    if (nextBtn) nextBtn.disabled = month || i === n - 1;
+    if (monthBtn) monthBtn.className = "nav-month" + (month ? " active" : "");
+    window.scrollTo(0, 0);
+  }
+  if (prevBtn) prevBtn.addEventListener("click", function () { if (!month && i > 0) { i--; show(); } });
+  if (nextBtn) nextBtn.addEventListener("click", function () { if (!month && i < n - 1) { i++; show(); } });
+  if (monthBtn) monthBtn.addEventListener("click", function () { month = !month; show(); });
+  ${withMonth ? `var heroes = document.querySelectorAll(".hero");
+  for (var h = 0; h < heroes.length; h++) {
+    heroes[h].addEventListener("click", function () { month = !month; show(); });
+  }` : ""}
+  show();
+})();
+</script>`;
 }
