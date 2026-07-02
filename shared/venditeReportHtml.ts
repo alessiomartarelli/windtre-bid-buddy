@@ -13,8 +13,10 @@
 // import React/server, solo import relativi — caricabile via loader tsx
 // nei test.
 import {
+  type CategoriaReportAggregate,
   type DailyReportAggregates,
   type DayHistoryEntry,
+  type PagamentoSplit,
   type TrendDay,
   REPORT_PISTA_ORDER,
   REPORT_TYPE_ORDER,
@@ -309,6 +311,49 @@ function tipiSection(a: DailyReportAggregates): string {
     </div>`;
 }
 
+// Modalità di pagamento mostrate come chip sotto ogni categoria.
+const PAGAMENTO_CHIP_ORDER: Array<{ key: keyof PagamentoSplit; label: string; icon: string }> = [
+  { key: "contanti", label: "Contanti", icon: "💵" },
+  { key: "pos", label: "POS", icon: "💳" },
+  { key: "finanziato", label: "Finanziato", icon: "🏦" },
+  { key: "varCredito", label: "VAR", icon: "📄" },
+  { key: "altro", label: "Altro", icon: "🧾" },
+];
+
+/**
+ * Card "dettaglio per categoria" (Prodotti o Servizi): una riga per
+ * categoria con pezzi, fatturato, barra proporzionale e chip con il
+ * fatturato diviso per modalità di pagamento (solo le modalità > 0).
+ * Il sottotitolo riporta pezzi e fatturato totali della sezione.
+ */
+function categorieSection(
+  titolo: string,
+  list: CategoriaReportAggregate[],
+  color: string,
+): string {
+  if (list.length === 0) return "";
+  const totPezzi = list.reduce((s, c) => s + c.pezzi, 0);
+  const totImporto = list.reduce((s, c) => s + c.importo, 0);
+  const maxImporto = Math.max(...list.map((c) => c.importo), 1);
+  const rows = list
+    .map((c) => {
+      const width = Math.max(4, Math.round((c.importo / maxImporto) * 100));
+      const chips = PAGAMENTO_CHIP_ORDER
+        .filter((m) => c.pagamenti[m.key] > 0.005)
+        .map((m) => `<span class="chip">${m.icon} ${escapeHtml(m.label)} ${escapeHtml(fmtEuro(c.pagamenti[m.key]))}</span>`)
+        .join("");
+      return `<div class="prow">
+        <div class="prow-head"><span class="pname" style="color:${color}">${escapeHtml(c.categoria)}</span><span class="pval">${c.pezzi} pz · ${escapeHtml(fmtEuro(c.importo))}</span></div>
+        <div class="pbar"><i style="width:${width}%;background:linear-gradient(90deg,${color},${color}66)"></i></div>
+        ${chips ? `<div class="pmeta">${chips}</div>` : ""}
+      </div>`;
+    })
+    .join("\n        ");
+  return `<div class="card"><h2>${escapeHtml(titolo)} <span class="h2-sub">${totPezzi} pz · ${escapeHtml(fmtEuro(totImporto))}</span></h2>
+        ${rows}
+    </div>`;
+}
+
 function rankBar(pct: number, color: string): string {
   const width = Math.max(3, Math.min(100, Math.round(pct)));
   return `<div class="bar"><i style="width:${width}%;background:linear-gradient(90deg,${color},${color}66)"></i></div>`;
@@ -366,6 +411,8 @@ function daySections(
     parts.push(trendSection(trendSlice));
     parts.push(pisteSection(a, trendSlice));
     parts.push(tipiSection(a));
+    parts.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
+    parts.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));
     parts.push(pdvSection(a));
     parts.push(addettiSection(a));
   }
@@ -399,6 +446,8 @@ function monthSections(month: { label: string; aggregates: DailyReportAggregates
     }
     parts.push(pisteSection(a, undefined, "La gara delle piste · mese"));
     parts.push(tipiSection(a));
+    parts.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
+    parts.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));
     parts.push(pdvSection(a));
     parts.push(addettiSection(a));
   }
@@ -438,6 +487,8 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
       sections.push(trendSection(trend));
       sections.push(pisteSection(a, trend));
       sections.push(tipiSection(a));
+      sections.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
+      sections.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));
       sections.push(pdvSection(a));
       sections.push(addettiSection(a));
     }
@@ -531,6 +582,7 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
           border-radius: 18px; padding: 16px; margin-bottom: 12px; }
   .card.empty { text-align: center; color: #94a3b8; padding: 32px 16px; }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: #fdba74; margin: 0 0 12px; }
+  .h2-sub { float: right; text-transform: none; letter-spacing: 0; font-weight: 700; color: #e2e8f0; }
   .axis { display: flex; justify-content: space-between; color: #64748b; font-size: 11px; margin-top: 4px; }
   .prow { padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
   .prow:last-child { border-bottom: none; padding-bottom: 2px; }

@@ -700,5 +700,152 @@ await test("isSensitiveLogKey: match case-insensitive e varianti", () => {
   }
 });
 
+console.log("\n— dettaglio categorie + split pagamenti —");
+
+// Helper: articolo con importi pagamento per-articolo.
+function artPay(categoria, prezzo, { fin = 0, credito = 0 } = {}) {
+  return {
+    categoria: { nome: categoria },
+    dettaglio: { prezzo: String(prezzo), importoFinanziato: String(fin), importoCredito: String(credito) },
+  };
+}
+// Helper: vendita con mix pagamento scontrino.
+function salePay({ articoli = [], pagamento = null, totale = "0" } = {}) {
+  return { stato: "COMPLETATA", totale, codicePos: "POS1", nomeNegozio: "Negozio 1", nomeAddetto: null, rawData: { articoli, pagamento } };
+}
+
+await test("prodottiByCategoria: pezzi/importo per categoria, ordinati per importo↓", () => {
+  const a = aggregateDailyReport([
+    salePay({ articoli: [artPay("TELEFONIA", 500), artPay("ACCESSORI", 30), artPay("ACCESSORI", 20)] }),
+    salePay({ articoli: [artPay("TELEFONIA", 300), artPay("UNTIED", 30)] }),
+  ]);
+  assert.deepEqual(a.prodottiByCategoria.map((c) => c.categoria), ["TELEFONIA", "ACCESSORI"]);
+  const tel = a.prodottiByCategoria[0];
+  assert.equal(tel.pezzi, 2);
+  assert.equal(tel.importo, 800);
+  const acc = a.prodottiByCategoria[1];
+  assert.equal(acc.pezzi, 2);
+  assert.equal(acc.importo, 50);
+  // UNTIED è canvass: NON compare fra i prodotti.
+  assert.ok(!a.prodottiByCategoria.some((c) => c.categoria === "UNTIED"));
+});
+
+await test("serviziByCategoria: fatturato e numero servizi separati dai prodotti", () => {
+  const a = aggregateDailyReport([
+    salePay({ articoli: [artPay("SPEDIZIONE", 5), artPay("ASSISTENZA", 25), artPay("TELEFONIA", 100)] }),
+  ]);
+  assert.deepEqual(a.serviziByCategoria.map((c) => c.categoria), ["ASSISTENZA", "SPEDIZIONE"]);
+  assert.equal(a.serviziByCategoria.reduce((s, c) => s + c.pezzi, 0), 2);
+  assert.equal(a.serviziByCategoria.reduce((s, c) => s + c.importo, 0), 30);
+  assert.equal(a.countByType.servizi, 2);
+  assert.equal(a.amountByType.servizi, 30);
+});
+
+await test("split pagamenti: finanziato/VAR esatti per-articolo, resto sul mix scontrino", () => {
+  // Telefono 600: 500 finanziato, 100 sul mix (60 contanti / 40 POS).
+  // Accessorio 40: tutto sul mix. Mix vendita: contanti 84, POS 56 (60/40%).
+  const a = aggregateDailyReport([
+    salePay({
+      articoli: [artPay("TELEFONIA", 600, { fin: 500 }), artPay("ACCESSORI", 40)],
+      pagamento: { contanti: "84", pagamentiElettronici: "56" },
+    }),
+  ]);
+  const tel = a.prodottiByCategoria.find((c) => c.categoria === "TELEFONIA");
+  assert.equal(tel.pagamenti.finanziato, 500);
+  assert.ok(Math.abs(tel.pagamenti.contanti - 60) < 0.01);
+  assert.ok(Math.abs(tel.pagamenti.pos - 40) < 0.01);
+  assert.equal(tel.pagamenti.varCredito, 0);
+  assert.equal(tel.pagamenti.altro, 0);
+  const acc = a.prodottiByCategoria.find((c) => c.categoria === "ACCESSORI");
+  assert.ok(Math.abs(acc.pagamenti.contanti - 24) < 0.01);
+  assert.ok(Math.abs(acc.pagamenti.pos - 16) < 0.01);
+  // Lo split somma al fatturato della categoria.
+  const sum = Object.values(tel.pagamenti).reduce((s, v) => s + v, 0);
+  assert.ok(Math.abs(sum - tel.importo) < 0.01);
+});
+
+await test("split pagamenti: VAR (credito), mix con bonifici in `altro`, vendita senza mix ⇒ altro", () => {
+  const a = aggregateDailyReport([
+    salePay({
+      articoli: [artPay("SMART DEVICE", 200, { credito: 200 }), artPay("ACCESSORI", 50)],
+      pagamento: { contanti: "0", bonifici: "50" },
+    }),
+    salePay({ articoli: [artPay("ACCESSORI", 10)] }), // nessun pagamento nel rawData
+  ]);
+  const sd = a.prodottiByCategoria.find((c) => c.categoria === "SMART DEVICE");
+  assert.equal(sd.pagamenti.varCredito, 200);
+  assert.equal(sd.pagamenti.contanti + sd.pagamenti.pos + sd.pagamenti.altro, 0);
+  const acc = a.prodottiByCategoria.find((c) => c.categoria === "ACCESSORI");
+  // 50 via bonifici (mix "altro") + 10 senza mix ⇒ altro.
+  assert.ok(Math.abs(acc.pagamenti.altro - 60) < 0.01);
+  assert.equal(acc.pagamenti.contanti, 0);
+});
+
+await test("split pagamenti: fin+VAR > prezzo ⇒ cappati, somma bucket == importo", () => {
+  // Dati sporchi: finanziato 500 + credito 200 su un prezzo di 600.
+  const a = aggregateDailyReport([
+    salePay({ articoli: [artPay("TELEFONIA", 600, { fin: 500, credito: 200 })] }),
+  ]);
+  const tel = a.prodottiByCategoria.find((c) => c.categoria === "TELEFONIA");
+  assert.equal(tel.pagamenti.finanziato, 500);
+  assert.equal(tel.pagamenti.varCredito, 100); // cappato al residuo
+  const sum = Object.values(tel.pagamenti).reduce((s, v) => s + v, 0);
+  assert.ok(Math.abs(sum - tel.importo) < 0.01, `sum=${sum} importo=${tel.importo}`);
+  assert.ok(Object.values(tel.pagamenti).every((v) => v >= 0));
+});
+
+await test("split pagamenti: mix con valori negativi ⇒ clampati, nessun bucket negativo", () => {
+  const a = aggregateDailyReport([
+    salePay({
+      articoli: [artPay("ACCESSORI", 100)],
+      pagamento: { contanti: "-50", pagamentiElettronici: "100" },
+    }),
+    salePay({
+      articoli: [artPay("SMART DEVICE", 80)],
+      pagamento: { contanti: "-10", bonifici: "-5" }, // mix effettivo nullo
+    }),
+  ]);
+  const acc = a.prodottiByCategoria.find((c) => c.categoria === "ACCESSORI");
+  assert.equal(acc.pagamenti.contanti, 0); // il -50 non pesa
+  assert.ok(Math.abs(acc.pagamenti.pos - 100) < 0.01);
+  const sd = a.prodottiByCategoria.find((c) => c.categoria === "SMART DEVICE");
+  assert.ok(Math.abs(sd.pagamenti.altro - 80) < 0.01); // fallback mix nullo
+  for (const c of a.prodottiByCategoria) {
+    assert.ok(Object.values(c.pagamenti).every((v) => v >= 0), `bucket negativo in ${c.categoria}`);
+  }
+});
+
+await test("HTML: card Prodotti per categoria e Servizi con chip pagamenti", () => {
+  const rows = [
+    salePay({
+      totale: "735",
+      articoli: [artPay("TELEFONIA", 600, { fin: 500 }), artPay("ACCESSORI", 40), artPay("SPEDIZIONE", 5), artPay("UNTIED", 90)],
+      pagamento: { contanti: "135", pagamentiElettronici: "0" },
+    }),
+  ];
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-02",
+    aggregates: aggregateDailyReport(rows),
+  });
+  assert.ok(html.includes("Prodotti per categoria"), "manca la card prodotti");
+  assert.ok(html.includes(">Servizi <span"), "manca la card servizi");
+  assert.ok(html.includes("TELEFONIA"), "manca la categoria TELEFONIA");
+  assert.ok(html.includes("🏦 Finanziato 500,00 €"), "manca il chip finanziato");
+  assert.ok(html.includes("💵 Contanti"), "manca il chip contanti");
+  // Sottotitolo con i totali della sezione servizi (1 pz · 5 €).
+  assert.ok(html.includes("1 pz · 5,00 €"), "manca il totale servizi nel sottotitolo");
+});
+
+await test("HTML: giornata senza prodotti/servizi ⇒ card assenti", () => {
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-02",
+    aggregates: aggregateDailyReport([salePay({ totale: "30", articoli: [artPay("UNTIED", 30)] })]),
+  });
+  assert.ok(!html.includes("Prodotti per categoria"));
+  assert.ok(!html.includes(">Servizi <span"));
+});
+
 console.log(`\nRisultato: ${passed} passati, ${failed} falliti`);
 if (failed > 0) process.exit(1);

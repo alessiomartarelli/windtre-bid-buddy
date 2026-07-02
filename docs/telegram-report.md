@@ -35,7 +35,19 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   (`PISTA_THEME`), pezzi+importo, chip per categoria (top 4 da
   `categorieByPista`) e delta vs media 7 gg; **"Mix del giorno"** —
   donut chart SVG (`svgDonut`, pezzi totali al centro) + legenda per
-  tipo; classifiche PDV e addetti (medaglie top 3) con barre
+  tipo; **"Prodotti per categoria"** e **"Servizi"** — una card
+  ciascuna (da `prodottiByCategoria`/`serviziByCategoria` di
+  `aggregateDailyReport`, assenti se vuote) con una riga per categoria
+  (pezzi + fatturato, barra proporzionale) e chip col fatturato diviso
+  per modalità di pagamento (💵 Contanti / 💳 POS / 🏦 Finanziato /
+  📄 VAR / 🧾 Altro, solo quelle > 0; sottotitolo `h2-sub` coi totali
+  di sezione). Lo split è calcolato in `aggregateDailyReport`:
+  finanziato (`importoFinanziato`) e VAR (`importoCredito`) sono esatti
+  per-articolo, il resto del prezzo è ripartito proporzionalmente sul
+  mix di incasso dello scontrino (`rawData.pagamento`: contanti /
+  pagamentiElettronici⇒POS / bonifici+assegni+buoni+coupon+non
+  scontrinato+altri⇒Altro); vendita senza mix ⇒ tutto in Altro;
+  classifiche PDV e addetti (medaglie top 3) con barre
   proporzionali all'importo. Documento standalone: CSS + SVG inline,
   nessuna risorsa esterna, escape HTML di tutti i valori dinamici. Il
   parametro `trend?: TrendDay[]` è opzionale: con meno di 2 giorni le
@@ -130,7 +142,7 @@ pulsanti "Invia report di prova" e "Salva configurazione".
 
 ## Test
 
-`tests/telegram-report.test.mjs` (44 test puri, inclusi 4 sui cambi
+`tests/telegram-report.test.mjs` (52 test puri, inclusi 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,

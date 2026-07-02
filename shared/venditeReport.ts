@@ -43,6 +43,37 @@ export interface PistaCategoriaAggregate {
   pezzi: number;
 }
 
+/**
+ * Ripartizione del fatturato per modalità di pagamento. Finanziato e VAR
+ * (credito) sono ESATTI (importi per-articolo BiSuite); il resto del
+ * prezzo è ripartito proporzionalmente sul mix di incasso dello
+ * scontrino (contanti / POS / altro), che BiSuite espone solo a livello
+ * vendita. Vendita senza mix di incasso ⇒ il resto finisce in `altro`.
+ */
+export interface PagamentoSplit {
+  contanti: number;
+  pos: number;
+  finanziato: number;
+  /** VAR / vendite a credito (importoCredito per-articolo). */
+  varCredito: number;
+  /** Bonifici, assegni, buoni, coupon, non scontrinato, altri. */
+  altro: number;
+}
+
+export function emptyPagamentoSplit(): PagamentoSplit {
+  return { contanti: 0, pos: 0, finanziato: 0, varCredito: 0, altro: 0 };
+}
+
+export interface CategoriaReportAggregate {
+  /** Nome categoria BiSuite (es. "TELEFONIA", "ACCESSORI"). */
+  categoria: string;
+  pezzi: number;
+  /** Fatturato (somma prezzi articolo, come amountByType). */
+  importo: number;
+  /** Fatturato della categoria diviso per modalità di pagamento. */
+  pagamenti: PagamentoSplit;
+}
+
 export interface DailyReportAggregates {
   /** Vendite non annullate considerate nel report. */
   vendite: number;
@@ -57,6 +88,16 @@ export interface DailyReportAggregates {
    * ordinato per pezzi decrescenti. Usato dalle card pista del report HTML.
    */
   categorieByPista: Partial<Record<PistaCanvass, PistaCategoriaAggregate[]>>;
+  /**
+   * Dettaglio Prodotti per categoria (pezzi, fatturato, split per
+   * modalità di pagamento), ordinato per fatturato decrescente.
+   */
+  prodottiByCategoria: CategoriaReportAggregate[];
+  /**
+   * Dettaglio Servizi per categoria, stessa shape dei prodotti. I totali
+   * servizi (pezzi/fatturato) restano in countByType/amountByType.
+   */
+  serviziByCategoria: CategoriaReportAggregate[];
   /** Aggregato per punto vendita, ordinato per importo decrescente. */
   perPdv: PdvReportAggregate[];
   /**
@@ -75,6 +116,36 @@ function parseTotale(totale: string | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function toNum(v: unknown): number {
+  if (v === null || v === undefined) return 0;
+  const n = typeof v === "number" ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Mix di incasso a livello scontrino letto da `rawData.pagamento`
+ * (contanti / POS / altro = bonifici+assegni+buoni+coupon+non
+ * scontrinato+altri). Serve a ripartire proporzionalmente sui singoli
+ * articoli la parte di prezzo non finanziata/a credito.
+ */
+function saleIncassoMix(rawData: unknown): { contanti: number; pos: number; altro: number; tot: number } {
+  const pag = (rawData as { pagamento?: Record<string, unknown> } | null | undefined)?.pagamento;
+  // Clamp a >= 0: valori negativi (storni/rettifiche) non devono generare
+  // bucket negativi o distorcere la ripartizione proporzionale.
+  const nn = (v: unknown) => Math.max(toNum(v), 0);
+  const contanti = nn(pag?.contanti);
+  const pos = nn(pag?.pagamentiElettronici);
+  const altro =
+    nn(pag?.nonScontrinato) +
+    nn(pag?.nonScontrinatoPos) +
+    nn(pag?.bonifici) +
+    nn(pag?.assegni) +
+    nn(pag?.buoni) +
+    nn(pag?.coupon) +
+    nn(pag?.altriPagamenti);
+  return { contanti, pos, altro, tot: contanti + pos + altro };
+}
+
 /**
  * Aggrega le vendite del giorno come la pagina Vendite BiSuite:
  * - le vendite ANNULLATA sono ESCLUSE da tutti i conteggi;
@@ -88,6 +159,10 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
   const countByPista: Partial<Record<PistaCanvass, number>> = {};
   const amountByPista: Partial<Record<PistaCanvass, number>> = {};
   const catByPista: Partial<Record<PistaCanvass, Map<string, number>>> = {};
+  const catByType: Record<"prodotti" | "servizi", Map<string, CategoriaReportAggregate>> = {
+    prodotti: new Map(),
+    servizi: new Map(),
+  };
   const pdvMap = new Map<string, PdvReportAggregate>();
   const addettoMap = new Map<string, AddettoReportAggregate>();
   let vendite = 0;
@@ -108,12 +183,50 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
       countByPista[pista] = (countByPista[pista] ?? 0) + count;
       amountByPista[pista] = (amountByPista[pista] ?? 0) + (sc.amountByPista[pista] ?? 0);
     }
+    const mix = saleIncassoMix(row.rawData);
     for (const article of sc.articles) {
-      if (!article.pista) continue;
-      const catLabel = article.categoriaNome.trim() || "Altro";
-      const map = catByPista[article.pista] ?? new Map<string, number>();
-      map.set(catLabel, (map.get(catLabel) ?? 0) + 1);
-      catByPista[article.pista] = map;
+      if (article.pista) {
+        const catLabel = article.categoriaNome.trim() || "Altro";
+        const map = catByPista[article.pista] ?? new Map<string, number>();
+        map.set(catLabel, (map.get(catLabel) ?? 0) + 1);
+        catByPista[article.pista] = map;
+      }
+
+      // Dettaglio Prodotti/Servizi per categoria con split pagamenti:
+      // finanziato e VAR sono esatti (per-articolo); il resto del prezzo
+      // è ripartito sul mix di incasso dello scontrino, oppure in
+      // `altro` se la vendita non espone alcun mix.
+      if (article.type === "prodotti" || article.type === "servizi") {
+        const catLabel = article.categoriaNome.trim() || "Altro";
+        const map = catByType[article.type];
+        const entry = map.get(catLabel) ?? {
+          categoria: catLabel,
+          pezzi: 0,
+          importo: 0,
+          pagamenti: emptyPagamentoSplit(),
+        };
+        entry.pezzi++;
+        entry.importo += article.prezzo;
+        // Invariante: la somma dei bucket per-articolo == prezzo articolo.
+        // Il finanziato è cappato al prezzo, il VAR al residuo dopo il
+        // finanziato, così fin+var non può mai superare il prezzo.
+        const prezzo = Math.max(article.prezzo, 0);
+        const fin = Math.min(Math.max(article.importoFinanziato, 0), prezzo);
+        const varC = Math.min(Math.max(article.importoCredito, 0), prezzo - fin);
+        entry.pagamenti.finanziato += fin;
+        entry.pagamenti.varCredito += varC;
+        const resto = Math.max(prezzo - fin - varC, 0);
+        if (resto > 0) {
+          if (mix.tot > 0) {
+            entry.pagamenti.contanti += (resto * mix.contanti) / mix.tot;
+            entry.pagamenti.pos += (resto * mix.pos) / mix.tot;
+            entry.pagamenti.altro += (resto * mix.altro) / mix.tot;
+          } else {
+            entry.pagamenti.altro += resto;
+          }
+        }
+        map.set(catLabel, entry);
+      }
     }
 
     const key = (row.codicePos ?? "").trim() || "N/D";
@@ -158,6 +271,11 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
       .sort((a, b) => b.pezzi - a.pezzi || a.categoria.localeCompare(b.categoria, "it"));
   }
 
+  const sortCategorie = (map: Map<string, CategoriaReportAggregate>): CategoriaReportAggregate[] =>
+    Array.from(map.values()).sort(
+      (a, b) => b.importo - a.importo || b.pezzi - a.pezzi || a.categoria.localeCompare(b.categoria, "it"),
+    );
+
   return {
     vendite,
     importo,
@@ -166,6 +284,8 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
     countByPista,
     amountByPista,
     categorieByPista,
+    prodottiByCategoria: sortCategorie(catByType.prodotti),
+    serviziByCategoria: sortCategorie(catByType.servizi),
     perPdv,
     perAddetto,
   };
