@@ -198,7 +198,7 @@ await test("messaggio completo: totali, sezioni tipo/pista/PDV, solo voci > 0", 
 
 console.log("\n— buildVenditeReportHtml / reportHtmlFileName —");
 
-await test("HTML: dashboard completa con hero, card piste, tipi, classifiche PDV e addetti", () => {
+await test("HTML: dashboard completa con hero, highlights, gara piste, mix tipi, classifiche", () => {
   const aggregates = aggregateDailyReport([
     sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario Rossi", totale: "130", articoli: [art("UNTIED", 30), art("TELEFONIA", 100)] }),
     sale({ codicePos: "P2", nomeNegozio: "Mare", nomeAddetto: "Luigi Verdi", totale: "20", articoli: [art("ENERGIA W3", 20)] }),
@@ -215,19 +215,24 @@ await test("HTML: dashboard completa con hero, card piste, tipi, classifiche PDV
   assert.ok(html.includes("ore 13:30"));
   // Hero: numero grande + importo totale
   assert.ok(html.includes('<div class="hero-num">2</div>'));
-  assert.ok(html.includes("Importo totale"));
   assert.ok(html.includes("150,00 €"));
-  // Card piste: solo piste con pezzi > 0, con tema colorato inline
-  assert.ok(html.includes(">Mobile</div>"));
-  assert.ok(html.includes(">Energia</div>"));
-  assert.ok(!html.includes(">Fisso</div>"));
-  assert.ok(html.includes("border-color:#2563eb")); // tema pista mobile
-  // Breakdown categorie dentro la card pista
-  assert.ok(html.includes("<span>UNTIED</span><b>1</b>"));
-  // Tipi: solo voci > 0 (niente Servizi)
-  assert.ok(html.includes(">Canvass</div>"));
-  assert.ok(html.includes(">Prodotti</div>"));
-  assert.ok(!html.includes(">Servizi</div>"));
+  // Highlights: top negozio/addetto/pista
+  assert.ok(html.includes("Top negozio"));
+  assert.ok(html.includes("Top addetto"));
+  assert.ok(html.includes("Pista del giorno"));
+  // Gara piste: solo piste con pezzi > 0, con colore tema inline
+  assert.ok(html.includes('style="color:#60a5fa">Mobile</span>')); // tema mobile dark
+  assert.ok(html.includes(">Energia</span>"));
+  assert.ok(!html.includes(">Fisso</span>"));
+  assert.ok(html.includes('<div class="pbar">'));
+  // Chip categorie dentro la riga pista
+  assert.ok(html.includes(">UNTIED ×1</span>"));
+  // Mix tipi: donut SVG + legenda solo voci > 0 (niente Servizi)
+  assert.ok(html.includes("Mix del giorno"));
+  assert.ok(html.includes("<svg")); // donut
+  assert.ok(html.includes(">Canvass</span>"));
+  assert.ok(html.includes(">Prodotti</span>"));
+  assert.ok(!html.includes(">Servizi</span>"));
   // Classifica PDV ordinata per importo↓ con barre
   assert.ok(html.includes("Per punto vendita"));
   assert.ok(html.indexOf("Centro") < html.indexOf("Mare"));
@@ -237,15 +242,14 @@ await test("HTML: dashboard completa con hero, card piste, tipi, classifiche PDV
   assert.ok(html.includes("Per addetto"));
   assert.ok(html.includes("🥇 Mario Rossi"));
   assert.ok(html.includes("🥈 Luigi Verdi"));
-  assert.ok(html.indexOf("Mario Rossi") < html.indexOf("Luigi Verdi")); // 130 > 20
-  // Senza trend: nessun grafico né KPI comparativi
-  assert.ok(!html.includes("<svg"));
-  assert.ok(!html.includes(">Ieri</div>"));
+  // Senza trend: niente sezione andamento né chip delta nell'hero
+  assert.ok(!html.includes("Andamento"));
+  assert.ok(!html.includes("oggi vs ieri"));
   // Nessuna risorsa esterna
   assert.ok(!html.includes("http://") && !html.includes("https://"));
 });
 
-await test("HTML con trend: KPI oggi/ieri/media, grafico andamento e sparkline pista", () => {
+await test("HTML con trend: delta nell'hero, grafico andamento, delta pista", () => {
   const aggregates = aggregateDailyReport([
     sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario Rossi", totale: "30", articoli: [art("UNTIED", 30)] }),
   ]);
@@ -260,20 +264,15 @@ await test("HTML con trend: KPI oggi/ieri/media, grafico andamento e sparkline p
     aggregates,
     trend,
   });
-  // KPI comparativi
-  assert.ok(html.includes(">Oggi</div>"));
-  assert.ok(html.includes(">Ieri</div>"));
-  assert.ok(html.includes(">Media 7 gg</div>"));
-  // Delta: oggi(1) vs ieri(2) = -50% ▼; media 7gg = (4+2)/2 = 3 ⇒ -67% ▼
+  // Delta nell'hero: oggi(1) vs ieri(2) = -50% ▼; media 7gg = (4+2)/2 = 3 ⇒ -67% ▼
+  assert.ok(html.includes('<div class="hero-chips">'));
   assert.ok(html.includes("▼ 50% oggi vs ieri"));
-  assert.ok(html.includes("▼ 67% oggi vs media"));
-  // Grafico andamento + assi con date
-  assert.ok(html.includes("Andamento — vendite ultimi 3 giorni"));
+  assert.ok(html.includes("▼ 67% oggi vs media 7 gg"));
+  // Grafico andamento + assi con giorno settimana e picco
+  assert.ok(html.includes("Andamento · ultimi 3 giorni"));
   assert.ok(html.includes("<svg"));
   assert.ok(html.includes("30/06"));
-  assert.ok(html.includes("max 4"));
-  // Sparkline dentro la card pista mobile
-  assert.ok(html.includes("Andamento Mobile"));
+  assert.ok(html.includes("picco 4"));
   // Delta pista: oggi(1) vs media 7gg pista (2+1)/2=1.5 ⇒ -33% ▼
   assert.ok(html.includes("▼ 33% vs media 7 gg"));
 });
@@ -288,7 +287,7 @@ await test("HTML: giorno senza vendite ⇒ hero a 0 + card vuota, niente classif
   assert.ok(html.includes("Nessuna vendita registrata oggi."));
   assert.ok(!html.includes("Per punto vendita"));
   assert.ok(!html.includes("Per addetto"));
-  assert.ok(!html.includes('<div class="kpi-value">'));
+  assert.ok(!html.includes("La gara delle piste"));
 });
 
 await test("HTML: giorno vuoto MA con trend ⇒ il grafico di andamento resta", () => {
@@ -303,7 +302,7 @@ await test("HTML: giorno vuoto MA con trend ⇒ il grafico di andamento resta", 
     trend,
   });
   assert.ok(html.includes("Nessuna vendita registrata oggi."));
-  assert.ok(html.includes("Andamento — vendite ultimi 2 giorni"));
+  assert.ok(html.includes("Andamento · ultimi 2 giorni"));
   assert.ok(html.includes("<svg"));
 });
 

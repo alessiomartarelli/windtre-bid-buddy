@@ -1,11 +1,13 @@
-// Report vendite giornaliero in formato HTML (Task #248, redesign Task #250):
-// file standalone allegato al messaggio Telegram in stile dashboard mobile:
-// hero con gradiente, KPI di confronto (oggi/ieri/media 7 gg), grafico di
-// andamento, card per pista con bordo colorato + breakdown categorie +
-// sparkline, classifiche PDV/addetti con barre. Tutti i grafici sono SVG
-// inline: nessuna risorsa esterna, il file si apre offline da Telegram.
-// Logica PURA: nessun import React/server, solo import relativi —
-// caricabile via loader tsx nei test.
+// Report vendite giornaliero in formato HTML (Task #248, redesign "night
+// glass" su feedback utente): file standalone allegato al messaggio
+// Telegram. Identità propria, NON una copia del riferimento: tema scuro
+// con card in stile glassmorphism (come l'app), filo conduttore arancione
+// WindTre, hero con delta integrati, riga "highlights" del giorno (top
+// PDV/addetto/pista), piste come gara a barre orizzontali con chip per
+// categoria, donut chart per il mix tipi, classifiche PDV/addetti.
+// Tutti i grafici sono SVG inline: nessuna risorsa esterna, il file si
+// apre offline da Telegram. Logica PURA: nessun import React/server, solo
+// import relativi — caricabile via loader tsx nei test.
 import {
   type DailyReportAggregates,
   type TrendDay,
@@ -22,22 +24,23 @@ import {
   TYPE_LABELS,
 } from "./bisuiteClassification";
 
-// Palette per pista: colore pieno (bordi/titoli/grafici), tinta di sfondo
-// card e colore testo. Coerente coi badge della pagina Vendite BiSuite.
-const PISTA_THEME: Record<PistaCanvass, { solid: string; tint: string; text: string }> = {
-  mobile: { solid: "#2563eb", tint: "#eff6ff", text: "#1d4ed8" },
-  fisso: { solid: "#7c3aed", tint: "#f5f3ff", text: "#6d28d9" },
-  cb: { solid: "#d97706", tint: "#fffbeb", text: "#b45309" },
-  assicurazioni: { solid: "#0d9488", tint: "#f0fdfa", text: "#0f766e" },
-  protecta: { solid: "#dc2626", tint: "#fef2f2", text: "#b91c1c" },
-  energia: { solid: "#16a34a", tint: "#f0fdf4", text: "#15803d" },
+// Palette per pista su fondo scuro (varianti luminose dei colori badge app).
+const PISTA_THEME: Record<PistaCanvass, string> = {
+  mobile: "#60a5fa",
+  fisso: "#a78bfa",
+  cb: "#fbbf24",
+  assicurazioni: "#2dd4bf",
+  protecta: "#f87171",
+  energia: "#4ade80",
 };
 
-const TYPE_THEME: Record<ArticleType, { solid: string; text: string }> = {
-  canvass: { solid: "#f97316", text: "#c2410c" },
-  prodotti: { solid: "#64748b", text: "#334155" },
-  servizi: { solid: "#06b6d4", text: "#0e7490" },
+const TYPE_THEME: Record<ArticleType, string> = {
+  canvass: "#fb923c",
+  prodotti: "#94a3b8",
+  servizi: "#22d3ee",
 };
+
+const ORANGE = "#ff7a1a";
 
 export function escapeHtml(s: string): string {
   return s
@@ -73,8 +76,8 @@ export interface VenditeReportHtmlParams {
   aggregates: DailyReportAggregates;
   /**
    * Serie per-giorno (crescente, ultimo giorno = oggi) per grafico di
-   * andamento, sparkline per pista e confronti oggi/ieri/media 7 gg.
-   * Assente o con meno di 2 giorni ⇒ le sezioni di trend non compaiono.
+   * andamento e confronti oggi/ieri/media 7 gg. Assente o con meno di
+   * 2 giorni ⇒ le sezioni di trend non compaiono.
    */
   trend?: TrendDay[];
 }
@@ -94,9 +97,8 @@ function chartCoords(values: number[], w: number, h: number, pad: number): Array
 }
 
 /**
- * Area chart SVG (linea + riempimento sfumato + punto finale). `values`
- * con meno di 2 punti ⇒ stringa vuota. Usato sia per il grafico grande
- * di andamento sia per le sparkline delle card pista.
+ * Area chart SVG (linea + riempimento + punto finale). `values` con meno
+ * di 2 punti ⇒ stringa vuota.
  */
 export function svgAreaChart(
   values: number[],
@@ -109,19 +111,57 @@ export function svgAreaChart(
   const baseline = (opts.h - pad).toFixed(1);
   const area = `${line} L${pts[pts.length - 1][0]},${baseline} L${pts[0][0]},${baseline} Z`;
   const [lx, ly] = pts[pts.length - 1];
-  const last = opts.showLast === false ? "" : `<circle cx="${lx}" cy="${ly}" r="3" fill="${opts.color}"/>`;
+  const last = opts.showLast === false ? "" : `<circle cx="${lx}" cy="${ly}" r="3.5" fill="${opts.color}"/>`;
   return (
     `<svg viewBox="0 0 ${opts.w} ${opts.h}" width="100%" height="${opts.h}" preserveAspectRatio="none" role="img" aria-hidden="true">` +
-    `<path d="${area}" fill="${opts.color}" fill-opacity="${opts.fillOpacity ?? 0.12}"/>` +
-    `<path d="${line}" fill="none" stroke="${opts.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` +
+    `<path d="${area}" fill="${opts.color}" fill-opacity="${opts.fillOpacity ?? 0.18}"/>` +
+    `<path d="${line}" fill="none" stroke="${opts.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` +
     last +
+    `</svg>`
+  );
+}
+
+/**
+ * Donut chart SVG a segmenti. Somma dei valori non positiva ⇒ stringa
+ * vuota. Al centro mostra `centerLabel` (es. pezzi totali).
+ */
+export function svgDonut(
+  segments: Array<{ value: number; color: string }>,
+  centerLabel: string,
+  size = 132,
+  strokeW = 18,
+): string {
+  const total = segments.reduce((s, seg) => s + Math.max(seg.value, 0), 0);
+  if (total <= 0) return "";
+  const r = (size - strokeW) / 2;
+  const c = size / 2;
+  const circ = 2 * Math.PI * r;
+  let offset = 0;
+  const arcs = segments
+    .filter((seg) => seg.value > 0)
+    .map((seg) => {
+      const len = (seg.value / total) * circ;
+      const dash = `${len.toFixed(2)} ${(circ - len).toFixed(2)}`;
+      const el = `<circle cx="${c}" cy="${c}" r="${r.toFixed(1)}" fill="none" stroke="${seg.color}" stroke-width="${strokeW}" stroke-dasharray="${dash}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 ${c} ${c})"/>`;
+      offset += len;
+      return el;
+    })
+    .join("");
+  return (
+    `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-hidden="true">` +
+    arcs +
+    `<text x="${c}" y="${c - 2}" text-anchor="middle" fill="#f8fafc" font-size="26" font-weight="800">${escapeHtml(centerLabel)}</text>` +
+    `<text x="${c}" y="${c + 16}" text-anchor="middle" fill="#94a3b8" font-size="11">pezzi</text>` +
     `</svg>`
   );
 }
 
 function fmtDayShort(ymd: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
-  return m ? `${m[3]}/${m[2]}` : ymd;
+  if (!m) return ymd;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  const wd = d.toLocaleDateString("it-IT", { weekday: "short", timeZone: "UTC" });
+  return `${wd} ${m[3]}/${m[2]}`;
 }
 
 function deltaChip(delta: number | null, suffix: string): string {
@@ -138,98 +178,114 @@ function deltaChip(delta: number | null, suffix: string): string {
 // Sezioni
 // ---------------------------------------------------------------------------
 
-function heroSection(a: DailyReportAggregates, dateLabel: string, timeLabel?: string): string {
-  const when = timeLabel ? `${dateLabel} · ore ${escapeHtml(timeLabel)}` : dateLabel;
+function heroSection(a: DailyReportAggregates, trend: TrendDay[] | undefined): string {
+  let chips = "";
+  if (trend && trend.length >= 2) {
+    const ieri = trend[trend.length - 2];
+    const prev = trend.slice(0, -1).slice(-7);
+    const media7 = prev.length > 0 ? prev.reduce((s, d) => s + d.vendite, 0) / prev.length : 0;
+    chips = `<div class="hero-chips">${deltaChip(pctDelta(a.vendite, ieri.vendite), "oggi vs ieri")}${deltaChip(pctDelta(a.vendite, media7), "oggi vs media 7 gg")}</div>`;
+  }
   return `<div class="hero">
+      <div class="hero-glow"></div>
       <div class="hero-label">Vendite di oggi</div>
       <div class="hero-num">${a.vendite}</div>
-      <div class="hero-sub">Importo totale <b>${escapeHtml(fmtEuro(a.importo))}</b></div>
-      <div class="hero-when">${when}</div>
+      <div class="hero-sub">${escapeHtml(fmtEuro(a.importo))} <span class="hero-sub-dim">di importo totale</span></div>
+      ${chips}
     </div>`;
 }
 
-function kpiSection(a: DailyReportAggregates, trend: TrendDay[] | undefined): string {
-  if (!trend || trend.length < 2) return "";
-  const ieri = trend[trend.length - 2];
-  const prev = trend.slice(0, -1).slice(-7);
-  const media7 = prev.length > 0 ? prev.reduce((s, d) => s + d.vendite, 0) / prev.length : 0;
-  const media7Round = Math.round(media7 * 10) / 10;
-  const media7Label = Number.isInteger(media7Round) ? String(media7Round) : media7Round.toFixed(1).replace(".", ",");
-  return `<div class="kpis">
-      <div class="card kpi"><div class="kpi-label">Oggi</div><div class="kpi-value">${a.vendite}</div></div>
-      <div class="card kpi"><div class="kpi-label">Ieri</div><div class="kpi-value">${ieri.vendite}</div>${deltaChip(pctDelta(a.vendite, ieri.vendite), "oggi vs ieri")}</div>
-      <div class="card kpi"><div class="kpi-label">Media 7 gg</div><div class="kpi-value">${media7Label}</div>${deltaChip(pctDelta(a.vendite, media7), "oggi vs media")}</div>
-    </div>`;
+function highlightsSection(a: DailyReportAggregates): string {
+  const items: string[] = [];
+  if (a.perPdv.length > 0) {
+    const top = a.perPdv[0];
+    items.push(`<div class="hl"><div class="hl-icon">🏆</div><div class="hl-k">Top negozio</div><div class="hl-v">${escapeHtml(top.nomeNegozio || top.codicePos)}</div><div class="hl-s">${escapeHtml(fmtEuro(top.importo))}</div></div>`);
+  }
+  if (a.perAddetto.length > 0) {
+    const top = a.perAddetto[0];
+    items.push(`<div class="hl"><div class="hl-icon">⭐</div><div class="hl-k">Top addetto</div><div class="hl-v">${escapeHtml(top.nomeAddetto)}</div><div class="hl-s">${top.vendite} vendite</div></div>`);
+  }
+  const topPista = REPORT_PISTA_ORDER
+    .map((p) => ({ p, n: a.countByPista[p] ?? 0 }))
+    .sort((x, y) => y.n - x.n)[0];
+  if (topPista && topPista.n > 0) {
+    items.push(`<div class="hl"><div class="hl-icon">🚀</div><div class="hl-k">Pista del giorno</div><div class="hl-v" style="color:${PISTA_THEME[topPista.p]}">${escapeHtml(PISTA_CANVASS_LABELS[topPista.p])}</div><div class="hl-s">${topPista.n} pz</div></div>`);
+  }
+  if (items.length === 0) return "";
+  return `<div class="hls">${items.join("")}</div>`;
 }
 
 function trendSection(trend: TrendDay[] | undefined): string {
   if (!trend || trend.length < 2) return "";
   const values = trend.map((d) => d.vendite);
   const max = Math.max(...values);
-  const chart = svgAreaChart(values, { w: 320, h: 96, color: "#f97316", fillOpacity: 0.15 });
+  const chart = svgAreaChart(values, { w: 320, h: 92, color: ORANGE, fillOpacity: 0.22 });
   return `<div class="card">
-      <h2><span class="dot" style="background:#f97316"></span>Andamento — vendite ultimi ${trend.length} giorni</h2>
+      <h2>Andamento · ultimi ${trend.length} giorni</h2>
       ${chart}
-      <div class="axis"><span>${escapeHtml(fmtDayShort(trend[0].ymd))}</span><span>max ${max}</span><span>${escapeHtml(fmtDayShort(trend[trend.length - 1].ymd))}</span></div>
+      <div class="axis"><span>${escapeHtml(fmtDayShort(trend[0].ymd))}</span><span>picco ${max}</span><span>${escapeHtml(fmtDayShort(trend[trend.length - 1].ymd))}</span></div>
     </div>`;
 }
 
 function pisteSection(a: DailyReportAggregates, trend: TrendDay[] | undefined): string {
-  const cards = REPORT_PISTA_ORDER
-    .filter((pista) => (a.countByPista[pista] ?? 0) > 0 || (trend ?? []).some((d) => (d.countByPista[pista] ?? 0) > 0))
+  const active = REPORT_PISTA_ORDER.filter((p) => (a.countByPista[p] ?? 0) > 0);
+  if (active.length === 0) return "";
+  const maxCount = Math.max(...active.map((p) => a.countByPista[p] ?? 0), 1);
+  const rows = active
     .map((pista) => {
-      const theme = PISTA_THEME[pista];
+      const color = PISTA_THEME[pista];
       const label = PISTA_CANVASS_LABELS[pista];
       const count = a.countByPista[pista] ?? 0;
       const amount = a.amountByPista[pista] ?? 0;
+      const width = Math.max(6, Math.round((count / maxCount) * 100));
 
-      let deltaHtml = "";
-      let sparkHtml = "";
+      let delta = "";
       if (trend && trend.length >= 2) {
         const series = trend.map((d) => d.countByPista[pista] ?? 0);
         const prev = series.slice(0, -1).slice(-7);
         const media7 = prev.length > 0 ? prev.reduce((s, v) => s + v, 0) / prev.length : 0;
-        deltaHtml = `<div class="pista-delta">${deltaChip(pctDelta(count, media7), "vs media 7 gg")}</div>`;
-        const spark = svgAreaChart(series, { w: 280, h: 48, color: theme.solid, fillOpacity: 0.12 });
-        if (spark) {
-          sparkHtml = `<div class="pista-chart-label">Andamento ${escapeHtml(label)}</div>${spark}`;
-        }
+        delta = deltaChip(pctDelta(count, media7), "vs media 7 gg");
       }
 
-      const breakdown = (a.categorieByPista[pista] ?? [])
-        .slice(0, 5)
-        .map((c) => `<div class="brow"><span>${escapeHtml(c.categoria)}</span><b>${c.pezzi}</b></div>`)
+      const chips = (a.categorieByPista[pista] ?? [])
+        .slice(0, 4)
+        .map((c) => `<span class="chip">${escapeHtml(c.categoria)} ×${c.pezzi}</span>`)
         .join("");
 
-      return `<div class="pista-card" style="border-color:${theme.solid};background:${theme.tint}">
-        <div class="pista-name" style="color:${theme.text}">${escapeHtml(label)}</div>
-        <div class="pista-num">${count} <span class="pista-pz">pz</span></div>
-        ${deltaHtml}
-        <div class="pista-amount">${escapeHtml(fmtEuro(amount))}</div>
-        ${breakdown ? `<div class="brows">${breakdown}</div>` : ""}
-        ${sparkHtml}
+      return `<div class="prow">
+        <div class="prow-head"><span class="pname" style="color:${color}">${escapeHtml(label)}</span><span class="pval">${count} pz · ${escapeHtml(fmtEuro(amount))}</span></div>
+        <div class="pbar"><i style="width:${width}%;background:linear-gradient(90deg,${color},${color}66)"></i></div>
+        <div class="pmeta">${chips}${delta}</div>
       </div>`;
-    });
-  if (cards.length === 0) return "";
-  return `<div class="section-title">📊 Piste</div>\n    ${cards.join("\n    ")}`;
+    })
+    .join("\n        ");
+  return `<div class="card"><h2>La gara delle piste</h2>
+        ${rows}
+    </div>`;
 }
 
 function tipiSection(a: DailyReportAggregates): string {
-  const cards = REPORT_TYPE_ORDER
-    .filter((t) => a.countByType[t] > 0)
-    .map((t) => {
-      const theme = TYPE_THEME[t];
-      return `<div class="card tipo"><div class="tipo-label"><span class="dot" style="background:${theme.solid}"></span>${escapeHtml(TYPE_LABELS[t])}</div>` +
-        `<div class="tipo-num" style="color:${theme.text}">${a.countByType[t]} <span class="pista-pz">pz</span></div>` +
-        `<div class="tipo-amount">${escapeHtml(fmtEuro(a.amountByType[t]))}</div></div>`;
-    });
-  if (cards.length === 0) return "";
-  return `<div class="section-title">🧾 Per tipo</div>\n    <div class="tipi">${cards.join("")}</div>`;
+  const active = REPORT_TYPE_ORDER.filter((t) => a.countByType[t] > 0);
+  if (active.length === 0) return "";
+  const totalPz = active.reduce((s, t) => s + a.countByType[t], 0);
+  const donut = svgDonut(
+    active.map((t) => ({ value: a.countByType[t], color: TYPE_THEME[t] })),
+    String(totalPz),
+  );
+  const legend = active
+    .map(
+      (t) =>
+        `<div class="lrow"><span class="ldot" style="background:${TYPE_THEME[t]}"></span><span class="lname">${escapeHtml(TYPE_LABELS[t])}</span><span class="lval">${a.countByType[t]} pz · ${escapeHtml(fmtEuro(a.amountByType[t]))}</span></div>`,
+    )
+    .join("");
+  return `<div class="card"><h2>Mix del giorno</h2>
+      <div class="mix"><div class="mix-donut">${donut}</div><div class="mix-legend">${legend}</div></div>
+    </div>`;
 }
 
 function rankBar(pct: number, color: string): string {
-  const width = Math.max(2, Math.min(100, Math.round(pct)));
-  return `<div class="bar"><i style="width:${width}%;background:${color}"></i></div>`;
+  const width = Math.max(3, Math.min(100, Math.round(pct)));
+  return `<div class="bar"><i style="width:${width}%;background:linear-gradient(90deg,${color},${color}66)"></i></div>`;
 }
 
 function pdvSection(a: DailyReportAggregates): string {
@@ -241,11 +297,11 @@ function pdvSection(a: DailyReportAggregates): string {
       return `<div class="rank">
         <div class="rank-top"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-val">${escapeHtml(fmtEuro(pdv.importo))}</span></div>
         <div class="rank-sub"><span class="mono">${escapeHtml(pdv.codicePos)}</span> · ${pdv.vendite} vendite</div>
-        ${rankBar((pdv.importo / maxImporto) * 100, "#f97316")}
+        ${rankBar((pdv.importo / maxImporto) * 100, ORANGE)}
       </div>`;
     })
     .join("\n        ");
-  return `<div class="card"><h2>🏬 Per punto vendita</h2>
+  return `<div class="card"><h2>Per punto vendita</h2>
         ${rows}
     </div>`;
 }
@@ -260,33 +316,34 @@ function addettiSection(a: DailyReportAggregates): string {
       return `<div class="rank">
         <div class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span><span class="rank-val">${escapeHtml(fmtEuro(add.importo))}</span></div>
         <div class="rank-sub">${add.vendite} vendite</div>
-        ${rankBar((add.importo / maxImporto) * 100, "#2563eb")}
+        ${rankBar((add.importo / maxImporto) * 100, "#60a5fa")}
       </div>`;
     })
     .join("\n        ");
-  return `<div class="card"><h2>👤 Per addetto</h2>
+  return `<div class="card"><h2>Per addetto</h2>
         ${rows}
     </div>`;
 }
 
 /**
- * Costruisce il documento HTML standalone del report giornaliero in stile
- * dashboard mobile. Tutti i valori dinamici sono escapati; CSS e grafici
- * SVG inline nel documento, nessuna risorsa esterna.
+ * Costruisce il documento HTML standalone del report giornaliero: tema
+ * scuro glass, accento arancione WindTre, grafici SVG inline. Tutti i
+ * valori dinamici sono escapati; nessuna risorsa esterna.
  */
 export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
   const a = p.aggregates;
   const dateLabel = fmtReportDate(p.dateYMD);
   const title = `Report vendite ${dateLabel}`;
   const trend = p.trend && p.trend.length >= 2 ? p.trend : undefined;
+  const when = p.timeLabel ? `${escapeHtml(dateLabel)} · ore ${escapeHtml(p.timeLabel)}` : escapeHtml(dateLabel);
 
   const sections: string[] = [];
-  sections.push(heroSection(a, escapeHtml(dateLabel), p.timeLabel));
+  sections.push(heroSection(a, trend));
   if (a.vendite === 0) {
     sections.push(`<div class="card empty">Nessuna vendita registrata oggi.</div>`);
     sections.push(trendSection(trend));
   } else {
-    sections.push(kpiSection(a, trend));
+    sections.push(highlightsSection(a));
     sections.push(trendSection(trend));
     sections.push(pisteSection(a, trend));
     sections.push(tipiSection(a));
@@ -301,80 +358,85 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)} — ${escapeHtml(p.orgName)}</title>
 <style>
-  :root { color-scheme: light; }
+  :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 14px; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-         background: #eef1f5; color: #0f172a; }
+         background: radial-gradient(1000px 500px at 50% -100px, #1e2a45 0%, #0b1220 55%) #0b1220;
+         color: #e2e8f0; }
   .wrap { max-width: 640px; margin: 0 auto; }
-  header { margin: 4px 2px 14px; }
-  h1 { font-size: 19px; margin: 0 0 2px; }
-  .sub { color: #475569; font-size: 13px; margin: 0; }
-  .hero { background: linear-gradient(135deg, #ff9a3d 0%, #ff6a00 60%, #f4511e 100%);
-          border-radius: 20px; padding: 26px 18px 22px; text-align: center; color: #fff;
-          margin-bottom: 14px; box-shadow: 0 8px 24px rgba(244,81,30,.25); }
-  .hero-label { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; opacity: .9; }
-  .hero-num { font-size: 56px; font-weight: 800; line-height: 1.05; margin: 4px 0 2px; }
-  .hero-sub { font-size: 15px; opacity: .95; }
-  .hero-sub b { font-weight: 700; }
-  .hero-when { font-size: 12px; opacity: .8; margin-top: 8px; }
-  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 14px 16px;
-          margin-bottom: 12px; box-shadow: 0 1px 3px rgba(15,23,42,.06); }
-  .card.empty { text-align: center; color: #475569; padding: 32px 16px; }
-  .kpis { display: flex; gap: 10px; }
-  .kpi { flex: 1 1 0; text-align: center; padding: 12px 8px; margin-bottom: 12px; }
-  .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #64748b; }
-  .kpi-value { font-size: 26px; font-weight: 800; margin-top: 2px; }
-  .delta { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px;
-           padding: 2px 8px; margin-top: 4px; }
-  .delta.up { color: #15803d; background: #dcfce7; }
-  .delta.down { color: #b91c1c; background: #fee2e2; }
-  .delta.flat { color: #64748b; background: #f1f5f9; }
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #475569;
-       margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; }
-  .axis { display: flex; justify-content: space-between; color: #94a3b8; font-size: 11px; margin-top: 4px; }
-  .section-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
-                   color: #334155; margin: 18px 2px 10px; }
-  .pista-card { border: 2px solid; border-radius: 18px; padding: 16px 16px 12px; margin-bottom: 12px;
-                text-align: center; box-shadow: 0 2px 8px rgba(15,23,42,.06); }
-  .pista-name { font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-  .pista-num { font-size: 40px; font-weight: 800; line-height: 1.1; margin: 2px 0; }
-  .pista-pz { font-size: 14px; font-weight: 600; color: #64748b; }
-  .pista-delta { margin: 2px 0 4px; }
-  .pista-amount { font-size: 13px; color: #475569; margin-bottom: 8px; }
-  .brows { text-align: left; margin: 8px 2px 10px; }
-  .brow { display: flex; justify-content: space-between; font-size: 13px; color: #334155;
-          padding: 3px 0; border-bottom: 1px dashed rgba(100,116,139,.25); }
-  .brow:last-child { border-bottom: none; }
-  .brow b { font-weight: 700; }
-  .pista-chart-label { font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
-                       color: #94a3b8; margin: 6px 0 2px; }
-  .tipi { display: flex; gap: 10px; flex-wrap: wrap; }
-  .tipo { flex: 1 1 140px; text-align: center; padding: 12px 8px; }
-  .tipo-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #64748b;
-                display: flex; align-items: center; justify-content: center; gap: 5px; }
-  .tipo-num { font-size: 24px; font-weight: 800; margin-top: 2px; }
-  .tipo-amount { font-size: 12px; color: #64748b; }
-  .rank { padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+           margin: 4px 2px 14px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; color: #f8fafc; }
+  .brand-dot { width: 10px; height: 10px; border-radius: 999px;
+               background: linear-gradient(135deg, #ffb347, ${ORANGE}); box-shadow: 0 0 12px ${ORANGE}aa; }
+  .when { color: #94a3b8; font-size: 13px; }
+  .hero { position: relative; overflow: hidden; text-align: center; padding: 30px 18px 24px;
+          border-radius: 22px; margin-bottom: 12px;
+          background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); }
+  .hero-glow { position: absolute; inset: -40% -20% auto; height: 150%; pointer-events: none;
+               background: radial-gradient(closest-side, ${ORANGE}55, transparent 70%); }
+  .hero-label { position: relative; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #fdba74; }
+  .hero-num { position: relative; font-size: 64px; font-weight: 800; line-height: 1.02; margin: 2px 0;
+              background: linear-gradient(180deg, #fff, #fdba74); -webkit-background-clip: text;
+              background-clip: text; color: transparent; }
+  .hero-sub { position: relative; font-size: 16px; font-weight: 700; color: #f8fafc; }
+  .hero-sub-dim { font-weight: 400; color: #94a3b8; font-size: 13px; }
+  .hero-chips { position: relative; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+  .delta { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 3px 10px; }
+  .delta.up { color: #4ade80; background: rgba(74,222,128,.12); border: 1px solid rgba(74,222,128,.3); }
+  .delta.down { color: #f87171; background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.3); }
+  .delta.flat { color: #94a3b8; background: rgba(148,163,184,.1); border: 1px solid rgba(148,163,184,.25); }
+  .hls { display: flex; gap: 10px; margin-bottom: 12px; }
+  .hl { flex: 1 1 0; min-width: 0; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
+        border-radius: 16px; padding: 12px 10px; text-align: center; }
+  .hl-icon { font-size: 18px; }
+  .hl-k { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-top: 2px; }
+  .hl-v { font-size: 13px; font-weight: 700; color: #f8fafc; margin-top: 2px; overflow-wrap: anywhere; }
+  .hl-s { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+  .card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
+          border-radius: 18px; padding: 16px; margin-bottom: 12px; }
+  .card.empty { text-align: center; color: #94a3b8; padding: 32px 16px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: #fdba74; margin: 0 0 12px; }
+  .axis { display: flex; justify-content: space-between; color: #64748b; font-size: 11px; margin-top: 4px; }
+  .prow { padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .prow:last-child { border-bottom: none; padding-bottom: 2px; }
+  .prow-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .pname { font-weight: 800; font-size: 15px; letter-spacing: .02em; }
+  .pval { font-size: 13px; font-weight: 600; color: #cbd5e1; white-space: nowrap; }
+  .pbar { height: 10px; border-radius: 999px; background: rgba(255,255,255,.06); overflow: hidden; margin: 7px 0 6px; }
+  .pbar i { display: block; height: 100%; border-radius: 999px; }
+  .pmeta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .chip { font-size: 11px; color: #cbd5e1; background: rgba(255,255,255,.06);
+          border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 2px 8px; }
+  .mix { display: flex; gap: 16px; align-items: center; }
+  .mix-donut { flex: 0 0 auto; }
+  .mix-legend { flex: 1 1 auto; min-width: 0; }
+  .lrow { display: flex; align-items: center; gap: 8px; padding: 6px 0;
+          border-bottom: 1px solid rgba(255,255,255,.06); font-size: 13px; }
+  .lrow:last-child { border-bottom: none; }
+  .ldot { width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto; }
+  .lname { font-weight: 700; color: #f8fafc; }
+  .lval { margin-left: auto; color: #94a3b8; white-space: nowrap; }
+  .rank { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
   .rank:last-child { border-bottom: none; }
   .rank-top { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
-  .rank-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
-  .rank-val { font-weight: 700; white-space: nowrap; }
-  .rank-sub { color: #64748b; font-size: 12px; margin: 1px 0 5px; }
+  .rank-name { font-weight: 600; color: #f8fafc; min-width: 0; overflow-wrap: anywhere; }
+  .rank-val { font-weight: 700; color: #f8fafc; white-space: nowrap; }
+  .rank-sub { color: #94a3b8; font-size: 12px; margin: 1px 0 5px; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
-  .bar { height: 6px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
+  .bar { height: 6px; background: rgba(255,255,255,.06); border-radius: 999px; overflow: hidden; }
   .bar i { display: block; height: 100%; border-radius: 999px; }
-  footer { color: #94a3b8; font-size: 12px; text-align: center; margin: 18px 0 8px; }
+  footer { color: #64748b; font-size: 12px; text-align: center; margin: 18px 0 8px; }
 </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>📊 ${escapeHtml(title)}</h1>
-      <p class="sub">${escapeHtml(p.orgName)}</p>
+      <div class="brand"><span class="brand-dot"></span>${escapeHtml(p.orgName)}</div>
+      <div class="when">${when}</div>
     </header>
     ${sections.filter(Boolean).join("\n    ")}
-    <footer>Report generato automaticamente — vendite ANNULLATA escluse.</footer>
+    <footer>Report vendite generato automaticamente · vendite ANNULLATA escluse</footer>
   </div>
 </body>
 </html>

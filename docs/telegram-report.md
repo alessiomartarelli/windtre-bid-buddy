@@ -22,15 +22,20 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   `trendYmdOf` (giorno YYYY-MM-DD da Date con getter locali o prefisso
   stringa), `addYmdDays` (aritmetica giorni UTC) e `pctDelta` (variazione
   % arrotondata, base non positiva ⇒ null).
-- **`shared/venditeReportHtml.ts`** (Task #248, redesign Task #250) —
-  logica PURA: `buildVenditeReportHtml` genera il **file HTML allegato**
-  in stile dashboard mobile: hero con gradiente arancione (numero grande
-  vendite + importo), KPI comparativi oggi/ieri/media 7 gg con chip
-  delta ▲/▼%, grafico di andamento 14 giorni ad area (SVG inline via
-  `svgAreaChart`), una card per pista con bordo/tinta a tema
-  (`PISTA_THEME`), pezzi, delta vs media 7 gg, importo, breakdown per
-  categoria (top 5 da `categorieByPista`) e sparkline dedicata; mini-card
-  per tipo, classifiche PDV e addetti (medaglie top 3) con barre
+- **`shared/venditeReportHtml.ts`** (Task #248, redesign "night glass"
+  su feedback utente) — logica PURA: `buildVenditeReportHtml` genera il
+  **file HTML allegato** come dashboard mobile a tema scuro con card in
+  stile glassmorphism (come l'app) e filo conduttore arancione WindTre.
+  Sezioni: hero con glow arancione (numero grande vendite + importo) e
+  chip delta oggi/ieri/media 7 gg ▲/▼% integrati; riga **highlights**
+  (🏆 top negozio, ⭐ top addetto, 🚀 pista del giorno); grafico di
+  andamento 14 giorni ad area (SVG inline via `svgAreaChart`, assi con
+  giorno settimana + picco); **"La gara delle piste"** — una riga per
+  pista con barra orizzontale scalata sul massimo, colore tema dark
+  (`PISTA_THEME`), pezzi+importo, chip per categoria (top 4 da
+  `categorieByPista`) e delta vs media 7 gg; **"Mix del giorno"** —
+  donut chart SVG (`svgDonut`, pezzi totali al centro) + legenda per
+  tipo; classifiche PDV e addetti (medaglie top 3) con barre
   proporzionali all'importo. Documento standalone: CSS + SVG inline,
   nessuna risorsa esterna, escape HTML di tutti i valori dinamici. Il
   parametro `trend?: TrendDay[]` è opzionale: con meno di 2 giorni le

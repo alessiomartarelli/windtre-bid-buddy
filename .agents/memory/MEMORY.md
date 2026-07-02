@@ -1,4 +1,4 @@
-- [Deploy prod via workflow](deploy-prod-via-workflow.md) — `npm run build` supera 120s e i bg process vengono uccisi; lancia deploy con un workflow temporaneo.
+- [Deploy prod staged](deploy-prod-via-workflow.md) — deploy a step separati (build+precompress, scp, schema sync via tunnel da ecosystem.config.cjs, swap+pm2 restart); mai toccare pm2 id 9/12/14.
 - [Customer Journey operator isolation](cj-operator-isolation.md) — operator-scoped queries: guard `filter != null` (empty array => []), never `filter.length > 0`, or empty addetti leaks whole tenant.
 - [Dev DB schema drift](dev-db-schema-drift.md) — se signup/login danno 500 "column ... does not exist", il DB dev è disallineato da shared/schema.ts: lancia `npm run db:push`.
 - [CJ gettone analysis floor](cj-gettone-floor.md) — Analisi gettoni floored per data trigger per TUTTI i ruoli; non gating config su isAdmin; test che seminano now() devono abbassare il trigger.
