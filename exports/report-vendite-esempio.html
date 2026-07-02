@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report vendite 02/07/2026 — Demo Retail S.r.l.</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 14px; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         background: #eef1f5; color: #0f172a; }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  header { margin: 4px 2px 14px; }
+  h1 { font-size: 19px; margin: 0 0 2px; }
+  .sub { color: #475569; font-size: 13px; margin: 0; }
+  .hero { background: linear-gradient(135deg, #ff9a3d 0%, #ff6a00 60%, #f4511e 100%);
+          border-radius: 20px; padding: 26px 18px 22px; text-align: center; color: #fff;
+          margin-bottom: 14px; box-shadow: 0 8px 24px rgba(244,81,30,.25); }
+  .hero-label { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; opacity: .9; }
+  .hero-num { font-size: 56px; font-weight: 800; line-height: 1.05; margin: 4px 0 2px; }
+  .hero-sub { font-size: 15px; opacity: .95; }
+  .hero-sub b { font-weight: 700; }
+  .hero-when { font-size: 12px; opacity: .8; margin-top: 8px; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 14px 16px;
+          margin-bottom: 12px; box-shadow: 0 1px 3px rgba(15,23,42,.06); }
+  .card.empty { text-align: center; color: #475569; padding: 32px 16px; }
+  .kpis { display: flex; gap: 10px; }
+  .kpi { flex: 1 1 0; text-align: center; padding: 12px 8px; margin-bottom: 12px; }
+  .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #64748b; }
+  .kpi-value { font-size: 26px; font-weight: 800; margin-top: 2px; }
+  .delta { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px;
+           padding: 2px 8px; margin-top: 4px; }
+  .delta.up { color: #15803d; background: #dcfce7; }
+  .delta.down { color: #b91c1c; background: #fee2e2; }
+  .delta.flat { color: #64748b; background: #f1f5f9; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #475569;
+       margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; }
+  .axis { display: flex; justify-content: space-between; color: #94a3b8; font-size: 11px; margin-top: 4px; }
+  .section-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+                   color: #334155; margin: 18px 2px 10px; }
+  .pista-card { border: 2px solid; border-radius: 18px; padding: 16px 16px 12px; margin-bottom: 12px;
+                text-align: center; box-shadow: 0 2px 8px rgba(15,23,42,.06); }
+  .pista-name { font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .pista-num { font-size: 40px; font-weight: 800; line-height: 1.1; margin: 2px 0; }
+  .pista-pz { font-size: 14px; font-weight: 600; color: #64748b; }
+  .pista-delta { margin: 2px 0 4px; }
+  .pista-amount { font-size: 13px; color: #475569; margin-bottom: 8px; }
+  .brows { text-align: left; margin: 8px 2px 10px; }
+  .brow { display: flex; justify-content: space-between; font-size: 13px; color: #334155;
+          padding: 3px 0; border-bottom: 1px dashed rgba(100,116,139,.25); }
+  .brow:last-child { border-bottom: none; }
+  .brow b { font-weight: 700; }
+  .pista-chart-label { font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+                       color: #94a3b8; margin: 6px 0 2px; }
+  .tipi { display: flex; gap: 10px; flex-wrap: wrap; }
+  .tipo { flex: 1 1 140px; text-align: center; padding: 12px 8px; }
+  .tipo-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #64748b;
+                display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .tipo-num { font-size: 24px; font-weight: 800; margin-top: 2px; }
+  .tipo-amount { font-size: 12px; color: #64748b; }
+  .rank { padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+  .rank:last-child { border-bottom: none; }
+  .rank-top { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+  .rank-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .rank-val { font-weight: 700; white-space: nowrap; }
+  .rank-sub { color: #64748b; font-size: 12px; margin: 1px 0 5px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+  .bar { height: 6px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 999px; }
+  footer { color: #94a3b8; font-size: 12px; text-align: center; margin: 18px 0 8px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>📊 Report vendite 02/07/2026</h1>
+      <p class="sub">Demo Retail S.r.l.</p>
+    </header>
+    <div class="hero">
+      <div class="hero-label">Vendite di oggi</div>
+      <div class="hero-num">6</div>
+      <div class="hero-sub">Importo totale <b>509,69 €</b></div>
+      <div class="hero-when">02/07/2026 · ore 13:30</div>
+    </div>
+    <div class="kpis">
+      <div class="card kpi"><div class="kpi-label">Oggi</div><div class="kpi-value">6</div></div>
+      <div class="card kpi"><div class="kpi-label">Ieri</div><div class="kpi-value">5</div><span class="delta up">▲ 20% oggi vs ieri</span></div>
+      <div class="card kpi"><div class="kpi-label">Media 7 gg</div><div class="kpi-value">4,7</div><span class="delta up">▲ 27% oggi vs media</span></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot" style="background:#f97316"></span>Andamento — vendite ultimi 14 giorni</h2>
+      <svg viewBox="0 0 320 96" width="100%" height="96" preserveAspectRatio="none" role="img" aria-hidden="true"><path d="M4,59 L28,37 L52,70 L76,26 L100,48 L124,15 L148,59 L172,37 L196,4 L220,48 L244,26 L268,70 L292,37 L316,26 L316,92.0 L4,92.0 Z" fill="#f97316" fill-opacity="0.15"/><path d="M4,59 L28,37 L52,70 L76,26 L100,48 L124,15 L148,59 L172,37 L196,4 L220,48 L244,26 L268,70 L292,37 L316,26" fill="none" stroke="#f97316" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="316" cy="26" r="3" fill="#f97316"/></svg>
+      <div class="axis"><span>19/06</span><span>max 8</span><span>02/07</span></div>
+    </div>
+    <div class="section-title">📊 Piste</div>
+    <div class="pista-card" style="border-color:#2563eb;background:#eff6ff">
+        <div class="pista-name" style="color:#1d4ed8">Mobile</div>
+        <div class="pista-num">3 <span class="pista-pz">pz</span></div>
+        <div class="pista-delta"><span class="delta up">▲ 5% vs media 7 gg</span></div>
+        <div class="pista-amount">59,79 €</div>
+        <div class="brows"><div class="brow"><span>UNTIED</span><b>2</b></div><div class="brow"><span>TIED CF</span><b>1</b></div></div>
+        <div class="pista-chart-label">Andamento Mobile</div><svg viewBox="0 0 280 48" width="100%" height="48" preserveAspectRatio="none" role="img" aria-hidden="true"><path d="M4,28 L24.9,20 L45.8,36 L66.8,12 L87.7,28 L108.6,12 L129.5,28 L150.5,20 L171.4,4 L192.3,28 L213.2,12 L234.2,36 L255.1,20 L276,20 L276,44.0 L4,44.0 Z" fill="#2563eb" fill-opacity="0.12"/><path d="M4,28 L24.9,20 L45.8,36 L66.8,12 L87.7,28 L108.6,12 L129.5,28 L150.5,20 L171.4,4 L192.3,28 L213.2,12 L234.2,36 L255.1,20 L276,20" fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="276" cy="20" r="3" fill="#2563eb"/></svg>
+      </div>
+    <div class="pista-card" style="border-color:#7c3aed;background:#f5f3ff">
+        <div class="pista-name" style="color:#6d28d9">Fisso</div>
+        <div class="pista-num">1 <span class="pista-pz">pz</span></div>
+        <div class="pista-delta"><span class="delta flat">— vs media 7 gg</span></div>
+        <div class="pista-amount">24,90 €</div>
+        <div class="brows"><div class="brow"><span>ADSL/FIBRA/FWA CF</span><b>1</b></div></div>
+        <div class="pista-chart-label">Andamento Fisso</div><svg viewBox="0 0 280 48" width="100%" height="48" preserveAspectRatio="none" role="img" aria-hidden="true"><path d="M4,44 L24.9,44 L45.8,44 L66.8,44 L87.7,44 L108.6,44 L129.5,44 L150.5,44 L171.4,44 L192.3,44 L213.2,44 L234.2,44 L255.1,44 L276,4 L276,44.0 L4,44.0 Z" fill="#7c3aed" fill-opacity="0.12"/><path d="M4,44 L24.9,44 L45.8,44 L66.8,44 L87.7,44 L108.6,44 L129.5,44 L150.5,44 L171.4,44 L192.3,44 L213.2,44 L234.2,44 L255.1,44 L276,4" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="276" cy="4" r="3" fill="#7c3aed"/></svg>
+      </div>
+    <div class="pista-card" style="border-color:#0d9488;background:#f0fdfa">
+        <div class="pista-name" style="color:#0f766e">Assicurazioni</div>
+        <div class="pista-num">1 <span class="pista-pz">pz</span></div>
+        <div class="pista-delta"><span class="delta flat">— vs media 7 gg</span></div>
+        <div class="pista-amount">15,00 €</div>
+        <div class="brows"><div class="brow"><span>ASSICURAZIONI</span><b>1</b></div></div>
+        <div class="pista-chart-label">Andamento Assicurazioni</div><svg viewBox="0 0 280 48" width="100%" height="48" preserveAspectRatio="none" role="img" aria-hidden="true"><path d="M4,44 L24.9,44 L45.8,44 L66.8,44 L87.7,44 L108.6,44 L129.5,44 L150.5,44 L171.4,44 L192.3,44 L213.2,44 L234.2,44 L255.1,44 L276,4 L276,44.0 L4,44.0 Z" fill="#0d9488" fill-opacity="0.12"/><path d="M4,44 L24.9,44 L45.8,44 L66.8,44 L87.7,44 L108.6,44 L129.5,44 L150.5,44 L171.4,44 L192.3,44 L213.2,44 L234.2,44 L255.1,44 L276,4" fill="none" stroke="#0d9488" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="276" cy="4" r="3" fill="#0d9488"/></svg>
+      </div>
+    <div class="pista-card" style="border-color:#16a34a;background:#f0fdf4">
+        <div class="pista-name" style="color:#15803d">Energia</div>
+        <div class="pista-num">2 <span class="pista-pz">pz</span></div>
+        <div class="pista-delta"><span class="delta up">▲ 8% vs media 7 gg</span></div>
+        <div class="pista-amount">0,00 €</div>
+        <div class="brows"><div class="brow"><span>ENERGIA W3</span><b>2</b></div></div>
+        <div class="pista-chart-label">Andamento Energia</div><svg viewBox="0 0 280 48" width="100%" height="48" preserveAspectRatio="none" role="img" aria-hidden="true"><path d="M4,30.7 L24.9,17.3 L45.8,30.7 L66.8,17.3 L87.7,17.3 L108.6,4 L129.5,30.7 L150.5,17.3 L171.4,4 L192.3,17.3 L213.2,17.3 L234.2,30.7 L255.1,17.3 L276,17.3 L276,44.0 L4,44.0 Z" fill="#16a34a" fill-opacity="0.12"/><path d="M4,30.7 L24.9,17.3 L45.8,30.7 L66.8,17.3 L87.7,17.3 L108.6,4 L129.5,30.7 L150.5,17.3 L171.4,4 L192.3,17.3 L213.2,17.3 L234.2,30.7 L255.1,17.3 L276,17.3" fill="none" stroke="#16a34a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="276" cy="17.3" r="3" fill="#16a34a"/></svg>
+      </div>
+    <div class="section-title">🧾 Per tipo</div>
+    <div class="tipi"><div class="card tipo"><div class="tipo-label"><span class="dot" style="background:#f97316"></span>Canvass</div><div class="tipo-num" style="color:#c2410c">7 <span class="pista-pz">pz</span></div><div class="tipo-amount">99,69 €</div></div><div class="card tipo"><div class="tipo-label"><span class="dot" style="background:#64748b"></span>Prodotti</div><div class="tipo-num" style="color:#334155">3 <span class="pista-pz">pz</span></div><div class="tipo-amount">410,00 €</div></div></div>
+    <div class="card"><h2>🏬 Per punto vendita</h2>
+        <div class="rank">
+        <div class="rank-top"><span class="rank-name">WindTre Milano Centro</span><span class="rank-val">484,79 €</span></div>
+        <div class="rank-sub"><span class="mono">W3001</span> · 4 vendite</div>
+        <div class="bar"><i style="width:100%;background:#f97316"></i></div>
+      </div>
+        <div class="rank">
+        <div class="rank-top"><span class="rank-name">WindTre Bergamo</span><span class="rank-val">24,90 €</span></div>
+        <div class="rank-sub"><span class="mono">W3002</span> · 2 vendite</div>
+        <div class="bar"><i style="width:5%;background:#f97316"></i></div>
+      </div>
+    </div>
+    <div class="card"><h2>👤 Per addetto</h2>
+        <div class="rank">
+        <div class="rank-top"><span class="rank-name">🥇 Mario Rossi</span><span class="rank-val">379,89 €</span></div>
+        <div class="rank-sub">2 vendite</div>
+        <div class="bar"><i style="width:100%;background:#2563eb"></i></div>
+      </div>
+        <div class="rank">
+        <div class="rank-top"><span class="rank-name">🥈 Giulio Verdi</span><span class="rank-val">104,90 €</span></div>
+        <div class="rank-sub">2 vendite</div>
+        <div class="bar"><i style="width:28%;background:#2563eb"></i></div>
+      </div>
+        <div class="rank">
+        <div class="rank-top"><span class="rank-name">🥉 Lucia Bianchi</span><span class="rank-val">24,90 €</span></div>
+        <div class="rank-sub">2 vendite</div>
+        <div class="bar"><i style="width:7%;background:#2563eb"></i></div>
+      </div>
+    </div>
+    <footer>Report generato automaticamente — vendite ANNULLATA escluse.</footer>
+  </div>
+</body>
+</html>

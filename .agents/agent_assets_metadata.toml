@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "B2gWKPvS8PB-OVmNeM6Kt"
+uri = "file://exports/report-vendite-esempio.png"
+type = "image"
+title = "Anteprima visiva del report"
+
+[[outputs]]
+id = "I4GmuT1xqkWHE-95i7YNL"
+uri = "file://exports/report-vendite-esempio.tar.gz"
+type = "unspecified"
+title = "File HTML di esempio (estrai e apri nel browser)"
