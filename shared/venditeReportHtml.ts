@@ -356,9 +356,12 @@ function categorieSection(
     </div>`;
 }
 
+// NB: solo <span> (phrasing content) perché la barra finisce dentro il
+// <summary> delle righe drill-down; i <div> lì non sono conformi e su
+// alcune WebView mobili possono rompere il toggle nativo (Task #252).
 function rankBar(pct: number, color: string): string {
   const width = Math.max(3, Math.min(100, Math.round(pct)));
-  return `<div class="bar"><i style="width:${width}%;background:linear-gradient(90deg,${color},${color}66)"></i></div>`;
+  return `<span class="bar"><i style="width:${width}%;background:linear-gradient(90deg,${color},${color}66)"></i></span>`;
 }
 
 /**
@@ -404,8 +407,8 @@ function pdvSection(a: DailyReportAggregates): string {
   const rows = a.perPdv
     .map((pdv) => {
       const name = pdv.nomeNegozio || "N/D";
-      const inner = `<div class="rank-top"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-val">${escapeHtml(fmtEuro(pdv.importo))}</span></div>
-        <div class="rank-sub"><span class="mono">${escapeHtml(pdv.codicePos)}</span> · ${pdv.vendite} vendite</div>
+      const inner = `<span class="rank-top"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-val">${escapeHtml(fmtEuro(pdv.importo))}</span></span>
+        <span class="rank-sub"><span class="mono">${escapeHtml(pdv.codicePos)}</span> · ${pdv.vendite} vendite</span>
         ${rankBar((pdv.importo / maxImporto) * 100, ORANGE)}`;
       return rankRow(inner, drillPanel(pdv.dettaglio));
     })
@@ -422,8 +425,8 @@ function addettiSection(a: DailyReportAggregates): string {
   const rows = a.perAddetto
     .map((add, i) => {
       const medal = medals[i] ? `${medals[i]} ` : "";
-      const inner = `<div class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span><span class="rank-val">${escapeHtml(fmtEuro(add.importo))}</span></div>
-        <div class="rank-sub">${add.vendite} vendite</div>
+      const inner = `<span class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span><span class="rank-val">${escapeHtml(fmtEuro(add.importo))}</span></span>
+        <span class="rank-sub">${add.vendite} vendite</span>
         ${rankBar((add.importo / maxImporto) * 100, "#60a5fa")}`;
       return rankRow(inner, drillPanel(add.dettaglio));
     })
@@ -657,9 +660,9 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
   .rank-top { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
   .rank-name { font-weight: 600; color: #f8fafc; min-width: 0; overflow-wrap: anywhere; }
   .rank-val { font-weight: 700; color: #f8fafc; white-space: nowrap; }
-  .rank-sub { color: #94a3b8; font-size: 12px; margin: 1px 0 5px; }
+  .rank-sub { display: block; color: #94a3b8; font-size: 12px; margin: 1px 0 5px; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
-  .bar { height: 6px; background: rgba(255,255,255,.06); border-radius: 999px; overflow: hidden; }
+  .bar { display: block; height: 6px; background: rgba(255,255,255,.06); border-radius: 999px; overflow: hidden; }
   .bar i { display: block; height: 100%; border-radius: 999px; }
   footer { color: #64748b; font-size: 12px; text-align: center; margin: 18px 0 8px; }
 </style>

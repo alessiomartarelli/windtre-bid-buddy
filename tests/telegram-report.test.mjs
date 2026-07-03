@@ -240,7 +240,9 @@ await test("HTML: dashboard completa con hero, highlights, gara piste, mix tipi,
   assert.ok(html.includes("Per punto vendita"));
   assert.ok(html.indexOf("Centro") < html.indexOf("Mare"));
   assert.ok(html.includes('<span class="mono">P1</span>'));
-  assert.ok(html.includes('<div class="bar">'));
+  // Barre come <span> (phrasing content): dentro <summary> i <div> non
+  // sono conformi e possono rompere il toggle su alcune WebView mobili.
+  assert.ok(html.includes('<span class="bar">'));
   // Classifica addetti con medaglie top 3
   assert.ok(html.includes("Per addetto"));
   assert.ok(html.includes("🥇 Mario Rossi"));
