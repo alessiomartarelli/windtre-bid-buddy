@@ -847,5 +847,101 @@ await test("HTML: giornata senza prodotti/servizi ⇒ card assenti", () => {
   assert.ok(!html.includes(">Servizi <span"));
 });
 
+console.log("\n— drill-down negozio/addetto (Task #251) —");
+
+await test("dettaglio per-PDV: canvass per pista + categorie prodotti/servizi con fatturato", () => {
+  const a = aggregateDailyReport([
+    { ...sale({ codicePos: "A", nomeNegozio: "Alfa", totale: "130", articoli: [art("UNTIED", 30), art("TELEFONIA", 100)] }), nomeAddetto: "Mario" },
+    { ...sale({ codicePos: "A", nomeNegozio: "Alfa", totale: "55", articoli: [art("UNTIED", 30), art("ADSL/FIBRA/FWA CF", 20), art("SPEDIZIONE", 5)] }), nomeAddetto: "Luigi" },
+    { ...sale({ codicePos: "B", nomeNegozio: "Beta", totale: "20", articoli: [art("ENERGIA W3", 20)] }), nomeAddetto: "Mario" },
+    { ...sale({ codicePos: "A", stato: "ANNULLATA", totale: "99", articoli: [art("UNTIED", 99), art("TELEFONIA", 99)] }) },
+  ]);
+  const pdvA = a.perPdv.find((p) => p.codicePos === "A");
+  // Canvass per pista SOLO del PDV A (annullata esclusa).
+  assert.deepEqual(pdvA.dettaglio.countByPista, { mobile: 2, fisso: 1 });
+  // Prodotti e servizi con pezzi + fatturato.
+  assert.deepEqual(pdvA.dettaglio.prodottiByCategoria, [{ categoria: "TELEFONIA", pezzi: 1, importo: 100 }]);
+  assert.deepEqual(pdvA.dettaglio.serviziByCategoria, [{ categoria: "SPEDIZIONE", pezzi: 1, importo: 5 }]);
+  const pdvB = a.perPdv.find((p) => p.codicePos === "B");
+  assert.deepEqual(pdvB.dettaglio.countByPista, { energia: 1 });
+  assert.deepEqual(pdvB.dettaglio.prodottiByCategoria, []);
+  assert.deepEqual(pdvB.dettaglio.serviziByCategoria, []);
+});
+
+await test("dettaglio per-addetto: fusione case-insensitive, N/D, ordinamento categorie per fatturato↓", () => {
+  const a = aggregateDailyReport([
+    { ...sale({ totale: "130", articoli: [art("UNTIED", 30), art("ACCESSORI", 20), art("TELEFONIA", 500)] }), nomeAddetto: "Mario Rossi" },
+    { ...sale({ totale: "40", articoli: [art("TIED CF", 40), art("ACCESSORI", 15)] }), nomeAddetto: "MARIO ROSSI " },
+    { ...sale({ totale: "5", articoli: [art("SPEDIZIONE", 5)] }), nomeAddetto: null },
+  ]);
+  const mario = a.perAddetto.find((x) => x.nomeAddetto === "Mario Rossi");
+  assert.deepEqual(mario.dettaglio.countByPista, { mobile: 2 }); // UNTIED + TIED CF fusi
+  // Ordinati per fatturato decrescente: TELEFONIA(500) prima di ACCESSORI(35).
+  assert.deepEqual(mario.dettaglio.prodottiByCategoria, [
+    { categoria: "TELEFONIA", pezzi: 1, importo: 500 },
+    { categoria: "ACCESSORI", pezzi: 2, importo: 35 },
+  ]);
+  assert.deepEqual(mario.dettaglio.serviziByCategoria, []);
+  const nd = a.perAddetto.find((x) => x.nomeAddetto === "N/D");
+  assert.deepEqual(nd.dettaglio.serviziByCategoria, [{ categoria: "SPEDIZIONE", pezzi: 1, importo: 5 }]);
+});
+
+await test("HTML: righe PDV/addetto toccabili (<details>) con pannello drill-down", () => {
+  const aggregates = aggregateDailyReport([
+    { ...sale({ codicePos: "P1", nomeNegozio: "Centro", totale: "135", articoli: [art("UNTIED", 30), art("TELEFONIA", 100), art("SPEDIZIONE", 5)] }), nomeAddetto: "Mario Rossi" },
+  ]);
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-02",
+    aggregates,
+  });
+  // Riga = <details> con summary toccabile e hint.
+  assert.ok(html.includes('<details class="rank"><summary>'));
+  assert.ok(html.includes("Tocca per il dettaglio ▾"));
+  // Pannello: canvass per pista con tema colore + categorie con fatturato.
+  assert.ok(html.includes('<div class="drill">'));
+  assert.ok(html.includes("Canvass per pista"));
+  assert.ok(html.includes('<b style="color:#60a5fa">Mobile</b> ×1'));
+  assert.ok(html.includes("Accessori e prodotti"));
+  assert.ok(html.includes(">TELEFONIA</span><span class=\"drill-val\">1 pz · 100,00 €</span>"));
+  assert.ok(html.includes(">SPEDIZIONE</span><span class=\"drill-val\">1 pz · 5,00 €</span>"));
+  // Drill sia nella card PDV sia in quella addetti (2 pannelli).
+  assert.equal(html.split('<div class="drill">').length - 1, 2);
+  // Nessuno script necessario: toggle nativo <details>.
+  assert.ok(!html.includes("<script>"));
+});
+
+await test("HTML: riga senza articoli ⇒ nessun <details>, resta un div semplice", () => {
+  const aggregates = aggregateDailyReport([sale({ codicePos: "P1", nomeNegozio: "Centro", totale: "10" })]);
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-02",
+    aggregates,
+  });
+  assert.ok(html.includes("Per punto vendita"));
+  assert.ok(!html.includes("<details"));
+  assert.ok(!html.includes('<div class="drill">'));
+  assert.ok(html.includes('<div class="rank">'));
+});
+
+await test("HTML navigabile: drill-down presente anche nelle pagine storico e Totale mese", () => {
+  const mkAgg = () => aggregateDailyReport([
+    { ...sale({ codicePos: "P1", nomeNegozio: "Centro", totale: "30", articoli: [art("UNTIED", 30)] }), nomeAddetto: "Mario" },
+  ]);
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-03",
+    aggregates: mkAgg(),
+    history: [
+      { ymd: "2026-07-02", aggregates: mkAgg() },
+      { ymd: "2026-07-03", aggregates: mkAgg() },
+    ],
+    month: { label: "luglio 2026", aggregates: mkAgg() },
+  });
+  // 3 pagine (d0, d1, month) × 2 card (PDV + addetti) = 6 pannelli.
+  assert.equal(html.split('<div class="drill">').length - 1, 6);
+  assert.ok(html.includes('<details class="rank">'));
+});
+
 console.log(`\nRisultato: ${passed} passati, ${failed} falliti`);
 if (failed > 0) process.exit(1);

@@ -23,11 +23,34 @@ export interface VenditaReportRow {
   rawData: unknown;
 }
 
+/** Categoria con pezzi e fatturato (per il drill-down PDV/addetto). */
+export interface CategoriaImportoAggregate {
+  categoria: string;
+  pezzi: number;
+  importo: number;
+}
+
+/**
+ * Dettaglio drill-down di un PDV o addetto (Task #251): canvass venduti
+ * per pista + categorie Prodotti/Servizi con fatturato. Stessa
+ * classificazione articoli dei totali globali (ANNULLATA già escluse).
+ */
+export interface ReportDrilldown {
+  /** Pezzi canvass per pista. */
+  countByPista: Partial<Record<PistaCanvass, number>>;
+  /** Categorie Prodotti (accessori ecc.), ordinate per fatturato↓. */
+  prodottiByCategoria: CategoriaImportoAggregate[];
+  /** Categorie Servizi, ordinate per fatturato↓. */
+  serviziByCategoria: CategoriaImportoAggregate[];
+}
+
 export interface PdvReportAggregate {
   codicePos: string;
   nomeNegozio: string;
   vendite: number;
   importo: number;
+  /** Drill-down del negozio (Task #251). */
+  dettaglio: ReportDrilldown;
 }
 
 export interface AddettoReportAggregate {
@@ -35,6 +58,8 @@ export interface AddettoReportAggregate {
   nomeAddetto: string;
   vendite: number;
   importo: number;
+  /** Drill-down dell'addetto (Task #251). */
+  dettaglio: ReportDrilldown;
 }
 
 export interface PistaCategoriaAggregate {
@@ -163,8 +188,17 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
     prodotti: new Map(),
     servizi: new Map(),
   };
-  const pdvMap = new Map<string, PdvReportAggregate>();
-  const addettoMap = new Map<string, AddettoReportAggregate>();
+  // Accumulatore del drill-down per singolo PDV/addetto (Task #251).
+  interface DrillAcc {
+    countByPista: Partial<Record<PistaCanvass, number>>;
+    prodotti: Map<string, CategoriaImportoAggregate>;
+    servizi: Map<string, CategoriaImportoAggregate>;
+  }
+  const newDrillAcc = (): DrillAcc => ({ countByPista: {}, prodotti: new Map(), servizi: new Map() });
+  const pdvMap = new Map<string, Omit<PdvReportAggregate, "dettaglio">>();
+  const addettoMap = new Map<string, Omit<AddettoReportAggregate, "dettaglio">>();
+  const pdvDrill = new Map<string, DrillAcc>();
+  const addettoDrill = new Map<string, DrillAcc>();
   let vendite = 0;
   let importo = 0;
 
@@ -173,6 +207,16 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
     vendite++;
     const tot = parseTotale(row.totale);
     importo += tot;
+
+    // Chiavi PDV/addetto calcolate PRIMA del loop articoli: servono anche
+    // agli accumulatori del drill-down per-articolo.
+    const key = (row.codicePos ?? "").trim() || "N/D";
+    const addettoName = (row.nomeAddetto ?? "").trim() || "N/D";
+    const addettoKey = addettoName.toLowerCase();
+    let pdvAcc = pdvDrill.get(key);
+    if (!pdvAcc) { pdvAcc = newDrillAcc(); pdvDrill.set(key, pdvAcc); }
+    let addAcc = addettoDrill.get(addettoKey);
+    if (!addAcc) { addAcc = newDrillAcc(); addettoDrill.set(addettoKey, addAcc); }
 
     const sc = classifySaleArticles(row.rawData);
     for (const t of Object.keys(sc.countByType) as ArticleType[]) {
@@ -190,6 +234,9 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
         const map = catByPista[article.pista] ?? new Map<string, number>();
         map.set(catLabel, (map.get(catLabel) ?? 0) + 1);
         catByPista[article.pista] = map;
+        // Drill-down: canvass per pista del PDV e dell'addetto.
+        pdvAcc.countByPista[article.pista] = (pdvAcc.countByPista[article.pista] ?? 0) + 1;
+        addAcc.countByPista[article.pista] = (addAcc.countByPista[article.pista] ?? 0) + 1;
       }
 
       // Dettaglio Prodotti/Servizi per categoria con split pagamenti:
@@ -198,6 +245,14 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
       // `altro` se la vendita non espone alcun mix.
       if (article.type === "prodotti" || article.type === "servizi") {
         const catLabel = article.categoriaNome.trim() || "Altro";
+        // Drill-down: categoria con pezzi e fatturato per PDV e addetto.
+        for (const acc of [pdvAcc, addAcc]) {
+          const drillMap = acc[article.type];
+          const drillEntry = drillMap.get(catLabel) ?? { categoria: catLabel, pezzi: 0, importo: 0 };
+          drillEntry.pezzi++;
+          drillEntry.importo += article.prezzo;
+          drillMap.set(catLabel, drillEntry);
+        }
         const map = catByType[article.type];
         const entry = map.get(catLabel) ?? {
           categoria: catLabel,
@@ -229,7 +284,6 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
       }
     }
 
-    const key = (row.codicePos ?? "").trim() || "N/D";
     const existing = pdvMap.get(key);
     if (existing) {
       existing.vendite++;
@@ -246,8 +300,6 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
 
     // Per addetto: grouping case-insensitive (le grafie diverse dello
     // stesso nominativo si fondono, come nelle gare addetto).
-    const addettoName = (row.nomeAddetto ?? "").trim() || "N/D";
-    const addettoKey = addettoName.toLowerCase();
     const existingAdd = addettoMap.get(addettoKey);
     if (existingAdd) {
       existingAdd.vendite++;
@@ -257,12 +309,27 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
     }
   }
 
-  const perPdv = Array.from(pdvMap.values()).sort(
-    (a, b) => b.importo - a.importo || b.vendite - a.vendite || a.codicePos.localeCompare(b.codicePos, "it"),
-  );
-  const perAddetto = Array.from(addettoMap.values()).sort(
-    (a, b) => b.importo - a.importo || b.vendite - a.vendite || a.nomeAddetto.localeCompare(b.nomeAddetto, "it"),
-  );
+  // Finalizza il drill-down: array categorie ordinati per fatturato↓.
+  const sortDrillCategorie = (map: Map<string, CategoriaImportoAggregate>): CategoriaImportoAggregate[] =>
+    Array.from(map.values()).sort(
+      (a, b) => b.importo - a.importo || b.pezzi - a.pezzi || a.categoria.localeCompare(b.categoria, "it"),
+    );
+  const finalizeDrill = (acc: DrillAcc | undefined): ReportDrilldown => ({
+    countByPista: acc?.countByPista ?? {},
+    prodottiByCategoria: acc ? sortDrillCategorie(acc.prodotti) : [],
+    serviziByCategoria: acc ? sortDrillCategorie(acc.servizi) : [],
+  });
+
+  const perPdv: PdvReportAggregate[] = Array.from(pdvMap.entries())
+    .map(([k, p]) => ({ ...p, dettaglio: finalizeDrill(pdvDrill.get(k)) }))
+    .sort(
+      (a, b) => b.importo - a.importo || b.vendite - a.vendite || a.codicePos.localeCompare(b.codicePos, "it"),
+    );
+  const perAddetto: AddettoReportAggregate[] = Array.from(addettoMap.entries())
+    .map(([k, p]) => ({ ...p, dettaglio: finalizeDrill(addettoDrill.get(k)) }))
+    .sort(
+      (a, b) => b.importo - a.importo || b.vendite - a.vendite || a.nomeAddetto.localeCompare(b.nomeAddetto, "it"),
+    );
 
   const categorieByPista: Partial<Record<PistaCanvass, PistaCategoriaAggregate[]>> = {};
   for (const [pista, map] of Object.entries(catByPista) as [PistaCanvass, Map<string, number>][]) {

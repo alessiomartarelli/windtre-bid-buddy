@@ -142,7 +142,7 @@ pulsanti "Invia report di prova" e "Salva configurazione".
 
 ## Test
 
-`tests/telegram-report.test.mjs` (52 test puri, inclusi 4 sui cambi
+`tests/telegram-report.test.mjs` (57 test puri, inclusi 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,
@@ -158,7 +158,11 @@ l'ultima visibile + barra nav ‹ › + JS inline, pagina "Totale mese" con
 gara piste del mese e bottone Mese, retrocompatibilità senza `history` ⇒
 niente nav né script), helper trend
 (`buildDailyTrend` bucketing/zero-fill/intervallo invalido, `pctDelta`,
-`addYmdDays`/`trendYmdOf`, `svgAreaChart`), orari
+`addYmdDays`/`trendYmdOf`, `svgAreaChart`), drill-down negozio/addetto
+(Task #251: `dettaglio` per PDV/addetto con canvass per pista e categorie
+prodotti/servizi ordinate per fatturato↓, righe `<details>` toccabili con
+pannello inline su tutte le pagine — giorno/storico/mese — riga senza
+articoli resta un `<div>` semplice, nessuno script richiesto), orari
 scheduler (`msUntilNextSend` a cavallo dei due orari
 e di mezzanotte) e `resolveTelegramConfig`. Lancio:
 `bash scripts/run-telegram-report-tests.sh`. La suite è inclusa nello

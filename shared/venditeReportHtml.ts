@@ -13,10 +13,12 @@
 // import React/server, solo import relativi — caricabile via loader tsx
 // nei test.
 import {
+  type CategoriaImportoAggregate,
   type CategoriaReportAggregate,
   type DailyReportAggregates,
   type DayHistoryEntry,
   type PagamentoSplit,
+  type ReportDrilldown,
   type TrendDay,
   REPORT_PISTA_ORDER,
   REPORT_TYPE_ORDER,
@@ -359,17 +361,53 @@ function rankBar(pct: number, color: string): string {
   return `<div class="bar"><i style="width:${width}%;background:linear-gradient(90deg,${color},${color}66)"></i></div>`;
 }
 
+/**
+ * Pannello drill-down di un PDV/addetto (Task #251): canvass per pista +
+ * categorie Prodotti/Servizi con fatturato. Nessun dato ⇒ stringa vuota
+ * (la riga resta non toccabile).
+ */
+function drillPanel(d: ReportDrilldown): string {
+  const parts: string[] = [];
+  const piste = REPORT_PISTA_ORDER.filter((p) => (d.countByPista[p] ?? 0) > 0);
+  if (piste.length > 0) {
+    const chips = piste
+      .map((p) => `<span class="chip"><b style="color:${PISTA_THEME[p]}">${escapeHtml(PISTA_CANVASS_LABELS[p])}</b> ×${d.countByPista[p]}</span>`)
+      .join("");
+    parts.push(`<div class="drill-sec"><div class="drill-k">Canvass per pista</div><div class="pmeta">${chips}</div></div>`);
+  }
+  const catBlock = (label: string, list: CategoriaImportoAggregate[], color: string) => {
+    if (list.length === 0) return;
+    const rows = list
+      .map((c) => `<div class="drill-row"><span class="drill-cat" style="color:${color}">${escapeHtml(c.categoria)}</span><span class="drill-val">${c.pezzi} pz · ${escapeHtml(fmtEuro(c.importo))}</span></div>`)
+      .join("");
+    parts.push(`<div class="drill-sec"><div class="drill-k">${escapeHtml(label)}</div>${rows}</div>`);
+  };
+  catBlock("Accessori e prodotti", d.prodottiByCategoria, TYPE_THEME.prodotti);
+  catBlock("Servizi", d.serviziByCategoria, TYPE_THEME.servizi);
+  if (parts.length === 0) return "";
+  return `<div class="drill">${parts.join("")}</div>`;
+}
+
+/**
+ * Riga di classifica: con drill-down diventa un <details> toccabile
+ * (toggle nativo, funziona in tutte le pagine pre-renderizzate senza JS
+ * né id univoci); senza dettaglio resta un semplice <div>.
+ */
+function rankRow(inner: string, drill: string): string {
+  if (!drill) return `<div class="rank">\n        ${inner}\n      </div>`;
+  return `<details class="rank"><summary>\n        ${inner}\n        <span class="drill-hint">Tocca per il dettaglio ▾</span>\n      </summary>${drill}</details>`;
+}
+
 function pdvSection(a: DailyReportAggregates): string {
   if (a.perPdv.length === 0) return "";
   const maxImporto = Math.max(...a.perPdv.map((p) => p.importo), 1);
   const rows = a.perPdv
     .map((pdv) => {
       const name = pdv.nomeNegozio || "N/D";
-      return `<div class="rank">
-        <div class="rank-top"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-val">${escapeHtml(fmtEuro(pdv.importo))}</span></div>
+      const inner = `<div class="rank-top"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-val">${escapeHtml(fmtEuro(pdv.importo))}</span></div>
         <div class="rank-sub"><span class="mono">${escapeHtml(pdv.codicePos)}</span> · ${pdv.vendite} vendite</div>
-        ${rankBar((pdv.importo / maxImporto) * 100, ORANGE)}
-      </div>`;
+        ${rankBar((pdv.importo / maxImporto) * 100, ORANGE)}`;
+      return rankRow(inner, drillPanel(pdv.dettaglio));
     })
     .join("\n        ");
   return `<div class="card"><h2>Per punto vendita</h2>
@@ -384,11 +422,10 @@ function addettiSection(a: DailyReportAggregates): string {
   const rows = a.perAddetto
     .map((add, i) => {
       const medal = medals[i] ? `${medals[i]} ` : "";
-      return `<div class="rank">
-        <div class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span><span class="rank-val">${escapeHtml(fmtEuro(add.importo))}</span></div>
+      const inner = `<div class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span><span class="rank-val">${escapeHtml(fmtEuro(add.importo))}</span></div>
         <div class="rank-sub">${add.vendite} vendite</div>
-        ${rankBar((add.importo / maxImporto) * 100, "#60a5fa")}
-      </div>`;
+        ${rankBar((add.importo / maxImporto) * 100, "#60a5fa")}`;
+      return rankRow(inner, drillPanel(add.dettaglio));
     })
     .join("\n        ");
   return `<div class="card"><h2>Per addetto</h2>
@@ -605,6 +642,18 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
   .lval { margin-left: auto; color: #94a3b8; white-space: nowrap; }
   .rank { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
   .rank:last-child { border-bottom: none; }
+  details.rank summary { list-style: none; cursor: pointer; }
+  details.rank summary::-webkit-details-marker { display: none; }
+  .drill-hint { display: block; margin-top: 5px; font-size: 10px; color: #64748b; }
+  details.rank[open] .drill-hint { color: #fdba74; }
+  .drill { margin-top: 8px; padding: 10px 12px; border-radius: 12px;
+           background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); }
+  .drill-sec { margin-bottom: 9px; }
+  .drill-sec:last-child { margin-bottom: 0; }
+  .drill-k { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-bottom: 4px; }
+  .drill-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 3px 0; }
+  .drill-cat { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+  .drill-val { color: #cbd5e1; white-space: nowrap; }
   .rank-top { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
   .rank-name { font-weight: 600; color: #f8fafc; min-width: 0; overflow-wrap: anywhere; }
   .rank-val { font-weight: 700; color: #f8fafc; white-space: nowrap; }
