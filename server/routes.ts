@@ -2328,13 +2328,16 @@ export async function registerRoutes(
       }
 
       const org = await storage.getOrganization(organization_id);
+      // syncFirst: come lo scheduler, aggiorna le vendite BiSuite del giorno
+      // PRIMA di inviare, così il report di prova riflette le ultime vendite.
+      // Un errore di sync non blocca l'invio (stessa semantica dello scheduler).
       const result = await sendDailyReportForOrg({
         orgId: organization_id,
         orgName: org?.name ?? "Organizzazione",
         botToken: token,
         chatId,
         timeLabel: "test",
-        syncFirst: false,
+        syncFirst: true,
       });
       if (!result.ok) {
         return res.status(400).json({ error: `Invio Telegram fallito: ${result.error}` });

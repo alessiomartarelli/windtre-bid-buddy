@@ -122,8 +122,10 @@ sceglie l'org.
   salvato) + chat id.
 - `POST /api/admin/telegram-report-test` — invia SUBITO il report di oggi
   (messaggio + allegato HTML) usando le credenziali nel body (o quelle
-  salvate come fallback), senza sync. Se solo l'allegato fallisce risponde
-  `{success: true, warning}`.
+  salvate come fallback). Come lo scheduler, esegue prima la **sync
+  BiSuite del giorno** così il report riflette le ultime vendite (un
+  errore di sync non blocca l'invio). Se solo l'allegato fallisce
+  risponde `{success: true, warning}`.
 
 Difesa in profondità: il logger delle risposte `/api/*` in
 `server/index.ts` usa `logJsonReplacer` (`server/logRedact.ts`) che
