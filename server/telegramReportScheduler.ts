@@ -7,6 +7,7 @@ import {
   aggregateDailyReport,
   buildDailyHistory,
   buildDailyTrend,
+  buildMonthEndProjection,
   buildTelegramReportMessage,
   fmtReportDate,
   monthLabelOf,
@@ -226,11 +227,15 @@ export async function sendDailyReportForOrg(params: {
     label: monthLabelOf(ymd),
     aggregates: aggregateDailyReport(monthRows),
   };
+  // Proiezione a fine mese (Task #263): pezzi Canvass totali e Telefoni
+  // stimati sui giorni lavorativi trascorsi, dagli aggregati del mese.
+  const monthProjection = buildMonthEndProjection(ymd, month.aggregates) ?? undefined;
   const message = buildTelegramReportMessage({
     orgName: params.orgName,
     dateYMD: ymd,
     timeLabel: params.timeLabel,
     aggregates,
+    monthProjection,
   });
   const result = await sendTelegramMessage(params.botToken, params.chatId, message);
   if (!result.ok) {
@@ -248,6 +253,7 @@ export async function sendDailyReportForOrg(params: {
     trend,
     history,
     month,
+    monthProjection,
   });
   const fileName = reportHtmlFileName(params.orgName, ymd, params.timeLabel);
   const docResult = await sendTelegramDocument(params.botToken, params.chatId, fileName, html, {

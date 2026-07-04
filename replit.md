@@ -140,7 +140,7 @@ Riepilogo — suite → script → prerequisiti:
 | CJ badge↔gettone parity (8) | `run-customer-journey-validity-gettone-parity-tests.sh` | — (puri) | ~1s |
 | CJ export PDF/Excel (26) | `run-customer-journey-export-tests.sh` | — (puri) | ~1s |
 | CJ report + filtri (28) | `run-customer-journey-report-tests.sh` | — (puri) | ~1s |
-| Telegram report (52) | `run-telegram-report-tests.sh` | — (puri) | ~1s |
+| Telegram report (70) | `run-telegram-report-tests.sh` | — (puri) | ~1s |
 | Incentivazione (18) | `run-incentivazione-tests.sh` | — (puri) | ~1s |
 | Inc. Acc/Servizi live (4) | `run-incentivazione-accessori-servizi-tests.sh` | `DATABASE_URL` | ~5s |
 | Inc. dashboard authz | `run-incentivazione-dashboard-authz-tests.sh` | app attiva | ~1s |

@@ -17,6 +17,11 @@ const {
   pctDelta,
   addYmdDays,
   trendYmdOf,
+  saleCustomerKind,
+  telefoniPezziOf,
+  monthWorkingDays,
+  projectMonthEnd,
+  buildMonthEndProjection,
 } = await import("../shared/venditeReport.ts");
 const {
   buildVenditeReportHtml,
@@ -943,6 +948,150 @@ await test("HTML navigabile: drill-down presente anche nelle pagine storico e To
   // 3 pagine (d0, d1, month) × 2 card (PDV + addetti) = 6 pannelli.
   assert.equal(html.split('<div class="drill">').length - 1, 6);
   assert.ok(html.includes('<details class="rank">'));
+});
+
+console.log("\n— arricchimenti report (Task #263) —");
+
+// Helper: vendita con blocco cliente in rawData (per lo split energia).
+function saleCli({ cliente = null, articoli = [], totale = "0", stato = "COMPLETATA" } = {}) {
+  return { stato, totale, codicePos: "POS1", nomeNegozio: "Negozio 1", nomeAddetto: null, rawData: { articoli, cliente } };
+}
+
+await test("saleCustomerKind: GIURIDICA/PROFESSIONISTA con P.IVA ⇒ business", () => {
+  assert.equal(saleCustomerKind({ cliente: { clienteTipo: "GIURIDICA", piva: "12345678901" } }), "business");
+  assert.equal(saleCustomerKind({ cliente: { clienteTipo: "PROFESSIONISTA", piva: "12345678901", codiceFiscale: "RSSMRA80A01H501U" } }), "business");
+});
+
+await test("saleCustomerKind: CF senza azienda ⇒ privato; solo P.IVA ⇒ business; vuoto ⇒ privato", () => {
+  assert.equal(saleCustomerKind({ cliente: { codiceFiscale: "RSSMRA80A01H501U" } }), "privato");
+  assert.equal(saleCustomerKind({ cliente: { clienteTipo: "FISICA", codiceFiscale: "RSSMRA80A01H501U" } }), "privato");
+  assert.equal(saleCustomerKind({ cliente: { piva: "12345678901" } }), "business");
+  assert.equal(saleCustomerKind({ cliente: {} }), "privato");
+  assert.equal(saleCustomerKind(null), "privato");
+});
+
+await test("energiaByCliente: split Privati (CF) vs Business (P.IVA), solo pista energia", () => {
+  const a = aggregateDailyReport([
+    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "20", articoli: [art("ENERGIA W3", 20)] }),
+    saleCli({ cliente: { clienteTipo: "GIURIDICA", piva: "12345678901" }, totale: "50", articoli: [art("ACEA ENERGIA", 30), art("ENERGIA W3", 20)] }),
+    // Mobile con CF: non deve toccare l'energia.
+    saleCli({ cliente: { codiceFiscale: "VRDLGI85B02H501X" }, totale: "40", articoli: [art("UNTIED", 40)] }),
+  ]);
+  assert.deepEqual(a.energiaByCliente.privato, { pezzi: 1, importo: 20 });
+  assert.deepEqual(a.energiaByCliente.business, { pezzi: 2, importo: 50 });
+});
+
+await test("energiaByCliente: sempre presente a zero senza vendite energia", () => {
+  const a = aggregateDailyReport([saleCli({ cliente: { codiceFiscale: "X" }, articoli: [art("UNTIED", 30)] })]);
+  assert.deepEqual(a.energiaByCliente, { privato: { pezzi: 0, importo: 0 }, business: { pezzi: 0, importo: 0 } });
+});
+
+await test("assicurazioniDettaglio: per categoria con pezzi/importo, ordinato per pezzi↓", () => {
+  const a = aggregateDailyReport([
+    saleCli({ articoli: [art("ASSICURAZIONI", 100), art("ASSICURAZIONI", 50), art("WINDTRE SECURITY PRO GA", 30)] }),
+    saleCli({ articoli: [art("ASSICURAZIONI BUSINESS PRO", 200)] }),
+  ]);
+  assert.deepEqual(a.assicurazioniDettaglio.map((c) => c.categoria), [
+    "ASSICURAZIONI",
+    "ASSICURAZIONI BUSINESS PRO",
+    "WINDTRE SECURITY PRO GA",
+  ]);
+  assert.deepEqual(a.assicurazioniDettaglio[0], { categoria: "ASSICURAZIONI", pezzi: 2, importo: 150 });
+});
+
+await test("telefoniPezziOf: pezzi della categoria TELEFONIA, 0 se assente", () => {
+  const a = aggregateDailyReport([saleCli({ articoli: [art("TELEFONIA", 500), art("TELEFONIA", 300), art("ACCESSORI", 10)] })]);
+  assert.equal(telefoniPezziOf(a), 2);
+  assert.equal(telefoniPezziOf(aggregateDailyReport([])), 0);
+});
+
+await test("monthWorkingDays: giorni lavorativi trascorsi/totali, input non valido ⇒ null", () => {
+  // Luglio 2026: 23 giorni lavorativi (festività: nessuna infrasettimanale a luglio).
+  const wd = monthWorkingDays("2026-07-15");
+  assert.ok(wd !== null);
+  assert.ok(wd.total >= 22 && wd.total <= 23, `total=${wd.total}`);
+  assert.ok(wd.elapsed > 0 && wd.elapsed <= wd.total);
+  assert.equal(monthWorkingDays("not-a-date"), null);
+});
+
+await test("projectMonthEnd: proporzione lineare; giorni non positivi ⇒ null", () => {
+  assert.equal(projectMonthEnd(100, 10, 20), 200);
+  assert.equal(projectMonthEnd(0, 10, 20), 0);
+  assert.equal(projectMonthEnd(100, 0, 20), null);
+  assert.equal(projectMonthEnd(100, 10, 0), null);
+});
+
+await test("buildMonthEndProjection: canvass totali e telefoni maturato+proiezione arrotondati", () => {
+  const monthAgg = aggregateDailyReport([
+    saleCli({ articoli: [art("UNTIED", 30), art("TELEFONIA", 500)] }),
+    saleCli({ articoli: [art("ADSL/FIBRA/FWA CF", 20)] }),
+  ]);
+  const proj = buildMonthEndProjection("2026-07-15", monthAgg);
+  assert.ok(proj !== null);
+  assert.equal(proj.canvass.maturato, 2); // UNTIED + ADSL
+  assert.equal(proj.telefoni.maturato, 1); // 1 TELEFONIA
+  assert.ok(Number.isInteger(proj.canvass.proiezione));
+  assert.ok(proj.canvass.proiezione >= proj.canvass.maturato);
+  assert.equal(proj.label, "luglio 2026");
+  assert.equal(buildMonthEndProjection("bad", monthAgg), null);
+});
+
+await test("messaggio: fatturato Telefoni/Accessori/Servizi, assicurazioni, energia, proiezione", () => {
+  const rows = [
+    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "540", articoli: [art("TELEFONIA", 500), art("ACCESSORI", 40)] }),
+    saleCli({ cliente: { clienteTipo: "GIURIDICA", piva: "12345678901" }, totale: "50", articoli: [art("ENERGIA W3", 50)] }),
+    saleCli({ cliente: { codiceFiscale: "VRDLGI85B02H501X" }, totale: "20", articoli: [art("ENERGIA W3", 20)] }),
+    saleCli({ totale: "100", articoli: [art("ASSICURAZIONI", 100), art("SPEDIZIONE", 5)] }),
+  ];
+  const aggregates = aggregateDailyReport(rows);
+  const monthProjection = buildMonthEndProjection("2026-07-15", aggregates);
+  const msg = buildTelegramReportMessage({ orgName: "Org", dateYMD: "2026-07-15", aggregates, monthProjection });
+  assert.ok(msg.includes("<b>Fatturato prodotti/servizi</b>"));
+  assert.ok(msg.includes("📱 Telefoni: 1 pz — 500,00 €"));
+  assert.ok(msg.includes("🎧 Accessori: 1 pz — 40,00 €"));
+  assert.ok(msg.includes("🔧 Servizi: 1 pz — 5,00 €"));
+  assert.ok(msg.includes("<b>Assicurazioni</b>"));
+  assert.ok(msg.includes("ASSICURAZIONI: 1 pz — 100,00 €"));
+  assert.ok(msg.includes("<b>Energia per cliente</b>"));
+  assert.ok(msg.includes("👤 Privati (CF): 1 pz — 20,00 €"));
+  assert.ok(msg.includes("🏢 Business (P.IVA): 1 pz — 50,00 €"));
+  assert.ok(msg.includes("<b>Proiezione fine mese</b> (luglio 2026)"));
+  assert.ok(msg.includes("Canvass totali:"));
+});
+
+await test("messaggio: senza monthProjection nessuna sezione proiezione", () => {
+  const aggregates = aggregateDailyReport([saleCli({ totale: "30", articoli: [art("UNTIED", 30)] })]);
+  const msg = buildTelegramReportMessage({ orgName: "Org", dateYMD: "2026-07-15", aggregates });
+  assert.ok(!msg.includes("Proiezione fine mese"));
+});
+
+await test("HTML: card Assicurazioni ed Energia nella pagina giorno", () => {
+  const rows = [
+    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "20", articoli: [art("ENERGIA W3", 20)] }),
+    saleCli({ cliente: { clienteTipo: "GIURIDICA", piva: "1" }, totale: "50", articoli: [art("ACEA ENERGIA", 50)] }),
+    saleCli({ totale: "100", articoli: [art("ASSICURAZIONI", 100)] }),
+  ];
+  const html = buildVenditeReportHtml({ orgName: "Org", dateYMD: "2026-07-15", aggregates: aggregateDailyReport(rows) });
+  assert.ok(html.includes(">Assicurazioni <span"), "manca la card assicurazioni");
+  assert.ok(html.includes("Energia · Privati vs Business"), "manca la card energia clienti");
+  assert.ok(html.includes("Privati (CF)"));
+  assert.ok(html.includes("Business (P.IVA)"));
+});
+
+await test("HTML: card Proiezione fine mese solo nella pagina mese", () => {
+  const monthAgg = aggregateDailyReport([saleCli({ articoli: [art("UNTIED", 30), art("TELEFONIA", 500)] })]);
+  const proj = buildMonthEndProjection("2026-07-15", monthAgg);
+  const html = buildVenditeReportHtml({
+    orgName: "Org",
+    dateYMD: "2026-07-15",
+    aggregates: aggregateDailyReport([saleCli({ articoli: [art("UNTIED", 30)] })]),
+    month: { label: "luglio 2026", aggregates: monthAgg },
+    monthProjection: proj,
+  });
+  assert.ok(html.includes("Proiezione fine mese"), "manca la card proiezione");
+  // La card proiezione è nella pagina mese (data-page="month").
+  const monthPage = html.slice(html.indexOf('data-page="month"'));
+  assert.ok(monthPage.includes("Proiezione fine mese"));
 });
 
 console.log(`\nRisultato: ${passed} passati, ${failed} falliti`);

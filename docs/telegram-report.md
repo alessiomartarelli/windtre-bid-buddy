@@ -16,6 +16,23 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   coerente con la pagina Vendite BiSuite) e
   `buildTelegramReportMessage` (messaggio HTML compatto per Telegram, con
   escape dei caratteri speciali e sezioni solo per le voci > 0).
+  Arricchimenti (Task #263): il messaggio aggiunge — quando > 0 — una
+  sezione **Fatturato prodotti/servizi** (📱 Telefoni = categoria
+  TELEFONIA, 🎧 Accessori = categoria ACCESSORI, 🔧 Servizi), il
+  **dettaglio Assicurazioni** per categoria BiSuite (pezzi + fatturato),
+  lo split **Energia per cliente** 👤 Privati (CF) vs 🏢 Business (P.IVA)
+  e, se passata, la **Proiezione fine mese** (pezzi Canvass totali e
+  Telefoni). Lo split energia usa `saleCustomerKind(rawData)` (specchio
+  della logica di collegamento clienti di `server/storage.ts`:
+  GIURIDICA/PROFESSIONISTA con P.IVA ⇒ business, poi CF ⇒ privato,
+  fallback P.IVA ⇒ business, default privato); `aggregateDailyReport`
+  espone i nuovi aggregati `energiaByCliente` (split per pista energia) e
+  `assicurazioniDettaglio` (ordinato per pezzi↓). La proiezione
+  (`buildMonthEndProjection(ymd, monthAgg)`) stima i pezzi a fine mese in
+  proporzione ai **giorni lavorativi** (`monthWorkingDays` riusa
+  `buildCalendar`/`italianHolidays` dell'Incentivazione;
+  `projectMonthEnd(value, elapsed, total)` = proporzione lineare, giorni
+  non positivi ⇒ null).
   Per il trend (Task #250): `buildDailyTrend(rows, fromYMD, toYMD)`
   (serie per-giorno zero-filled, `TrendDay {ymd, vendite, importo,
   countByPista}`, ANNULLATA e righe senza data/fuori intervallo escluse),
@@ -144,7 +161,7 @@ pulsanti "Invia report di prova" e "Salva configurazione".
 
 ## Test
 
-`tests/telegram-report.test.mjs` (57 test puri, inclusi 4 sui cambi
+`tests/telegram-report.test.mjs` (70 test puri, inclusi 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,

@@ -10,6 +10,7 @@ import {
   type ArticleType,
   type PistaCanvass,
 } from "./bisuiteClassification";
+import { buildCalendar, italianHolidays } from "./incentivazione";
 
 // Shape minimale della vendita necessaria al report: sottoinsieme di
 // `BisuiteSale` (shared/schema.ts) senza dipendere da Drizzle.
@@ -99,6 +100,23 @@ export interface CategoriaReportAggregate {
   pagamenti: PagamentoSplit;
 }
 
+/** Pezzi e fatturato di un raggruppamento (es. energia per tipo cliente). */
+export interface PezziImporto {
+  pezzi: number;
+  importo: number;
+}
+
+/**
+ * Split della pista energia per tipo di cliente (Task #263): Privati
+ * (persone fisiche, codice fiscale) vs Business (P.IVA / clienti azienda).
+ * Il tipo cliente è derivato da `rawData.cliente` della vendita, NON dalla
+ * classificazione articoli (che non distingue CF/IVA per l'energia).
+ */
+export interface EnergiaByCliente {
+  privato: PezziImporto;
+  business: PezziImporto;
+}
+
 export interface DailyReportAggregates {
   /** Vendite non annullate considerate nel report. */
   vendite: number;
@@ -108,6 +126,18 @@ export interface DailyReportAggregates {
   amountByType: Record<ArticleType, number>;
   countByPista: Partial<Record<PistaCanvass, number>>;
   amountByPista: Partial<Record<PistaCanvass, number>>;
+  /**
+   * Split della pista energia per tipo cliente Privati (CF) vs Business
+   * (P.IVA), pezzi e fatturato. Presente anche quando non c'è energia
+   * (bucket a zero).
+   */
+  energiaByCliente: EnergiaByCliente;
+  /**
+   * Dettaglio della pista assicurazioni per categoria BiSuite (es.
+   * ASSICURAZIONI, ASSICURAZIONI BUSINESS PRO, WINDTRE SECURITY PRO GA):
+   * pezzi e fatturato, ordinato per pezzi decrescenti.
+   */
+  assicurazioniDettaglio: CategoriaImportoAggregate[];
   /**
    * Breakdown per categoria dentro ogni pista (es. mobile ⇒ UNTIED/TIED CF),
    * ordinato per pezzi decrescenti. Usato dalle card pista del report HTML.
@@ -172,6 +202,25 @@ function saleIncassoMix(rawData: unknown): { contanti: number; pos: number; altr
 }
 
 /**
+ * Determina il tipo di cliente di una vendita da `rawData.cliente`,
+ * coerente con la logica di collegamento clienti di `server/storage.ts`:
+ * azienda/Business se `clienteTipo` è GIURIDICA/PROFESSIONISTA con P.IVA,
+ * altrimenti Privato se c'è il codice fiscale, con fallback su P.IVA ⇒
+ * Business. Cliente non identificabile ⇒ Privato (default prudente).
+ */
+export function saleCustomerKind(rawData: unknown): "privato" | "business" {
+  const cliente = (rawData as { cliente?: Record<string, unknown> } | null | undefined)?.cliente ?? {};
+  const cf = String(cliente.codiceFiscale ?? "").toUpperCase().trim();
+  const piva = String(cliente.piva ?? "").toUpperCase().trim();
+  const tipo = String(cliente.clienteTipo ?? "").toUpperCase().trim();
+  const isAzienda = tipo === "GIURIDICA" || tipo === "PROFESSIONISTA";
+  if (isAzienda && piva) return "business";
+  if (cf) return "privato";
+  if (piva) return "business";
+  return "privato";
+}
+
+/**
  * Aggrega le vendite del giorno come la pagina Vendite BiSuite:
  * - le vendite ANNULLATA sono ESCLUSE da tutti i conteggi;
  * - pezzi/importi per Tipo e Pista sono a livello articolo
@@ -188,6 +237,11 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
     prodotti: new Map(),
     servizi: new Map(),
   };
+  const energiaByCliente: EnergiaByCliente = {
+    privato: { pezzi: 0, importo: 0 },
+    business: { pezzi: 0, importo: 0 },
+  };
+  const assicurazioniMap = new Map<string, CategoriaImportoAggregate>();
   // Accumulatore del drill-down per singolo PDV/addetto (Task #251).
   interface DrillAcc {
     countByPista: Partial<Record<PistaCanvass, number>>;
@@ -228,6 +282,9 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
       amountByPista[pista] = (amountByPista[pista] ?? 0) + (sc.amountByPista[pista] ?? 0);
     }
     const mix = saleIncassoMix(row.rawData);
+    // Tipo cliente della vendita: serve allo split energia CF/IVA (la
+    // classificazione articoli non distingue Privati/Business per l'energia).
+    const clienteKind = saleCustomerKind(row.rawData);
     for (const article of sc.articles) {
       if (article.pista) {
         const catLabel = article.categoriaNome.trim() || "Altro";
@@ -237,6 +294,18 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
         // Drill-down: canvass per pista del PDV e dell'addetto.
         pdvAcc.countByPista[article.pista] = (pdvAcc.countByPista[article.pista] ?? 0) + 1;
         addAcc.countByPista[article.pista] = (addAcc.countByPista[article.pista] ?? 0) + 1;
+        // Split energia per tipo cliente (Privati CF vs Business P.IVA).
+        if (article.pista === "energia") {
+          energiaByCliente[clienteKind].pezzi++;
+          energiaByCliente[clienteKind].importo += article.prezzo;
+        }
+        // Dettaglio assicurazioni per categoria (pezzi + fatturato).
+        if (article.pista === "assicurazioni") {
+          const entry = assicurazioniMap.get(catLabel) ?? { categoria: catLabel, pezzi: 0, importo: 0 };
+          entry.pezzi++;
+          entry.importo += article.prezzo;
+          assicurazioniMap.set(catLabel, entry);
+        }
       }
 
       // Dettaglio Prodotti/Servizi per categoria con split pagamenti:
@@ -350,6 +419,10 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
     amountByType,
     countByPista,
     amountByPista,
+    energiaByCliente,
+    assicurazioniDettaglio: Array.from(assicurazioniMap.values()).sort(
+      (a, b) => b.pezzi - a.pezzi || b.importo - a.importo || a.categoria.localeCompare(b.categoria, "it"),
+    ),
     categorieByPista,
     prodottiByCategoria: sortCategorie(catByType.prodotti),
     serviziByCategoria: sortCategorie(catByType.servizi),
@@ -492,6 +565,86 @@ export function pctDelta(current: number, previous: number): number | null {
   return Math.round(((current - previous) / previous) * 100);
 }
 
+// ---------------------------------------------------------------------------
+// Proiezione a fine mese (Task #263): stima dei pezzi a fine mese in base
+// ai giorni lavorativi trascorsi, riusando il calendario giorni-lavorativi
+// dell'Incentivazione (festività nazionali IT + Lunedì dell'Angelo).
+// ---------------------------------------------------------------------------
+
+/** Categoria BiSuite dei telefoni (prodotti) usata per la proiezione. */
+const TELEFONI_CATEGORIA = "TELEFONIA";
+
+/** Pezzi Telefoni (categoria TELEFONIA) dagli aggregati prodotti. */
+export function telefoniPezziOf(a: DailyReportAggregates): number {
+  const t = a.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === TELEFONI_CATEGORIA);
+  return t?.pezzi ?? 0;
+}
+
+/**
+ * Giorni lavorativi del mese di `ymd`: trascorsi (fino a `ymd` incluso) e
+ * totali. Esclude weekend e festività nazionali italiane. Input non
+ * valido ⇒ null.
+ */
+export function monthWorkingDays(ymd: string): { elapsed: number; total: number } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+  if (!m) return null;
+  const year = +m[1];
+  const month1 = +m[2];
+  const day = +m[3];
+  // Mezzogiorno per evitare ambiguità di fuso nel confronto interno del
+  // calendario; `day` cade sempre dentro il mese selezionato.
+  const now = new Date(year, month1 - 1, day, 12, 0, 0);
+  const cal = buildCalendar(year, month1, italianHolidays(year), now);
+  return { elapsed: cal.el, total: cal.tot };
+}
+
+/**
+ * Proietta un valore maturato a fine mese in proporzione ai giorni
+ * lavorativi. Giorni trascorsi o totali non positivi ⇒ null (non
+ * calcolabile: mese non ancora iniziato o dato mancante).
+ */
+export function projectMonthEnd(value: number, elapsedWorkingDays: number, totalWorkingDays: number): number | null {
+  if (elapsedWorkingDays <= 0 || totalWorkingDays <= 0) return null;
+  return (value / elapsedWorkingDays) * totalWorkingDays;
+}
+
+/** Voce di proiezione: valore maturato e stima a fine mese (arrotondata). */
+export interface ProjectionEntry {
+  maturato: number;
+  proiezione: number | null;
+}
+
+export interface MonthEndProjection {
+  /** Etichetta italiana del mese (es. "luglio 2026"). */
+  label: string;
+  elapsedWorkingDays: number;
+  totalWorkingDays: number;
+  /** Pezzi Canvass totali (tutte le piste). */
+  canvass: ProjectionEntry;
+  /** Pezzi Telefoni (categoria TELEFONIA). */
+  telefoni: ProjectionEntry;
+}
+
+/**
+ * Costruisce la proiezione a fine mese dei pezzi Canvass totali e dei
+ * Telefoni a partire dagli aggregati del mese in corso e dalla data del
+ * report. Data non valida ⇒ null.
+ */
+export function buildMonthEndProjection(ymd: string, monthAgg: DailyReportAggregates): MonthEndProjection | null {
+  const wd = monthWorkingDays(ymd);
+  if (!wd) return null;
+  const canvass = monthAgg.countByType.canvass;
+  const telefoni = telefoniPezziOf(monthAgg);
+  const round = (v: number | null): number | null => (v === null ? null : Math.round(v));
+  return {
+    label: monthLabelOf(ymd),
+    elapsedWorkingDays: wd.elapsed,
+    totalWorkingDays: wd.total,
+    canvass: { maturato: canvass, proiezione: round(projectMonthEnd(canvass, wd.elapsed, wd.total)) },
+    telefoni: { maturato: telefoni, proiezione: round(projectMonthEnd(telefoni, wd.elapsed, wd.total)) },
+  };
+}
+
 // Ordine fisso delle piste nel messaggio (stesso ordine della UI).
 export const REPORT_PISTA_ORDER: PistaCanvass[] = [
   "mobile",
@@ -534,6 +687,11 @@ export interface TelegramReportParams {
   /** Etichetta oraria (es. "13:30") mostrata nell'intestazione. */
   timeLabel?: string;
   aggregates: DailyReportAggregates;
+  /**
+   * Proiezione a fine mese (pezzi Canvass totali e Telefoni). Assente ⇒
+   * la sezione proiezione non compare.
+   */
+  monthProjection?: MonthEndProjection;
 }
 
 /**
@@ -576,6 +734,61 @@ export function buildTelegramReportMessage(p: TelegramReportParams): string {
     lines.push("");
     lines.push("<b>Per pista</b>");
     lines.push(...pistaLines);
+  }
+
+  // Fatturato Telefoni / Accessori / Servizi (Task #263).
+  const telefoni = a.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === "TELEFONIA");
+  const accessori = a.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === "ACCESSORI");
+  const fatturatoLines: string[] = [];
+  if (telefoni && telefoni.pezzi > 0) {
+    fatturatoLines.push(`• 📱 Telefoni: ${telefoni.pezzi} pz — ${fmtEuro(telefoni.importo)}`);
+  }
+  if (accessori && accessori.pezzi > 0) {
+    fatturatoLines.push(`• 🎧 Accessori: ${accessori.pezzi} pz — ${fmtEuro(accessori.importo)}`);
+  }
+  if (a.countByType.servizi > 0) {
+    fatturatoLines.push(`• 🔧 Servizi: ${a.countByType.servizi} pz — ${fmtEuro(a.amountByType.servizi)}`);
+  }
+  if (fatturatoLines.length > 0) {
+    lines.push("");
+    lines.push("<b>Fatturato prodotti/servizi</b>");
+    lines.push(...fatturatoLines);
+  }
+
+  // Dettaglio assicurazioni per categoria (Task #263).
+  if (a.assicurazioniDettaglio.length > 0) {
+    lines.push("");
+    lines.push("<b>Assicurazioni</b>");
+    for (const cat of a.assicurazioniDettaglio) {
+      lines.push(`• ${escapeTelegramHtml(cat.categoria)}: ${cat.pezzi} pz — ${fmtEuro(cat.importo)}`);
+    }
+  }
+
+  // Split energia Privati (CF) vs Business (P.IVA) (Task #263).
+  const ec = a.energiaByCliente;
+  if (ec.privato.pezzi > 0 || ec.business.pezzi > 0) {
+    lines.push("");
+    lines.push("<b>Energia per cliente</b>");
+    if (ec.privato.pezzi > 0) {
+      lines.push(`• 👤 Privati (CF): ${ec.privato.pezzi} pz — ${fmtEuro(ec.privato.importo)}`);
+    }
+    if (ec.business.pezzi > 0) {
+      lines.push(`• 🏢 Business (P.IVA): ${ec.business.pezzi} pz — ${fmtEuro(ec.business.importo)}`);
+    }
+  }
+
+  // Proiezione a fine mese: pezzi Canvass totali e Telefoni (Task #263).
+  const proj = p.monthProjection;
+  if (proj) {
+    const projLine = (label: string, e: ProjectionEntry): string => {
+      const stima = e.proiezione === null ? "—" : `${e.proiezione}`;
+      return `• ${label}: ${e.maturato} → <b>${stima}</b>`;
+    };
+    lines.push("");
+    lines.push(`<b>Proiezione fine mese</b> (${escapeTelegramHtml(proj.label)})`);
+    lines.push(`<i>${proj.elapsedWorkingDays}/${proj.totalWorkingDays} giorni lavorativi</i>`);
+    lines.push(projLine("Canvass totali", proj.canvass));
+    lines.push(projLine("📱 Telefoni", proj.telefoni));
   }
 
   if (a.perPdv.length > 0) {
