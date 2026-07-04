@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Eye, EyeOff, Smartphone, Wifi, Zap, Shield, TrendingUp, Users, BarChart3, Award } from 'lucide-react';
+import { Loader2, Eye, EyeOff, Smartphone, Wifi, Zap, Shield, TrendingUp, Users, BarChart3 } from 'lucide-react';
+import { BrandGlyph } from '@/components/BrandLogo';
 
 const loginSchema = z.object({
   email: z.string().email('Email non valida'),
@@ -135,7 +136,7 @@ export default function Auth() {
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/25">
-              <Award className="w-5 h-5 text-white" />
+              <BrandGlyph className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight" data-testid="text-brand-title">
               MyStoreDesk
@@ -178,7 +179,7 @@ export default function Auth() {
           {/* Mobile brand header */}
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/25">
-              <Award className="w-5 h-5 text-white" />
+              <BrandGlyph className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight" data-testid="text-brand-title-mobile">
               MyStoreDesk

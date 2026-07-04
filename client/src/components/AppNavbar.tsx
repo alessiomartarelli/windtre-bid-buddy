@@ -15,10 +15,11 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield, Users,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
-  ChevronDown, Zap, BookOpen, BarChart3, Route, Medal,
+  ChevronDown, BookOpen, BarChart3, Route, Medal,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificationsBell';
+import { BrandGlyph } from '@/components/BrandLogo';
 
 interface AppNavbarProps {
   title?: string;
@@ -90,7 +91,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
             data-testid="text-app-title"
           >
             <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 shadow-sm group-hover:shadow-md transition-shadow">
-              <Zap className="h-4 w-4 text-white" />
+              <BrandGlyph className="h-4 w-4 text-white" />
             </div>
             <h1 className="text-base sm:text-lg font-bold text-foreground truncate tracking-tight">
               {title}
