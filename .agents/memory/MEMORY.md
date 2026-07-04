@@ -17,6 +17,7 @@
 - [CJ virtual scrolling](cj-virtual-scroll.md) — CJ page usa useWindowVirtualizer (schede grid + report table); la tabella report è gated da soglia per non rompere i selettori dei test cj-gettone-ui.
 - [API log secret redaction](api-log-secret-redaction.md) — il logger /api/* serializza i body JSON: mai restituire segreti in chiaro nelle risposte; redactor condiviso in server/logRedact.ts.
 - [UTC-anchored date display](utc-anchored-date-display.md) — date ancorate a fine giorno UTC (es. scadenza T6) vanno formattate con timeZone:"UTC" e il day-count su date UTC, o rotolano al giorno dopo in IT.
+- [Energy split vs prod data](energy-split-customer-kind.md) — prod conferma saleCustomerKind: clienteTipo popolato al 100%, nessun cliente block mancante; niente campo alternativo, split corretto.
 - [CJ schede date filter](cj-schede-date-filter.md) — il dal–al delle Schede filtra per data INSERIMENTO SIM (non "aperta il"/openedAt); scelta voluta dall'utente, non è un bug: non switchare a openedAt.
 - [Prod SMTP_SECRET_KEY differs](prod-secret-key-differs.md) — segreti per il DB di prod vanno cifrati SUL VPS (chiave diversa da dev); plaintext via stdin, verifica round-trip.
 - [Static precompress sidecars](static-precompress-sidecars.md) — mai comprimere asset in sync al boot; sidecar .gz/.br generati al build + warm-up async di fallback; regole duplicate build↔server da tenere allineate.
