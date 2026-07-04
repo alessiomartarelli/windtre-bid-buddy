@@ -24,6 +24,71 @@ interface TelegramReportFormProps {
   organizations: Organization[];
 }
 
+// Forecast mensile (Task #266): valori del form come stringhe (input
+// numerici), convertiti a numero/null al salvataggio.
+interface ForecastForm {
+  canvassPezzi: string;
+  telefoniPezzi: string;
+  accessoriFatturato: string;
+  serviziFatturato: string;
+  numeroNegozi: string;
+  giorniLavorativiPerNegozio: string;
+}
+
+const EMPTY_FORECAST_FORM: ForecastForm = {
+  canvassPezzi: "",
+  telefoniPezzi: "",
+  accessoriFatturato: "",
+  serviziFatturato: "",
+  numeroNegozi: "",
+  giorniLavorativiPerNegozio: "",
+};
+
+const FORECAST_FIELDS: Array<{
+  key: keyof ForecastForm;
+  label: string;
+  placeholder: string;
+  hint?: string;
+}> = [
+  { key: "canvassPezzi", label: "Canvass (pezzi/mese)", placeholder: "es. 240" },
+  { key: "telefoniPezzi", label: "Telefoni (pezzi/mese)", placeholder: "es. 120" },
+  { key: "accessoriFatturato", label: "Accessori (€/mese)", placeholder: "es. 5000" },
+  { key: "serviziFatturato", label: "Servizi (€/mese)", placeholder: "es. 3000" },
+  { key: "numeroNegozi", label: "Numero negozi", placeholder: "es. 4" },
+  { key: "giorniLavorativiPerNegozio", label: "Giorni lavorativi/mese", placeholder: "es. 26" },
+];
+
+function forecastFormToPayload(f: ForecastForm): Record<string, number | null> {
+  const num = (v: string): number | null => {
+    const s = v.trim().replace(",", ".");
+    if (s === "") return null;
+    const n = parseFloat(s);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  return {
+    canvassPezzi: num(f.canvassPezzi),
+    telefoniPezzi: num(f.telefoniPezzi),
+    accessoriFatturato: num(f.accessoriFatturato),
+    serviziFatturato: num(f.serviziFatturato),
+    numeroNegozi: num(f.numeroNegozi),
+    giorniLavorativiPerNegozio: num(f.giorniLavorativiPerNegozio),
+  };
+}
+
+function forecastToForm(raw: unknown): ForecastForm {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string =>
+    v === null || v === undefined || v === "" ? "" : String(v);
+  return {
+    canvassPezzi: str(o.canvassPezzi),
+    telefoniPezzi: str(o.telefoniPezzi),
+    accessoriFatturato: str(o.accessoriFatturato),
+    serviziFatturato: str(o.serviziFatturato),
+    numeroNegozi: str(o.numeroNegozi),
+    giorniLavorativiPerNegozio: str(o.giorniLavorativiPerNegozio),
+  };
+}
+
 // Card admin per il report vendite giornaliero su Telegram (Task #239):
 // configura bot token + chat ID del gruppo per organizzazione, abilita
 // l'invio automatico (13:30 e 22:30 ora italiana) e invia un test.
@@ -39,15 +104,7 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
   const [isTesting, setIsTesting] = useState(false);
   const [hasExistingConfig, setHasExistingConfig] = useState(false);
   const [hasSavedToken, setHasSavedToken] = useState(false);
-  // Forecast/obiettivi mensili per il commento "da direttore vendite" (#266).
-  const [forecast, setForecast] = useState({
-    canvassPezzi: "",
-    telefoniPezzi: "",
-    accessoriEuro: "",
-    serviziEuro: "",
-    numeroNegozi: "",
-    giorniLavorativi: "",
-  });
+  const [forecast, setForecast] = useState<ForecastForm>(EMPTY_FORECAST_FORM);
 
   useEffect(() => {
     if (selectedOrgId) {
@@ -58,19 +115,12 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
       setChatId("");
       setHasExistingConfig(false);
       setHasSavedToken(false);
-      resetForecast();
+      setForecast(EMPTY_FORECAST_FORM);
     }
   }, [selectedOrgId]);
 
-  const resetForecast = () =>
-    setForecast({
-      canvassPezzi: "",
-      telefoniPezzi: "",
-      accessoriEuro: "",
-      serviziEuro: "",
-      numeroNegozi: "",
-      giorniLavorativi: "",
-    });
+  const setForecastField = (key: keyof ForecastForm, value: string) =>
+    setForecast((prev) => ({ ...prev, [key]: value }));
 
   const loadConfig = async (orgId: string) => {
     setIsLoading(true);
@@ -87,22 +137,14 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
         setChatId(data.chat_id || "");
         setHasSavedToken(data.has_token === true);
         setHasExistingConfig(Boolean(data.has_token || data.chat_id));
-        const fc = (n: unknown) => (typeof n === "number" && n > 0 ? String(n) : "");
-        setForecast({
-          canvassPezzi: fc(data.forecast_canvass_pezzi),
-          telefoniPezzi: fc(data.forecast_telefoni_pezzi),
-          accessoriEuro: fc(data.forecast_accessori_euro),
-          serviziEuro: fc(data.forecast_servizi_euro),
-          numeroNegozi: fc(data.numero_negozi),
-          giorniLavorativi: fc(data.giorni_lavorativi),
-        });
+        setForecast(forecastToForm(data.forecast));
       } else {
         setEnabled(false);
         setBotToken("");
         setChatId("");
         setHasSavedToken(false);
         setHasExistingConfig(false);
-        resetForecast();
+        setForecast(EMPTY_FORECAST_FORM);
       }
     } catch (error) {
       console.error("Error loading Telegram config:", error);
@@ -137,12 +179,7 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
           enabled,
           bot_token: botToken.trim(),
           chat_id: chatId.trim(),
-          forecast_canvass_pezzi: forecast.canvassPezzi.trim(),
-          forecast_telefoni_pezzi: forecast.telefoniPezzi.trim(),
-          forecast_accessori_euro: forecast.accessoriEuro.trim(),
-          forecast_servizi_euro: forecast.serviziEuro.trim(),
-          numero_negozi: forecast.numeroNegozi.trim(),
-          giorni_lavorativi: forecast.giorniLavorativi.trim(),
+          forecast: forecastFormToPayload(forecast),
         }),
       });
       const data = await res.json().catch(() => null);
@@ -353,103 +390,6 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
                 </p>
               </div>
 
-              <div className="space-y-3 rounded-lg border border-border p-3">
-                <div className="space-y-0.5">
-                  <Label>Forecast e obiettivi del mese</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Il messaggio di testo del report è un commento "da direttore vendite"
-                    che confronta l'andamento con questi obiettivi mensili. Lascia vuoto un
-                    campo per non valutarlo. Il dettaglio completo resta nell'allegato.
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="fc-canvass" className="text-xs">Canvass (pezzi/mese)</Label>
-                    <Input
-                      id="fc-canvass"
-                      data-testid="input-forecast-canvass-pezzi"
-                      type="number"
-                      min="0"
-                      inputMode="numeric"
-                      placeholder="es. 300"
-                      value={forecast.canvassPezzi}
-                      onChange={(e) => setForecast((f) => ({ ...f, canvassPezzi: e.target.value }))}
-                      disabled={!selectedOrgId}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="fc-telefoni" className="text-xs">Telefoni (pezzi/mese)</Label>
-                    <Input
-                      id="fc-telefoni"
-                      data-testid="input-forecast-telefoni-pezzi"
-                      type="number"
-                      min="0"
-                      inputMode="numeric"
-                      placeholder="es. 150"
-                      value={forecast.telefoniPezzi}
-                      onChange={(e) => setForecast((f) => ({ ...f, telefoniPezzi: e.target.value }))}
-                      disabled={!selectedOrgId}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="fc-accessori" className="text-xs">Accessori (€/mese)</Label>
-                    <Input
-                      id="fc-accessori"
-                      data-testid="input-forecast-accessori-euro"
-                      type="number"
-                      min="0"
-                      inputMode="decimal"
-                      placeholder="es. 5000"
-                      value={forecast.accessoriEuro}
-                      onChange={(e) => setForecast((f) => ({ ...f, accessoriEuro: e.target.value }))}
-                      disabled={!selectedOrgId}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="fc-servizi" className="text-xs">Servizi (€/mese)</Label>
-                    <Input
-                      id="fc-servizi"
-                      data-testid="input-forecast-servizi-euro"
-                      type="number"
-                      min="0"
-                      inputMode="decimal"
-                      placeholder="es. 2000"
-                      value={forecast.serviziEuro}
-                      onChange={(e) => setForecast((f) => ({ ...f, serviziEuro: e.target.value }))}
-                      disabled={!selectedOrgId}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="fc-negozi" className="text-xs">Numero negozi</Label>
-                    <Input
-                      id="fc-negozi"
-                      data-testid="input-forecast-numero-negozi"
-                      type="number"
-                      min="0"
-                      inputMode="numeric"
-                      placeholder="es. 5"
-                      value={forecast.numeroNegozi}
-                      onChange={(e) => setForecast((f) => ({ ...f, numeroNegozi: e.target.value }))}
-                      disabled={!selectedOrgId}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="fc-giorni" className="text-xs">Giorni lavorativi/mese</Label>
-                    <Input
-                      id="fc-giorni"
-                      data-testid="input-forecast-giorni-lavorativi"
-                      type="number"
-                      min="0"
-                      inputMode="numeric"
-                      placeholder="auto (calendario)"
-                      value={forecast.giorniLavorativi}
-                      onChange={(e) => setForecast((f) => ({ ...f, giorniLavorativi: e.target.value }))}
-                      disabled={!selectedOrgId}
-                    />
-                  </div>
-                </div>
-              </div>
-
               <div className="flex items-center justify-between rounded-lg border border-border p-3">
                 <div className="space-y-0.5">
                   <Label htmlFor="tg-enabled">Invio automatico</Label>
@@ -464,6 +404,37 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
                   onCheckedChange={setEnabled}
                   disabled={!selectedOrgId}
                 />
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div className="space-y-0.5">
+                  <Label>Forecast e obiettivi (mese)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Obiettivi mensili per il commento del report (stile direttore
+                    vendite): passo, delta % e proiezioni. Lascia vuoto ciò che non
+                    vuoi valutare.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {FORECAST_FIELDS.map((f) => (
+                    <div key={f.key} className="space-y-1">
+                      <Label htmlFor={`tg-forecast-${f.key}`} className="text-xs">
+                        {f.label}
+                      </Label>
+                      <Input
+                        id={`tg-forecast-${f.key}`}
+                        data-testid={`input-telegram-forecast-${f.key}`}
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        placeholder={f.placeholder}
+                        value={forecast[f.key]}
+                        onChange={(e) => setForecastField(f.key, e.target.value)}
+                        disabled={!selectedOrgId}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="flex gap-3 pt-2">

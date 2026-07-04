@@ -11,6 +11,13 @@ import {
   type PistaCanvass,
 } from "./bisuiteClassification";
 import { buildCalendar, italianHolidays } from "./incentivazione";
+import {
+  buildDirettoreCommento,
+  fasciaFromTimeLabel,
+  EMPTY_FORECAST,
+  type ForecastConfig,
+  type Fascia,
+} from "./venditeCommento";
 
 // Shape minimale della vendita necessaria al report: sottoinsieme di
 // `BisuiteSale` (shared/schema.ts) senza dipendere da Drizzle.
@@ -717,273 +724,6 @@ export function fmtReportDate(ymd: string): string {
 // variare giorno per giorno restando testabili.
 // ---------------------------------------------------------------------------
 
-/** Fascia di invio: parziale (metà giornata) o chiusura (fine giornata). */
-export type ReportPhase = "parziale" | "chiusura";
-
-/**
- * Forecast/obiettivi mensili per organizzazione. Tutti opzionali: una
- * dimensione senza forecast semplicemente non viene valutata nel commento.
- */
-export interface ForecastConfig {
-  /** Pezzi Canvass attesi nel mese. */
-  canvassPezzi?: number;
-  /** Pezzi Telefoni (categoria TELEFONIA) attesi nel mese. */
-  telefoniPezzi?: number;
-  /** Fatturato Accessori atteso nel mese (€). */
-  accessoriEuro?: number;
-  /** Fatturato Servizi atteso nel mese (€). */
-  serviziEuro?: number;
-  /** Numero di negozi attesi (contesto per gli standout). */
-  numeroNegozi?: number;
-  /** Giorni lavorativi del mese (override del calendario nazionale). */
-  giorniLavorativi?: number;
-}
-
-/**
- * Estrae il ForecastConfig dal blocco config `telegramReport` salvato in
- * organization_config.config. Legge i campi numerici (snake_case) ignorando
- * valori non finiti o negativi. Input non oggetto ⇒ forecast vuoto.
- */
-export function parseForecastConfig(raw: unknown): ForecastConfig {
-  const cfg = (raw ?? {}) as Record<string, unknown>;
-  const num = (v: unknown): number | undefined => {
-    const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
-    return Number.isFinite(n) && n > 0 ? n : undefined;
-  };
-  return {
-    canvassPezzi: num(cfg.forecast_canvass_pezzi),
-    telefoniPezzi: num(cfg.forecast_telefoni_pezzi),
-    accessoriEuro: num(cfg.forecast_accessori_euro),
-    serviziEuro: num(cfg.forecast_servizi_euro),
-    numeroNegozi: num(cfg.numero_negozi),
-    giorniLavorativi: num(cfg.giorni_lavorativi),
-  };
-}
-
-/** Fatturato della categoria ACCESSORI dagli aggregati prodotti. */
-export function accessoriEuroOf(a: DailyReportAggregates): number {
-  const c = a.prodottiByCategoria.find((x) => x.categoria.trim().toUpperCase() === "ACCESSORI");
-  return c?.importo ?? 0;
-}
-
-/** Deriva la fascia (parziale/chiusura) dall'etichetta oraria dell'invio. */
-export function phaseFromTimeLabel(timeLabel?: string): ReportPhase {
-  return (timeLabel ?? "").trim() === "13:30" ? "parziale" : "chiusura";
-}
-
-/** Giorno dell'anno (0-based) di una data YYYY-MM-DD; input non valido ⇒ 0. */
-function dayOfYear(ymd: string): number {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
-  if (!m) return 0;
-  const d = Date.UTC(+m[1], +m[2] - 1, +m[3]);
-  const start = Date.UTC(+m[1], 0, 1);
-  return Math.round((d - start) / 86400000);
-}
-
-/** Selezione deterministica da un pool in base a un seed (data). */
-function pick<T>(pool: T[], seed: number): T {
-  if (pool.length === 0) return undefined as unknown as T;
-  return pool[((seed % pool.length) + pool.length) % pool.length];
-}
-
-export type PerfBand = "molto_sotto" | "sotto" | "in_linea" | "sopra" | "molto_sopra";
-
-function bandFromScore(score: number): PerfBand {
-  if (score >= 15) return "molto_sopra";
-  if (score >= 5) return "sopra";
-  if (score > -5) return "in_linea";
-  if (score > -15) return "sotto";
-  return "molto_sotto";
-}
-
-interface DimEval {
-  key: "canvass" | "telefoni" | "accessori" | "servizi";
-  label: string;
-  unit: "pezzi" | "euro";
-  day: number;
-  month: number;
-  forecast: number;
-  /** Passo atteso a oggi (obiettivo giornaliero × giorni trascorsi). */
-  expected: number;
-  /** Delta % del maturato rispetto al passo atteso. */
-  paceDelta: number;
-  /** Proiezione a fine mese (lineare sui giorni lavorativi). */
-  projection: number | null;
-}
-
-function fmtDimValue(v: number, unit: "pezzi" | "euro"): string {
-  return unit === "euro" ? fmtEuro(v) : `${Math.round(v)} pz`;
-}
-
-function fmtSignedPct(pct: number): string {
-  return pct >= 0 ? `+${pct}%` : `${pct}%`;
-}
-
-export interface ReportCommentParams {
-  phase: ReportPhase;
-  dateYMD: string;
-  /** Aggregati del giorno (parziale o pieno). */
-  dayAggregates: DailyReportAggregates;
-  /** Aggregati mese-a-oggi (fallback: dayAggregates). */
-  monthAggregates?: DailyReportAggregates;
-  forecast?: ForecastConfig;
-  elapsedWorkingDays?: number;
-  totalWorkingDays?: number;
-}
-
-/**
- * Genera il commento discorsivo (parse_mode HTML) del report Telegram.
- * Deterministico: le frasi variano per data ma sono stabili nei test.
- */
-export function buildReportComment(p: ReportCommentParams): string {
-  const seed = dayOfYear(p.dateYMD);
-  const day = p.dayAggregates;
-  const month = p.monthAggregates ?? p.dayAggregates;
-  const fc = p.forecast ?? {};
-  const totalWD = fc.giorniLavorativi && fc.giorniLavorativi > 0
-    ? fc.giorniLavorativi
-    : (p.totalWorkingDays ?? 0);
-  const elapsedWD = Math.min(Math.max(p.elapsedWorkingDays ?? 0, 0), totalWD > 0 ? totalWD : Number.MAX_SAFE_INTEGER);
-
-  const lines: string[] = [];
-
-  // Giorno senza vendite: commento dedicato "al palo".
-  if (day.vendite === 0) {
-    const openPool = p.phase === "parziale"
-      ? ["☀️ Buongiorno team!", "☀️ Si comincia team!", "☀️ Nuova giornata, squadra!"]
-      : ["🌙 Giornata in archivio.", "🌙 Serata, team.", "🌙 Chiudiamo la giornata."]; 
-    const emptyPool = p.phase === "parziale"
-      ? [
-          "A metà giornata non abbiamo ancora messo a segno vendite: c'è tutto il pomeriggio per far girare la macchina. 💪",
-          "Per ora la giornata è ferma al palo: rimbocchiamoci le maniche, il bello deve ancora arrivare. 💪",
-          "Nessuna vendita finora: teniamo alta l'attenzione, ogni cliente conta da qui a stasera. 💪",
-        ]
-      : [
-          "Giornata senza vendite: capita, resettiamo e ripartiamo con più energia domani. 🙌",
-          "Oggi non si è sbloccato nulla: analizziamo cosa non ha funzionato e domani si riparte forte. 🙌",
-          "Zero a referto oggi: testa alta, domani è un'altra occasione per rimetterci in corsa. 🙌",
-        ];
-    lines.push(`${pick(openPool, seed)}`);
-    lines.push(pick(emptyPool, seed));
-    return lines.join("\n\n");
-  }
-
-  // Valutazione delle dimensioni con forecast.
-  const rawDims: Array<Omit<DimEval, "expected" | "paceDelta" | "projection">> = [
-    { key: "canvass", label: "Canvass", unit: "pezzi", day: day.countByType.canvass, month: month.countByType.canvass, forecast: fc.canvassPezzi ?? 0 },
-    { key: "telefoni", label: "Telefoni", unit: "pezzi", day: telefoniPezziOf(day), month: telefoniPezziOf(month), forecast: fc.telefoniPezzi ?? 0 },
-    { key: "accessori", label: "Accessori", unit: "euro", day: accessoriEuroOf(day), month: accessoriEuroOf(month), forecast: fc.accessoriEuro ?? 0 },
-    { key: "servizi", label: "Servizi", unit: "euro", day: day.amountByType.servizi, month: month.amountByType.servizi, forecast: fc.serviziEuro ?? 0 },
-  ];
-  const dims: DimEval[] = [];
-  for (const d of rawDims) {
-    if (d.forecast <= 0 || totalWD <= 0) continue;
-    const dailyTarget = d.forecast / totalWD;
-    const expected = dailyTarget * elapsedWD;
-    const paceDelta = expected > 0 ? Math.round(((d.month - expected) / expected) * 100) : 0;
-    const projection = elapsedWD > 0 ? (d.month / elapsedWD) * totalWD : null;
-    dims.push({ ...d, expected, paceDelta, projection });
-  }
-
-  const hasForecast = dims.length > 0;
-  const avgPace = hasForecast
-    ? Math.round(dims.reduce((s, d) => s + d.paceDelta, 0) / dims.length)
-    : 0;
-  const band = bandFromScore(avgPace);
-
-  // 1) Apertura in base a fascia + fascia performance.
-  const greetPool: Record<ReportPhase, Record<PerfBand, string[]>> = {
-    parziale: {
-      molto_sopra: ["☀️ Buongiorno team, che partenza!", "☀️ A metà giornata siamo lanciati!"],
-      sopra: ["☀️ Buongiorno team! La macchina gira bene.", "☀️ Buon lavoro squadra, si va spediti."],
-      in_linea: ["☀️ Buongiorno team! Andiamo in linea col passo.", "☀️ A metà giornata siamo sul ritmo previsto."],
-      sotto: ["☀️ Buongiorno team, serve una spinta.", "☀️ A metà giornata siamo un po' indietro."],
-      molto_sotto: ["☀️ Buongiorno team, oggi dobbiamo cambiare marcia.", "☀️ A metà giornata siamo sotto: rimbocchiamoci le maniche."],
-    },
-    chiusura: {
-      molto_sopra: ["🌙 Giornata in archivio, e che giornata!", "🌙 Chiudiamo alla grande, squadra!"],
-      sopra: ["🌙 Giornata in archivio, bel ritmo.", "🌙 Chiudiamo in positivo, ottimo lavoro."],
-      in_linea: ["🌙 Giornata in archivio, in linea col passo.", "🌙 Chiudiamo sul ritmo previsto."],
-      sotto: ["🌙 Giornata in archivio, sotto le attese.", "🌙 Chiudiamo un po' indietro rispetto al passo."],
-      molto_sotto: ["🌙 Giornata in archivio, giornata da dimenticare.", "🌙 Chiudiamo sotto tono: domani si reagisce."],
-    },
-  };
-  lines.push(pick(greetPool[p.phase][band], seed));
-
-  // 2) Numeri del giorno.
-  const dayLine = `Oggi <b>${day.vendite}</b> vendite per <b>${fmtEuro(day.importo)}</b>.`;
-  lines.push(dayLine);
-
-  // 3) Andamento sul mese per dimensione tracciata.
-  if (hasForecast) {
-    const monthLines: string[] = [];
-    for (const d of dims) {
-      const proj = d.projection === null ? "—" : fmtDimValue(d.projection, d.unit);
-      monthLines.push(
-        `• ${d.label}: <b>${fmtDimValue(d.month, d.unit)}</b> sul mese (${fmtSignedPct(d.paceDelta)} sul passo), ` +
-          `proiezione <b>${proj}</b> su obiettivo ${fmtDimValue(d.forecast, d.unit)}`,
-      );
-    }
-    lines.push(`Sul mese (${elapsedWD}/${totalWD} giorni lavorativi):\n${monthLines.join("\n")}`);
-  }
-
-  // 4) Standout negozio/addetto (sul giorno).
-  const standout: string[] = [];
-  const topPdv = day.perPdv[0];
-  if (topPdv) {
-    const nome = topPdv.nomeNegozio || topPdv.codicePos;
-    standout.push(`In evidenza <b>${escapeTelegramHtml(nome)}</b> (${topPdv.vendite} vendite, ${fmtEuro(topPdv.importo)})`);
-  }
-  const topAdd = day.perAddetto[0];
-  if (topAdd) {
-    standout.push(`bene l'addetto <b>${escapeTelegramHtml(topAdd.nomeAddetto)}</b>`);
-  }
-  // Negozio sotto tono: se ci sono almeno 3 PDV e l'ultimo è ben sotto la media.
-  if (day.perPdv.length >= 3) {
-    const avgImporto = day.perPdv.reduce((s, x) => s + x.importo, 0) / day.perPdv.length;
-    const last = day.perPdv[day.perPdv.length - 1];
-    if (avgImporto > 0 && last.importo < avgImporto * 0.5) {
-      const nome = last.nomeNegozio || last.codicePos;
-      standout.push(`da rivedere invece <b>${escapeTelegramHtml(nome)}</b>, rimasto indietro`);
-    }
-  }
-  if (standout.length > 0) {
-    lines.push(`${standout.join("; ")}.`);
-  }
-
-  // 5) Spunto strategico: dimensione più in ritardo e quella in vantaggio.
-  if (hasForecast) {
-    const sorted = [...dims].sort((a, b) => a.paceDelta - b.paceDelta);
-    const laggard = sorted[0];
-    const leader = sorted[sorted.length - 1];
-    if (laggard.paceDelta < -3) {
-      lines.push(`Spunto: spingiamo su <b>${laggard.label}</b>, è la voce più in ritardo sul passo del mese.`);
-    } else if (leader.paceDelta > 5) {
-      lines.push(`Spunto: consolidiamo il vantaggio su <b>${leader.label}</b> e teniamo il ritmo su tutto il resto.`);
-    }
-  }
-
-  // 6) Chiusura motivazionale in base a fascia + performance.
-  const closePool: Record<ReportPhase, Record<PerfBand, string[]>> = {
-    parziale: {
-      molto_sopra: ["Teniamo questo passo nel pomeriggio! 🚀", "Continuiamo così, il traguardo è vicino! 🚀"],
-      sopra: ["Spingiamo ancora nel pomeriggio! 💪", "Bel ritmo, non molliamo! 💪"],
-      in_linea: ["Un ultimo sforzo per chiudere sopra il passo! 💪", "Il pomeriggio può fare la differenza! 💪"],
-      sotto: ["Rimettiamoci in corsa nel pomeriggio! 💪", "C'è ancora tutto il pomeriggio per recuperare! 💪"],
-      molto_sotto: ["Serve una reazione forte da qui a stasera! 🔥", "Tiriamo fuori l'orgoglio nel pomeriggio! 🔥"],
-    },
-    chiusura: {
-      molto_sopra: ["Portiamo questa energia anche domani! 👏", "Grande squadra, si replica domani! 👏"],
-      sopra: ["Bel lavoro, domani si continua così! 👏", "Ottima giornata, avanti così! 👏"],
-      in_linea: ["Buon lavoro, domani cerchiamo lo scatto! 🙌", "Giornata solida, domani puntiamo più in alto! 🙌"],
-      sotto: ["Domani reagiamo e recuperiamo terreno! 💪", "Testa a domani, possiamo fare di più! 💪"],
-      molto_sotto: ["Domani è un'altra storia: reagiamo! 🔥", "Ci rifacciamo domani, forza squadra! 🔥"],
-    },
-  };
-  lines.push(pick(closePool[p.phase][band], seed + 1));
-
-  return lines.join("\n\n");
-}
 
 export interface TelegramReportParams {
   orgName: string;
@@ -991,30 +731,29 @@ export interface TelegramReportParams {
   dateYMD: string;
   /** Etichetta oraria (es. "13:30") mostrata nell'intestazione. */
   timeLabel?: string;
+  /** Aggregati del giorno (parziale o pieno). */
   aggregates: DailyReportAggregates;
   /**
-   * Proiezione a fine mese (pezzi Canvass totali e Telefoni). Mantenuta per
-   * compatibilità/allegato HTML; il commento usa il forecast configurato.
+   * Aggregati mese-a-oggi per passo e proiezioni del commento. Assente ⇒
+   * si usa il giorno come fallback (proiezioni poco significative).
    */
-  monthProjection?: MonthEndProjection;
-  /** Fascia di invio; se assente viene derivata da timeLabel. */
-  phase?: ReportPhase;
-  /** Aggregati mese-a-oggi per il confronto col forecast. */
   monthAggregates?: DailyReportAggregates;
-  /** Forecast/obiettivi mensili dell'organizzazione. */
+  /** Forecast mensile configurato. Assente ⇒ commento senza valutazione. */
   forecast?: ForecastConfig;
-  /** Giorni lavorativi trascorsi del mese (dal calendario). */
-  elapsedWorkingDays?: number;
-  /** Giorni lavorativi totali del mese (dal calendario). */
-  totalWorkingDays?: number;
+  /** Fascia esplicita; se assente derivata da `timeLabel`. */
+  fascia?: Fascia;
 }
 
 /**
- * Costruisce il messaggio Telegram (parse_mode HTML): intestazione + commento
- * discorsivo "da direttore vendite" (Task #266). Il dettaglio numerico delle
- * vendite vive nell'allegato HTML. Le vendite ANNULLATA sono già escluse.
+ * Costruisce il messaggio Telegram (parse_mode HTML): intestazione (data,
+ * org, fascia) + commento discorsivo in stile "direttore vendite"
+ * (`buildDirettoreCommento`). Il dettaglio completo delle vendite resta
+ * nell'allegato HTML, non più nel testo. Le vendite ANNULLATA sono già
+ * escluse dagli aggregati.
  */
 export function buildTelegramReportMessage(p: TelegramReportParams): string {
+  const a = p.aggregates;
+  const fascia = p.fascia ?? fasciaFromTimeLabel(p.timeLabel);
   const lines: string[] = [];
   const header = `📊 <b>Report vendite ${escapeTelegramHtml(fmtReportDate(p.dateYMD))}</b>` +
     (p.timeLabel ? ` — ${escapeTelegramHtml(p.timeLabel)}` : "");
@@ -1022,19 +761,30 @@ export function buildTelegramReportMessage(p: TelegramReportParams): string {
   lines.push(`🏢 ${escapeTelegramHtml(p.orgName)}`);
   lines.push("");
 
-  // Il corpo è un commento discorsivo "da direttore vendite" (Task #266):
-  // niente più elenco di vendite nel testo — il dettaglio completo resta
-  // nell'allegato HTML navigabile.
-  const comment = buildReportComment({
-    phase: p.phase ?? phaseFromTimeLabel(p.timeLabel),
-    dateYMD: p.dateYMD,
-    dayAggregates: p.aggregates,
-    monthAggregates: p.monthAggregates,
-    forecast: p.forecast,
-    elapsedWorkingDays: p.elapsedWorkingDays,
-    totalWorkingDays: p.totalWorkingDays,
-  });
-  lines.push(comment);
+  const forecast = p.forecast ?? EMPTY_FORECAST;
+  const month = p.monthAggregates ?? a;
+  // Giorni lavorativi: totale dalla config (giorniLavorativiPerNegozio) con
+  // fallback al calendario; giorni trascorsi sempre dal calendario, cappati
+  // al totale.
+  const wd = monthWorkingDays(p.dateYMD);
+  const total =
+    forecast.giorniLavorativiPerNegozio && forecast.giorniLavorativiPerNegozio > 0
+      ? forecast.giorniLavorativiPerNegozio
+      : wd?.total ?? 0;
+  const rawElapsed = wd?.elapsed ?? 0;
+  const elapsed = total > 0 ? Math.min(rawElapsed, total) : rawElapsed;
+
+  lines.push(
+    buildDirettoreCommento({
+      fascia,
+      dateYMD: p.dateYMD,
+      forecast,
+      today: a,
+      month,
+      elapsedWorkingDays: elapsed,
+      totalWorkingDays: total,
+    }),
+  );
 
   return lines.join("\n");
 }

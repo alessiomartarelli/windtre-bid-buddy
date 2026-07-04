@@ -12,11 +12,10 @@ import {
   fmtReportDate,
   monthLabelOf,
   monthStartYmd,
-  monthWorkingDays,
-  parseForecastConfig,
   trendYmdOf,
 } from "@shared/venditeReport";
 import { buildVenditeReportHtml, reportHtmlFileName } from "@shared/venditeReportHtml";
+import { fasciaFromTimeLabel, parseForecastConfig } from "@shared/venditeCommento";
 
 /**
  * Scheduler del report vendite giornaliero su Telegram (Task #239).
@@ -240,23 +239,20 @@ export async function sendDailyReportForOrg(params: {
   // Proiezione a fine mese (Task #263): pezzi Canvass totali e Telefoni
   // stimati sui giorni lavorativi trascorsi, dagli aggregati del mese.
   const monthProjection = buildMonthEndProjection(ymd, month.aggregates) ?? undefined;
-  // Forecast/obiettivi per il commento "da direttore vendite" (Task #266):
-  // letti dalla config org e confrontati con il maturato del mese e i giorni
-  // lavorativi trascorsi/totali del calendario.
-  const orgCfg = await storage.getOrgConfig(params.orgId);
-  const tgCfg = (orgCfg?.config as Record<string, unknown> | undefined)?.telegramReport;
-  const forecast = parseForecastConfig(tgCfg);
-  const wd = monthWorkingDays(ymd);
+  // Commento "direttore vendite" (Task #266): forecast per-org dalla config
+  // + fascia dedotta dall'orario (13:30 parziale / 22:30 chiusura).
+  const orgConfig = await storage.getOrgConfig(params.orgId);
+  const cfg = orgConfig?.config as Record<string, unknown> | undefined;
+  const tg = cfg?.telegramReport as Record<string, unknown> | undefined;
+  const forecast = parseForecastConfig(tg?.forecast);
   const message = buildTelegramReportMessage({
     orgName: params.orgName,
     dateYMD: ymd,
     timeLabel: params.timeLabel,
     aggregates,
-    monthProjection,
     monthAggregates: month.aggregates,
     forecast,
-    elapsedWorkingDays: wd?.elapsed,
-    totalWorkingDays: wd?.total,
+    fascia: fasciaFromTimeLabel(params.timeLabel),
   });
   const result = await sendTelegramMessage(params.botToken, params.chatId, message);
   if (!result.ok) {

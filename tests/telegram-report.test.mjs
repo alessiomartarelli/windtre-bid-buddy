@@ -30,6 +30,13 @@ const {
   escapeHtml,
   svgAreaChart,
 } = await import("../shared/venditeReportHtml.ts");
+const {
+  buildDirettoreCommento,
+  parseForecastConfig,
+  fasciaFromTimeLabel,
+  hasForecast,
+  EMPTY_FORECAST,
+} = await import("../shared/venditeCommento.ts");
 
 let passed = 0;
 let failed = 0;
@@ -165,45 +172,56 @@ await test("fmtReportDate YYYY-MM-DD ⇒ DD/MM/YYYY, input non valido passthroug
 
 console.log("\n— buildTelegramReportMessage —");
 
-await test("giorno senza vendite ⇒ commento 'giornata al palo', niente elenco (Task #266)", () => {
+await test("intestazione: data, fascia oraria, org (escape HTML)", () => {
   const msg = buildTelegramReportMessage({
-    orgName: "Org Test",
+    orgName: "Org & Co <srl>",
     dateYMD: "2026-07-02",
     timeLabel: "13:30",
     aggregates: aggregateDailyReport([]),
   });
   assert.ok(msg.includes("Report vendite 02/07/2026"));
   assert.ok(msg.includes("13:30"));
-  assert.ok(msg.includes("Org Test"));
-  // Fascia parziale (13:30): saluto del mattino + frase "al palo".
-  assert.ok(msg.includes("Buongiorno") || msg.includes("Si comincia") || msg.includes("Nuova giornata"));
-  assert.ok(/palo|ferma|non abbiamo|attenzione/i.test(msg));
-  // Il testo NON contiene più le sezioni di dettaglio.
-  assert.ok(!msg.includes("Per tipo"));
-  assert.ok(!msg.includes("Per punto vendita"));
+  assert.ok(msg.includes("🏢 Org &amp; Co &lt;srl&gt;"));
+  assert.ok(!msg.includes("<srl>"));
 });
 
-await test("commento: header + testo discorsivo, niente elenco vendite (Task #266)", () => {
+await test("giorno senza vendite ⇒ commento 'giornata al palo', niente sezioni dettaglio", () => {
+  const msg = buildTelegramReportMessage({
+    orgName: "Org Test",
+    dateYMD: "2026-07-02",
+    timeLabel: "13:30",
+    aggregates: aggregateDailyReport([]),
+  });
+  // Commento discorsivo per giornata vuota (parziale): apertura ☀️ + frase palo
+  assert.ok(msg.includes("☀️"));
+  assert.ok(/palo|tabellone|ghiaccio|rimonta|zero/.test(msg));
+  // Il dettaglio ora vive solo nell'allegato HTML: niente sezioni nel testo.
+  assert.ok(!msg.includes("Per tipo"));
+  assert.ok(!msg.includes("Per pista"));
+  assert.ok(!msg.includes("Per punto vendita"));
+  assert.ok(!msg.includes("Proiezione fine mese"));
+});
+
+await test("messaggio con vendite ⇒ commento discorsivo, nessuna sezione elenco", () => {
   const aggregates = aggregateDailyReport([
     sale({ codicePos: "P1", nomeNegozio: "Centro", totale: "130", articoli: [art("UNTIED", 30), art("TELEFONIA", 100)] }),
     sale({ codicePos: "P2", nomeNegozio: "Mare", totale: "20", articoli: [art("ENERGIA W3", 20)] }),
   ]);
   const msg = buildTelegramReportMessage({
-    orgName: "Org & Co <srl>",
+    orgName: "Org",
     dateYMD: "2026-07-02",
+    timeLabel: "13:30",
     aggregates,
   });
-  // Numeri del giorno riassunti in una frase, non in un elenco.
-  assert.ok(msg.includes("Oggi <b>2</b> vendite per <b>150,00 €</b>."));
-  // Standout del giorno: top PDV in evidenza.
-  assert.ok(msg.includes("In evidenza <b>Centro</b>"));
-  // Nessuna sezione di dettaglio nel TESTO (restano nell'allegato HTML).
+  // Riassunto discorsivo della giornata (parziale ⇒ "Finora").
+  assert.ok(msg.includes("<b>2 vendite</b>"));
+  assert.ok(msg.includes("Finora"));
+  // Standout negozio in evidenza.
+  assert.ok(msg.includes("Centro"));
+  // Nessuna delle vecchie sezioni elenco.
   assert.ok(!msg.includes("<b>Per tipo</b>"));
   assert.ok(!msg.includes("<b>Per pista</b>"));
   assert.ok(!msg.includes("<b>Per punto vendita</b>"));
-  // Escape HTML di nomi con caratteri speciali (intestazione org).
-  assert.ok(msg.includes("Org &amp; Co &lt;srl&gt;"));
-  assert.ok(!msg.includes("<srl>"));
 });
 
 console.log("\n— buildVenditeReportHtml / reportHtmlFileName —");
@@ -1051,56 +1069,41 @@ await test("buildMonthEndProjection: canvass totali e telefoni maturato+proiezio
   assert.equal(buildMonthEndProjection("bad", monthAgg), null);
 });
 
-await test("commento: il TESTO non elenca più fatturato/assicurazioni/energia/proiezione (restano in HTML) (Task #266)", () => {
-  const rows = [
-    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "620", articoli: [art("TELEFONIA", 500), art("ACCESSORI", 40), art("ELETTRODOMESTICI", 80)] }),
-    saleCli({ totale: "50", articoli: [art("ENERGIA W3", 50, { descrizione: "LUCE MICROBUSINESS - DOMICILIAZIONE BANCARIA" })] }),
-    saleCli({ totale: "20", articoli: [art("ENERGIA W3", 20, { descrizione: "LUCE - DOMICILIAZIONE BANCARIA" })] }),
-    saleCli({ totale: "250", articoli: [art("ASSICURAZIONI", 100), art("WINDTRE SECURITY PRO GA", 150), art("SPEDIZIONE", 5)] }),
-  ];
-  const aggregates = aggregateDailyReport(rows);
-  const monthProjection = buildMonthEndProjection("2026-07-15", aggregates);
-  const msg = buildTelegramReportMessage({ orgName: "Org", dateYMD: "2026-07-15", aggregates, monthProjection });
-  // Nessuna delle vecchie sezioni-elenco è più nel testo.
-  assert.ok(!msg.includes("<b>Fatturato prodotti/servizi</b>"));
-  assert.ok(!msg.includes("<b>Assicurazioni</b>"));
-  assert.ok(!msg.includes("<b>Energia per cliente</b>"));
-  assert.ok(!msg.includes("<b>Proiezione fine mese</b>"));
-  // C'è invece il riepilogo discorsivo del giorno.
-  assert.ok(msg.includes("Oggi <b>4</b> vendite per"));
-});
-
-await test("commento: con forecast mostra passo mese, delta% e proiezione per dimensione (Task #266)", () => {
-  const dayAgg = aggregateDailyReport([
-    saleCli({ totale: "530", articoli: [art("UNTIED", 30), art("TELEFONIA", 500)] }),
+await test("messaggio: con forecast + monthAggregates ⇒ passo mensile e proiezione nel commento", () => {
+  const today = aggregateDailyReport([
+    saleCli({ totale: "540", articoli: [art("TELEFONIA", 500), art("ACCESSORI", 40)] }),
   ]);
-  // Mese-a-oggi: 10 canvass, 5 telefoni.
-  const monthRows = [];
-  for (let i = 0; i < 10; i++) monthRows.push(saleCli({ totale: "30", articoli: [art("UNTIED", 30)] }));
-  for (let i = 0; i < 5; i++) monthRows.push(saleCli({ totale: "500", articoli: [art("TELEFONIA", 500)] }));
-  const monthAgg = aggregateDailyReport(monthRows);
+  const monthAgg = aggregateDailyReport([
+    saleCli({ totale: "540", articoli: [art("TELEFONIA", 500), art("ACCESSORI", 40)] }),
+    saleCli({ totale: "30", articoli: [art("UNTIED", 30)] }),
+  ]);
   const msg = buildTelegramReportMessage({
     orgName: "Org",
     dateYMD: "2026-07-15",
     timeLabel: "22:30",
-    aggregates: dayAgg,
+    aggregates: today,
     monthAggregates: monthAgg,
-    forecast: { canvassPezzi: 40, telefoniPezzi: 40 },
-    elapsedWorkingDays: 10,
-    totalWorkingDays: 20,
+    forecast: parseForecastConfig({ canvassPezzi: 100, telefoniPezzi: 60, accessoriFatturato: 2000, giorniLavorativiPerNegozio: 26 }),
   });
-  // Passo atteso canvass a 10/20 gg = 20 → maturato 10 ⇒ -50%; proiezione 20.
-  assert.ok(msg.includes("• Canvass:"));
-  assert.ok(msg.includes("-50% sul passo"));
-  assert.ok(msg.includes("• Telefoni:"));
-  assert.ok(msg.includes("10/20 giorni lavorativi"));
+  // Fascia chiusura ⇒ apertura notturna 🌙 e lead "In chiusura".
+  assert.ok(msg.includes("🌙"));
+  assert.ok(msg.includes("In chiusura"));
+  // Framing mensile: passo + proiezione + obiettivo.
+  assert.ok(msg.includes("Sul mese"));
+  assert.ok(/proiezione/.test(msg));
+  assert.ok(/obiettivo/.test(msg));
+  // Nessuna vecchia sezione elenco.
+  assert.ok(!msg.includes("Fatturato prodotti/servizi"));
+  assert.ok(!msg.includes("Proiezione fine mese"));
 });
 
-await test("commento: senza forecast niente sezione 'sul mese' (Task #266)", () => {
+await test("messaggio: senza forecast nessun framing mensile ma commento presente", () => {
   const aggregates = aggregateDailyReport([saleCli({ totale: "30", articoli: [art("UNTIED", 30)] })]);
   const msg = buildTelegramReportMessage({ orgName: "Org", dateYMD: "2026-07-15", aggregates });
-  assert.ok(!msg.includes("sul passo"));
-  assert.ok(!msg.includes("giorni lavorativi"));
+  assert.ok(!msg.includes("Proiezione fine mese"));
+  assert.ok(!msg.includes("Sul mese"));
+  // Il commento della giornata resta comunque presente.
+  assert.ok(msg.includes("<b>1 vendite</b>"));
 });
 
 await test("commento: varietà deterministica per data — stesso giorno identico, giorni diversi variano (Task #266)", () => {
@@ -1173,6 +1176,133 @@ await test("HTML: card Proiezione fine mese solo nella pagina mese", () => {
   // La card proiezione è nella pagina mese (data-page="month").
   const monthPage = html.slice(html.indexOf('data-page="month"'));
   assert.ok(monthPage.includes("Proiezione fine mese"));
+});
+
+console.log("\n— parseForecastConfig / hasForecast / fasciaFromTimeLabel —");
+
+await test("parseForecastConfig: stringhe/virgole ⇒ numeri; vuoti/≤0/NaN ⇒ null", () => {
+  const fc = parseForecastConfig({
+    canvassPezzi: "240",
+    telefoniPezzi: 120,
+    accessoriFatturato: "5.000,50".replace(".", ""), // "5000,50"
+    serviziFatturato: "",
+    numeroNegozi: 0,
+    giorniLavorativiPerNegozio: "abc",
+  });
+  assert.equal(fc.canvassPezzi, 240);
+  assert.equal(fc.telefoniPezzi, 120);
+  assert.equal(fc.accessoriFatturato, 5000.5);
+  assert.equal(fc.serviziFatturato, null);
+  assert.equal(fc.numeroNegozi, null); // 0 ⇒ null
+  assert.equal(fc.giorniLavorativiPerNegozio, null);
+});
+
+await test("parseForecastConfig: input null/undefined ⇒ EMPTY_FORECAST", () => {
+  assert.deepEqual(parseForecastConfig(null), EMPTY_FORECAST);
+  assert.deepEqual(parseForecastConfig(undefined), EMPTY_FORECAST);
+});
+
+await test("hasForecast: vero solo con almeno una dimensione valutabile", () => {
+  assert.equal(hasForecast(EMPTY_FORECAST), false);
+  assert.equal(hasForecast(parseForecastConfig({ numeroNegozi: 4 })), false); // solo divisore
+  assert.equal(hasForecast(parseForecastConfig({ canvassPezzi: 10 })), true);
+});
+
+await test("fasciaFromTimeLabel: 22:xx ⇒ chiusura, resto ⇒ parziale", () => {
+  assert.equal(fasciaFromTimeLabel("22:30"), "chiusura");
+  assert.equal(fasciaFromTimeLabel("13:30"), "parziale");
+  assert.equal(fasciaFromTimeLabel(""), "parziale");
+  assert.equal(fasciaFromTimeLabel(null), "parziale");
+  assert.equal(fasciaFromTimeLabel(undefined), "parziale");
+});
+
+console.log("\n— buildDirettoreCommento —");
+
+const cjToday = aggregateDailyReport([
+  sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario Rossi", totale: "540", articoli: [art("UNTIED", 30), art("TELEFONIA", 500), art("ACCESSORI", 40)] }),
+]);
+const cjMonth = aggregateDailyReport([
+  sale({ codicePos: "P1", nomeNegozio: "Centro", totale: "540", articoli: [art("UNTIED", 30), art("TELEFONIA", 500), art("ACCESSORI", 40)] }),
+  sale({ codicePos: "P2", nomeNegozio: "Mare", totale: "60", articoli: [art("UNTIED", 30), art("UNTIED", 30)] }),
+]);
+const cjForecast = parseForecastConfig({ canvassPezzi: 100, telefoniPezzi: 60, accessoriFatturato: 2000, serviziFatturato: 500 });
+
+await test("determinismo: stessa data ⇒ stesso testo, date diverse possono differire", () => {
+  const base = { fascia: "parziale", forecast: cjForecast, today: cjToday, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26 };
+  const a1 = buildDirettoreCommento({ ...base, dateYMD: "2026-07-15" });
+  const a2 = buildDirettoreCommento({ ...base, dateYMD: "2026-07-15" });
+  assert.equal(a1, a2);
+  const b = buildDirettoreCommento({ ...base, dateYMD: "2026-07-16" });
+  // Non richiediamo che differiscano sempre, ma il testo deve essere valido.
+  assert.ok(typeof b === "string" && b.length > 0);
+});
+
+await test("parziale con vendite: apertura ☀️, lead 'Finora', standout negozio+addetto", () => {
+  const s = buildDirettoreCommento({
+    fascia: "parziale", dateYMD: "2026-07-15", forecast: cjForecast,
+    today: cjToday, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26,
+  });
+  assert.ok(s.includes("☀️"));
+  assert.ok(s.includes("Finora"));
+  assert.ok(s.includes("<b>1 vendite</b>"));
+  assert.ok(s.includes("Centro"));
+  assert.ok(s.includes("Mario Rossi"));
+  assert.ok(s.includes("Sul mese"));
+});
+
+await test("chiusura con vendite: apertura 🌙 e lead 'In chiusura'", () => {
+  const s = buildDirettoreCommento({
+    fascia: "chiusura", dateYMD: "2026-07-15", forecast: cjForecast,
+    today: cjToday, month: cjMonth, elapsedWorkingDays: 20, totalWorkingDays: 26,
+  });
+  assert.ok(s.includes("🌙"));
+  assert.ok(s.includes("In chiusura"));
+});
+
+await test("giornata al palo parziale: frase dedicata, niente lead giornata", () => {
+  const s = buildDirettoreCommento({
+    fascia: "parziale", dateYMD: "2026-07-15", forecast: cjForecast,
+    today: aggregateDailyReport([]), month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26,
+  });
+  assert.ok(s.includes("☀️"));
+  assert.ok(/palo|tabellone|ghiaccio|rimonta|zero/.test(s));
+  assert.ok(!s.includes("Finora"));
+});
+
+await test("giornata al palo chiusura: frase dedicata di reset", () => {
+  const s = buildDirettoreCommento({
+    fascia: "chiusura", dateYMD: "2026-07-15", forecast: cjForecast,
+    today: aggregateDailyReport([]), month: cjMonth, elapsedWorkingDays: 20, totalWorkingDays: 26,
+  });
+  assert.ok(s.includes("🌙"));
+  assert.ok(/palo|Tabellone|dimenticare|domani/.test(s));
+});
+
+await test("banda performance: molto sopra ⇒ tono positivo, molto sotto ⇒ tono di recupero", () => {
+  // Mese molto sopra il passo: forecast bassissimo ⇒ delta molto positivo.
+  const sopra = buildDirettoreCommento({
+    fascia: "parziale", dateYMD: "2026-07-15",
+    forecast: parseForecastConfig({ canvassPezzi: 1 }),
+    today: cjToday, month: cjMonth, elapsedWorkingDays: 25, totalWorkingDays: 26,
+  });
+  assert.ok(sopra.includes("davanti al passo"));
+  // Mese molto sotto il passo: forecast altissimo ⇒ delta molto negativo.
+  const sotto = buildDirettoreCommento({
+    fascia: "parziale", dateYMD: "2026-07-15",
+    forecast: parseForecastConfig({ canvassPezzi: 100000 }),
+    today: cjToday, month: cjMonth, elapsedWorkingDays: 25, totalWorkingDays: 26,
+  });
+  assert.ok(sotto.includes("dietro al passo"));
+});
+
+await test("senza forecast: solo commento giornata, nessun framing mensile né spunto", () => {
+  const s = buildDirettoreCommento({
+    fascia: "parziale", dateYMD: "2026-07-15", forecast: EMPTY_FORECAST,
+    today: cjToday, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26,
+  });
+  assert.ok(s.includes("Finora"));
+  assert.ok(!s.includes("Sul mese"));
+  assert.ok(!s.includes("passo"));
 });
 
 console.log(`\nRisultato: ${passed} passati, ${failed} falliti`);

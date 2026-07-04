@@ -10,48 +10,53 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   (tipo Canvass/Prodotti/Servizi + pista) è stata spostata da
   `client/src/lib/` a `shared/` perché serve anche al server; il vecchio
   path client resta come re-export, gli import esistenti non cambiano.
+- **`shared/venditeCommento.ts`** (Task #266) — logica PURA del
+  **commento discorsivo in stile "direttore vendite"** che ha sostituito
+  l'elenco nel messaggio di testo. Nessuna AI: pool di frasi predefinite a
+  fasce, selezione **deterministica** legata alla data (hash FNV-1a di
+  `dateYMD` ⇒ seme; stessa data ⇒ stesso testo, ma varietà giorno-per-
+  giorno). `buildDirettoreCommento(params)` compone: apertura per fascia
+  (☀️ parziale 13:30 / 🌙 chiusura 22:30) e **banda di performance**
+  (moltoSopra ≥ +15%, sopra ≥ +5%, inLinea −5..+5%, sotto ≤ −5%,
+  moltoSotto ≤ −15% sul delta medio mensile); riassunto della giornata
+  (vendite + importo, dimensioni con pezzi/€, delta % vs obiettivo
+  giornaliero); framing del **mese** per dimensione (canvass pz, telefoni
+  pz, accessori €, servizi €) con delta % vs passo atteso a oggi +
+  **proiezione** a fine mese su obiettivo; standout negozio + addetto (con
+  eventuale tono "occhio a … sotto la sua media" quando ≥ 3 negozi);
+  spunto strategico (spingere sulla dimensione più indietro, consolidare
+  la più avanti) e chiusura motivazionale (diversa parziale/chiusura e per
+  banda). **Giornata al palo** (0 vendite) ⇒ frasi dedicate parziale/
+  chiusura. Il passo atteso a oggi usa `elapsed`/`total` giorni lavorativi.
+  Config di supporto: `parseForecastConfig(raw)` (normalizza il blocco
+  forecast: stringhe/virgole ⇒ numeri, vuoti/≤0/NaN ⇒ null),
+  `EMPTY_FORECAST`, `hasForecast(fc)`, `fasciaFromTimeLabel(label)`
+  (22:xx ⇒ chiusura, resto ⇒ parziale). `ForecastConfig` =
+  `{canvassPezzi, telefoniPezzi, accessoriFatturato, serviziFatturato,
+  numeroNegozi, giorniLavorativiPerNegozio}` (ogni campo opzionale: una
+  dimensione a null semplicemente non viene valutata).
 - **`shared/venditeReport.ts`** — logica PURA: `aggregateDailyReport`
   (aggregati del giorno: vendite/importo totale, per tipo, per pista, per
   PDV, breakdown `categorieByPista` per le card pista; ANNULLATA escluse,
   coerente con la pagina Vendite BiSuite) e
-  `buildTelegramReportMessage`. **Dal Task #266 il messaggio di testo NON
-  è più un elenco di vendite** (le sezioni Per tipo / Per pista / Per PDV /
-  Fatturato / Assicurazioni / Energia / Proiezione sono state **rimosse dal
-  testo**: quel dettaglio vive ora **solo nell'allegato HTML**). Il testo è
-  un **commento discorsivo "da direttore vendite"** generato da
-  `buildReportComment(input)`: header (org + data + orario) seguito da un
-  saluto per fascia oraria (`phaseFromTimeLabel` → mattino per 13:30, sera
-  per 22:30), il riepilogo del giorno in una frase (`Oggi <b>N</b> vendite
-  per <b>€</b>.`), lo **standout** del giorno (top PDV / top addetto), e —
-  quando è configurato un **forecast mensile** — una sezione **"sul mese"**
-  che per ogni dimensione (Canvass, Telefoni, Accessori €, Servizi €)
-  confronta il maturato mese-a-oggi col **passo atteso** proporzionale ai
-  giorni lavorativi trascorsi (`elapsedWorkingDays`/`totalWorkingDays`),
-  mostra il **delta %** vs passo (fasce `bandFromScore`:
-  molto sopra/sopra/in linea/sotto/molto sotto) e la **proiezione fine
-  mese** vs obiettivo; chiude con uno spunto strategico e una frase
-  motivazionale coerente con la fascia di performance. Giorno senza vendite
-  ⇒ commento "giornata al palo" (niente elenco). La **varietà** delle frasi
-  è **deterministica per data** (`dayOfYear` + `pick`), così lo stesso
-  giorno produce sempre lo stesso testo ma i giorni diversi variano. Le
-  dimensioni forecast: canvass = `countByType.canvass`; telefoni =
-  `telefoniPezziOf`; accessori € = `accessoriEuroOf(prodottiByCategoria)`;
-  servizi € = `amountByType.servizi`. La config è normalizzata da
-  `parseForecastConfig` (`ForecastConfig`: campi opzionali, un campo vuoto
-  o ≤ 0 non viene valutato). **L'allegato HTML resta invariato.**
-  Gli aggregati di dettaglio restano esportati e usati dall'HTML:
-  il **dettaglio Assicurazioni** per prodotto (tipologia — descrizione) e
-  lo split **Energia per cliente** 👤 Privati (CF) vs
-  🏢 Business (P.IVA); la proiezione (pezzi Canvass totali e Telefoni).
-  **Lo split energia CF/IVA viene ricavato
-  dalla DESCRIZIONE dell'offerta, non dal tipo cliente registrato**
-  (Task #264): `energiaClienteFromDescrizione(descrizione)` = business se
-  la descrizione (maiuscola) contiene `BUSINESS` (copre `MICROBUSINESS` e
-  `CLIENTE BUSINESS`), altrimenti privato. Sui dati reali WindTre il campo
-  cliente spesso non concorda con la descrizione, per questo si usa la
-  descrizione. (`saleCustomerKind(rawData)` — business se `clienteTipo` è
-  GIURIDICA/PROFESSIONISTA **oppure** è presente la P.IVA — resta esportato
-  ma NON governa più lo split energia.) `aggregateDailyReport`
+  `buildTelegramReportMessage`. **Task #266**: il messaggio di testo è ora
+  **intestazione** (📊 data + fascia oraria, 🏢 org, con escape HTML) +
+  **commento discorsivo** (`buildDirettoreCommento`). L'elenco dettagliato
+  (per tipo/pista/PDV, fatturato prodotti/servizi, assicurazioni, energia,
+  proiezione) **non è più nel testo**: resta tutto nell'**allegato HTML**,
+  invariato. Parametri: `aggregates` (giorno), `monthAggregates?`
+  (mese-a-oggi per passo/proiezioni, fallback al giorno), `forecast?`
+  (`ForecastConfig`; assente ⇒ commento senza valutazione mensile),
+  `fascia?` (derivata da `timeLabel` se assente). I giorni lavorativi del
+  mese: `total` da `forecast.giorniLavorativiPerNegozio` se > 0, altrimenti
+  dal calendario (`monthWorkingDays`); `elapsed` sempre dal calendario,
+  cappato a `total`.
+  Arricchimenti (Task #263, ora solo nell'HTML allegato): lo split
+  **Energia per cliente** 👤 Privati (CF) vs 🏢 Business (P.IVA)
+  usa `saleCustomerKind(rawData)`: business se
+  `clienteTipo` è GIURIDICA/PROFESSIONISTA **oppure** è presente la P.IVA,
+  altrimenti privato (CF o cliente non identificabile ⇒ default privato);
+  `aggregateDailyReport`
   espone i nuovi aggregati `energiaByCliente` (split per pista energia) e
   `assicurazioniDettaglio` (ordinato per pezzi↓). La proiezione
   (`buildMonthEndProjection(ymd, monthAgg)`) stima i pezzi a fine mese in
@@ -75,12 +80,8 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   andamento 14 giorni ad area (SVG inline via `svgAreaChart`, assi con
   giorno settimana + picco); **"La gara delle piste"** — una riga per
   pista con barra orizzontale scalata sul massimo, colore tema dark
-  (`PISTA_THEME`), pezzi+importo, chip di dettaglio inline (top 4 da
-  `categorieByPista`) e delta vs media 7 gg. **I chip di dettaglio
-  (Task #264)**: per **Assicurazioni** mostrano la **descrizione prodotto**
-  (`tipologia — descrizione`, come i chip Mobile TIED/UNTIED); per
-  **Energia** mostrano `CF`/`IVA` ricavati dalla descrizione offerta; per
-  le altre piste la categoria BiSuite. **"Mix del giorno"** —
+  (`PISTA_THEME`), pezzi+importo, chip per categoria (top 4 da
+  `categorieByPista`) e delta vs media 7 gg; **"Mix del giorno"** —
   donut chart SVG (`svgDonut`, pezzi totali al centro) + legenda per
   tipo; **"Prodotti per categoria"** e **"Servizi"** — una card
   ciascuna (da `prodottiByCategoria`/`serviziByCategoria` di
@@ -147,15 +148,12 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
 ## Config per-organizzazione
 
 In `organization_config.config.telegramReport`:
-`{ enabled, bot_token, chat_id }` + i campi **forecast** (Task #266, in
-chiaro — non sono segreti): `forecast_canvass_pezzi`,
-`forecast_telefoni_pezzi`, `forecast_accessori_euro`,
-`forecast_servizi_euro`, `numero_negozi`, `giorni_lavorativi`. Il token è
-cifrato at-rest con la stessa AES di SMTP/BiSuite
-(`server/cryptoSecret.ts`, chiave `SMTP_SECRET_KEY`); mai in chiaro nel
-DB. I campi forecast alimentano il commento "da direttore vendite": un
-obiettivo lasciato vuoto/≤0 non viene valutato; `giorni_lavorativi` vuoto
-⇒ si usano i giorni lavorativi da calendario (`monthWorkingDays`).
+`{ enabled, bot_token, chat_id, forecast }`. Il token è cifrato at-rest con
+la stessa AES di SMTP/BiSuite (`server/cryptoSecret.ts`, chiave
+`SMTP_SECRET_KEY`); mai in chiaro nel DB. Il blocco `forecast` (Task #266)
+= `{canvassPezzi, telefoniPezzi, accessoriFatturato, serviziFatturato,
+numeroNegozi, giorniLavorativiPerNegozio}` (numeri o null; **non è un
+segreto**, nessuna cifratura) alimenta il commento del report.
 
 ## API admin (`server/routes.ts`)
 
@@ -192,23 +190,28 @@ nei log runtime.
 `client/src/components/TelegramReportForm.tsx` — card "Report vendite su
 Telegram" (pattern BiSuiteConnectionForm) in AdminPanel (tab credenziali,
 org propria) e SuperAdminPanel (selettore org). Campi token (mascherato) e
-chat ID con istruzioni BotFather/getUpdates, sotto-sezione **"Forecast e
-obiettivi del mese"** (Task #266) con 6 input numerici — Canvass, Telefoni,
-Accessori €, Servizi €, numero negozi, giorni lavorativi/mese (vuoto =
-auto da calendario) — che alimentano il commento del report, switch invio
-automatico, pulsanti "Invia report di prova" e "Salva configurazione".
+chat ID con istruzioni BotFather/getUpdates, switch invio automatico,
+pulsanti "Invia report di prova" e "Salva configurazione". Sottosezione
+**"Forecast e obiettivi (mese)"** (Task #266): 6 input numerici (canvass
+pz, telefoni pz, accessori €, servizi €, numero negozi, giorni lavorativi/
+mese), caricati da `GET …/telegram-report` (`forecast`) e inviati nel body
+del POST come blocco `forecast`; i valori vuoti restano non valutati nel
+commento.
 
 ## Test
 
-`tests/telegram-report.test.mjs` (73 test puri, inclusi 4 sui cambi
+`tests/telegram-report.test.mjs` (85 test puri, inclusi 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,
 `categorieByPista` ordinato per pezzi, input malformati), formattazione
-euro/date, **commento "da direttore vendite"** (Task #266: header + testo
-discorsivo senza elenco vendite, riepilogo del giorno + standout, sezione
-"sul mese" con delta% vs passo e proiezione quando c'è forecast, niente
-sezione mese senza forecast, giorno "al palo"), report HTML
+euro/date, messaggio (Task #266: intestazione + commento discorsivo,
+escape HTML, giorno vuoto, framing mensile solo con forecast, niente più
+sezioni elenco), **commento direttore** (`buildDirettoreCommento`:
+determinismo per data, apertura/lead per fascia parziale/chiusura,
+standout negozio+addetto, bande sopra/sotto il passo, giornata al palo;
+`parseForecastConfig` stringhe/virgole/≤0⇒null, `hasForecast`,
+`fasciaFromTimeLabel`), report HTML
 allegato (redesign Task #250: hero/card piste a tema/tipi/classifiche
 con barre e medaglie, KPI e delta con trend, sparkline per pista,
 giorno vuoto con e senza trend, escape valori dinamici, nessuna risorsa
@@ -272,50 +275,3 @@ reconcile journey, messaggio arrivato nel gruppo "Windtre test" con
 label "verifica scheduler (prova pre-13:30)". Il timer di prod resta
 armato (log PM2: `prossimo report 13:30 programmato per
 2026-07-03T11:30:05Z`).
-
-## Verifica arricchimenti Task #263 (Task #264)
-
-Il 04/07/2026 sono stati verificati end-to-end gli arricchimenti del
-Task #263 (Proiezione fine mese, Fatturato prodotti/servizi, dettaglio
-Assicurazioni, split Energia Privati/Business). Procedura: prima un
-dry-run che costruisce messaggio + HTML dagli stessi dati/funzioni di
-`sendDailyReportForOrg` **senza inviare** (dati di PROD via tunnel SSH),
-per ispezionare le nuove sezioni, la validità dell'HTML (container
-bilanciati, nessun `undefined`/`NaN`/`[object Object]`) e il render
-dell'allegato; poi l'invio REALE nel gruppo "Windtre test" via
-`scripts/verify-telegram-scheduled-path.mts`
-(`ORG_ID=org-admin-windtre`, sync BiSuite del giorno, reconcile journey
-⇒ `INVIATO`). Un invio 200 implica HTML del messaggio valido (Telegram
-rifiuta il parse_mode HTML malformato). Il timer schedulato di prod
-resta armato.
-
-**Correzioni emerse dalla verifica.** Nel messaggio di testo la sezione
-Fatturato mostrava solo Telefoni/Accessori (mancavano le altre categorie
-prodotto vendute: Ricariche, SIM, Modem/Router, Elettrodomestici, Viaggi,
-ecc.) e le sezioni Assicurazioni / Energia per cliente ripetevano il
-totale già presente in "Per pista" quando c'era un solo sottogruppo. Fix:
-il Fatturato elenca ora **tutte** le categorie prodotto (con la loro
-descrizione BiSuite) più il totale Servizi; Assicurazioni ed Energia per
-cliente compaiono **solo** quando aggiungono granularità (≥ 2 prodotti
-assicurazione / entrambi i tipi cliente energia).
-
-**Revisione finale (Task #264, feedback utente Round 4).** Su richiesta
-esplicita dell'utente, nell'allegato HTML le **card dedicate** sotto "La
-gara delle piste" ("Assicurazioni" ed "Energia · Privati vs Business")
-sono state **rimosse del tutto** ("togli quelle sotto"). Al loro posto, il
-dettaglio compare **inline come chip** dentro la riga pista di "La gara
-delle piste" (esattamente come i chip Mobile "TIED CF ×N / UNTIED ×N"):
-per Assicurazioni i chip mostrano la **descrizione prodotto**, per Energia
-i chip `CF`/`IVA`. Inoltre lo **split Energia CF/IVA** è ora ricavato dalla
-**descrizione dell'offerta** (`energiaClienteFromDescrizione`), non dal
-tipo cliente registrato: sui dati reali WindTre il campo cliente spesso
-diverge dalla descrizione, mentre le offerte business/IVA contengono
-sempre `BUSINESS` in descrizione (es. `LUCE MICROBUSINESS …`,
-`CLIENTE BUSINESS …`). `assicurazioniDettaglio`
-(`aggregateDailyReport`) raggruppa per **descrizione prodotto**
-(`tipologiaNome — descrizione`, es. "ASSICURAZIONI CASA — CASA
-ELETTRODOMESTICI"). Le sezioni **testuali** del messaggio (Assicurazioni /
-Energia per cliente) restano invariate con la regola anti-duplicazione.
-Test puri aggiornati (categorie prodotto,
-no-duplicazione messaggio + HTML, raggruppamento per descrizione) e
-re-invio nel gruppo dopo il fix.
