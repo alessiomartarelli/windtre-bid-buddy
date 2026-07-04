@@ -86,24 +86,24 @@ const KpiCard = ({ label, value, subvalue, accent, icon: Icon }: {
   label: string; value: React.ReactNode; subvalue?: React.ReactNode; accent?: string;
   icon?: React.ComponentType<any>;
 }) => (
-  <div className="relative overflow-hidden border border-neutral-200 bg-white">
+  <div className="relative overflow-hidden border border-neutral-200 dark:border-slate-700 bg-white dark:bg-slate-900">
     <div className="absolute top-0 left-0 w-1 h-full" style={{ background: accent || "#9ca3af" }} />
     <div className="px-5 py-4">
       <div className="flex items-start justify-between mb-2">
-        <div className="text-[10px] uppercase tracking-[0.18em] text-neutral-500 font-medium">{label}</div>
-        {Icon && <Icon size={14} strokeWidth={1.5} className="text-neutral-400" />}
+        <div className="text-[10px] uppercase tracking-[0.18em] text-neutral-500 dark:text-slate-400 font-medium">{label}</div>
+        {Icon && <Icon size={14} strokeWidth={1.5} className="text-neutral-400 dark:text-slate-500" />}
       </div>
-      <div className="font-serif text-2xl text-neutral-900 leading-tight">{value}</div>
-      {subvalue && <div className="text-xs text-neutral-600 mt-1.5 font-mono">{subvalue}</div>}
+      <div className="font-serif text-2xl text-neutral-900 dark:text-slate-100 leading-tight">{value}</div>
+      {subvalue && <div className="text-xs text-neutral-600 dark:text-slate-300 mt-1.5 font-mono">{subvalue}</div>}
     </div>
   </div>
 );
 
 const SectionHead = ({ eyebrow, title, right }: { eyebrow?: string; title: string; right?: React.ReactNode }) => (
-  <div className="flex items-end justify-between mb-5 pb-3 border-b-2 border-neutral-900 gap-3 flex-wrap">
+  <div className="flex items-end justify-between mb-5 pb-3 border-b-2 border-neutral-900 dark:border-slate-600 gap-3 flex-wrap">
     <div>
-      {eyebrow && <div className="text-[10px] uppercase tracking-[0.22em] text-neutral-500 mb-1">{eyebrow}</div>}
-      <h2 className="font-serif text-2xl text-neutral-900">{title}</h2>
+      {eyebrow && <div className="text-[10px] uppercase tracking-[0.22em] text-neutral-500 dark:text-slate-400 mb-1">{eyebrow}</div>}
+      <h2 className="font-serif text-2xl text-neutral-900 dark:text-slate-100">{title}</h2>
     </div>
     {right}
   </div>
@@ -117,8 +117,8 @@ const FilterChip = ({ active, onClick, children, dot, testId }: {
     data-testid={testId}
     className={`px-3 py-1.5 text-xs font-mono tracking-wide uppercase border transition-all flex items-center gap-2 ${
       active
-        ? 'bg-neutral-900 text-white border-neutral-900'
-        : 'bg-white text-neutral-600 border-neutral-300 hover:border-neutral-900 hover:text-neutral-900'
+        ? 'bg-neutral-900 dark:bg-slate-100 text-white dark:text-slate-900 border-neutral-900 dark:border-slate-100'
+        : 'bg-white dark:bg-slate-900 text-neutral-600 dark:text-slate-300 border-neutral-300 dark:border-slate-700 hover:border-neutral-900 dark:hover:border-slate-400 hover:text-neutral-900 dark:hover:text-slate-100'
     }`}
   >
     {dot && <span className="w-1.5 h-1.5 rounded-full" style={{ background: dot }} />}
@@ -129,10 +129,10 @@ const FilterChip = ({ active, onClick, children, dot, testId }: {
 const MetricBox = ({ label, value, tone, highlight }: {
   label: string; value: React.ReactNode; tone?: 'ok' | 'ko' | 'warn'; highlight?: boolean;
 }) => {
-  const toneCls = tone === 'ok' ? 'text-emerald-700' : tone === 'ko' ? 'text-red-700' : tone === 'warn' ? 'text-amber-700' : 'text-neutral-900';
+  const toneCls = tone === 'ok' ? 'text-emerald-700 dark:text-emerald-300' : tone === 'ko' ? 'text-red-700 dark:text-red-300' : tone === 'warn' ? 'text-amber-700 dark:text-amber-300' : 'text-neutral-900 dark:text-slate-100';
   return (
-    <div className={`border border-neutral-200 bg-white px-3 py-2 ${highlight ? 'ring-1 ring-indigo-200 bg-indigo-50/40' : ''}`}>
-      <div className="text-[9px] uppercase tracking-[0.15em] text-neutral-500 mb-0.5">{label}</div>
+    <div className={`border border-neutral-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 ${highlight ? 'ring-1 ring-indigo-200 dark:ring-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/40' : ''}`}>
+      <div className="text-[9px] uppercase tracking-[0.15em] text-neutral-500 dark:text-slate-400 mb-0.5">{label}</div>
       <div className={`font-mono text-sm font-semibold ${toneCls}`}>{value}</div>
     </div>
   );
@@ -180,8 +180,8 @@ function UploadCard({
             e.preventDefault(); setDragOver(false);
             const f = e.dataTransfer.files[0]; if (f) onFileChosen(f);
           }}
-          className={`relative block bg-white border-2 rounded-2xl transition-all duration-300 cursor-pointer overflow-hidden ${
-            dragOver ? 'border-indigo-600 bg-indigo-50/80 scale-[1.005]' : 'border-neutral-300/60 hover:border-indigo-500/60'
+          className={`relative block bg-white dark:bg-slate-900 border-2 rounded-2xl transition-all duration-300 cursor-pointer overflow-hidden ${
+            dragOver ? 'border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/80 scale-[1.005]' : 'border-neutral-300/60 dark:border-slate-700/60 hover:border-indigo-500/60'
           }`}
         >
           <input
@@ -196,27 +196,27 @@ function UploadCard({
           <div className="relative p-8 sm:p-12 text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5"
               style={{ background: loading ? 'linear-gradient(135deg, #c7d2fe, #a5b4fc)' : 'linear-gradient(135deg, #eef2ff, #e0e7ff)', border: '1px solid #c7d2fe' }}>
-              {loading ? <Loader2 size={28} className="animate-spin text-indigo-700" /> : <Upload size={28} strokeWidth={1.5} className="text-indigo-700" />}
+              {loading ? <Loader2 size={28} className="animate-spin text-indigo-700 dark:text-indigo-300" /> : <Upload size={28} strokeWidth={1.5} className="text-indigo-700 dark:text-indigo-300" />}
             </div>
-            <div className="font-serif text-2xl text-neutral-900 mb-2 tracking-tight">
+            <div className="font-serif text-2xl text-neutral-900 dark:text-slate-100 mb-2 tracking-tight">
               {loading ? "Elaborazione del DRMS…" : "Carica il file DRMS"}
             </div>
-            <div className="text-sm text-neutral-600 mb-4">
+            <div className="text-sm text-neutral-600 dark:text-slate-300 mb-4">
               {loading ? "Classificazione e salvataggio in corso" : (
-                <>Trascina <span className="font-mono px-1.5 py-0.5 bg-neutral-100 rounded text-xs">.xlsx</span> oppure <span className="text-indigo-700 font-semibold underline decoration-dotted underline-offset-4">clicca qui</span></>
+                <>Trascina <span className="font-mono px-1.5 py-0.5 bg-neutral-100 dark:bg-slate-800 rounded text-xs">.xlsx</span> oppure <span className="text-indigo-700 dark:text-indigo-300 font-semibold underline decoration-dotted underline-offset-4">clicca qui</span></>
               )}
             </div>
             {!loading && (
-              <div className="flex items-center justify-center gap-4 text-[10px] uppercase tracking-[0.15em] text-neutral-500 flex-wrap">
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-600" /> Parsing locale</span>
-                <span className="w-1 h-1 bg-neutral-300 rounded-full" />
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-600" /> 13 capitoli</span>
-                <span className="w-1 h-1 bg-neutral-300 rounded-full" />
-                <span className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-600" /> Persistenza per org+mese</span>
+              <div className="flex items-center justify-center gap-4 text-[10px] uppercase tracking-[0.15em] text-neutral-500 dark:text-slate-400 flex-wrap">
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" /> Parsing locale</span>
+                <span className="w-1 h-1 bg-neutral-300 dark:bg-slate-700 rounded-full" />
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" /> 13 capitoli</span>
+                <span className="w-1 h-1 bg-neutral-300 dark:bg-slate-700 rounded-full" />
+                <span className="flex items-center gap-1.5"><CheckCircle2 size={11} className="text-emerald-600 dark:text-emerald-400" /> Persistenza per org+mese</span>
               </div>
             )}
             {error && (
-              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
                 <AlertCircle size={14} /> {error}
               </div>
             )}
@@ -225,46 +225,46 @@ function UploadCard({
       </div>
 
       {savedList.length > 0 && (
-        <div className="bg-white border border-neutral-200">
-          <div className="px-5 py-3 border-b border-neutral-200 flex items-center justify-between gap-3 flex-wrap">
+        <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
+          <div className="px-5 py-3 border-b border-neutral-200 dark:border-slate-700 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3">
-              <div className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 font-semibold">DRMS salvati</div>
-              <span className="text-[10px] text-neutral-500 font-mono">
+              <div className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 dark:text-slate-300 font-semibold">DRMS salvati</div>
+              <span className="text-[10px] text-neutral-500 dark:text-slate-400 font-mono">
                 {selectedIds.size > 0 ? `${selectedIds.size}/${savedList.length} selezionati` : `${savedList.length} totali`}
               </span>
             </div>
             <div className="flex items-center gap-2">
               {hasPersistedSelection && (
                 <>
-                  <button onClick={onResetPersisted} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-red-700 underline" data-testid="button-reset-persisted-drms">Reset selezione salvata</button>
-                  <span className="text-neutral-300">·</span>
+                  <button onClick={onResetPersisted} className="text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 hover:text-red-700 dark:hover:text-red-300 underline" data-testid="button-reset-persisted-drms">Reset selezione salvata</button>
+                  <span className="text-neutral-300 dark:text-slate-600">·</span>
                 </>
               )}
               {savedList.length > 1 && (
                 <>
-                  <button onClick={selectAll} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-select-all-drms">Tutti</button>
-                  <span className="text-neutral-300">·</span>
-                  <button onClick={selectNone} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-select-none-drms">Nessuno</button>
+                  <button onClick={selectAll} className="text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 hover:text-neutral-900 dark:hover:text-slate-100 underline" data-testid="button-select-all-drms">Tutti</button>
+                  <span className="text-neutral-300 dark:text-slate-600">·</span>
+                  <button onClick={selectNone} className="text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 hover:text-neutral-900 dark:hover:text-slate-100 underline" data-testid="button-select-none-drms">Nessuno</button>
                 </>
               )}
               <Button
                 size="sm"
                 onClick={handleOpenMulti}
                 disabled={selectedIds.size === 0 || loading}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-neutral-300"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-neutral-300 dark:disabled:bg-slate-700"
                 data-testid="button-open-selected-drms"
               >
                 Apri selezionati ({selectedIds.size})
               </Button>
             </div>
           </div>
-          <div className="divide-y divide-neutral-100">
+          <div className="divide-y divide-neutral-100 dark:divide-slate-800">
             {savedList.map((s) => {
               const checked = selectedIds.has(s.id);
               return (
                 <div
                   key={s.id}
-                  className={`px-5 py-3 flex items-center justify-between gap-3 ${checked ? 'bg-indigo-50/50' : ''}`}
+                  className={`px-5 py-3 flex items-center justify-between gap-3 ${checked ? 'bg-indigo-50/50 dark:bg-indigo-950/50' : ''}`}
                   data-testid={`row-drms-saved-${s.id}`}
                 >
                   <label className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer">
@@ -276,15 +276,15 @@ function UploadCard({
                       data-testid={`checkbox-drms-${s.id}`}
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 text-sm font-medium text-neutral-900">
-                        <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
+                      <div className="flex items-center gap-2 text-sm font-medium text-neutral-900 dark:text-slate-100">
+                        <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <span className="truncate">{s.fileName}</span>
                       </div>
-                      <div className="text-xs text-neutral-500 mt-0.5 font-mono">
+                      <div className="text-xs text-neutral-500 dark:text-slate-400 mt-0.5 font-mono">
                         {s.period} · {MONTH_LABELS[s.month - 1]} {s.year} · {fmtInt(s.righeCount)} righe · {fmtEur(parseFloat(s.totaleImporto || '0'))}
                       </div>
                       {s.uploadedAt && (
-                        <div className="text-[10px] text-neutral-400 mt-0.5 font-mono">
+                        <div className="text-[10px] text-neutral-400 dark:text-slate-500 mt-0.5 font-mono">
                           Caricato il {new Date(s.uploadedAt).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}
                         </div>
                       )}
@@ -294,7 +294,7 @@ function UploadCard({
                     <Button size="sm" variant="outline" onClick={() => onLoadSaved(s.id)} data-testid={`button-load-drms-${s.id}`}>
                       Apri
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => onDeleteSaved(s.id)} className="text-red-600 hover:text-red-700" data-testid={`button-delete-drms-${s.id}`}>
+                    <Button size="sm" variant="ghost" onClick={() => onDeleteSaved(s.id)} className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300" data-testid={`button-delete-drms-${s.id}`}>
                       <Trash2 size={14} />
                     </Button>
                   </div>
@@ -326,14 +326,14 @@ function PreviewCard({
 }) {
   const totalCapitoli = preview.capitoliCount.reduce((s, c) => s + c.count, 0);
   return (
-    <div className="bg-white border border-neutral-200">
-      <div className="px-5 py-4 border-b-2 border-neutral-900 flex items-center justify-between gap-3 flex-wrap">
+    <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
+      <div className="px-5 py-4 border-b-2 border-neutral-900 dark:border-slate-600 flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.22em] text-neutral-500 mb-1">Anteprima</div>
-          <div className="font-serif text-2xl text-neutral-900">Verifica i dati prima del salvataggio</div>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-neutral-500 dark:text-slate-400 mb-1">Anteprima</div>
+          <div className="font-serif text-2xl text-neutral-900 dark:text-slate-100">Verifica i dati prima del salvataggio</div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-neutral-600 font-mono">
-          <FileSpreadsheet size={14} className="text-emerald-600" />
+        <div className="flex items-center gap-2 text-xs text-neutral-600 dark:text-slate-300 font-mono">
+          <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />
           <span className="truncate max-w-[260px]" title={preview.fileName}>{preview.fileName}</span>
         </div>
       </div>
@@ -350,31 +350,31 @@ function PreviewCard({
         </div>
 
         <div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-neutral-500 font-medium mb-2">Conteggio per capitolo</div>
-          <div className="border border-neutral-200">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-neutral-500 dark:text-slate-400 font-medium mb-2">Conteggio per capitolo</div>
+          <div className="border border-neutral-200 dark:border-slate-700">
             {preview.capitoliCount.map(c => (
-              <div key={c.key} className={`px-4 py-2 flex items-center justify-between border-b border-neutral-100 last:border-b-0 ${c.key === 'ALTRO' ? 'bg-amber-50/50' : ''}`}>
+              <div key={c.key} className={`px-4 py-2 flex items-center justify-between border-b border-neutral-100 dark:border-slate-800 last:border-b-0 ${c.key === 'ALTRO' ? 'bg-amber-50/50 dark:bg-amber-950/50' : ''}`}>
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-2 h-2 shrink-0" style={{ background: c.color }} />
-                  <span className="text-sm text-neutral-900 truncate">{c.label}</span>
+                  <span className="text-sm text-neutral-900 dark:text-slate-100 truncate">{c.label}</span>
                   {c.key === 'ALTRO' && (
-                    <span className="text-[10px] uppercase tracking-wider text-amber-700 font-mono">non classificato</span>
+                    <span className="text-[10px] uppercase tracking-wider text-amber-700 dark:text-amber-300 font-mono">non classificato</span>
                   )}
                 </div>
                 <div className="flex items-center gap-4 shrink-0">
-                  <span className="text-xs text-neutral-500 font-mono tabular-nums">{fmtInt(c.count)} righe</span>
-                  <span className={`font-mono text-sm font-semibold tabular-nums ${c.importo < 0 ? 'text-red-700' : 'text-neutral-900'}`}>{fmtEur(c.importo)}</span>
+                  <span className="text-xs text-neutral-500 dark:text-slate-400 font-mono tabular-nums">{fmtInt(c.count)} righe</span>
+                  <span className={`font-mono text-sm font-semibold tabular-nums ${c.importo < 0 ? 'text-red-700 dark:text-red-300' : 'text-neutral-900 dark:text-slate-100'}`}>{fmtEur(c.importo)}</span>
                 </div>
               </div>
             ))}
             {preview.capitoliCount.length === 0 && (
-              <div className="px-4 py-6 text-sm text-neutral-500 text-center">Nessuna riga classificata</div>
+              <div className="px-4 py-6 text-sm text-neutral-500 dark:text-slate-400 text-center">Nessuna riga classificata</div>
             )}
           </div>
         </div>
 
         {preview.hasConflict && (
-          <div className="flex items-start gap-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-900">
+          <div className="flex items-start gap-2 px-4 py-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded text-sm text-blue-900 dark:text-blue-100">
             <AlertCircle size={16} className="shrink-0 mt-0.5" />
             <div>
               <div className="font-semibold">Esiste già un DRMS per questo periodo</div>
@@ -383,7 +383,7 @@ function PreviewCard({
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-2 border-t border-neutral-200">
+        <div className="flex items-center justify-end gap-3 pt-2 border-t border-neutral-200 dark:border-slate-700">
           <Button variant="outline" onClick={onCancel} disabled={saving} data-testid="button-preview-cancel">
             <X size={14} className="mr-2" /> Annulla
           </Button>
@@ -607,47 +607,47 @@ function Dashboard({
   };
 
   return (
-    <div className="bg-[#faf8f4] min-h-[calc(100vh-60px)]">
+    <div className="bg-[#faf8f4] dark:bg-slate-950 min-h-[calc(100vh-60px)]">
       {/* Sub-header DRMS */}
-      <div className="bg-white border-b-2 border-neutral-900">
+      <div className="bg-white dark:bg-slate-900 border-b-2 border-neutral-900 dark:border-slate-600">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="min-w-0">
-            <div className="text-[9px] uppercase tracking-[0.3em] text-neutral-500">DRMS · Commissioning</div>
-            <div className="font-serif text-lg text-neutral-900 leading-tight">
-              Franchising <span className="italic text-indigo-700">W3</span>
+            <div className="text-[9px] uppercase tracking-[0.3em] text-neutral-500 dark:text-slate-400">DRMS · Commissioning</div>
+            <div className="font-serif text-lg text-neutral-900 dark:text-slate-100 leading-tight">
+              Franchising <span className="italic text-indigo-700 dark:text-indigo-300">W3</span>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:gap-6">
             <div className="text-right">
-              <div className="text-[9px] uppercase tracking-wider text-neutral-500">Period</div>
-              <div className="font-mono text-xs text-neutral-900 font-semibold" data-testid="text-drms-period">{period}</div>
+              <div className="text-[9px] uppercase tracking-wider text-neutral-500 dark:text-slate-400">Period</div>
+              <div className="font-mono text-xs text-neutral-900 dark:text-slate-100 font-semibold" data-testid="text-drms-period">{period}</div>
             </div>
-            <div className="h-8 w-px bg-neutral-300 hidden sm:block" />
+            <div className="h-8 w-px bg-neutral-300 dark:bg-slate-700 hidden sm:block" />
             <div className="text-right hidden sm:block">
-              <div className="text-[10px] uppercase tracking-wider text-neutral-500">Totale pagato</div>
-              <div className="font-mono text-sm text-neutral-900 font-semibold" data-testid="text-drms-totale">{fmtEur(totali.imp)}</div>
+              <div className="text-[10px] uppercase tracking-wider text-neutral-500 dark:text-slate-400">Totale pagato</div>
+              <div className="font-mono text-sm text-neutral-900 dark:text-slate-100 font-semibold" data-testid="text-drms-totale">{fmtEur(totali.imp)}</div>
             </div>
           </div>
         </div>
         {sources.length > 0 && (
-          <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-2 border-t border-neutral-200 bg-neutral-50/50 flex items-center justify-between gap-3 flex-wrap">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-2 border-t border-neutral-200 dark:border-slate-700 bg-neutral-50/50 dark:bg-slate-900/50 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
-              <FileSpreadsheet size={14} className="text-emerald-600 shrink-0" />
-              <span className="text-[10px] uppercase tracking-wider text-neutral-500 hidden sm:inline">
+              <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="text-[10px] uppercase tracking-wider text-neutral-500 dark:text-slate-400 hidden sm:inline">
                 {isMulti ? `${sources.length} DRMS:` : 'File:'}
               </span>
               {isMulti ? (
                 sources.map(s => (
                   <span
                     key={s.id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-neutral-300 text-[10px] font-mono text-neutral-800"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-slate-900 border border-neutral-300 dark:border-slate-700 text-[10px] font-mono text-neutral-800 dark:text-slate-200"
                     data-testid={`chip-source-${s.id}`}
                     title={s.fileName}
                   >
                     {s.period}
                     <button
                       onClick={() => onRemoveSource(s.id)}
-                      className="text-neutral-400 hover:text-red-600 ml-0.5"
+                      className="text-neutral-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 ml-0.5"
                       data-testid={`button-remove-source-${s.id}`}
                       aria-label={`Rimuovi ${s.period}`}
                     >
@@ -656,19 +656,19 @@ function Dashboard({
                   </span>
                 ))
               ) : (
-                <span className="text-xs font-mono text-neutral-900 truncate" data-testid="text-drms-filename">{sources[0].fileName}</span>
+                <span className="text-xs font-mono text-neutral-900 dark:text-slate-100 truncate" data-testid="text-drms-filename">{sources[0].fileName}</span>
               )}
             </div>
             <button
               onClick={onReset}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-wider font-medium text-red-700 hover:bg-red-50 border border-red-200 hover:border-red-400 rounded transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-wider font-medium text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950 border border-red-200 dark:border-red-800 hover:border-red-400 rounded transition-colors whitespace-nowrap"
               data-testid="button-drms-reset"
             >
               <X size={12} strokeWidth={2.5} /> <span>Cambia DRMS</span>
             </button>
           </div>
         )}
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-8 flex gap-0 border-t border-neutral-200 overflow-x-auto">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-8 flex gap-0 border-t border-neutral-200 dark:border-slate-700 overflow-x-auto">
           {([
             { k: "overview" as TabKey, l: "Panoramica" },
             { k: "matrix" as TabKey, l: "Matrice" },
@@ -680,7 +680,7 @@ function Dashboard({
               onClick={() => setActiveTab(t.k)}
               data-testid={`tab-drms-${t.k}`}
               className={`px-4 sm:px-5 py-3 text-[11px] sm:text-xs uppercase tracking-[0.12em] border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === t.k ? 'border-indigo-700 text-neutral-900 font-semibold' : 'border-transparent text-neutral-500 hover:text-neutral-900'
+                activeTab === t.k ? 'border-indigo-700 text-neutral-900 dark:text-slate-100 font-semibold' : 'border-transparent text-neutral-500 dark:text-slate-400 hover:text-neutral-900 dark:hover:text-slate-100'
               }`}
             >{t.l}</button>
           ))}
@@ -689,17 +689,17 @@ function Dashboard({
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-5 sm:py-8">
         {/* Filtri capitoli */}
-        <div className="mb-8 bg-white border border-neutral-200">
-          <div className="px-5 py-3 border-b border-neutral-200 flex items-center justify-between gap-3 flex-wrap">
+        <div className="mb-8 bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
+          <div className="px-5 py-3 border-b border-neutral-200 dark:border-slate-700 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
-              <Filter size={14} className="text-neutral-500" />
-              <span className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 font-semibold">Capitoli attivi</span>
-              <span className="text-[11px] text-neutral-500 font-mono">({selectedCapitoli.size}/{capitoliOrdinati.length})</span>
+              <Filter size={14} className="text-neutral-500 dark:text-slate-400" />
+              <span className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 dark:text-slate-300 font-semibold">Capitoli attivi</span>
+              <span className="text-[11px] text-neutral-500 dark:text-slate-400 font-mono">({selectedCapitoli.size}/{capitoliOrdinati.length})</span>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setSelectedCapitoli(new Set(capitoliOrdinati))} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline">Tutti</button>
-              <span className="text-neutral-300">·</span>
-              <button onClick={() => setSelectedCapitoli(new Set())} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline">Nessuno</button>
+              <button onClick={() => setSelectedCapitoli(new Set(capitoliOrdinati))} className="text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 hover:text-neutral-900 dark:hover:text-slate-100 underline">Tutti</button>
+              <span className="text-neutral-300 dark:text-slate-600">·</span>
+              <button onClick={() => setSelectedCapitoli(new Set())} className="text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 hover:text-neutral-900 dark:hover:text-slate-100 underline">Nessuno</button>
             </div>
           </div>
           <div className="p-4 flex flex-wrap gap-2">
@@ -710,16 +710,16 @@ function Dashboard({
             ))}
           </div>
           {periodOptions.length > 1 && (
-            <div className="border-t border-neutral-200">
-              <div className="px-5 py-2.5 border-b border-neutral-100 flex items-center justify-between gap-3 flex-wrap">
+            <div className="border-t border-neutral-200 dark:border-slate-700">
+              <div className="px-5 py-2.5 border-b border-neutral-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 font-semibold">DRMS (PERIOD)</span>
-                  <span className="text-[11px] text-neutral-500 font-mono">({selectedPeriods.size}/{periodOptions.length})</span>
+                  <span className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 dark:text-slate-300 font-semibold">DRMS (PERIOD)</span>
+                  <span className="text-[11px] text-neutral-500 dark:text-slate-400 font-mono">({selectedPeriods.size}/{periodOptions.length})</span>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setSelectedPeriods(new Set(periodOptions))} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-period-all">Tutti</button>
-                  <span className="text-neutral-300">·</span>
-                  <button onClick={() => setSelectedPeriods(new Set())} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-period-none">Nessuno</button>
+                  <button onClick={() => setSelectedPeriods(new Set(periodOptions))} className="text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 hover:text-neutral-900 dark:hover:text-slate-100 underline" data-testid="button-period-all">Tutti</button>
+                  <span className="text-neutral-300 dark:text-slate-600">·</span>
+                  <button onClick={() => setSelectedPeriods(new Set())} className="text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 hover:text-neutral-900 dark:hover:text-slate-100 underline" data-testid="button-period-none">Nessuno</button>
                 </div>
               </div>
               <div className="p-4 flex flex-wrap gap-2">
@@ -744,16 +744,16 @@ function Dashboard({
             </div>
           )}
           {competenzaOptions.length > 1 && (
-            <div className="border-t border-neutral-200">
-              <div className="px-5 py-2.5 border-b border-neutral-100 flex items-center justify-between gap-3 flex-wrap">
+            <div className="border-t border-neutral-200 dark:border-slate-700">
+              <div className="px-5 py-2.5 border-b border-neutral-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 font-semibold">Competenza</span>
-                  <span className="text-[11px] text-neutral-500 font-mono">({selectedComp.size}/{competenzaOptions.length})</span>
+                  <span className="text-[11px] uppercase tracking-[0.15em] text-neutral-600 dark:text-slate-300 font-semibold">Competenza</span>
+                  <span className="text-[11px] text-neutral-500 dark:text-slate-400 font-mono">({selectedComp.size}/{competenzaOptions.length})</span>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setSelectedComp(new Set(competenzaOptions))} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-competenza-all">Tutti</button>
-                  <span className="text-neutral-300">·</span>
-                  <button onClick={() => setSelectedComp(new Set())} className="text-[10px] uppercase tracking-wider text-neutral-600 hover:text-neutral-900 underline" data-testid="button-competenza-none">Nessuno</button>
+                  <button onClick={() => setSelectedComp(new Set(competenzaOptions))} className="text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 hover:text-neutral-900 dark:hover:text-slate-100 underline" data-testid="button-competenza-all">Tutti</button>
+                  <span className="text-neutral-300 dark:text-slate-600">·</span>
+                  <button onClick={() => setSelectedComp(new Set())} className="text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 hover:text-neutral-900 dark:hover:text-slate-100 underline" data-testid="button-competenza-none">Nessuno</button>
                 </div>
               </div>
               <div className="p-4 flex flex-wrap gap-2">
@@ -850,28 +850,28 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
 
       <div>
         <SectionHead eyebrow="Ripartizione" title="Distribuzione per capitolo" />
-        <div className="bg-white border border-neutral-200">
+        <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
           <div className="p-5">
             <div className="flex h-10 mb-4 overflow-hidden">
               {perCapitolo.filter(c => c.importo > 0).map(c => (
                 <div key={c.capitolo}
                   style={{ width: `${(c.importo / Math.max(positiveTotImp, 1)) * 100}%`, background: c.config.color }}
                   className="relative group" title={`${c.config.label}: ${fmtEur(c.importo)}`}>
-                  <div className="absolute inset-0 group-hover:bg-white group-hover:bg-opacity-20" />
+                  <div className="absolute inset-0 group-hover:bg-white dark:group-hover:bg-slate-900 group-hover:bg-opacity-20" />
                 </div>
               ))}
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-2 mt-6">
               {perCapitolo.map(c => (
-                <div key={c.capitolo} className="flex items-center justify-between py-2 border-b border-neutral-100 gap-2">
+                <div key={c.capitolo} className="flex items-center justify-between py-2 border-b border-neutral-100 dark:border-slate-800 gap-2">
                   <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                     <span className="w-2.5 h-2.5 shrink-0" style={{ background: c.config.color }} />
-                    <span className="text-sm text-neutral-900 truncate">{c.config.label}</span>
-                    <span className="text-[10px] uppercase tracking-wider text-neutral-400 font-mono whitespace-nowrap">{fmtInt(c.righe)} righe</span>
+                    <span className="text-sm text-neutral-900 dark:text-slate-100 truncate">{c.config.label}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-neutral-400 dark:text-slate-500 font-mono whitespace-nowrap">{fmtInt(c.righe)} righe</span>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className={`font-mono text-sm font-semibold ${c.importo < 0 ? 'text-red-700' : 'text-neutral-900'}`}>{fmtEur(c.importo)}</div>
-                    <div className="text-[10px] text-neutral-500 font-mono">{fmtPct(c.importo, totali.imp)}</div>
+                    <div className={`font-mono text-sm font-semibold ${c.importo < 0 ? 'text-red-700 dark:text-red-300' : 'text-neutral-900 dark:text-slate-100'}`}>{fmtEur(c.importo)}</div>
+                    <div className="text-[10px] text-neutral-500 dark:text-slate-400 font-mono">{fmtPct(c.importo, totali.imp)}</div>
                   </div>
                 </div>
               ))}
@@ -914,16 +914,16 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
               </Button>
             }
           />
-          <div className="bg-white border border-neutral-200 overflow-x-auto">
+          <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700 overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead>
-                <tr className="border-b-2 border-neutral-900">
-                  <th className="text-left px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">Competenza</th>
-                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 whitespace-nowrap">Righe</th>
-                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 whitespace-nowrap">Contratti</th>
-                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 whitespace-nowrap">Importo</th>
+                <tr className="border-b-2 border-neutral-900 dark:border-slate-600">
+                  <th className="text-left px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300">Competenza</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 whitespace-nowrap">Righe</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 whitespace-nowrap">Contratti</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 whitespace-nowrap">Importo</th>
                   {isMulti && (
-                    <th className="text-left px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 w-[280px]">Ripartizione per DRMS</th>
+                    <th className="text-left px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 w-[280px]">Ripartizione per DRMS</th>
                   )}
                 </tr>
               </thead>
@@ -932,14 +932,14 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
                   const tot = Object.values(c.perPeriod).reduce((s, v) => s + v, 0);
                   const absTot = Object.values(c.perPeriod).reduce((s, v) => s + Math.abs(v), 0) || 1;
                   return (
-                    <tr key={c.competenza} className="border-b border-neutral-100 hover:bg-indigo-50/30" data-testid={`row-competenza-${c.competenza}`}>
-                      <td className="px-4 py-2 font-mono text-neutral-900 font-semibold">{c.competenza}</td>
-                      <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(c.righe)}</td>
-                      <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(c.contratti)}</td>
-                      <td className={`px-4 py-2 text-right font-mono font-semibold tabular-nums ${tot < 0 ? 'text-red-700' : 'text-neutral-900'}`}>{fmtEur(tot)}</td>
+                    <tr key={c.competenza} className="border-b border-neutral-100 dark:border-slate-800 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/30" data-testid={`row-competenza-${c.competenza}`}>
+                      <td className="px-4 py-2 font-mono text-neutral-900 dark:text-slate-100 font-semibold">{c.competenza}</td>
+                      <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700 dark:text-slate-200">{fmtInt(c.righe)}</td>
+                      <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700 dark:text-slate-200">{fmtInt(c.contratti)}</td>
+                      <td className={`px-4 py-2 text-right font-mono font-semibold tabular-nums ${tot < 0 ? 'text-red-700 dark:text-red-300' : 'text-neutral-900 dark:text-slate-100'}`}>{fmtEur(tot)}</td>
                       {isMulti && (
                         <td className="px-4 py-2">
-                          <div className="flex h-3 w-full bg-neutral-100 overflow-hidden">
+                          <div className="flex h-3 w-full bg-neutral-100 dark:bg-slate-800 overflow-hidden">
                             {bySource.map(src => {
                               const v = Math.abs(c.perPeriod[src.period] || 0);
                               if (v === 0) return null;
@@ -955,7 +955,7 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
                           </div>
                           <div className="flex flex-wrap gap-2 mt-1">
                             {bySource.filter(s => (c.perPeriod[s.period] || 0) !== 0).map(s => (
-                              <span key={s.period} className="text-[9px] font-mono text-neutral-500 inline-flex items-center gap-1">
+                              <span key={s.period} className="text-[9px] font-mono text-neutral-500 dark:text-slate-400 inline-flex items-center gap-1">
                                 <span className="w-1.5 h-1.5" style={{ background: periodColor[s.period] }} />
                                 {s.period}: {fmtEur(c.perPeriod[s.period] || 0)}
                               </span>
@@ -970,7 +970,7 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
             </table>
           </div>
           {isMulti && (
-            <div className="mt-2 text-[10px] uppercase tracking-wider text-neutral-500">
+            <div className="mt-2 text-[10px] uppercase tracking-wider text-neutral-500 dark:text-slate-400">
               I colori indicano da quale DRMS (PERIOD) provengono gli importi di ogni mese di competenza. Utile per leggere gli arretrati.
             </div>
           )}
@@ -981,7 +981,7 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
         <div>
           <SectionHead eyebrow="Per file caricato" title="Subtotali per DRMS (PERIOD)" />
           {duplicatePeriods.size > 0 && (
-            <div className="mb-3 flex items-start gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-800" data-testid="alert-duplicate-periods">
+            <div className="mb-3 flex items-start gap-2 px-4 py-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded text-sm text-red-800 dark:text-red-200" data-testid="alert-duplicate-periods">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <div>
                 <div className="font-semibold">PERIOD sovrapposti rilevati</div>
@@ -991,23 +991,23 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
               </div>
             </div>
           )}
-          <div className="bg-white border border-neutral-200">
+          <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
             <table className="min-w-full text-xs">
               <thead>
-                <tr className="border-b-2 border-neutral-900">
-                  <th className="text-left px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">DRMS</th>
-                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">Righe</th>
-                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">Contratti</th>
-                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">Importo</th>
-                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600">Quota</th>
+                <tr className="border-b-2 border-neutral-900 dark:border-slate-600">
+                  <th className="text-left px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300">DRMS</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300">Righe</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300">Contratti</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300">Importo</th>
+                  <th className="text-right px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300">Quota</th>
                 </tr>
               </thead>
               <tbody>
                 {bySource.map(s => {
                   const isDup = duplicatePeriods.has(s.period);
                   return (
-                  <tr key={s.period} className={`border-b border-neutral-100 ${isDup ? 'bg-red-50/40' : ''}`} data-testid={`row-source-${s.period}`}>
-                    <td className="px-4 py-2 font-mono text-neutral-900 font-semibold">
+                  <tr key={s.period} className={`border-b border-neutral-100 dark:border-slate-800 ${isDup ? 'bg-red-50/40 dark:bg-red-950/40' : ''}`} data-testid={`row-source-${s.period}`}>
+                    <td className="px-4 py-2 font-mono text-neutral-900 dark:text-slate-100 font-semibold">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="w-2 h-2" style={{ background: periodColor[s.period] }} />
                         <span>{s.period}</span>
@@ -1022,10 +1022,10 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(s.righe)}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(s.contratti)}</td>
-                    <td className={`px-4 py-2 text-right font-mono font-semibold tabular-nums ${s.importo < 0 ? 'text-red-700' : 'text-neutral-900'}`}>{fmtEur(s.importo)}</td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-500">{fmtPct(s.importo, grandImp)}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700 dark:text-slate-200">{fmtInt(s.righe)}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700 dark:text-slate-200">{fmtInt(s.contratti)}</td>
+                    <td className={`px-4 py-2 text-right font-mono font-semibold tabular-nums ${s.importo < 0 ? 'text-red-700 dark:text-red-300' : 'text-neutral-900 dark:text-slate-100'}`}>{fmtEur(s.importo)}</td>
+                    <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-500 dark:text-slate-400">{fmtPct(s.importo, grandImp)}</td>
                   </tr>
                   );
                 })}
@@ -1038,28 +1038,28 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <SectionHead eyebrow={`Top ${TOP_N}`} title="Migliori PV" />
-          <div className="bg-white border border-neutral-200">
+          <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
             {topPV.map((p, i) => (
-              <div key={p.neg} className="px-4 py-2.5 border-b border-neutral-100 last:border-b-0 flex items-center gap-3">
-                <span className="text-[10px] font-mono text-neutral-400 w-6">#{i + 1}</span>
-                <span className="font-mono text-sm text-neutral-900 flex-1 truncate">{p.neg}</span>
-                <span className="font-mono text-sm font-semibold text-neutral-900">{fmtEur(p.tot)}</span>
+              <div key={p.neg} className="px-4 py-2.5 border-b border-neutral-100 dark:border-slate-800 last:border-b-0 flex items-center gap-3">
+                <span className="text-[10px] font-mono text-neutral-400 dark:text-slate-500 w-6">#{i + 1}</span>
+                <span className="font-mono text-sm text-neutral-900 dark:text-slate-100 flex-1 truncate">{p.neg}</span>
+                <span className="font-mono text-sm font-semibold text-neutral-900 dark:text-slate-100">{fmtEur(p.tot)}</span>
               </div>
             ))}
-            {topPV.length === 0 && <div className="px-4 py-6 text-sm text-neutral-500 text-center">Nessun PV positivo</div>}
+            {topPV.length === 0 && <div className="px-4 py-6 text-sm text-neutral-500 dark:text-slate-400 text-center">Nessun PV positivo</div>}
           </div>
         </div>
 
         <div>
           <SectionHead eyebrow="Storni netti" title="PV in negativo" />
-          <div className="bg-white border border-neutral-200">
+          <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
             {bottomPV.map((p) => (
-              <div key={p.neg} className="px-4 py-2.5 border-b border-neutral-100 last:border-b-0 flex items-center gap-3 bg-red-50/30">
-                <span className="font-mono text-sm text-neutral-900 flex-1 truncate">{p.neg}</span>
-                <span className="font-mono text-sm font-semibold text-red-700">{fmtEur(p.tot)}</span>
+              <div key={p.neg} className="px-4 py-2.5 border-b border-neutral-100 dark:border-slate-800 last:border-b-0 flex items-center gap-3 bg-red-50/30 dark:bg-red-950/30">
+                <span className="font-mono text-sm text-neutral-900 dark:text-slate-100 flex-1 truncate">{p.neg}</span>
+                <span className="font-mono text-sm font-semibold text-red-700 dark:text-red-300">{fmtEur(p.tot)}</span>
               </div>
             ))}
-            {bottomPV.length === 0 && <div className="px-4 py-6 text-sm text-neutral-500 text-center">Nessun PV in negativo</div>}
+            {bottomPV.length === 0 && <div className="px-4 py-6 text-sm text-neutral-500 dark:text-slate-400 text-center">Nessun PV in negativo</div>}
           </div>
         </div>
       </div>
@@ -1134,29 +1134,29 @@ function MatrixTab({ matrix, capitoliOrdinati, onSelectPV, filteredData, include
         </Button>
       } />
 
-      <div className="bg-white border border-neutral-200 overflow-x-auto">
+      <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700 overflow-x-auto">
         <table className="min-w-full text-xs border-collapse">
           <thead>
-            <tr className="border-b-2 border-neutral-900">
-              <th className="text-left px-3 py-2 sticky left-0 bg-white z-10 font-mono text-[10px] uppercase tracking-wider text-neutral-600 w-[140px]">Negozio</th>
+            <tr className="border-b-2 border-neutral-900 dark:border-slate-600">
+              <th className="text-left px-3 py-2 sticky left-0 bg-white dark:bg-slate-900 z-10 font-mono text-[10px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 w-[140px]">Negozio</th>
               {capitoliOrdinati.map(c => (
-                <th key={c} className="px-2 py-2 text-right font-mono text-[9px] uppercase tracking-wider text-neutral-600 whitespace-nowrap">
+                <th key={c} className="px-2 py-2 text-right font-mono text-[9px] uppercase tracking-wider text-neutral-600 dark:text-slate-300 whitespace-nowrap">
                   <div className="flex flex-col items-end gap-1">
                     <span className="w-1.5 h-1.5 rounded-full" style={{ background: CAPITOLI_CONFIG[c].color }} />
                     <span>{CAPITOLI_CONFIG[c].label}</span>
                   </div>
                 </th>
               ))}
-              <th className="px-3 py-2 text-right font-mono text-[10px] uppercase tracking-wider text-neutral-900 bg-neutral-100 whitespace-nowrap border-l-2 border-neutral-900">Totale</th>
+              <th className="px-3 py-2 text-right font-mono text-[10px] uppercase tracking-wider text-neutral-900 dark:text-slate-100 bg-neutral-100 dark:bg-slate-800 whitespace-nowrap border-l-2 border-neutral-900 dark:border-slate-600">Totale</th>
             </tr>
           </thead>
           <tbody>
             {matrix.map(r => (
-              <tr key={r.neg} className="border-b border-neutral-100 hover:bg-indigo-50 cursor-pointer group" onClick={() => onSelectPV(r.neg)} data-testid={`row-matrix-${r.neg}`}>
-                <td className="px-3 py-2 sticky left-0 bg-white group-hover:bg-indigo-50 font-mono text-neutral-900">
+              <tr key={r.neg} className="border-b border-neutral-100 dark:border-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 cursor-pointer group" onClick={() => onSelectPV(r.neg)} data-testid={`row-matrix-${r.neg}`}>
+                <td className="px-3 py-2 sticky left-0 bg-white dark:bg-slate-900 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-950 font-mono text-neutral-900 dark:text-slate-100">
                   <div className="flex items-center justify-between">
                     <span>{r.neg}</span>
-                    <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 text-indigo-700" />
+                    <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 text-indigo-700 dark:text-indigo-300" />
                   </div>
                 </td>
                 {capitoliOrdinati.map(c => {
@@ -1167,26 +1167,26 @@ function MatrixTab({ matrix, capitoliOrdinati, onSelectPV, filteredData, include
                     : v < 0 ? `rgba(239,68,68,${0.1 + intensity * 0.5})` : 'transparent';
                   return (
                     <td key={c} className="px-2 py-2 text-right tabular-nums" style={{ background: bg }}>
-                      {v !== 0 ? <span className={v < 0 ? 'text-red-700' : 'text-neutral-900'}>{v.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</span> : <span className="text-neutral-300">—</span>}
+                      {v !== 0 ? <span className={v < 0 ? 'text-red-700 dark:text-red-300' : 'text-neutral-900 dark:text-slate-100'}>{v.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</span> : <span className="text-neutral-300 dark:text-slate-600">—</span>}
                     </td>
                   );
                 })}
-                <td className="px-3 py-2 text-right font-mono font-semibold text-neutral-900 bg-neutral-50 border-l-2 border-neutral-900 tabular-nums">{fmtEur(r.tot)}</td>
+                <td className="px-3 py-2 text-right font-mono font-semibold text-neutral-900 dark:text-slate-100 bg-neutral-50 dark:bg-slate-900 border-l-2 border-neutral-900 dark:border-slate-600 tabular-nums">{fmtEur(r.tot)}</td>
               </tr>
             ))}
-            <tr className="border-t-2 border-neutral-900 bg-neutral-100 font-semibold">
-              <td className="px-3 py-2 sticky left-0 bg-neutral-100 font-mono text-[10px] uppercase tracking-wider text-neutral-900">Totale</td>
+            <tr className="border-t-2 border-neutral-900 dark:border-slate-600 bg-neutral-100 dark:bg-slate-800 font-semibold">
+              <td className="px-3 py-2 sticky left-0 bg-neutral-100 dark:bg-slate-800 font-mono text-[10px] uppercase tracking-wider text-neutral-900 dark:text-slate-100">Totale</td>
               {capitoliOrdinati.map(c => (
-                <td key={c} className="px-2 py-2 text-right font-mono tabular-nums text-[11px] text-neutral-900">{fmtInt(capitoliTot[c] || 0)}</td>
+                <td key={c} className="px-2 py-2 text-right font-mono tabular-nums text-[11px] text-neutral-900 dark:text-slate-100">{fmtInt(capitoliTot[c] || 0)}</td>
               ))}
-              <td className="px-3 py-2 text-right font-mono font-bold text-neutral-900 border-l-2 border-neutral-900 tabular-nums">
+              <td className="px-3 py-2 text-right font-mono font-bold text-neutral-900 dark:text-slate-100 border-l-2 border-neutral-900 dark:border-slate-600 tabular-nums">
                 {fmtEur(Object.values(capitoliTot).reduce((s, v) => s + v, 0))}
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <div className="mt-3 text-[10px] uppercase tracking-wider text-neutral-500">Clicca su una riga per il dettaglio PV. Intensità colore = importo/max. Rosso = storni.</div>
+      <div className="mt-3 text-[10px] uppercase tracking-wider text-neutral-500 dark:text-slate-400">Clicca su una riga per il dettaglio PV. Intensità colore = importo/max. Rosso = storni.</div>
     </div>
   );
 }
@@ -1271,12 +1271,12 @@ function DriverTab({ filteredData, perCapitolo, selectedCapitoli }: {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {capitoliDisponibili.map(c => (
             <button key={c.capitolo} onClick={() => setSelectedCap(c.capitolo)}
-              className="bg-white border border-neutral-200 hover:border-neutral-900 p-4 sm:p-5 text-left transition-all group"
+              className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700 hover:border-neutral-900 dark:hover:border-slate-400 p-4 sm:p-5 text-left transition-all group"
               data-testid={`button-driver-capitolo-${c.capitolo}`}>
               <div className="w-1 h-6 mb-3" style={{ background: c.config.color }} />
-              <div className="text-[10px] uppercase tracking-[0.15em] text-neutral-500 mb-1">{c.config.label}</div>
-              <div className="font-serif text-lg sm:text-2xl text-neutral-900 mb-2 break-words">{fmtEur(c.importo)}</div>
-              <div className="text-xs text-neutral-600 flex items-center justify-between">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-neutral-500 dark:text-slate-400 mb-1">{c.config.label}</div>
+              <div className="font-serif text-lg sm:text-2xl text-neutral-900 dark:text-slate-100 mb-2 break-words">{fmtEur(c.importo)}</div>
+              <div className="text-xs text-neutral-600 dark:text-slate-300 flex items-center justify-between">
                 <span>{fmtInt(c.contratti)} contr.</span>
                 <ChevronRight size={12} className="opacity-30 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
               </div>
@@ -1287,11 +1287,11 @@ function DriverTab({ filteredData, perCapitolo, selectedCapitoli }: {
         <div>
           <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <button onClick={() => setSelectedCap(null)} className="text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-900 underline" data-testid="button-driver-back">← Tutti i capitoli</button>
-              <span className="text-neutral-400">/</span>
+              <button onClick={() => setSelectedCap(null)} className="text-xs uppercase tracking-wider text-neutral-500 dark:text-slate-400 hover:text-neutral-900 dark:hover:text-slate-100 underline" data-testid="button-driver-back">← Tutti i capitoli</button>
+              <span className="text-neutral-400 dark:text-slate-500">/</span>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2" style={{ background: CAPITOLI_CONFIG[selectedCap].color }} />
-                <span className="font-serif text-xl text-neutral-900">{CAPITOLI_CONFIG[selectedCap].label}</span>
+                <span className="font-serif text-xl text-neutral-900 dark:text-slate-100">{CAPITOLI_CONFIG[selectedCap].label}</span>
               </div>
             </div>
             {capitoloData && (
@@ -1339,27 +1339,27 @@ function DetailTable({ title, data, showContratti }: {
 }) {
   const tot = data.reduce((s, r) => s + r.imp, 0);
   return (
-    <div className="bg-white border border-neutral-200">
-      <div className="px-4 py-3 border-b border-neutral-200">
-        <div className="text-[10px] uppercase tracking-[0.15em] text-neutral-600 font-semibold">{title}</div>
+    <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
+      <div className="px-4 py-3 border-b border-neutral-200 dark:border-slate-700">
+        <div className="text-[10px] uppercase tracking-[0.15em] text-neutral-600 dark:text-slate-300 font-semibold">{title}</div>
       </div>
       <div className="max-h-80 overflow-y-auto">
         <table className="w-full text-xs">
           <tbody>
             {data.map((r, i) => (
-              <tr key={i} className={`border-b border-neutral-100 ${r.imp < 0 ? 'bg-red-50/30' : ''}`}>
-                <td className="px-4 py-2 text-neutral-900">
+              <tr key={i} className={`border-b border-neutral-100 dark:border-slate-800 ${r.imp < 0 ? 'bg-red-50/30 dark:bg-red-950/30' : ''}`}>
+                <td className="px-4 py-2 text-neutral-900 dark:text-slate-100">
                   <div className="flex items-center gap-2">
                     <span className="truncate max-w-[250px]" title={r.key}>{r.key}</span>
                   </div>
                   {showContratti && r.contratti !== undefined && (
-                    <div className="text-[10px] text-neutral-400 font-mono">{r.contratti} contr.</div>
+                    <div className="text-[10px] text-neutral-400 dark:text-slate-500 font-mono">{r.contratti} contr.</div>
                   )}
                 </td>
-                <td className="px-2 py-2 text-right text-neutral-500 font-mono text-[10px] whitespace-nowrap">{fmtInt(r.n)}</td>
+                <td className="px-2 py-2 text-right text-neutral-500 dark:text-slate-400 font-mono text-[10px] whitespace-nowrap">{fmtInt(r.n)}</td>
                 <td className="px-4 py-2 text-right font-mono tabular-nums whitespace-nowrap">
-                  <span className={r.imp < 0 ? 'text-red-700' : 'text-neutral-900'}>{fmtEur(r.imp)}</span>
-                  <div className="text-[10px] text-neutral-400">{fmtPct(r.imp, tot)}</div>
+                  <span className={r.imp < 0 ? 'text-red-700 dark:text-red-300' : 'text-neutral-900 dark:text-slate-100'}>{fmtEur(r.imp)}</span>
+                  <div className="text-[10px] text-neutral-400 dark:text-slate-500">{fmtPct(r.imp, tot)}</div>
                 </td>
               </tr>
             ))}
@@ -1439,27 +1439,27 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
     <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
       <div>
         <SectionHead eyebrow="Elenco" title="Negozi" />
-        <div className="bg-white border border-neutral-200">
-          <div className="p-3 border-b border-neutral-200">
+        <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
+          <div className="p-3 border-b border-neutral-200 dark:border-slate-700">
             <div className="relative">
-              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-slate-500" />
               <input type="text" value={searchPV} onChange={(e) => setSearchPV(e.target.value)} placeholder="Cerca codice PV…"
                 data-testid="input-pv-search"
-                className="w-full pl-8 pr-8 py-2 text-xs border border-neutral-200 focus:outline-none focus:border-neutral-900 font-mono" />
+                className="w-full pl-8 pr-8 py-2 text-xs border border-neutral-200 dark:border-slate-700 focus:outline-none focus:border-neutral-900 dark:focus:border-slate-600 font-mono" />
               {searchPV && (
-                <button onClick={() => setSearchPV("")} className="absolute right-2 top-1/2 -translate-y-1/2"><X size={12} className="text-neutral-400" /></button>
+                <button onClick={() => setSearchPV("")} className="absolute right-2 top-1/2 -translate-y-1/2"><X size={12} className="text-neutral-400 dark:text-slate-500" /></button>
               )}
             </div>
           </div>
           <div className="max-h-[600px] overflow-y-auto">
             {listaPV.map(pv => (
               <button key={pv.neg} onClick={() => setSelectedPV(pv.neg)} data-testid={`button-pv-${pv.neg}`}
-                className={`w-full text-left px-3 py-2.5 border-b border-neutral-100 transition-colors ${
-                  selectedPV === pv.neg ? 'bg-indigo-50 border-l-2 border-l-indigo-700' : 'hover:bg-neutral-50'
+                className={`w-full text-left px-3 py-2.5 border-b border-neutral-100 dark:border-slate-800 transition-colors ${
+                  selectedPV === pv.neg ? 'bg-indigo-50 dark:bg-indigo-950 border-l-2 border-l-indigo-700' : 'hover:bg-neutral-50 dark:hover:bg-slate-800'
                 }`}>
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs text-neutral-900">{pv.neg}</span>
-                  <span className={`text-xs font-mono tabular-nums ${pv.tot < 0 ? 'text-red-700' : 'text-neutral-600'}`}>
+                  <span className="font-mono text-xs text-neutral-900 dark:text-slate-100">{pv.neg}</span>
+                  <span className={`text-xs font-mono tabular-nums ${pv.tot < 0 ? 'text-red-700 dark:text-red-300' : 'text-neutral-600 dark:text-slate-300'}`}>
                     {Math.abs(pv.tot) >= 1000 ? `${(pv.tot/1000).toFixed(1)}k` : Math.round(pv.tot)}
                   </span>
                 </div>
@@ -1471,22 +1471,22 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
 
       <div>
         {!selectedPV ? (
-          <div className="bg-white border border-neutral-200 p-16 text-center">
-            <Store size={48} strokeWidth={1} className="mx-auto mb-4 text-neutral-300" />
-            <div className="font-serif text-2xl text-neutral-400">Seleziona un punto vendita</div>
-            <div className="text-sm text-neutral-500 mt-2">Scegli dall'elenco per vedere il prospetto dettagliato</div>
+          <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700 p-16 text-center">
+            <Store size={48} strokeWidth={1} className="mx-auto mb-4 text-neutral-300 dark:text-slate-600" />
+            <div className="font-serif text-2xl text-neutral-400 dark:text-slate-500">Seleziona un punto vendita</div>
+            <div className="text-sm text-neutral-500 dark:text-slate-400 mt-2">Scegli dall'elenco per vedere il prospetto dettagliato</div>
           </div>
         ) : pvData && (
           <div className="space-y-6">
-            <div className="bg-white border border-neutral-200 p-6">
+            <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700 p-6">
               <div className="flex items-start justify-between flex-wrap gap-3">
                 <div>
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-neutral-500 mb-1">Punto Vendita</div>
-                  <div className="font-mono text-2xl text-neutral-900 font-semibold">{selectedPV}</div>
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-neutral-500 dark:text-slate-400 mb-1">Punto Vendita</div>
+                  <div className="font-mono text-2xl text-neutral-900 dark:text-slate-100 font-semibold">{selectedPV}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] uppercase tracking-[0.2em] text-neutral-500 mb-1">Totale maturato</div>
-                  <div className={`font-serif text-3xl ${pvData.tot < 0 ? 'text-red-700' : 'text-neutral-900'}`}>{fmtEur(pvData.tot)}</div>
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-neutral-500 dark:text-slate-400 mb-1">Totale maturato</div>
+                  <div className={`font-serif text-3xl ${pvData.tot < 0 ? 'text-red-700 dark:text-red-300' : 'text-neutral-900 dark:text-slate-100'}`}>{fmtEur(pvData.tot)}</div>
                 </div>
               </div>
             </div>
@@ -1529,17 +1529,17 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
 
             <div>
               <SectionHead eyebrow="Ripartizione" title="Importo per Capitolo" />
-              <div className="bg-white border border-neutral-200">
+              <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
                 {Object.entries(pvData.byCap)
                   .sort((a, b) => b[1].importo - a[1].importo)
                   .map(([cap, d]) => (
-                    <div key={cap} className="px-5 py-3 border-b border-neutral-100 last:border-b-0 flex items-center justify-between flex-wrap gap-3">
+                    <div key={cap} className="px-5 py-3 border-b border-neutral-100 dark:border-slate-800 last:border-b-0 flex items-center justify-between flex-wrap gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <span className="w-2 h-2 shrink-0" style={{ background: CAPITOLI_CONFIG[cap as CapitoloKey]?.color || '#888' }} />
-                        <span className="text-sm text-neutral-900">{CAPITOLI_CONFIG[cap as CapitoloKey]?.label || cap}</span>
-                        <span className="text-[10px] uppercase text-neutral-400 font-mono">{d.contratti.size} contr.</span>
+                        <span className="text-sm text-neutral-900 dark:text-slate-100">{CAPITOLI_CONFIG[cap as CapitoloKey]?.label || cap}</span>
+                        <span className="text-[10px] uppercase text-neutral-400 dark:text-slate-500 font-mono">{d.contratti.size} contr.</span>
                       </div>
-                      <span className={`font-mono text-sm font-semibold ${d.importo < 0 ? 'text-red-700' : 'text-neutral-900'}`}>{fmtEur(d.importo)}</span>
+                      <span className={`font-mono text-sm font-semibold ${d.importo < 0 ? 'text-red-700 dark:text-red-300' : 'text-neutral-900 dark:text-slate-100'}`}>{fmtEur(d.importo)}</span>
                     </div>
                   ))}
               </div>
@@ -1971,16 +1971,16 @@ export default function DrmsCommissioning() {
       {parsedData ? (
         <Dashboard data={parsedData} sources={sources} onReset={handleReset} onRemoveSource={handleRemoveSource} />
       ) : (
-        <div className="bg-[#faf8f4] min-h-[calc(100vh-60px)]">
+        <div className="bg-[#faf8f4] dark:bg-slate-950 min-h-[calc(100vh-60px)]">
           <div className="max-w-5xl mx-auto px-4 sm:px-8 py-8">
             <div className="mb-8">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white border border-neutral-200 rounded-full text-[10px] uppercase tracking-[0.2em] text-neutral-700 font-medium mb-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700 rounded-full text-[10px] uppercase tracking-[0.2em] text-neutral-700 dark:text-slate-200 font-medium mb-4">
                 <span className="w-1 h-1 bg-indigo-600 rounded-full" /> Analisi DRMS · W3 Incentivazione
               </div>
-              <h1 className="font-serif text-4xl sm:text-5xl text-neutral-900 leading-tight tracking-tight">
+              <h1 className="font-serif text-4xl sm:text-5xl text-neutral-900 dark:text-slate-100 leading-tight tracking-tight">
                 Dashboard <span className="italic" style={{ background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #818cf8 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Commissioning</span>
               </h1>
-              <p className="mt-4 text-neutral-700 max-w-2xl leading-relaxed">
+              <p className="mt-4 text-neutral-700 dark:text-slate-200 max-w-2xl leading-relaxed">
                 Carica un file DRMS Excel per generare il prospetto dettagliato per capitolo, PV, soglie e driver.
                 Verifica i dati nell'anteprima prima di salvarli sul database (per organizzazione e mese).
               </p>

@@ -1171,7 +1171,7 @@ export default function VenditeBiSuite() {
                 <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <Package className="h-4 w-4 text-slate-600" />
+                      <Package className="h-4 w-4 text-slate-600 dark:text-slate-300" />
                       <span className="font-semibold text-sm">Prodotti</span>
                     </div>
                     <Badge className={TYPE_COLORS.prodotti + " text-sm font-bold"}>

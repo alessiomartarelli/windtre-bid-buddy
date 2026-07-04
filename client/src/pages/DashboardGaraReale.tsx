@@ -1042,17 +1042,17 @@ function PistaCompactRow({
         data-testid={`btn-expand-row-${testId}`}
       >
         <div className="flex items-center gap-1.5 min-w-0 lg:w-40 lg:shrink-0">
-          {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />}
+          {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" />}
           <div className="min-w-0">
             <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{name}</div>
-            {subtitle && <div className="text-[11px] text-gray-500 truncate">{subtitle}</div>}
+            {subtitle && <div className="text-[11px] text-gray-500 dark:text-slate-400 truncate">{subtitle}</div>}
           </div>
         </div>
         <div className="flex flex-wrap items-stretch gap-2 flex-1 pl-5 lg:pl-0">
           {hasPunti && (
             <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 flex-1 min-w-[160px] space-y-0.5">
               <div className="flex items-center justify-between gap-2 whitespace-nowrap">
-                <span className="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Att.</span>
+                <span className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-slate-400 shrink-0">Att.</span>
                 <div className="flex items-center gap-1">
                   <span className="text-sm font-semibold">{(m.puntiAtt ?? 0).toFixed(2)} pt</span>
                   {hasSogliaAtt && (
@@ -1073,7 +1073,7 @@ function PistaCompactRow({
           )}
           {hasPremio && (
             <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 min-w-[150px]">
-              <div className="text-[10px] uppercase tracking-wide text-gray-500">Premio</div>
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-slate-400">Premio</div>
               <div className="flex items-baseline gap-2 whitespace-nowrap">
                 <span className={`text-sm font-bold ${premioCls}`}>{formatEuro(m.premioAtt ?? 0)}</span>
                 {m.premioProi !== undefined && (
@@ -1157,7 +1157,7 @@ function TabellaCellSingolo({ valore, soglia, variant, stimata, dim, quotaRs, qu
     <div className={`flex items-center justify-center gap-1 whitespace-nowrap ${sizeCls} ${colorCls} ${italicCls}`} title={tooltip}>
       {variant === 'proiezione' && <TrendingUp className="h-2.5 w-2.5" />}
       <span className="font-semibold">{valore.toFixed(1)}</span>
-      {(stimata || quotaRs) && <span className="text-[9px] text-gray-400">~</span>}
+      {(stimata || quotaRs) && <span className="text-[9px] text-gray-400 dark:text-slate-500">~</span>}
       {showSoglia && (
         <Badge variant="outline" className={`text-[9px] h-4 px-1 ${getSogliaColor(soglia!)}`}>{soglia}</Badge>
       )}
@@ -1269,7 +1269,7 @@ function DashboardPdfExportDialog({
               className="mt-1 min-h-[60px]"
               data-testid={`textarea-${testIdPrefix}-nota`}
             />
-            <p className="text-[11px] text-gray-500 mt-1">Condivisa tra i diversi export PDF della dashboard.</p>
+            <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-1">Condivisa tra i diversi export PDF della dashboard.</p>
           </div>
 
           <div>
@@ -1287,7 +1287,7 @@ function DashboardPdfExportDialog({
                   <img
                     src={prefs.logoDataUrl || orgLogoDataUrl || ''}
                     alt="Logo preview"
-                    className="h-10 w-auto max-w-[80px] border rounded bg-white object-contain"
+                    className="h-10 w-auto max-w-[80px] border rounded bg-white dark:bg-slate-900 object-contain"
                     data-testid={`img-${testIdPrefix}-logo-preview`}
                   />
                   {prefs.logoDataUrl && (
@@ -1303,7 +1303,7 @@ function DashboardPdfExportDialog({
                 </>
               )}
             </div>
-            <p className="text-[11px] text-gray-500 mt-1">
+            <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-1">
               {prefs.logoDataUrl
                 ? 'Logo locale caricato solo per questo PDF. Rimuovi per tornare al logo dell\'organizzazione. Condiviso tra i diversi export PDF della dashboard.'
                 : orgLogoDataUrl
@@ -1973,7 +1973,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
             <tbody>
               {rsRows.length === 0 && (
                 <tr data-testid="row-table-empty">
-                  <td colSpan={1 + pisteAttive.length * 2} className="px-3 py-6 text-center text-sm text-gray-500">
+                  <td colSpan={1 + pisteAttive.length * 2} className="px-3 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
                     Nessun dato disponibile per i punti vendita.
                   </td>
                 </tr>
@@ -1989,7 +1989,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                     >
                       <td className="px-3 py-2 font-semibold sticky left-0 bg-blue-50 dark:bg-blue-950/40 border-r z-[5]">
                         <div className="flex items-center gap-1.5">
-                          {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                          {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-500 dark:text-slate-400" /> : <ChevronRight className="h-4 w-4 text-gray-500 dark:text-slate-400" />}
                           <span className="truncate" title={rs.displayName}>{rs.displayName}</span>
                           <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">{rs.pdvs.size} PDV</Badge>
                         </div>
@@ -2013,7 +2013,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                         <td className="px-3 py-2 sticky left-0 bg-white dark:bg-gray-950 border-r z-[5]">
                           <div className="pl-6">
                             <div className="font-medium text-gray-700 dark:text-gray-200 truncate text-xs" title={pdv.nomeNegozio}>{pdv.nomeNegozio}</div>
-                            <div className="text-gray-500 text-[10px]">{pdv.codicePos}</div>
+                            <div className="text-gray-500 dark:text-slate-400 text-[10px]">{pdv.codicePos}</div>
                           </div>
                         </td>
                         {pisteAttive.map(p => {
@@ -3511,7 +3511,7 @@ export default function DashboardGaraReale() {
             <CardContent className="py-12 text-center">
               <Trophy className="h-12 w-12 mx-auto text-amber-500 mb-4" />
               <p className="text-lg font-medium">Configurazione Gara mancante</p>
-              <p className="text-sm text-gray-500 mt-1 mb-4">
+              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1 mb-4">
                 Non esiste una configurazione gara per il mese selezionato. Configura i PDV, cluster e calendari per visualizzare la dashboard.
               </p>
               <Button
@@ -3528,7 +3528,7 @@ export default function DashboardGaraReale() {
             <CardContent className="py-12 text-center">
               <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-4" />
               <p className="text-lg font-medium" data-testid="text-no-data">Nessun dato disponibile</p>
-              <p className="text-sm text-gray-500 mt-1">Importa le vendite da BiSuite per visualizzare la dashboard</p>
+              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Importa le vendite da BiSuite per visualizzare la dashboard</p>
             </CardContent>
           </Card>
         ) : (
@@ -3563,7 +3563,7 @@ export default function DashboardGaraReale() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
               <Card data-testid="card-total-sales">
                 <CardContent className="p-3 sm:py-4 sm:px-6 text-center">
-                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 mb-1">
+                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 mb-1">
                     <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                     <span className="hidden sm:inline">Vendite Totali</span>
                     <span className="sm:hidden">Vendite</span>
@@ -3573,7 +3573,7 @@ export default function DashboardGaraReale() {
               </Card>
               <Card data-testid="card-total-articoli">
                 <CardContent className="p-3 sm:py-4 sm:px-6 text-center">
-                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 mb-1">
+                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 mb-1">
                     <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                     <span className="hidden sm:inline">Attivazioni Gara</span>
                     <span className="sm:hidden">Attivaz.</span>
@@ -3583,7 +3583,7 @@ export default function DashboardGaraReale() {
               </Card>
               <Card className="col-span-2 sm:col-span-1" data-testid="card-pdv-active">
                 <CardContent className="p-3 sm:py-4 sm:px-6 text-center">
-                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 mb-1">
+                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 mb-1">
                     <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                     PDV Attivi
                   </div>
@@ -3596,15 +3596,15 @@ export default function DashboardGaraReale() {
               <CardContent className="p-3 sm:py-3 sm:px-6">
                 <div className="flex items-center gap-2 sm:gap-6 text-[11px] sm:text-sm flex-wrap">
                   <span className="flex items-center gap-1 sm:gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 shrink-0" />
-                    <span className="text-gray-500 hidden sm:inline">Giorni lavorativi:</span>
-                    <span className="text-gray-500 sm:hidden">GG:</span>
+                    <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 dark:text-slate-500 shrink-0" />
+                    <span className="text-gray-500 dark:text-slate-400 hidden sm:inline">Giorni lavorativi:</span>
+                    <span className="text-gray-500 dark:text-slate-400 sm:hidden">GG:</span>
                     <span className="font-medium" data-testid="text-elapsed-days">{workdayInfo.elapsedWorkingDays}</span>
-                    <span className="text-gray-400">/ {workdayInfo.totalWorkingDays}</span>
+                    <span className="text-gray-400 dark:text-slate-500">/ {workdayInfo.totalWorkingDays}</span>
                   </span>
                   <span className="flex items-center gap-1 sm:gap-1.5">
-                    <span className="text-gray-500 hidden sm:inline">Rimanenti:</span>
-                    <span className="text-gray-500 sm:hidden">Rim:</span>
+                    <span className="text-gray-500 dark:text-slate-400 hidden sm:inline">Rimanenti:</span>
+                    <span className="text-gray-500 dark:text-slate-400 sm:hidden">Rim:</span>
                     <span className="font-medium" data-testid="text-remaining-days">{workdayInfo.remainingWorkingDays}</span>
                   </span>
                   <span className="flex items-center gap-1 sm:gap-1.5">
@@ -3681,7 +3681,7 @@ export default function DashboardGaraReale() {
                           <div className="text-lg font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-totale-rs-${rs.displayName}`}>
                             {formatEuro(rs.premioAttuale)}
                           </div>
-                          <div className="text-sm text-gray-500">Premio attuale</div>
+                          <div className="text-sm text-gray-500 dark:text-slate-400">Premio attuale</div>
                           {rs.premioProiettato > 0 && (
                             <div className="text-sm mt-0.5">
                               <TrendingUp className="h-3 w-3 inline mr-1 text-blue-500" />
@@ -3792,7 +3792,7 @@ export default function DashboardGaraReale() {
                     <CardContent className="space-y-3">
                       <div className="flex items-baseline gap-2">
                         <span className="text-3xl font-bold" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
-                        <span className="text-sm text-gray-500">pezzi attuali</span>
+                        <span className="text-sm text-gray-500 dark:text-slate-400">pezzi attuali</span>
                         {pista.rsCalcBreakdown && Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
                           <span key={rsKey} className="hidden" data-testid={`text-pezzi-${pista.pista}-${rsKey}`}>{rsData.pezziAttuali}</span>
                         ))}
@@ -3821,12 +3821,12 @@ export default function DashboardGaraReale() {
                             const detail = isCB ? (
                               <div className="grid grid-cols-2 gap-2">
                                 <div className="text-center">
-                                  <div className="text-xs text-gray-500">Pezzi</div>
+                                  <div className="text-xs text-gray-500 dark:text-slate-400">Pezzi</div>
                                   <span className="text-lg font-bold">{rsData.pezziAttuali}</span>
                                   {rsData.pezziProiezione > rsData.pezziAttuali && <div className="text-xs text-blue-500">→ {rsData.pezziProiezione}</div>}
                                 </div>
                                 <div className="text-center">
-                                  <div className="text-xs text-gray-500">Gettoni €</div>
+                                  <div className="text-xs text-gray-500 dark:text-slate-400">Gettoni €</div>
                                   <span className="text-lg font-bold text-orange-700 dark:text-orange-400">{formatEuro(rsData.premioAttuale)}</span>
                                   {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
                                     <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5"><TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}</div>
@@ -3837,12 +3837,12 @@ export default function DashboardGaraReale() {
                               <>
                                 <div className="grid grid-cols-2 gap-2">
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500">Punti</div>
+                                    <div className="text-xs text-gray-500 dark:text-slate-400">Punti</div>
                                     <span className="text-lg font-bold">{rsData.puntiAttuali.toFixed(2)}</span>
                                     {rsData.puntiProiezione > rsData.puntiAttuali && <div className="text-xs text-blue-500">→ {rsData.puntiProiezione.toFixed(2)}</div>}
                                   </div>
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500">Premio €</div>
+                                    <div className="text-xs text-gray-500 dark:text-slate-400">Premio €</div>
                                     <span className="text-lg font-bold text-green-700 dark:text-green-400">{formatEuro(rsData.premioAttuale)}</span>
                                     {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
                                       <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5"><TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}</div>
@@ -3852,13 +3852,13 @@ export default function DashboardGaraReale() {
                                 {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between text-xs">
-                                      <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
+                                      <span className="text-gray-500 dark:text-slate-400 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
                                       <span className="font-medium">{rsData.forecastTarget.toFixed(2)} pt</span>
                                     </div>
                                     <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
                                     <div className="flex items-center justify-between text-xs">
                                       <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(2)} pt</span>
-                                      <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                      <span className="text-gray-500 dark:text-slate-400">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
                                     </div>
                                   </div>
                                 )}
@@ -3867,14 +3867,14 @@ export default function DashboardGaraReale() {
                               <>
                                 <div className="grid grid-cols-2 gap-2">
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500">Soglia Att.</div>
+                                    <div className="text-xs text-gray-500 dark:text-slate-400">Soglia Att.</div>
                                     <Badge className={`text-sm ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
-                                    {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiAttuali.toFixed(2)} pt</div>}
+                                    {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{rsData.puntiAttuali.toFixed(2)} pt</div>}
                                   </div>
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500">Proiezione</div>
+                                    <div className="text-xs text-gray-500 dark:text-slate-400">Proiezione</div>
                                     <Badge className={`text-sm ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
-                                    {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 mt-0.5">{rsData.puntiProiezione.toFixed(2)} pt</div>}
+                                    {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{rsData.puntiProiezione.toFixed(2)} pt</div>}
                                   </div>
                                 </div>
                                 {rsData.soglieRef && (
@@ -3893,13 +3893,13 @@ export default function DashboardGaraReale() {
                                 {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between text-xs">
-                                      <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                      <span className="text-gray-500 dark:text-slate-400 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
                                       <span className="font-medium">{rsData.forecastTarget.toFixed(2)} pt</span>
                                     </div>
                                     <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
                                     <div className="flex items-center justify-between text-xs">
                                       <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(2)} pt</span>
-                                      <span className="text-gray-500">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                      <span className="text-gray-500 dark:text-slate-400">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
                                     </div>
                                   </div>
                                 )}
@@ -3919,25 +3919,25 @@ export default function DashboardGaraReale() {
                               <>
                                 <div className="grid grid-cols-2 gap-2">
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500">Soglia Att.</div>
+                                    <div className="text-xs text-gray-500 dark:text-slate-400">Soglia Att.</div>
                                     <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline">{sogliaAtt}</Badge>
-                                    {p.pdvCalc.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{p.pdvCalc.puntiTotali.toFixed(2)} pt</div>}
+                                    {p.pdvCalc.puntiTotali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{p.pdvCalc.puntiTotali.toFixed(2)} pt</div>}
                                   </div>
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500">Premio €</div>
+                                    <div className="text-xs text-gray-500 dark:text-slate-400">Premio €</div>
                                     <span className="text-base font-bold text-green-700 dark:text-green-400">{formatEuro(p.pdvCalc.premioStimato)}</span>
                                   </div>
                                 </div>
                                 {p.pdvCalc.forecastTarget != null && p.pdvCalc.forecastTarget > 0 && (
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between text-xs">
-                                      <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                      <span className="text-gray-500 dark:text-slate-400 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
                                       <span className="font-medium">{p.pdvCalc.forecastTarget.toFixed(2)} pt</span>
                                     </div>
                                     <Progress value={Math.min((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100, 100)} className="h-1.5" />
                                     <div className="flex items-center justify-between text-xs">
                                       <span className={`font-medium ${(p.pdvCalc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(p.pdvCalc.forecastGap ?? 0) >= 0 ? "+" : ""}{(p.pdvCalc.forecastGap ?? 0).toFixed(2)} pt</span>
-                                      <span className="text-gray-500">{Math.round((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100)}%</span>
+                                      <span className="text-gray-500 dark:text-slate-400">{Math.round((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100)}%</span>
                                     </div>
                                   </div>
                                 )}
@@ -3959,14 +3959,14 @@ export default function DashboardGaraReale() {
                               {!isCB && !isPartnership && sogliaAtt !== 'N/A' && (
                                 <div className="grid grid-cols-2 gap-2">
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500">Soglia Att.</div>
+                                    <div className="text-xs text-gray-500 dark:text-slate-400">Soglia Att.</div>
                                     <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>{sogliaAtt}</Badge>
-                                    {pista.calc.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{pista.calc.puntiTotali.toFixed(2)} pt</div>}
+                                    {pista.calc.puntiTotali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{pista.calc.puntiTotali.toFixed(2)} pt</div>}
                                   </div>
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500">Proiezione</div>
+                                    <div className="text-xs text-gray-500 dark:text-slate-400">Proiezione</div>
                                     <Badge className={`text-sm ${getSogliaColor(sogliaProi)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>{sogliaProi}</Badge>
-                                    {pista.calcProiezione.puntiTotali > 0 && <div className="text-xs text-gray-500 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(2)} pt</div>}
+                                    {pista.calcProiezione.puntiTotali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(2)} pt</div>}
                                   </div>
                                 </div>
                               )}
@@ -3986,25 +3986,25 @@ export default function DashboardGaraReale() {
                               {pista.calc.forecastTarget != null && pista.calc.forecastTarget > 0 && (
                                 <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
                                   <div className="flex items-center justify-between text-xs">
-                                    <span className="text-gray-500 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                    <span className="text-gray-500 dark:text-slate-400 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
                                     <span className="font-medium">{pista.calc.forecastTarget.toFixed(2)} pt</span>
                                   </div>
                                   <Progress value={Math.min((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100, 100)} className="h-1.5" />
                                   <div className="flex items-center justify-between text-xs">
                                     <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(2)} pt</span>
-                                    <span className="text-gray-400">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
+                                    <span className="text-gray-400 dark:text-slate-500">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
                                   </div>
                                 </div>
                               )}
                               {(pista.calc.premioStimato > 0 || pista.calcProiezione.premioStimato > 0) && (
                                 <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3 py-2 space-y-1`}>
                                   <div className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-500">Attuale</span>
+                                    <span className="text-gray-500 dark:text-slate-400">Attuale</span>
                                     <span className={`font-bold ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`}>{formatEuro(pista.calc.premioStimato)}</span>
                                   </div>
                                   {pista.calcProiezione.premioStimato > 0 && (
                                     <div className="flex items-center justify-between text-sm">
-                                      <span className="text-gray-500 flex items-center gap-1"><TrendingUp className="h-3 w-3 text-blue-500" /> Proiezione</span>
+                                      <span className="text-gray-500 dark:text-slate-400 flex items-center gap-1"><TrendingUp className="h-3 w-3 text-blue-500" /> Proiezione</span>
                                       <span className="font-bold text-blue-600">{formatEuro(pista.calcProiezione.premioStimato)}</span>
                                     </div>
                                   )}
@@ -4036,7 +4036,7 @@ export default function DashboardGaraReale() {
                             })}
                             {/* Footer aggregate Totale Premio (always visible) */}
                             <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3 py-2 flex items-center justify-between flex-wrap gap-2`}>
-                              <span className="text-sm font-medium text-gray-600">Totale Premio</span>
+                              <span className="text-sm font-medium text-gray-600 dark:text-slate-300">Totale Premio</span>
                               <div className="flex items-center gap-3 flex-wrap">
                                 <span className={`font-bold ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`} data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
                                 {pista.calcProiezione.premioStimato > 0 && (
@@ -4051,7 +4051,7 @@ export default function DashboardGaraReale() {
                       })()}
 
                       {pista.totalePezzi === 0 ? (
-                        <p className="text-sm text-gray-400 italic">Nessuna attivazione mappata</p>
+                        <p className="text-sm text-gray-400 dark:text-slate-500 italic">Nessuna attivazione mappata</p>
                       ) : (pista.pista === "mobile" || pista.pista === "fisso") ? (
                         <>
                           <Separator />
@@ -4073,12 +4073,12 @@ export default function DashboardGaraReale() {
                                     data-testid={`btn-toggle-${pista.pista}-group-${group.groupKey}`}
                                   >
                                     <span className="font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-1">
-                                      <span className="text-xs text-gray-400">{groupExpanded ? "▼" : "▶"}</span>
+                                      <span className="text-xs text-gray-400 dark:text-slate-500">{groupExpanded ? "▼" : "▶"}</span>
                                       {group.groupLabel}
                                     </span>
                                     <div className="flex items-center gap-2">
                                       <span className="font-bold">{group.totalPezzi}</span>
-                                      <span className="text-gray-400 text-sm">→ {group.totalProiezione}</span>
+                                      <span className="text-gray-400 dark:text-slate-500 text-sm">→ {group.totalProiezione}</span>
                                     </div>
                                   </button>
                                   {groupExpanded && (
@@ -4090,7 +4090,7 @@ export default function DashboardGaraReale() {
                                           </span>
                                           <div className="flex items-center gap-2">
                                             <span className="font-medium">{cat.pezzi}</span>
-                                            <span className="text-gray-400">→ {cat.proiezione}</span>
+                                            <span className="text-gray-400 dark:text-slate-500">→ {cat.proiezione}</span>
                                           </div>
                                         </div>
                                       ))}
@@ -4110,7 +4110,7 @@ export default function DashboardGaraReale() {
                                 <span className="text-gray-600 dark:text-gray-300 truncate max-w-[60%]">{cat.label}</span>
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium">{cat.pezzi}</span>
-                                  <span className="text-gray-400">→ {cat.proiezione}</span>
+                                  <span className="text-gray-400 dark:text-slate-500">→ {cat.proiezione}</span>
                                 </div>
                               </div>
                             ))}
@@ -4188,7 +4188,7 @@ export default function DashboardGaraReale() {
                     <CardTitle className="text-lg flex items-center gap-2">
                       <Smartphone className="h-5 w-5" />
                       Device per modello
-                      <span className="text-sm text-gray-500 font-normal">({totGlobal} pezzi totali)</span>
+                      <span className="text-sm text-gray-500 dark:text-slate-400 font-normal">({totGlobal} pezzi totali)</span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -4206,7 +4206,7 @@ export default function DashboardGaraReale() {
                               <span className="font-bold text-violet-800 dark:text-violet-200">{totKind}</span>
                             </div>
                             {rows.length === 0 ? (
-                              <div className="text-xs text-gray-500 italic">Nessun pezzo</div>
+                              <div className="text-xs text-gray-500 dark:text-slate-400 italic">Nessun pezzo</div>
                             ) : (
                               <div className="max-h-72 overflow-y-auto pr-1 space-y-1">
                                 {rows.map((r) => {
@@ -4239,12 +4239,12 @@ export default function DashboardGaraReale() {
                                         data-testid={`button-drill-agg-modello-${kk.key}-${r.desc}`}
                                       >
                                         <span className="truncate flex items-center gap-1" title={r.desc}>
-                                          <span className="text-[10px] text-gray-400 w-2 inline-block">{open ? '▾' : '▸'}</span>
+                                          <span className="text-[10px] text-gray-400 dark:text-slate-500 w-2 inline-block">{open ? '▾' : '▸'}</span>
                                           <span className="truncate">{r.desc}</span>
                                         </span>
                                         <span className="shrink-0 font-medium">
                                           {r.totale}
-                                          {tags.length > 0 && <span className="ml-1 text-gray-400">({tags.join(' · ')})</span>}
+                                          {tags.length > 0 && <span className="ml-1 text-gray-400 dark:text-slate-500">({tags.join(' · ')})</span>}
                                         </span>
                                       </button>
                                       {open && (
@@ -4279,11 +4279,11 @@ export default function DashboardGaraReale() {
                                               <div key={rowKey} className="flex items-center justify-between gap-2 text-[11px] text-gray-600 dark:text-gray-300" data-testid={`drill-agg-modello-${mode}-${kk.key}-${r.desc}-${rowKey}`}>
                                                 <span className="truncate" title={subtitle ? `${label} · ${subtitle}` : label}>
                                                   {label}
-                                                  {subtitle && <span className="text-gray-400"> · {subtitle}</span>}
+                                                  {subtitle && <span className="text-gray-400 dark:text-slate-500"> · {subtitle}</span>}
                                                 </span>
                                                 <span className="shrink-0 font-medium">
                                                   {e.totale}
-                                                  {subTags.length > 0 && <span className="ml-1 text-gray-400">({subTags.join(' · ')})</span>}
+                                                  {subTags.length > 0 && <span className="ml-1 text-gray-400 dark:text-slate-500">({subTags.join(' · ')})</span>}
                                                 </span>
                                               </div>
                                             );
@@ -4299,7 +4299,7 @@ export default function DashboardGaraReale() {
                         );
                       })}
                     </div>
-                    <div className="text-[11px] text-gray-500 mt-2 italic">F = Finanziato · V = VAR · A = Altro</div>
+                    <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-2 italic">F = Finanziato · V = VAR · A = Altro</div>
                   </CardContent>
                 </Card>
               );
@@ -4438,7 +4438,7 @@ export default function DashboardGaraReale() {
                         Dettaglio per PDV
                       </CardTitle>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 shrink-0">Ordina per</span>
+                        <span className="text-xs text-gray-500 dark:text-slate-400 shrink-0">Ordina per</span>
                         <Select value={pdvSortKey} onValueChange={(v) => setPdvSortKey(v as PdvSortKey)}>
                           <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="select-pdv-sort">
                             <SelectValue />
@@ -4489,7 +4489,7 @@ export default function DashboardGaraReale() {
                               <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
                               <span className="truncate flex-1 text-gray-700 dark:text-gray-300">{p.name}</span>
                               <span className="font-bold text-green-700 shrink-0">{formatEuro(p.value)}</span>
-                              <span className="text-gray-500 shrink-0 w-14 text-right font-semibold">{p.pct}%</span>
+                              <span className="text-gray-500 dark:text-slate-400 shrink-0 w-14 text-right font-semibold">{p.pct}%</span>
                             </div>
                           ))}
                         </div>
@@ -4589,7 +4589,7 @@ export default function DashboardGaraReale() {
                                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: pdvChartColor }} />
                                     <div className="text-left min-w-0">
                                       <div className="font-medium text-sm truncate">{pdv.nomeNegozio}</div>
-                                      <div className="text-xs text-gray-500 truncate">{pdv.codicePos} · {pdv.ragioneSociale}</div>
+                                      <div className="text-xs text-gray-500 dark:text-slate-400 truncate">{pdv.codicePos} · {pdv.ragioneSociale}</div>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2 sm:gap-4 text-sm flex-wrap pl-6 sm:pl-0">
@@ -4603,7 +4603,7 @@ export default function DashboardGaraReale() {
                                     )}
                                     <div className="text-right shrink-0">
                                       <div className="font-bold">{totalPezzi} pezzi</div>
-                                      <div className="text-sm text-gray-400">Proiezione: {proiezione}</div>
+                                      <div className="text-sm text-gray-400 dark:text-slate-500">Proiezione: {proiezione}</div>
                                     </div>
                                   </div>
                                 </div>
@@ -4629,7 +4629,7 @@ export default function DashboardGaraReale() {
                                             )}
                                           </div>
                                           <div className="flex items-center gap-2 shrink-0">
-                                            <span className="text-xs text-gray-500">{pistaPct}%</span>
+                                            <span className="text-xs text-gray-500 dark:text-slate-400">{pistaPct}%</span>
                                             <span className="font-bold">{pistaData.corePezzi}</span>
                                           </div>
                                         </div>
@@ -4656,8 +4656,8 @@ export default function DashboardGaraReale() {
                                                   <span>{r.n} pz</span>
                                                   {r.n > 0 && (
                                                     <>
-                                                      <span className="text-gray-400">·</span>
-                                                      <span className="text-gray-500">proiezione {proj(r.n)}</span>
+                                                      <span className="text-gray-400 dark:text-slate-500">·</span>
+                                                      <span className="text-gray-500 dark:text-slate-400">proiezione {proj(r.n)}</span>
                                                     </>
                                                   )}
                                                 </div>
@@ -4677,12 +4677,12 @@ export default function DashboardGaraReale() {
                                                 <Smartphone className="h-3 w-3" />
                                                 <span className="font-medium">Smartphone:</span>
                                                 <span>{split.total} pz</span>
-                                                <span className="text-gray-400">·</span>
-                                                <span className="text-gray-500">proiezione {proj(split.total)}</span>
+                                                <span className="text-gray-400 dark:text-slate-500">·</span>
+                                                <span className="text-gray-500 dark:text-slate-400">proiezione {proj(split.total)}</span>
                                               </div>
                                               <div className="pl-4 text-gray-600 dark:text-gray-300 flex items-center gap-2 flex-wrap">
                                                 <span>Finanziato: <span className="font-medium">{split.fin}</span></span>
-                                                <span className="text-gray-400">·</span>
+                                                <span className="text-gray-400 dark:text-slate-500">·</span>
                                                 <span>VAR: <span className="font-medium">{split.rate}</span></span>
                                               </div>
                                             </div>
@@ -4698,7 +4698,7 @@ export default function DashboardGaraReale() {
                                             ? (calc.puntiTotali * total) / elapsed
                                             : (calc?.puntiTotali ?? 0);
                                           return (
-                                            <div className="text-[11px] text-gray-500 mb-1.5 space-y-0.5" data-testid={`pdv-pista-proiezione-${pdv.codicePos}-${pistaKey}`}>
+                                            <div className="text-[11px] text-gray-500 dark:text-slate-400 mb-1.5 space-y-0.5" data-testid={`pdv-pista-proiezione-${pdv.codicePos}-${pistaKey}`}>
                                               <div className="flex items-center gap-1 flex-wrap">
                                                 <span className="font-medium text-gray-600 dark:text-gray-400">Attuali:</span>
                                                 <span>{pistaData.corePezzi} pz</span>
@@ -4729,7 +4729,7 @@ export default function DashboardGaraReale() {
                                                 {calc.sogliaLabel}
                                               </Badge>
                                               {calc.puntiTotali > 0 && (
-                                                <span className="text-xs text-gray-500" data-testid={`pdv-pista-punti-${pdv.codicePos}-${pistaKey}`}>{calc.puntiTotali.toFixed(2)} pt</span>
+                                                <span className="text-xs text-gray-500 dark:text-slate-400" data-testid={`pdv-pista-punti-${pdv.codicePos}-${pistaKey}`}>{calc.puntiTotali.toFixed(2)} pt</span>
                                               )}
                                             </div>
                                             {(() => {
@@ -4809,7 +4809,7 @@ export default function DashboardGaraReale() {
                                                   </div>
                                                   {children.length > 0 && (
                                                     <div className="pl-3 space-y-0.5">
-                                                      <div className="text-[11px] text-gray-500 italic">di cui:</div>
+                                                      <div className="text-[11px] text-gray-500 dark:text-slate-400 italic">di cui:</div>
                                                       {children.flatMap((item) => {
                                                         if (item.targetCategory === "SIM_IVA" && item.descriptions && Object.keys(item.descriptions).length > 0) {
                                                           return Object.entries(item.descriptions)
@@ -4888,7 +4888,7 @@ export default function DashboardGaraReale() {
                                               <span>·</span>
                                               <span>{formatEuro(projSrvImp)}</span>
                                             </div>
-                                            <div className="text-[10px] text-gray-500 italic">Spedizione, assistenza, garanteasy</div>
+                                            <div className="text-[10px] text-gray-500 dark:text-slate-400 italic">Spedizione, assistenza, garanteasy</div>
                                           </div>
                                         </div>
                                         {(() => {
@@ -4950,7 +4950,7 @@ export default function DashboardGaraReale() {
                                                                 <span className="truncate" title={desc}>{desc}</span>
                                                                 <span className="shrink-0 font-medium">
                                                                   {count}
-                                                                  {tags.length > 0 && <span className="ml-1 text-gray-400">({tags.join(' · ')})</span>}
+                                                                  {tags.length > 0 && <span className="ml-1 text-gray-400 dark:text-slate-500">({tags.join(' · ')})</span>}
                                                                 </span>
                                                               </div>
                                                             );
@@ -5311,7 +5311,7 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
                 <div className="text-left min-w-0">
                   <div className="font-medium text-sm truncate">{rs.ragioneSociale}</div>
-                  <div className="text-sm text-gray-500">{rs.pdvs.length} PDV</div>
+                  <div className="text-sm text-gray-500 dark:text-slate-400">{rs.pdvs.length} PDV</div>
                 </div>
                 <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                   {rsPremioTotale > 0 && (
@@ -5321,7 +5321,7 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
                   )}
                   <div className="text-right shrink-0">
                     <div className="font-bold text-sm">{rs.totalPezzi} pezzi</div>
-                    <div className="text-sm text-gray-400">Proiezione: {proiezione}</div>
+                    <div className="text-sm text-gray-400 dark:text-slate-500">Proiezione: {proiezione}</div>
                   </div>
                 </div>
               </div>
@@ -5355,22 +5355,22 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
                       <div className="rounded-lg border p-3 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-200">
                         <div className="text-xs font-medium flex items-center gap-1"><Smartphone className="h-3 w-3" /> Smartphone Mobile</div>
                         <div className="text-lg font-bold">{spMob}</div>
-                        <div className="text-[11px] text-gray-500">Proiezione: {pj(spMob)}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400">Proiezione: {pj(spMob)}</div>
                       </div>
                       <div className="rounded-lg border p-3 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-200">
                         <div className="text-xs font-medium flex items-center gap-1"><Smartphone className="h-3 w-3" /> Smartphone CB</div>
                         <div className="text-lg font-bold">{spCB}</div>
-                        <div className="text-[11px] text-gray-500">Proiezione: {pj(spCB)}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400">Proiezione: {pj(spCB)}</div>
                       </div>
                       <div className="rounded-lg border p-3 bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-200" data-testid={`rs-accessori-${rs.ragioneSociale}`}>
                         <div className="text-xs font-medium">Accessori</div>
                         <div className="text-lg font-bold">{accPz} pz · {formatEuro(accImp)}</div>
-                        <div className="text-[11px] text-gray-500">Proiezione: {pj(accPz)} pz · {formatEuro(pje(accImp))}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400">Proiezione: {pj(accPz)} pz · {formatEuro(pje(accImp))}</div>
                       </div>
                       <div className="rounded-lg border p-3 bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-200" data-testid={`rs-servizi-${rs.ragioneSociale}`}>
                         <div className="text-xs font-medium">Servizi</div>
                         <div className="text-lg font-bold">{srvPz} pz · {formatEuro(srvImp)}</div>
-                        <div className="text-[11px] text-gray-500">Proiezione: {pj(srvPz)} pz · {formatEuro(pje(srvImp))}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400">Proiezione: {pj(srvPz)} pz · {formatEuro(pje(srvImp))}</div>
                       </div>
                     </div>
                   );
@@ -5386,7 +5386,7 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
                             <span className="font-bold">{pdvPezzi}</span>
                           </div>
                         </div>
-                        <div className="text-sm text-gray-400">{pdv.codicePos}</div>
+                        <div className="text-sm text-gray-400 dark:text-slate-500">{pdv.codicePos}</div>
                       </div>
                     );
                   })}

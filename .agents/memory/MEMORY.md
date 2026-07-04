@@ -22,3 +22,4 @@
 - [Static precompress sidecars](static-precompress-sidecars.md) — mai comprimere asset in sync al boot; sidecar .gz/.br generati al build + warm-up async di fallback; regole duplicate build↔server da tenere allineate.
 - [Prod scheduled-path rehearsal](prod-scheduled-path-rehearsal.md) — per verificare un percorso schedulato di prod senza aspettare il timer: stesse funzioni via tsx da dev + tunnel SSH al DB prod.
 - [Rebrand color semantics](rebrand-color-semantics.md) — arancione residuo = semantico (warning/categoria/●live), NON residuo brand; brand = indaco --brand-indigo.
+- [Dark mode status & mapping](dark-mode-status.md) — dark mode NON è raggiungibile (nessun toggle/provider); `.dark` esiste in index.css. Per test: `class="dark"` in index.html. Convenzione dark: variants.

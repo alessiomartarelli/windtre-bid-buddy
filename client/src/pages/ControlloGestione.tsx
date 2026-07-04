@@ -934,13 +934,13 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         <button
                           type="button"
                           onClick={() => setPivotPeriodo("anno")}
-                          className={`px-3 text-xs font-medium ${pivotPeriodo === "anno" ? "bg-slate-700 text-white" : "bg-background hover:bg-muted"}`}
+                          className={`px-3 text-xs font-medium ${pivotPeriodo === "anno" ? "bg-slate-700 text-white dark:bg-slate-600" : "bg-background hover:bg-muted"}`}
                           data-testid="btn-pivot-anno"
                         >Anno</button>
                         <button
                           type="button"
                           onClick={() => setPivotPeriodo("mese")}
-                          className={`px-3 text-xs font-medium border-l ${pivotPeriodo === "mese" ? "bg-slate-700 text-white" : "bg-background hover:bg-muted"}`}
+                          className={`px-3 text-xs font-medium border-l ${pivotPeriodo === "mese" ? "bg-slate-700 text-white dark:bg-slate-600" : "bg-background hover:bg-muted"}`}
                           data-testid="btn-pivot-mese"
                         >Mese</button>
                       </div>
