@@ -12,6 +12,8 @@ import {
   fmtReportDate,
   monthLabelOf,
   monthStartYmd,
+  monthWorkingDays,
+  parseForecastConfig,
   trendYmdOf,
 } from "@shared/venditeReport";
 import { buildVenditeReportHtml, reportHtmlFileName } from "@shared/venditeReportHtml";
@@ -37,6 +39,14 @@ export interface TelegramReportConfig {
   enabled?: boolean;
   bot_token?: string; // cifrato at-rest (enc:v1:...)
   chat_id?: string;
+  // Forecast/obiettivi mensili per il commento "da direttore vendite"
+  // (Task #266). Numeri in chiaro (non segreti).
+  forecast_canvass_pezzi?: number;
+  forecast_telefoni_pezzi?: number;
+  forecast_accessori_euro?: number;
+  forecast_servizi_euro?: number;
+  numero_negozi?: number;
+  giorni_lavorativi?: number;
 }
 
 function romeParts(now: Date = new Date()): {
@@ -230,12 +240,23 @@ export async function sendDailyReportForOrg(params: {
   // Proiezione a fine mese (Task #263): pezzi Canvass totali e Telefoni
   // stimati sui giorni lavorativi trascorsi, dagli aggregati del mese.
   const monthProjection = buildMonthEndProjection(ymd, month.aggregates) ?? undefined;
+  // Forecast/obiettivi per il commento "da direttore vendite" (Task #266):
+  // letti dalla config org e confrontati con il maturato del mese e i giorni
+  // lavorativi trascorsi/totali del calendario.
+  const orgCfg = await storage.getOrgConfig(params.orgId);
+  const tgCfg = (orgCfg?.config as Record<string, unknown> | undefined)?.telegramReport;
+  const forecast = parseForecastConfig(tgCfg);
+  const wd = monthWorkingDays(ymd);
   const message = buildTelegramReportMessage({
     orgName: params.orgName,
     dateYMD: ymd,
     timeLabel: params.timeLabel,
     aggregates,
     monthProjection,
+    monthAggregates: month.aggregates,
+    forecast,
+    elapsedWorkingDays: wd?.elapsed,
+    totalWorkingDays: wd?.total,
   });
   const result = await sendTelegramMessage(params.botToken, params.chatId, message);
   if (!result.ok) {

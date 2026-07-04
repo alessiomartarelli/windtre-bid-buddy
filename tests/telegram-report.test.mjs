@@ -165,7 +165,7 @@ await test("fmtReportDate YYYY-MM-DD ⇒ DD/MM/YYYY, input non valido passthroug
 
 console.log("\n— buildTelegramReportMessage —");
 
-await test("giorno senza vendite ⇒ messaggio 'Nessuna vendita'", () => {
+await test("giorno senza vendite ⇒ commento 'giornata al palo', niente elenco (Task #266)", () => {
   const msg = buildTelegramReportMessage({
     orgName: "Org Test",
     dateYMD: "2026-07-02",
@@ -175,11 +175,15 @@ await test("giorno senza vendite ⇒ messaggio 'Nessuna vendita'", () => {
   assert.ok(msg.includes("Report vendite 02/07/2026"));
   assert.ok(msg.includes("13:30"));
   assert.ok(msg.includes("Org Test"));
-  assert.ok(msg.includes("Nessuna vendita registrata oggi."));
+  // Fascia parziale (13:30): saluto del mattino + frase "al palo".
+  assert.ok(msg.includes("Buongiorno") || msg.includes("Si comincia") || msg.includes("Nuova giornata"));
+  assert.ok(/palo|ferma|non abbiamo|attenzione/i.test(msg));
+  // Il testo NON contiene più le sezioni di dettaglio.
   assert.ok(!msg.includes("Per tipo"));
+  assert.ok(!msg.includes("Per punto vendita"));
 });
 
-await test("messaggio completo: totali, sezioni tipo/pista/PDV, solo voci > 0", () => {
+await test("commento: header + testo discorsivo, niente elenco vendite (Task #266)", () => {
   const aggregates = aggregateDailyReport([
     sale({ codicePos: "P1", nomeNegozio: "Centro", totale: "130", articoli: [art("UNTIED", 30), art("TELEFONIA", 100)] }),
     sale({ codicePos: "P2", nomeNegozio: "Mare", totale: "20", articoli: [art("ENERGIA W3", 20)] }),
@@ -189,21 +193,15 @@ await test("messaggio completo: totali, sezioni tipo/pista/PDV, solo voci > 0", 
     dateYMD: "2026-07-02",
     aggregates,
   });
-  assert.ok(msg.includes("Vendite: <b>2</b>"));
-  assert.ok(msg.includes("Importo totale: <b>150,00 €</b>"));
-  assert.ok(msg.includes("<b>Per tipo</b>"));
-  assert.ok(msg.includes("Canvass: 2 pz — 50,00 €"));
-  assert.ok(msg.includes("Prodotti: 1 pz — 100,00 €"));
-  assert.ok(!msg.includes("Servizi:")); // zero pezzi ⇒ riga assente
-  assert.ok(msg.includes("<b>Per pista</b>"));
-  assert.ok(msg.includes("Mobile: 1 pz — 30,00 €"));
-  assert.ok(msg.includes("Energia: 1 pz — 20,00 €"));
-  assert.ok(!msg.includes("Fisso:"));
-  assert.ok(msg.includes("<b>Per punto vendita</b>"));
-  assert.ok(msg.includes("Centro (P1): 1 vendite — 130,00 €"));
-  // Ordine PDV per importo decrescente
-  assert.ok(msg.indexOf("Centro (P1)") < msg.indexOf("Mare (P2)"));
-  // Escape HTML di nomi con caratteri speciali
+  // Numeri del giorno riassunti in una frase, non in un elenco.
+  assert.ok(msg.includes("Oggi <b>2</b> vendite per <b>150,00 €</b>."));
+  // Standout del giorno: top PDV in evidenza.
+  assert.ok(msg.includes("In evidenza <b>Centro</b>"));
+  // Nessuna sezione di dettaglio nel TESTO (restano nell'allegato HTML).
+  assert.ok(!msg.includes("<b>Per tipo</b>"));
+  assert.ok(!msg.includes("<b>Per pista</b>"));
+  assert.ok(!msg.includes("<b>Per punto vendita</b>"));
+  // Escape HTML di nomi con caratteri speciali (intestazione org).
   assert.ok(msg.includes("Org &amp; Co &lt;srl&gt;"));
   assert.ok(!msg.includes("<srl>"));
 });
@@ -1053,7 +1051,7 @@ await test("buildMonthEndProjection: canvass totali e telefoni maturato+proiezio
   assert.equal(buildMonthEndProjection("bad", monthAgg), null);
 });
 
-await test("messaggio: fatturato tutte le categorie prodotto/servizi, assicurazioni (>1 cat), energia (CF+IVA), proiezione", () => {
+await test("commento: il TESTO non elenca più fatturato/assicurazioni/energia/proiezione (restano in HTML) (Task #266)", () => {
   const rows = [
     saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "620", articoli: [art("TELEFONIA", 500), art("ACCESSORI", 40), art("ELETTRODOMESTICI", 80)] }),
     saleCli({ totale: "50", articoli: [art("ENERGIA W3", 50, { descrizione: "LUCE MICROBUSINESS - DOMICILIAZIONE BANCARIA" })] }),
@@ -1063,43 +1061,59 @@ await test("messaggio: fatturato tutte le categorie prodotto/servizi, assicurazi
   const aggregates = aggregateDailyReport(rows);
   const monthProjection = buildMonthEndProjection("2026-07-15", aggregates);
   const msg = buildTelegramReportMessage({ orgName: "Org", dateYMD: "2026-07-15", aggregates, monthProjection });
-  assert.ok(msg.includes("<b>Fatturato prodotti/servizi</b>"));
-  assert.ok(msg.includes("📱 Telefoni: 1 pz — 500,00 €"));
-  assert.ok(msg.includes("🎧 Accessori: 1 pz — 40,00 €"));
-  // Categoria prodotto non nota (elettrodomestici, viaggi, ecc.): descrizione visibile con fallback 📦.
-  assert.ok(msg.includes("📦 ELETTRODOMESTICI: 1 pz — 80,00 €"));
-  assert.ok(msg.includes("🔧 Servizi: 1 pz — 5,00 €"));
-  // Assicurazioni: dettaglio visibile perché ci sono 2+ categorie.
-  assert.ok(msg.includes("<b>Assicurazioni</b>"));
-  assert.ok(msg.includes("ASSICURAZIONI: 1 pz — 100,00 €"));
-  assert.ok(msg.includes("WINDTRE SECURITY PRO GA: 1 pz — 150,00 €"));
-  // Energia: split visibile perché sono presenti sia CF che P.IVA.
-  assert.ok(msg.includes("<b>Energia per cliente</b>"));
-  assert.ok(msg.includes("👤 Privati (CF): 1 pz — 20,00 €"));
-  assert.ok(msg.includes("🏢 Business (P.IVA): 1 pz — 50,00 €"));
-  assert.ok(msg.includes("<b>Proiezione fine mese</b> (luglio 2026)"));
-  assert.ok(msg.includes("Canvass totali:"));
+  // Nessuna delle vecchie sezioni-elenco è più nel testo.
+  assert.ok(!msg.includes("<b>Fatturato prodotti/servizi</b>"));
+  assert.ok(!msg.includes("<b>Assicurazioni</b>"));
+  assert.ok(!msg.includes("<b>Energia per cliente</b>"));
+  assert.ok(!msg.includes("<b>Proiezione fine mese</b>"));
+  // C'è invece il riepilogo discorsivo del giorno.
+  assert.ok(msg.includes("Oggi <b>4</b> vendite per"));
 });
 
-await test("messaggio: no duplicazione — assicurazioni con 1 sola categoria e energia con 1 solo tipo cliente NON ripetono il totale pista (Task #264)", () => {
-  const rows = [
-    saleCli({ cliente: { codiceFiscale: "VRDLGI85B02H501X" }, totale: "20", articoli: [art("ENERGIA W3", 20)] }),
-    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "30", articoli: [art("ENERGIA W3", 30)] }),
-    saleCli({ totale: "100", articoli: [art("ASSICURAZIONI", 100)] }),
-  ];
-  const aggregates = aggregateDailyReport(rows);
-  const msg = buildTelegramReportMessage({ orgName: "Org", dateYMD: "2026-07-15", aggregates });
-  // La riga "Per pista" resta l'unico posto in cui compaiono Assicurazioni ed Energia.
-  assert.ok(!msg.includes("<b>Assicurazioni</b>"), "la sezione Assicurazioni non deve comparire con 1 sola categoria");
-  assert.ok(!msg.includes("<b>Energia per cliente</b>"), "la sezione Energia per cliente non deve comparire con 1 solo tipo cliente");
-  assert.equal(msg.split("Assicurazioni").length - 1, 1, "Assicurazioni deve comparire una sola volta (solo Per pista)");
-  assert.equal(msg.split("Energia").length - 1, 1, "Energia deve comparire una sola volta (solo Per pista)");
+await test("commento: con forecast mostra passo mese, delta% e proiezione per dimensione (Task #266)", () => {
+  const dayAgg = aggregateDailyReport([
+    saleCli({ totale: "530", articoli: [art("UNTIED", 30), art("TELEFONIA", 500)] }),
+  ]);
+  // Mese-a-oggi: 10 canvass, 5 telefoni.
+  const monthRows = [];
+  for (let i = 0; i < 10; i++) monthRows.push(saleCli({ totale: "30", articoli: [art("UNTIED", 30)] }));
+  for (let i = 0; i < 5; i++) monthRows.push(saleCli({ totale: "500", articoli: [art("TELEFONIA", 500)] }));
+  const monthAgg = aggregateDailyReport(monthRows);
+  const msg = buildTelegramReportMessage({
+    orgName: "Org",
+    dateYMD: "2026-07-15",
+    timeLabel: "22:30",
+    aggregates: dayAgg,
+    monthAggregates: monthAgg,
+    forecast: { canvassPezzi: 40, telefoniPezzi: 40 },
+    elapsedWorkingDays: 10,
+    totalWorkingDays: 20,
+  });
+  // Passo atteso canvass a 10/20 gg = 20 → maturato 10 ⇒ -50%; proiezione 20.
+  assert.ok(msg.includes("• Canvass:"));
+  assert.ok(msg.includes("-50% sul passo"));
+  assert.ok(msg.includes("• Telefoni:"));
+  assert.ok(msg.includes("10/20 giorni lavorativi"));
 });
 
-await test("messaggio: senza monthProjection nessuna sezione proiezione", () => {
+await test("commento: senza forecast niente sezione 'sul mese' (Task #266)", () => {
   const aggregates = aggregateDailyReport([saleCli({ totale: "30", articoli: [art("UNTIED", 30)] })]);
   const msg = buildTelegramReportMessage({ orgName: "Org", dateYMD: "2026-07-15", aggregates });
-  assert.ok(!msg.includes("Proiezione fine mese"));
+  assert.ok(!msg.includes("sul passo"));
+  assert.ok(!msg.includes("giorni lavorativi"));
+});
+
+await test("commento: varietà deterministica per data — stesso giorno identico, giorni diversi variano (Task #266)", () => {
+  const aggregates = aggregateDailyReport([
+    saleCli({ codicePos: "P1", nomeNegozio: "Centro", totale: "130", articoli: [art("UNTIED", 30), art("TELEFONIA", 100)] }),
+  ]);
+  const mk = (ymd) => buildTelegramReportMessage({ orgName: "Org", dateYMD: ymd, timeLabel: "13:30", aggregates });
+  // Stessa data ⇒ testo identico (determinismo).
+  assert.equal(mk("2026-07-15"), mk("2026-07-15"));
+  // Su un arco di date il testo non è sempre identico (la varietà cambia).
+  const variants = new Set();
+  for (let d = 1; d <= 20; d++) variants.add(mk(`2026-07-${String(d).padStart(2, "0")}`));
+  assert.ok(variants.size > 1, "il commento deve variare fra date diverse");
 });
 
 await test("HTML: chip pista Assicurazioni = descrizione prodotto; Energia = CF/IVA; niente card duplicate sotto (Task #264)", () => {

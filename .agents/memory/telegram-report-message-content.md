@@ -1,43 +1,43 @@
 ---
-name: Telegram report message — content rules
-description: Design rules for the compact Telegram text message sections (buildTelegramReportMessage)
+name: Telegram report — text message content rules
+description: What the Telegram TEXT message is (discursive director comment, not a listing) vs what belongs only in the HTML attachment
 ---
 
-Il messaggio di testo Telegram (`buildTelegramReportMessage` in
-`shared/venditeReport.ts`) è compatto e NON deve ripetere lo stesso dato in
-più sezioni. Regole decise con l'utente:
+Il messaggio di TESTO Telegram (`buildTelegramReportMessage` →
+`buildReportComment` in `shared/venditeReport.ts`) è un **commento discorsivo
+"da direttore vendite"**, NON un elenco di vendite. Le vecchie sezioni-elenco
+(Per tipo / Per pista / Per PDV / Fatturato prodotti-servizi / Assicurazioni /
+Energia per cliente / Proiezione fine mese) sono state **rimosse dal testo**:
+quel dettaglio vive ora **solo nell'allegato HTML** (`buildVenditeReportHtml`).
 
-- **Fatturato prodotti/servizi**: elenca TUTTE le categorie prodotto vendute
-  (da `prodottiByCategoria`, già ordinato per fatturato↓), non solo
-  Telefoni/Accessori — l'utente vuole vedere la descrizione di ogni etichetta
-  (Ricariche, SIM, Modem/Router, Elettrodomestici, Viaggi, ecc.). Emoji note
-  📱/🎧, fallback 📦; poi il totale 🔧 Servizi.
-- **Assicurazioni** ed **Energia per cliente**: nel MESSAGGIO DI TESTO
-  mostrarle SOLO quando aggiungono granularità oltre la riga "Per pista" —
-  assicurazioni con ≥ 2 prodotti distinti, energia con ENTRAMBI i tipi cliente
-  (CF e IVA). Con un solo sottogruppo ripeterebbero il totale di "Per pista".
-- **Dettaglio assicurazioni per PRODOTTO, non per categoria pista**: la
-  categoria BiSuite della pista è sempre l'unico bucket "ASSICURAZIONI", quindi
-  raggruppare per categoria dà una sola riga = duplicato del totale pista.
-  `assicurazioniDettaglio` in `aggregateDailyReport` raggruppa per
-  `tipologiaNome — descrizione` dell'articolo (fallback alla categoria se
-  entrambe vuote), es. "ASSICURAZIONI CASA — CASA ELETTRODOMESTICI".
-- **Split Energia CF/IVA dalla DESCRIZIONE offerta, non dal tipo cliente**
-  (`energiaClienteFromDescrizione` in `shared/venditeReport.ts`): business/IVA
-  se la descrizione maiuscola contiene `BUSINESS` (copre `MICROBUSINESS`,
-  `CLIENTE BUSINESS`), altrimenti privato/CF. `saleCustomerKind` esiste ancora
-  (export usato dai test) ma NON governa più lo split energia.
+**Regola durevole:** il testo è narrativo (saluto per fascia oraria + riepilogo
+del giorno in una frase + standout PDV/addetto + eventuale confronto col
+forecast mensile + chiusura motivazionale). Se serve aggiungere un nuovo dato
+di dettaglio, va nell'HTML, NON nel testo. Non reintrodurre elenchi nel testo.
 
-**Why:** l'utente ha bocciato più round perché (a) il messaggio mostrava
-Assicurazioni/Energia "2 volte"; (b) sui dati reali WindTre il tipo cliente
-registrato spesso NON concorda con la descrizione dell'offerta, mentre le
-offerte IVA hanno sempre `BUSINESS` in descrizione; (c) voleva il dettaglio
-inline come i chip Mobile, non card separate.
+**Forecast (config per-org, in chiaro, NON segreti):**
+`forecast_canvass_pezzi`, `forecast_telefoni_pezzi`, `forecast_accessori_euro`,
+`forecast_servizi_euro`, `numero_negozi`, `giorni_lavorativi`. Un obiettivo
+vuoto o ≤ 0 non viene valutato. `giorni_lavorativi` vuoto ⇒ fallback ai giorni
+lavorativi da calendario (`monthWorkingDays`, riusa `buildCalendar`/festività
+dell'Incentivazione). Il confronto è: maturato mese-a-oggi vs passo atteso
+proporzionale a `elapsedWorkingDays/totalWorkingDays`, delta% + proiezione fine
+mese. Le dimensioni: canvass=`countByType.canvass`, telefoni=`telefoniPezziOf`,
+accessori €=`accessoriEuroOf(prodottiByCategoria)`, servizi €=`amountByType.servizi`.
 
-**How to apply — HTML (Task #264):** nell'allegato HTML NON esistono più le
-card dedicate "Assicurazioni" ed "Energia · Privati vs Business" (rimosse su
-richiesta "togli quelle sotto"). Il dettaglio va nei CHIP inline della riga
-pista di "La gara delle piste" (`pisteSection`, chip da `categorieByPista`):
-per assicurazioni il chip = descrizione prodotto, per energia = `CF`/`IVA`
-(come i chip Mobile TIED/UNTIED). La soppressione anti-duplicazione vale SOLO
-per le sezioni testuali del messaggio, non per i chip HTML.
+**Determinismo:** la varietà delle frasi è seed-ata sulla data (`dayOfYear` +
+`pick`): stesso giorno ⇒ stesso testo, giorni diversi ⇒ variano. I test che
+seminano una data fissa devono aspettarsi output stabile.
+
+**Why:** l'utente (Task #266) voleva che la chat Telegram non fosse più un muro
+di numeri ma un commento da direttore vendite che dà il polso sull'obiettivo
+mensile; il dettaglio completo resta comunque a portata nell'allegato HTML.
+
+**How to apply — HTML (regole precedenti tuttora valide nell'allegato):** nella
+riga pista di "La gara delle piste" il dettaglio Assicurazioni/Energia è nei
+CHIP inline (assicurazioni = descrizione prodotto da `assicurazioniDettaglio`
+raggruppato per `tipologiaNome — descrizione`; energia = `CF`/`IVA` da
+`energiaClienteFromDescrizione`, che guarda la DESCRIZIONE offerta — `BUSINESS`/
+`MICROBUSINESS` ⇒ IVA — non il tipo cliente registrato, spesso incoerente sui
+dati WindTre). `saleCustomerKind` resta esportato (usato dai test) ma non
+governa lo split energia.

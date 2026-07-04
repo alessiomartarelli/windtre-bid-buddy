@@ -39,6 +39,15 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
   const [isTesting, setIsTesting] = useState(false);
   const [hasExistingConfig, setHasExistingConfig] = useState(false);
   const [hasSavedToken, setHasSavedToken] = useState(false);
+  // Forecast/obiettivi mensili per il commento "da direttore vendite" (#266).
+  const [forecast, setForecast] = useState({
+    canvassPezzi: "",
+    telefoniPezzi: "",
+    accessoriEuro: "",
+    serviziEuro: "",
+    numeroNegozi: "",
+    giorniLavorativi: "",
+  });
 
   useEffect(() => {
     if (selectedOrgId) {
@@ -49,8 +58,19 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
       setChatId("");
       setHasExistingConfig(false);
       setHasSavedToken(false);
+      resetForecast();
     }
   }, [selectedOrgId]);
+
+  const resetForecast = () =>
+    setForecast({
+      canvassPezzi: "",
+      telefoniPezzi: "",
+      accessoriEuro: "",
+      serviziEuro: "",
+      numeroNegozi: "",
+      giorniLavorativi: "",
+    });
 
   const loadConfig = async (orgId: string) => {
     setIsLoading(true);
@@ -67,12 +87,22 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
         setChatId(data.chat_id || "");
         setHasSavedToken(data.has_token === true);
         setHasExistingConfig(Boolean(data.has_token || data.chat_id));
+        const fc = (n: unknown) => (typeof n === "number" && n > 0 ? String(n) : "");
+        setForecast({
+          canvassPezzi: fc(data.forecast_canvass_pezzi),
+          telefoniPezzi: fc(data.forecast_telefoni_pezzi),
+          accessoriEuro: fc(data.forecast_accessori_euro),
+          serviziEuro: fc(data.forecast_servizi_euro),
+          numeroNegozi: fc(data.numero_negozi),
+          giorniLavorativi: fc(data.giorni_lavorativi),
+        });
       } else {
         setEnabled(false);
         setBotToken("");
         setChatId("");
         setHasSavedToken(false);
         setHasExistingConfig(false);
+        resetForecast();
       }
     } catch (error) {
       console.error("Error loading Telegram config:", error);
@@ -107,6 +137,12 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
           enabled,
           bot_token: botToken.trim(),
           chat_id: chatId.trim(),
+          forecast_canvass_pezzi: forecast.canvassPezzi.trim(),
+          forecast_telefoni_pezzi: forecast.telefoniPezzi.trim(),
+          forecast_accessori_euro: forecast.accessoriEuro.trim(),
+          forecast_servizi_euro: forecast.serviziEuro.trim(),
+          numero_negozi: forecast.numeroNegozi.trim(),
+          giorni_lavorativi: forecast.giorniLavorativi.trim(),
         }),
       });
       const data = await res.json().catch(() => null);
@@ -315,6 +351,103 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
                   -100): scrivi un messaggio nel gruppo e apri
                   api.telegram.org/bot&lt;TOKEN&gt;/getUpdates per leggerlo.
                 </p>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div className="space-y-0.5">
+                  <Label>Forecast e obiettivi del mese</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Il messaggio di testo del report è un commento "da direttore vendite"
+                    che confronta l'andamento con questi obiettivi mensili. Lascia vuoto un
+                    campo per non valutarlo. Il dettaglio completo resta nell'allegato.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="fc-canvass" className="text-xs">Canvass (pezzi/mese)</Label>
+                    <Input
+                      id="fc-canvass"
+                      data-testid="input-forecast-canvass-pezzi"
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      placeholder="es. 300"
+                      value={forecast.canvassPezzi}
+                      onChange={(e) => setForecast((f) => ({ ...f, canvassPezzi: e.target.value }))}
+                      disabled={!selectedOrgId}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="fc-telefoni" className="text-xs">Telefoni (pezzi/mese)</Label>
+                    <Input
+                      id="fc-telefoni"
+                      data-testid="input-forecast-telefoni-pezzi"
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      placeholder="es. 150"
+                      value={forecast.telefoniPezzi}
+                      onChange={(e) => setForecast((f) => ({ ...f, telefoniPezzi: e.target.value }))}
+                      disabled={!selectedOrgId}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="fc-accessori" className="text-xs">Accessori (€/mese)</Label>
+                    <Input
+                      id="fc-accessori"
+                      data-testid="input-forecast-accessori-euro"
+                      type="number"
+                      min="0"
+                      inputMode="decimal"
+                      placeholder="es. 5000"
+                      value={forecast.accessoriEuro}
+                      onChange={(e) => setForecast((f) => ({ ...f, accessoriEuro: e.target.value }))}
+                      disabled={!selectedOrgId}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="fc-servizi" className="text-xs">Servizi (€/mese)</Label>
+                    <Input
+                      id="fc-servizi"
+                      data-testid="input-forecast-servizi-euro"
+                      type="number"
+                      min="0"
+                      inputMode="decimal"
+                      placeholder="es. 2000"
+                      value={forecast.serviziEuro}
+                      onChange={(e) => setForecast((f) => ({ ...f, serviziEuro: e.target.value }))}
+                      disabled={!selectedOrgId}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="fc-negozi" className="text-xs">Numero negozi</Label>
+                    <Input
+                      id="fc-negozi"
+                      data-testid="input-forecast-numero-negozi"
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      placeholder="es. 5"
+                      value={forecast.numeroNegozi}
+                      onChange={(e) => setForecast((f) => ({ ...f, numeroNegozi: e.target.value }))}
+                      disabled={!selectedOrgId}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="fc-giorni" className="text-xs">Giorni lavorativi/mese</Label>
+                    <Input
+                      id="fc-giorni"
+                      data-testid="input-forecast-giorni-lavorativi"
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      placeholder="auto (calendario)"
+                      value={forecast.giorniLavorativi}
+                      onChange={(e) => setForecast((f) => ({ ...f, giorniLavorativi: e.target.value }))}
+                      disabled={!selectedOrgId}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center justify-between rounded-lg border border-border p-3">

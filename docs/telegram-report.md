@@ -14,20 +14,36 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   (aggregati del giorno: vendite/importo totale, per tipo, per pista, per
   PDV, breakdown `categorieByPista` per le card pista; ANNULLATA escluse,
   coerente con la pagina Vendite BiSuite) e
-  `buildTelegramReportMessage` (messaggio HTML compatto per Telegram, con
-  escape dei caratteri speciali e sezioni solo per le voci > 0).
-  Arricchimenti (Task #263, affinati in Task #264): il messaggio aggiunge
-  — quando > 0 — una sezione **Fatturato prodotti/servizi** che elenca
-  **tutte** le categorie prodotto vendute (non solo Telefoni/Accessori:
-  anche Elettrodomestici, Viaggi, Ricariche, SIM, ecc., con emoji 📱 per
-  TELEFONIA, 🎧 per ACCESSORI, 📦 fallback per le altre) più il totale
-  🔧 Servizi; il **dettaglio Assicurazioni** per prodotto (tipologia —
-  descrizione) e lo split **Energia per cliente** 👤 Privati (CF) vs
-  🏢 Business (P.IVA) compaiono **solo quando aggiungono granularità**
-  oltre la riga "Per pista" (assicurazioni: ≥ 2 prodotti; energia:
-  presenti sia CF che IVA), così non duplicano il totale pista quando c'è
-  un solo sottogruppo; e, se passata, la **Proiezione fine mese** (pezzi
-  Canvass totali e Telefoni). **Lo split energia CF/IVA viene ricavato
+  `buildTelegramReportMessage`. **Dal Task #266 il messaggio di testo NON
+  è più un elenco di vendite** (le sezioni Per tipo / Per pista / Per PDV /
+  Fatturato / Assicurazioni / Energia / Proiezione sono state **rimosse dal
+  testo**: quel dettaglio vive ora **solo nell'allegato HTML**). Il testo è
+  un **commento discorsivo "da direttore vendite"** generato da
+  `buildReportComment(input)`: header (org + data + orario) seguito da un
+  saluto per fascia oraria (`phaseFromTimeLabel` → mattino per 13:30, sera
+  per 22:30), il riepilogo del giorno in una frase (`Oggi <b>N</b> vendite
+  per <b>€</b>.`), lo **standout** del giorno (top PDV / top addetto), e —
+  quando è configurato un **forecast mensile** — una sezione **"sul mese"**
+  che per ogni dimensione (Canvass, Telefoni, Accessori €, Servizi €)
+  confronta il maturato mese-a-oggi col **passo atteso** proporzionale ai
+  giorni lavorativi trascorsi (`elapsedWorkingDays`/`totalWorkingDays`),
+  mostra il **delta %** vs passo (fasce `bandFromScore`:
+  molto sopra/sopra/in linea/sotto/molto sotto) e la **proiezione fine
+  mese** vs obiettivo; chiude con uno spunto strategico e una frase
+  motivazionale coerente con la fascia di performance. Giorno senza vendite
+  ⇒ commento "giornata al palo" (niente elenco). La **varietà** delle frasi
+  è **deterministica per data** (`dayOfYear` + `pick`), così lo stesso
+  giorno produce sempre lo stesso testo ma i giorni diversi variano. Le
+  dimensioni forecast: canvass = `countByType.canvass`; telefoni =
+  `telefoniPezziOf`; accessori € = `accessoriEuroOf(prodottiByCategoria)`;
+  servizi € = `amountByType.servizi`. La config è normalizzata da
+  `parseForecastConfig` (`ForecastConfig`: campi opzionali, un campo vuoto
+  o ≤ 0 non viene valutato). **L'allegato HTML resta invariato.**
+  Gli aggregati di dettaglio restano esportati e usati dall'HTML:
+  il **dettaglio Assicurazioni** per prodotto (tipologia — descrizione) e
+  lo split **Energia per cliente** 👤 Privati (CF) vs
+  🏢 Business (P.IVA); la proiezione (pezzi Canvass totali e Telefoni).
+  **Lo split energia CF/IVA viene ricavato
   dalla DESCRIZIONE dell'offerta, non dal tipo cliente registrato**
   (Task #264): `energiaClienteFromDescrizione(descrizione)` = business se
   la descrizione (maiuscola) contiene `BUSINESS` (copre `MICROBUSINESS` e
@@ -131,9 +147,15 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
 ## Config per-organizzazione
 
 In `organization_config.config.telegramReport`:
-`{ enabled, bot_token, chat_id }`. Il token è cifrato at-rest con la
-stessa AES di SMTP/BiSuite (`server/cryptoSecret.ts`, chiave
-`SMTP_SECRET_KEY`); mai in chiaro nel DB.
+`{ enabled, bot_token, chat_id }` + i campi **forecast** (Task #266, in
+chiaro — non sono segreti): `forecast_canvass_pezzi`,
+`forecast_telefoni_pezzi`, `forecast_accessori_euro`,
+`forecast_servizi_euro`, `numero_negozi`, `giorni_lavorativi`. Il token è
+cifrato at-rest con la stessa AES di SMTP/BiSuite
+(`server/cryptoSecret.ts`, chiave `SMTP_SECRET_KEY`); mai in chiaro nel
+DB. I campi forecast alimentano il commento "da direttore vendite": un
+obiettivo lasciato vuoto/≤0 non viene valutato; `giorni_lavorativi` vuoto
+⇒ si usano i giorni lavorativi da calendario (`monthWorkingDays`).
 
 ## API admin (`server/routes.ts`)
 
@@ -170,17 +192,23 @@ nei log runtime.
 `client/src/components/TelegramReportForm.tsx` — card "Report vendite su
 Telegram" (pattern BiSuiteConnectionForm) in AdminPanel (tab credenziali,
 org propria) e SuperAdminPanel (selettore org). Campi token (mascherato) e
-chat ID con istruzioni BotFather/getUpdates, switch invio automatico,
-pulsanti "Invia report di prova" e "Salva configurazione".
+chat ID con istruzioni BotFather/getUpdates, sotto-sezione **"Forecast e
+obiettivi del mese"** (Task #266) con 6 input numerici — Canvass, Telefoni,
+Accessori €, Servizi €, numero negozi, giorni lavorativi/mese (vuoto =
+auto da calendario) — che alimentano il commento del report, switch invio
+automatico, pulsanti "Invia report di prova" e "Salva configurazione".
 
 ## Test
 
-`tests/telegram-report.test.mjs` (70 test puri, inclusi 4 sui cambi
+`tests/telegram-report.test.mjs` (73 test puri, inclusi 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,
 `categorieByPista` ordinato per pezzi, input malformati), formattazione
-euro/date, messaggio (sezioni, escape HTML, giorno vuoto), report HTML
+euro/date, **commento "da direttore vendite"** (Task #266: header + testo
+discorsivo senza elenco vendite, riepilogo del giorno + standout, sezione
+"sul mese" con delta% vs passo e proiezione quando c'è forecast, niente
+sezione mese senza forecast, giorno "al palo"), report HTML
 allegato (redesign Task #250: hero/card piste a tema/tipi/classifiche
 con barre e medaglie, KPI e delta con trend, sparkline per pista,
 giorno vuoto con e senza trend, escape valori dinamici, nessuna risorsa

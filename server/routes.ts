@@ -2224,10 +2224,21 @@ export async function registerRoutes(
       // riceve solo il flag has_token; per cambiarlo si digita un token
       // nuovo, per mantenerlo si lascia il campo vuoto.
       const rawToken = typeof tg.bot_token === "string" ? tg.bot_token : "";
+      const numOrNull = (v: unknown): number | null => {
+        const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
+        return Number.isFinite(n) && n > 0 ? n : null;
+      };
       res.json({
         enabled: tg.enabled === true,
         has_token: rawToken.length > 0,
         chat_id: typeof tg.chat_id === "string" ? tg.chat_id : "",
+        // Forecast/obiettivi mensili per il commento report (Task #266).
+        forecast_canvass_pezzi: numOrNull(tg.forecast_canvass_pezzi),
+        forecast_telefoni_pezzi: numOrNull(tg.forecast_telefoni_pezzi),
+        forecast_accessori_euro: numOrNull(tg.forecast_accessori_euro),
+        forecast_servizi_euro: numOrNull(tg.forecast_servizi_euro),
+        numero_negozi: numOrNull(tg.numero_negozi),
+        giorni_lavorativi: numOrNull(tg.giorni_lavorativi),
       });
     } catch (error) {
       console.error("Error loading Telegram report config:", error);
@@ -2275,9 +2286,33 @@ export async function registerRoutes(
       if (isEnabled && (!encToken || !chatId)) {
         return res.status(400).json({ error: "Per abilitare il report servono bot token e chat ID" });
       }
+      // Forecast/obiettivi mensili (Task #266): numeri in chiaro (non segreti).
+      // Un valore non valido/≤0/vuoto azzera il campo (undefined ⇒ non salvato).
+      // Se la chiave NON è nel body (es. rimozione token) si mantiene il valore
+      // già salvato: così azioni collaterali non cancellano il forecast.
+      const numOrUndef = (v: unknown): number | undefined => {
+        if (v === undefined || v === null || v === "") return undefined;
+        const n = typeof v === "number" ? v : parseFloat(String(v));
+        return Number.isFinite(n) && n > 0 ? n : undefined;
+      };
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const pickNum = (key: string): number | undefined =>
+        Object.prototype.hasOwnProperty.call(body, key)
+          ? numOrUndef(body[key])
+          : numOrUndef(existingTg?.[key]);
       const updatedConfig = {
         ...existingConfig,
-        telegramReport: { enabled: isEnabled, bot_token: encToken, chat_id: chatId },
+        telegramReport: {
+          enabled: isEnabled,
+          bot_token: encToken,
+          chat_id: chatId,
+          forecast_canvass_pezzi: pickNum("forecast_canvass_pezzi"),
+          forecast_telefoni_pezzi: pickNum("forecast_telefoni_pezzi"),
+          forecast_accessori_euro: pickNum("forecast_accessori_euro"),
+          forecast_servizi_euro: pickNum("forecast_servizi_euro"),
+          numero_negozi: pickNum("numero_negozi"),
+          giorni_lavorativi: pickNum("giorni_lavorativi"),
+        },
       };
       await storage.upsertOrgConfig(
         organization_id,
