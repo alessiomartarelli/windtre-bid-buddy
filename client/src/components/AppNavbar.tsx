@@ -15,11 +15,57 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield, Users,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
-  ChevronDown, BookOpen, BarChart3, Route, Medal,
+  ChevronDown, BookOpen, BarChart3, Route, Medal, Sun, Moon, Monitor,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificationsBell';
 import { BrandGlyph } from '@/components/BrandLogo';
+import { useTheme, type Theme } from '@/hooks/useTheme';
+
+const themeOptions: Array<{ value: Theme; label: string; icon: typeof Sun }> = [
+  { value: 'light', label: 'Chiaro', icon: Sun },
+  { value: 'dark', label: 'Scuro', icon: Moon },
+  { value: 'system', label: 'Sistema', icon: Monitor },
+];
+
+function ThemeToggle() {
+  const { theme, resolvedTheme, setTheme } = useTheme();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-lg h-9 w-9"
+          data-testid="button-theme-toggle"
+          aria-label="Cambia tema"
+        >
+          {resolvedTheme === 'dark' ? (
+            <Moon className="h-4 w-4" />
+          ) : (
+            <Sun className="h-4 w-4" />
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          Tema
+        </DropdownMenuLabel>
+        {themeOptions.map((opt) => (
+          <DropdownMenuItem
+            key={opt.value}
+            onClick={() => setTheme(opt.value)}
+            className={theme === opt.value ? 'bg-accent' : ''}
+            data-testid={`theme-option-${opt.value}`}
+          >
+            <opt.icon className="mr-2 h-4 w-4" />
+            <span>{opt.label}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 interface AppNavbarProps {
   title?: string;
@@ -30,6 +76,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
   const [location, setLocation] = useLocation();
   const { user, profile, organization, signOut } = useAuth();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
 
   const handleSignOut = async () => {
     const { error } = await signOut();
@@ -181,6 +228,8 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
         <div className="flex items-center gap-2">
           {children}
 
+          <ThemeToggle />
+
           {isAdminOrSuper && <BisuiteSyncNotificationsBell />}
 
           {isAdminOrSuper && (
@@ -252,6 +301,19 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Impostazioni</span>
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Tema</DropdownMenuLabel>
+                {themeOptions.map((opt) => (
+                  <DropdownMenuItem
+                    key={opt.value}
+                    onClick={() => setTheme(opt.value)}
+                    className={theme === opt.value ? 'bg-accent' : ''}
+                    data-testid={`theme-option-mobile-${opt.value}`}
+                  >
+                    <opt.icon className="mr-2 h-4 w-4" />
+                    <span>{opt.label}</span>
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

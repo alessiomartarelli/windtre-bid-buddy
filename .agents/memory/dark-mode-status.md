@@ -1,16 +1,21 @@
 ---
 name: Dark mode status & color mapping
-description: Dark mode is style-ready but not user-reachable; how to add dark: variants consistently.
+description: Dark mode is user-reachable via a theme toggle; how the theme wiring works + dark: variant conventions.
 ---
 
-Dark mode is **not reachable by users**: tailwind `darkMode: ["class"]` + a full `.dark`
-palette exist in `client/src/index.css` (blu notte: bg 227 32% 10%, card 227 28% 14%,
-primary indaco chiaro), but nothing ever adds the `.dark` class — no toggle, no provider,
-no system-preference detection. `next-themes` is a dependency but unused. To preview dark
-mode in dev, temporarily add `class="dark"` to `<html>` in `client/index.html` and revert.
+Dark mode IS reachable by users. Wiring: tailwind `darkMode: ["class"]` + a full `.dark`
+palette in `client/src/index.css` (blu notte: bg 227 32% 10%, card 227 28% 14%, primary
+indaco chiaro). A `ThemeProvider`/`useTheme` (`client/src/hooks/useTheme.tsx`) toggles the
+`.dark` class on `document.documentElement`; choice (light/dark/system) persists in
+localStorage key `mystoredesk-theme`. An inline pre-paint script in `client/index.html`
+reads the SAME key and applies `.dark` before first paint to avoid a flash — keep the key
+and logic in the script aligned with the provider. The toggle lives in `AppNavbar`
+(desktop icon button + mobile menu items). `next-themes` is a dependency but NOT used
+(custom provider preferred for CSR flash control).
 
-**Why:** don't waste time hunting for a theme switch or assume dark mode is live for end
-users. If a task needs dark mode usable, a toggle/provider must be added first.
+**Why:** the dark palette + dark: variants are only visible because this switch exists;
+don't re-add a toggle/provider. Note the login/`auth` page has no navbar, so no toggle
+there by design (it already renders a fixed dark-ish split layout).
 
 **How to apply — dark: variant convention** (add `dark:` NEXT TO the light class, never
 replace it; leave inline `style` hex/rgba untouched):

@@ -3,6 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/hooks/useTheme";
 import { useAuth } from "@/hooks/useAuth";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { BASE_PATH } from "@/lib/basePath";
@@ -153,12 +154,14 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={BASE_PATH || undefined}>
-          <Toaster />
-          <Router />
-        </WouterRouter>
-      </TooltipProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <WouterRouter base={BASE_PATH || undefined}>
+            <Toaster />
+            <Router />
+          </WouterRouter>
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }
