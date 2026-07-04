@@ -364,58 +364,6 @@ function categorieSection(
 }
 
 /**
- * Card "Assicurazioni" (Task #263): dettaglio della pista assicurazioni per
- * categoria BiSuite con pezzi e fatturato, barra proporzionale ai pezzi.
- */
-function assicurazioniSection(a: DailyReportAggregates): string {
-  const list = a.assicurazioniDettaglio;
-  if (list.length === 0) return "";
-  const color = PISTA_THEME.assicurazioni;
-  const totPezzi = list.reduce((s, c) => s + c.pezzi, 0);
-  const totImporto = list.reduce((s, c) => s + c.importo, 0);
-  const maxPezzi = Math.max(...list.map((c) => c.pezzi), 1);
-  const rows = list
-    .map((c) => {
-      const width = Math.max(6, Math.round((c.pezzi / maxPezzi) * 100));
-      return `<div class="prow">
-        <div class="prow-head"><span class="pname" style="color:${color}">${escapeHtml(c.categoria)}</span><span class="pval">${c.pezzi} pz · ${escapeHtml(fmtEuro(c.importo))}</span></div>
-        <div class="pbar"><i style="width:${width}%;background:linear-gradient(90deg,${color},${color}66)"></i></div>
-      </div>`;
-    })
-    .join("\n        ");
-  return `<div class="card"><h2>Assicurazioni <span class="h2-sub">${totPezzi} pz · ${escapeHtml(fmtEuro(totImporto))}</span></h2>
-        ${rows}
-    </div>`;
-}
-
-/**
- * Card "Energia · Privati vs Business" (Task #263): split della pista
- * energia per tipo cliente (CF vs P.IVA) con pezzi e fatturato.
- */
-function energiaClientiSection(a: DailyReportAggregates): string {
-  const ec = a.energiaByCliente;
-  if (ec.privato.pezzi === 0 && ec.business.pezzi === 0) return "";
-  const color = PISTA_THEME.energia;
-  const totPezzi = ec.privato.pezzi + ec.business.pezzi;
-  const totImporto = ec.privato.importo + ec.business.importo;
-  const maxPezzi = Math.max(ec.privato.pezzi, ec.business.pezzi, 1);
-  const row = (icon: string, label: string, v: { pezzi: number; importo: number }): string => {
-    if (v.pezzi === 0) return "";
-    const width = Math.max(6, Math.round((v.pezzi / maxPezzi) * 100));
-    return `<div class="prow">
-        <div class="prow-head"><span class="pname" style="color:${color}">${icon} ${escapeHtml(label)}</span><span class="pval">${v.pezzi} pz · ${escapeHtml(fmtEuro(v.importo))}</span></div>
-        <div class="pbar"><i style="width:${width}%;background:linear-gradient(90deg,${color},${color}66)"></i></div>
-      </div>`;
-  };
-  const rows = [row("👤", "Privati (CF)", ec.privato), row("🏢", "Business (P.IVA)", ec.business)]
-    .filter(Boolean)
-    .join("\n        ");
-  return `<div class="card"><h2>Energia · Privati vs Business <span class="h2-sub">${totPezzi} pz · ${escapeHtml(fmtEuro(totImporto))}</span></h2>
-        ${rows}
-    </div>`;
-}
-
-/**
  * Card "Proiezione fine mese" (Task #263): stima dei pezzi Canvass totali e
  * dei Telefoni a fine mese in base ai giorni lavorativi trascorsi.
  */
@@ -534,8 +482,6 @@ function daySections(
     parts.push(highlightsSection(a));
     parts.push(trendSection(trendSlice));
     parts.push(pisteSection(a, trendSlice));
-    parts.push(assicurazioniSection(a));
-    parts.push(energiaClientiSection(a));
     parts.push(tipiSection(a));
     parts.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
     parts.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));
@@ -576,8 +522,6 @@ function monthSections(
     }
     parts.push(projectionSection(projection));
     parts.push(pisteSection(a, undefined, "La gara delle piste · mese"));
-    parts.push(assicurazioniSection(a));
-    parts.push(energiaClientiSection(a));
     parts.push(tipiSection(a));
     parts.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
     parts.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));
@@ -619,8 +563,6 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
       sections.push(highlightsSection(a));
       sections.push(trendSection(trend));
       sections.push(pisteSection(a, trend));
-      sections.push(assicurazioniSection(a));
-      sections.push(energiaClientiSection(a));
       sections.push(tipiSection(a));
       sections.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
       sections.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));

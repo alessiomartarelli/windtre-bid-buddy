@@ -18,6 +18,7 @@ const {
   addYmdDays,
   trendYmdOf,
   saleCustomerKind,
+  energiaClienteFromDescrizione,
   telefoniPezziOf,
   monthWorkingDays,
   projectMonthEnd,
@@ -55,8 +56,11 @@ function sale({ stato = "COMPLETATA", totale = "0", codicePos = "POS1", nomeNego
     rawData: { articoli },
   };
 }
-function art(categoria, prezzo) {
-  return { categoria: { nome: categoria }, dettaglio: { prezzo: String(prezzo) } };
+function art(categoria, prezzo, opts = {}) {
+  const a = { categoria: { nome: categoria }, dettaglio: { prezzo: String(prezzo) } };
+  if (opts.tipologia) a.tipologia = { nome: opts.tipologia };
+  if (opts.descrizione) a.descrizione = opts.descrizione;
+  return a;
 }
 
 console.log("\n— aggregateDailyReport —");
@@ -973,12 +977,22 @@ await test("saleCustomerKind: CF senza azienda ⇒ privato; solo P.IVA ⇒ busin
   assert.equal(saleCustomerKind(null), "privato");
 });
 
-await test("energiaByCliente: split Privati (CF) vs Business (P.IVA), solo pista energia", () => {
+await test("energiaClienteFromDescrizione: Business ⇐ descrizione con BUSINESS/MICROBUSINESS; altrimenti CF", () => {
+  assert.equal(energiaClienteFromDescrizione("LUCE MICROBUSINESS - DOMICILIAZIONE BANCARIA"), "business");
+  assert.equal(energiaClienteFromDescrizione("CLIENTE BUSINESS CON DOMICILIAZIONE BANCARIA"), "business");
+  assert.equal(energiaClienteFromDescrizione("LUCE - DOMICILIAZIONE BANCARIA"), "privato");
+  assert.equal(energiaClienteFromDescrizione("CLIENTE CONSUMER"), "privato");
+  assert.equal(energiaClienteFromDescrizione(""), "privato");
+});
+
+await test("energiaByCliente: split CF/IVA dalla DESCRIZIONE offerta, non dal tipo cliente, solo pista energia", () => {
   const a = aggregateDailyReport([
-    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "20", articoli: [art("ENERGIA W3", 20)] }),
-    saleCli({ cliente: { clienteTipo: "GIURIDICA", piva: "12345678901" }, totale: "50", articoli: [art("ACEA ENERGIA", 30), art("ENERGIA W3", 20)] }),
-    // Mobile con CF: non deve toccare l'energia.
-    saleCli({ cliente: { codiceFiscale: "VRDLGI85B02H501X" }, totale: "40", articoli: [art("UNTIED", 40)] }),
+    // Offerta consumer venduta a cliente registrato business ⇒ resta CF (conta la descrizione).
+    saleCli({ cliente: { clienteTipo: "GIURIDICA", piva: "1" }, totale: "20", articoli: [art("ENERGIA W3", 20, { descrizione: "LUCE - DOMICILIAZIONE BANCARIA" })] }),
+    // Offerta MICROBUSINESS venduta a cliente CF ⇒ IVA (conta la descrizione).
+    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "50", articoli: [art("ENERGIA W3", 30, { descrizione: "GAS MICROBUSINESS - BOLLETTINO POSTALE" }), art("ENERGIA W3", 20, { descrizione: "LUCE MICROBUSINESS - DOMICILIAZIONE BANCARIA" })] }),
+    // Mobile: non deve toccare l'energia.
+    saleCli({ totale: "40", articoli: [art("UNTIED", 40)] }),
   ]);
   assert.deepEqual(a.energiaByCliente.privato, { pezzi: 1, importo: 20 });
   assert.deepEqual(a.energiaByCliente.business, { pezzi: 2, importo: 50 });
@@ -1039,12 +1053,12 @@ await test("buildMonthEndProjection: canvass totali e telefoni maturato+proiezio
   assert.equal(buildMonthEndProjection("bad", monthAgg), null);
 });
 
-await test("messaggio: fatturato Telefoni/Accessori/Servizi, assicurazioni, energia, proiezione", () => {
+await test("messaggio: fatturato tutte le categorie prodotto/servizi, assicurazioni (>1 cat), energia (CF+IVA), proiezione", () => {
   const rows = [
-    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "540", articoli: [art("TELEFONIA", 500), art("ACCESSORI", 40)] }),
-    saleCli({ cliente: { clienteTipo: "GIURIDICA", piva: "12345678901" }, totale: "50", articoli: [art("ENERGIA W3", 50)] }),
-    saleCli({ cliente: { codiceFiscale: "VRDLGI85B02H501X" }, totale: "20", articoli: [art("ENERGIA W3", 20)] }),
-    saleCli({ totale: "100", articoli: [art("ASSICURAZIONI", 100), art("SPEDIZIONE", 5)] }),
+    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "620", articoli: [art("TELEFONIA", 500), art("ACCESSORI", 40), art("ELETTRODOMESTICI", 80)] }),
+    saleCli({ totale: "50", articoli: [art("ENERGIA W3", 50, { descrizione: "LUCE MICROBUSINESS - DOMICILIAZIONE BANCARIA" })] }),
+    saleCli({ totale: "20", articoli: [art("ENERGIA W3", 20, { descrizione: "LUCE - DOMICILIAZIONE BANCARIA" })] }),
+    saleCli({ totale: "250", articoli: [art("ASSICURAZIONI", 100), art("WINDTRE SECURITY PRO GA", 150), art("SPEDIZIONE", 5)] }),
   ];
   const aggregates = aggregateDailyReport(rows);
   const monthProjection = buildMonthEndProjection("2026-07-15", aggregates);
@@ -1052,14 +1066,34 @@ await test("messaggio: fatturato Telefoni/Accessori/Servizi, assicurazioni, ener
   assert.ok(msg.includes("<b>Fatturato prodotti/servizi</b>"));
   assert.ok(msg.includes("📱 Telefoni: 1 pz — 500,00 €"));
   assert.ok(msg.includes("🎧 Accessori: 1 pz — 40,00 €"));
+  // Categoria prodotto non nota (elettrodomestici, viaggi, ecc.): descrizione visibile con fallback 📦.
+  assert.ok(msg.includes("📦 ELETTRODOMESTICI: 1 pz — 80,00 €"));
   assert.ok(msg.includes("🔧 Servizi: 1 pz — 5,00 €"));
+  // Assicurazioni: dettaglio visibile perché ci sono 2+ categorie.
   assert.ok(msg.includes("<b>Assicurazioni</b>"));
   assert.ok(msg.includes("ASSICURAZIONI: 1 pz — 100,00 €"));
+  assert.ok(msg.includes("WINDTRE SECURITY PRO GA: 1 pz — 150,00 €"));
+  // Energia: split visibile perché sono presenti sia CF che P.IVA.
   assert.ok(msg.includes("<b>Energia per cliente</b>"));
   assert.ok(msg.includes("👤 Privati (CF): 1 pz — 20,00 €"));
   assert.ok(msg.includes("🏢 Business (P.IVA): 1 pz — 50,00 €"));
   assert.ok(msg.includes("<b>Proiezione fine mese</b> (luglio 2026)"));
   assert.ok(msg.includes("Canvass totali:"));
+});
+
+await test("messaggio: no duplicazione — assicurazioni con 1 sola categoria e energia con 1 solo tipo cliente NON ripetono il totale pista (Task #264)", () => {
+  const rows = [
+    saleCli({ cliente: { codiceFiscale: "VRDLGI85B02H501X" }, totale: "20", articoli: [art("ENERGIA W3", 20)] }),
+    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "30", articoli: [art("ENERGIA W3", 30)] }),
+    saleCli({ totale: "100", articoli: [art("ASSICURAZIONI", 100)] }),
+  ];
+  const aggregates = aggregateDailyReport(rows);
+  const msg = buildTelegramReportMessage({ orgName: "Org", dateYMD: "2026-07-15", aggregates });
+  // La riga "Per pista" resta l'unico posto in cui compaiono Assicurazioni ed Energia.
+  assert.ok(!msg.includes("<b>Assicurazioni</b>"), "la sezione Assicurazioni non deve comparire con 1 sola categoria");
+  assert.ok(!msg.includes("<b>Energia per cliente</b>"), "la sezione Energia per cliente non deve comparire con 1 solo tipo cliente");
+  assert.equal(msg.split("Assicurazioni").length - 1, 1, "Assicurazioni deve comparire una sola volta (solo Per pista)");
+  assert.equal(msg.split("Energia").length - 1, 1, "Energia deve comparire una sola volta (solo Per pista)");
 });
 
 await test("messaggio: senza monthProjection nessuna sezione proiezione", () => {
@@ -1068,17 +1102,47 @@ await test("messaggio: senza monthProjection nessuna sezione proiezione", () => 
   assert.ok(!msg.includes("Proiezione fine mese"));
 });
 
-await test("HTML: card Assicurazioni ed Energia nella pagina giorno", () => {
+await test("HTML: chip pista Assicurazioni = descrizione prodotto; Energia = CF/IVA; niente card duplicate sotto (Task #264)", () => {
   const rows = [
-    saleCli({ cliente: { codiceFiscale: "RSSMRA80A01H501U" }, totale: "20", articoli: [art("ENERGIA W3", 20)] }),
-    saleCli({ cliente: { clienteTipo: "GIURIDICA", piva: "1" }, totale: "50", articoli: [art("ACEA ENERGIA", 50)] }),
-    saleCli({ totale: "100", articoli: [art("ASSICURAZIONI", 100)] }),
+    // Energia: una consumer (CF) e una microbusiness (IVA) ⇒ chip CF/IVA.
+    saleCli({ totale: "20", articoli: [art("ENERGIA W3", 20, { descrizione: "LUCE - DOMICILIAZIONE BANCARIA" })] }),
+    saleCli({ totale: "50", articoli: [art("ENERGIA W3", 50, { descrizione: "LUCE MICROBUSINESS - DOMICILIAZIONE BANCARIA" })] }),
+    saleCli({
+      totale: "150",
+      articoli: [
+        art("ASSICURAZIONI", 100, { tipologia: "ASSICURAZIONI CASA", descrizione: "CASA ELETTRODOMESTICI" }),
+        art("ASSICURAZIONI", 50, { tipologia: "ASSICURAZIONI MOBILITY", descrizione: "VIAGGI E VACANZE" }),
+      ],
+    }),
   ];
   const html = buildVenditeReportHtml({ orgName: "Org", dateYMD: "2026-07-15", aggregates: aggregateDailyReport(rows) });
-  assert.ok(html.includes(">Assicurazioni <span"), "manca la card assicurazioni");
-  assert.ok(html.includes("Energia · Privati vs Business"), "manca la card energia clienti");
-  assert.ok(html.includes("Privati (CF)"));
-  assert.ok(html.includes("Business (P.IVA)"));
+  // I chip della card "La gara delle piste" mostrano il dettaglio inline.
+  assert.ok(html.includes(`<span class="chip">CASA ELETTRODOMESTICI ×1</span>`), "manca il chip descrizione assicurazione");
+  assert.ok(html.includes(`<span class="chip">VIAGGI E VACANZE ×1</span>`), "manca il secondo chip descrizione assicurazione");
+  assert.ok(html.includes(`<span class="chip">CF ×1</span>`), "manca il chip energia CF");
+  assert.ok(html.includes(`<span class="chip">IVA ×1</span>`), "manca il chip energia IVA");
+  // Le card dedicate sotto sono state rimosse: nessuna duplicazione.
+  assert.ok(!html.includes(">Assicurazioni <span"), "la card Assicurazioni dedicata non deve più esistere");
+  assert.ok(!html.includes("Energia · Privati vs Business"), "la card Energia dedicata non deve più esistere");
+  // "Assicurazioni" compare solo come nome pista, non come titolo card.
+  assert.ok(html.includes(`>Assicurazioni</span>`), "manca il nome pista Assicurazioni");
+});
+
+await test("assicurazioniDettaglio: raggruppa per descrizione prodotto (tipologia — descrizione), non per bucket pista", () => {
+  const a = aggregateDailyReport([
+    saleCli({
+      articoli: [
+        art("ASSICURAZIONI", 100, { tipologia: "ASSICURAZIONI CASA", descrizione: "FULL" }),
+        art("ASSICURAZIONI", 80, { tipologia: "ASSICURAZIONI CASA", descrizione: "FULL" }),
+        art("ASSICURAZIONI", 50, { tipologia: "ASSICURAZIONI PERSONA", descrizione: "BASE" }),
+      ],
+    }),
+  ]);
+  assert.deepEqual(a.assicurazioniDettaglio.map((c) => c.categoria), [
+    "ASSICURAZIONI CASA — FULL",
+    "ASSICURAZIONI PERSONA — BASE",
+  ]);
+  assert.deepEqual(a.assicurazioniDettaglio[0], { categoria: "ASSICURAZIONI CASA — FULL", pezzi: 2, importo: 180 });
 });
 
 await test("HTML: card Proiezione fine mese solo nella pagina mese", () => {

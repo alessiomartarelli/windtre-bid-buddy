@@ -22,5 +22,6 @@
 - [Prod SMTP_SECRET_KEY differs](prod-secret-key-differs.md) — segreti per il DB di prod vanno cifrati SUL VPS (chiave diversa da dev); plaintext via stdin, verifica round-trip.
 - [Static precompress sidecars](static-precompress-sidecars.md) — mai comprimere asset in sync al boot; sidecar .gz/.br generati al build + warm-up async di fallback; regole duplicate build↔server da tenere allineate.
 - [Prod scheduled-path rehearsal](prod-scheduled-path-rehearsal.md) — per verificare un percorso schedulato di prod senza aspettare il timer: stesse funzioni via tsx da dev + tunnel SSH al DB prod.
+- [Telegram report message content](telegram-report-message-content.md) — testo: elenca TUTTE le categorie, Assicur/Energia no-dup; HTML: niente card dedicate, dettaglio nei chip pista (assic=descrizione, energia=CF/IVA da descrizione offerta).
 - [Rebrand color semantics](rebrand-color-semantics.md) — arancione residuo = semantico (warning/categoria/●live), NON residuo brand; brand = indaco --brand-indigo.
 - [Dark mode status & mapping](dark-mode-status.md) — dark mode NON è raggiungibile (nessun toggle/provider); `.dark` esiste in index.css. Per test: `class="dark"` in index.html. Convenzione dark: variants.

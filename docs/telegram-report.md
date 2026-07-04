@@ -16,16 +16,26 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   coerente con la pagina Vendite BiSuite) e
   `buildTelegramReportMessage` (messaggio HTML compatto per Telegram, con
   escape dei caratteri speciali e sezioni solo per le voci > 0).
-  Arricchimenti (Task #263): il messaggio aggiunge — quando > 0 — una
-  sezione **Fatturato prodotti/servizi** (📱 Telefoni = categoria
-  TELEFONIA, 🎧 Accessori = categoria ACCESSORI, 🔧 Servizi), il
-  **dettaglio Assicurazioni** per categoria BiSuite (pezzi + fatturato),
-  lo split **Energia per cliente** 👤 Privati (CF) vs 🏢 Business (P.IVA)
-  e, se passata, la **Proiezione fine mese** (pezzi Canvass totali e
-  Telefoni). Lo split energia usa `saleCustomerKind(rawData)`: business se
-  `clienteTipo` è GIURIDICA/PROFESSIONISTA **oppure** è presente la P.IVA,
-  altrimenti privato (CF o cliente non identificabile ⇒ default privato);
-  `aggregateDailyReport`
+  Arricchimenti (Task #263, affinati in Task #264): il messaggio aggiunge
+  — quando > 0 — una sezione **Fatturato prodotti/servizi** che elenca
+  **tutte** le categorie prodotto vendute (non solo Telefoni/Accessori:
+  anche Elettrodomestici, Viaggi, Ricariche, SIM, ecc., con emoji 📱 per
+  TELEFONIA, 🎧 per ACCESSORI, 📦 fallback per le altre) più il totale
+  🔧 Servizi; il **dettaglio Assicurazioni** per prodotto (tipologia —
+  descrizione) e lo split **Energia per cliente** 👤 Privati (CF) vs
+  🏢 Business (P.IVA) compaiono **solo quando aggiungono granularità**
+  oltre la riga "Per pista" (assicurazioni: ≥ 2 prodotti; energia:
+  presenti sia CF che IVA), così non duplicano il totale pista quando c'è
+  un solo sottogruppo; e, se passata, la **Proiezione fine mese** (pezzi
+  Canvass totali e Telefoni). **Lo split energia CF/IVA viene ricavato
+  dalla DESCRIZIONE dell'offerta, non dal tipo cliente registrato**
+  (Task #264): `energiaClienteFromDescrizione(descrizione)` = business se
+  la descrizione (maiuscola) contiene `BUSINESS` (copre `MICROBUSINESS` e
+  `CLIENTE BUSINESS`), altrimenti privato. Sui dati reali WindTre il campo
+  cliente spesso non concorda con la descrizione, per questo si usa la
+  descrizione. (`saleCustomerKind(rawData)` — business se `clienteTipo` è
+  GIURIDICA/PROFESSIONISTA **oppure** è presente la P.IVA — resta esportato
+  ma NON governa più lo split energia.) `aggregateDailyReport`
   espone i nuovi aggregati `energiaByCliente` (split per pista energia) e
   `assicurazioniDettaglio` (ordinato per pezzi↓). La proiezione
   (`buildMonthEndProjection(ymd, monthAgg)`) stima i pezzi a fine mese in
@@ -49,8 +59,12 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   andamento 14 giorni ad area (SVG inline via `svgAreaChart`, assi con
   giorno settimana + picco); **"La gara delle piste"** — una riga per
   pista con barra orizzontale scalata sul massimo, colore tema dark
-  (`PISTA_THEME`), pezzi+importo, chip per categoria (top 4 da
-  `categorieByPista`) e delta vs media 7 gg; **"Mix del giorno"** —
+  (`PISTA_THEME`), pezzi+importo, chip di dettaglio inline (top 4 da
+  `categorieByPista`) e delta vs media 7 gg. **I chip di dettaglio
+  (Task #264)**: per **Assicurazioni** mostrano la **descrizione prodotto**
+  (`tipologia — descrizione`, come i chip Mobile TIED/UNTIED); per
+  **Energia** mostrano `CF`/`IVA` ricavati dalla descrizione offerta; per
+  le altre piste la categoria BiSuite. **"Mix del giorno"** —
   donut chart SVG (`svgDonut`, pezzi totali al centro) + legenda per
   tipo; **"Prodotti per categoria"** e **"Servizi"** — una card
   ciascuna (da `prodottiByCategoria`/`serviziByCategoria` di
@@ -230,3 +244,50 @@ reconcile journey, messaggio arrivato nel gruppo "Windtre test" con
 label "verifica scheduler (prova pre-13:30)". Il timer di prod resta
 armato (log PM2: `prossimo report 13:30 programmato per
 2026-07-03T11:30:05Z`).
+
+## Verifica arricchimenti Task #263 (Task #264)
+
+Il 04/07/2026 sono stati verificati end-to-end gli arricchimenti del
+Task #263 (Proiezione fine mese, Fatturato prodotti/servizi, dettaglio
+Assicurazioni, split Energia Privati/Business). Procedura: prima un
+dry-run che costruisce messaggio + HTML dagli stessi dati/funzioni di
+`sendDailyReportForOrg` **senza inviare** (dati di PROD via tunnel SSH),
+per ispezionare le nuove sezioni, la validità dell'HTML (container
+bilanciati, nessun `undefined`/`NaN`/`[object Object]`) e il render
+dell'allegato; poi l'invio REALE nel gruppo "Windtre test" via
+`scripts/verify-telegram-scheduled-path.mts`
+(`ORG_ID=org-admin-windtre`, sync BiSuite del giorno, reconcile journey
+⇒ `INVIATO`). Un invio 200 implica HTML del messaggio valido (Telegram
+rifiuta il parse_mode HTML malformato). Il timer schedulato di prod
+resta armato.
+
+**Correzioni emerse dalla verifica.** Nel messaggio di testo la sezione
+Fatturato mostrava solo Telefoni/Accessori (mancavano le altre categorie
+prodotto vendute: Ricariche, SIM, Modem/Router, Elettrodomestici, Viaggi,
+ecc.) e le sezioni Assicurazioni / Energia per cliente ripetevano il
+totale già presente in "Per pista" quando c'era un solo sottogruppo. Fix:
+il Fatturato elenca ora **tutte** le categorie prodotto (con la loro
+descrizione BiSuite) più il totale Servizi; Assicurazioni ed Energia per
+cliente compaiono **solo** quando aggiungono granularità (≥ 2 prodotti
+assicurazione / entrambi i tipi cliente energia).
+
+**Revisione finale (Task #264, feedback utente Round 4).** Su richiesta
+esplicita dell'utente, nell'allegato HTML le **card dedicate** sotto "La
+gara delle piste" ("Assicurazioni" ed "Energia · Privati vs Business")
+sono state **rimosse del tutto** ("togli quelle sotto"). Al loro posto, il
+dettaglio compare **inline come chip** dentro la riga pista di "La gara
+delle piste" (esattamente come i chip Mobile "TIED CF ×N / UNTIED ×N"):
+per Assicurazioni i chip mostrano la **descrizione prodotto**, per Energia
+i chip `CF`/`IVA`. Inoltre lo **split Energia CF/IVA** è ora ricavato dalla
+**descrizione dell'offerta** (`energiaClienteFromDescrizione`), non dal
+tipo cliente registrato: sui dati reali WindTre il campo cliente spesso
+diverge dalla descrizione, mentre le offerte business/IVA contengono
+sempre `BUSINESS` in descrizione (es. `LUCE MICROBUSINESS …`,
+`CLIENTE BUSINESS …`). `assicurazioniDettaglio`
+(`aggregateDailyReport`) raggruppa per **descrizione prodotto**
+(`tipologiaNome — descrizione`, es. "ASSICURAZIONI CASA — CASA
+ELETTRODOMESTICI"). Le sezioni **testuali** del messaggio (Assicurazioni /
+Energia per cliente) restano invariate con la regola anti-duplicazione.
+Test puri aggiornati (categorie prodotto,
+no-duplicazione messaggio + HTML, raggruppamento per descrizione) e
+re-invio nel gruppo dopo il fix.

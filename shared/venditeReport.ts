@@ -217,6 +217,18 @@ export function saleCustomerKind(rawData: unknown): "privato" | "business" {
 }
 
 /**
+ * Distingue le offerte energia CF (Consumer) vs IVA (Business) dalla
+ * DESCRIZIONE dell'offerta, non dal tipo cliente della vendita: il tipo
+ * cliente è inaffidabile (offerte MICROBUSINESS vendute a clienti registrati
+ * come privati e viceversa), mentre la descrizione dell'offerta dice sempre
+ * se è consumer o business. Business ⇒ la descrizione contiene "BUSINESS"
+ * (copre "MICROBUSINESS" e "CLIENTE BUSINESS"); altrimenti Consumer (CF).
+ */
+export function energiaClienteFromDescrizione(descrizione: string): "privato" | "business" {
+  return descrizione.toUpperCase().includes("BUSINESS") ? "business" : "privato";
+}
+
+/**
  * Aggrega le vendite del giorno come la pagina Vendite BiSuite:
  * - le vendite ANNULLATA sono ESCLUSE da tutti i conteggi;
  * - pezzi/importi per Tipo e Pista sono a livello articolo
@@ -278,29 +290,49 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
       amountByPista[pista] = (amountByPista[pista] ?? 0) + (sc.amountByPista[pista] ?? 0);
     }
     const mix = saleIncassoMix(row.rawData);
-    // Tipo cliente della vendita: serve allo split energia CF/IVA (la
-    // classificazione articoli non distingue Privati/Business per l'energia).
-    const clienteKind = saleCustomerKind(row.rawData);
     for (const article of sc.articles) {
       if (article.pista) {
+        // Etichetta dei chip nella card "La gara delle piste". Per la maggior
+        // parte delle piste è la categoria BiSuite (es. mobile ⇒ TIED CF /
+        // UNTIED). Per assicurazioni ed energia la categoria è un unico bucket
+        // ("ASSICURAZIONI" / "ENERGIA W3") che ripeterebbe il totale pista,
+        // quindi usiamo un dettaglio più utile (Task #264):
+        // - assicurazioni ⇒ la descrizione reale del prodotto (es. CASA
+        //   ELETTRODOMESTICI, VIAGGI E VACANZE);
+        // - energia ⇒ CF (Consumer) vs IVA (Business), riconosciuti dalla
+        //   descrizione dell'offerta (vedi energiaClienteFromDescrizione).
         const catLabel = article.categoriaNome.trim() || "Altro";
+        let chipLabel = catLabel;
+        if (article.pista === "assicurazioni") {
+          chipLabel = article.descrizione.trim() || article.tipologiaNome.trim() || catLabel;
+        } else if (article.pista === "energia") {
+          chipLabel = energiaClienteFromDescrizione(article.descrizione) === "business" ? "IVA" : "CF";
+        }
         const map = catByPista[article.pista] ?? new Map<string, number>();
-        map.set(catLabel, (map.get(catLabel) ?? 0) + 1);
+        map.set(chipLabel, (map.get(chipLabel) ?? 0) + 1);
         catByPista[article.pista] = map;
         // Drill-down: canvass per pista del PDV e dell'addetto.
         pdvAcc.countByPista[article.pista] = (pdvAcc.countByPista[article.pista] ?? 0) + 1;
         addAcc.countByPista[article.pista] = (addAcc.countByPista[article.pista] ?? 0) + 1;
-        // Split energia per tipo cliente (Privati CF vs Business P.IVA).
+        // Split energia CF (Consumer) vs Business (P.IVA) dalla descrizione
+        // dell'offerta, non dal tipo cliente della vendita (Task #264).
         if (article.pista === "energia") {
-          energiaByCliente[clienteKind].pezzi++;
-          energiaByCliente[clienteKind].importo += article.prezzo;
+          const kind = energiaClienteFromDescrizione(article.descrizione);
+          energiaByCliente[kind].pezzi++;
+          energiaByCliente[kind].importo += article.prezzo;
         }
-        // Dettaglio assicurazioni per categoria (pezzi + fatturato).
+        // Dettaglio assicurazioni per PRODOTTO (Task #264): la categoria
+        // BiSuite della pista è sempre l'unico bucket "ASSICURAZIONI", quindi
+        // raggruppare per categoria darebbe una sola riga che ripete il totale
+        // pista. Usiamo la descrizione reale del prodotto (tipologia +
+        // descrizione), con fallback alla categoria se entrambe assenti.
         if (article.pista === "assicurazioni") {
-          const entry = assicurazioniMap.get(catLabel) ?? { categoria: catLabel, pezzi: 0, importo: 0 };
+          const assLabel =
+            [article.tipologiaNome.trim(), article.descrizione.trim()].filter(Boolean).join(" — ") || catLabel;
+          const entry = assicurazioniMap.get(assLabel) ?? { categoria: assLabel, pezzi: 0, importo: 0 };
           entry.pezzi++;
           entry.importo += article.prezzo;
-          assicurazioniMap.set(catLabel, entry);
+          assicurazioniMap.set(assLabel, entry);
         }
       }
 
@@ -690,6 +722,22 @@ export interface TelegramReportParams {
   monthProjection?: MonthEndProjection;
 }
 
+/** Emoji per le categorie prodotto note; fallback 📦 per le altre. */
+function prodottoEmoji(categoria: string): string {
+  const c = categoria.trim().toUpperCase();
+  if (c === "TELEFONIA") return "📱";
+  if (c === "ACCESSORI") return "🎧";
+  return "📦";
+}
+
+/** Etichetta leggibile per le categorie prodotto note; altrimenti il nome BiSuite. */
+function prodottoLabel(categoria: string): string {
+  const c = categoria.trim().toUpperCase();
+  if (c === "TELEFONIA") return "Telefoni";
+  if (c === "ACCESSORI") return "Accessori";
+  return categoria.trim();
+}
+
 /**
  * Costruisce il messaggio Telegram (parse_mode HTML) con il riepilogo del
  * giorno. Compatto e leggibile su mobile; mostra solo le voci con almeno
@@ -732,15 +780,16 @@ export function buildTelegramReportMessage(p: TelegramReportParams): string {
     lines.push(...pistaLines);
   }
 
-  // Fatturato Telefoni / Accessori / Servizi (Task #263).
-  const telefoni = a.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === "TELEFONIA");
-  const accessori = a.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === "ACCESSORI");
+  // Fatturato per categoria Prodotti + totale Servizi (Task #263/#264):
+  // elenca TUTTE le categorie prodotto vendute (Telefoni, Accessori,
+  // Elettrodomestici, Viaggi, ecc.), non solo Telefoni/Accessori, così il
+  // report mostra la descrizione di ogni etichetta venduta.
   const fatturatoLines: string[] = [];
-  if (telefoni && telefoni.pezzi > 0) {
-    fatturatoLines.push(`• 📱 Telefoni: ${telefoni.pezzi} pz — ${fmtEuro(telefoni.importo)}`);
-  }
-  if (accessori && accessori.pezzi > 0) {
-    fatturatoLines.push(`• 🎧 Accessori: ${accessori.pezzi} pz — ${fmtEuro(accessori.importo)}`);
+  for (const cat of a.prodottiByCategoria) {
+    if (cat.pezzi <= 0) continue;
+    fatturatoLines.push(
+      `• ${prodottoEmoji(cat.categoria)} ${escapeTelegramHtml(prodottoLabel(cat.categoria))}: ${cat.pezzi} pz — ${fmtEuro(cat.importo)}`,
+    );
   }
   if (a.countByType.servizi > 0) {
     fatturatoLines.push(`• 🔧 Servizi: ${a.countByType.servizi} pz — ${fmtEuro(a.amountByType.servizi)}`);
@@ -751,8 +800,10 @@ export function buildTelegramReportMessage(p: TelegramReportParams): string {
     lines.push(...fatturatoLines);
   }
 
-  // Dettaglio assicurazioni per categoria (Task #263).
-  if (a.assicurazioniDettaglio.length > 0) {
+  // Dettaglio assicurazioni per categoria (Task #263). Mostrato SOLO quando
+  // aggiunge granularità oltre la riga "Per pista" (più di una categoria):
+  // con una sola categoria ripeterebbe il totale pista Assicurazioni (Task #264).
+  if (a.assicurazioniDettaglio.length > 1) {
     lines.push("");
     lines.push("<b>Assicurazioni</b>");
     for (const cat of a.assicurazioniDettaglio) {
@@ -760,17 +811,15 @@ export function buildTelegramReportMessage(p: TelegramReportParams): string {
     }
   }
 
-  // Split energia Privati (CF) vs Business (P.IVA) (Task #263).
+  // Split energia Privati (CF) vs Business (P.IVA) (Task #263). Mostrato SOLO
+  // quando sono presenti ENTRAMBI i tipi cliente: con un solo tipo la riga
+  // ripeterebbe il totale pista Energia (Task #264).
   const ec = a.energiaByCliente;
-  if (ec.privato.pezzi > 0 || ec.business.pezzi > 0) {
+  if (ec.privato.pezzi > 0 && ec.business.pezzi > 0) {
     lines.push("");
     lines.push("<b>Energia per cliente</b>");
-    if (ec.privato.pezzi > 0) {
-      lines.push(`• 👤 Privati (CF): ${ec.privato.pezzi} pz — ${fmtEuro(ec.privato.importo)}`);
-    }
-    if (ec.business.pezzi > 0) {
-      lines.push(`• 🏢 Business (P.IVA): ${ec.business.pezzi} pz — ${fmtEuro(ec.business.importo)}`);
-    }
+    lines.push(`• 👤 Privati (CF): ${ec.privato.pezzi} pz — ${fmtEuro(ec.privato.importo)}`);
+    lines.push(`• 🏢 Business (P.IVA): ${ec.business.pezzi} pz — ${fmtEuro(ec.business.importo)}`);
   }
 
   // Proiezione a fine mese: pezzi Canvass totali e Telefoni (Task #263).
