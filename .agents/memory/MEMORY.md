@@ -25,3 +25,4 @@
 - [Telegram report message content](telegram-report-message-content.md) — testo = commento discorsivo "direttore vendite" (no elenco, forecast per-org, seed su data); il dettaglio vive SOLO nell'allegato HTML (chip pista: assic=descrizione, energia=CF/IVA da descrizione offerta).
 - [Rebrand color semantics](rebrand-color-semantics.md) — arancione residuo = semantico (warning/categoria/●live), NON residuo brand; brand = indaco --brand-indigo.
 - [Dark mode status & mapping](dark-mode-status.md) — dark mode NON è raggiungibile (nessun toggle/provider); `.dark` esiste in index.css. Per test: `class="dark"` in index.html. Convenzione dark: variants.
+- [Telegram forecast in gara_config](telegram-forecast-in-garaconfig.md) — forecast/obiettivi report Telegram sta per-mese in gara_config.config.venditeForecast (non telegramReport); giorni lavorativi auto CC(incl. domeniche)/strada.

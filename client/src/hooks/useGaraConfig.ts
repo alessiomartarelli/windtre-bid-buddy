@@ -230,6 +230,21 @@ export interface GaraConfigData {
   pistaMobile?: Record<string, unknown>;
   pistaFisso?: Record<string, unknown>;
   calendarioGara?: Record<string, unknown>;
+  venditeForecast?: {
+    mobileVolumi?: number | null;
+    mobileIvaVolumi?: number | null;
+    fissoVolumi?: number | null;
+    fissoIvaVolumi?: number | null;
+    energiaVolumi?: number | null;
+    assicurazioniVolumi?: number | null;
+    protettiVolumi?: number | null;
+    cbVolumi?: number | null;
+    telefoniPezzi?: number | null;
+    accessoriFatturato?: number | null;
+    serviziFatturato?: number | null;
+    numeroNegoziCc?: number | null;
+    numeroNegoziStrada?: number | null;
+  };
 }
 
 export interface GaraConfigRecord {

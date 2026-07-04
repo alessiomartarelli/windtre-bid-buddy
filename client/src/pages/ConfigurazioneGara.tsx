@@ -426,6 +426,74 @@ function CodiciRSInput({ codici, onChange, rsName }: { codici: string[]; onChang
   );
 }
 
+// Forecast/obiettivi vendite (mese): campi del form come stringhe (input
+// controllati), convertiti a numeri per il payload salvato in gara_config.
+type ForecastFormKey =
+  | 'mobileVolumi' | 'mobileIvaVolumi' | 'fissoVolumi' | 'fissoIvaVolumi'
+  | 'energiaVolumi' | 'assicurazioniVolumi' | 'protettiVolumi' | 'cbVolumi'
+  | 'telefoniPezzi' | 'accessoriFatturato' | 'serviziFatturato'
+  | 'numeroNegoziCc' | 'numeroNegoziStrada';
+
+const FORECAST_VOLUMI_FIELDS: Array<{ key: ForecastFormKey; label: string; placeholder: string }> = [
+  { key: 'mobileVolumi', label: 'Mobile (volumi)', placeholder: 'es. 300' },
+  { key: 'mobileIvaVolumi', label: 'di cui P.IVA (volumi)', placeholder: 'es. 40' },
+  { key: 'fissoVolumi', label: 'Fisso (volumi)', placeholder: 'es. 120' },
+  { key: 'fissoIvaVolumi', label: 'di cui P.IVA (volumi)', placeholder: 'es. 20' },
+  { key: 'energiaVolumi', label: 'Energia (volumi)', placeholder: 'es. 60' },
+  { key: 'assicurazioniVolumi', label: 'Assicurazioni (volumi)', placeholder: 'es. 40' },
+  { key: 'protettiVolumi', label: 'Protetti (volumi)', placeholder: 'es. 30' },
+  { key: 'cbVolumi', label: 'Cb (volumi)', placeholder: 'es. 25' },
+];
+
+const FORECAST_FATTURATO_FIELDS: Array<{ key: ForecastFormKey; label: string; placeholder: string }> = [
+  { key: 'telefoniPezzi', label: 'Telefoni (pezzi)', placeholder: 'es. 90' },
+  { key: 'accessoriFatturato', label: 'Accessori (€)', placeholder: 'es. 5000' },
+  { key: 'serviziFatturato', label: 'Servizi (€)', placeholder: 'es. 3000' },
+];
+
+const FORECAST_NEGOZI_FIELDS: Array<{ key: ForecastFormKey; label: string; placeholder: string }> = [
+  { key: 'numeroNegoziCc', label: 'N. negozi CC', placeholder: 'es. 2' },
+  { key: 'numeroNegoziStrada', label: 'N. negozi strada', placeholder: 'es. 3' },
+];
+
+type ForecastForm = Record<ForecastFormKey, string>;
+
+const EMPTY_FORECAST_FORM: ForecastForm = {
+  mobileVolumi: '', mobileIvaVolumi: '', fissoVolumi: '', fissoIvaVolumi: '',
+  energiaVolumi: '', assicurazioniVolumi: '', protettiVolumi: '', cbVolumi: '',
+  telefoniPezzi: '', accessoriFatturato: '', serviziFatturato: '',
+  numeroNegoziCc: '', numeroNegoziStrada: '',
+};
+
+function forecastToForm(raw: unknown): ForecastForm {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string =>
+    v === null || v === undefined || v === '' ? '' : String(v);
+  const out = { ...EMPTY_FORECAST_FORM };
+  (Object.keys(EMPTY_FORECAST_FORM) as ForecastFormKey[]).forEach((k) => {
+    out[k] = str(o[k]);
+  });
+  return out;
+}
+
+function forecastFormToPayload(f: ForecastForm): Record<ForecastFormKey, number | null> {
+  const num = (v: string): number | null => {
+    const t = v.trim();
+    if (t === '') return null;
+    const n = parseFloat(t.replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  };
+  const out = {} as Record<ForecastFormKey, number | null>;
+  (Object.keys(EMPTY_FORECAST_FORM) as ForecastFormKey[]).forEach((k) => {
+    out[k] = num(f[k]);
+  });
+  return out;
+}
+
+function forecastFormHasValue(f: ForecastForm): boolean {
+  return (Object.keys(EMPTY_FORECAST_FORM) as ForecastFormKey[]).some((k) => f[k].trim() !== '');
+}
+
 export default function ConfigurazioneGara() {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -541,6 +609,11 @@ export default function ConfigurazioneGara() {
   }, [orgTabelleConfig]);
   const [tabelleCalcolo, setTabelleCalcolo] = useState<TabelleCalcoloConfig>(tabelleCalcoloDefaults);
   const [extraGaraIvaSogliePerRS, setExtraGaraIvaSogliePerRS] = useState<ExtraGaraSogliePerRS>({});
+  const [venditeForecast, setVenditeForecast] = useState<ForecastForm>(EMPTY_FORECAST_FORM);
+  const setForecastField = useCallback((key: ForecastFormKey, value: string) => {
+    setVenditeForecast((prev) => ({ ...prev, [key]: value }));
+    setIsDirty(true);
+  }, []);
 
   const { profile } = useAuth();
   const { toast } = useToast();
@@ -691,6 +764,7 @@ export default function ConfigurazioneGara() {
       else setImportedFiles([]);
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
+      setVenditeForecast(forecastToForm(cfg.venditeForecast));
     }
     setIsDirty(false);
     setInitialLoaded(true);
@@ -769,6 +843,7 @@ export default function ConfigurazioneGara() {
       }
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
+      setVenditeForecast(forecastToForm(cfg.venditeForecast));
     } else {
       setConfigName('');
       setTipologiaGara('gara_operatore');
@@ -785,6 +860,7 @@ export default function ConfigurazioneGara() {
       setAssicurazioniConfig({ pdvInGara: 0, targetNoMalus: 0, targetS1: 0, targetS2: 0, premioS1: 500, premioS2: 750 });
       setTabelleCalcolo(JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS({});
+      setVenditeForecast(EMPTY_FORECAST_FORM);
 
       const salesPdvs = await fetchPdvFromSales(month, year);
       if (salesPdvs.length > 0) {
@@ -827,10 +903,11 @@ export default function ConfigurazioneGara() {
     importedFiles,
     tabelleCalcolo,
     ...(Object.keys(extraGaraIvaSogliePerRS).length > 0 ? { extraGaraIvaSogliePerRS } : {}),
+    ...(forecastFormHasValue(venditeForecast) ? { venditeForecast: forecastFormToPayload(venditeForecast) } : {}),
     ...(garaConfigRecord?.config ? {
       importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
     } : {}),
-  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, garaConfigRecord]);
+  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, garaConfigRecord]);
 
   const handleQuickSave = useCallback(async () => {
     if (!garaConfigRecord?.id) {
@@ -1510,6 +1587,83 @@ export default function ConfigurazioneGara() {
             </div>
 
             <TabsContent value="pdv" className="space-y-4">
+              <Card data-testid="card-forecast-vendite">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Target className="h-4 w-4" />
+                    Forecast e obiettivi (mese)
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Obiettivi mensili usati dal report Telegram (commento "direttore vendite").
+                    Valgono per {MONTHS.find(m => m.value === selectedMonth)?.label} {selectedYear}.
+                    I giorni lavorativi del mese sono calcolati in automatico (negozi CC: tutti i
+                    giorni tranne festivi, domeniche incluse; negozi strada: esclude domeniche e festivi).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="text-xs font-semibold">Volumi per pista</Label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
+                      {FORECAST_VOLUMI_FIELDS.map((f) => (
+                        <div key={f.key}>
+                          <Label htmlFor={`forecast-${f.key}`} className="text-xs text-muted-foreground">{f.label}</Label>
+                          <Input
+                            id={`forecast-${f.key}`}
+                            data-testid={`input-forecast-${f.key}`}
+                            type="number"
+                            inputMode="decimal"
+                            className="h-8 text-sm"
+                            placeholder={f.placeholder}
+                            value={venditeForecast[f.key]}
+                            onChange={(e) => setForecastField(f.key, e.target.value)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">Telefoni, Accessori & Servizi</Label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
+                      {FORECAST_FATTURATO_FIELDS.map((f) => (
+                        <div key={f.key}>
+                          <Label htmlFor={`forecast-${f.key}`} className="text-xs text-muted-foreground">{f.label}</Label>
+                          <Input
+                            id={`forecast-${f.key}`}
+                            data-testid={`input-forecast-${f.key}`}
+                            type="number"
+                            inputMode="decimal"
+                            className="h-8 text-sm"
+                            placeholder={f.placeholder}
+                            value={venditeForecast[f.key]}
+                            onChange={(e) => setForecastField(f.key, e.target.value)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">Numero negozi (per giorni lavorativi)</Label>
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                      {FORECAST_NEGOZI_FIELDS.map((f) => (
+                        <div key={f.key}>
+                          <Label htmlFor={`forecast-${f.key}`} className="text-xs text-muted-foreground">{f.label}</Label>
+                          <Input
+                            id={`forecast-${f.key}`}
+                            data-testid={`input-forecast-${f.key}`}
+                            type="number"
+                            inputMode="numeric"
+                            className="h-8 text-sm"
+                            placeholder={f.placeholder}
+                            value={venditeForecast[f.key]}
+                            onChange={(e) => setForecastField(f.key, e.target.value)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">

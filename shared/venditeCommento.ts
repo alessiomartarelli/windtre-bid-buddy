@@ -8,6 +8,7 @@
 import {
   type DailyReportAggregates,
   telefoniPezziOf,
+  businessPezziOf,
   projectMonthEnd,
   pctDelta,
   fmtEuro,
@@ -22,27 +23,48 @@ export type PerformanceBand = "moltoSopra" | "sopra" | "inLinea" | "sotto" | "mo
  * dimensione è null/assente il commento semplicemente non la valuta.
  */
 export interface ForecastConfig {
-  /** Pezzi Canvass attesi nel mese (tutte le piste). */
-  canvassPezzi: number | null;
+  /** Volumi Mobile (pista mobile) attesi nel mese. */
+  mobileVolumi: number | null;
+  /** Di cui SIM Mobile a P.IVA (clienti business) attese nel mese. */
+  mobileIvaVolumi: number | null;
+  /** Volumi Fisso (pista fisso) attesi nel mese. */
+  fissoVolumi: number | null;
+  /** Di cui Fisso a P.IVA (clienti business) attesi nel mese. */
+  fissoIvaVolumi: number | null;
+  /** Volumi Energia attesi nel mese. */
+  energiaVolumi: number | null;
+  /** Volumi Assicurazioni attesi nel mese. */
+  assicurazioniVolumi: number | null;
+  /** Volumi Protetti (pista protecta) attesi nel mese. */
+  protettiVolumi: number | null;
+  /** Volumi Cb (pista cb) attesi nel mese. */
+  cbVolumi: number | null;
   /** Pezzi Telefoni (categoria TELEFONIA) attesi nel mese. */
   telefoniPezzi: number | null;
   /** Fatturato Accessori atteso nel mese (€). */
   accessoriFatturato: number | null;
   /** Fatturato Servizi atteso nel mese (€). */
   serviziFatturato: number | null;
-  /** Numero negozi attesi (per la quota media a negozio). */
-  numeroNegozi: number | null;
-  /** Giorni lavorativi per negozio nel mese (totale del mese). */
-  giorniLavorativiPerNegozio: number | null;
+  /** Numero negozi Corner/CC (giorni lavorativi incl. domeniche, no festivi). */
+  numeroNegoziCc: number | null;
+  /** Numero negozi Strada (giorni lavorativi no domeniche, no festivi). */
+  numeroNegoziStrada: number | null;
 }
 
 export const EMPTY_FORECAST: ForecastConfig = {
-  canvassPezzi: null,
+  mobileVolumi: null,
+  mobileIvaVolumi: null,
+  fissoVolumi: null,
+  fissoIvaVolumi: null,
+  energiaVolumi: null,
+  assicurazioniVolumi: null,
+  protettiVolumi: null,
+  cbVolumi: null,
   telefoniPezzi: null,
   accessoriFatturato: null,
   serviziFatturato: null,
-  numeroNegozi: null,
-  giorniLavorativiPerNegozio: null,
+  numeroNegoziCc: null,
+  numeroNegoziStrada: null,
 };
 
 /**
@@ -58,19 +80,33 @@ export function parseForecastConfig(raw: unknown): ForecastConfig {
     return Number.isFinite(n) && n > 0 ? n : null;
   };
   return {
-    canvassPezzi: num(o.canvassPezzi),
+    mobileVolumi: num(o.mobileVolumi),
+    mobileIvaVolumi: num(o.mobileIvaVolumi),
+    fissoVolumi: num(o.fissoVolumi),
+    fissoIvaVolumi: num(o.fissoIvaVolumi),
+    energiaVolumi: num(o.energiaVolumi),
+    assicurazioniVolumi: num(o.assicurazioniVolumi),
+    protettiVolumi: num(o.protettiVolumi),
+    cbVolumi: num(o.cbVolumi),
     telefoniPezzi: num(o.telefoniPezzi),
     accessoriFatturato: num(o.accessoriFatturato),
     serviziFatturato: num(o.serviziFatturato),
-    numeroNegozi: num(o.numeroNegozi),
-    giorniLavorativiPerNegozio: num(o.giorniLavorativiPerNegozio),
+    numeroNegoziCc: num(o.numeroNegoziCc),
+    numeroNegoziStrada: num(o.numeroNegoziStrada),
   };
 }
 
 /** Vero se almeno una dimensione forecast è impostata. */
 export function hasForecast(fc: ForecastConfig): boolean {
   return (
-    fc.canvassPezzi !== null ||
+    fc.mobileVolumi !== null ||
+    fc.mobileIvaVolumi !== null ||
+    fc.fissoVolumi !== null ||
+    fc.fissoIvaVolumi !== null ||
+    fc.energiaVolumi !== null ||
+    fc.assicurazioniVolumi !== null ||
+    fc.protettiVolumi !== null ||
+    fc.cbVolumi !== null ||
     fc.telefoniPezzi !== null ||
     fc.accessoriFatturato !== null ||
     fc.serviziFatturato !== null
@@ -285,7 +321,14 @@ export function buildDirettoreCommento(p: CommentoParams): string {
   const seed = seedFromYMD(p.dateYMD);
 
   const dims: DimInput[] = [
-    { label: "canvass", unit: "pz", forecast: fc.canvassPezzi, today: today.countByType.canvass, month: month.countByType.canvass },
+    { label: "mobile", unit: "pz", forecast: fc.mobileVolumi, today: today.countByPista.mobile ?? 0, month: month.countByPista.mobile ?? 0 },
+    { label: "mobile P.IVA", unit: "pz", forecast: fc.mobileIvaVolumi, today: businessPezziOf(today, "mobile"), month: businessPezziOf(month, "mobile") },
+    { label: "fisso", unit: "pz", forecast: fc.fissoVolumi, today: today.countByPista.fisso ?? 0, month: month.countByPista.fisso ?? 0 },
+    { label: "fisso P.IVA", unit: "pz", forecast: fc.fissoIvaVolumi, today: businessPezziOf(today, "fisso"), month: businessPezziOf(month, "fisso") },
+    { label: "energia", unit: "pz", forecast: fc.energiaVolumi, today: today.countByPista.energia ?? 0, month: month.countByPista.energia ?? 0 },
+    { label: "assicurazioni", unit: "pz", forecast: fc.assicurazioniVolumi, today: today.countByPista.assicurazioni ?? 0, month: month.countByPista.assicurazioni ?? 0 },
+    { label: "protetti", unit: "pz", forecast: fc.protettiVolumi, today: today.countByPista.protecta ?? 0, month: month.countByPista.protecta ?? 0 },
+    { label: "cb", unit: "pz", forecast: fc.cbVolumi, today: today.countByPista.cb ?? 0, month: month.countByPista.cb ?? 0 },
     { label: "telefonia", unit: "pz", forecast: fc.telefoniPezzi, today: telefoniPezziOf(today), month: telefoniPezziOf(month) },
     { label: "accessori", unit: "€", forecast: fc.accessoriFatturato, today: accessoriImportoOf(today), month: accessoriImportoOf(month) },
     { label: "servizi", unit: "€", forecast: fc.serviziFatturato, today: today.amountByType.servizi, month: month.amountByType.servizi },
@@ -402,7 +445,8 @@ function standoutFraming(today: DailyReportAggregates, fc: ForecastConfig): stri
   // Sotto tono: negozio marcatamente sotto la quota media (caso evidente).
   const negozi = today.perPdv.filter((p) => p.vendite > 0);
   if (negozi.length >= 3) {
-    const divisore = fc.numeroNegozi ?? negozi.length;
+    const numNegozi = (fc.numeroNegoziCc ?? 0) + (fc.numeroNegoziStrada ?? 0);
+    const divisore = numNegozi > 0 ? numNegozi : negozi.length;
     const attesa = divisore > 0 ? today.importo / divisore : 0;
     const laggard = [...negozi].reverse().find((p) => attesa > 0 && p.importo < attesa * 0.5);
     if (laggard && laggard.codicePos !== topPdv?.codicePos) {

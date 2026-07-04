@@ -38,14 +38,8 @@ export interface TelegramReportConfig {
   enabled?: boolean;
   bot_token?: string; // cifrato at-rest (enc:v1:...)
   chat_id?: string;
-  // Forecast/obiettivi mensili per il commento "da direttore vendite"
-  // (Task #266). Numeri in chiaro (non segreti).
-  forecast_canvass_pezzi?: number;
-  forecast_telefoni_pezzi?: number;
-  forecast_accessori_euro?: number;
-  forecast_servizi_euro?: number;
-  numero_negozi?: number;
-  giorni_lavorativi?: number;
+  // Il forecast/obiettivi mensile vive ora in gara_config.config.venditeForecast
+  // (per-mese), non più qui: questo blocco tiene solo il trasporto Telegram.
 }
 
 function romeParts(now: Date = new Date()): {
@@ -239,12 +233,16 @@ export async function sendDailyReportForOrg(params: {
   // Proiezione a fine mese (Task #263): pezzi Canvass totali e Telefoni
   // stimati sui giorni lavorativi trascorsi, dagli aggregati del mese.
   const monthProjection = buildMonthEndProjection(ymd, month.aggregates) ?? undefined;
-  // Commento "direttore vendite" (Task #266): forecast per-org dalla config
+  // Commento "direttore vendite" (Task #266): forecast/obiettivi per-org e
+  // PER MESE dalla Configurazione gara (gara_config.config.venditeForecast)
   // + fascia dedotta dall'orario (13:30 parziale / 22:30 chiusura).
-  const orgConfig = await storage.getOrgConfig(params.orgId);
-  const cfg = orgConfig?.config as Record<string, unknown> | undefined;
-  const tg = cfg?.telegramReport as Record<string, unknown> | undefined;
-  const forecast = parseForecastConfig(tg?.forecast);
+  const gm = /^(\d{4})-(\d{2})-\d{2}$/.exec(ymd);
+  let forecast = parseForecastConfig(undefined);
+  if (gm) {
+    const garaCfg = await storage.getGaraConfig(params.orgId, +gm[2], +gm[1]);
+    const gcfg = garaCfg?.config as Record<string, unknown> | undefined;
+    forecast = parseForecastConfig(gcfg?.venditeForecast);
+  }
   const message = buildTelegramReportMessage({
     orgName: params.orgName,
     dateYMD: ymd,

@@ -134,6 +134,12 @@ export interface DailyReportAggregates {
   countByPista: Partial<Record<PistaCanvass, number>>;
   amountByPista: Partial<Record<PistaCanvass, number>>;
   /**
+   * Pezzi per pista dei soli clienti Business (P.IVA), determinati da
+   * `saleCustomerKind(rawData)` a livello vendita. Usato per il "di cui
+   * IVA" di Mobile/Fisso nel commento forecast.
+   */
+  businessCountByPista: Partial<Record<PistaCanvass, number>>;
+  /**
    * Split della pista energia per tipo cliente Privati (CF) vs Business
    * (P.IVA), pezzi e fatturato. Presente anche quando non c'è energia
    * (bucket a zero).
@@ -247,6 +253,7 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
   const amountByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
   const countByPista: Partial<Record<PistaCanvass, number>> = {};
   const amountByPista: Partial<Record<PistaCanvass, number>> = {};
+  const businessCountByPista: Partial<Record<PistaCanvass, number>> = {};
   const catByPista: Partial<Record<PistaCanvass, Map<string, number>>> = {};
   const catByType: Record<"prodotti" | "servizi", Map<string, CategoriaReportAggregate>> = {
     prodotti: new Map(),
@@ -288,6 +295,7 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
     if (!addAcc) { addAcc = newDrillAcc(); addettoDrill.set(addettoKey, addAcc); }
 
     const sc = classifySaleArticles(row.rawData);
+    const custKind = saleCustomerKind(row.rawData);
     for (const t of Object.keys(sc.countByType) as ArticleType[]) {
       countByType[t] += sc.countByType[t];
       amountByType[t] += sc.amountByType[t];
@@ -295,6 +303,9 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
     for (const [pista, count] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
       countByPista[pista] = (countByPista[pista] ?? 0) + count;
       amountByPista[pista] = (amountByPista[pista] ?? 0) + (sc.amountByPista[pista] ?? 0);
+      if (custKind === "business") {
+        businessCountByPista[pista] = (businessCountByPista[pista] ?? 0) + count;
+      }
     }
     const mix = saleIncassoMix(row.rawData);
     for (const article of sc.articles) {
@@ -454,6 +465,7 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
     amountByType,
     countByPista,
     amountByPista,
+    businessCountByPista,
     energiaByCliente,
     assicurazioniDettaglio: Array.from(assicurazioniMap.values()).sort(
       (a, b) => b.pezzi - a.pezzi || b.importo - a.importo || a.categoria.localeCompare(b.categoria, "it"),
@@ -615,6 +627,50 @@ export function telefoniPezziOf(a: DailyReportAggregates): number {
   return t?.pezzi ?? 0;
 }
 
+/** Pezzi Business (P.IVA) di una pista dagli aggregati. */
+export function businessPezziOf(a: DailyReportAggregates, pista: PistaCanvass): number {
+  return a.businessCountByPista[pista] ?? 0;
+}
+
+/**
+ * Giorni lavorativi del mese di `ymd` per tipo negozio, trascorsi (fino a
+ * `ymd` incluso) e totali:
+ * - `cc` (Corner/CC): tutti i giorni tranne le festività nazionali (incluse
+ *   le domeniche);
+ * - `strada`: tutti i giorni tranne domeniche e festività nazionali.
+ * Input non valido ⇒ null.
+ */
+export function monthWorkingDaysByType(
+  ymd: string,
+): { cc: { elapsed: number; total: number }; strada: { elapsed: number; total: number } } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+  if (!m) return null;
+  const year = +m[1];
+  const month1 = +m[2];
+  const day = +m[3];
+  const monthIdx = month1 - 1;
+  const holidays = new Set(italianHolidays(year));
+  const lastDay = new Date(year, month1, 0).getDate();
+  const iso = (d: number) =>
+    `${year}-${String(month1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const cc = { elapsed: 0, total: 0 };
+  const strada = { elapsed: 0, total: 0 };
+  for (let d = 1; d <= lastDay; d++) {
+    if (holidays.has(iso(d))) continue;
+    const dow = new Date(year, monthIdx, d).getDay();
+    const elapsed = d <= day;
+    // CC: tutti i giorni feriali+festivi tranne le festività (domenica inclusa).
+    cc.total++;
+    if (elapsed) cc.elapsed++;
+    // Strada: escludiamo anche la domenica (dow === 0).
+    if (dow !== 0) {
+      strada.total++;
+      if (elapsed) strada.elapsed++;
+    }
+  }
+  return { cc, strada };
+}
+
 /**
  * Giorni lavorativi del mese di `ymd`: trascorsi (fino a `ymd` incluso) e
  * totali. Esclude weekend e festività nazionali italiane. Input non
@@ -763,16 +819,25 @@ export function buildTelegramReportMessage(p: TelegramReportParams): string {
 
   const forecast = p.forecast ?? EMPTY_FORECAST;
   const month = p.monthAggregates ?? a;
-  // Giorni lavorativi: totale dalla config (giorniLavorativiPerNegozio) con
-  // fallback al calendario; giorni trascorsi sempre dal calendario, cappati
-  // al totale.
-  const wd = monthWorkingDays(p.dateYMD);
-  const total =
-    forecast.giorniLavorativiPerNegozio && forecast.giorniLavorativiPerNegozio > 0
-      ? forecast.giorniLavorativiPerNegozio
-      : wd?.total ?? 0;
-  const rawElapsed = wd?.elapsed ?? 0;
-  const elapsed = total > 0 ? Math.min(rawElapsed, total) : rawElapsed;
+  // Giorni lavorativi (passo/proiezioni): calcolati in automatico per il mese
+  // in corso e mediati sul numero di negozi CC/strada configurato (i due tipi
+  // hanno calendari diversi: CC include le domeniche, strada no). Senza
+  // conteggi negozi si ricade sul calendario standard (esclude weekend+festivi).
+  const wdt = monthWorkingDaysByType(p.dateYMD);
+  const nCc = forecast.numeroNegoziCc ?? 0;
+  const nStrada = forecast.numeroNegoziStrada ?? 0;
+  const nTot = nCc + nStrada;
+  let total: number;
+  let elapsed: number;
+  if (wdt && nTot > 0) {
+    total = (nCc * wdt.cc.total + nStrada * wdt.strada.total) / nTot;
+    elapsed = (nCc * wdt.cc.elapsed + nStrada * wdt.strada.elapsed) / nTot;
+  } else {
+    const wd = monthWorkingDays(p.dateYMD);
+    total = wd?.total ?? 0;
+    const rawElapsed = wd?.elapsed ?? 0;
+    elapsed = total > 0 ? Math.min(rawElapsed, total) : rawElapsed;
+  }
 
   lines.push(
     buildDirettoreCommento({

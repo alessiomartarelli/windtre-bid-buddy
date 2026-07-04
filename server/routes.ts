@@ -23,7 +23,6 @@ import {
 } from "./email";
 import { decryptSecret, encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
 import { sendDailyReportForOrg } from "./telegramReportScheduler";
-import { parseForecastConfig } from "@shared/venditeCommento";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 // FinPlan PRELOAD: rimosso in Task #148 (cutover finale). Le route
@@ -2229,9 +2228,6 @@ export async function registerRoutes(
         enabled: tg.enabled === true,
         has_token: rawToken.length > 0,
         chat_id: typeof tg.chat_id === "string" ? tg.chat_id : "",
-        // Forecast mensile per il commento "direttore vendite" (Task #266).
-        // Numeri non segreti: restituiti in chiaro per popolare il form.
-        forecast: parseForecastConfig(tg.forecast),
       });
     } catch (error) {
       console.error("Error loading Telegram report config:", error);
@@ -2246,7 +2242,7 @@ export async function registerRoutes(
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ error: "Solo gli amministratori possono gestire la configurazione Telegram" });
       }
-      const { organization_id, enabled, bot_token, chat_id, clear_token, forecast } = req.body ?? {};
+      const { organization_id, enabled, bot_token, chat_id, clear_token } = req.body ?? {};
       if (!organization_id || typeof organization_id !== "string") {
         return res.status(400).json({ error: "organization_id è obbligatorio" });
       }
@@ -2279,16 +2275,18 @@ export async function registerRoutes(
       if (isEnabled && (!encToken || !chatId)) {
         return res.status(400).json({ error: "Per abilitare il report servono bot token e chat ID" });
       }
-      // Forecast mensile (Task #266): normalizzato (numeri o null), non
-      // segreto. Salvato accanto a token/chat_id nello stesso blocco.
-      const parsedForecast = parseForecastConfig(forecast);
+      // Il forecast/obiettivi vive ora nella Configurazione gara
+      // (gara_config.config.venditeForecast), per-mese: qui restano solo
+      // token, chat_id e flag di abilitazione. Un eventuale forecast già
+      // salvato in questo blocco viene preservato ma non più usato.
+      const existingForecast = existingTg?.forecast;
       const updatedConfig = {
         ...existingConfig,
         telegramReport: {
           enabled: isEnabled,
           bot_token: encToken,
           chat_id: chatId,
-          forecast: parsedForecast,
+          ...(existingForecast !== undefined ? { forecast: existingForecast } : {}),
         },
       };
       await storage.upsertOrgConfig(

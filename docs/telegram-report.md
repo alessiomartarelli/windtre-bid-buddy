@@ -20,8 +20,9 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   (moltoSopra ≥ +15%, sopra ≥ +5%, inLinea −5..+5%, sotto ≤ −5%,
   moltoSotto ≤ −15% sul delta medio mensile); riassunto della giornata
   (vendite + importo, dimensioni con pezzi/€, delta % vs obiettivo
-  giornaliero); framing del **mese** per dimensione (canvass pz, telefoni
-  pz, accessori €, servizi €) con delta % vs passo atteso a oggi +
+  giornaliero); framing del **mese** per dimensione (mobile, di cui P.IVA,
+  fisso, di cui P.IVA, energia, assicurazioni, protetti, cb — tutti pz;
+  telefonia pz, accessori €, servizi €) con delta % vs passo atteso a oggi +
   **proiezione** a fine mese su obiettivo; standout negozio + addetto (con
   eventuale tono "occhio a … sotto la sua media" quando ≥ 3 negozi);
   spunto strategico (spingere sulla dimensione più indietro, consolidare
@@ -32,9 +33,12 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   forecast: stringhe/virgole ⇒ numeri, vuoti/≤0/NaN ⇒ null),
   `EMPTY_FORECAST`, `hasForecast(fc)`, `fasciaFromTimeLabel(label)`
   (22:xx ⇒ chiusura, resto ⇒ parziale). `ForecastConfig` =
-  `{canvassPezzi, telefoniPezzi, accessoriFatturato, serviziFatturato,
-  numeroNegozi, giorniLavorativiPerNegozio}` (ogni campo opzionale: una
-  dimensione a null semplicemente non viene valutata).
+  `{mobileVolumi, mobileIvaVolumi, fissoVolumi, fissoIvaVolumi,
+  energiaVolumi, assicurazioniVolumi, protettiVolumi, cbVolumi,
+  telefoniPezzi, accessoriFatturato, serviziFatturato, numeroNegoziCc,
+  numeroNegoziStrada}` (ogni campo opzionale: una dimensione a null non
+  viene valutata; `numeroNegoziCc`/`numeroNegoziStrada` sono solo divisori
+  per lo standout/giorni lavorativi, non dimensioni valutate).
 - **`shared/venditeReport.ts`** — logica PURA: `aggregateDailyReport`
   (aggregati del giorno: vendite/importo totale, per tipo, per pista, per
   PDV, breakdown `categorieByPista` per le card pista; ANNULLATA escluse,
@@ -48,9 +52,12 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   (mese-a-oggi per passo/proiezioni, fallback al giorno), `forecast?`
   (`ForecastConfig`; assente ⇒ commento senza valutazione mensile),
   `fascia?` (derivata da `timeLabel` se assente). I giorni lavorativi del
-  mese: `total` da `forecast.giorniLavorativiPerNegozio` se > 0, altrimenti
-  dal calendario (`monthWorkingDays`); `elapsed` sempre dal calendario,
-  cappato a `total`.
+  mese sono **automatici** e pesati per tipologia di negozio via
+  `monthWorkingDaysByType(ymd)`: CC = tutti i giorni tranne i festivi
+  (domeniche incluse), strada = tutti tranne domeniche e festivi. `total`
+  ed `elapsed` sono la media pesata su `numeroNegoziCc`/`numeroNegoziStrada`
+  del forecast; senza conteggi negozi si ricade sul calendario standard
+  (`monthWorkingDays`). `elapsed` è sempre cappato a `total`.
   Arricchimenti (Task #263, ora solo nell'HTML allegato): lo split
   **Energia per cliente** 👤 Privati (CF) vs 🏢 Business (P.IVA)
   usa `saleCustomerKind(rawData)`: business se
@@ -148,12 +155,18 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
 ## Config per-organizzazione
 
 In `organization_config.config.telegramReport`:
-`{ enabled, bot_token, chat_id, forecast }`. Il token è cifrato at-rest con
+`{ enabled, bot_token, chat_id }`. Il token è cifrato at-rest con
 la stessa AES di SMTP/BiSuite (`server/cryptoSecret.ts`, chiave
-`SMTP_SECRET_KEY`); mai in chiaro nel DB. Il blocco `forecast` (Task #266)
-= `{canvassPezzi, telefoniPezzi, accessoriFatturato, serviziFatturato,
-numeroNegozi, giorniLavorativiPerNegozio}` (numeri o null; **non è un
-segreto**, nessuna cifratura) alimenta il commento del report.
+`SMTP_SECRET_KEY`); mai in chiaro nel DB.
+
+Il **forecast/obiettivi** NON vive più qui: è per-mese in
+`gara_config.config.venditeForecast` (vedi
+[`docs/incentivazione-interna.md`](incentivazione-interna.md) per la
+Configurazione gara), gestito dalla card "Forecast e obiettivi (mese)" in
+Performance → Configurazione gara. Lo scheduler lo legge via
+`storage.getGaraConfig(orgId, month, year)` per il mese/anno correnti.
+Un eventuale `forecast` legacy ancora presente in `telegramReport` viene
+preservato ma non più usato.
 
 ## API admin (`server/routes.ts`)
 
@@ -166,7 +179,8 @@ sceglie l'org.
   (il logger API serializza i body delle risposte): la UI riceve solo il
   flag `has_token`.
 - `POST /api/admin/telegram-report` — salva `{organization_id, enabled,
-  bot_token, chat_id, clear_token?}`; token cifrato al salvataggio;
+  bot_token, chat_id, clear_token?}` (solo trasporto: il forecast si salva
+  via `/api/gara-config`); token cifrato al salvataggio;
   **token vuoto nel payload = mantieni quello già salvato**;
   `clear_token: true` = rimozione esplicita del token (pulsante "Rimuovi
   token salvato" nella card); per abilitare servono token (nuovo o
@@ -191,16 +205,21 @@ nei log runtime.
 Telegram" (pattern BiSuiteConnectionForm) in AdminPanel (tab credenziali,
 org propria) e SuperAdminPanel (selettore org). Campi token (mascherato) e
 chat ID con istruzioni BotFather/getUpdates, switch invio automatico,
-pulsanti "Invia report di prova" e "Salva configurazione". Sottosezione
-**"Forecast e obiettivi (mese)"** (Task #266): 6 input numerici (canvass
-pz, telefoni pz, accessori €, servizi €, numero negozi, giorni lavorativi/
-mese), caricati da `GET …/telegram-report` (`forecast`) e inviati nel body
-del POST come blocco `forecast`; i valori vuoti restano non valutati nel
-commento.
+pulsanti "Invia report di prova" e "Salva configurazione". Solo trasporto:
+nessun campo forecast qui.
+
+La card **"Forecast e obiettivi (mese)"** vive in
+`client/src/pages/ConfigurazioneGara.tsx` (Performance → Configurazione
+gara), per-mese/anno: input per pista (mobile e di cui P.IVA, fisso e di
+cui P.IVA, energia, assicurazioni, protetti, cb), telefoni pz, accessori €,
+servizi €, e due caselle manuali n. negozi CC / n. negozi strada. Salva in
+`gara_config.config.venditeForecast`; i valori vuoti restano non valutati.
+I giorni lavorativi del report sono automatici (CC incl. domeniche, strada
+no) e non si configurano.
 
 ## Test
 
-`tests/telegram-report.test.mjs` (85 test puri, inclusi 4 sui cambi
+`tests/telegram-report.test.mjs` (86 test puri, inclusi 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,

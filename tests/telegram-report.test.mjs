@@ -1083,7 +1083,7 @@ await test("messaggio: con forecast + monthAggregates ⇒ passo mensile e proiez
     timeLabel: "22:30",
     aggregates: today,
     monthAggregates: monthAgg,
-    forecast: parseForecastConfig({ canvassPezzi: 100, telefoniPezzi: 60, accessoriFatturato: 2000, giorniLavorativiPerNegozio: 26 }),
+    forecast: parseForecastConfig({ mobileVolumi: 100, telefoniPezzi: 60, accessoriFatturato: 2000 }),
   });
   // Fascia chiusura ⇒ apertura notturna 🌙 e lead "In chiusura".
   assert.ok(msg.includes("🌙"));
@@ -1182,19 +1182,19 @@ console.log("\n— parseForecastConfig / hasForecast / fasciaFromTimeLabel —")
 
 await test("parseForecastConfig: stringhe/virgole ⇒ numeri; vuoti/≤0/NaN ⇒ null", () => {
   const fc = parseForecastConfig({
-    canvassPezzi: "240",
+    mobileVolumi: "240",
     telefoniPezzi: 120,
     accessoriFatturato: "5.000,50".replace(".", ""), // "5000,50"
     serviziFatturato: "",
-    numeroNegozi: 0,
-    giorniLavorativiPerNegozio: "abc",
+    numeroNegoziCc: 0,
+    numeroNegoziStrada: "abc",
   });
-  assert.equal(fc.canvassPezzi, 240);
+  assert.equal(fc.mobileVolumi, 240);
   assert.equal(fc.telefoniPezzi, 120);
   assert.equal(fc.accessoriFatturato, 5000.5);
   assert.equal(fc.serviziFatturato, null);
-  assert.equal(fc.numeroNegozi, null); // 0 ⇒ null
-  assert.equal(fc.giorniLavorativiPerNegozio, null);
+  assert.equal(fc.numeroNegoziCc, null); // 0 ⇒ null
+  assert.equal(fc.numeroNegoziStrada, null);
 });
 
 await test("parseForecastConfig: input null/undefined ⇒ EMPTY_FORECAST", () => {
@@ -1204,8 +1204,9 @@ await test("parseForecastConfig: input null/undefined ⇒ EMPTY_FORECAST", () =>
 
 await test("hasForecast: vero solo con almeno una dimensione valutabile", () => {
   assert.equal(hasForecast(EMPTY_FORECAST), false);
-  assert.equal(hasForecast(parseForecastConfig({ numeroNegozi: 4 })), false); // solo divisore
-  assert.equal(hasForecast(parseForecastConfig({ canvassPezzi: 10 })), true);
+  assert.equal(hasForecast(parseForecastConfig({ numeroNegoziCc: 4 })), false); // solo divisore
+  assert.equal(hasForecast(parseForecastConfig({ numeroNegoziStrada: 4 })), false); // solo divisore
+  assert.equal(hasForecast(parseForecastConfig({ mobileVolumi: 10 })), true);
 });
 
 await test("fasciaFromTimeLabel: 22:xx ⇒ chiusura, resto ⇒ parziale", () => {
@@ -1225,7 +1226,7 @@ const cjMonth = aggregateDailyReport([
   sale({ codicePos: "P1", nomeNegozio: "Centro", totale: "540", articoli: [art("UNTIED", 30), art("TELEFONIA", 500), art("ACCESSORI", 40)] }),
   sale({ codicePos: "P2", nomeNegozio: "Mare", totale: "60", articoli: [art("UNTIED", 30), art("UNTIED", 30)] }),
 ]);
-const cjForecast = parseForecastConfig({ canvassPezzi: 100, telefoniPezzi: 60, accessoriFatturato: 2000, serviziFatturato: 500 });
+const cjForecast = parseForecastConfig({ mobileVolumi: 100, telefoniPezzi: 60, accessoriFatturato: 2000, serviziFatturato: 500 });
 
 await test("determinismo: stessa data ⇒ stesso testo, date diverse possono differire", () => {
   const base = { fascia: "parziale", forecast: cjForecast, today: cjToday, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26 };
@@ -1282,14 +1283,14 @@ await test("banda performance: molto sopra ⇒ tono positivo, molto sotto ⇒ to
   // Mese molto sopra il passo: forecast bassissimo ⇒ delta molto positivo.
   const sopra = buildDirettoreCommento({
     fascia: "parziale", dateYMD: "2026-07-15",
-    forecast: parseForecastConfig({ canvassPezzi: 1 }),
+    forecast: parseForecastConfig({ mobileVolumi: 1 }),
     today: cjToday, month: cjMonth, elapsedWorkingDays: 25, totalWorkingDays: 26,
   });
   assert.ok(sopra.includes("davanti al passo"));
   // Mese molto sotto il passo: forecast altissimo ⇒ delta molto negativo.
   const sotto = buildDirettoreCommento({
     fascia: "parziale", dateYMD: "2026-07-15",
-    forecast: parseForecastConfig({ canvassPezzi: 100000 }),
+    forecast: parseForecastConfig({ mobileVolumi: 100000 }),
     today: cjToday, month: cjMonth, elapsedWorkingDays: 25, totalWorkingDays: 26,
   });
   assert.ok(sotto.includes("dietro al passo"));
@@ -1301,7 +1302,7 @@ await test("apertura che finisce con ! non produce doppia punteggiatura (!.)", (
   for (const dateYMD of ["2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18", "2026-07-19"]) {
     const s = buildDirettoreCommento({
       fascia: "chiusura", dateYMD,
-      forecast: parseForecastConfig({ canvassPezzi: 1 }),
+      forecast: parseForecastConfig({ mobileVolumi: 1 }),
       today: cjToday, month: cjMonth, elapsedWorkingDays: 25, totalWorkingDays: 26,
     });
     assert.ok(!s.includes("!."), `doppia punteggiatura in: ${s.slice(0, 60)}`);
