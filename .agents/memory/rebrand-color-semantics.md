@@ -3,7 +3,7 @@ name: Rebrand color semantics
 description: Nel redesign colori (via arancione WindTre → indaco) quali arancioni sono semantici e vanno mantenuti
 ---
 
-Regola: dopo il rebrand a palette indaco (task colori 2026-07), l'arancione residuo nel codice NON è un residuo brand da rimuovere — è semantico/di categoria.
+Regola: dopo il rebrand a palette indaco, l'arancione residuo nel codice NON è un residuo brand da rimuovere — è semantico/di categoria.
 
 **Dove l'arancione è intenzionale:**
 - ControlloGestione: delta negativo `text-orange-600` (warning)
