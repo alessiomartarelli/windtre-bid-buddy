@@ -1226,7 +1226,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
 
   return (
     <div className="min-h-screen bg-background">
-      <AppNavbar title="Incentive W3" />
+      <AppNavbar title="MyStoreDesk" />
       <div className="container mx-auto px-3 sm:px-6 py-6 space-y-6">
         {inner}
       </div>

@@ -25,7 +25,7 @@ interface AppNavbarProps {
   children?: React.ReactNode;
 }
 
-export function AppNavbar({ title = "Incentive W3", children }: AppNavbarProps) {
+export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
   const [location, setLocation] = useLocation();
   const { user, profile, organization, signOut } = useAuth();
   const { toast } = useToast();

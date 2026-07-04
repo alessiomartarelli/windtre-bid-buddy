@@ -2,8 +2,9 @@
 
 ## Overview
 
-WindTre sales quoting/estimating platform ("Preventivatore") per operatori
-retail telecom italiani. Crea, configura e gestisce preventivi su varie linee
+**MyStoreDesk** (ex "Incentive W3") — piattaforma di gestione punto vendita
+per operatori retail telecom italiani (brand visibile: "MyStoreDesk"; i nomi
+tecnici di prod restano `incentive-w3`/`incentivew3`). Crea, configura e gestisce preventivi su varie linee
 prodotto: Mobile, Fisso, Energia, Assicurazioni, Partnership Rewards,
 Protecta, Extra Gara P.IVA. Ogni linea ha il suo motore di calcolo allineato
 agli incentivi WindTre (soglie, bonus, punti). Multi-tenant con ruoli

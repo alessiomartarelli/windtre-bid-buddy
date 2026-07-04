@@ -3439,7 +3439,7 @@ export default function DashboardGaraReale() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900" data-testid="dashboard-gara-reale">
-      <AppNavbar title="Incentive W3">
+      <AppNavbar title="MyStoreDesk">
         <Select value={selectedPeriod} onValueChange={(v) => { setSelectedPeriod(v); setSelectedConfigId(""); }} data-testid="select-period">
           <SelectTrigger className="w-[140px] sm:w-[200px] text-xs sm:text-sm" data-testid="select-period-trigger">
             <Calendar className="h-4 w-4 mr-1 sm:mr-2 shrink-0" />

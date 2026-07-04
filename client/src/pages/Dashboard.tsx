@@ -525,7 +525,7 @@ export default function Dashboard() {
             {selectedPreventivo && (
               <div className="hidden print:block mb-4">
                 <h2 className="text-xl font-bold">{selectedPreventivo.name}</h2>
-                <p className="text-sm text-muted-foreground">Report Analytics — Incentive W3</p>
+                <p className="text-sm text-muted-foreground">Report Analytics — MyStoreDesk</p>
               </div>
             )}
             <Card className="border-dashed print:hidden">

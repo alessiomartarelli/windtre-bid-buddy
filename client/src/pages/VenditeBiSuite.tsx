@@ -830,7 +830,7 @@ export default function VenditeBiSuite() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppNavbar title="Incentive W3" />
+      <AppNavbar title="MyStoreDesk" />
 
       <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {fetchResult && (

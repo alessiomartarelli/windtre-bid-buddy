@@ -561,7 +561,7 @@ export default function TabelleCalcolo() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted">
-      <AppNavbar title="Incentive W3">
+      <AppNavbar title="MyStoreDesk">
         {activeSection === 'gara_operatore' && (
           <>
             <Button variant="ghost" size="sm" onClick={() => setActiveSection('selection')} data-testid="button-back-section">

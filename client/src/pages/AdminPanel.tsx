@@ -621,7 +621,7 @@ export default function AdminPanel() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted">
-      <AppNavbar title="Incentive W3" />
+      <AppNavbar title="MyStoreDesk" />
       <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6 p-3 sm:p-4">
 
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>

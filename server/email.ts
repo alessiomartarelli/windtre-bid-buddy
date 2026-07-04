@@ -309,7 +309,7 @@ export function buildBisuiteSyncFailureEmail(p: BisuiteSyncFailureEmailParams): 
   const base = getAppBaseUrl();
   const link = base ? `${base}/vendite-bisuite` : "/vendite-bisuite";
   const statusLabel = p.status === "partial" ? "PARZIALE" : "FALLITA";
-  const subject = `[Incentive W3] Sync BiSuite ${statusLabel} – ${p.orgName}`;
+  const subject = `[MyStoreDesk] Sync BiSuite ${statusLabel} – ${p.orgName}`;
 
   const detailsHtml = p.status === "partial"
     ? `<p>La sincronizzazione notturna è stata completata solo parzialmente. Mesi non scaricati:</p>
@@ -354,15 +354,15 @@ export interface TestEmailParams {
 
 export function buildTestEmail(p: TestEmailParams): { subject: string; html: string; text: string } {
   const base = getAppBaseUrl();
-  const subject = "[Incentive W3] Email di test SMTP";
+  const subject = "[MyStoreDesk] Email di test SMTP";
   const html = `<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;color:#111;">
     <h2>Email di test ricevuta correttamente</h2>
-    <p>Se vedi questo messaggio, la configurazione SMTP di Incentive W3 funziona.</p>
+    <p>Se vedi questo messaggio, la configurazione SMTP di MyStoreDesk funziona.</p>
     ${p.triggeredBy ? `<p style="color:#71717a;font-size:12px;">Inviata da: ${escapeHtml(p.triggeredBy)}</p>` : ""}
     ${base ? `<p style="color:#71717a;font-size:12px;">Base URL applicazione: ${escapeHtml(base)}</p>` : ""}
   </body></html>`;
   const text = [
-    "Email di test SMTP — Incentive W3",
+    "Email di test SMTP — MyStoreDesk",
     "",
     "Se vedi questo messaggio, la configurazione SMTP funziona correttamente.",
     p.triggeredBy ? `Inviata da: ${p.triggeredBy}` : "",

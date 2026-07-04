@@ -138,11 +138,11 @@ export default function Auth() {
               <Award className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight" data-testid="text-brand-title">
-              Incentive W3
+              MyStoreDesk
             </h1>
           </div>
           <p className="text-white/50 text-sm mt-1 ml-[52px]" data-testid="text-brand-subtitle">
-            Sistema di Simulazione & Gestione Gara
+            La scrivania digitale del punto vendita
           </p>
         </div>
 
@@ -181,7 +181,7 @@ export default function Auth() {
               <Award className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight" data-testid="text-brand-title-mobile">
-              Incentive W3
+              MyStoreDesk
             </h1>
           </div>
 

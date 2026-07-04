@@ -416,7 +416,7 @@ export default function MappaturaBiSuite() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppNavbar title="Incentive W3">
+      <AppNavbar title="MyStoreDesk">
         {hasChanges && (
           <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
             Modifiche non salvate

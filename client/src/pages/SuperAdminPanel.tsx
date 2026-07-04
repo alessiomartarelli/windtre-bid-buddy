@@ -271,7 +271,7 @@ export default function SuperAdminPanel() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted">
-      <AppNavbar title="Incentive W3" />
+      <AppNavbar title="MyStoreDesk" />
       <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 p-2 sm:p-4">
         <div className="flex items-center justify-end">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

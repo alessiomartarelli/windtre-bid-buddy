@@ -1693,7 +1693,7 @@ const Preventivatore = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex flex-col">
-      <AppNavbar title="Incentive W3">
+      <AppNavbar title="MyStoreDesk">
         {(configGara.nomeGara || activeConfigName) && (
           <span className="hidden sm:inline text-sm font-medium text-muted-foreground truncate max-w-[250px]" data-testid="text-active-config" title={configGara.nomeGara || activeConfigName || ""}>
             {configGara.nomeGara || activeConfigName}

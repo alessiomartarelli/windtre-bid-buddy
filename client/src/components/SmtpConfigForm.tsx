@@ -275,7 +275,7 @@ export function SmtpConfigForm({ defaultTestRecipient }: { defaultTestRecipient?
                 <Input
                   id="smtp-from"
                   data-testid="input-smtp-from"
-                  placeholder='Incentive W3 <noreply@example.com>'
+                  placeholder='MyStoreDesk <noreply@example.com>'
                   value={from}
                   onChange={(e) => setFrom(e.target.value)}
                 />
