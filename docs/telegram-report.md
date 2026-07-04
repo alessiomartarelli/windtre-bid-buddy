@@ -22,10 +22,10 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   **dettaglio Assicurazioni** per categoria BiSuite (pezzi + fatturato),
   lo split **Energia per cliente** 👤 Privati (CF) vs 🏢 Business (P.IVA)
   e, se passata, la **Proiezione fine mese** (pezzi Canvass totali e
-  Telefoni). Lo split energia usa `saleCustomerKind(rawData)` (specchio
-  della logica di collegamento clienti di `server/storage.ts`:
-  GIURIDICA/PROFESSIONISTA con P.IVA ⇒ business, poi CF ⇒ privato,
-  fallback P.IVA ⇒ business, default privato); `aggregateDailyReport`
+  Telefoni). Lo split energia usa `saleCustomerKind(rawData)`: business se
+  `clienteTipo` è GIURIDICA/PROFESSIONISTA **oppure** è presente la P.IVA,
+  altrimenti privato (CF o cliente non identificabile ⇒ default privato);
+  `aggregateDailyReport`
   espone i nuovi aggregati `energiaByCliente` (split per pista energia) e
   `assicurazioniDettaglio` (ordinato per pezzi↓). La proiezione
   (`buildMonthEndProjection(ymd, monthAgg)`) stima i pezzi a fine mese in

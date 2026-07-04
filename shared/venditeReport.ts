@@ -202,21 +202,17 @@ function saleIncassoMix(rawData: unknown): { contanti: number; pos: number; altr
 }
 
 /**
- * Determina il tipo di cliente di una vendita da `rawData.cliente`,
- * coerente con la logica di collegamento clienti di `server/storage.ts`:
- * azienda/Business se `clienteTipo` è GIURIDICA/PROFESSIONISTA con P.IVA,
- * altrimenti Privato se c'è il codice fiscale, con fallback su P.IVA ⇒
- * Business. Cliente non identificabile ⇒ Privato (default prudente).
+ * Determina il tipo di cliente di una vendita da `rawData.cliente` per lo
+ * split Energia Privati (CF) vs Business (P.IVA): Business se `clienteTipo`
+ * è GIURIDICA/PROFESSIONISTA OPPURE è presente la P.IVA, altrimenti Privato
+ * (codice fiscale o cliente non identificabile ⇒ default prudente Privato).
  */
 export function saleCustomerKind(rawData: unknown): "privato" | "business" {
   const cliente = (rawData as { cliente?: Record<string, unknown> } | null | undefined)?.cliente ?? {};
-  const cf = String(cliente.codiceFiscale ?? "").toUpperCase().trim();
   const piva = String(cliente.piva ?? "").toUpperCase().trim();
   const tipo = String(cliente.clienteTipo ?? "").toUpperCase().trim();
   const isAzienda = tipo === "GIURIDICA" || tipo === "PROFESSIONISTA";
-  if (isAzienda && piva) return "business";
-  if (cf) return "privato";
-  if (piva) return "business";
+  if (isAzienda || piva) return "business";
   return "privato";
 }
 

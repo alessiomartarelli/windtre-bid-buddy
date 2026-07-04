@@ -957,9 +957,12 @@ function saleCli({ cliente = null, articoli = [], totale = "0", stato = "COMPLET
   return { stato, totale, codicePos: "POS1", nomeNegozio: "Negozio 1", nomeAddetto: null, rawData: { articoli, cliente } };
 }
 
-await test("saleCustomerKind: GIURIDICA/PROFESSIONISTA con P.IVA ⇒ business", () => {
+await test("saleCustomerKind: GIURIDICA/PROFESSIONISTA ⇒ business (anche senza P.IVA)", () => {
   assert.equal(saleCustomerKind({ cliente: { clienteTipo: "GIURIDICA", piva: "12345678901" } }), "business");
   assert.equal(saleCustomerKind({ cliente: { clienteTipo: "PROFESSIONISTA", piva: "12345678901", codiceFiscale: "RSSMRA80A01H501U" } }), "business");
+  // Regola OR: azienda senza P.IVA (o con solo CF) resta business.
+  assert.equal(saleCustomerKind({ cliente: { clienteTipo: "GIURIDICA" } }), "business");
+  assert.equal(saleCustomerKind({ cliente: { clienteTipo: "GIURIDICA", codiceFiscale: "RSSMRA80A01H501U" } }), "business");
 });
 
 await test("saleCustomerKind: CF senza azienda ⇒ privato; solo P.IVA ⇒ business; vuoto ⇒ privato", () => {
