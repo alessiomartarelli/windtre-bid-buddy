@@ -757,7 +757,7 @@ function MobileTab({ config, systemConfig, isArrayOverridden, updateArrayValue, 
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm min-w-[500px]" data-testid="table-mobile-soglie">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Cluster</th>
                 {soglieLabels.map((l, i) => (
                   <th key={i} className={`p-2 text-center font-medium ${i === 3 ? 'rounded-tr-md' : ''}`}>{l}</th>
@@ -798,7 +798,7 @@ function MobileTab({ config, systemConfig, isArrayOverridden, updateArrayValue, 
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-mobile-punti">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Tipo Attivazione</th>
                 <th className="p-2 text-center font-medium rounded-tr-md w-32">Punti</th>
               </tr>
@@ -835,7 +835,7 @@ function MobileTab({ config, systemConfig, isArrayOverridden, updateArrayValue, 
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm min-w-[500px]" data-testid="table-mobile-moltiplicatori">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Gruppo</th>
                 <th className="p-2 text-center font-medium">S1</th>
                 <th className="p-2 text-center font-medium">S2</th>
@@ -889,7 +889,7 @@ function FissoTab({ config, systemConfig, isArrayOverridden, updateArrayValue, r
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm min-w-[550px]" data-testid="table-fisso-soglie">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Cluster</th>
                 {soglieLabels.map((l, i) => (
                   <th key={i} className={`p-2 text-center font-medium ${i === 4 ? 'rounded-tr-md' : ''}`}>{l}</th>
@@ -930,7 +930,7 @@ function FissoTab({ config, systemConfig, isArrayOverridden, updateArrayValue, r
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-fisso-euro">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Categoria</th>
                 <th className="p-2 text-center font-medium rounded-tr-md w-32">\u20AC/pezzo</th>
               </tr>
@@ -966,7 +966,7 @@ function FissoTab({ config, systemConfig, isArrayOverridden, updateArrayValue, r
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-fisso-gettoni">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Categoria</th>
                 <th className="p-2 text-center font-medium rounded-tr-md w-32">Gettone \u20AC</th>
               </tr>
@@ -1011,7 +1011,7 @@ function EnergiaTab({ config, systemConfig, isOverridden, updateValue, resetValu
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-energia-compensi">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Categoria</th>
                 <th className="p-2 text-center font-medium rounded-tr-md w-32">\u20AC/contratto</th>
               </tr>
@@ -1048,7 +1048,7 @@ function EnergiaTab({ config, systemConfig, isOverridden, updateValue, resetValu
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-energia-pista">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Soglia</th>
                 <th className="p-2 text-center font-medium">Per PDV (primi 3)</th>
                 <th className="p-2 text-center font-medium rounded-tr-md">Da 4° PDV</th>
@@ -1096,7 +1096,7 @@ function EnergiaTab({ config, systemConfig, isOverridden, updateValue, resetValu
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-energia-bonus">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Soglia</th>
                 <th className="p-2 text-center font-medium rounded-tr-md w-32">Bonus \u20AC</th>
               </tr>
@@ -1138,7 +1138,7 @@ function AssicurazioniTab({ config, systemConfig, isOverridden, updateValue, res
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-assicurazioni-punti">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Prodotto</th>
                 <th className="p-2 text-center font-medium rounded-tr-md w-32">Punti</th>
               </tr>
@@ -1175,7 +1175,7 @@ function AssicurazioniTab({ config, systemConfig, isOverridden, updateValue, res
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-assicurazioni-premi">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Prodotto</th>
                 <th className="p-2 text-center font-medium rounded-tr-md w-32">\u20AC/pezzo</th>
               </tr>
@@ -1216,7 +1216,7 @@ function ProtectaTab({ config, systemConfig, isOverridden, updateValue, resetVal
       <CardContent className="overflow-x-auto">
         <table className="w-full text-sm" data-testid="table-protecta-gettoni">
           <thead>
-            <tr className="bg-orange-500 text-white">
+            <tr className="bg-primary text-primary-foreground">
               <th className="p-2 text-left font-medium rounded-tl-md">Prodotto</th>
               <th className="p-2 text-center font-medium rounded-tr-md w-32">Gettone €</th>
             </tr>
@@ -1261,7 +1261,7 @@ function ExtraGaraTab({ config, systemConfig, isOverridden, isArrayOverridden, u
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-extra-gara-punti">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Tipo Attivazione</th>
                 <th className="p-2 text-center font-medium rounded-tr-md w-32">Punti</th>
               </tr>
@@ -1298,7 +1298,7 @@ function ExtraGaraTab({ config, systemConfig, isOverridden, isArrayOverridden, u
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-extra-gara-soglie-multi">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Tipo</th>
                 <th className="p-2 text-center font-medium">S1</th>
                 <th className="p-2 text-center font-medium">S2</th>
@@ -1343,7 +1343,7 @@ function ExtraGaraTab({ config, systemConfig, isOverridden, isArrayOverridden, u
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-extra-gara-soglie-mono">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Tipo</th>
                 <th className="p-2 text-center font-medium">S1</th>
                 <th className="p-2 text-center font-medium">S2</th>
@@ -1388,7 +1388,7 @@ function ExtraGaraTab({ config, systemConfig, isOverridden, isArrayOverridden, u
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="table-extra-gara-premi">
             <thead>
-              <tr className="bg-orange-500 text-white">
+              <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md">Cluster P.IVA</th>
                 <th className="p-2 text-center font-medium">Nessuna</th>
                 <th className="p-2 text-center font-medium">S1</th>

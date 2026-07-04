@@ -401,7 +401,7 @@ function SectionView(props: {
                 Avanzamento {calendar.pct}% · giorni lavorativi
               </div>
               <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-orange-500" style={{ width: `${calendar.pct}%` }} />
+                <div className="h-full bg-primary" style={{ width: `${calendar.pct}%` }} />
               </div>
             </div>
           </div>
@@ -566,7 +566,7 @@ function SummaryCard(props: { label: string; value: number; sub?: string; active
   const { label, value, sub, active, onClick, accent } = props;
   return (
     <Card
-      className={`p-3 ${onClick ? "cursor-pointer transition-shadow hover:shadow-md" : ""} ${active ? (accent ? "ring-2 ring-orange-500" : "ring-2 ring-primary") : ""}`}
+      className={`p-3 ${onClick ? "cursor-pointer transition-shadow hover:shadow-md" : ""} ${active ? "ring-2 ring-primary" : ""}`}
       onClick={onClick}
       data-testid={`card-summary-${label.replace(/[^a-zA-Z]/g, "").toLowerCase()}`}
     >

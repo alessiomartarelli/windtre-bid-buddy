@@ -73,7 +73,7 @@ interface AggregatedData {
 
 // Palette colori armonizzata con il design system
 const CATEGORY_COLORS = {
-  Mobile: 'hsl(20, 100%, 50%)',      // Primary orange
+  Mobile: 'hsl(243, 75%, 59%)',      // Primary indigo
   Fisso: 'hsl(280, 85%, 50%)',       // Accent purple
   Partnership: 'hsl(200, 80%, 50%)', // Blue
   Energia: 'hsl(145, 65%, 45%)',     // Success green

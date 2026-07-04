@@ -128,7 +128,7 @@ export const StepCluster: React.FC<StepClusterProps> = ({
           <span className="text-muted-foreground">CB</span>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <div className="w-6 h-6 rounded bg-orange-500 text-white flex items-center justify-center">
+          <div className="w-6 h-6 rounded bg-primary text-primary-foreground flex items-center justify-center">
             <Briefcase className="w-3.5 h-3.5" />
           </div>
           <span className="text-muted-foreground">P.IVA</span>
@@ -161,7 +161,7 @@ export const StepCluster: React.FC<StepClusterProps> = ({
               </TableHead>
               <TableHead className="font-semibold px-2">
                 <div className="flex items-center gap-1">
-                  <Briefcase className="w-3.5 h-3.5 text-orange-500" />
+                  <Briefcase className="w-3.5 h-3.5 text-primary" />
                   <span className="hidden sm:inline">P.IVA</span>
                 </div>
               </TableHead>

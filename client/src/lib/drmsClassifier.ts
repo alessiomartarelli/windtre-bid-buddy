@@ -11,7 +11,7 @@ export interface CapitoloMeta {
 
 export const CAPITOLI_CONFIG: Record<CapitoloKey, CapitoloMeta> = {
   ENERGIA: { label: "Energia", color: "#10b981", order: 1 },
-  MOBILE: { label: "Mobile", color: "#f97316", order: 2 },
+  MOBILE: { label: "Mobile", color: "#4f46e5", order: 2 },
   FISSO: { label: "Fisso", color: "#3b82f6", order: 3 },
   PARTNERSHIP_REWARD: { label: "Partnership Reward", color: "#8b5cf6", order: 4 },
   CB: { label: "Customer Base", color: "#ec4899", order: 5 },

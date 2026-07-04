@@ -497,7 +497,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
         {!embedded && (
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-sm">
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-sm">
                 <Wallet className="h-5 w-5 text-white" />
               </div>
               <div>
@@ -674,7 +674,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
             </div>
 
             {/* === Dashboard ANNUALE === */}
-            <Card className="border-orange-200 dark:border-orange-900/40">
+            <Card className="border-indigo-200 dark:border-indigo-900/40">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
@@ -690,7 +690,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         <button
                           type="button"
                           onClick={() => setAnnoVista("competenza")}
-                          className={`px-3 text-xs font-medium ${annoVista === "competenza" ? "bg-orange-500 text-white" : "bg-background hover:bg-muted"}`}
+                          className={`px-3 text-xs font-medium ${annoVista === "competenza" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
                           data-testid="btn-vista-competenza"
                         >Competenza</button>
                         <button
@@ -964,13 +964,13 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         <button
                           type="button"
                           onClick={() => setPivotRaggr("rs")}
-                          className={`px-3 text-xs font-medium ${pivotRaggr === "rs" ? "bg-orange-500 text-white" : "bg-background hover:bg-muted"}`}
+                          className={`px-3 text-xs font-medium ${pivotRaggr === "rs" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
                           data-testid="btn-pivot-rs"
                         >Ragione Sociale</button>
                         <button
                           type="button"
                           onClick={() => setPivotRaggr("pdv")}
-                          className={`px-3 text-xs font-medium border-l ${pivotRaggr === "pdv" ? "bg-orange-500 text-white" : "bg-background hover:bg-muted"}`}
+                          className={`px-3 text-xs font-medium border-l ${pivotRaggr === "pdv" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
                           data-testid="btn-pivot-pdv"
                         >Punto Vendita</button>
                       </div>

@@ -213,8 +213,8 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
                   <CardHeader className="pb-3 cursor-pointer hover:bg-muted/30 transition-colors">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                          <Building2 className="w-5 h-5 text-orange-500" />
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <Building2 className="w-5 h-5 text-primary" />
                         </div>
                         <div>
                           <CardTitle className="text-base">{rs}</CardTitle>
@@ -256,7 +256,7 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
                   <CardContent className="pt-0 space-y-6">
                     {/* Customer Base Eventi */}
                     <div className="space-y-3">
-                      <Badge variant="secondary" className="bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300">
+                      <Badge variant="secondary" className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
                         Customer Base Eventi
                       </Badge>
                       
@@ -360,7 +360,7 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
 
                     {/* Altri Eventi FISSO */}
                     <div className="space-y-3">
-                      <Badge variant="secondary" className="bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300">
+                      <Badge variant="secondary" className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
                         Altri Eventi - FISSO
                       </Badge>
                       <div className="grid gap-2">
@@ -387,7 +387,7 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
 
                     {/* Altri Eventi MOBILE */}
                     <div className="space-y-3">
-                      <Badge variant="secondary" className="bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300">
+                      <Badge variant="secondary" className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
                         Altri Eventi - MOBILE
                       </Badge>
                       <div className="grid gap-2">

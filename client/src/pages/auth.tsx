@@ -20,9 +20,9 @@ const featureCards = [
     icon: TrendingUp,
     title: 'Simulazione Gara',
     description: 'Simula scenari di gara con calcoli automatici su soglie, premi e incentivi per ogni punto vendita.',
-    gradient: 'from-orange-500/20 to-amber-500/20',
-    border: 'border-orange-400/30',
-    iconColor: 'text-orange-400',
+    gradient: 'from-indigo-500/20 to-blue-500/20',
+    border: 'border-indigo-400/30',
+    iconColor: 'text-indigo-400',
   },
   {
     icon: Smartphone,
@@ -126,16 +126,16 @@ export default function Auth() {
   return (
     <div className="min-h-screen flex" data-testid="page-auth">
       {/* Left Panel - Feature Cards with dark gradient background */}
-      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-gradient-to-br from-[#0f1729] via-[#1a1f3a] to-[#0d1117] p-8 xl:p-12 flex-col justify-between">
+      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-gradient-to-br from-[#131c3b] via-[#1a2148] to-[#101830] p-8 xl:p-12 flex-col justify-between">
         {/* Decorative gradient orbs */}
-        <div className="absolute top-[-120px] left-[-80px] w-[400px] h-[400px] rounded-full bg-orange-500/10 blur-[100px] pointer-events-none" />
+        <div className="absolute top-[-120px] left-[-80px] w-[400px] h-[400px] rounded-full bg-indigo-500/10 blur-[100px] pointer-events-none" />
         <div className="absolute bottom-[-100px] right-[-60px] w-[350px] h-[350px] rounded-full bg-blue-500/8 blur-[100px] pointer-events-none" />
         <div className="absolute top-[40%] right-[20%] w-[250px] h-[250px] rounded-full bg-violet-500/8 blur-[80px] pointer-events-none" />
 
         {/* Header */}
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/25">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
               <BrandGlyph className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight" data-testid="text-brand-title">
@@ -178,7 +178,7 @@ export default function Auth() {
         <div className="w-full max-w-[420px]">
           {/* Mobile brand header */}
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/25">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
               <BrandGlyph className="w-5 h-5 text-white" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight" data-testid="text-brand-title-mobile">

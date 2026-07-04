@@ -131,7 +131,7 @@ const MetricBox = ({ label, value, tone, highlight }: {
 }) => {
   const toneCls = tone === 'ok' ? 'text-emerald-700' : tone === 'ko' ? 'text-red-700' : tone === 'warn' ? 'text-amber-700' : 'text-neutral-900';
   return (
-    <div className={`border border-neutral-200 bg-white px-3 py-2 ${highlight ? 'ring-1 ring-orange-200 bg-orange-50/40' : ''}`}>
+    <div className={`border border-neutral-200 bg-white px-3 py-2 ${highlight ? 'ring-1 ring-indigo-200 bg-indigo-50/40' : ''}`}>
       <div className="text-[9px] uppercase tracking-[0.15em] text-neutral-500 mb-0.5">{label}</div>
       <div className={`font-mono text-sm font-semibold ${toneCls}`}>{value}</div>
     </div>
@@ -181,7 +181,7 @@ function UploadCard({
             const f = e.dataTransfer.files[0]; if (f) onFileChosen(f);
           }}
           className={`relative block bg-white border-2 rounded-2xl transition-all duration-300 cursor-pointer overflow-hidden ${
-            dragOver ? 'border-orange-600 bg-orange-50/80 scale-[1.005]' : 'border-neutral-300/60 hover:border-orange-500/60'
+            dragOver ? 'border-indigo-600 bg-indigo-50/80 scale-[1.005]' : 'border-neutral-300/60 hover:border-indigo-500/60'
           }`}
         >
           <input
@@ -195,15 +195,15 @@ function UploadCard({
           />
           <div className="relative p-8 sm:p-12 text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5"
-              style={{ background: loading ? 'linear-gradient(135deg, #fed7aa, #fdba74)' : 'linear-gradient(135deg, #fff7ed, #ffedd5)', border: '1px solid #fed7aa' }}>
-              {loading ? <Loader2 size={28} className="animate-spin text-orange-700" /> : <Upload size={28} strokeWidth={1.5} className="text-orange-700" />}
+              style={{ background: loading ? 'linear-gradient(135deg, #c7d2fe, #a5b4fc)' : 'linear-gradient(135deg, #eef2ff, #e0e7ff)', border: '1px solid #c7d2fe' }}>
+              {loading ? <Loader2 size={28} className="animate-spin text-indigo-700" /> : <Upload size={28} strokeWidth={1.5} className="text-indigo-700" />}
             </div>
             <div className="font-serif text-2xl text-neutral-900 mb-2 tracking-tight">
               {loading ? "Elaborazione del DRMS…" : "Carica il file DRMS"}
             </div>
             <div className="text-sm text-neutral-600 mb-4">
               {loading ? "Classificazione e salvataggio in corso" : (
-                <>Trascina <span className="font-mono px-1.5 py-0.5 bg-neutral-100 rounded text-xs">.xlsx</span> oppure <span className="text-orange-700 font-semibold underline decoration-dotted underline-offset-4">clicca qui</span></>
+                <>Trascina <span className="font-mono px-1.5 py-0.5 bg-neutral-100 rounded text-xs">.xlsx</span> oppure <span className="text-indigo-700 font-semibold underline decoration-dotted underline-offset-4">clicca qui</span></>
               )}
             </div>
             {!loading && (
@@ -251,7 +251,7 @@ function UploadCard({
                 size="sm"
                 onClick={handleOpenMulti}
                 disabled={selectedIds.size === 0 || loading}
-                className="bg-orange-600 hover:bg-orange-700 text-white disabled:bg-neutral-300"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-neutral-300"
                 data-testid="button-open-selected-drms"
               >
                 Apri selezionati ({selectedIds.size})
@@ -264,7 +264,7 @@ function UploadCard({
               return (
                 <div
                   key={s.id}
-                  className={`px-5 py-3 flex items-center justify-between gap-3 ${checked ? 'bg-orange-50/50' : ''}`}
+                  className={`px-5 py-3 flex items-center justify-between gap-3 ${checked ? 'bg-indigo-50/50' : ''}`}
                   data-testid={`row-drms-saved-${s.id}`}
                 >
                   <label className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer">
@@ -272,7 +272,7 @@ function UploadCard({
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleSel(s.id)}
-                      className="w-4 h-4 accent-orange-600 shrink-0"
+                      className="w-4 h-4 accent-indigo-600 shrink-0"
                       data-testid={`checkbox-drms-${s.id}`}
                     />
                     <div className="min-w-0 flex-1">
@@ -340,7 +340,7 @@ function PreviewCard({
 
       <div className="p-5 space-y-5">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <KpiCard label="Periodo" value={preview.period} subvalue={`${MONTH_LABELS[preview.month - 1]} ${preview.year}`} accent="#f97316" icon={Activity} />
+          <KpiCard label="Periodo" value={preview.period} subvalue={`${MONTH_LABELS[preview.month - 1]} ${preview.year}`} accent="#6366f1" icon={Activity} />
           <KpiCard label="Righe totali" value={fmtInt(preview.righeCount)} subvalue={`${fmtInt(totalCapitoli)} classificate`} accent="#3b82f6" />
           <KpiCard label="Totale importi" value={fmtEur(preview.totale)} accent="#10b981" icon={Target} />
           <KpiCard label="Non classificate" value={fmtInt(preview.altroCount)}
@@ -387,7 +387,7 @@ function PreviewCard({
           <Button variant="outline" onClick={onCancel} disabled={saving} data-testid="button-preview-cancel">
             <X size={14} className="mr-2" /> Annulla
           </Button>
-          <Button onClick={onConfirm} disabled={saving} data-testid="button-preview-confirm" className="bg-orange-600 hover:bg-orange-700 text-white">
+          <Button onClick={onConfirm} disabled={saving} data-testid="button-preview-confirm" className="bg-indigo-600 hover:bg-indigo-700 text-white">
             {saving ? <><Loader2 size={14} className="mr-2 animate-spin" /> Salvataggio…</> : <><Save size={14} className="mr-2" /> {preview.hasConflict ? 'Unisci e apri' : 'Salva e apri'}</>}
           </Button>
         </div>
@@ -614,7 +614,7 @@ function Dashboard({
           <div className="min-w-0">
             <div className="text-[9px] uppercase tracking-[0.3em] text-neutral-500">DRMS · Commissioning</div>
             <div className="font-serif text-lg text-neutral-900 leading-tight">
-              Franchising <span className="italic text-orange-700">W3</span>
+              Franchising <span className="italic text-indigo-700">W3</span>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:gap-6">
@@ -680,7 +680,7 @@ function Dashboard({
               onClick={() => setActiveTab(t.k)}
               data-testid={`tab-drms-${t.k}`}
               className={`px-4 sm:px-5 py-3 text-[11px] sm:text-xs uppercase tracking-[0.12em] border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === t.k ? 'border-orange-700 text-neutral-900 font-semibold' : 'border-transparent text-neutral-500 hover:text-neutral-900'
+                activeTab === t.k ? 'border-indigo-700 text-neutral-900 font-semibold' : 'border-transparent text-neutral-500 hover:text-neutral-900'
               }`}
             >{t.l}</button>
           ))}
@@ -826,7 +826,7 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
   isMulti: boolean;
 }) {
   // Palette stabile per i PERIOD (per la barra impilata in "Andamento per competenza")
-  const PERIOD_PALETTE = ["#f97316", "#3b82f6", "#10b981", "#8b5cf6", "#eab308", "#ef4444", "#06b6d4", "#a855f7", "#84cc16", "#f43f5e"];
+  const PERIOD_PALETTE = ["#6366f1", "#3b82f6", "#10b981", "#8b5cf6", "#eab308", "#ef4444", "#06b6d4", "#a855f7", "#84cc16", "#f43f5e"];
   const periodColor: Record<string, string> = {};
   bySource.forEach((s, i) => { periodColor[s.period] = PERIOD_PALETTE[i % PERIOD_PALETTE.length]; });
   const grandImp = bySource.reduce((s, b) => s + b.importo, 0) || totali.imp || 1;
@@ -841,7 +841,7 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
       <div>
         <SectionHead eyebrow={`Period ${period}`} title="Sintesi esecutiva" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard label="Totale maturato" value={fmtEur(totali.imp)} subvalue={`${fmtInt(totali.righe)} righe`} accent="#f97316" icon={TrendingUp} />
+          <KpiCard label="Totale maturato" value={fmtEur(totali.imp)} subvalue={`${fmtInt(totali.righe)} righe`} accent="#6366f1" icon={TrendingUp} />
           <KpiCard label="Contratti distinti" value={fmtInt(totali.contratti)} subvalue={`${totali.pv} PV attivi`} accent="#8b5cf6" icon={Store} />
           <KpiCard label="Eventi pagati" value={fmtInt(totali.pagati)} subvalue={`${fmtInt(totali.nonAtt)} non attivati`} accent="#10b981" icon={CheckCircle2} />
           <KpiCard label="Eventi stornati" value={fmtInt(totali.stornati)} subvalue={`${fmtPct(totali.stornati, totali.righe)} righe`} accent="#ef4444" icon={TrendingDown} />
@@ -932,7 +932,7 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
                   const tot = Object.values(c.perPeriod).reduce((s, v) => s + v, 0);
                   const absTot = Object.values(c.perPeriod).reduce((s, v) => s + Math.abs(v), 0) || 1;
                   return (
-                    <tr key={c.competenza} className="border-b border-neutral-100 hover:bg-orange-50/30" data-testid={`row-competenza-${c.competenza}`}>
+                    <tr key={c.competenza} className="border-b border-neutral-100 hover:bg-indigo-50/30" data-testid={`row-competenza-${c.competenza}`}>
                       <td className="px-4 py-2 font-mono text-neutral-900 font-semibold">{c.competenza}</td>
                       <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(c.righe)}</td>
                       <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700">{fmtInt(c.contratti)}</td>
@@ -1152,11 +1152,11 @@ function MatrixTab({ matrix, capitoliOrdinati, onSelectPV, filteredData, include
           </thead>
           <tbody>
             {matrix.map(r => (
-              <tr key={r.neg} className="border-b border-neutral-100 hover:bg-orange-50 cursor-pointer group" onClick={() => onSelectPV(r.neg)} data-testid={`row-matrix-${r.neg}`}>
-                <td className="px-3 py-2 sticky left-0 bg-white group-hover:bg-orange-50 font-mono text-neutral-900">
+              <tr key={r.neg} className="border-b border-neutral-100 hover:bg-indigo-50 cursor-pointer group" onClick={() => onSelectPV(r.neg)} data-testid={`row-matrix-${r.neg}`}>
+                <td className="px-3 py-2 sticky left-0 bg-white group-hover:bg-indigo-50 font-mono text-neutral-900">
                   <div className="flex items-center justify-between">
                     <span>{r.neg}</span>
-                    <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 text-orange-700" />
+                    <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 text-indigo-700" />
                   </div>
                 </td>
                 {capitoliOrdinati.map(c => {
@@ -1455,7 +1455,7 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
             {listaPV.map(pv => (
               <button key={pv.neg} onClick={() => setSelectedPV(pv.neg)} data-testid={`button-pv-${pv.neg}`}
                 className={`w-full text-left px-3 py-2.5 border-b border-neutral-100 transition-colors ${
-                  selectedPV === pv.neg ? 'bg-orange-50 border-l-2 border-l-orange-700' : 'hover:bg-neutral-50'
+                  selectedPV === pv.neg ? 'bg-indigo-50 border-l-2 border-l-indigo-700' : 'hover:bg-neutral-50'
                 }`}>
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-xs text-neutral-900">{pv.neg}</span>
@@ -1975,10 +1975,10 @@ export default function DrmsCommissioning() {
           <div className="max-w-5xl mx-auto px-4 sm:px-8 py-8">
             <div className="mb-8">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-white border border-neutral-200 rounded-full text-[10px] uppercase tracking-[0.2em] text-neutral-700 font-medium mb-4">
-                <span className="w-1 h-1 bg-orange-600 rounded-full" /> Analisi DRMS · W3 Incentivazione
+                <span className="w-1 h-1 bg-indigo-600 rounded-full" /> Analisi DRMS · W3 Incentivazione
               </div>
               <h1 className="font-serif text-4xl sm:text-5xl text-neutral-900 leading-tight tracking-tight">
-                Dashboard <span className="italic" style={{ background: "linear-gradient(135deg, #ea580c 0%, #f97316 50%, #fb923c 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Commissioning</span>
+                Dashboard <span className="italic" style={{ background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #818cf8 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Commissioning</span>
               </h1>
               <p className="mt-4 text-neutral-700 max-w-2xl leading-relaxed">
                 Carica un file DRMS Excel per generare il prospetto dettagliato per capitolo, PV, soglie e driver.

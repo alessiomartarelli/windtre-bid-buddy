@@ -90,7 +90,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
             onClick={() => setLocation('/')}
             data-testid="text-app-title"
           >
-            <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 shadow-sm group-hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-sm group-hover:shadow-md transition-shadow">
               <BrandGlyph className="h-4 w-4 text-white" />
             </div>
             <h1 className="text-base sm:text-lg font-bold text-foreground truncate tracking-tight">
@@ -260,7 +260,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-user-menu">
                 <Avatar className="h-9 w-9 ring-2 ring-border/50 ring-offset-1 ring-offset-background">
-                  <AvatarFallback className="bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-semibold">
+                  <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white text-xs font-semibold">
                     {getInitials()}
                   </AvatarFallback>
                 </Avatar>

@@ -438,11 +438,11 @@ export const StepAttivatoMobileRS: React.FC<StepAttivatoMobileRSProps> = ({
                     {/* Sezione Device/Telefoni */}
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="bg-orange-500/10 text-orange-600 hover:bg-orange-500/20">
+                        <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/20">
                           Telefoni / Device
                         </Badge>
                       </div>
-                      <div className="grid gap-2 pl-2 border-l-2 border-orange-500/30">
+                      <div className="grid gap-2 pl-2 border-l-2 border-primary/30">
                         {deviceCategories.map((type) => {
                           const currentValue = getOrCreatePezzi(rs, type);
                           return (
