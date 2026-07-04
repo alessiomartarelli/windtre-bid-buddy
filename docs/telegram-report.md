@@ -275,3 +275,40 @@ reconcile journey, messaggio arrivato nel gruppo "Windtre test" con
 label "verifica scheduler (prova pre-13:30)". Il timer di prod resta
 armato (log PM2: `prossimo report 13:30 programmato per
 2026-07-03T11:30:05Z`).
+
+Il verify script accetta ora `TIME_LABEL=<testo>` (override dell'etichetta
+oraria in intestazione — determina anche la fascia: `22:xx` ⇒ chiusura) e
+`SYNC_FIRST=0` (salta la sync BiSuite, utile per un 2° invio ravvicinato
+senza risincronizzare). Così un solo giro può inviare sia il parziale
+(13:30) sia la chiusura (22:30).
+
+## Verifica del commento "direttore vendite" con dati reali (Task #267)
+
+`scripts/preview-telegram-commento.mts` — helper **read-only** (non invia,
+non scrive sul DB): replica la catena dello scheduler (stessa finestra
+dati, `aggregateDailyReport` oggi+mese, `parseForecastConfig`) e stampa il
+testo del messaggio per fascia **parziale e chiusura** più una tabella di
+**cross-check** dei numeri (delta % giorno/passo, atteso-a-oggi,
+proiezioni) da confrontare con l'allegato HTML. Il forecast si può
+sovrascrivere via env (`FC_CANVASS`/`FC_TELEFONI`/`FC_ACCESSORI`/
+`FC_SERVIZI`/`FC_NEGOZI`/`FC_GIORNI`) per esercitare tutte le bande di
+performance senza toccare la config di prod:
+
+```bash
+DATABASE_URL=<prod via tunnel> ORG_ID=org-admin-windtre \
+  FC_CANVASS=4600 FC_TELEFONI=905 FC_ACCESSORI=20629 FC_SERVIZI=11109 \
+  FC_NEGOZI=8 FC_GIORNI=23 \
+  npx tsx scripts/preview-telegram-commento.mts
+```
+
+Verificato il 04/07/2026 sui dati reali di prod (128 vendite/9.440,86 € al
+momento): delta % e proiezioni del commento coincidono con
+`buildMonthEndProjection` su tutte le bande (in linea / sopra / sotto),
+standout PDV+addetto leggibili. **Org prod senza forecast** ⇒ il commento
+live salta il framing mensile (scelta: nessun obiettivo mensile inventato
+scritto in prod). Su richiesta utente inviati poi 2 messaggi reali
+(parziale 13:30 + chiusura 22:30, label "(verifica commento)") nel gruppo
+"Windtre test" — variante **senza forecast**. Fix di forma emerso nella
+verifica: le aperture di banda che finiscono con `!` (es. "Chiusura col
+botto, squadra!") non prendono più il punto in coda ("!." ⇒ "!", helper
+`withPeriod` in `shared/venditeCommento.ts`).

@@ -119,6 +119,12 @@ function signedPct(v: number): string {
   return `${v >= 0 ? "+" : ""}${v}%`;
 }
 
+// Chiude una frase con il punto, salvo che termini già con . ! ? (le frasi
+// di apertura "col botto!" / "che giornata!" non devono diventare "!.").
+function withPeriod(s: string): string {
+  return /[.!?]$/.test(s.trim()) ? s : s + ".";
+}
+
 interface DimInput {
   label: string;
   unit: "pz" | "€";
@@ -299,7 +305,7 @@ export function buildDirettoreCommento(p: CommentoParams): string {
   const band = bandOf(overallMonthDelta);
 
   const out: string[] = [];
-  out.push(pick(APERTURA[fascia][band], seed) + ".");
+  out.push(withPeriod(pick(APERTURA[fascia][band], seed)));
 
   // ── Giornata al palo ───────────────────────────────────────────────
   if (today.vendite === 0) {

@@ -1295,6 +1295,20 @@ await test("banda performance: molto sopra ⇒ tono positivo, molto sotto ⇒ to
   assert.ok(sotto.includes("dietro al passo"));
 });
 
+await test("apertura che finisce con ! non produce doppia punteggiatura (!.)", () => {
+  // La banda 'molto sopra' in chiusura può pescare "Chiusura col botto,
+  // squadra!" / "…e che giornata!": il punto non va aggiunto in coda.
+  for (const dateYMD of ["2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18", "2026-07-19"]) {
+    const s = buildDirettoreCommento({
+      fascia: "chiusura", dateYMD,
+      forecast: parseForecastConfig({ canvassPezzi: 1 }),
+      today: cjToday, month: cjMonth, elapsedWorkingDays: 25, totalWorkingDays: 26,
+    });
+    assert.ok(!s.includes("!."), `doppia punteggiatura in: ${s.slice(0, 60)}`);
+    assert.ok(!s.includes("?."));
+  }
+});
+
 await test("senza forecast: solo commento giornata, nessun framing mensile né spunto", () => {
   const s = buildDirettoreCommento({
     fascia: "parziale", dateYMD: "2026-07-15", forecast: EMPTY_FORECAST,

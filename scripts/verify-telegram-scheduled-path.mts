@@ -51,8 +51,9 @@ async function main() {
       orgName: org.name,
       botToken: tg.botToken,
       chatId: tg.chatId,
-      timeLabel: "verifica scheduler (prova pre-13:30)",
-      syncFirst: true,
+      timeLabel: (process.env.TIME_LABEL ?? "verifica scheduler (prova pre-13:30)").trim(),
+      // SYNC_FIRST=0 salta la sync BiSuite (utile al 2° invio ravvicinato).
+      syncFirst: process.env.SYNC_FIRST !== "0",
     });
     if (r.ok) {
       sent++;
