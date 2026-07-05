@@ -9,6 +9,7 @@ import {
   type DailyReportAggregates,
   telefoniPezziOf,
   businessPezziOf,
+  accessoriImportoOf,
   projectMonthEnd,
   pctDelta,
   fmtEuro,
@@ -116,11 +117,6 @@ export function hasForecast(fc: ForecastConfig): boolean {
 /** Fascia dall'etichetta oraria: 22:xx ⇒ chiusura, tutto il resto ⇒ parziale. */
 export function fasciaFromTimeLabel(label?: string | null): Fascia {
   return (label ?? "").trim().startsWith("22") ? "chiusura" : "parziale";
-}
-
-function accessoriImportoOf(a: DailyReportAggregates): number {
-  const x = a.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === "ACCESSORI");
-  return x?.importo ?? 0;
 }
 
 function escTg(s: string): string {

@@ -103,8 +103,9 @@ export interface VenditeReportHtmlParams {
    */
   month?: { label: string; aggregates: DailyReportAggregates };
   /**
-   * Proiezione a fine mese (pezzi Canvass totali e Telefoni): mostrata
-   * come card nella pagina "Totale mese". Assente ⇒ non compare.
+   * Proiezione a fine mese per ogni KPI (volumi per pista + Telefoni +
+   * Accessori/Servizi): mostrata come card nella pagina "Totale mese".
+   * Assente ⇒ non compare.
    */
   monthProjection?: MonthEndProjection;
 }
@@ -364,25 +365,40 @@ function categorieSection(
 }
 
 /**
- * Card "Proiezione fine mese" (Task #263): stima dei pezzi Canvass totali e
- * dei Telefoni a fine mese in base ai giorni lavorativi trascorsi.
+ * Card "Proiezione fine mese": stima a fine mese di OGNI KPI (volumi per
+ * pista + Telefoni + Accessori/Servizi), non più solo i Canvass totali, in
+ * base ai giorni lavorativi trascorsi.
  */
+const PROJ_KPI_STYLE: Record<string, { icon: string; color: string }> = {
+  mobile: { icon: "📱", color: PISTA_THEME.mobile },
+  mobileIva: { icon: "🏢", color: PISTA_THEME.mobile },
+  fisso: { icon: "🏠", color: PISTA_THEME.fisso },
+  fissoIva: { icon: "🏢", color: PISTA_THEME.fisso },
+  energia: { icon: "⚡", color: PISTA_THEME.energia },
+  assicurazioni: { icon: "🛡️", color: PISTA_THEME.assicurazioni },
+  protetti: { icon: "🔒", color: PISTA_THEME.protecta },
+  cb: { icon: "💳", color: PISTA_THEME.cb },
+  telefoni: { icon: "📲", color: ORANGE },
+  accessori: { icon: "🎧", color: ORANGE },
+  servizi: { icon: "🛠️", color: ORANGE },
+};
+
 function projectionSection(proj: MonthEndProjection | undefined): string {
   if (!proj) return "";
-  const row = (icon: string, label: string, e: ProjectionEntry): string => {
-    const stima = e.proiezione === null ? "—" : String(e.proiezione);
-    const width = Math.min(100, Math.max(6, proj.totalWorkingDays > 0
-      ? Math.round((proj.elapsedWorkingDays / proj.totalWorkingDays) * 100)
-      : 6));
+  const width = Math.min(100, Math.max(6, proj.totalWorkingDays > 0
+    ? Math.round((proj.elapsedWorkingDays / proj.totalWorkingDays) * 100)
+    : 6));
+  const fmtVal = (unit: "pz" | "€", v: number): string =>
+    unit === "€" ? fmtEuro(v) : String(v);
+  const row = (e: ProjectionEntry): string => {
+    const s = PROJ_KPI_STYLE[e.key] ?? { icon: "•", color: ORANGE };
+    const stima = e.proiezione === null ? "—" : fmtVal(e.unit, e.proiezione);
     return `<div class="prow">
-        <div class="prow-head"><span class="pname" style="color:${ORANGE}">${icon} ${escapeHtml(label)}</span><span class="pval">${e.maturato} → <b>${escapeHtml(stima)}</b></span></div>
-        <div class="pbar"><i style="width:${width}%;background:linear-gradient(90deg,${ORANGE},${ORANGE}66)"></i></div>
+        <div class="prow-head"><span class="pname" style="color:${s.color}">${s.icon} ${escapeHtml(e.label)}</span><span class="pval">${escapeHtml(fmtVal(e.unit, e.maturato))} → <b>${escapeHtml(stima)}</b></span></div>
+        <div class="pbar"><i style="width:${width}%;background:linear-gradient(90deg,${s.color},${s.color}66)"></i></div>
       </div>`;
   };
-  const rows = [
-    row("🚀", "Canvass totali", proj.canvass),
-    row("📱", "Telefoni", proj.telefoni),
-  ].join("\n        ");
+  const rows = proj.kpis.map(row).join("\n        ");
   return `<div class="card"><h2>Proiezione fine mese <span class="h2-sub">${escapeHtml(proj.label)} · ${proj.elapsedWorkingDays}/${proj.totalWorkingDays} gg lavorativi</span></h2>
         ${rows}
     </div>`;

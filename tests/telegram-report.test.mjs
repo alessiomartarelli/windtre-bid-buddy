@@ -1054,17 +1054,25 @@ await test("projectMonthEnd: proporzione lineare; giorni non positivi ⇒ null",
   assert.equal(projectMonthEnd(100, 10, 0), null);
 });
 
-await test("buildMonthEndProjection: canvass totali e telefoni maturato+proiezione arrotondati", () => {
+await test("buildMonthEndProjection: un KPI per riga, maturato+proiezione arrotondati", () => {
   const monthAgg = aggregateDailyReport([
     saleCli({ articoli: [art("UNTIED", 30), art("TELEFONIA", 500)] }),
     saleCli({ articoli: [art("ADSL/FIBRA/FWA CF", 20)] }),
   ]);
   const proj = buildMonthEndProjection("2026-07-15", monthAgg);
   assert.ok(proj !== null);
-  assert.equal(proj.canvass.maturato, 2); // UNTIED + ADSL
-  assert.equal(proj.telefoni.maturato, 1); // 1 TELEFONIA
-  assert.ok(Number.isInteger(proj.canvass.proiezione));
-  assert.ok(proj.canvass.proiezione >= proj.canvass.maturato);
+  const kpi = (key) => proj.kpis.find((k) => k.key === key);
+  // Nessuna riga "Canvass totali": solo KPI per pista + telefoni + acc/serv.
+  assert.equal(proj.kpis.find((k) => /canvass totali/i.test(k.label)), undefined);
+  assert.equal(kpi("mobile").maturato, 1); // UNTIED ⇒ pista mobile
+  assert.equal(kpi("fisso").maturato, 1); // ADSL/FIBRA/FWA CF ⇒ pista fisso
+  assert.equal(kpi("telefoni").maturato, 1); // 1 TELEFONIA
+  assert.equal(kpi("telefoni").unit, "pz");
+  assert.equal(kpi("accessori").unit, "€");
+  assert.equal(kpi("servizi").unit, "€");
+  const tel = kpi("telefoni");
+  assert.ok(Number.isInteger(tel.proiezione));
+  assert.ok(tel.proiezione >= tel.maturato);
   assert.equal(proj.label, "luglio 2026");
   assert.equal(buildMonthEndProjection("bad", monthAgg), null);
 });

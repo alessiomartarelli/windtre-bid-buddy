@@ -613,8 +613,8 @@ export function pctDelta(current: number, previous: number): number | null {
 }
 
 // ---------------------------------------------------------------------------
-// Proiezione a fine mese (Task #263): stima dei pezzi a fine mese in base
-// ai giorni lavorativi trascorsi, riusando il calendario giorni-lavorativi
+// Proiezione a fine mese: stima di ogni KPI a fine mese in base ai giorni
+// lavorativi trascorsi, riusando il calendario giorni-lavorativi
 // dell'Incentivazione (festività nazionali IT + Lunedì dell'Angelo).
 // ---------------------------------------------------------------------------
 
@@ -630,6 +630,12 @@ export function telefoniPezziOf(a: DailyReportAggregates): number {
 /** Pezzi Business (P.IVA) di una pista dagli aggregati. */
 export function businessPezziOf(a: DailyReportAggregates, pista: PistaCanvass): number {
   return a.businessCountByPista[pista] ?? 0;
+}
+
+/** Fatturato Accessori (categoria ACCESSORI) dagli aggregati prodotti. */
+export function accessoriImportoOf(a: DailyReportAggregates): number {
+  const x = a.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === "ACCESSORI");
+  return x?.importo ?? 0;
 }
 
 /**
@@ -699,8 +705,17 @@ export function projectMonthEnd(value: number, elapsedWorkingDays: number, total
   return (value / elapsedWorkingDays) * totalWorkingDays;
 }
 
-/** Voce di proiezione: valore maturato e stima a fine mese (arrotondata). */
+/** Unità di misura di un KPI di proiezione. */
+export type ProjectionUnit = "pz" | "€";
+
+/**
+ * Voce di proiezione di un singolo KPI: chiave stabile, etichetta, unità,
+ * valore maturato nel mese e stima a fine mese (arrotondata).
+ */
 export interface ProjectionEntry {
+  key: string;
+  label: string;
+  unit: ProjectionUnit;
   maturato: number;
   proiezione: number | null;
 }
@@ -710,29 +725,48 @@ export interface MonthEndProjection {
   label: string;
   elapsedWorkingDays: number;
   totalWorkingDays: number;
-  /** Pezzi Canvass totali (tutte le piste). */
-  canvass: ProjectionEntry;
-  /** Pezzi Telefoni (categoria TELEFONIA). */
-  telefoni: ProjectionEntry;
+  /**
+   * Proiezione a fine mese per OGNI KPI: volumi per pista (Mobile, di cui
+   * P.IVA, Fisso, di cui P.IVA, Energia, Assicurazioni, Protetti, Cb),
+   * Telefoni (pezzi), Accessori e Servizi (fatturato €).
+   */
+  kpis: ProjectionEntry[];
 }
 
 /**
- * Costruisce la proiezione a fine mese dei pezzi Canvass totali e dei
- * Telefoni a partire dagli aggregati del mese in corso e dalla data del
- * report. Data non valida ⇒ null.
+ * Costruisce la proiezione a fine mese di TUTTI i KPI (uno per riga, stessa
+ * granularità del forecast/obiettivi) a partire dagli aggregati del mese in
+ * corso e dalla data del report. Data non valida ⇒ null.
  */
 export function buildMonthEndProjection(ymd: string, monthAgg: DailyReportAggregates): MonthEndProjection | null {
   const wd = monthWorkingDays(ymd);
   if (!wd) return null;
-  const canvass = monthAgg.countByType.canvass;
-  const telefoni = telefoniPezziOf(monthAgg);
   const round = (v: number | null): number | null => (v === null ? null : Math.round(v));
+  const mk = (key: string, label: string, unit: ProjectionUnit, maturato: number): ProjectionEntry => ({
+    key,
+    label,
+    unit,
+    maturato,
+    proiezione: round(projectMonthEnd(maturato, wd.elapsed, wd.total)),
+  });
+  const kpis: ProjectionEntry[] = [
+    mk("mobile", "Mobile", "pz", monthAgg.countByPista.mobile ?? 0),
+    mk("mobileIva", "Mobile P.IVA", "pz", businessPezziOf(monthAgg, "mobile")),
+    mk("fisso", "Fisso", "pz", monthAgg.countByPista.fisso ?? 0),
+    mk("fissoIva", "Fisso P.IVA", "pz", businessPezziOf(monthAgg, "fisso")),
+    mk("energia", "Energia", "pz", monthAgg.countByPista.energia ?? 0),
+    mk("assicurazioni", "Assicurazioni", "pz", monthAgg.countByPista.assicurazioni ?? 0),
+    mk("protetti", "Protetti", "pz", monthAgg.countByPista.protecta ?? 0),
+    mk("cb", "Cb", "pz", monthAgg.countByPista.cb ?? 0),
+    mk("telefoni", "Telefoni", "pz", telefoniPezziOf(monthAgg)),
+    mk("accessori", "Accessori", "€", accessoriImportoOf(monthAgg)),
+    mk("servizi", "Servizi", "€", monthAgg.amountByType.servizi),
+  ];
   return {
     label: monthLabelOf(ymd),
     elapsedWorkingDays: wd.elapsed,
     totalWorkingDays: wd.total,
-    canvass: { maturato: canvass, proiezione: round(projectMonthEnd(canvass, wd.elapsed, wd.total)) },
-    telefoni: { maturato: telefoni, proiezione: round(projectMonthEnd(telefoni, wd.elapsed, wd.total)) },
+    kpis,
   };
 }
 

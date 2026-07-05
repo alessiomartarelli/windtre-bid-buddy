@@ -230,7 +230,7 @@ export async function sendDailyReportForOrg(params: {
     label: monthLabelOf(ymd),
     aggregates: aggregateDailyReport(monthRows),
   };
-  // Proiezione a fine mese (Task #263): pezzi Canvass totali e Telefoni
+  // Proiezione a fine mese: un KPI per riga (volumi per pista + Telefoni + Accessori/Servizi)
   // stimati sui giorni lavorativi trascorsi, dagli aggregati del mese.
   const monthProjection = buildMonthEndProjection(ymd, month.aggregates) ?? undefined;
   // Commento "direttore vendite" (Task #266): forecast/obiettivi per-org e

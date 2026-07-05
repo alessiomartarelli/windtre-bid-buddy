@@ -1,0 +1,936 @@
+<!DOCTYPE html><html lang="it"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Report vendite</title>
+<style>
+  :root{
+    --bg-0:#050506; --bg-1:#0c0c0e; --glass:rgba(255,255,255,.045); --glass-brd:rgba(255,255,255,.09);
+    --line:rgba(255,255,255,.08); --text:#f5f5f2; --text-dim:#a3a3ab; --text-faint:#6b6b74;
+    --red:#e30613; --red-soft:#ff3b3b; --yellow:#ffcc00; --yellow-soft:#ffe066;
+    --mobile:#e30613; --fisso:#ffcc00; --iva:#f2f2ee; --energia:#ff8a00; --cb:#8c1023;
+    --up:#3ddc84; --down:#ff5c5c;
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0; padding:14px;
+    font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:
+      radial-gradient(900px 480px at 15% -10%, rgba(227,6,19,.20), transparent 60%),
+      radial-gradient(700px 420px at 100% 0%, rgba(255,204,0,.10), transparent 55%),
+      var(--bg-0);
+    color:var(--text); -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:680px;margin:0 auto;}
+  h1,h2,h3{margin:0;}
+  header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 2px 12px;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:15px;letter-spacing:-0.01em;}
+  .brand-dot{width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--yellow));box-shadow:0 0 14px rgba(227,6,19,.65);}
+  .badge{font-size:10.5px;padding:4px 9px;border-radius:20px;background:var(--glass);border:1px solid var(--glass-brd);color:var(--text-dim);white-space:nowrap;}
+
+  .nav{display:flex;align-items:center;gap:6px;margin-bottom:12px;background:var(--glass);
+       border:1px solid var(--glass-brd);border-radius:16px;padding:6px;position:sticky;top:8px;z-index:5;
+       backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
+  .nav button{font:inherit;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--glass-brd);
+              border-radius:11px;padding:8px 12px;cursor:pointer;font-weight:800;}
+  .nav button:disabled{opacity:.3;cursor:default;}
+  .nav .nav-label{flex:1;text-align:center;font-weight:800;font-size:13.5px;color:var(--yellow-soft);text-transform:capitalize;}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;}
+  .tab{flex:1;text-align:center;padding:9px;border-radius:12px;font-weight:800;font-size:12.5px;
+       background:var(--glass);border:1px solid var(--glass-brd);color:var(--text-dim);cursor:pointer;letter-spacing:.02em;}
+  .tab.active{background:linear-gradient(135deg,var(--red),#a3050f);color:#fff;border-color:transparent;}
+
+  .hero{position:relative;overflow:hidden;text-align:center;padding:28px 18px 22px;border-radius:22px;
+        margin-bottom:12px;background:var(--glass);border:1px solid var(--glass-brd);}
+  .hero-glow{position:absolute;inset:-40% -20% auto;height:150%;pointer-events:none;
+             background:radial-gradient(closest-side, rgba(227,6,19,.35), transparent 70%);}
+  .hero-glow2{position:absolute;inset:auto -20% -50% auto;height:120%;width:70%;pointer-events:none;
+             background:radial-gradient(closest-side, rgba(255,204,0,.20), transparent 70%);}
+  .hero-label{position:relative;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--yellow-soft);font-weight:800;}
+  .hero-num{position:relative;font-size:56px;font-weight:800;line-height:1.02;margin:4px 0 2px;letter-spacing:-0.02em;
+            background:linear-gradient(180deg,#fff,var(--yellow-soft));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .hero-sub{position:relative;font-size:15px;font-weight:700;color:var(--text);}
+  .hero-sub-dim{font-weight:500;color:var(--text-dim);font-size:12.5px;}
+  .hero-chips{position:relative;display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin-top:12px;}
+  .delta{display:inline-block;font-size:11px;font-weight:800;border-radius:999px;padding:3px 10px;margin-top:8px;}
+  .delta.up{color:var(--up);background:rgba(61,220,132,.12);border:1px solid rgba(61,220,132,.3);}
+  .delta.down{color:var(--down);background:rgba(255,92,92,.12);border:1px solid rgba(255,92,92,.3);}
+  .delta.flat{color:var(--text-dim);background:rgba(255,255,255,.06);border:1px solid var(--glass-brd);}
+
+  .hls{display:flex;gap:8px;margin-bottom:12px;}
+  .hl{flex:1;min-width:0;background:var(--glass);border:1px solid var(--glass-brd);border-radius:15px;
+      padding:11px 8px;text-align:center;}
+  .hl-icon{font-size:16px;}
+  .hl-k{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-dim);margin-top:3px;font-weight:700;}
+  .hl-v{font-size:12.5px;font-weight:800;color:var(--text);margin-top:2px;overflow-wrap:anywhere;}
+
+  .card{background:var(--glass);border:1px solid var(--glass-brd);border-radius:18px;padding:15px;margin-bottom:11px;}
+  .card.empty{text-align:center;color:var(--text-dim);padding:34px 16px;}
+  .card-title{font-size:11.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--yellow-soft);font-weight:800;margin-bottom:11px;display:flex;justify-content:space-between;align-items:center;}
+
+  .prow{padding:9px 0;border-bottom:1px solid var(--line);}
+  .prow:last-child{border-bottom:none;padding-bottom:0;}
+  .prow-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+  .pname{font-weight:800;font-size:14.5px;letter-spacing:.01em;}
+  .pval{font-size:13px;font-weight:700;color:var(--text-dim);white-space:nowrap;}
+  .pbar{height:9px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;margin:7px 0 2px;}
+  .pbar i{display:block;height:100%;border-radius:999px;}
+
+  .prod-block{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px;}
+  .prod-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px;}
+  .prod-head .name{font-weight:800;font-size:14px;}
+  .prod-head .agg{font-size:12px;color:var(--text-dim);font-weight:700;}
+  .paychips{display:flex;flex-wrap:wrap;gap:6px;}
+  .chip{font-size:10.5px;background:rgba(255,255,255,.05);border:1px solid var(--glass-brd);border-radius:20px;padding:3px 9px;color:var(--text-dim);font-weight:600;}
+
+  .proj-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;}
+  .proj-box{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center;}
+  .proj-box .v{font-size:19px;font-weight:800;background:linear-gradient(135deg,#fff,var(--yellow-soft));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .proj-box .k{font-size:10.5px;color:var(--text-dim);margin-top:3px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;}
+  .proj-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);}
+  .proj-row:last-child{border-bottom:none;padding-bottom:0;}
+  .proj-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .proj-label{flex:1;font-weight:800;font-size:13.5px;}
+  .proj-nums{font-size:13px;font-weight:700;color:var(--text-dim);white-space:nowrap;}
+  .proj-nums b{color:var(--yellow-soft);font-weight:800;}
+  .proj-nums .arrow{color:var(--text-faint);margin:0 3px;}
+  .proj-section-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint);font-weight:700;margin:10px 0 2px;}
+  .proj-section-label:first-child{margin-top:0;}
+
+  .trend{display:flex;align-items:flex-end;gap:4px;height:74px;padding-top:6px;}
+  .trend-bar{flex:1;background:linear-gradient(180deg,var(--yellow),var(--red));border-radius:4px 4px 0 0;min-height:3px;cursor:pointer;opacity:.55;}
+  .trend-bar.sel{opacity:1;box-shadow:0 0 10px rgba(255,204,0,.5);}
+  .trend-labels{display:flex;gap:4px;margin-top:4px;}
+  .trend-labels span{flex:1;text-align:center;font-size:9px;color:var(--text-faint);}
+
+  .toggle-row{display:flex;gap:6px;margin-bottom:10px;}
+  .toggle-btn{flex:1;font-size:12px;padding:8px;border-radius:10px;background:rgba(255,255,255,.04);
+              border:1px solid var(--glass-brd);color:var(--text-dim);cursor:pointer;font-weight:800;}
+  .toggle-btn.active{background:linear-gradient(135deg,var(--yellow),#e0a800);color:#1a1400;border-color:transparent;}
+
+  details.rank{padding:9px 0;border-bottom:1px solid var(--line);}
+  details.rank:last-child{border-bottom:none;padding-bottom:0;}
+  details.rank summary{list-style:none;cursor:pointer;}
+  details.rank summary::-webkit-details-marker{display:none;}
+  .rank-top{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px;}
+  .medal{width:22px;display:inline-block;text-align:center;}
+  .rank-name{font-weight:700;color:var(--text);min-width:0;overflow-wrap:anywhere;}
+  .rank-val{font-weight:800;color:var(--yellow-soft);white-space:nowrap;}
+  .rank-sub{font-size:11px;color:var(--text-dim);margin-top:2px;margin-left:22px;}
+  .drill{margin-top:9px;margin-left:22px;padding:10px 11px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--line);}
+  .mini-tags{display:flex;flex-wrap:wrap;gap:5px;}
+  .mini-tag{font-size:10.5px;padding:2px 8px;border-radius:20px;border:1px solid var(--glass-brd);color:var(--text-dim);font-weight:600;}
+
+  .empty{text-align:center;padding:46px 20px;color:var(--text-dim);}
+  .empty .big{font-size:36px;margin-bottom:10px;}
+  .footnote{font-size:10.5px;color:var(--text-faint);margin-top:8px;line-height:1.5;padding:0 2px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header>
+    <div class="brand"><span class="brand-dot"></span> Report vendite</div>
+    <div class="badge" id="lastUpdateBadge">04/07 · 22:37</div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="giorno">📅 Giorno</div>
+    <div class="tab" data-tab="mese">📊 Mese</div>
+  </div>
+
+  <div class="nav" id="dayNav" style="display: flex;">
+    <button id="navPrev">◀</button>
+    <div class="nav-label" id="navLabel">sabato 04 luglio</div>
+    <button id="navNext" disabled="">▶</button>
+  </div>
+
+  <noscript><div class="footnote" style="text-align:center;padding:6px 0;">Anteprima statica · per navigare i giorni apri il file con Safari o Chrome</div></noscript>
+  <div id="content">
+    <div class="hero">
+      <div class="hero-glow"></div><div class="hero-glow2"></div>
+      <div class="hero-label">Pezzi Canvass · sab 04/07</div>
+      <div class="hero-num">54</div>
+      <div class="hero-sub">13 <span class="hero-sub-dim">pz Telefonia venduti oggi</span></div>
+      <span class="delta down">▼ -22% vs giorno prima</span>
+      <div class="hero-chips">
+        <span class="chip" style="border-color:var(--mobile)88">Mobile 38</span><span class="chip" style="border-color:var(--fisso)88">Fisso 12</span><span class="chip" style="border-color:var(--iva)88">IVA 1</span><span class="chip" style="border-color:var(--energia)88">Energia 3</span>
+      </div>
+    </div>
+
+    <div class="hls">
+      <div class="hl"><div class="hl-icon">📱</div><div class="hl-k">Telefonia</div><div class="hl-v">13 pz</div></div>
+      <div class="hl"><div class="hl-icon">🎧</div><div class="hl-k">Accessori</div><div class="hl-v">359,49 €</div></div>
+      <div class="hl"><div class="hl-icon">🛠️</div><div class="hl-k">Servizi</div><div class="hl-v">69,97 €</div></div>
+    </div>
+
+    <div class="card"><div class="card-title">🚀 Piste Canvass</div><details class="rank">
+      <summary>
+        <div class="prow-head"><span class="pname" style="color:var(--mobile)">Mobile</span><span class="pval">38 pz</span></div>
+        <div class="pbar"><i style="width:100%;background:var(--mobile)"></i></div>
+      </summary>
+      <div class="drill" style="margin-left:0;"><div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">OFFERTE VOCE SMART PAY</span>
+          <span class="proj-nums" style="font-size:12px;">19 pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">VODAFONE MOBILE START (+6 altre)</div><div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">OFFERTE VOCE WALLET PAY</span>
+          <span class="proj-nums" style="font-size:12px;">11 pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">CALL POWER EDITION wallet pay (+3 altre)</div><div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">ALTRE OFFERTE MOBILI</span>
+          <span class="proj-nums" style="font-size:12px;">5 pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">DOLCE VITA ULTRA (+3 altre)</div><div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">RICARICA PURA</span>
+          <span class="proj-nums" style="font-size:12px;">2 pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">MOBILE START R.P</div><div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">OFFERTE DATI RICARICABILI</span>
+          <span class="proj-nums" style="font-size:12px;">1 pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">INTERNET PACK 3 MESI</div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="prow-head"><span class="pname" style="color:var(--fisso)">Fisso</span><span class="pval">12 pz</span></div>
+        <div class="pbar"><i style="width:32%;background:var(--fisso)"></i></div>
+      </summary>
+      <div class="drill" style="margin-left:0;"><div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">OFFERTE DUAL PLAY</span>
+          <span class="proj-nums" style="font-size:12px;">10 pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">CASA START LOCK IN 23,95 (+4 altre)</div><div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">DUAL PLAY FASTWEB</span>
+          <span class="proj-nums" style="font-size:12px;">2 pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">CASA PRO (+1 altre)</div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="prow-head"><span class="pname" style="color:var(--iva)">IVA</span><span class="pval">1 pz</span></div>
+        <div class="pbar"><i style="width:3%;background:var(--iva)"></i></div>
+      </summary>
+      <div class="drill" style="margin-left:0;"><div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">VOCE IVA NUOVA ATTIVAZIONE</span>
+          <span class="proj-nums" style="font-size:12px;">1 pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">MOBILE COMFORT</div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="prow-head"><span class="pname" style="color:var(--energia)">Energia</span><span class="pval">3 pz</span></div>
+        <div class="pbar"><i style="width:8%;background:var(--energia)"></i></div>
+      </summary>
+      <div class="drill" style="margin-left:0;"><div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">LUCE FASTWEB</span>
+          <span class="proj-nums" style="font-size:12px;">2 pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">LUCE FASTWEB CONSUMER FIX</div><div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">FASTWEB GAS</span>
+          <span class="proj-nums" style="font-size:12px;">1 pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">FASTWEB GAS consumer</div></div>
+    </details></div>
+
+    <div class="card">
+      <div class="card-title">Prodotti</div>
+      <div class="prod-block">
+    <div class="prod-head"><span class="name">📱 Telefonia</span><span class="agg">13 pz · 5957,99 €</span></div>
+    <div class="paychips">
+      <span class="chip">💵 Contanti 0,00 €</span>
+      <span class="chip">💳 POS 0,00 €</span>
+      <span class="chip">🏦 Finanziato 5957,99 €</span>
+      <span class="chip">🧾 Altro 0,00 €</span>
+    </div>
+  </div>
+      <div class="prod-block">
+    <div class="prod-head"><span class="name">🎧 Accessori</span><span class="agg">17 pz · 359,49 €</span></div>
+    <div class="paychips">
+      <span class="chip">💵 Contanti 11,43 €</span>
+      <span class="chip">💳 POS 59,80 €</span>
+      <span class="chip">🏦 Finanziato 0,00 €</span>
+      <span class="chip">🧾 Altro 288,26 €</span>
+    </div>
+  </div>
+      <div class="mini-tags">
+        <span class="mini-tag">🛡️ Kasko ×0</span>
+        <span class="mini-tag">🛡️ Defender ×0</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Servizi</div>
+      <div class="hls" style="margin-bottom:0;">
+        <div class="hl"><div class="hl-k">Garanteasy</div><div class="hl-v">14,97 €</div></div>
+        <div class="hl"><div class="hl-k">Assistenza</div><div class="hl-v">55,00 €</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Dettaglio</div>
+      <div class="toggle-row">
+        <button class="toggle-btn active" data-rv="store">🏪 Punto vendita</button>
+        <button class="toggle-btn " data-rv="addetto">🧑 Addetto</button>
+      </div>
+      <div><details class="rank">
+      <summary>
+        <div class="rank-top">
+          <span class="rank-name"><span class="medal">🥇</span> VODAFONE STORE LADISPOLI</span>
+          <span class="rank-val">2797,70 €</span>
+        </div>
+        <div class="rank-sub">5 vendite · 2 pz canvass</div>
+      </summary>
+      <div class="drill"><div class="mini-tags"><span class="mini-tag">Mobile ×1</span><span class="mini-tag">Fisso ×1</span><span class="mini-tag">📱 Telefonia ×5 · 2568,00 €</span>,<span class="mini-tag">🎧 Accessori ×9 · 179,70 €</span></div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="rank-top">
+          <span class="rank-name"><span class="medal">🥈</span> VODAFONE STORE VITERBO</span>
+          <span class="rank-val">1243,00 €</span>
+        </div>
+        <div class="rank-sub">13 vendite · 7 pz canvass</div>
+      </summary>
+      <div class="drill"><div class="mini-tags"><span class="mini-tag">Mobile ×5</span><span class="mini-tag">Fisso ×2</span><span class="mini-tag">📱 Telefonia ×1 · 936,00 €</span>,<span class="mini-tag">🎧 Accessori ×1 · 20,00 €</span>,<span class="mini-tag">🛠️ Assistenza ×4</span></div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="rank-top">
+          <span class="rank-name"><span class="medal">🥉</span> VODAFONE STORE PORTA Di ROMA</span>
+          <span class="rank-val">1117,98 €</span>
+        </div>
+        <div class="rank-sub">18 vendite · 12 pz canvass</div>
+      </summary>
+      <div class="drill"><div class="mini-tags"><span class="mini-tag">Mobile ×9</span><span class="mini-tag">Fisso ×2</span><span class="mini-tag">IVA ×1</span><span class="mini-tag">📱 Telefonia ×1 · 627,99 €</span>,<span class="mini-tag">🎧 Accessori ×4 · 99,99 €</span>,<span class="mini-tag">🛠️ Assistenza ×1</span></div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="rank-top">
+          <span class="rank-name"><span class="medal">4.</span> VODAFONE STORE POMEZIA</span>
+          <span class="rank-val">1016,00 €</span>
+        </div>
+        <div class="rank-sub">8 vendite · 4 pz canvass</div>
+      </summary>
+      <div class="drill"><div class="mini-tags"><span class="mini-tag">Mobile ×1</span><span class="mini-tag">Fisso ×3</span><span class="mini-tag">📱 Telefonia ×1 · 936,00 €</span>,<span class="mini-tag">🛠️ Assistenza ×1</span></div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="rank-top">
+          <span class="rank-name"><span class="medal">5.</span> VODAFONE STORE VIALE EUROPA</span>
+          <span class="rank-val">922,85 €</span>
+        </div>
+        <div class="rank-sub">13 vendite · 7 pz canvass</div>
+      </summary>
+      <div class="drill"><div class="mini-tags"><span class="mini-tag">Mobile ×6</span><span class="mini-tag">Fisso ×1</span><span class="mini-tag">📱 Telefonia ×2 · 552,00 €</span>,<span class="mini-tag">🎧 Accessori ×2 · 39,85 €</span></div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="rank-top">
+          <span class="rank-name"><span class="medal">6.</span> VODAFONE STORE PRENESTINA</span>
+          <span class="rank-val">438,00 €</span>
+        </div>
+        <div class="rank-sub">3 vendite · 5 pz canvass</div>
+      </summary>
+      <div class="drill"><div class="mini-tags"><span class="mini-tag">Mobile ×4</span><span class="mini-tag">Fisso ×1</span><span class="mini-tag">📱 Telefonia ×2 · 338,00 €</span></div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="rank-top">
+          <span class="rank-name"><span class="medal">7.</span> VODAFONE STORE CIVITAVECCHIA</span>
+          <span class="rank-val">315,00 €</span>
+        </div>
+        <div class="rank-sub">11 vendite · 7 pz canvass</div>
+      </summary>
+      <div class="drill"><div class="mini-tags"><span class="mini-tag">Mobile ×7</span></div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="rank-top">
+          <span class="rank-name"><span class="medal">8.</span> VODAFONE STORE FIUMICINO</span>
+          <span class="rank-val">185,95 €</span>
+        </div>
+        <div class="rank-sub">7 vendite · 8 pz canvass</div>
+      </summary>
+      <div class="drill"><div class="mini-tags"><span class="mini-tag">Mobile ×3</span><span class="mini-tag">Fisso ×2</span><span class="mini-tag">Energia ×3</span><span class="mini-tag">📱 Telefonia ×1 · 0,00 €</span>,<span class="mini-tag">🎧 Accessori ×1 · 19,95 €</span></div></div>
+    </details><details class="rank">
+      <summary>
+        <div class="rank-top">
+          <span class="rank-name"><span class="medal">9.</span> VODAFONE STORE ROMA EST</span>
+          <span class="rank-val">166,00 €</span>
+        </div>
+        <div class="rank-sub">10 vendite · 2 pz canvass</div>
+      </summary>
+      <div class="drill"><div class="mini-tags"><span class="mini-tag">Mobile ×2</span><span class="mini-tag">🛠️ Assistenza ×1</span></div></div>
+    </details></div>
+    </div>
+  </div>
+
+  <div class="footnote" id="footnote">Le modalità di pagamento (Contanti/POS/Finanziato/Altro) sono stimate proporzionalmente al prezzo di ciascun articolo su scontrini con più voci; gli articoli finanziati sono identificati in modo esatto.</div>
+</div>
+
+<script>
+(function(){
+
+// ============================== CONFIG ==============================
+const MCP_URL = "https://db1.bisuite.app/mcp";
+const MCP_NAME = "phonedwh";
+const MODEL = "claude-sonnet-4-6";
+const MAX_PAGES_SAFETY = 60;
+
+const CATEGORIA_TO_PISTA = {
+  "OFFERTE VOCE":"Mobile","OFFERTE DATI":"Mobile","ALTRE OFFERTE MOBILI":"Mobile","MOBILE FASTWEB":"Mobile",
+  "DUAL PLAY/ FWA":"Fisso","DUAL PLAY FWA FASTWEB":"Fisso",
+  "IVA VOCE":"IVA","IVA DATI":"IVA","IVA RETE FISSA":"IVA","IVA OPZIONI - ADDON - SERVIZI":"IVA","CB IVA":"IVA","SOLUZIONI E M2M":"IVA",
+  "FASTWEB ENERGIA":"Energia","EDISON ENERGIA":"Energia"
+};
+// NB: la pista "CB" non è presente nell'elenco fornito ed è stata rimossa in attesa di conferma.
+const PISTE = ["Mobile","Fisso","IVA","Energia"];
+const PISTA_COLOR = {Mobile:"var(--mobile)",Fisso:"var(--fisso)",IVA:"var(--iva)",Energia:"var(--energia)"};
+
+function pistaOf(categoriaNome){
+  if(!categoriaNome) return null;
+  const c = categoriaNome.toUpperCase().trim();
+  return CATEGORIA_TO_PISTA[c] || null;
+}
+
+
+const PRELOADED_DATA = {"2026-07-01":{"canvass":{"totalePezzi":57,"Mobile":{"pezzi":40,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":19,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":7,"CALL POWER EDITION wallet pay":4,"CALL MAX wallet pay":2,"MOBILE POWER WALLET PAY":1,"VODAFONE MOBILE PRO WALLET PAY":5}},"OFFERTE VOCE SMART PAY":{"pezzi":21,"descrizioni":{"MOBILE PRO IN FATTURA":7,"MOBILE PRO FUORI FATTURA":1,"MOBILE START FUORI FATTURA":2,"VODAFONE MOBILE PRO SmaRT PAY":4,"MOBILE START IN FATTURA":4,"VODAFONE MOBILE ULTRA SMART PAY":1,"VODAFONE MOBILE START":1,"MOBILE POWER SMART PAY":1}}}},"Fisso":{"pezzi":11,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":7,"descrizioni":{"CASA START mass market 27,95":1,"CASA START LOCK IN 23,95":2,"CASA START LOCK-IN 23,95":1,"CASA PRO LOCK-IN 25,95":1,"casa start 2ND HOME 23,95":1,"CASA PRO FAMILY PLAN 25,95":1}},"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA PRO mass market 29,95":1}},"DUAL PLAY FASTWEB":{"pezzi":3,"descrizioni":{"CASA START":3}}}},"IVA":{"pezzi":5,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":4,"descrizioni":{"MOBILE COMFORT":4}},"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"FISSA COMFORT":1}}}},"Energia":{"pezzi":1,"tipologie":{"FASTWEB GAS":{"pezzi":1,"descrizioni":{"FASTWEB GAS consumer":1}}}}},"prodotti":{"Telefonia":{"pezzi":14,"fatturato":3021.99,"contanti":0,"pos":239.99,"finanziato":2782,"altro":0},"Accessori":{"pezzi":16,"fatturato":340.04999999999995,"contanti":81.07775919732441,"pos":12.9,"finanziato":0,"altro":246.0722408026755}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":2,"fatturato":9.98},"assistenza":{"pezzi":24,"fatturato":234},"totaleFatturato":243.98000000000002},"fatturatoTotale":5891.829999999999,"venditeIds":109,"perStore":{"VODAFONE STORE LADISPOLI":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":4,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":3,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":2,"VODAFONE MOBILE PRO WALLET PAY":1}},"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE ULTRA SMART PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":19.95,"contanti":13.277759197324414,"pos":0,"finanziato":0,"altro":6.672240802675585}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":2,"fatturato":9.98},"assistenza":{"pezzi":3,"fatturato":35},"totaleFatturato":44.980000000000004},"fatturatoTotale":309.85,"venditeIds":8,"perStore":{},"perAddetto":{}},"VODAFONE STORE CIVITAVECCHIA":{"canvass":{"totalePezzi":8,"Mobile":{"pezzi":5,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":3,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1,"CALL POWER EDITION wallet pay":2}},"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START":1,"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":3,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA START mass market 27,95":1,"CASA START LOCK IN 23,95":1}},"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":5,"fatturato":2129.99,"contanti":0,"pos":239.98999999999978,"finanziato":1890,"altro":0},"Accessori":{"pezzi":8,"fatturato":159.6,"contanti":0,"pos":0,"finanziato":0,"altro":159.6}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":2517.59,"venditeIds":13,"perStore":{},"perAddetto":{}},"VODAFONE STORE FIUMICINO":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":1,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":1,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":12.9,"contanti":12.9,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":142.9,"venditeIds":10,"perStore":{},"perAddetto":{}},"VODAFONE STORE PORTA Di ROMA":{"canvass":{"totalePezzi":17,"Mobile":{"pezzi":14,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":6,"descrizioni":{"CALL MAX wallet pay":2,"VODAFONE MOBILE PRO WALLET PAY":4}},"OFFERTE VOCE SMART PAY":{"pezzi":8,"descrizioni":{"MOBILE PRO FUORI FATTURA":1,"VODAFONE MOBILE PRO SmaRT PAY":2,"MOBILE PRO IN FATTURA":3,"MOBILE START IN FATTURA":2}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA PRO LOCK-IN 25,95":1,"CASA PRO FAMILY PLAN 25,95":1}}}},"IVA":{"pezzi":1,"tipologie":{"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"FISSA COMFORT":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":4,"fatturato":552,"contanti":0,"pos":0,"finanziato":552,"altro":0},"Accessori":{"pezzi":3,"fatturato":52.8,"contanti":0,"pos":12.9,"finanziato":0,"altro":39.9}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":1269.7,"venditeIds":23,"perStore":{},"perAddetto":{}},"VODAFONE STORE VITERBO":{"canvass":{"totalePezzi":7,"Mobile":{"pezzi":6,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":4,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":3,"CALL POWER EDITION wallet pay":1}},"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"MOBILE START FUORI FATTURA":1,"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA PRO mass market 29,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":6,"fatturato":54},"totaleFatturato":54},"fatturatoTotale":431,"venditeIds":11,"perStore":{},"perAddetto":{}},"VODAFONE STORE VIALE EUROPA":{"canvass":{"totalePezzi":6,"Mobile":{"pezzi":4,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"CALL POWER EDITION wallet pay":1}},"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"MOBILE PRO IN FATTURA":1,"MOBILE START FUORI FATTURA":1,"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":2,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":2,"descrizioni":{"MOBILE COMFORT":2}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":340,"contanti":0,"pos":0,"finanziato":340,"altro":0},"Accessori":{"pezzi":2,"fatturato":39.9,"contanti":0,"pos":0,"finanziato":0,"altro":39.9}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":595.9,"venditeIds":17,"perStore":{},"perAddetto":{}},"VODAFONE STORE POMEZIA":{"canvass":{"totalePezzi":6,"Mobile":{"pezzi":4,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":4,"descrizioni":{"VODAFONE MOBILE PRO SmaRT PAY":2,"MOBILE PRO IN FATTURA":2}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK IN 23,95":1}}}},"IVA":{"pezzi":1,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":54.9,"contanti":54.9,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":13,"fatturato":126},"totaleFatturato":126},"fatturatoTotale":289.9,"venditeIds":10,"perStore":{},"perAddetto":{}},"VODAFONE STORE PRENESTINA":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"MOBILE POWER WALLET PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"casa start 2ND HOME 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":1,"tipologie":{"FASTWEB GAS":{"pezzi":1,"descrizioni":{"FASTWEB GAS consumer":1}}}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":10},"totaleFatturato":10},"fatturatoTotale":125,"venditeIds":7,"perStore":{},"perAddetto":{}},"VODAFONE STORE ROMA EST":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}},"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE POWER SMART PAY":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK-IN 23,95":1}},"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":209.99,"venditeIds":10,"perStore":{},"perAddetto":{}}},"perAddetto":{"Tartaglia Claudia":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":2}},"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE ULTRA SMART PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":2,"fatturato":9.98},"assistenza":{"pezzi":1,"fatturato":5},"totaleFatturato":14.98},"fatturatoTotale":140,"venditeIds":3,"perStore":{},"perAddetto":{}},"Lupidi Giulia":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE PRO WALLET PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":19.95,"contanti":13.277759197324414,"pos":0,"finanziato":0,"altro":6.672240802675585}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":30},"totaleFatturato":30},"fatturatoTotale":169.85000000000002,"venditeIds":5,"perStore":{},"perAddetto":{}},"MAGRO GIUSEPPE":{"canvass":{"totalePezzi":8,"Mobile":{"pezzi":5,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":3,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1,"CALL POWER EDITION wallet pay":2}},"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START":1,"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":3,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA START mass market 27,95":1,"CASA START LOCK IN 23,95":1}},"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":5,"fatturato":2129.99,"contanti":0,"pos":239.98999999999978,"finanziato":1890,"altro":0},"Accessori":{"pezzi":8,"fatturato":159.6,"contanti":0,"pos":0,"finanziato":0,"altro":159.6}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":2517.59,"venditeIds":13,"perStore":{},"perAddetto":{}},"FANTON LAURA":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":1,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":1,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":12.9,"contanti":12.9,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":142.9,"venditeIds":10,"perStore":{},"perAddetto":{}},"MARGHIOALA ANDREI DANIEL":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE PRO WALLET PAY":1,"CALL MAX wallet pay":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":144.95,"venditeIds":3,"perStore":{},"perAddetto":{}},"ROSIELLO ALESSIA":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":2}},"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA PRO mass market 29,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":3,"fatturato":27},"totaleFatturato":27},"fatturatoTotale":258,"venditeIds":6,"perStore":{},"perAddetto":{}},"Mastrangelo Vincent":{"canvass":{"totalePezzi":5,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"CALL POWER EDITION wallet pay":1}},"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"MOBILE PRO IN FATTURA":1,"MOBILE START FUORI FATTURA":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":2,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":2,"descrizioni":{"MOBILE COMFORT":2}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":340,"contanti":0,"pos":0,"finanziato":340,"altro":0},"Accessori":{"pezzi":2,"fatturato":39.9,"contanti":0,"pos":0,"finanziato":0,"altro":39.9}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":449.9,"venditeIds":6,"perStore":{},"perAddetto":{}},"Daidone Loredana":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START FUORI FATTURA":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":18},"totaleFatturato":18},"fatturatoTotale":142,"venditeIds":4,"perStore":{},"perAddetto":{}},"Cola Damiano":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE PRO SmaRT PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":55,"venditeIds":4,"perStore":{},"perAddetto":{}},"CIADAMIDARO ROBERTO":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":4,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":3,"descrizioni":{"CALL MAX wallet pay":1,"VODAFONE MOBILE PRO WALLET PAY":2}},"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":160,"venditeIds":6,"perStore":{},"perAddetto":{}},"Maccione Martina":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"VODAFONE MOBILE PRO SmaRT PAY":1,"MOBILE PRO IN FATTURA":2}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":1,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":54.9,"contanti":54.9,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":12,"fatturato":117},"totaleFatturato":117},"fatturatoTotale":234.9,"venditeIds":6,"perStore":{},"perAddetto":{}},"PIZZO FEDERICA":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"MOBILE POWER WALLET PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":1,"tipologie":{"FASTWEB GAS":{"pezzi":1,"descrizioni":{"FASTWEB GAS consumer":1}}}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":10},"totaleFatturato":10},"fatturatoTotale":100,"venditeIds":5,"perStore":{},"perAddetto":{}},"Marcari Giorgia":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK-IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":114.99000000000001,"venditeIds":5,"perStore":{},"perAddetto":{}},"Puia Marius":{"canvass":{"totalePezzi":8,"Mobile":{"pezzi":5,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":4,"descrizioni":{"VODAFONE MOBILE PRO SmaRT PAY":2,"MOBILE PRO IN FATTURA":2}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE PRO WALLET PAY":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA PRO LOCK-IN 25,95":1,"CASA PRO FAMILY PLAN 25,95":1}}}},"IVA":{"pezzi":1,"tipologie":{"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"FISSA COMFORT":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":249.95,"venditeIds":9,"perStore":{},"perAddetto":{}},"CHIAPPINI FILOMENA":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE POWER SMART PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":60,"venditeIds":3,"perStore":{},"perAddetto":{}},"Nuozzi Alice":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"MOBILE PRO FUORI FATTURA":1,"MOBILE START IN FATTURA":2}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":552,"contanti":0,"pos":0,"finanziato":552,"altro":0},"Accessori":{"pezzi":3,"fatturato":52.8,"contanti":0,"pos":12.9,"finanziato":0,"altro":39.9}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":714.8,"venditeIds":5,"perStore":{},"perAddetto":{}},"Coletta Lorenzo":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":50,"venditeIds":4,"perStore":{},"perAddetto":{}},"BUONOMINI LUCA":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":96,"venditeIds":7,"perStore":{},"perAddetto":{}},"Monaco Fabrizio":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"casa start 2ND HOME 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":25,"venditeIds":2,"perStore":{},"perAddetto":{}},"RUGGERI REBECCA":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":35,"venditeIds":2,"perStore":{},"perAddetto":{}},"FRATTUCCI MARCO":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"CALL POWER EDITION wallet pay":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":31,"venditeIds":1,"perStore":{},"perAddetto":{}}},"date":"2026-07-01","generatedAt":"2026-07-03T21:21:00+02:00"},"2026-07-02":{"canvass":{"totalePezzi":53,"Mobile":{"pezzi":31,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":20,"descrizioni":{"MOBILE PRO IN FATTURA":10,"MOBILE START IN FATTURA":6,"VODAFONE MOBILE START":2,"VODAFONE MOBILE PRO SmaRT PAY":1,"MOBILE START FUORI FATTURA":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":11,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":4,"VODAFONE MOBILE ULTRA WALLET PAY":5,"VODAFONE MOBILE PRO WALLET PAY":2}}}},"Fisso":{"pezzi":12,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":9,"descrizioni":{"casa start 2ND HOME 23,95":2,"CASA START LOCK IN 23,95":4,"CASA PRO FAMILY PLAN 25,95":1,"CASA START LOCK-IN 23,95":1,"CASA START FAMILY PLAN 23,95":1}},"DUAL PLAY FASTWEB":{"pezzi":2,"descrizioni":{"CASA START":2}},"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA START LOCK-IN 23,95":1}}}},"IVA":{"pezzi":7,"tipologie":{"OFFERTE RETE FISSA IVA":{"pezzi":4,"descrizioni":{"FISSA COMFORT":3,"ONEBUSINESS SMART FISSO":1}},"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":3,"descrizioni":{"MOBILE COMFORT":3}}}},"Energia":{"pezzi":3,"tipologie":{"FASTWEB GAS":{"pezzi":3,"descrizioni":{"FASTWEB GAS consumer":3}}}}},"prodotti":{"Telefonia":{"pezzi":18,"fatturato":3916.9799999999996,"contanti":10.913634545454546,"pos":0,"finanziato":3837,"altro":69.06636545454512},"Accessori":{"pezzi":28,"fatturato":444.76,"contanti":34.31894609970674,"pos":39.784946236559136,"finanziato":0,"altro":370.65610766373413}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":5,"fatturato":24.98},"assistenza":{"pezzi":19,"fatturato":165},"totaleFatturato":189.98000000000002},"fatturatoTotale":7220.959999999998,"venditeIds":86,"perStore":{"VODAFONE STORE PORTA Di ROMA":{"canvass":{"totalePezzi":11,"Mobile":{"pezzi":7,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":2}},"OFFERTE VOCE SMART PAY":{"pezzi":5,"descrizioni":{"MOBILE PRO IN FATTURA":2,"VODAFONE MOBILE START":2,"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":4,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":3,"descrizioni":{"casa start 2ND HOME 23,95":2,"CASA PRO FAMILY PLAN 25,95":1}},"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA START LOCK-IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":6,"fatturato":3218,"contanti":0,"pos":0,"finanziato":3218,"altro":0},"Accessori":{"pezzi":11,"fatturato":219.94000000000003,"contanti":0,"pos":0,"finanziato":0,"altro":219.94000000000003}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":2,"fatturato":9.98},"assistenza":{"pezzi":2,"fatturato":40},"totaleFatturato":49.980000000000004},"fatturatoTotale":2183.9700000000003,"venditeIds":18,"perStore":{},"perAddetto":{}},"VODAFONE STORE VIALE EUROPA":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":19.9,"contanti":19.9,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":20},"totaleFatturato":20},"fatturatoTotale":711.9,"venditeIds":10,"perStore":{},"perAddetto":{}},"VODAFONE STORE POMEZIA":{"canvass":{"totalePezzi":6,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":5,"tipologie":{"OFFERTE RETE FISSA IVA":{"pezzi":3,"descrizioni":{"FISSA COMFORT":3}},"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":2,"descrizioni":{"MOBILE COMFORT":2}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":12,"fatturato":90},"totaleFatturato":90},"fatturatoTotale":146,"venditeIds":7,"perStore":{},"perAddetto":{}},"VODAFONE STORE PRENESTINA":{"canvass":{"totalePezzi":9,"Mobile":{"pezzi":5,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":5,"descrizioni":{"MOBILE START IN FATTURA":2,"MOBILE PRO IN FATTURA":2,"VODAFONE MOBILE PRO SmaRT PAY":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA START LOCK IN 23,95":2}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":2,"tipologie":{"FASTWEB GAS":{"pezzi":2,"descrizioni":{"FASTWEB GAS consumer":2}}}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":355,"contanti":0,"pos":0,"finanziato":355,"altro":0},"Accessori":{"pezzi":2,"fatturato":40,"contanti":0,"pos":33.33333333333333,"finanziato":0,"altro":6.666666666666671}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":3,"fatturato":15},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":15},"fatturatoTotale":654.85,"venditeIds":6,"perStore":{},"perAddetto":{}},"VODAFONE STORE ROMA EST":{"canvass":{"totalePezzi":6,"Mobile":{"pezzi":5,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":5,"descrizioni":{"MOBILE PRO IN FATTURA":4,"MOBILE START FUORI FATTURA":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":1,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":2,"fatturato":20,"contanti":0,"pos":0,"finanziato":0,"altro":20}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":578.9,"venditeIds":6,"perStore":{},"perAddetto":{}},"VODAFONE STORE LADISPOLI":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":1,"tipologie":{"FASTWEB GAS":{"pezzi":1,"descrizioni":{"FASTWEB GAS consumer":1}}}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":144,"contanti":0,"pos":0,"finanziato":144,"altro":0},"Accessori":{"pezzi":2,"fatturato":34.9,"contanti":0,"pos":0,"finanziato":0,"altro":34.9}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":5},"totaleFatturato":5},"fatturatoTotale":365.9,"venditeIds":8,"perStore":{},"perAddetto":{}},"VODAFONE STORE CIVITAVECCHIA":{"canvass":{"totalePezzi":9,"Mobile":{"pezzi":6,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":5,"descrizioni":{"VODAFONE MOBILE ULTRA WALLET PAY":5}},"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":3,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":3,"descrizioni":{"CASA START LOCK IN 23,95":2,"CASA START FAMILY PLAN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":3,"fatturato":199.98000000000002,"contanti":10.913634545454546,"pos":0,"finanziato":120,"altro":69.06636545454546},"Accessori":{"pezzi":10,"fatturato":110.02,"contanti":14.418946099706744,"pos":6.451612903225806,"finanziato":0,"altro":89.14944099706744}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":2228.5,"venditeIds":15,"perStore":{},"perAddetto":{}},"VODAFONE STORE VITERBO":{"canvass":{"totalePezzi":8,"Mobile":{"pezzi":6,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":4,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":2,"VODAFONE MOBILE PRO WALLET PAY":2}},"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"MOBILE START IN FATTURA":2}}}},"Fisso":{"pezzi":2,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}},"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK-IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":3,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":10},"totaleFatturato":10},"fatturatoTotale":300.94,"venditeIds":12,"perStore":{},"perAddetto":{}},"VODAFONE STORE FIUMICINO":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":1,"tipologie":{"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"ONEBUSINESS SMART FISSO":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":50,"venditeIds":4,"perStore":{},"perAddetto":{}}},"perAddetto":{"Bernardini Roberta":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"MOBILE PRO IN FATTURA":2,"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO FAMILY PLAN 25,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":2,"fatturato":9.98},"assistenza":{"pezzi":2,"fatturato":40},"totaleFatturato":49.980000000000004},"fatturatoTotale":100,"venditeIds":6,"perStore":{},"perAddetto":{}},"Mastrangelo Vincent":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":19.9,"contanti":19.9,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":20},"totaleFatturato":20},"fatturatoTotale":29.9,"venditeIds":4,"perStore":{},"perAddetto":{}},"Maccione Martina":{"canvass":{"totalePezzi":6,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":5,"tipologie":{"OFFERTE RETE FISSA IVA":{"pezzi":3,"descrizioni":{"FISSA COMFORT":3}},"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":2,"descrizioni":{"MOBILE COMFORT":2}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":12,"fatturato":90},"totaleFatturato":90},"fatturatoTotale":146,"venditeIds":7,"perStore":{},"perAddetto":{}},"Nuozzi Alice":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":60,"venditeIds":3,"perStore":{},"perAddetto":{}},"Monaco Fabrizio":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE PRO SmaRT PAY":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA START LOCK IN 23,95":2}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":355,"contanti":0,"pos":0,"finanziato":355,"altro":0},"Accessori":{"pezzi":2,"fatturato":40,"contanti":0,"pos":33.33333333333333,"finanziato":0,"altro":6.666666666666671}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":3,"fatturato":15},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":15},"fatturatoTotale":594.85,"venditeIds":3,"perStore":{},"perAddetto":{}},"CIADAMIDARO ROBERTO":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START":2}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"casa start 2ND HOME 23,95":2}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":6,"fatturato":3218,"contanti":0,"pos":0,"finanziato":3218,"altro":0},"Accessori":{"pezzi":11,"fatturato":219.94000000000003,"contanti":0,"pos":0,"finanziato":0,"altro":219.94000000000003}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":1963.97,"venditeIds":5,"perStore":{},"perAddetto":{}},"Marcari Giorgia":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START FUORI FATTURA":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":1,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":35,"venditeIds":2,"perStore":{},"perAddetto":{}},"PIZZO FEDERICA":{"canvass":{"totalePezzi":6,"Mobile":{"pezzi":4,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":4,"descrizioni":{"MOBILE START IN FATTURA":2,"MOBILE PRO IN FATTURA":2}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":2,"tipologie":{"FASTWEB GAS":{"pezzi":2,"descrizioni":{"FASTWEB GAS consumer":2}}}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":60,"venditeIds":3,"perStore":{},"perAddetto":{}},"ESPOSITO GIANLUCA":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":4,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":4,"descrizioni":{"MOBILE PRO IN FATTURA":4}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":504,"venditeIds":3,"perStore":{},"perAddetto":{}},"Lupidi Giulia":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":50,"venditeIds":3,"perStore":{},"perAddetto":{}},"Tartaglia Claudia":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":1,"tipologie":{"FASTWEB GAS":{"pezzi":1,"descrizioni":{"FASTWEB GAS consumer":1}}}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":144,"contanti":0,"pos":0,"finanziato":144,"altro":0},"Accessori":{"pezzi":2,"fatturato":34.9,"contanti":0,"pos":0,"finanziato":0,"altro":34.9}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":5},"totaleFatturato":5},"fatturatoTotale":315.9,"venditeIds":5,"perStore":{},"perAddetto":{}},"MAGRO GIUSEPPE":{"canvass":{"totalePezzi":8,"Mobile":{"pezzi":5,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":5,"descrizioni":{"VODAFONE MOBILE ULTRA WALLET PAY":5}}}},"Fisso":{"pezzi":3,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":3,"descrizioni":{"CASA START LOCK IN 23,95":2,"CASA START FAMILY PLAN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":3,"fatturato":199.98000000000002,"contanti":10.913634545454546,"pos":0,"finanziato":120,"altro":69.06636545454546},"Accessori":{"pezzi":8,"fatturato":90.02,"contanti":14.418946099706744,"pos":6.451612903225806,"finanziato":0,"altro":69.14944099706744}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":1510.6,"venditeIds":9,"perStore":{},"perAddetto":{}},"Daidone Loredana":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"MOBILE START IN FATTURA":2}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":50,"venditeIds":2,"perStore":{},"perAddetto":{}},"di clemente luca":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":2,"fatturato":20,"contanti":0,"pos":0,"finanziato":0,"altro":20}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":697.9,"venditeIds":5,"perStore":{},"perAddetto":{}},"BORGHESI SILVIA":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE PRO WALLET PAY":2}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK-IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":10},"totaleFatturato":10},"fatturatoTotale":89.99000000000001,"venditeIds":4,"perStore":{},"perAddetto":{}},"Coletta Lorenzo":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":80,"venditeIds":4,"perStore":{},"perAddetto":{}},"Puia Marius":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":2}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA START LOCK-IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":60,"venditeIds":4,"perStore":{},"perAddetto":{}},"CHIAPPINI FILOMENA":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":2,"fatturato":20,"contanti":0,"pos":0,"finanziato":0,"altro":20}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":39.9,"venditeIds":1,"perStore":{},"perAddetto":{}},"FANTON LAURA":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":1,"tipologie":{"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"ONEBUSINESS SMART FISSO":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":50,"venditeIds":4,"perStore":{},"perAddetto":{}},"FRATTUCCI MARCO":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":2}}}},"Fisso":{"pezzi":1,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":91,"venditeIds":5,"perStore":{},"perAddetto":{}},"BUONOMINI LUCA":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":602,"venditeIds":2,"perStore":{},"perAddetto":{}},"ROSIELLO ALESSIA":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":69.95,"venditeIds":1,"perStore":{},"perAddetto":{}},"HALMAGEAN DIANA":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":20,"venditeIds":1,"perStore":{},"perAddetto":{}}},"date":"2026-07-02","generatedAt":"2026-07-03T21:21:00+02:00"},"2026-07-03":{"canvass":{"totalePezzi":69,"Mobile":{"pezzi":36,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":21,"descrizioni":{"MOBILE PRO IN FATTURA":3,"VODAFONE MOBILE START":8,"MOBILE START IN FATTURA":4,"VODAFONE MOBILE PRO SmaRT PAY":2,"VODAFONE MOBILE ULTRA SMART PAY":1,"MOBILE START FUORI FATTURA":1,"MOBILE PRO SMART PAY (INTRA BRAND)":1,"MOBILE ULTRA IN FATTURA":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":12,"descrizioni":{"CALL POWER EDITION wallet pay":2,"VODAFONE MOBILE START WALLET PAY":7,"VODAFONE MOBILE ULTRA WALLET PAY":2,"VODAFONE MOBILE PRO WALLET PAY":1}},"RICARICA AUTOMATICA":{"pezzi":2,"descrizioni":{"MOBILE START R.A":1,"MOBILE PRO R.A":1}},"RICARICA PURA":{"pezzi":1,"descrizioni":{"MOBILE ULTRA R.P":1}}}},"Fisso":{"pezzi":19,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":12,"descrizioni":{"CASA START FAMILY PLAN 23,95":3,"CASA START mass market 27,95":2,"CASA PRO mass market 29,95":2,"CASA PRO FAMILY PLAN 25,95":1,"CASA START LOCK IN 23,95":2,"CASA PRO LOCK IN 25,95":1,"CASA PRO LOCK-IN 25,95":1}},"DUAL PLAY FASTWEB":{"pezzi":4,"descrizioni":{"CASA PRO":2,"CASA START":2}},"OFFERTE FWA":{"pezzi":3,"descrizioni":{"CASA FWA START LOCK-IN 23,95":1,"CASA FWA LIGHT 24,95":2}}}},"IVA":{"pezzi":14,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":6,"descrizioni":{"MOBILE SMART":5,"MOBILE COMFORT":1}},"SOLUZIONI DIGITALI":{"pezzi":3,"descrizioni":{"BACKUP FACILE":2,"FASTWEB AI WORK ESSENTIAL":1}},"VOCE IVA CONVERSIONE":{"pezzi":2,"descrizioni":{"ONE BUSINESS SMART VOCE CONVERSIONE":1,"MOBILE COMFORT CONVERSIONE":1}},"OFFERTE RETE FISSA IVA":{"pezzi":3,"descrizioni":{"FISSA WIRELESS 5G":1,"ONEBUSINESS SMART FISSO":1,"FISSA SMART":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":11,"fatturato":1101.95,"contanti":0,"pos":0,"finanziato":1032,"altro":69.95000000000005},"Accessori":{"pezzi":17,"fatturato":320,"contanti":19.95,"pos":125.45000000000002,"finanziato":0,"altro":174.6}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":1,"fatturato":4.99},"assistenza":{"pezzi":20,"fatturato":178.5},"totaleFatturato":183.49},"fatturatoTotale":3522.3400000000006,"venditeIds":117,"perStore":{"VODAFONE STORE LADISPOLI":{"canvass":{"totalePezzi":12,"Mobile":{"pezzi":4,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"MOBILE PRO IN FATTURA":2}},"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"CALL POWER EDITION wallet pay":1,"VODAFONE MOBILE ULTRA WALLET PAY":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO FAMILY PLAN 25,95":1}},"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA LIGHT 24,95":1}}}},"IVA":{"pezzi":6,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":5,"descrizioni":{"MOBILE SMART":5}},"SOLUZIONI DIGITALI":{"pezzi":1,"descrizioni":{"BACKUP FACILE":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":1,"fatturato":4.99},"assistenza":{"pezzi":2,"fatturato":24},"totaleFatturato":28.990000000000002},"fatturatoTotale":261,"venditeIds":12,"perStore":{},"perAddetto":{}},"VODAFONE STORE PRENESTINA":{"canvass":{"totalePezzi":6,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START IN FATTURA":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE PRO WALLET PAY":1}},"RICARICA AUTOMATICA":{"pezzi":1,"descrizioni":{"MOBILE PRO R.A":1}}}},"Fisso":{"pezzi":3,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA PRO":1}},"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA PRO LOCK IN 25,95":1,"CASA START mass market 27,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":18},"totaleFatturato":18},"fatturatoTotale":101,"venditeIds":7,"perStore":{},"perAddetto":{}},"VODAFONE STORE FIUMICINO":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":10},"totaleFatturato":10},"fatturatoTotale":90,"venditeIds":6,"perStore":{},"perAddetto":{}},"VODAFONE STORE CIVITAVECCHIA":{"canvass":{"totalePezzi":7,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"MOBILE START IN FATTURA":1,"VODAFONE MOBILE START":1,"MOBILE PRO SMART PAY (INTRA BRAND)":1}}}},"Fisso":{"pezzi":3,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":3,"descrizioni":{"CASA START FAMILY PLAN 23,95":2,"CASA START LOCK IN 23,95":1}}}},"IVA":{"pezzi":1,"tipologie":{"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"FISSA WIRELESS 5G":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":6,"fatturato":981.95,"contanti":0,"pos":0,"finanziato":912,"altro":69.95000000000005},"Accessori":{"pezzi":6,"fatturato":119.69999999999999,"contanti":0,"pos":0,"finanziato":0,"altro":119.69999999999999}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":1267.65,"venditeIds":16,"perStore":{},"perAddetto":{}},"VODAFONE STORE VITERBO":{"canvass":{"totalePezzi":10,"Mobile":{"pezzi":7,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":4,"descrizioni":{"VODAFONE MOBILE START":3,"MOBILE ULTRA IN FATTURA":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":3,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":3}}}},"Fisso":{"pezzi":3,"tipologie":{"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA START LOCK-IN 23,95":1}},"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}},"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO LOCK-IN 25,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":2,"fatturato":27.8,"contanti":0,"pos":27.8,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":3,"fatturato":28},"totaleFatturato":28},"fatturatoTotale":434.68999999999994,"venditeIds":17,"perStore":{},"perAddetto":{}},"VODAFONE STORE POMEZIA":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START IN FATTURA":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA LIGHT 24,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":120,"contanti":0,"pos":0,"finanziato":120,"altro":0},"Accessori":{"pezzi":4,"fatturato":67.8,"contanti":0,"pos":12.9,"finanziato":0,"altro":54.9}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":3,"fatturato":28},"totaleFatturato":28},"fatturatoTotale":352.79999999999995,"venditeIds":11,"perStore":{},"perAddetto":{}},"VODAFONE STORE VIALE EUROPA":{"canvass":{"totalePezzi":9,"Mobile":{"pezzi":3,"tipologie":{"RICARICA PURA":{"pezzi":1,"descrizioni":{"MOBILE ULTRA R.P":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}},"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK IN 23,95":1}}}},"IVA":{"pezzi":5,"tipologie":{"VOCE IVA CONVERSIONE":{"pezzi":1,"descrizioni":{"ONE BUSINESS SMART VOCE CONVERSIONE":1}},"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}},"SOLUZIONI DIGITALI":{"pezzi":2,"descrizioni":{"BACKUP FACILE":1,"FASTWEB AI WORK ESSENTIAL":1}},"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"ONEBUSINESS SMART FISSO":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":3,"fatturato":64.8,"contanti":0,"pos":64.8,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":20},"totaleFatturato":20},"fatturatoTotale":344.8,"venditeIds":15,"perStore":{},"perAddetto":{}},"VODAFONE STORE PORTA Di ROMA":{"canvass":{"totalePezzi":10,"Mobile":{"pezzi":7,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":7,"descrizioni":{"VODAFONE MOBILE PRO SmaRT PAY":2,"VODAFONE MOBILE ULTRA SMART PAY":1,"VODAFONE MOBILE START":3,"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":3,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA START FAMILY PLAN 23,95":1,"CASA PRO mass market 29,95":1}},"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":20},"totaleFatturato":20},"fatturatoTotale":345,"venditeIds":16,"perStore":{},"perAddetto":{}},"VODAFONE STORE ROMA EST":{"canvass":{"totalePezzi":11,"Mobile":{"pezzi":6,"tipologie":{"RICARICA AUTOMATICA":{"pezzi":1,"descrizioni":{"MOBILE START R.A":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":4,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":2,"VODAFONE MOBILE ULTRA WALLET PAY":1,"CALL POWER EDITION wallet pay":1}},"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START FUORI FATTURA":1}}}},"Fisso":{"pezzi":3,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA START mass market 27,95":1,"CASA PRO mass market 29,95":1}},"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA PRO":1}}}},"IVA":{"pezzi":2,"tipologie":{"VOCE IVA CONVERSIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT CONVERSIONE":1}},"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"FISSA SMART":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":2,"fatturato":39.9,"contanti":19.95,"pos":19.95,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":4,"fatturato":21.5},"totaleFatturato":21.5},"fatturatoTotale":325.4,"venditeIds":16,"perStore":{},"perAddetto":{}},"BACK OFFICE VODAFONE PARTNER":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":0,"venditeIds":1,"perStore":{},"perAddetto":{}}},"perAddetto":{"Tartaglia Claudia":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"CALL POWER EDITION wallet pay":1,"VODAFONE MOBILE ULTRA WALLET PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":1,"fatturato":4.99},"assistenza":{"pezzi":1,"fatturato":4},"totaleFatturato":8.99},"fatturatoTotale":161,"venditeIds":6,"perStore":{},"perAddetto":{}},"Lupidi Giulia":{"canvass":{"totalePezzi":10,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"MOBILE PRO IN FATTURA":2}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO FAMILY PLAN 25,95":1}},"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA LIGHT 24,95":1}}}},"IVA":{"pezzi":6,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":5,"descrizioni":{"MOBILE SMART":5}},"SOLUZIONI DIGITALI":{"pezzi":1,"descrizioni":{"BACKUP FACILE":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":20},"totaleFatturato":20},"fatturatoTotale":100,"venditeIds":6,"perStore":{},"perAddetto":{}},"Monaco Fabrizio":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE PRO WALLET PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":71,"venditeIds":4,"perStore":{},"perAddetto":{}},"FANTON LAURA":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":10},"totaleFatturato":10},"fatturatoTotale":90,"venditeIds":6,"perStore":{},"perAddetto":{}},"MAGRO GIUSEPPE":{"canvass":{"totalePezzi":5,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START":1,"MOBILE PRO SMART PAY (INTRA BRAND)":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA START FAMILY PLAN 23,95":1,"CASA START LOCK IN 23,95":1}}}},"IVA":{"pezzi":1,"tipologie":{"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"FISSA WIRELESS 5G":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":5,"fatturato":981.95,"contanti":0,"pos":0,"finanziato":912,"altro":69.95000000000005},"Accessori":{"pezzi":6,"fatturato":119.69999999999999,"contanti":0,"pos":0,"finanziato":0,"altro":119.69999999999999}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":1177.65,"venditeIds":10,"perStore":{},"perAddetto":{}},"di clemente luca":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START FAMILY PLAN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":90,"venditeIds":6,"perStore":{},"perAddetto":{}},"PIZZO FEDERICA":{"canvass":{"totalePezzi":5,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START IN FATTURA":1}},"RICARICA AUTOMATICA":{"pezzi":1,"descrizioni":{"MOBILE PRO R.A":1}}}},"Fisso":{"pezzi":3,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA PRO":1}},"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA PRO LOCK IN 25,95":1,"CASA START mass market 27,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":30,"venditeIds":3,"perStore":{},"perAddetto":{}},"ROSIELLO ALESSIA":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO LOCK-IN 25,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":12.9,"contanti":0,"pos":12.9,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":98.8,"venditeIds":5,"perStore":{},"perAddetto":{}},"Cola Damiano":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START IN FATTURA":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA LIGHT 24,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":12.9,"contanti":0,"pos":12.9,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":3,"fatturato":28},"totaleFatturato":28},"fatturatoTotale":152.9,"venditeIds":9,"perStore":{},"perAddetto":{}},"BORGHESI SILVIA":{"canvass":{"totalePezzi":6,"Mobile":{"pezzi":5,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":3,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":3}},"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START":2}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE FWA":{"pezzi":1,"descrizioni":{"CASA FWA START LOCK-IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":10},"totaleFatturato":10},"fatturatoTotale":234.99,"venditeIds":6,"perStore":{},"perAddetto":{}},"Mastrangelo Vincent":{"canvass":{"totalePezzi":6,"Mobile":{"pezzi":3,"tipologie":{"RICARICA PURA":{"pezzi":1,"descrizioni":{"MOBILE ULTRA R.P":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}},"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":3,"tipologie":{"VOCE IVA CONVERSIONE":{"pezzi":1,"descrizioni":{"ONE BUSINESS SMART VOCE CONVERSIONE":1}},"SOLUZIONI DIGITALI":{"pezzi":1,"descrizioni":{"BACKUP FACILE":1}},"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"ONEBUSINESS SMART FISSO":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":3,"fatturato":64.8,"contanti":0,"pos":64.8,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":20},"totaleFatturato":20},"fatturatoTotale":199.79999999999998,"venditeIds":9,"perStore":{},"perAddetto":{}},"FRATTUCCI MARCO":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE ULTRA IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":14.9,"contanti":0,"pos":14.9,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":100.9,"venditeIds":6,"perStore":{},"perAddetto":{}},"Bernardini Roberta":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START":1,"MOBILE START IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START FAMILY PLAN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":55,"venditeIds":3,"perStore":{},"perAddetto":{}},"Nuozzi Alice":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE PRO SmaRT PAY":1,"VODAFONE MOBILE ULTRA SMART PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":20},"totaleFatturato":20},"fatturatoTotale":105,"venditeIds":3,"perStore":{},"perAddetto":{}},"CIADAMIDARO ROBERTO":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"VODAFONE MOBILE START":2,"VODAFONE MOBILE PRO SmaRT PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO mass market 29,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":165,"venditeIds":8,"perStore":{},"perAddetto":{}},"RUGGERI REBECCA":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE START FUORI FATTURA":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO mass market 29,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":19.95,"contanti":0,"pos":19.95,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":14},"totaleFatturato":14},"fatturatoTotale":115.95,"venditeIds":6,"perStore":{},"perAddetto":{}},"Marcari Giorgia":{"canvass":{"totalePezzi":6,"Mobile":{"pezzi":2,"tipologie":{"RICARICA AUTOMATICA":{"pezzi":1,"descrizioni":{"MOBILE START R.A":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START mass market 27,95":1}},"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA PRO":1}}}},"IVA":{"pezzi":2,"tipologie":{"VOCE IVA CONVERSIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT CONVERSIONE":1}},"OFFERTE RETE FISSA IVA":{"pezzi":1,"descrizioni":{"FISSA SMART":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":19.95,"contanti":19.95,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":84.95,"venditeIds":6,"perStore":{},"perAddetto":{}},"Coletta Lorenzo":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK IN 23,95":1}}}},"IVA":{"pezzi":2,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}},"SOLUZIONI DIGITALI":{"pezzi":1,"descrizioni":{"FASTWEB AI WORK ESSENTIAL":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":145,"venditeIds":5,"perStore":{},"perAddetto":{}},"Maccione Martina":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":120,"contanti":0,"pos":0,"finanziato":120,"altro":0},"Accessori":{"pezzi":3,"fatturato":54.9,"contanti":0,"pos":0,"finanziato":0,"altro":54.9}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":199.9,"venditeIds":2,"perStore":{},"perAddetto":{}},"ESPOSITO GIANLUCA":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE ULTRA WALLET PAY":1,"CALL POWER EDITION wallet pay":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":7.5},"totaleFatturato":7.5},"fatturatoTotale":124.5,"venditeIds":4,"perStore":{},"perAddetto":{}},"BUONOMINI LUCA":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":0,"venditeIds":1,"perStore":{},"perAddetto":{}},"MARGHIOALA ANDREI DANIEL":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":1,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":20,"venditeIds":2,"perStore":{},"perAddetto":{}},"DALIA BOLES":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":0,"venditeIds":1,"perStore":{},"perAddetto":{}}},"date":"2026-07-03","generatedAt":"2026-07-03T22:21:00+02:00"},"2026-07-04":{"canvass":{"totalePezzi":54,"Mobile":{"pezzi":38,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":11,"descrizioni":{"CALL POWER EDITION wallet pay":4,"VODAFONE MOBILE PRO WALLET PAY":1,"VODAFONE MOBILE START WALLET PAY":4,"VODAFONE MOBILE ULTRA WALLET PAY":2}},"OFFERTE VOCE SMART PAY":{"pezzi":19,"descrizioni":{"VODAFONE MOBILE START":8,"MOBILE START IN FATTURA":1,"VODAFONE MOBILE PRO SmaRT PAY":1,"VODAFONE MOBILE ULTRA SMART PAY":1,"MOBILE PRO IN FATTURA":4,"CALL POWER ASSOCIATA A MOP O GIGA FAMILY(smart pay)":3,"CALL MAX smart pay":1}},"ALTRE OFFERTE MOBILI":{"pezzi":5,"descrizioni":{"DOLCE VITA Pro":1,"DOLCE VITA ULTRA":2,"CALL POWER PRO":1,"DOLCE VITA start":1}},"RICARICA PURA":{"pezzi":2,"descrizioni":{"MOBILE START R.P":2}},"OFFERTE DATI RICARICABILI":{"pezzi":1,"descrizioni":{"INTERNET PACK 3 MESI":1}}}},"Fisso":{"pezzi":12,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":10,"descrizioni":{"CASA PRO FAMILY PLAN 25,95":3,"CASA START FAMILY PLAN 23,95":1,"CASA START LOCK IN 23,95":4,"CASA START mass market 27,95":1,"CASA START LOCK-IN 23,95":1}},"DUAL PLAY FASTWEB":{"pezzi":2,"descrizioni":{"CASA PRO":1,"CASA START":1}}}},"IVA":{"pezzi":1,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}}}},"Energia":{"pezzi":3,"tipologie":{"FASTWEB GAS":{"pezzi":1,"descrizioni":{"FASTWEB GAS consumer":1}},"LUCE FASTWEB":{"pezzi":2,"descrizioni":{"LUCE FASTWEB CONSUMER FIX":2}}}}},"prodotti":{"Telefonia":{"pezzi":13,"fatturato":5957.99,"contanti":0,"pos":0,"finanziato":5957.99,"altro":0},"Accessori":{"pezzi":17,"fatturato":359.49,"contanti":11.428571428571427,"pos":59.8,"finanziato":0,"altro":288.2614285714286}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":3,"fatturato":14.97},"assistenza":{"pezzi":7,"fatturato":55},"totaleFatturato":69.97},"fatturatoTotale":8202.48,"venditeIds":88,"perStore":{"VODAFONE STORE CIVITAVECCHIA":{"canvass":{"totalePezzi":7,"Mobile":{"pezzi":7,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":3,"descrizioni":{"CALL POWER EDITION wallet pay":3}},"ALTRE OFFERTE MOBILI":{"pezzi":4,"descrizioni":{"DOLCE VITA Pro":1,"DOLCE VITA ULTRA":2,"DOLCE VITA start":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":315,"venditeIds":11,"perStore":{},"perAddetto":{}},"VODAFONE STORE LADISPOLI":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO FAMILY PLAN 25,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":5,"fatturato":2568,"contanti":0,"pos":0,"finanziato":2568,"altro":0},"Accessori":{"pezzi":9,"fatturato":179.70000000000002,"contanti":0,"pos":0,"finanziato":0,"altro":179.70000000000002}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":2797.7,"venditeIds":5,"perStore":{},"perAddetto":{}},"VODAFONE STORE PORTA Di ROMA":{"canvass":{"totalePezzi":12,"Mobile":{"pezzi":9,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":3,"descrizioni":{"VODAFONE MOBILE PRO WALLET PAY":1,"CALL POWER EDITION wallet pay":1,"VODAFONE MOBILE ULTRA WALLET PAY":1}},"OFFERTE VOCE SMART PAY":{"pezzi":6,"descrizioni":{"VODAFONE MOBILE ULTRA SMART PAY":1,"MOBILE PRO IN FATTURA":2,"CALL MAX smart pay":1,"VODAFONE MOBILE START":2}}}},"Fisso":{"pezzi":2,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA PRO":1}},"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO FAMILY PLAN 25,95":1}}}},"IVA":{"pezzi":1,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":627.99,"contanti":0,"pos":0,"finanziato":627.99,"altro":0},"Accessori":{"pezzi":4,"fatturato":99.99000000000001,"contanti":0,"pos":0,"finanziato":0,"altro":99.99000000000001}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":3,"fatturato":14.97},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":23.97},"fatturatoTotale":1117.98,"venditeIds":18,"perStore":{},"perAddetto":{}},"VODAFONE STORE PRENESTINA":{"canvass":{"totalePezzi":5,"Mobile":{"pezzi":4,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"MOBILE START IN FATTURA":1,"VODAFONE MOBILE START":2}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO FAMILY PLAN 25,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":338,"contanti":0,"pos":0,"finanziato":338,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":438,"venditeIds":3,"perStore":{},"perAddetto":{}},"VODAFONE STORE FIUMICINO":{"canvass":{"totalePezzi":8,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"VODAFONE MOBILE START":2,"VODAFONE MOBILE PRO SmaRT PAY":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START FAMILY PLAN 23,95":1}},"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":3,"tipologie":{"FASTWEB GAS":{"pezzi":1,"descrizioni":{"FASTWEB GAS consumer":1}},"LUCE FASTWEB":{"pezzi":2,"descrizioni":{"LUCE FASTWEB CONSUMER FIX":2}}}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":19.95,"contanti":0,"pos":19.95,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":185.95,"venditeIds":7,"perStore":{},"perAddetto":{}},"VODAFONE STORE VIALE EUROPA":{"canvass":{"totalePezzi":7,"Mobile":{"pezzi":6,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START":1}},"ALTRE OFFERTE MOBILI":{"pezzi":1,"descrizioni":{"CALL POWER PRO":1}},"RICARICA PURA":{"pezzi":2,"descrizioni":{"MOBILE START R.P":2}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE ULTRA WALLET PAY":1}},"OFFERTE DATI RICARICABILI":{"pezzi":1,"descrizioni":{"INTERNET PACK 3 MESI":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":552,"contanti":0,"pos":0,"finanziato":552,"altro":0},"Accessori":{"pezzi":2,"fatturato":39.849999999999994,"contanti":0,"pos":39.849999999999994,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":922.85,"venditeIds":13,"perStore":{},"perAddetto":{}},"VODAFONE STORE ROMA EST":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}},"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"CALL POWER ASSOCIATA A MOP O GIGA FAMILY(smart pay)":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":4},"totaleFatturato":4},"fatturatoTotale":166,"venditeIds":10,"perStore":{},"perAddetto":{}},"VODAFONE STORE VITERBO":{"canvass":{"totalePezzi":7,"Mobile":{"pezzi":5,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":2}},"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"MOBILE PRO IN FATTURA":1,"CALL POWER ASSOCIATA A MOP O GIGA FAMILY(smart pay)":1,"VODAFONE MOBILE START":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA START LOCK IN 23,95":1,"CASA START LOCK-IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":936,"contanti":0,"pos":0,"finanziato":936,"altro":0},"Accessori":{"pezzi":1,"fatturato":20,"contanti":11.428571428571427,"pos":0,"finanziato":0,"altro":8.571428571428573}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":4,"fatturato":33},"totaleFatturato":33},"fatturatoTotale":1243,"venditeIds":13,"perStore":{},"perAddetto":{}},"VODAFONE STORE POMEZIA":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"CALL POWER ASSOCIATA A MOP O GIGA FAMILY(smart pay)":1}}}},"Fisso":{"pezzi":3,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":3,"descrizioni":{"CASA START LOCK IN 23,95":2,"CASA START mass market 27,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":936,"contanti":0,"pos":0,"finanziato":936,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":1016,"venditeIds":8,"perStore":{},"perAddetto":{}}},"perAddetto":{"HALMAGEAN DIANA":{"canvass":{"totalePezzi":7,"Mobile":{"pezzi":7,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":3,"descrizioni":{"CALL POWER EDITION wallet pay":3}},"ALTRE OFFERTE MOBILI":{"pezzi":4,"descrizioni":{"DOLCE VITA Pro":1,"DOLCE VITA ULTRA":2,"DOLCE VITA start":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":285,"venditeIds":8,"perStore":{},"perAddetto":{}},"Lupidi Giulia":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"MOBILE PRO IN FATTURA":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO FAMILY PLAN 25,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":936,"contanti":0,"pos":0,"finanziato":936,"altro":0},"Accessori":{"pezzi":3,"fatturato":54.9,"contanti":0,"pos":0,"finanziato":0,"altro":54.9}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":1020.9,"venditeIds":2,"perStore":{},"perAddetto":{}},"Tartaglia Claudia":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":4,"fatturato":1632,"contanti":0,"pos":0,"finanziato":1632,"altro":0},"Accessori":{"pezzi":6,"fatturato":124.80000000000001,"contanti":0,"pos":0,"finanziato":0,"altro":124.80000000000001}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":1776.8,"venditeIds":3,"perStore":{},"perAddetto":{}},"Bernardini Roberta":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"MOBILE PRO IN FATTURA":2}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE ULTRA WALLET PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO FAMILY PLAN 25,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":3,"fatturato":14.97},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":14.97},"fatturatoTotale":105,"venditeIds":3,"perStore":{},"perAddetto":{}},"Monaco Fabrizio":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"MOBILE START IN FATTURA":1,"VODAFONE MOBILE START":2}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA PRO FAMILY PLAN 25,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":60,"venditeIds":2,"perStore":{},"perAddetto":{}},"PIZZO FEDERICA":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":338,"contanti":0,"pos":0,"finanziato":338,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":378,"venditeIds":1,"perStore":{},"perAddetto":{}},"FANTON LAURA":{"canvass":{"totalePezzi":8,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":3,"descrizioni":{"VODAFONE MOBILE START":2,"VODAFONE MOBILE PRO SmaRT PAY":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START FAMILY PLAN 23,95":1}},"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA START":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":3,"tipologie":{"FASTWEB GAS":{"pezzi":1,"descrizioni":{"FASTWEB GAS consumer":1}},"LUCE FASTWEB":{"pezzi":2,"descrizioni":{"LUCE FASTWEB CONSUMER FIX":2}}}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":19.95,"contanti":0,"pos":19.95,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":185.95,"venditeIds":7,"perStore":{},"perAddetto":{}},"CIADAMIDARO ROBERTO":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE PRO WALLET PAY":1}},"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"CALL MAX smart pay":1,"VODAFONE MOBILE START":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":627.99,"contanti":0,"pos":0,"finanziato":627.99,"altro":0},"Accessori":{"pezzi":4,"fatturato":99.99000000000001,"contanti":0,"pos":0,"finanziato":0,"altro":99.99000000000001}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":837.98,"venditeIds":5,"perStore":{},"perAddetto":{}},"MARGHIOALA ANDREI DANIEL":{"canvass":{"totalePezzi":3,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"CALL POWER EDITION wallet pay":1}}}},"Fisso":{"pezzi":1,"tipologie":{"DUAL PLAY FASTWEB":{"pezzi":1,"descrizioni":{"CASA PRO":1}}}},"IVA":{"pezzi":1,"tipologie":{"VOCE IVA NUOVA ATTIVAZIONE":{"pezzi":1,"descrizioni":{"MOBILE COMFORT":1}}}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":75,"venditeIds":5,"perStore":{},"perAddetto":{}},"di clemente luca":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":30,"venditeIds":3,"perStore":{},"perAddetto":{}},"Mastrangelo Vincent":{"canvass":{"totalePezzi":4,"Mobile":{"pezzi":3,"tipologie":{"RICARICA PURA":{"pezzi":2,"descrizioni":{"MOBILE START R.P":2}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE ULTRA WALLET PAY":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":200,"venditeIds":6,"perStore":{},"perAddetto":{}},"ESPOSITO GIANLUCA":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":60,"venditeIds":3,"perStore":{},"perAddetto":{}},"BORGHESI SILVIA":{"canvass":{"totalePezzi":5,"Mobile":{"pezzi":3,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"MOBILE PRO IN FATTURA":1,"VODAFONE MOBILE START":1}},"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA START LOCK IN 23,95":1,"CASA START LOCK-IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":1,"fatturato":20,"contanti":11.428571428571427,"pos":0,"finanziato":0,"altro":8.571428571428573}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":2,"fatturato":15},"totaleFatturato":15},"fatturatoTotale":180,"venditeIds":7,"perStore":{},"perAddetto":{}},"Maccione Martina":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":2,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":2,"descrizioni":{"CASA START LOCK IN 23,95":1,"CASA START mass market 27,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":936,"contanti":0,"pos":0,"finanziato":936,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":966,"venditeIds":4,"perStore":{},"perAddetto":{}},"Daidone Loredana":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE WALLET PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START WALLET PAY":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":46,"venditeIds":2,"perStore":{},"perAddetto":{}},"Puia Marius":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":2,"descrizioni":{"VODAFONE MOBILE ULTRA SMART PAY":1,"VODAFONE MOBILE START":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":100,"venditeIds":5,"perStore":{},"perAddetto":{}},"BUONOMINI LUCA":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"ALTRE OFFERTE MOBILI":{"pezzi":1,"descrizioni":{"CALL POWER PRO":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":2,"fatturato":552,"contanti":0,"pos":0,"finanziato":552,"altro":0},"Accessori":{"pezzi":2,"fatturato":39.849999999999994,"contanti":0,"pos":39.849999999999994,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":622.85,"venditeIds":4,"perStore":{},"perAddetto":{}},"RUGGERI REBECCA":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"CALL POWER ASSOCIATA A MOP O GIGA FAMILY(smart pay)":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":4},"totaleFatturato":4},"fatturatoTotale":66,"venditeIds":4,"perStore":{},"perAddetto":{}},"Coletta Lorenzo":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":2,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"VODAFONE MOBILE START":1}},"OFFERTE DATI RICARICABILI":{"pezzi":1,"descrizioni":{"INTERNET PACK 3 MESI":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":100,"venditeIds":3,"perStore":{},"perAddetto":{}},"ROSIELLO ALESSIA":{"canvass":{"totalePezzi":1,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"CALL POWER ASSOCIATA A MOP O GIGA FAMILY(smart pay)":1}}}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":1,"fatturato":936,"contanti":0,"pos":0,"finanziato":936,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":997,"venditeIds":3,"perStore":{},"perAddetto":{}},"Cola Damiano":{"canvass":{"totalePezzi":2,"Mobile":{"pezzi":1,"tipologie":{"OFFERTE VOCE SMART PAY":{"pezzi":1,"descrizioni":{"CALL POWER ASSOCIATA A MOP O GIGA FAMILY(smart pay)":1}}}},"Fisso":{"pezzi":1,"tipologie":{"OFFERTE DUAL PLAY":{"pezzi":1,"descrizioni":{"CASA START LOCK IN 23,95":1}}}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":1,"fatturato":9},"totaleFatturato":9},"fatturatoTotale":50,"venditeIds":4,"perStore":{},"perAddetto":{}},"CHIAPPINI FILOMENA":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":40,"venditeIds":3,"perStore":{},"perAddetto":{}},"FRATTUCCI MARCO":{"canvass":{"totalePezzi":0,"Mobile":{"pezzi":0,"tipologie":{}},"Fisso":{"pezzi":0,"tipologie":{}},"IVA":{"pezzi":0,"tipologie":{}},"Energia":{"pezzi":0,"tipologie":{}}},"prodotti":{"Telefonia":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0},"Accessori":{"pezzi":0,"fatturato":0,"contanti":0,"pos":0,"finanziato":0,"altro":0}},"garanzie":{"kasko":0,"defender":0},"servizi":{"garanteasy":{"pezzi":0,"fatturato":0},"assistenza":{"pezzi":0,"fatturato":0},"totaleFatturato":0},"fatturatoTotale":20,"venditeIds":1,"perStore":{},"perAddetto":{}}},"date":"2026-07-04","generatedAt":"2026-07-04T22:37:55+02:00"}};
+
+const state = {
+  loading:false,
+  today: fmtDate(new Date()),
+  selectedDate: fmtDate(new Date()),
+  monthDays: [],
+  tab: "giorno",       // 'giorno' | 'mese'
+  rankView: "store",   // 'store' | 'addetto'
+};
+
+// ============================== UTIL ==============================
+function fmtDate(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function firstOfMonth(dateStr){ return dateStr.slice(0,7)+"-01"; }
+function daysInMonthOf(dateStr){
+  const [y,m] = dateStr.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+function eur(n){ return (n||0).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})+" €"; }
+function num(n){ return Math.round(n||0).toLocaleString("it-IT"); }
+function dayLabel(dateStr){
+  const d = new Date(dateStr+"T00:00:00");
+  return d.toLocaleDateString("it-IT",{weekday:"short",day:"2-digit",month:"2-digit"});
+}
+function fullDayLabel(dateStr){
+  const d = new Date(dateStr+"T00:00:00");
+  return d.toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"});
+}
+function findDay(dateStr){ return state.monthDays.find(d=>d.date===dateStr) || null; }
+
+// ============================== GIORNI LAVORATIVI (lun-sab, festività IT escluse) ==============================
+function easterMonday(year){
+  const a=year%19, b=Math.floor(year/100), c=year%100, d=Math.floor(b/4), e=b%4,
+        f=Math.floor((b+8)/25), g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30,
+        i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7,
+        m=Math.floor((a+11*h+22*l)/451),
+        month=Math.floor((h+l-7*m+114)/31), day=((h+l-7*m+114)%31)+1;
+  const easter = new Date(year, month-1, day);
+  easter.setDate(easter.getDate()+1);
+  return fmtDate(easter);
+}
+const FIXED_HOLIDAYS_MMDD = ["01-01","01-06","04-25","05-01","06-02","08-15","11-01","12-08","12-25","12-26"];
+function isHoliday(dateStr){
+  const [y,m,d] = dateStr.split("-");
+  if(FIXED_HOLIDAYS_MMDD.includes(`${m}-${d}`)) return true;
+  if(dateStr === easterMonday(parseInt(y,10))) return true;
+  return false;
+}
+function isWorkingDay(dateStr){
+  const dow = new Date(dateStr+"T00:00:00").getDay(); // 0 = domenica
+  if(dow===0) return false;
+  if(isHoliday(dateStr)) return false;
+  return true;
+}
+
+// ============================== AGGREGAZIONE GIORNALIERA ==============================
+function emptyBucket(){ return {pezzi:0, fatturato:0, contanti:0, pos:0, finanziato:0, altro:0}; }
+function addPayShare(bucket, article, sale){
+  const importo = parseFloat(article.importo_scontrino ?? article.prezzo ?? 0) || 0;
+  bucket.pezzi += 1; bucket.fatturato += importo;
+  const financed = Number(article.id_finanziatore) > 0;
+  if(financed){ bucket.finanziato += importo; return; }
+  let contanti = 0, pos = 0, altro = 0;
+  if(sale && sale.pagamento && Array.isArray(sale.__articles)){
+    const p = sale.pagamento;
+    const nonFinArticles = sale.__articles.filter(a => !(Number(a.id_finanziatore)>0));
+    const nonFinTotal = nonFinArticles.reduce((s,a)=> s + (parseFloat(a.importo_scontrino ?? a.prezzo ?? 0)||0), 0);
+    if(nonFinTotal > 0){
+      const share = importo / nonFinTotal;
+      contanti = (parseFloat(p.contanti||0)||0) * share;
+      pos = (parseFloat(p.pagamenti_elettronici||0)||0) * share;
+      altro = ((parseFloat(p.bonifici||0)||0)+(parseFloat(p.assegni||0)||0)+(parseFloat(p.buoni||0)||0)+(parseFloat(p.coupon||0)||0)+(parseFloat(p.altri_pagamenti||0)||0)) * share;
+    }
+  }
+  // Quadratura per articolo: le quote assegnate non possono superare l'importo,
+  // e ciò che resta non classificato (non scontrinato, non riscosso, ecc.) finisce in Altro.
+  let assegnato = contanti + pos + altro;
+  if(assegnato > importo && assegnato > 0){
+    const k = importo / assegnato;
+    contanti *= k; pos *= k; altro *= k; assegnato = importo;
+  }
+  bucket.contanti += contanti;
+  bucket.pos += pos;
+  bucket.altro += altro + (importo - assegnato);
+}
+function emptyPistaBucket(){ return {pezzi:0, tipologie:{}}; }
+function newDayAgg(){
+  const canvass = {totalePezzi:0};
+  PISTE.forEach(p=> canvass[p] = emptyPistaBucket());
+  return {
+    canvass,
+    prodotti: {Telefonia: emptyBucket(), Accessori: emptyBucket()},
+    garanzie: {kasko:0, defender:0},
+    servizi: {garanteasy:{pezzi:0,fatturato:0}, assistenza:{pezzi:0,fatturato:0}, totaleFatturato:0},
+    fatturatoTotale:0, venditeIds: new Set(), perStore: {}, perAddetto: {}
+  };
+}
+function ensureGroup(map, key){ if(!map[key]) map[key] = newDayAgg(); return map[key]; }
+function addCanvassDetail(pistaBucket, tipologiaNome, descrizione){
+  pistaBucket.pezzi += 1;
+  const tip = tipologiaNome || "(senza tipologia)";
+  const desc = descrizione || "(senza descrizione)";
+  if(!pistaBucket.tipologie[tip]) pistaBucket.tipologie[tip] = {pezzi:0, descrizioni:{}};
+  pistaBucket.tipologie[tip].pezzi += 1;
+  pistaBucket.tipologie[tip].descrizioni[desc] = (pistaBucket.tipologie[tip].descrizioni[desc]||0) + 1;
+}
+
+// Punti da escludere completamente dal report (banchetti promozionali)
+const EXCLUDED_STORE_RE = /BANCHETTO/i;
+
+function aggregateDay(articles, salesById){
+  const day = newDayAgg();
+  for(const art of articles){
+    const sale = salesById[art.vendita_id];
+    const cat = (art.categoria_nome||"").toUpperCase().trim();
+    const tipologia = (art.tipologia_nome||"").toUpperCase().trim();
+    const importo = parseFloat(art.importo_scontrino ?? art.prezzo ?? 0) || 0;
+    const storeName = sale?.attivita_nome || sale?.att_dest_nominativo || "Sconosciuto";
+    if(EXCLUDED_STORE_RE.test(storeName)) continue;
+    const addettoName = sale?.addetto_nome || "Sconosciuto";
+    const storeAgg = ensureGroup(day.perStore, storeName);
+    const addettoAgg = ensureGroup(day.perAddetto, addettoName);
+    const targets = [day, storeAgg, addettoAgg];
+
+    if(art.tipo === "C"){
+      const pista = pistaOf(cat);
+      if(pista){
+        for(const t of targets){
+          addCanvassDetail(t.canvass[pista], art.tipologia_nome, art.descrizione);
+          t.canvass.totalePezzi += 1;
+        }
+      }
+    } else {
+      if(cat === "TELEFONIA"){ for(const t of targets) addPayShare(t.prodotti.Telefonia, art, sale); }
+      else if(cat === "ACCESSORI"){ for(const t of targets) addPayShare(t.prodotti.Accessori, art, sale); }
+      else if(cat === "GARANZIE"){
+        if(tipologia === "KASKO"){ for(const t of targets) t.garanzie.kasko += 1; }
+        else if(tipologia === "DEFENDER"){ for(const t of targets) t.garanzie.defender += 1; }
+      } else if(cat === "GARANTEASY"){
+        for(const t of targets){ t.servizi.garanteasy.pezzi += 1; t.servizi.garanteasy.fatturato += importo; t.servizi.totaleFatturato += importo; }
+      } else if(cat === "ASSISTENZA"){
+        for(const t of targets){ t.servizi.assistenza.pezzi += 1; t.servizi.assistenza.fatturato += importo; t.servizi.totaleFatturato += importo; }
+      }
+    }
+    if(art.vendita_id!=null){
+      day.venditeIds.add(art.vendita_id); storeAgg.venditeIds.add(art.vendita_id); addettoAgg.venditeIds.add(art.vendita_id);
+    }
+  }
+  for(const id of day.venditeIds){ const s = salesById[id]; if(s) day.fatturatoTotale += parseFloat(s.totale||0)||0; }
+  for(const storeName in day.perStore){ const g = day.perStore[storeName]; for(const id of g.venditeIds){ const s = salesById[id]; if(s) g.fatturatoTotale += parseFloat(s.totale||0)||0; } }
+  for(const addettoName in day.perAddetto){ const g = day.perAddetto[addettoName]; for(const id of g.venditeIds){ const s = salesById[id]; if(s) g.fatturatoTotale += parseFloat(s.totale||0)||0; } }
+  return day;
+}
+function serializeDay(day){
+  return JSON.parse(JSON.stringify(day, (k,v)=> v instanceof Set ? v.size : v));
+}
+
+// ============================== AGGREGAZIONE MENSILE ==============================
+function blankAgg(){
+  const canvass = {totalePezzi:0};
+  PISTE.forEach(p=> canvass[p] = emptyPistaBucket());
+  return {
+    canvass,
+    prodotti:{Telefonia:emptyBucket(), Accessori:emptyBucket()},
+    garanzie:{kasko:0,defender:0},
+    servizi:{garanteasy:{pezzi:0,fatturato:0},assistenza:{pezzi:0,fatturato:0},totaleFatturato:0},
+    fatturatoTotale:0, venditeIds:0, perStore:{}, perAddetto:{}
+  };
+}
+function mergePistaBucket(target, src){
+  if(!src) return;
+  target.pezzi += src.pezzi||0;
+  for(const [tip, tData] of Object.entries(src.tipologie||{})){
+    if(!target.tipologie[tip]) target.tipologie[tip] = {pezzi:0, descrizioni:{}};
+    target.tipologie[tip].pezzi += tData.pezzi||0;
+    for(const [desc, cnt] of Object.entries(tData.descrizioni||{})){
+      target.tipologie[tip].descrizioni[desc] = (target.tipologie[tip].descrizioni[desc]||0) + cnt;
+    }
+  }
+}
+function addInto(target, src){
+  if(!src) return;
+  PISTE.forEach(p=> mergePistaBucket(target.canvass[p], src.canvass?.[p]));
+  target.canvass.totalePezzi += src.canvass?.totalePezzi||0;
+  ["Telefonia","Accessori"].forEach(k=>{
+    const t=target.prodotti[k], s=(src.prodotti&&src.prodotti[k])||{};
+    ["pezzi","fatturato","contanti","pos","finanziato","altro"].forEach(f=> t[f]+= s[f]||0);
+  });
+  target.garanzie.kasko += src.garanzie?.kasko||0;
+  target.garanzie.defender += src.garanzie?.defender||0;
+  target.servizi.garanteasy.pezzi += src.servizi?.garanteasy?.pezzi||0;
+  target.servizi.garanteasy.fatturato += src.servizi?.garanteasy?.fatturato||0;
+  target.servizi.assistenza.pezzi += src.servizi?.assistenza?.pezzi||0;
+  target.servizi.assistenza.fatturato += src.servizi?.assistenza?.fatturato||0;
+  target.servizi.totaleFatturato += src.servizi?.totaleFatturato||0;
+  target.fatturatoTotale += src.fatturatoTotale||0;
+  target.venditeIds += src.venditeIds||0;
+}
+function aggregateMonth(days){
+  const total = blankAgg();
+  for(const d of days){
+    addInto(total, d);
+    for(const [name,g] of Object.entries(d.perStore||{})){
+      if(!total.perStore[name]) total.perStore[name] = blankAgg();
+      addInto(total.perStore[name], g);
+    }
+    for(const [name,g] of Object.entries(d.perAddetto||{})){
+      if(!total.perAddetto[name]) total.perAddetto[name] = blankAgg();
+      addInto(total.perAddetto[name], g);
+    }
+  }
+  return total;
+}
+function computeProjection(){
+  const monthStr = state.today.slice(0,7);
+  const nDays = daysInMonthOf(state.today);
+  let workedSoFar=0, workedTotal=0;
+  for(let day=1; day<=nDays; day++){
+    const ds = `${monthStr}-${String(day).padStart(2,"0")}`;
+    if(isWorkingDay(ds)){
+      workedTotal++;
+      if(ds <= state.today) workedSoFar++;
+    }
+  }
+  const monthAgg = aggregateMonth(state.monthDays);
+  const rate = workedSoFar>0 ? (workedTotal/workedSoFar) : 0;
+  const mk = (v)=> ({mtd:v, proj:v*rate});
+
+  const canvassPerPista = {};
+  PISTE.forEach(p=> canvassPerPista[p] = mk(monthAgg.canvass[p]?.pezzi||0));
+
+  return {
+    workedSoFar, workedTotal, monthAgg,
+    canvassTotal: mk(monthAgg.canvass.totalePezzi),
+    canvassPerPista,
+    telefoniaPezzi: mk(monthAgg.prodotti.Telefonia.pezzi),
+    accessoriFatturato: mk(monthAgg.prodotti.Accessori.fatturato),
+    serviziFatturato: mk(monthAgg.servizi.totaleFatturato),
+    // mantenuti per compatibilità interna, non mostrati in evidenza
+    mtdRevenue: monthAgg.fatturatoTotale, mtdCanvass: monthAgg.canvass.totalePezzi,
+    projRevenue: monthAgg.fatturatoTotale*rate, projCanvass: monthAgg.canvass.totalePezzi*rate
+  };
+}
+
+
+// ============================== BADGE ULTIMO AGGIORNAMENTO ==============================
+function updateBadge(){
+  const d = findDay(state.today);
+  const g = d && d.generatedAt;
+  document.getElementById("lastUpdateBadge").textContent = g
+    ? new Date(g).toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"}) + " · " + new Date(g).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})
+    : "mai aggiornato";
+}
+
+// ============================== RENDER ==============================
+function pistaRows(canvass){
+  const max = Math.max(1, ...PISTE.map(p=>canvass[p]?.pezzi||0));
+  return PISTE.map(p=>{
+    const bucket = canvass[p] || {pezzi:0, tipologie:{}};
+    const v = bucket.pezzi||0, pct = Math.round((v/max)*100);
+    const tipRows = Object.entries(bucket.tipologie||{})
+      .sort((a,b)=> b[1].pezzi - a[1].pezzi)
+      .map(([tip, tData])=>{
+        const topDesc = Object.entries(tData.descrizioni||{}).sort((a,b)=>b[1]-a[1])[0];
+        const descLabel = topDesc ? `${topDesc[0]}${Object.keys(tData.descrizioni).length>1 ? ` (+${Object.keys(tData.descrizioni).length-1} altre)` : ""}` : "";
+        return `<div class="proj-row" style="padding:6px 0;">
+          <span class="proj-label" style="font-size:12.5px;font-weight:700;">${tip}</span>
+          <span class="proj-nums" style="font-size:12px;">${num(tData.pezzi)} pz</span>
+        </div>
+        <div class="rank-sub" style="margin-left:0;margin-bottom:2px;">${descLabel}</div>`;
+      }).join("");
+    return `<details class="rank">
+      <summary>
+        <div class="prow-head"><span class="pname" style="color:${PISTA_COLOR[p]}">${p}</span><span class="pval">${num(v)} pz</span></div>
+        <div class="pbar"><i style="width:${pct}%;background:${PISTA_COLOR[p]}"></i></div>
+      </summary>
+      <div class="drill" style="margin-left:0;">${tipRows || '<span class="mini-tag">nessun dettaglio</span>'}</div>
+    </details>`;
+  }).join("");
+}
+function prodBlock(name, b){
+  return `<div class="prod-block">
+    <div class="prod-head"><span class="name">${name}</span><span class="agg">${num(b.pezzi)} pz · ${eur(b.fatturato)}</span></div>
+    <div class="paychips">
+      <span class="chip">💵 Contanti ${eur(b.contanti)}</span>
+      <span class="chip">💳 POS ${eur(b.pos)}</span>
+      <span class="chip">🏦 Finanziato ${eur(b.finanziato)}</span>
+      <span class="chip">🧾 Altro ${eur(b.altro)}</span>
+    </div>
+  </div>`;
+}
+function trendChart(){
+  const days = state.monthDays;
+  if(days.length===0) return "";
+  const max = Math.max(1, ...days.map(d=>d.fatturatoTotale||0));
+  const bars = days.map(d=>{
+    const h = Math.max(3, Math.round((d.fatturatoTotale/max)*74));
+    const cls = "trend-bar" + (d.date===state.selectedDate ? " sel" : "");
+    return `<div class="${cls}" data-date="${d.date}" style="height:${h}px" title="${dayLabel(d.date)}: ${eur(d.fatturatoTotale)}"></div>`;
+  }).join("");
+  const labels = days.map(d=>`<span>${d.date.slice(8,10)}</span>`).join("");
+  return `<div class="trend">${bars}</div><div class="trend-labels">${labels}</div>`;
+}
+function rankedList(source){
+  const entries = Object.entries(source).sort((a,b)=> b[1].fatturatoTotale - a[1].fatturatoTotale);
+  if(entries.length===0) return `<div class="footnote">Nessun dato per questa vista.</div>`;
+  const medals = ["🥇","🥈","🥉"];
+  return entries.map(([name,g],i)=>{
+    const medal = i<3 ? medals[i] : (i+1)+".";
+    const cbTags = PISTE.filter(p=>g.canvass[p]?.pezzi>0).map(p=>`<span class="mini-tag">${p} ×${g.canvass[p].pezzi}</span>`).join("");
+    const prodTags = [];
+    if(g.prodotti.Telefonia.pezzi) prodTags.push(`<span class="mini-tag">📱 Telefonia ×${g.prodotti.Telefonia.pezzi} · ${eur(g.prodotti.Telefonia.fatturato)}</span>`);
+    if(g.prodotti.Accessori.pezzi) prodTags.push(`<span class="mini-tag">🎧 Accessori ×${g.prodotti.Accessori.pezzi} · ${eur(g.prodotti.Accessori.fatturato)}</span>`);
+    if(g.servizi.assistenza.pezzi) prodTags.push(`<span class="mini-tag">🛠️ Assistenza ×${g.servizi.assistenza.pezzi}</span>`);
+    if(g.garanzie.kasko) prodTags.push(`<span class="mini-tag">🛡️ Kasko ×${g.garanzie.kasko}</span>`);
+    if(g.garanzie.defender) prodTags.push(`<span class="mini-tag">🛡️ Defender ×${g.garanzie.defender}</span>`);
+    return `<details class="rank">
+      <summary>
+        <div class="rank-top">
+          <span class="rank-name"><span class="medal">${medal}</span> ${name}</span>
+          <span class="rank-val">${eur(g.fatturatoTotale)}</span>
+        </div>
+        <div class="rank-sub">${g.venditeIds} vendite · ${g.canvass.totalePezzi} pz canvass</div>
+      </summary>
+      <div class="drill"><div class="mini-tags">${cbTags}${prodTags || '<span class="mini-tag">nessun prodotto/servizio</span>'}</div></div>
+    </details>`;
+  }).join("");
+}
+
+function deltaBadge(curr, prev){
+  if(prev==null) return "";
+  if(prev===0 && curr===0) return `<span class="delta flat">= invariato</span>`;
+  if(prev===0) return `<span class="delta up">▲ nuovo</span>`;
+  const pct = Math.round(((curr-prev)/prev)*100);
+  if(pct>0) return `<span class="delta up">▲ +${pct}% vs giorno prima</span>`;
+  if(pct<0) return `<span class="delta down">▼ ${pct}% vs giorno prima</span>`;
+  return `<span class="delta flat">= invariato</span>`;
+}
+
+function renderGiornoNav(){
+  const nav = document.getElementById("dayNav");
+  nav.style.display = state.tab==="giorno" ? "flex" : "none";
+  const first = firstOfMonth(state.today);
+  document.getElementById("navPrev").disabled = state.selectedDate <= first;
+  document.getElementById("navNext").disabled = state.selectedDate >= state.today;
+  document.getElementById("navLabel").textContent = fullDayLabel(state.selectedDate);
+}
+
+function render(){
+  document.querySelectorAll(".tab").forEach(t=> t.classList.toggle("active", t.dataset.tab===state.tab));
+  renderGiornoNav();
+
+  if(state.tab === "giorno"){ renderGiorno(); }
+  else { renderMese(); }
+}
+
+function renderGiorno(){
+  const day = findDay(state.selectedDate);
+  if(!day){
+    document.getElementById("content").innerHTML = `<div class="empty"><div class="big">📭</div>
+      <div>Nessuna vendita registrata per il ${dayLabel(state.selectedDate)}.</div></div>`;
+    document.getElementById("footnote").innerHTML = "";
+    return;
+  }
+  const idx = state.monthDays.findIndex(d=>d.date===state.selectedDate);
+  const prevDay = idx>0 ? state.monthDays[idx-1] : null;
+  const delta = deltaBadge(day.canvass.totalePezzi, prevDay ? prevDay.canvass.totalePezzi : null);
+
+  document.getElementById("content").innerHTML = `
+    <div class="hero">
+      <div class="hero-glow"></div><div class="hero-glow2"></div>
+      <div class="hero-label">Pezzi Canvass · ${dayLabel(state.selectedDate)}</div>
+      <div class="hero-num">${num(day.canvass.totalePezzi)}</div>
+      <div class="hero-sub">${num(day.prodotti.Telefonia.pezzi)} <span class="hero-sub-dim">pz Telefonia venduti oggi</span></div>
+      ${delta}
+      <div class="hero-chips">
+        ${PISTE.map(p=>`<span class="chip" style="border-color:${PISTA_COLOR[p]}88">${p} ${day.canvass[p]?.pezzi||0}</span>`).join("")}
+      </div>
+    </div>
+
+    <div class="hls">
+      <div class="hl"><div class="hl-icon">📱</div><div class="hl-k">Telefonia</div><div class="hl-v">${num(day.prodotti.Telefonia.pezzi)} pz</div></div>
+      <div class="hl"><div class="hl-icon">🎧</div><div class="hl-k">Accessori</div><div class="hl-v">${eur(day.prodotti.Accessori.fatturato)}</div></div>
+      <div class="hl"><div class="hl-icon">🛠️</div><div class="hl-k">Servizi</div><div class="hl-v">${eur(day.servizi.totaleFatturato)}</div></div>
+    </div>
+
+    <div class="card"><div class="card-title">🚀 Piste Canvass</div>${pistaRows(day.canvass)}</div>
+
+    <div class="card">
+      <div class="card-title">Prodotti</div>
+      ${prodBlock("📱 Telefonia", day.prodotti.Telefonia)}
+      ${prodBlock("🎧 Accessori", day.prodotti.Accessori)}
+      <div class="mini-tags">
+        <span class="mini-tag">🛡️ Kasko ×${day.garanzie.kasko}</span>
+        <span class="mini-tag">🛡️ Defender ×${day.garanzie.defender}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Servizi</div>
+      <div class="hls" style="margin-bottom:0;">
+        <div class="hl"><div class="hl-k">Garanteasy</div><div class="hl-v">${eur(day.servizi.garanteasy.fatturato)}</div></div>
+        <div class="hl"><div class="hl-k">Assistenza</div><div class="hl-v">${eur(day.servizi.assistenza.fatturato)}</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Dettaglio</div>
+      <div class="toggle-row">
+        <button class="toggle-btn ${state.rankView==='store'?'active':''}" data-rv="store">🏪 Punto vendita</button>
+        <button class="toggle-btn ${state.rankView==='addetto'?'active':''}" data-rv="addetto">🧑 Addetto</button>
+      </div>
+      <div>${rankedList(state.rankView==='store' ? day.perStore : day.perAddetto)}</div>
+    </div>
+  `;
+  document.getElementById("footnote").innerHTML =
+    `Le modalità di pagamento (Contanti/POS/Finanziato/Altro) sono stimate proporzionalmente al prezzo di ciascun articolo su scontrini con più voci; gli articoli finanziati sono identificati in modo esatto.`;
+  bindRankToggle();
+}
+
+function renderMese(){
+  if(state.monthDays.length===0){
+    document.getElementById("content").innerHTML = `<div class="empty"><div class="big">📭</div><div>Nessun dato disponibile per questo mese.</div></div>`;
+    document.getElementById("footnote").innerHTML = "";
+    return;
+  }
+  const proj = computeProjection();
+  const m = proj.monthAgg;
+
+  const pistaProjRows = PISTE.map(p=>{
+    const d = proj.canvassPerPista[p];
+    return `<div class="proj-row">
+      <span class="proj-dot" style="background:${PISTA_COLOR[p]}"></span>
+      <span class="proj-label" style="color:${PISTA_COLOR[p]}">${p}</span>
+      <span class="proj-nums">${num(d.mtd)}<span class="arrow">→</span><b>${num(d.proj)}</b> pz</span>
+    </div>`;
+  }).join("");
+
+  document.getElementById("content").innerHTML = `
+    <div class="hero">
+      <div class="hero-glow"></div><div class="hero-glow2"></div>
+      <div class="hero-label">Pezzi Canvass mese (MTD)</div>
+      <div class="hero-num">${num(proj.canvassTotal.mtd)}</div>
+      <div class="hero-sub">→ <b style="color:var(--yellow-soft)">${num(proj.canvassTotal.proj)}</b> <span class="hero-sub-dim">pezzi stimati a fine mese</span></div>
+      <div class="hero-chips">
+        <span class="chip">📆 ${proj.workedSoFar}/${proj.workedTotal} giorni lavorati</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📈 Proiezione fine mese <span style="font-weight:600;color:var(--text-faint);text-transform:none;">oggi → stimato</span></div>
+      <div class="proj-section-label">Canvass per pista</div>
+      ${pistaProjRows}
+      <div class="proj-row" style="border-top:1px solid var(--line);margin-top:2px;padding-top:10px;">
+        <span class="proj-label">Totale Canvass</span>
+        <span class="proj-nums">${num(proj.canvassTotal.mtd)}<span class="arrow">→</span><b>${num(proj.canvassTotal.proj)}</b> pz</span>
+      </div>
+
+      <div class="proj-section-label">Telefonia</div>
+      <div class="proj-row">
+        <span class="proj-label">📱 Pezzi venduti</span>
+        <span class="proj-nums">${num(proj.telefoniaPezzi.mtd)}<span class="arrow">→</span><b>${num(proj.telefoniaPezzi.proj)}</b> pz</span>
+      </div>
+
+      <div class="proj-section-label">Accessori e Servizi</div>
+      <div class="proj-row">
+        <span class="proj-label">🎧 Fatturato Accessori</span>
+        <span class="proj-nums">${eur(proj.accessoriFatturato.mtd)}<span class="arrow">→</span><b>${eur(proj.accessoriFatturato.proj)}</b></span>
+      </div>
+      <div class="proj-row">
+        <span class="proj-label">🛠️ Fatturato Servizi</span>
+        <span class="proj-nums">${eur(proj.serviziFatturato.mtd)}<span class="arrow">→</span><b>${eur(proj.serviziFatturato.proj)}</b></span>
+      </div>
+
+      <div class="footnote" style="margin-top:10px;">Proiezione = ritmo medio sui ${proj.workedSoFar} giorni lavorativi trascorsi, esteso ai ${proj.workedTotal} giorni lavorativi totali del mese (lun–sab, festività italiane escluse).</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Prodotti (mese)</div>
+      ${prodBlock("📱 Telefonia", m.prodotti.Telefonia)}
+      ${prodBlock("🎧 Accessori", m.prodotti.Accessori)}
+      <div class="mini-tags">
+        <span class="mini-tag">🛡️ Kasko ×${m.garanzie.kasko}</span>
+        <span class="mini-tag">🛡️ Defender ×${m.garanzie.defender}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Andamento giornaliero <span style="font-weight:600;color:var(--text-faint);text-transform:none;">tocca una barra</span></div>
+      ${trendChart()}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Classifica mese</div>
+      <div class="toggle-row">
+        <button class="toggle-btn ${state.rankView==='store'?'active':''}" data-rv="store">🏪 Punto vendita</button>
+        <button class="toggle-btn ${state.rankView==='addetto'?'active':''}" data-rv="addetto">🧑 Addetto</button>
+      </div>
+      <div>${rankedList(state.rankView==='store' ? m.perStore : m.perAddetto)}</div>
+    </div>
+  `;
+  document.getElementById("footnote").innerHTML =
+    `Giorni lavorativi calcolati da lunedì a sabato, escluse le domeniche e le festività nazionali italiane.`;
+  bindRankToggle();
+  document.querySelectorAll(".trend-bar").forEach(bar=>{
+    bar.addEventListener("click", ()=>{
+      state.selectedDate = bar.dataset.date;
+      state.tab = "giorno";
+      render();
+    });
+  });
+}
+
+function bindRankToggle(){
+  document.querySelectorAll(".toggle-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{ state.rankView = btn.dataset.rv; render(); });
+  });
+}
+
+// ============================== TELEGRAM SHARE ==============================
+document.querySelectorAll(".tab").forEach(t=>{
+  t.addEventListener("click", ()=>{ state.tab = t.dataset.tab; render(); });
+});
+document.getElementById("navPrev").addEventListener("click", ()=>{
+  const d = new Date(state.selectedDate+"T00:00:00"); d.setDate(d.getDate()-1);
+  const ds = fmtDate(d);
+  if(ds >= firstOfMonth(state.today)){ state.selectedDate = ds; render(); }
+});
+document.getElementById("navNext").addEventListener("click", ()=>{
+  const d = new Date(state.selectedDate+"T00:00:00"); d.setDate(d.getDate()+1);
+  const ds = fmtDate(d);
+  if(ds <= state.today){ state.selectedDate = ds; render(); }
+});
+
+// ============================== BOOT ==============================
+(function bootSync(){
+  try{
+    state.monthDays = Object.values(PRELOADED_DATA).sort((a,b)=> a.date.localeCompare(b.date));
+  }catch(e){ console.error("Errore nel caricamento dei dati precaricati:", e); }
+  updateBadge();
+  render();
+})();
+
+})();
+</script>
+
+
+</body></html>

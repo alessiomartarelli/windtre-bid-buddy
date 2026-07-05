@@ -29,3 +29,12 @@ volumi per pista, negozi CC vs strada con calendari lavorativi diversi).
 **How to apply:** se tocchi il commento report o lo scheduler, leggi il
 forecast da gara_config, non da telegramReport. Un `forecast` legacy in
 telegramReport viene preservato dal POST ma NON usato.
+
+**Proiezione fine mese (card HTML "Totale mese"):** proietta UN KPI per
+riga con la stessa granularità del forecast (volumi per pista: Mobile, di
+cui P.IVA, Fisso, di cui P.IVA, Energia, Assicurazioni, Protetti=protecta,
+Cb; + Telefoni pz; + Accessori/Servizi €). NON esiste più la riga "Canvass
+totali" (pezzi totali): l'utente l'ha esplicitamente rifiutata a favore
+della proiezione per-KPI. `MonthEndProjection.kpis: ProjectionEntry[]`
+(key/label/unit/maturato/proiezione). Base ritmo = `monthWorkingDays`
+standard lun–sab (la ponderazione CC/strada resta solo nel commento).
