@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
+import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -73,6 +74,8 @@ export default function IncentivazioneInterna() {
   const { profile } = useAuth();
   const { toast } = useToast();
   const isAdmin = ["super_admin", "admin"].includes(profile?.role || "");
+  const { isEnabled } = useEnabledModules();
+  const garaConfigEnabled = isEnabled("gara_configurazione");
 
   const [month, setMonthRaw] = useState(now.getMonth() + 1);
   const [year, setYearRaw] = useState(now.getFullYear());
@@ -264,8 +267,8 @@ export default function IncentivazioneInterna() {
             <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching} data-testid="button-refresh">
               <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
             </Button>
-            {isAdmin && (
-              <Link href="/incentivazione-interna/config">
+            {isAdmin && garaConfigEnabled && (
+              <Link href="/configurazione-gara">
                 <Button variant="outline" size="sm" data-testid="button-config">
                   <Settings className="h-4 w-4 mr-1" /> Configura
                 </Button>

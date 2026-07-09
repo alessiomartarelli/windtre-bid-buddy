@@ -117,8 +117,8 @@ mantenere snello questo file:
 - [`docs/incentivazione-interna.md`](docs/incentivazione-interna.md) —
   Modulo Incentivazione interna (gare addetto): valenze piste da Excel +
   Accessori/Servizi live BiSuite, config admin per-mese multi-gara
-  (più configurazioni con nome per periodo, pagina admin dedicata
-  `/incentivazione-interna/config`, selettore in dashboard), calendario
+  (più configurazioni con nome per periodo, tab "Incentivazione" nella
+  pagina `/configurazione-gara`, selettore in dashboard), calendario
   lavorativo, sblocco gara, isolamento per operatore.
 
 ## Testing

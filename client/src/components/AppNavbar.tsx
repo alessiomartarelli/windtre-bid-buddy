@@ -111,7 +111,6 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
     ...(isSuperAdmin ? [{ path: '/super-admin', label: 'Super Admin', icon: Shield }] : []),
     ...(isAdminOrSuper && (isEnabled('amministrazione') || isEnabled('controllo_gestione')) ? [{ path: '/amministrazione', label: 'Amministrazione', icon: BookOpen }] : []),
     ...(isAdminOrSuper && isEnabled('drms_commissioning') ? [{ path: '/drms-commissioning', label: 'DRMS Commissioning', icon: BarChart3 }] : []),
-    ...(isAdminOrSuper && isEnabled('incentivazione_interna') ? [{ path: '/incentivazione-interna/config', label: 'Incentivazione interna', icon: Medal }] : []),
   ];
 
   const garaItems: Array<{ path: string; label: string; icon: typeof Shield }> = [

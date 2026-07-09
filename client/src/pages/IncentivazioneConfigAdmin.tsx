@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { AppNavbar } from "@/components/AppNavbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,7 +51,7 @@ const MONTHS = [
   "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
 ];
 
-export default function IncentivazioneConfigAdmin() {
+export function IncentivazioneConfigSection() {
   const now = new Date();
   const { profile } = useAuth();
   const { toast } = useToast();
@@ -131,26 +130,19 @@ export default function IncentivazioneConfigAdmin() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-background">
-        <AppNavbar title="Incentivazione interna" />
-        <div className="container mx-auto px-3 sm:px-6 py-10">
-          <Card className="p-8 text-center text-sm text-muted-foreground">
-            <AlertCircle className="h-6 w-6 mx-auto mb-2" />
-            Sezione riservata agli amministratori.
-          </Card>
-        </div>
-      </div>
+      <Card className="p-8 text-center text-sm text-muted-foreground">
+        <AlertCircle className="h-6 w-6 mx-auto mb-2" />
+        Sezione riservata agli amministratori.
+      </Card>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppNavbar title="Incentivazione interna" />
-      <div className="container mx-auto px-3 sm:px-6 py-5 space-y-5">
+    <div className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-              <Medal className="h-5 w-5" /> Configurazioni gara
+              <Medal className="h-5 w-5" /> Incentivazione interna · Configurazioni gara
             </h2>
             <p className="text-sm text-muted-foreground">
               Gestisci le gare del periodo: crea, duplica, rinomina e modifica le regole.
@@ -230,7 +222,6 @@ export default function IncentivazioneConfigAdmin() {
             ))}
           </div>
         )}
-      </div>
 
       {/* Create / duplicate dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

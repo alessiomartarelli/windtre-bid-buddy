@@ -58,12 +58,13 @@ Tutta la config è **editabile in-app da admin/super_admin** e
 persistita per `org + mese + anno + nome`. Dal Task #273 possono
 coesistere **più configurazioni (gare) con nome** nello stesso periodo:
 
-- la gestione avviene nella pagina dedicata
-  `/incentivazione-interna/config` (voce **"Incentivazione interna"**
-  nel menù Admin, o bottone "Configura" della dashboard): elenco per
-  periodo, **crea** (con nome, opzionalmente copiando le regole da una
-  gara esistente), **duplica**, **rinomina**, **elimina**, **modifica
-  regole** (stesso editor di prima, ora per-configurazione);
+- la gestione avviene nella tab **"Incentivazione"** della pagina
+  **Configurazione Gara** (`/configurazione-gara`, raggiungibile anche
+  dal bottone "Configura" della dashboard incentivazione; la tab
+  compare solo se il modulo `incentivazione_interna` è abilitato):
+  elenco per periodo, **crea** (con nome, opzionalmente copiando le
+  regole da una gara esistente), **duplica**, **rinomina**, **elimina**,
+  **modifica regole** (stesso editor di prima, ora per-configurazione);
 - il nome è unico (case-insensitive) per `org+mese+anno` (409 in caso
   di duplicato); le righe pre-esistenti sono migrate col nome di
   default **"Gara"**;
@@ -152,8 +153,9 @@ con flag `live`.
 - `client/src/pages/IncentivazioneInterna.tsx` — dashboard (period
   picker, selettore gara, tab sezioni, calendario, upload valenze, card
   riepilogo, card addetti, filtri, contatore sblocco gara).
-- `client/src/pages/IncentivazioneConfigAdmin.tsx` — pagina admin
-  `/incentivazione-interna/config` (elenco gare per periodo, crea/
+- `client/src/pages/IncentivazioneConfigAdmin.tsx` — sezione admin
+  `IncentivazioneConfigSection`, embeddata come tab "Incentivazione"
+  in `/configurazione-gara` (elenco gare per periodo, crea/
   duplica/rinomina/elimina, editor regole).
 - Tabelle: `incentivazione_config` (unique `org+month+year+name`),
   `incentivazione_valenze` (unique `org+month+year+sectionId`).

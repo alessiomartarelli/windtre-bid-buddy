@@ -21,8 +21,10 @@ import { apiUrl } from '@/lib/basePath';
 import {
   Loader2, Save, Download, Plus, Trash2, CalendarDays, Store,
   ChevronDown, ChevronUp, History, Upload, Settings, Target, Zap, Shield, ShieldCheck, Calculator,
-  FileText, X, Check, AlertTriangle,
+  FileText, X, Check, AlertTriangle, Medal,
 } from 'lucide-react';
+import { IncentivazioneConfigSection } from '@/pages/IncentivazioneConfigAdmin';
+import { useEnabledModules } from '@/hooks/useEnabledModules';
 import { WizardStepSkeleton } from "@/components/skeletons";
 import { TabelleCalcoloGara, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
 import { useTabelleCalcoloConfig } from '@/hooks/useTabelleCalcoloConfig';
@@ -617,6 +619,8 @@ export default function ConfigurazioneGara() {
 
   const { profile } = useAuth();
   const { toast } = useToast();
+  const { isEnabled } = useEnabledModules();
+  const incentivazioneEnabled = isEnabled('incentivazione_interna');
   const {
     config: garaConfigRecord,
     configList,
@@ -1570,7 +1574,7 @@ export default function ConfigurazioneGara() {
         ) : (
           <Tabs defaultValue="pdv" className="space-y-4">
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-            <TabsList className="grid w-full grid-cols-4 min-w-[320px]">
+            <TabsList className={`grid w-full ${incentivazioneEnabled ? 'grid-cols-5 min-w-[400px]' : 'grid-cols-4 min-w-[320px]'}`}>
               <TabsTrigger value="pdv" className="text-[11px] sm:text-sm px-2 sm:px-3" data-testid="tab-pdv">
                 <Store className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 sm:mr-1" /><span className="hidden sm:inline">PDV</span> ({pdvList.length})
               </TabsTrigger>
@@ -1583,6 +1587,11 @@ export default function ConfigurazioneGara() {
               <TabsTrigger value="tabelleCalcolo" className="text-[11px] sm:text-sm px-2 sm:px-3" data-testid="tab-tabelle-calcolo">
                 <Calculator className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">Tabelle</span><span className="sm:hidden">Tab.</span>
               </TabsTrigger>
+              {incentivazioneEnabled && (
+                <TabsTrigger value="incentivazione" className="text-[11px] sm:text-sm px-2 sm:px-3" data-testid="tab-incentivazione">
+                  <Medal className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 sm:mr-1" /><span className="hidden sm:inline">Incentivazione</span><span className="sm:hidden">Incent.</span>
+                </TabsTrigger>
+              )}
             </TabsList>
             </div>
 
@@ -2307,6 +2316,12 @@ export default function ConfigurazioneGara() {
                 </>
               )}
             </TabsContent>
+
+            {incentivazioneEnabled && (
+              <TabsContent value="incentivazione" className="space-y-4">
+                <IncentivazioneConfigSection />
+              </TabsContent>
+            )}
 
             <TabsContent value="tabelleCalcolo" className="space-y-4">
               <TabelleCalcoloGara

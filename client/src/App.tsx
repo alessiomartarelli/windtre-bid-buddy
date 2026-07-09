@@ -35,7 +35,6 @@ const ConfigurazioneGara = lazy(() => import("@/pages/ConfigurazioneGara"));
 const Amministrazione = lazy(() => import("@/pages/Amministrazione"));
 const DrmsCommissioning = lazy(() => import("@/pages/DrmsCommissioning"));
 const IncentivazioneInterna = lazy(() => import("@/pages/IncentivazioneInterna"));
-const IncentivazioneConfigAdmin = lazy(() => import("@/pages/IncentivazioneConfigAdmin"));
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -142,9 +141,6 @@ function Router() {
         </Route>
         <Route path="/incentivazione-interna">
           {() => <ModuleRoute component={IncentivazioneInterna} moduleKey="incentivazione_interna" />}
-        </Route>
-        <Route path="/incentivazione-interna/config">
-          {() => <ModuleRoute component={IncentivazioneConfigAdmin} moduleKey="incentivazione_interna" />}
         </Route>
         <Route path="/drms-commissioning">
           {() => <ModuleRoute component={DrmsCommissioning} moduleKey="drms_commissioning" />}
