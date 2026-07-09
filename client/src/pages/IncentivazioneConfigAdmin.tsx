@@ -63,6 +63,8 @@ export function IncentivazioneConfigSection() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createSourceId, setCreateSourceId] = useState<string>("none");
+  const [createMonth, setCreateMonth] = useState(now.getMonth() + 1);
+  const [createYear, setCreateYear] = useState(now.getFullYear());
   const [renameTarget, setRenameTarget] = useState<ConfigListItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<ConfigListItem | null>(null);
@@ -85,7 +87,7 @@ export function IncentivazioneConfigSection() {
 
   const createMut = useMutation({
     mutationFn: async () => {
-      const body: Record<string, unknown> = { month, year, name: createName.trim() };
+      const body: Record<string, unknown> = { month: createMonth, year: createYear, name: createName.trim() };
       if (createSourceId !== "none") body.sourceId = createSourceId;
       const res = await apiRequest("POST", "/api/incentivazione/configs", body);
       return res.json();
@@ -95,14 +97,16 @@ export function IncentivazioneConfigSection() {
       setCreateOpen(false);
       setCreateName("");
       setCreateSourceId("none");
+      setMonth(createMonth);
+      setYear(createYear);
       invalidate();
     },
     onError: (e: any) => toast({ title: "Errore", description: String(e.message || e), variant: "destructive" }),
   });
 
   const renameMut = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("PATCH", `/api/incentivazione/configs/${renameTarget!.id}`, { name: renameValue.trim() });
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("PATCH", `/api/incentivazione/configs/${id}`, { name: renameValue.trim() });
       return res.json();
     },
     onSuccess: () => {
@@ -114,8 +118,8 @@ export function IncentivazioneConfigSection() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("DELETE", `/api/incentivazione/configs/${deleteTarget!.id}`);
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/incentivazione/configs/${id}`);
       return res.json();
     },
     onSuccess: () => {
@@ -171,7 +175,7 @@ export function IncentivazioneConfigSection() {
                 ))}
               </SelectContent>
             </Select>
-            <Button size="sm" onClick={() => { setCreateName(""); setCreateSourceId("none"); setCreateOpen(true); }} data-testid="button-create-config">
+            <Button size="sm" onClick={() => { setCreateName(""); setCreateSourceId("none"); setCreateMonth(month); setCreateYear(year); setCreateOpen(true); }} data-testid="button-create-config">
               <Plus className="h-4 w-4 mr-1" /> Nuova gara
             </Button>
           </div>
@@ -211,7 +215,7 @@ export function IncentivazioneConfigSection() {
                   <Button size="sm" variant="ghost" onClick={() => { setRenameTarget(c); setRenameValue(c.name); }} data-testid={`button-rename-${c.id}`}>
                     <Pencil className="h-3.5 w-3.5 mr-1" /> Rinomina
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => { setCreateName(`${c.name} (copia)`); setCreateSourceId(c.id); setCreateOpen(true); }} data-testid={`button-duplicate-${c.id}`}>
+                  <Button size="sm" variant="ghost" onClick={() => { setCreateName(`${c.name} (copia)`); setCreateSourceId(c.id); setCreateMonth(month); setCreateYear(year); setCreateOpen(true); }} data-testid={`button-duplicate-${c.id}`}>
                     <Copy className="h-3.5 w-3.5 mr-1" /> Duplica
                   </Button>
                   <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-600" onClick={() => setDeleteTarget(c)} data-testid={`button-delete-${c.id}`}>
@@ -227,9 +231,30 @@ export function IncentivazioneConfigSection() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Nuova gara · {MONTHS[month - 1]} {year}</DialogTitle>
+            <DialogTitle>Nuova gara</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Periodo</Label>
+              <div className="flex gap-2">
+                <Select value={String(createMonth)} onValueChange={(v) => setCreateMonth(parseInt(v, 10))}>
+                  <SelectTrigger className="flex-1" data-testid="select-create-month"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map((m, i) => (
+                      <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={String(createYear)} onValueChange={(v) => setCreateYear(parseInt(v, 10))}>
+                  <SelectTrigger className="w-[100px]" data-testid="select-create-year"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {yearOptions.map((y) => (
+                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div>
               <Label className="text-xs">Nome della gara</Label>
               <Input
@@ -275,7 +300,7 @@ export function IncentivazioneConfigSection() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRenameTarget(null)}>Annulla</Button>
-            <Button onClick={() => renameMut.mutate()} disabled={!renameValue.trim() || renameMut.isPending} data-testid="button-confirm-rename">
+            <Button onClick={() => { if (renameTarget) renameMut.mutate(renameTarget.id); }} disabled={!renameValue.trim() || renameMut.isPending} data-testid="button-confirm-rename">
               {renameMut.isPending ? "Salvo…" : "Rinomina"}
             </Button>
           </DialogFooter>
@@ -296,7 +321,7 @@ export function IncentivazioneConfigSection() {
             <AlertDialogCancel>Annulla</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
-              onClick={() => deleteMut.mutate()}
+              onClick={() => { if (deleteTarget) deleteMut.mutate(deleteTarget.id); }}
               data-testid="button-confirm-delete"
             >
               {deleteMut.isPending ? "Elimino…" : "Elimina"}
