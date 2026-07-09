@@ -173,6 +173,17 @@ Marginalità" (non più "Smartphone") e che separatore vuoto, 2ª
 validation `incentivazione-tests`
 (`bash scripts/run-incentivazione-tests.sh`). Run ~1s.
 
+## Brand gating tests (`tests/brand-gating.test.mjs`)
+
+7 test puri (Task #279) su `shared/modules.ts`: `isWindtreBrandName`
+(varianti "WindTre"/"Wind Tre"/"WIND3"/"W3" accettate, altri brand
+rifiutati) e `isModuleAllowedForBrands` (moduli non gated sempre
+consentiti; fallback sicuro org senza brand ⇒ nessun filtro; org con
+brand ma senza WindTre ⇒ moduli WindTre bloccati; WindTre presente ⇒
+consentiti; lista `WINDTRE_GATED_MODULES` attesa). Nessun prerequisito.
+Step di validation `brand-gating-tests`
+(`bash scripts/run-brand-gating-tests.sh`). Run ~1s.
+
 ## Incentivazione Accessori/Servizi live tests (`tests/incentivazione-accessori-servizi.test.mjs`)
 
 4 scenari DB-backed (Task #174) su `aggregateAccessoriServizi`

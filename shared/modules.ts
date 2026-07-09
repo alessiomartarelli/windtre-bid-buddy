@@ -37,6 +37,41 @@ export function defaultEnabledModules(): Record<string, boolean> {
   return Object.fromEntries(MODULES.map((m) => [m.key, true]));
 }
 
+// === Brand gating (Task #279) ===
+// Moduli legati agli incentivi/dati WindTre: visibili solo se l'org ha il
+// brand WindTre associato. Fallback sicuro: org SENZA alcun brand associato
+// => nessun filtro (comportamento attuale).
+export const WINDTRE_GATED_MODULES: string[] = [
+  "simulatore",
+  "tabelle_calcolo",
+  "gara_dashboard",
+  "gara_configurazione",
+  "drms_commissioning",
+  "incentivazione_interna",
+  "vendite_bisuite",
+  "customer_journey",
+];
+
+// Riconosce il brand WindTre in modo tollerante: "WindTre", "Wind Tre",
+// "WIND3", "W3", "WindTre Business", ecc.
+export function isWindtreBrandName(name: string): boolean {
+  const norm = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return norm.includes("windtre") || norm.includes("wind3") || norm === "w3" || norm.startsWith("w3");
+}
+
+// True se il modulo è consentito dai brand associati all'org.
+// - modulo non brand-gated => sempre true
+// - org senza brand associati (array vuoto/null) => true (fallback: nessun filtro)
+// - org con almeno un brand => i moduli WindTre richiedono il brand WindTre
+export function isModuleAllowedForBrands(
+  brandNames: string[] | null | undefined,
+  key: string,
+): boolean {
+  if (!WINDTRE_GATED_MODULES.includes(key)) return true;
+  if (!brandNames || brandNames.length === 0) return true;
+  return brandNames.some(isWindtreBrandName);
+}
+
 // Restituisce true se il modulo è abilitato per la org.
 // Se la chiave non è presente nel record => true (retro-compat / nuova chiave).
 export function isModuleEnabled(

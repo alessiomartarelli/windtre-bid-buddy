@@ -61,6 +61,7 @@ else
     "run-customer-journey-validity-gettone-parity-tests.sh"
     "run-customer-journey-export-tests.sh"
     "run-incentivazione-tests.sh"
+    "run-brand-gating-tests.sh"
     "run-customer-journey-report-tests.sh"
     "run-telegram-report-tests.sh"
   )

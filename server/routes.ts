@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions } from "../shared/bisuiteMapping";
-import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
+import { isModuleEnabled, isModuleAllowedForBrands, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
 import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
@@ -108,7 +108,13 @@ function requireModule(moduleKey: string | string[]): RequestHandler {
         return res.status(403).json({ error: "Modulo non abilitato" });
       }
       const enabled = org.enabledModules ?? null;
-      const anyEnabled = keys.some((k) => isModuleEnabled(enabled, k));
+      let brandNames: string[] | null = null;
+      if (keys.some((k) => WINDTRE_GATED_MODULES.includes(k))) {
+        brandNames = (await storage.getOrganizationBrands(profile.organizationId)).map((b) => b.name);
+      }
+      const anyEnabled = keys.some(
+        (k) => isModuleEnabled(enabled, k) && isModuleAllowedForBrands(brandNames, k),
+      );
       if (!anyEnabled) {
         return res.status(403).json({ error: "Modulo non abilitato" });
       }
@@ -226,8 +232,11 @@ export async function registerRoutes(
       req.session.userId = profile.id;
 
       let organization = null;
+      let organizationBrands: { id: string; name: string }[] = [];
       if (profile.organizationId) {
         organization = await storage.getOrganization(profile.organizationId);
+        organizationBrands = (await storage.getOrganizationBrands(profile.organizationId))
+          .map((b) => ({ id: b.id, name: b.name }));
       }
 
       await new Promise<void>((resolve, reject) => {
@@ -237,7 +246,7 @@ export async function registerRoutes(
         });
       });
 
-      res.json({ ...profile, passwordHash: undefined, organization });
+      res.json({ ...profile, passwordHash: undefined, organization, organizationBrands });
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ error: "Errore durante il login" });

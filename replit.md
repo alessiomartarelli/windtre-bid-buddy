@@ -94,7 +94,9 @@ mantenere snello questo file:
   allegati, write-through su org config.
 - [`docs/moduli-organizzazione.md`](docs/moduli-organizzazione.md) —
   Sistema dei moduli abilitabili per organizzazione
-  (`enabledModules`, `requireModule`, `<ModuleRoute>`).
+  (`enabledModules`, `requireModule`, `<ModuleRoute>`) + brand gating
+  (moduli WindTre visibili solo con brand WindTre associato; org senza
+  brand = nessun filtro).
 - [`docs/struttura-organizzazione.md`](docs/struttura-organizzazione.md) —
   CRUD RS/PDV admin con propagazione cross-modulo, banner sync
   incongruenze, wizard storage scoping per orgId.
@@ -145,6 +147,7 @@ Riepilogo — suite → script → prerequisiti:
 | CJ report + filtri (28) | `run-customer-journey-report-tests.sh` | — (puri) | ~1s |
 | Telegram report (70) | `run-telegram-report-tests.sh` | — (puri) | ~1s |
 | Incentivazione (18) | `run-incentivazione-tests.sh` | — (puri) | ~1s |
+| Brand gating (7) | `run-brand-gating-tests.sh` | — (puri) | ~1s |
 | Inc. Acc/Servizi live (4) | `run-incentivazione-accessori-servizi-tests.sh` | `DATABASE_URL` | ~5s |
 | Inc. dashboard authz | `run-incentivazione-dashboard-authz-tests.sh` | app attiva | ~1s |
 | CJ gettone UI (5, Playwright) | `run-customer-journey-gettone-ui-tests.sh` | app + DB + chromium | ~25s |
