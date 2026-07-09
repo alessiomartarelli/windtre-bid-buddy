@@ -242,17 +242,22 @@ export const drmsUploads = pgTable("drms_uploads", {
 // Incentivazione interna (gare addetto, Task #170): configurazione per
 // organizzazione e per mese/anno. `config` JSONB contiene sezioni, piste
 // (tracks), categorie connettore Accessori/Servizi e festività override.
+// Multi-config (Task #273): più configurazioni possono coesistere nello
+// stesso org+mese+anno, distinte per `name` (unique per periodo). Le
+// righe pre-esistenti ricevono il nome di default "Gara".
 export const incentivazioneConfig = pgTable("incentivazione_config", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
   month: integer("month").notNull(),
   year: integer("year").notNull(),
+  name: varchar("name").notNull().default("Gara"),
   config: jsonb("config").notNull().default({}),
   updatedBy: varchar("updated_by").references(() => profiles.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  uniqueIndex("UQ_incentivazione_config_org_month_year").on(table.organizationId, table.month, table.year),
+  index("IDX_incentivazione_config_org_month_year").on(table.organizationId, table.month, table.year),
+  uniqueIndex("UQ_incentivazione_config_org_month_year_name").on(table.organizationId, table.month, table.year, table.name),
 ]);
 
 // Incentivazione interna: valenze caricate da Excel per sezione e mese/anno.

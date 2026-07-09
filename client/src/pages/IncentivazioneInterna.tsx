@@ -1,18 +1,14 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import * as XLSX from "xlsx";
 import { AppNavbar } from "@/components/AppNavbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -26,7 +22,7 @@ import {
   type IncSortKey, type IncSortDir,
 } from "@shared/incentivazione";
 import {
-  Upload, Settings, Unlock, Lock, Trash2, Plus, RefreshCw, AlertCircle, FileDown,
+  Upload, Settings, Unlock, Lock, Trash2, RefreshCw, AlertCircle, FileDown,
   ArrowDown, ArrowUp,
 } from "lucide-react";
 import { exportIncentivazionePdf, exportIncentivazioneExcel, exportIncentivazioneHtml } from "@/lib/incentivazioneExport";
@@ -39,6 +35,9 @@ interface DashboardResp {
   valenze: Record<string, { fileName: string; uploadedAt: string | null; rows: ValenzaRow[] }>;
   live: LiveAddetto[];
   lastBisuiteSync: string | null;
+  configId: string | null;
+  configName: string | null;
+  configs: Array<{ id: string; name: string }>;
 }
 
 const MONTHS = [
@@ -75,8 +74,13 @@ export default function IncentivazioneInterna() {
   const { toast } = useToast();
   const isAdmin = ["super_admin", "admin"].includes(profile?.role || "");
 
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonthRaw] = useState(now.getMonth() + 1);
+  const [year, setYearRaw] = useState(now.getFullYear());
+  // Configurazione (gara) selezionata: null = prima/storica del periodo.
+  // Si resetta al cambio periodo (le config sono per mese/anno).
+  const [configId, setConfigId] = useState<string | null>(null);
+  const setMonth = (m: number) => { setMonthRaw(m); setConfigId(null); };
+  const setYear = (y: number) => { setYearRaw(y); setConfigId(null); };
   const [activeSection, setActiveSection] = useState("ss_w3");
   const [statusFilter, setStatusFilter] = useState<"all" | Semaforo>("all");
   const [unlockOnly, setUnlockOnly] = useState(false);
@@ -87,8 +91,12 @@ export default function IncentivazioneInterna() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadTarget, setUploadTarget] = useState<string | null>(null);
 
+  // Il fetcher di default unisce i segmenti della queryKey come path:
+  // /api/incentivazione/dashboard/:month/:year[/:configId]
   const { data, isLoading, isError, refetch, isFetching } = useQuery<DashboardResp>({
-    queryKey: ["/api/incentivazione/dashboard", month, year],
+    queryKey: configId
+      ? ["/api/incentivazione/dashboard", month, year, configId]
+      : ["/api/incentivazione/dashboard", month, year],
   });
 
   const config: IncentivazioneConfig = useMemo(
@@ -238,16 +246,30 @@ export default function IncentivazioneInterna() {
                 ))}
               </SelectContent>
             </Select>
+            {(data?.configs?.length ?? 0) > 1 && (
+              <Select
+                value={configId ?? data?.configId ?? ""}
+                onValueChange={(v) => setConfigId(v)}
+              >
+                <SelectTrigger className="w-[180px]" data-testid="select-config">
+                  <SelectValue placeholder="Gara" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(data?.configs ?? []).map((c) => (
+                    <SelectItem key={c.id} value={c.id} data-testid={`option-config-${c.id}`}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching} data-testid="button-refresh">
               <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
             </Button>
-            {isAdmin && section && (
-              <ConfigEditor
-                month={month}
-                year={year}
-                config={config}
-                onSaved={() => queryClient.invalidateQueries({ queryKey: ["/api/incentivazione/dashboard", month, year] })}
-              />
+            {isAdmin && (
+              <Link href="/incentivazione-interna/config">
+                <Button variant="outline" size="sm" data-testid="button-config">
+                  <Settings className="h-4 w-4 mr-1" /> Configura
+                </Button>
+              </Link>
             )}
           </div>
         </div>
@@ -647,151 +669,3 @@ function EmployeeCard({ emp, tracks }: { emp: Employee; tracks: Track[] }) {
   );
 }
 
-// ── Admin config editor ─────────────────────────────────────────────────────
-function ConfigEditor(props: {
-  month: number;
-  year: number;
-  config: IncentivazioneConfig;
-  onSaved: () => void;
-}) {
-  const { month, year, config, onSaved } = props;
-  const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<IncentivazioneConfig>(config);
-  const [editSection, setEditSection] = useState(config.sections[0]?.id ?? "ss_w3");
-
-  const reset = () => { setDraft(JSON.parse(JSON.stringify(config))); setEditSection(config.sections[0]?.id ?? "ss_w3"); };
-
-  const save = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("PUT", "/api/incentivazione/config", { month, year, config: draft });
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Configurazione salvata" });
-      setOpen(false);
-      onSaved();
-    },
-    onError: (e: any) => toast({ title: "Errore", description: String(e.message || e), variant: "destructive" }),
-  });
-
-  const updateSection = (id: string, patch: Partial<Section>) => {
-    setDraft((d) => ({ ...d, sections: d.sections.map((s) => s.id === id ? { ...s, ...patch } : s) }));
-  };
-  const updateTrack = (sid: string, tid: string, patch: Partial<Track>) => {
-    setDraft((d) => ({
-      ...d,
-      sections: d.sections.map((s) => s.id === sid
-        ? { ...s, tracks: s.tracks.map((t) => t.id === tid ? { ...t, ...patch } : t) }
-        : s),
-    }));
-  };
-  const addTrack = (sid: string) => {
-    const newTrack: Track = { id: `track_${Date.now()}`, name: "Nuova pista", target: 1, unit: "pz", isLock: false };
-    setDraft((d) => ({ ...d, sections: d.sections.map((s) => s.id === sid ? { ...s, tracks: [...s.tracks, newTrack] } : s) }));
-  };
-  const removeTrack = (sid: string, tid: string) => {
-    setDraft((d) => ({ ...d, sections: d.sections.map((s) => s.id === sid ? { ...s, tracks: s.tracks.filter((t) => t.id !== tid) } : s) }));
-  };
-
-  const sec = draft.sections.find((s) => s.id === editSection) || draft.sections[0];
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (o) reset(); }}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" data-testid="button-config"><Settings className="h-4 w-4 mr-1" /> Configura</Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Configurazione gara · {MONTHS[month - 1]} {year}</DialogTitle>
-        </DialogHeader>
-
-        {/* Global cats */}
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
-            <Label className="text-xs">Categorie Accessori (id, separati da virgola)</Label>
-            <Input
-              value={draft.catAcc.join(",")}
-              onChange={(e) => setDraft((d) => ({ ...d, catAcc: parseIds(e.target.value) }))}
-              data-testid="input-cat-acc"
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Categorie Servizi (id, separati da virgola)</Label>
-            <Input
-              value={draft.catServ.join(",")}
-              onChange={(e) => setDraft((d) => ({ ...d, catServ: parseIds(e.target.value) }))}
-              data-testid="input-cat-serv"
-            />
-          </div>
-        </div>
-
-        {/* Section selector */}
-        <div className="flex flex-wrap gap-1">
-          {draft.sections.map((s) => (
-            <Button key={s.id} variant={editSection === s.id ? "secondary" : "ghost"} size="sm" onClick={() => setEditSection(s.id)}>
-              {s.op} · {s.label}
-            </Button>
-          ))}
-        </div>
-
-        {sec && (
-          <div className="space-y-3 border rounded-lg p-3">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs">Attiva (ready)</Label>
-                <Switch checked={sec.ready} onCheckedChange={(v) => updateSection(sec.id, { ready: v })} data-testid={`switch-ready-${sec.id}`} />
-              </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs">Base €</Label>
-                <Input
-                  type="number"
-                  className="w-24 h-8"
-                  value={sec.base ?? ""}
-                  onChange={(e) => updateSection(sec.id, { base: e.target.value === "" ? null : Number(e.target.value) })}
-                  data-testid={`input-base-${sec.id}`}
-                />
-              </div>
-              <Button variant="outline" size="sm" onClick={() => addTrack(sec.id)}><Plus className="h-4 w-4 mr-1" /> Pista</Button>
-            </div>
-
-            <div className="space-y-2">
-              {sec.tracks.map((t) => (
-                <div key={t.id} className="grid grid-cols-12 gap-2 items-center text-xs">
-                  <Input className="col-span-4 h-8" value={t.name} onChange={(e) => updateTrack(sec.id, t.id, { name: e.target.value })} placeholder="Nome" />
-                  <Input className="col-span-2 h-8" type="number" value={t.target} onChange={(e) => updateTrack(sec.id, t.id, { target: Number(e.target.value) })} placeholder="Target" />
-                  <Input className="col-span-1 h-8" value={t.unit} onChange={(e) => updateTrack(sec.id, t.id, { unit: e.target.value })} placeholder="u." />
-                  <Input className="col-span-1 h-8" value={t.excelCol ?? ""} onChange={(e) => updateTrack(sec.id, t.id, { excelCol: e.target.value.toUpperCase() || undefined })} placeholder="Col" disabled={t.live} />
-                  <label className="col-span-1 flex items-center gap-1" title="Lucchetto bloccante">
-                    <Switch checked={t.isLock} onCheckedChange={(v) => updateTrack(sec.id, t.id, { isLock: v })} /> 🔒
-                  </label>
-                  <label className="col-span-1 flex items-center gap-1" title="Sotto-pista (non conta nello stato)">
-                    <Switch checked={!!t.sub} onCheckedChange={(v) => updateTrack(sec.id, t.id, { sub: v })} /> sub
-                  </label>
-                  <label className="col-span-1 flex items-center gap-1" title="Dato live da BiSuite">
-                    <Switch checked={!!t.live} onCheckedChange={(v) => updateTrack(sec.id, t.id, { live: v })} /> live
-                  </label>
-                  <Button variant="ghost" size="icon" className="col-span-1 h-8 w-8" onClick={() => removeTrack(sec.id, t.id)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-              {sec.tracks.length === 0 && <div className="text-xs text-muted-foreground">Nessuna pista. Aggiungine una.</div>}
-            </div>
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)}>Annulla</Button>
-          <Button onClick={() => save.mutate()} disabled={save.isPending} data-testid="button-save-config">
-            {save.isPending ? "Salvo…" : "Salva configurazione"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function parseIds(s: string): number[] {
-  return s.split(",").map((x) => parseInt(x.trim(), 10)).filter((n) => !Number.isNaN(n));
-}

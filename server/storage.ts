@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
-import { eq, desc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
+import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets } from "@shared/customerJourney";
 
 // Data trigger di default della customer journey: una CJ si apre solo per
@@ -101,6 +101,11 @@ export interface IStorage {
   // Incentivazione interna (gare addetto)
   getIncentivazioneConfig(orgId: string, month: number, year: number): Promise<IncentivazioneConfigRow | undefined>;
   upsertIncentivazioneConfig(orgId: string, month: number, year: number, config: Record<string, unknown>, updatedBy: string | null): Promise<IncentivazioneConfigRow>;
+  listIncentivazioneConfigs(orgId: string, month?: number, year?: number): Promise<IncentivazioneConfigRow[]>;
+  getIncentivazioneConfigById(orgId: string, id: string): Promise<IncentivazioneConfigRow | undefined>;
+  createIncentivazioneConfig(orgId: string, month: number, year: number, name: string, config: Record<string, unknown>, updatedBy: string | null): Promise<IncentivazioneConfigRow>;
+  updateIncentivazioneConfig(orgId: string, id: string, patch: { name?: string; config?: Record<string, unknown> }, updatedBy: string | null): Promise<IncentivazioneConfigRow | undefined>;
+  deleteIncentivazioneConfig(orgId: string, id: string): Promise<void>;
   listIncentivazioneValenze(orgId: string, month: number, year: number): Promise<IncentivazioneValenze[]>;
   upsertIncentivazioneValenze(value: InsertIncentivazioneValenze): Promise<IncentivazioneValenze>;
   deleteIncentivazioneValenze(orgId: string, month: number, year: number, sectionId: string): Promise<void>;
@@ -591,6 +596,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Incentivazione interna (gare addetto)
+  // Legacy single-config accessor: ritorna la prima config del periodo
+  // (la più vecchia per createdAt = quella "storica"), per back-compat.
   async getIncentivazioneConfig(orgId: string, month: number, year: number): Promise<IncentivazioneConfigRow | undefined> {
     const [r] = await db.select().from(incentivazioneConfig)
       .where(and(
@@ -598,19 +605,74 @@ export class DatabaseStorage implements IStorage {
         eq(incentivazioneConfig.month, month),
         eq(incentivazioneConfig.year, year),
       ))
+      .orderBy(asc(incentivazioneConfig.createdAt))
       .limit(1);
     return r;
   }
 
+  // Legacy upsert: aggiorna la prima config del periodo se esiste, altrimenti
+  // ne crea una con il nome di default. Le API multi-config usano i metodi
+  // dedicati sotto.
   async upsertIncentivazioneConfig(orgId: string, month: number, year: number, config: Record<string, unknown>, updatedBy: string | null): Promise<IncentivazioneConfigRow> {
+    const existing = await this.getIncentivazioneConfig(orgId, month, year);
+    if (existing) {
+      const [r] = await db.update(incentivazioneConfig)
+        .set({ config, updatedBy, updatedAt: new Date() })
+        .where(eq(incentivazioneConfig.id, existing.id))
+        .returning();
+      return r;
+    }
     const [r] = await db.insert(incentivazioneConfig)
       .values({ organizationId: orgId, month, year, config, updatedBy })
-      .onConflictDoUpdate({
-        target: [incentivazioneConfig.organizationId, incentivazioneConfig.month, incentivazioneConfig.year],
-        set: { config, updatedBy, updatedAt: new Date() },
-      })
       .returning();
     return r;
+  }
+
+  async listIncentivazioneConfigs(orgId: string, month?: number, year?: number): Promise<IncentivazioneConfigRow[]> {
+    const conds = [eq(incentivazioneConfig.organizationId, orgId)];
+    if (month !== undefined) conds.push(eq(incentivazioneConfig.month, month));
+    if (year !== undefined) conds.push(eq(incentivazioneConfig.year, year));
+    return await db.select().from(incentivazioneConfig)
+      .where(and(...conds))
+      .orderBy(desc(incentivazioneConfig.year), desc(incentivazioneConfig.month), asc(incentivazioneConfig.createdAt));
+  }
+
+  async getIncentivazioneConfigById(orgId: string, id: string): Promise<IncentivazioneConfigRow | undefined> {
+    const [r] = await db.select().from(incentivazioneConfig)
+      .where(and(
+        eq(incentivazioneConfig.id, id),
+        eq(incentivazioneConfig.organizationId, orgId),
+      ))
+      .limit(1);
+    return r;
+  }
+
+  async createIncentivazioneConfig(orgId: string, month: number, year: number, name: string, config: Record<string, unknown>, updatedBy: string | null): Promise<IncentivazioneConfigRow> {
+    const [r] = await db.insert(incentivazioneConfig)
+      .values({ organizationId: orgId, month, year, name, config, updatedBy })
+      .returning();
+    return r;
+  }
+
+  async updateIncentivazioneConfig(orgId: string, id: string, patch: { name?: string; config?: Record<string, unknown> }, updatedBy: string | null): Promise<IncentivazioneConfigRow | undefined> {
+    const set: Record<string, unknown> = { updatedBy, updatedAt: new Date() };
+    if (patch.name !== undefined) set.name = patch.name;
+    if (patch.config !== undefined) set.config = patch.config;
+    const [r] = await db.update(incentivazioneConfig)
+      .set(set)
+      .where(and(
+        eq(incentivazioneConfig.id, id),
+        eq(incentivazioneConfig.organizationId, orgId),
+      ))
+      .returning();
+    return r;
+  }
+
+  async deleteIncentivazioneConfig(orgId: string, id: string): Promise<void> {
+    await db.delete(incentivazioneConfig).where(and(
+      eq(incentivazioneConfig.id, id),
+      eq(incentivazioneConfig.organizationId, orgId),
+    ));
   }
 
   async listIncentivazioneValenze(orgId: string, month: number, year: number): Promise<IncentivazioneValenze[]> {

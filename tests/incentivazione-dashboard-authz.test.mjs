@@ -238,6 +238,122 @@ test('scenario 1: dashboard live data is filtered by role and operator addetti',
 });
 
 // ===========================================================================
+// SCENARIO 3 (Task #273, multi-config): gestione configurazioni con nome.
+//   - la creazione/rinomina/duplicazione/eliminazione è SOLO admin/super
+//     (operatore => 403);
+//   - due configurazioni con nomi diversi coesistono nello stesso mese
+//     (nome duplicato => 409);
+//   - la dashboard seleziona la config via /:configId e espone `configs`.
+// ===========================================================================
+test('scenario 3: multi-config management is admin-only, coexists per month, dashboard selects by configId', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  try {
+    await setRole(pool, session.profileId, 'admin');
+
+    // (a) admin crea la prima config con nome.
+    const created1 = await jsonReq(`${BASE}/api/incentivazione/configs`, {
+      method: 'POST',
+      headers: { Cookie: session.cookie },
+      body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Gara A', config: { catAcc: CAT_ACC, catServ: CAT_SERV } }),
+    });
+    assert.equal(created1.status, 201, `create #1 failed: ${JSON.stringify(created1.body)}`);
+    assert.equal(created1.body.name, 'Gara A');
+
+    // (b) seconda config con nome diverso nello STESSO mese => coesiste.
+    const created2 = await jsonReq(`${BASE}/api/incentivazione/configs`, {
+      method: 'POST',
+      headers: { Cookie: session.cookie },
+      body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Gara B', sourceId: created1.body.id }),
+    });
+    assert.equal(created2.status, 201, `create #2 (duplicate from source) failed: ${JSON.stringify(created2.body)}`);
+
+    // (c) stesso nome (case-insensitive) => 409.
+    const dupName = await jsonReq(`${BASE}/api/incentivazione/configs`, {
+      method: 'POST',
+      headers: { Cookie: session.cookie },
+      body: JSON.stringify({ month: MONTH, year: YEAR, name: 'gara a' }),
+    });
+    assert.equal(dupName.status, 409, 'duplicate name in same period must be rejected');
+
+    // (d) la lista admin contiene entrambe.
+    const list = await jsonReq(`${BASE}/api/incentivazione/configs`, {
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(list.status, 200);
+    const names = list.body.filter((c) => c.month === MONTH && c.year === YEAR).map((c) => c.name).sort();
+    assert.deepEqual(names, ['Gara A', 'Gara B'], 'both configs must coexist in the same month');
+
+    // (e) rinomina.
+    const renamed = await jsonReq(`${BASE}/api/incentivazione/configs/${created2.body.id}`, {
+      method: 'PATCH',
+      headers: { Cookie: session.cookie },
+      body: JSON.stringify({ name: 'Gara B2' }),
+    });
+    assert.equal(renamed.status, 200, `rename failed: ${JSON.stringify(renamed.body)}`);
+    assert.equal(renamed.body.name, 'Gara B2');
+
+    // (f) la dashboard espone `configs` a TUTTI e seleziona per :configId.
+    const dashDefault = await fetchDashboard(session);
+    assert.equal(dashDefault.status, 200);
+    assert.equal(dashDefault.body.configs.length, 2, 'dashboard must list both configs');
+    assert.equal(dashDefault.body.configId, created1.body.id, 'default = first/oldest config');
+    const dashB = await jsonReq(
+      `${BASE}/api/incentivazione/dashboard/${MONTH}/${YEAR}/${created2.body.id}`,
+      { headers: { Cookie: session.cookie } },
+    );
+    assert.equal(dashB.status, 200);
+    assert.equal(dashB.body.configId, created2.body.id, 'dashboard must honor :configId');
+    assert.equal(dashB.body.configName, 'Gara B2');
+    // configId inesistente => 404.
+    const dashMissing = await jsonReq(
+      `${BASE}/api/incentivazione/dashboard/${MONTH}/${YEAR}/00000000-0000-0000-0000-000000000000`,
+      { headers: { Cookie: session.cookie } },
+    );
+    assert.equal(dashMissing.status, 404, 'unknown configId must be 404');
+
+    // (g) operatore: la gestione è vietata (403) su tutte le superfici,
+    // ma la dashboard resta accessibile con l'elenco configs.
+    await setRole(pool, session.profileId, 'operatore', ['mario rossi']);
+    const opList = await jsonReq(`${BASE}/api/incentivazione/configs`, { headers: { Cookie: session.cookie } });
+    assert.equal(opList.status, 403, 'operator must not list configs (admin surface)');
+    const opCreate = await jsonReq(`${BASE}/api/incentivazione/configs`, {
+      method: 'POST',
+      headers: { Cookie: session.cookie },
+      body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Hack' }),
+    });
+    assert.equal(opCreate.status, 403, 'operator must not create configs');
+    const opPatch = await jsonReq(`${BASE}/api/incentivazione/configs/${created1.body.id}`, {
+      method: 'PATCH',
+      headers: { Cookie: session.cookie },
+      body: JSON.stringify({ name: 'Hack' }),
+    });
+    assert.equal(opPatch.status, 403, 'operator must not rename configs');
+    const opDelete = await jsonReq(`${BASE}/api/incentivazione/configs/${created1.body.id}`, {
+      method: 'DELETE',
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(opDelete.status, 403, 'operator must not delete configs');
+    const opDash = await fetchDashboard(session);
+    assert.equal(opDash.status, 200, 'operator dashboard must still work');
+    assert.equal(opDash.body.configs.length, 2, 'operator sees the configs list for the selector');
+
+    // (h) admin elimina la seconda config.
+    await setRole(pool, session.profileId, 'admin');
+    const del = await jsonReq(`${BASE}/api/incentivazione/configs/${created2.body.id}`, {
+      method: 'DELETE',
+      headers: { Cookie: session.cookie },
+    });
+    assert.equal(del.status, 200, `delete failed: ${JSON.stringify(del.body)}`);
+    const dashAfter = await fetchDashboard(session);
+    assert.equal(dashAfter.body.configs.length, 1, 'deleted config must disappear from dashboard list');
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
 // SCENARIO 2: le righe VALENZE restituite dalla dashboard sono filtrate per
 // addetto esattamente come i dati live.
 //   - admin       => tutte le righe

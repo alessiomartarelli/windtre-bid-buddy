@@ -52,10 +52,28 @@ sono nel file punti.
   (`unlockProjected`). Il contatore "🔓 Sblocco gara" è cliccabile e
   filtra la lista.
 
-## Configurazione admin (in-app, per mese)
+## Configurazione admin (in-app, per mese, multi-gara)
 
 Tutta la config è **editabile in-app da admin/super_admin** e
-persistita per `org + mese + anno`. Il dialog "Configura" permette di:
+persistita per `org + mese + anno + nome`. Dal Task #273 possono
+coesistere **più configurazioni (gare) con nome** nello stesso periodo:
+
+- la gestione avviene nella pagina dedicata
+  `/incentivazione-interna/config` (voce **"Incentivazione interna"**
+  nel menù Admin, o bottone "Configura" della dashboard): elenco per
+  periodo, **crea** (con nome, opzionalmente copiando le regole da una
+  gara esistente), **duplica**, **rinomina**, **elimina**, **modifica
+  regole** (stesso editor di prima, ora per-configurazione);
+- il nome è unico (case-insensitive) per `org+mese+anno` (409 in caso
+  di duplicato); le righe pre-esistenti sono migrate col nome di
+  default **"Gara"**;
+- nella dashboard, se il mese ha più di una gara compare un **selettore
+  di configurazione** accanto a mese/anno (per tutti i ruoli); la prima
+  gara creata (la più vecchia) è quella predefinita;
+- le **valenze Excel restano per `org+mese+anno+sezione`**, condivise
+  tra tutte le gare del periodo (eliminare una gara non le tocca).
+
+L'editor regole permette di:
 
 - modificare le **categorie connettore** Accessori (`catAcc`, default
   `[13,3]`) e Servizi (`catServ`, default `[4,27]`) — sono `categoria.id`
@@ -86,11 +104,26 @@ in base al ruolo:
 Tutte sotto `requireModule("incentivazione_interna")`; le mutazioni
 richiedono `requireAdminRole`.
 
-- `GET /api/incentivazione/config?month&year` → `{ config, updatedAt, isDefault }`.
-- `PUT /api/incentivazione/config` (admin) — body `{ month, year, config }`.
-- `GET /api/incentivazione/dashboard/:month/:year` →
-  `{ config, calendar, valenze, live, lastBisuiteSync }` (filtrato per
-  operatore). `lastBisuiteSync` = `max(bisuite_sales.last_seen_at)` dell'org
+- `GET /api/incentivazione/config?month&year` → `{ config, updatedAt, isDefault }`
+  (legacy: opera sulla **prima** config del periodo).
+- `PUT /api/incentivazione/config` (admin) — body `{ month, year, config }`
+  (legacy: aggiorna la prima config del periodo, o la crea col nome default).
+- `GET /api/incentivazione/configs[?month&year]` (admin) → elenco
+  `{ id, month, year, name, updatedAt, createdAt }`.
+- `GET /api/incentivazione/configs/:id` (admin) → dettaglio con `config`
+  normalizzata.
+- `POST /api/incentivazione/configs` (admin) — body
+  `{ month, year, name, sourceId? | config? }`; `sourceId` duplica le
+  regole di una gara esistente; nome duplicato nel periodo → 409.
+- `PATCH /api/incentivazione/configs/:id` (admin) — body
+  `{ name?, config? }` (rinomina e/o aggiorna regole).
+- `DELETE /api/incentivazione/configs/:id` (admin).
+- `GET /api/incentivazione/dashboard/:month/:year[/:configId]` →
+  `{ config, calendar, valenze, live, lastBisuiteSync, configId,
+  configName, configs }` (filtrato per operatore). Senza `:configId`
+  usa la prima gara del periodo; `configId` sconosciuto → 404;
+  `configs` = `[{ id, name }]` del periodo (alimenta il selettore).
+  `lastBisuiteSync` = `max(bisuite_sales.last_seen_at)` dell'org
   (data dell'ultima sincronizzazione vendite dal connettore; `null` se nessuna
   vendita), mostrata nel riquadro Accessori/Servizi.
 - `POST /api/incentivazione/valenze` (admin) — body
@@ -111,11 +144,16 @@ con flag `live`.
 
 - `shared/incentivazione.ts` — tipi + logica pura (default config,
   festività, calendario, parse Excel, compute semafori/sblocco).
-- `server/storage.ts` — get/upsert config, list/upsert/delete valenze,
-  `aggregateAccessoriServizi`.
-- `server/routes.ts` — i 5 endpoint sopra.
-- `client/src/pages/IncentivazioneInterna.tsx` — UI (period picker, tab
-  sezioni, calendario, upload valenze, card riepilogo, card addetti,
-  filtri, contatore sblocco gara, dialog config admin).
-- Tabelle: `incentivazione_config`, `incentivazione_valenze`
-  (unique `org+month+year[+sectionId]`).
+- `server/storage.ts` — get/upsert config (legacy), CRUD multi-config
+  (`listIncentivazioneConfigs`, `getIncentivazioneConfigById`,
+  `create/update/deleteIncentivazioneConfig`), list/upsert/delete
+  valenze, `aggregateAccessoriServizi`.
+- `server/routes.ts` — gli endpoint sopra.
+- `client/src/pages/IncentivazioneInterna.tsx` — dashboard (period
+  picker, selettore gara, tab sezioni, calendario, upload valenze, card
+  riepilogo, card addetti, filtri, contatore sblocco gara).
+- `client/src/pages/IncentivazioneConfigAdmin.tsx` — pagina admin
+  `/incentivazione-interna/config` (elenco gare per periodo, crea/
+  duplica/rinomina/elimina, editor regole).
+- Tabelle: `incentivazione_config` (unique `org+month+year+name`),
+  `incentivazione_valenze` (unique `org+month+year+sectionId`).

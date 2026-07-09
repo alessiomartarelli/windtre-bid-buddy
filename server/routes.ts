@@ -1240,9 +1240,128 @@ export async function registerRoutes(
     }
   });
 
+  // === Multi-config (Task #273): gestione configurazioni con nome ===
+  // Più configurazioni possono coesistere per org+mese+anno (nomi diversi).
+  // La gestione (CRUD) è riservata ad admin/super_admin; gli operatori
+  // ricevono l'elenco {id, name} del periodo dentro la dashboard.
+  app.get("/api/incentivazione/configs", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const month = req.query.month !== undefined ? parseInt(String(req.query.month), 10) : undefined;
+      const year = req.query.year !== undefined ? parseInt(String(req.query.year), 10) : undefined;
+      if ((month !== undefined && (!month || month < 1 || month > 12)) || (year !== undefined && !year)) {
+        return res.status(400).json({ error: "Mese/anno non validi" });
+      }
+      const rows = await storage.listIncentivazioneConfigs(profile.organizationId!, month, year);
+      res.json(rows.map((r) => ({
+        id: r.id, month: r.month, year: r.year, name: r.name,
+        updatedAt: r.updatedAt, createdAt: r.createdAt,
+      })));
+    } catch (e) {
+      console.error("Incentivazione configs list error:", e);
+      res.status(500).json({ error: "Errore nel recupero delle configurazioni" });
+    }
+  });
+
+  app.get("/api/incentivazione/configs/:id", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const row = await storage.getIncentivazioneConfigById(profile.organizationId!, String(req.params.id));
+      if (!row) return res.status(404).json({ error: "Configurazione non trovata" });
+      res.json({
+        id: row.id, month: row.month, year: row.year, name: row.name,
+        config: normalizeConfig(row.config ?? null, row.year), updatedAt: row.updatedAt,
+      });
+    } catch (e) {
+      console.error("Incentivazione config detail error:", e);
+      res.status(500).json({ error: "Errore nel recupero della configurazione" });
+    }
+  });
+
+  // Crea una nuova configurazione (con nome). Con `sourceId` duplica una
+  // configurazione esistente (regole di gara copiate).
+  app.post("/api/incentivazione/configs", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const month = parseInt(String(req.body.month), 10);
+      const year = parseInt(String(req.body.year), 10);
+      const name = String(req.body.name ?? "").trim();
+      if (!month || !year || month < 1 || month > 12) return res.status(400).json({ error: "Mese/anno non validi" });
+      if (!name) return res.status(400).json({ error: "Nome obbligatorio" });
+      const siblings = await storage.listIncentivazioneConfigs(profile.organizationId!, month, year);
+      if (siblings.some((s) => s.name.toLowerCase() === name.toLowerCase())) {
+        return res.status(409).json({ error: "Esiste già una configurazione con questo nome per il periodo" });
+      }
+      let config: Record<string, unknown>;
+      if (req.body.sourceId) {
+        const source = await storage.getIncentivazioneConfigById(profile.organizationId!, String(req.body.sourceId));
+        if (!source) return res.status(404).json({ error: "Configurazione di origine non trovata" });
+        config = normalizeConfig(source.config ?? null, year) as unknown as Record<string, unknown>;
+      } else {
+        config = normalizeConfig(req.body.config ?? null, year) as unknown as Record<string, unknown>;
+      }
+      const row = await storage.createIncentivazioneConfig(profile.organizationId!, month, year, name, config, profile.id);
+      res.status(201).json({ id: row.id, month: row.month, year: row.year, name: row.name, config, updatedAt: row.updatedAt });
+    } catch (e) {
+      console.error("Incentivazione config create error:", e);
+      res.status(500).json({ error: "Errore nella creazione della configurazione" });
+    }
+  });
+
+  // Rinomina e/o aggiorna le regole di gara di una configurazione.
+  app.patch("/api/incentivazione/configs/:id", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const existing = await storage.getIncentivazioneConfigById(profile.organizationId!, String(req.params.id));
+      if (!existing) return res.status(404).json({ error: "Configurazione non trovata" });
+      const patch: { name?: string; config?: Record<string, unknown> } = {};
+      if (req.body.name !== undefined) {
+        const name = String(req.body.name ?? "").trim();
+        if (!name) return res.status(400).json({ error: "Nome obbligatorio" });
+        const siblings = await storage.listIncentivazioneConfigs(profile.organizationId!, existing.month, existing.year);
+        if (siblings.some((s) => s.id !== existing.id && s.name.toLowerCase() === name.toLowerCase())) {
+          return res.status(409).json({ error: "Esiste già una configurazione con questo nome per il periodo" });
+        }
+        patch.name = name;
+      }
+      if (req.body.config !== undefined) {
+        patch.config = normalizeConfig(req.body.config ?? null, existing.year) as unknown as Record<string, unknown>;
+      }
+      const row = await storage.updateIncentivazioneConfig(profile.organizationId!, existing.id, patch, profile.id);
+      res.json({
+        id: row!.id, month: row!.month, year: row!.year, name: row!.name,
+        config: normalizeConfig(row!.config ?? null, row!.year), updatedAt: row!.updatedAt,
+      });
+    } catch (e) {
+      console.error("Incentivazione config patch error:", e);
+      res.status(500).json({ error: "Errore nell'aggiornamento della configurazione" });
+    }
+  });
+
+  app.delete("/api/incentivazione/configs/:id", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const existing = await storage.getIncentivazioneConfigById(profile.organizationId!, String(req.params.id));
+      if (!existing) return res.status(404).json({ error: "Configurazione non trovata" });
+      await storage.deleteIncentivazioneConfig(profile.organizationId!, existing.id);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("Incentivazione config delete error:", e);
+      res.status(500).json({ error: "Errore nell'eliminazione della configurazione" });
+    }
+  });
+
   // Dashboard data: calendario + valenze caricate + Accessori/Servizi live,
   // filtrate per operatore (isolamento per-addetto come Customer Journey).
-  app.get("/api/incentivazione/dashboard/:month/:year", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
+  // Con più configurazioni nel periodo, il segmento opzionale :configId
+  // seleziona quale usare (default: la prima/storica). Le valenze restano
+  // per org+mese+anno, condivise tra le configurazioni del periodo.
+  app.get("/api/incentivazione/dashboard/:month/:year{/:configId}", isAuthenticated, requireModule("incentivazione_interna"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
@@ -1250,7 +1369,12 @@ export async function registerRoutes(
       const year = parseInt(String(req.params.year), 10);
       if (!month || !year || month < 1 || month > 12) return res.status(400).json({ error: "Mese/anno non validi" });
 
-      const cfgRow = await storage.getIncentivazioneConfig(profile.organizationId, month, year);
+      const cfgRows = await storage.listIncentivazioneConfigs(profile.organizationId, month, year);
+      const requestedId = req.params.configId ? String(req.params.configId) : null;
+      const cfgRow = requestedId
+        ? cfgRows.find((r) => r.id === requestedId)
+        : cfgRows[0];
+      if (requestedId && !cfgRow) return res.status(404).json({ error: "Configurazione non trovata" });
       const config = normalizeConfig(cfgRow?.config ?? null, year);
       const calendar = buildCalendar(year, month, config.holidays);
 
@@ -1278,7 +1402,12 @@ export async function registerRoutes(
       const live = liveAll.filter((l) => allowed(l.name));
       const lastBisuiteSync = await storage.getLastBisuiteSync(profile.organizationId);
 
-      res.json({ month, year, config, calendar, valenze, live, lastBisuiteSync });
+      res.json({
+        month, year, config, calendar, valenze, live, lastBisuiteSync,
+        configId: cfgRow?.id ?? null,
+        configName: cfgRow?.name ?? null,
+        configs: cfgRows.map((r) => ({ id: r.id, name: r.name })),
+      });
     } catch (e) {
       console.error("Incentivazione dashboard error:", e);
       res.status(500).json({ error: "Errore nel recupero della dashboard" });

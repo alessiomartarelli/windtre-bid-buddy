@@ -116,9 +116,10 @@ mantenere snello questo file:
   report HTML navigabile allegato, API admin + card di config, test puri.
 - [`docs/incentivazione-interna.md`](docs/incentivazione-interna.md) —
   Modulo Incentivazione interna (gare addetto): valenze piste da Excel +
-  Accessori/Servizi live BiSuite, config admin per-mese (sezioni/piste/
-  lucchetti/base/categorie), calendario lavorativo, sblocco gara,
-  isolamento per operatore.
+  Accessori/Servizi live BiSuite, config admin per-mese multi-gara
+  (più configurazioni con nome per periodo, pagina admin dedicata
+  `/incentivazione-interna/config`, selettore in dashboard), calendario
+  lavorativo, sblocco gara, isolamento per operatore.
 
 ## Testing
 
