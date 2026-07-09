@@ -143,3 +143,16 @@ ${SSH} "cd ${VPS_DIR} && rm -rf dist_old && mv dist dist_old && mkdir dist && ta
 
 echo "==> Done. Verifying pm2 status..."
 ${SSH} "pm2 list"
+
+# Health-check post-deploy (Task #274): il nuovo base path deve rispondere
+# 200 e il vecchio /incentivew3 deve reindirizzare 301 verso /mystoredesk.
+echo "==> Post-deploy health-check..."
+NEW_CODE=$(${SSH} "curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/mystoredesk/")
+OLD_CODE=$(${SSH} "curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/incentivew3/")
+echo "    /mystoredesk/ => ${NEW_CODE} (atteso 200)"
+echo "    /incentivew3/ => ${OLD_CODE} (atteso 301)"
+if [[ "${NEW_CODE}" != "200" || "${OLD_CODE}" != "301" ]]; then
+  echo "ERROR: health-check fallito (nuovo=${NEW_CODE}, vecchio=${OLD_CODE})" >&2
+  exit 1
+fi
+echo "==> Health-check OK."
