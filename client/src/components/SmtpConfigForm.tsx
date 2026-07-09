@@ -287,7 +287,7 @@ export function SmtpConfigForm({ defaultTestRecipient }: { defaultTestRecipient?
                 <Input
                   id="smtp-baseurl"
                   data-testid="input-smtp-baseurl"
-                  placeholder="https://incentive.example.com/incentivew3"
+                  placeholder="https://incentive.example.com/mystoredesk"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
                 />

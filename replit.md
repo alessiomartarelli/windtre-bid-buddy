@@ -55,7 +55,7 @@ Sintesi — il dettaglio operativo completo (deploy script, quality gate,
 cache, backup, logrotate) è in [`docs/deploy-prod.md`](docs/deploy-prod.md).
 
 - **VPS**: 85.215.124.207, Nginx reverse proxy, app su porta 3001, base
-  path `/incentivew3`.
+  path `/mystoredesk` (il vecchio `/incentivew3` è solo redirect 301).
 - **Directory VPS**: `/var/www/incentive-w3/` (con trattino!). NON
   `/var/www/incentivew3/`.
 - **PM2**: riferirsi sempre al **nome** `incentive-w3` (l'id può

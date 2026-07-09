@@ -8,7 +8,10 @@ import { startTelegramReportScheduler } from "./telegramReportScheduler";
 import { logJsonReplacer } from "./logRedact";
 
 const isProduction = process.env.NODE_ENV === "production";
-const BASE_PATH = isProduction ? "/incentivew3" : "";
+const BASE_PATH = isProduction ? "/mystoredesk" : "";
+// Vecchio base path pre-rebrand (Task #274): resta come redirect 301
+// permanente verso BASE_PATH, così i preferiti salvati non si rompono.
+const LEGACY_BASE_PATH = "/incentivew3";
 
 const app = express();
 const httpServer = createServer(app);
@@ -117,6 +120,15 @@ app.use((req, res, next) => {
     });
 
     serveStatic(subApp);
+
+    // Redirect 301 dal vecchio percorso /incentivew3 al nuovo, preservando
+    // sotto-path e query string (req.url = resto dopo il mount point).
+    // Montato PRIMA del sub-app: copre anche gli accessi diretti alla
+    // porta 3001 che bypassano Nginx.
+    app.use(LEGACY_BASE_PATH, (req, res) => {
+      res.redirect(301, BASE_PATH + req.url);
+    });
+
     app.use(BASE_PATH, subApp);
 
     app.get("/", (_req, res) => {

@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { mountCompressedStatic, precompressStatic } from "./compressedStatic";
 
-const BASE_PATH = process.env.NODE_ENV === "production" ? "/incentivew3" : "";
+const BASE_PATH = process.env.NODE_ENV === "production" ? "/mystoredesk" : "";
 
 export function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");

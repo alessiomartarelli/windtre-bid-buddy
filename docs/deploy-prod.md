@@ -6,7 +6,10 @@ Dettaglio operativo della produzione. La sintesi (VPS, path, PM2) resta in
 ## Ambiente
 
 - **VPS**: 85.215.124.207 con Nginx reverse proxy, app su porta 3001.
-- **Base Path**: `/incentivew3` per assets e API.
+- **Base Path**: `/mystoredesk` per assets e API (Task #274, rebrand
+  MyStoreDesk). Il vecchio `/incentivew3` risponde con redirect 301 al
+  percorso equivalente sotto `/mystoredesk`, sia via Nginx
+  (`nginx-incentivew3.conf`) sia via Express (accessi diretti alla 3001).
 - **Directory VPS**: `/var/www/incentive-w3/` (con trattino!). NON
   `/var/www/incentivew3/`.
 - **PM2**: usa il **nome** `incentive-w3` (id storico 0, oggi 13 dopo un
@@ -47,8 +50,14 @@ Dettaglio operativo della produzione. La sintesi (VPS, path, PM2) resta in
   `shared/schema.ts`, applica anche a mano le ALTER/CREATE sul DB prod
   (`PGPASSWORD=… psql -U incentive_w3 -d incentive_w3 -h localhost`).
 - **Verifica post-deploy**: sul VPS
+  `curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/mystoredesk/`
+  ⇒ 200 (root `/` ⇒ 302 redirect, normale);
   `curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/incentivew3/`
-  ⇒ 200 (root `/` ⇒ 302 redirect, normale).
+  ⇒ 301 verso `/mystoredesk/`.
+- **Nginx (solo se cambia la config)**: il blocco `location` dell'app è in
+  `nginx-incentivew3.conf` (repo). Dopo averlo copiato sul VPS nel file
+  incluso dal server block: `nginx -t && systemctl reload nginx`. Gli altri
+  siti (easycashflows, protecta, easystripe) non vanno toccati.
 
 ## Quality gate pre-deploy
 
