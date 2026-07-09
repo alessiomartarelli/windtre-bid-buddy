@@ -638,6 +638,96 @@ export function accessoriImportoOf(a: DailyReportAggregates): number {
   return x?.importo ?? 0;
 }
 
+// ---------------------------------------------------------------------------
+// Migliori per KPI: miglior addetto e miglior negozio per ciascun KPI
+// commerciale (TELCO, New Core, Telefoni, Accessori, Servizi), calcolati
+// dai drill-down per-addetto/per-PDV già presenti negli aggregati. Usato
+// dal report HTML (pagina giorno e "Totale mese", maturato senza
+// proiezione) e dal commento discorsivo.
+// ---------------------------------------------------------------------------
+
+export type TopKpiKey = "telco" | "newcore" | "telefoni" | "accessori" | "servizi";
+
+export interface TopKpiWinner {
+  /** Nominativo addetto o nome negozio (fallback codice POS). */
+  nome: string;
+  /** Valore del KPI (pezzi o €, secondo `unit` della voce). */
+  valore: number;
+}
+
+export interface TopKpiEntry {
+  key: TopKpiKey;
+  label: string;
+  unit: "pz" | "€";
+  /** Miglior addetto (escluso "N/D"); null se nessuno sopra zero. */
+  addetto: TopKpiWinner | null;
+  /** Miglior negozio; null se nessuno sopra zero. */
+  negozio: TopKpiWinner | null;
+}
+
+/** Valore di un KPI dal drill-down di un addetto/negozio. */
+function drilldownKpiValue(d: ReportDrilldown, key: TopKpiKey): number {
+  switch (key) {
+    case "telco":
+      return (d.countByPista.fisso ?? 0) + (d.countByPista.mobile ?? 0);
+    case "newcore":
+      return (d.countByPista.assicurazioni ?? 0) + (d.countByPista.energia ?? 0);
+    case "telefoni":
+      return (
+        d.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === TELEFONI_CATEGORIA)
+          ?.pezzi ?? 0
+      );
+    case "accessori":
+      return (
+        d.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === "ACCESSORI")
+          ?.importo ?? 0
+      );
+    case "servizi":
+      return d.serviziByCategoria.reduce((s, c) => s + c.importo, 0);
+  }
+}
+
+const TOP_KPI_DEFS: ReadonlyArray<{ key: TopKpiKey; label: string; unit: "pz" | "€" }> = [
+  { key: "telco", label: "TELCO", unit: "pz" },
+  { key: "newcore", label: "New Core", unit: "pz" },
+  { key: "telefoni", label: "Telefoni", unit: "pz" },
+  { key: "accessori", label: "Accessori", unit: "€" },
+  { key: "servizi", label: "Servizi", unit: "€" },
+];
+
+/**
+ * Migliori per KPI dagli aggregati di un periodo (giorno o mese-a-oggi):
+ * per ogni KPI il miglior addetto (escluso "N/D") e il miglior negozio.
+ * Pareggi deterministici: a parità di valore vince chi viene prima
+ * nell'ordinamento esistente per importo totale decrescente (strettamente
+ * maggiore per superare). KPI a zero per tutti (né addetto né negozio) ⇒
+ * la voce non compare nel risultato.
+ */
+export function buildTopPerKpi(a: DailyReportAggregates): TopKpiEntry[] {
+  const best = <T,>(
+    items: T[],
+    getDrill: (x: T) => ReportDrilldown,
+    getNome: (x: T) => string,
+    key: TopKpiKey,
+  ): TopKpiWinner | null => {
+    let win: TopKpiWinner | null = null;
+    for (const it of items) {
+      const nome = getNome(it);
+      if (!nome || nome === "N/D") continue;
+      const valore = drilldownKpiValue(getDrill(it), key);
+      if (valore > 0 && (win === null || valore > win.valore)) win = { nome, valore };
+    }
+    return win;
+  };
+  const out: TopKpiEntry[] = [];
+  for (const def of TOP_KPI_DEFS) {
+    const addetto = best(a.perAddetto, (x) => x.dettaglio, (x) => x.nomeAddetto, def.key);
+    const negozio = best(a.perPdv, (x) => x.dettaglio, (x) => x.nomeNegozio || x.codicePos, def.key);
+    if (addetto || negozio) out.push({ ...def, addetto, negozio });
+  }
+  return out;
+}
+
 /**
  * Giorni lavorativi del mese di `ymd` per tipo negozio, trascorsi (fino a
  * `ymd` incluso) e totali:

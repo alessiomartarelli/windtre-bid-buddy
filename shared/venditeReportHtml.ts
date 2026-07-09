@@ -21,9 +21,11 @@ import {
   type PagamentoSplit,
   type ProjectionEntry,
   type ReportDrilldown,
+  type TopKpiKey,
   type TrendDay,
   REPORT_PISTA_ORDER,
   REPORT_TYPE_ORDER,
+  buildTopPerKpi,
   fmtEuro,
   fmtReportDate,
   pctDelta,
@@ -235,14 +237,6 @@ function heroSection(a: DailyReportAggregates, trend: TrendDay[] | undefined, op
 
 function highlightsSection(a: DailyReportAggregates): string {
   const items: string[] = [];
-  if (a.perPdv.length > 0) {
-    const top = a.perPdv[0];
-    items.push(`<div class="hl"><div class="hl-icon">🏆</div><div class="hl-k">Top negozio</div><div class="hl-v">${escapeHtml(top.nomeNegozio || top.codicePos)}</div><div class="hl-s">${escapeHtml(fmtEuro(top.importo))}</div></div>`);
-  }
-  if (a.perAddetto.length > 0) {
-    const top = a.perAddetto[0];
-    items.push(`<div class="hl"><div class="hl-icon">⭐</div><div class="hl-k">Top addetto</div><div class="hl-v">${escapeHtml(top.nomeAddetto)}</div><div class="hl-s">${top.vendite} vendite</div></div>`);
-  }
   const topPista = REPORT_PISTA_ORDER
     .map((p) => ({ p, n: a.countByPista[p] ?? 0 }))
     .sort((x, y) => y.n - x.n)[0];
@@ -251,6 +245,42 @@ function highlightsSection(a: DailyReportAggregates): string {
   }
   if (items.length === 0) return "";
   return `<div class="hls">${items.join("")}</div>`;
+}
+
+/** Icona per KPI della sezione "I migliori". */
+const TOP_KPI_ICON: Record<TopKpiKey, string> = {
+  telco: "📡",
+  newcore: "🛡️",
+  telefoni: "📱",
+  accessori: "🎧",
+  servizi: "🛠️",
+};
+
+/**
+ * Sezione "I migliori per KPI": per ogni KPI (TELCO, New Core, Telefoni,
+ * Accessori, Servizi) il miglior addetto ⭐ e il miglior negozio 🏆 col
+ * valore maturato (pz o €). Usata sia nella pagina giorno sia nel
+ * "Totale mese" (senza proiezione). KPI a zero per tutti ⇒ riga assente.
+ */
+function topPerKpiSection(a: DailyReportAggregates, title: string): string {
+  const entries = buildTopPerKpi(a);
+  if (entries.length === 0) return "";
+  const fmtVal = (unit: "pz" | "€", v: number) => (unit === "€" ? fmtEuro(v) : `${v} pz`);
+  const cell = (icon: string, who: string, w: { nome: string; valore: number } | null, unit: "pz" | "€") =>
+    w
+      ? `<span class="tk-cell">${icon} <span class="tk-who">${escapeHtml(who)}</span> <b>${escapeHtml(w.nome)}</b> <span class="tk-val">${escapeHtml(fmtVal(unit, w.valore))}</span></span>`
+      : "";
+  const rows = entries
+    .map((e) => {
+      const cells = [cell("⭐", "Addetto", e.addetto, e.unit), cell("🏆", "Negozio", e.negozio, e.unit)]
+        .filter(Boolean)
+        .join("");
+      return `<div class="tk-row"><span class="tk-kpi">${TOP_KPI_ICON[e.key]} ${escapeHtml(e.label)}</span>${cells}</div>`;
+    })
+    .join("\n        ");
+  return `<div class="card"><h2>${escapeHtml(title)}</h2>
+        ${rows}
+    </div>`;
 }
 
 function trendSection(trend: TrendDay[] | undefined): string {
@@ -496,6 +526,7 @@ function daySections(
     parts.push(trendSection(trendSlice));
   } else {
     parts.push(highlightsSection(a));
+    parts.push(topPerKpiSection(a, "I migliori del giorno"));
     parts.push(trendSection(trendSlice));
     parts.push(pisteSection(a, trendSlice));
     parts.push(tipiSection(a));
@@ -523,6 +554,7 @@ function monthSections(
     parts.push(`<div class="card empty">Nessuna vendita registrata nel mese.</div>`);
   } else {
     parts.push(highlightsSection(a));
+    parts.push(topPerKpiSection(a, "I migliori del mese"));
     // Andamento del mese: giorni dello storico che appartengono al mese.
     if (history && history.length >= 2) {
       const monthDays = history.filter((h) => h.ymd.slice(0, 7) === history[history.length - 1].ymd.slice(0, 7));
@@ -577,6 +609,7 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
       sections.push(trendSection(trend));
     } else {
       sections.push(highlightsSection(a));
+      sections.push(topPerKpiSection(a, "I migliori del giorno"));
       sections.push(trendSection(trend));
       sections.push(pisteSection(a, trend));
       sections.push(tipiSection(a));
@@ -671,6 +704,14 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
   .hl-k { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-top: 2px; }
   .hl-v { font-size: 13px; font-weight: 700; color: #f8fafc; margin-top: 2px; overflow-wrap: anywhere; }
   .hl-s { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+  .tk-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+            padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 12px; }
+  .tk-row:last-child { border-bottom: none; }
+  .tk-kpi { flex: 0 0 100%; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+            color: #94a3b8; font-weight: 700; }
+  .tk-cell { color: #e2e8f0; overflow-wrap: anywhere; }
+  .tk-who { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #64748b; }
+  .tk-val { color: #fdba74; font-weight: 700; }
   .card { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
           border-radius: 18px; padding: 16px; margin-bottom: 12px; }
   .card.empty { text-align: center; color: #94a3b8; padding: 32px 16px; }

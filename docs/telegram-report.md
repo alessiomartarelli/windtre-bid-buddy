@@ -83,7 +83,21 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   stile glassmorphism (come l'app) e filo conduttore arancione WindTre.
   Sezioni: hero con glow arancione (numero grande vendite + importo) e
   chip delta oggi/ieri/media 7 gg ▲/▼% integrati; riga **highlights**
-  (🏆 top negozio, ⭐ top addetto, 🚀 pista del giorno); grafico di
+  (🚀 pista del giorno); card **"I migliori del giorno"** (Task #272,
+  sostituisce le vecchie card 🏆 Top negozio / ⭐ Top addetto uniche):
+  per ciascun KPI — 📡 TELCO (fisso+mobile pz), 🛡️ New Core
+  (assicurazioni+energia pz), 📱 Telefoni pz, 🎧 Accessori €,
+  🛠️ Servizi € — il miglior ⭐ addetto (escluso N/D) e il miglior
+  🏆 negozio col valore maturato; calcolo in `buildTopPerKpi`
+  (`shared/venditeReport.ts`) dai drill-down `perAddetto`/`perPdv`,
+  pareggi deterministici (a parità vince chi è davanti nell'ordinamento
+  per importo↓), KPI a zero per tutti ⇒ riga assente. La stessa card
+  compare come **"I migliori del mese"** nella pagina "Totale mese"
+  (maturato mese-a-oggi, SENZA proiezione). Anche lo standout del
+  commento discorsivo (`standoutFraming` in `shared/venditeCommento.ts`)
+  usa `buildTopPerKpi`: cita negozio e addetto del KPI più rilevante
+  (primo con un vincitore nell'ordine TELCO → New Core → Telefoni →
+  Accessori → Servizi) col valore; grafico di
   andamento 14 giorni ad area (SVG inline via `svgAreaChart`, assi con
   giorno settimana + picco); **"La gara delle piste"** — una riga per
   pista con barra orizzontale scalata sul massimo, colore tema dark
@@ -219,7 +233,9 @@ no) e non si configurano.
 
 ## Test
 
-`tests/telegram-report.test.mjs` (86 test puri, inclusi 4 sui cambi
+`tests/telegram-report.test.mjs` (90 test puri, inclusi 4 su
+`buildTopPerKpi` — vincitori per KPI, N/D escluso, pareggi
+deterministici, input vuoto —, 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,

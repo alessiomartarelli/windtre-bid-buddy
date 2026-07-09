@@ -7,6 +7,7 @@
 // giorno ma test stabili). Caricabile via loader tsx senza server/DB.
 import {
   type DailyReportAggregates,
+  buildTopPerKpi,
   telefoniPezziOf,
   businessPezziOf,
   accessoriImportoOf,
@@ -426,15 +427,22 @@ function meseFraming(tracked: DimEval[], overallMonthDelta: number | null): stri
 
 function standoutFraming(today: DailyReportAggregates, fc: ForecastConfig): string | null {
   const parts: string[] = [];
-  const topPdv = today.perPdv.find((p) => p.vendite > 0);
-  if (topPdv) parts.push(`In evidenza <b>${escTg(nomePdv(topPdv))}</b>`);
-  const topAddetto = today.perAddetto.find((a) => a.nomeAddetto !== "N/D" && a.vendite > 0);
-  if (topAddetto) {
+  // Migliori per KPI (Task #272): stesso criterio della sezione "I migliori"
+  // dell'allegato HTML. Il KPI più rilevante è il primo con un vincitore
+  // (ordine TELCO → New Core → Telefoni → Accessori → Servizi).
+  const kpis = buildTopPerKpi(today);
+  const top = kpis[0];
+  const fmtKpiVal = (unit: "pz" | "€", v: number) => (unit === "€" ? fmtEuro(v) : `${v} pz`);
+  const topPdv = top?.negozio ?? null;
+  if (top && topPdv) {
     parts.push(
-      parts.length > 0
-        ? `bene l'addetto <b>${escTg(topAddetto.nomeAddetto)}</b>`
-        : `Bene l'addetto <b>${escTg(topAddetto.nomeAddetto)}</b>`,
+      `In evidenza <b>${escTg(topPdv.nome)}</b> su ${top.label} (${fmtKpiVal(top.unit, topPdv.valore)})`,
     );
+  }
+  const topAddetto = top?.addetto ?? null;
+  if (top && topAddetto) {
+    const frase = `l'addetto <b>${escTg(topAddetto.nome)}</b> con ${fmtKpiVal(top.unit, topAddetto.valore)} su ${top.label}`;
+    parts.push(parts.length > 0 ? `bene ${frase}` : `Bene ${frase}`);
   }
   if (parts.length === 0) return null;
   let s = parts.join(", ");
@@ -445,7 +453,7 @@ function standoutFraming(today: DailyReportAggregates, fc: ForecastConfig): stri
     const divisore = numNegozi > 0 ? numNegozi : negozi.length;
     const attesa = divisore > 0 ? today.importo / divisore : 0;
     const laggard = [...negozi].reverse().find((p) => attesa > 0 && p.importo < attesa * 0.5);
-    if (laggard && laggard.codicePos !== topPdv?.codicePos) {
+    if (laggard && nomePdv(laggard) !== topPdv?.nome) {
       s += `; occhio a <b>${escTg(nomePdv(laggard))}</b>, sotto la sua media`;
     }
   }

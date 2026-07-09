@@ -23,6 +23,7 @@ const {
   monthWorkingDays,
   projectMonthEnd,
   buildMonthEndProjection,
+  buildTopPerKpi,
 } = await import("../shared/venditeReport.ts");
 const {
   buildVenditeReportHtml,
@@ -244,10 +245,15 @@ await test("HTML: dashboard completa con hero, highlights, gara piste, mix tipi,
   // Hero: numero grande + importo totale
   assert.ok(html.includes('<div class="hero-num">2</div>'));
   assert.ok(html.includes("150,00 €"));
-  // Highlights: top negozio/addetto/pista
-  assert.ok(html.includes("Top negozio"));
-  assert.ok(html.includes("Top addetto"));
+  // Highlights: pista del giorno + sezione "I migliori" per KPI (Task #272)
+  assert.ok(!html.includes("Top negozio"));
+  assert.ok(!html.includes("Top addetto"));
   assert.ok(html.includes("Pista del giorno"));
+  assert.ok(html.includes("I migliori del giorno"));
+  assert.ok(html.includes("TELCO"));
+  assert.ok(html.includes("Telefoni"));
+  assert.ok(html.includes("<b>Mario Rossi</b>"));
+  assert.ok(html.includes("<b>Centro</b>"));
   // Gara piste: solo piste con pezzi > 0, con colore tema inline
   assert.ok(html.includes('style="color:#60a5fa">Mobile</span>')); // tema mobile dark
   assert.ok(html.includes(">Energia</span>"));
@@ -441,6 +447,60 @@ await test("aggregateDailyReport: categorieByPista ordinate per pezzi decrescent
   assert.deepEqual(mobile[1], { categoria: "TIED CF", pezzi: 1 });
 });
 
+console.log("\n— buildTopPerKpi (migliori per KPI, Task #272) —");
+
+await test("migliori per KPI: vincitori distinti per TELCO/New Core/Telefoni/Accessori/Servizi", () => {
+  const a = aggregateDailyReport([
+    // Mario (P1 Centro): 2 mobile + 1 fisso = 3 TELCO; 1 telefono; 10 € accessori
+    sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario", totale: "300", articoli: [art("UNTIED", 30), art("UNTIED", 30), art("ADSL/FIBRA/FWA CF", 25), art("TELEFONIA", 200), art("ACCESSORI", 10)] }),
+    // Luigi (P2 Mare): 1 mobile; 2 telefoni; 50 € accessori; 1 assicurazione + 1 energia = 2 New Core; 80 € servizi
+    sale({ codicePos: "P2", nomeNegozio: "Mare", nomeAddetto: "Luigi", totale: "700", articoli: [art("UNTIED", 30), art("TELEFONIA", 250), art("TELEFONIA", 250), art("ACCESSORI", 50), art("ASSICURAZIONI", 0), art("ENERGIA W3", 0), art("SPEDIZIONE", 80)] }),
+  ]);
+  const kpis = buildTopPerKpi(a);
+  assert.deepEqual(kpis.map((k) => k.key), ["telco", "newcore", "telefoni", "accessori", "servizi"]);
+  const by = Object.fromEntries(kpis.map((k) => [k.key, k]));
+  assert.deepEqual(by.telco.addetto, { nome: "Mario", valore: 3 });
+  assert.deepEqual(by.telco.negozio, { nome: "Centro", valore: 3 });
+  assert.equal(by.telco.unit, "pz");
+  assert.deepEqual(by.newcore.addetto, { nome: "Luigi", valore: 2 });
+  assert.deepEqual(by.newcore.negozio, { nome: "Mare", valore: 2 });
+  assert.deepEqual(by.telefoni.addetto, { nome: "Luigi", valore: 2 });
+  assert.deepEqual(by.accessori.addetto, { nome: "Luigi", valore: 50 });
+  assert.equal(by.accessori.unit, "€");
+  assert.deepEqual(by.servizi.addetto, { nome: "Luigi", valore: 80 });
+  assert.deepEqual(by.servizi.negozio, { nome: "Mare", valore: 80 });
+});
+
+await test("migliori per KPI: N/D escluso, KPI a zero per tutti assente", () => {
+  const a = aggregateDailyReport([
+    sale({ codicePos: null, nomeNegozio: null, nomeAddetto: null, totale: "100", articoli: [art("UNTIED", 100)] }),
+    sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Anna", totale: "10", articoli: [art("ACCESSORI", 10)] }),
+  ]);
+  const kpis = buildTopPerKpi(a);
+  const by = Object.fromEntries(kpis.map((k) => [k.key, k]));
+  // TELCO: la vendita mobile è tutta su addetto/negozio N/D ⇒ nessun vincitore ⇒ voce assente.
+  assert.equal(by.telco, undefined);
+  assert.equal(by.telefoni, undefined);
+  assert.equal(by.servizi, undefined);
+  assert.deepEqual(by.accessori.addetto, { nome: "Anna", valore: 10 });
+  assert.deepEqual(by.accessori.negozio, { nome: "Centro", valore: 10 });
+});
+
+await test("migliori per KPI: pareggio deterministico (vince chi ha più importo totale)", () => {
+  const a = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Alfa", nomeAddetto: "Primo", totale: "50", articoli: [art("UNTIED", 50)] }),
+    sale({ codicePos: "P2", nomeNegozio: "Beta", nomeAddetto: "Secondo", totale: "200", articoli: [art("UNTIED", 200)] }),
+  ]);
+  const by = Object.fromEntries(buildTopPerKpi(a).map((k) => [k.key, k]));
+  // 1 TELCO a testa: vince chi viene prima nell'ordinamento per importo↓ (Secondo/Beta).
+  assert.deepEqual(by.telco.addetto, { nome: "Secondo", valore: 1 });
+  assert.deepEqual(by.telco.negozio, { nome: "Beta", valore: 1 });
+});
+
+await test("migliori per KPI: input vuoto ⇒ []", () => {
+  assert.deepEqual(buildTopPerKpi(aggregateDailyReport([])), []);
+});
+
 console.log("\n— storico navigabile + totale mese —");
 
 await test("monthStartYmd e monthLabelOf: inizio mese ed etichetta italiana", () => {
@@ -510,8 +570,8 @@ await test("HTML navigabile: una pagina per giorno, nav ‹ ›, solo l'ultima v
 
 await test("HTML: pagina Totale mese con hero, gara piste mese e bottone Mese", () => {
   const monthAgg = aggregateDailyReport([
-    sale({ totale: "100", articoli: [art("UNTIED", 50)] }),
-    sale({ totale: "200", articoli: [art("LUCE", 80)] }),
+    sale({ nomeAddetto: "Mario", totale: "100", articoli: [art("UNTIED", 50)] }),
+    sale({ nomeAddetto: "Mario", totale: "200", articoli: [art("LUCE", 80)] }),
   ]);
   const html = buildVenditeReportHtml({
     orgName: "Org Test",
@@ -526,6 +586,8 @@ await test("HTML: pagina Totale mese con hero, gara piste mese e bottone Mese", 
   assert.ok(html.includes('data-page="month" hidden'));
   assert.ok(html.includes("Totale luglio 2026"));
   assert.ok(html.includes("La gara delle piste · mese"));
+  // Migliori per KPI del mese (Task #272): maturato, senza proiezione.
+  assert.ok(html.includes("I migliori del mese"));
   assert.ok(html.includes('id="nav-month"'));
   assert.ok(html.includes("Tocca per il totale del mese"));
   assert.ok(html.includes("Tocca per tornare al giorno"));
