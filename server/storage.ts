@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
+import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets } from "@shared/customerJourney";
 
@@ -48,6 +48,19 @@ export interface IStorage {
   createOrganization(org: InsertOrganization): Promise<Organization>;
   updateOrganization(id: string, updates: Partial<InsertOrganization>): Promise<Organization>;
   deleteOrganization(id: string): Promise<void>;
+
+  // Brands (operatori telefonici, Task #277)
+  getBrands(): Promise<Brand[]>;
+  getBrand(id: string): Promise<Brand | undefined>;
+  getBrandByNameCi(name: string): Promise<Brand | undefined>;
+  createBrand(brand: InsertBrand): Promise<Brand>;
+  updateBrand(id: string, name: string): Promise<Brand>;
+  deleteBrand(id: string): Promise<void>;
+  getOrganizationBrandIds(orgId: string): Promise<string[]>;
+  getOrganizationBrands(orgId: string): Promise<Brand[]>;
+  getAllOrganizationBrandIds(): Promise<Record<string, string[]>>;
+  setOrganizationBrands(orgId: string, brandIds: string[]): Promise<string[]>;
+  countBrandAssociations(brandId: string): Promise<number>;
 
   // Preventivi
   getPreventivi(orgId: string): Promise<(Preventivo & { createdByName: string | null; createdByEmail: string | null })[]>;
@@ -223,6 +236,93 @@ export class DatabaseStorage implements IStorage {
 
   async deleteOrganization(id: string): Promise<void> {
     await db.delete(organizations).where(eq(organizations.id, id));
+  }
+
+  // === Brands (operatori telefonici, Task #277) ===
+  async getBrands(): Promise<Brand[]> {
+    return await db.select().from(brands).orderBy(asc(brands.name));
+  }
+
+  async getBrand(id: string): Promise<Brand | undefined> {
+    const [b] = await db.select().from(brands).where(eq(brands.id, id));
+    return b;
+  }
+
+  // Lookup case-insensitive per garantire l'unicità del nome (es. "WindTre"
+  // vs "windtre").
+  async getBrandByNameCi(name: string): Promise<Brand | undefined> {
+    const [b] = await db.select().from(brands)
+      .where(sql`lower(${brands.name}) = lower(${name})`);
+    return b;
+  }
+
+  async createBrand(brand: InsertBrand): Promise<Brand> {
+    const [result] = await db.insert(brands).values(brand).returning();
+    return result;
+  }
+
+  async updateBrand(id: string, name: string): Promise<Brand> {
+    const [result] = await db.update(brands)
+      .set({ name })
+      .where(eq(brands.id, id))
+      .returning();
+    return result;
+  }
+
+  // Le associazioni org↔brand cadono in cascata (FK onDelete: cascade).
+  async deleteBrand(id: string): Promise<void> {
+    await db.delete(brands).where(eq(brands.id, id));
+  }
+
+  async getOrganizationBrandIds(orgId: string): Promise<string[]> {
+    const rows = await db.select({ brandId: organizationBrands.brandId })
+      .from(organizationBrands)
+      .where(eq(organizationBrands.organizationId, orgId));
+    return rows.map((r) => r.brandId);
+  }
+
+  async getOrganizationBrands(orgId: string): Promise<Brand[]> {
+    const rows = await db.select({ brand: brands })
+      .from(organizationBrands)
+      .innerJoin(brands, eq(brands.id, organizationBrands.brandId))
+      .where(eq(organizationBrands.organizationId, orgId))
+      .orderBy(asc(brands.name));
+    return rows.map((r) => r.brand);
+  }
+
+  // Mappa orgId -> brandIds per la lista del pannello super admin (una query).
+  async getAllOrganizationBrandIds(): Promise<Record<string, string[]>> {
+    const rows = await db.select({
+      organizationId: organizationBrands.organizationId,
+      brandId: organizationBrands.brandId,
+    }).from(organizationBrands);
+    const map: Record<string, string[]> = {};
+    for (const r of rows) {
+      (map[r.organizationId] ??= []).push(r.brandId);
+    }
+    return map;
+  }
+
+  // Sostituisce l'insieme dei brand associati a un'org (PUT semantics).
+  async setOrganizationBrands(orgId: string, brandIds: string[]): Promise<string[]> {
+    const unique = Array.from(new Set(brandIds));
+    await db.transaction(async (tx) => {
+      await tx.delete(organizationBrands)
+        .where(eq(organizationBrands.organizationId, orgId));
+      if (unique.length > 0) {
+        await tx.insert(organizationBrands).values(
+          unique.map((brandId) => ({ organizationId: orgId, brandId })),
+        );
+      }
+    });
+    return unique;
+  }
+
+  async countBrandAssociations(brandId: string): Promise<number> {
+    const [row] = await db.select({ n: sql<number>`count(*)::int` })
+      .from(organizationBrands)
+      .where(eq(organizationBrands.brandId, brandId));
+    return row?.n ?? 0;
   }
 
   // Preventivi

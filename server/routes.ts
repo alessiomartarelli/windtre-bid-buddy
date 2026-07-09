@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions } from "../shared/bisuiteMapping";
 import { isModuleEnabled, MODULE_KEYS } from "../shared/modules";
-import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver } from "@shared/schema";
+import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
 import { registerCdgRoutes } from "./cdgRoutes";
@@ -266,11 +266,15 @@ export async function registerRoutes(
       }
 
       let organization = null;
+      let organizationBrands: { id: string; name: string }[] = [];
       if (profile.organizationId) {
         organization = await storage.getOrganization(profile.organizationId);
+        // Brand (operatori) associati all'org — read-only per tutti i ruoli.
+        organizationBrands = (await storage.getOrganizationBrands(profile.organizationId))
+          .map((b) => ({ id: b.id, name: b.name }));
       }
 
-      res.json({ ...profile, passwordHash: undefined, organization });
+      res.json({ ...profile, passwordHash: undefined, organization, organizationBrands });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -1693,10 +1697,13 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Unauthorized" });
       }
       let organization = null;
+      let organizationBrands: { id: string; name: string }[] = [];
       if (profile.organizationId) {
         organization = await storage.getOrganization(profile.organizationId);
+        organizationBrands = (await storage.getOrganizationBrands(profile.organizationId))
+          .map((b) => ({ id: b.id, name: b.name }));
       }
-      res.json({ ...profile, passwordHash: undefined, organization });
+      res.json({ ...profile, passwordHash: undefined, organization, organizationBrands });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user" });
     }
@@ -1728,6 +1735,131 @@ export async function registerRoutes(
       res.json(orgs);
     } catch (error) {
       res.status(500).json({ message: "Error fetching organizations" });
+    }
+  });
+
+  // === BRAND (operatori telefonici, Task #277) — solo super_admin ===
+  // Catalogo globale di brand + associazione multiselect alle organizzazioni.
+  const requireSuperAdmin = async (req: any, res: any): Promise<boolean> => {
+    const profile = await storage.getProfile(req.session.userId);
+    if (!profile || profile.role !== "super_admin") {
+      res.status(403).json({ message: "Solo il super admin può gestire i brand" });
+      return false;
+    }
+    return true;
+  };
+
+  app.get("/api/admin/brands", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const list = await storage.getBrands();
+      // Includiamo il conteggio associazioni per la conferma di eliminazione.
+      const orgMap = await storage.getAllOrganizationBrandIds();
+      const counts: Record<string, number> = {};
+      for (const ids of Object.values(orgMap)) {
+        for (const id of ids) counts[id] = (counts[id] ?? 0) + 1;
+      }
+      res.json(list.map((b) => ({ ...b, orgCount: counts[b.id] ?? 0 })));
+    } catch (error) {
+      res.status(500).json({ message: "Errore nel caricamento dei brand" });
+    }
+  });
+
+  app.post("/api/admin/brands", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const parsed = insertBrandSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Nome brand non valido" });
+      }
+      const existing = await storage.getBrandByNameCi(parsed.data.name);
+      if (existing) {
+        return res.status(409).json({ message: `Esiste già un brand con questo nome (${existing.name})` });
+      }
+      const brand = await storage.createBrand({ name: parsed.data.name });
+      res.status(201).json(brand);
+    } catch (error) {
+      res.status(500).json({ message: "Errore nella creazione del brand" });
+    }
+  });
+
+  app.patch("/api/admin/brands/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const parsed = insertBrandSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Nome brand non valido" });
+      }
+      const brand = await storage.getBrand(req.params.id);
+      if (!brand) return res.status(404).json({ message: "Brand non trovato" });
+      const dupe = await storage.getBrandByNameCi(parsed.data.name);
+      if (dupe && dupe.id !== brand.id) {
+        return res.status(409).json({ message: `Esiste già un brand con questo nome (${dupe.name})` });
+      }
+      const updated = await storage.updateBrand(brand.id, parsed.data.name);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Errore nella modifica del brand" });
+    }
+  });
+
+  app.delete("/api/admin/brands/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const brand = await storage.getBrand(req.params.id);
+      if (!brand) return res.status(404).json({ message: "Brand non trovato" });
+      const removedAssociations = await storage.countBrandAssociations(brand.id);
+      // Le associazioni org↔brand vengono rimosse in cascata (FK).
+      await storage.deleteBrand(brand.id);
+      res.json({ ok: true, removedAssociations });
+    } catch (error) {
+      res.status(500).json({ message: "Errore nell'eliminazione del brand" });
+    }
+  });
+
+  // Mappa orgId -> brandIds per il pannello super admin.
+  app.get("/api/admin/organization-brands", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      res.json(await storage.getAllOrganizationBrandIds());
+    } catch (error) {
+      res.status(500).json({ message: "Errore nel caricamento delle associazioni brand" });
+    }
+  });
+
+  app.get("/api/admin/organizations/:id/brands", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const org = await storage.getOrganization(req.params.id);
+      if (!org) return res.status(404).json({ message: "Organizzazione non trovata" });
+      res.json({ brandIds: await storage.getOrganizationBrandIds(org.id) });
+    } catch (error) {
+      res.status(500).json({ message: "Errore nel caricamento dei brand dell'organizzazione" });
+    }
+  });
+
+  // PUT sostituisce l'insieme dei brand associati (multiselect).
+  app.put("/api/admin/organizations/:id/brands", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await requireSuperAdmin(req, res))) return;
+      const org = await storage.getOrganization(req.params.id);
+      if (!org) return res.status(404).json({ message: "Organizzazione non trovata" });
+      const schema = z.object({ brandIds: z.array(z.string().min(1)).max(200) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "brandIds deve essere un array di id" });
+      }
+      // Verifica che tutti i brand esistano prima di scrivere.
+      const all = await storage.getBrands();
+      const validIds = new Set(all.map((b) => b.id));
+      const unknown = parsed.data.brandIds.filter((id) => !validIds.has(id));
+      if (unknown.length > 0) {
+        return res.status(400).json({ message: `Brand inesistenti: ${unknown.join(", ")}` });
+      }
+      const saved = await storage.setOrganizationBrands(org.id, parsed.data.brandIds);
+      res.json({ ok: true, brandIds: saved });
+    } catch (error) {
+      res.status(500).json({ message: "Errore nel salvataggio dei brand dell'organizzazione" });
     }
   });
 

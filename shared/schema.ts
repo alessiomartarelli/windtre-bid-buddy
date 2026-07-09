@@ -23,6 +23,36 @@ export const organizations = pgTable("organizations", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Brands (operatori telefonici, es. WindTre/Vodafone/Fastweb) — catalogo
+// globale gestito SOLO dal super_admin (Task #277). L'unicità del nome è
+// case-insensitive: la colonna è unique e le route normalizzano/controllano
+// lower(name) prima dell'insert/rename.
+export const brands = pgTable("brands", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  // Unicità case-insensitive anche a livello DB (oltre al check applicativo),
+  // per chiudere la finestra di race tra lookup e insert.
+  uniqueIndex("UQ_brands_name_ci").on(sql`lower(${table.name})`),
+]);
+
+// Associazione org ↔ brand (multiselect): tabella ponte con coppia unica.
+export const organizationBrands = pgTable("organization_brands", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id")
+    .references(() => organizations.id, { onDelete: "cascade" })
+    .notNull(),
+  brandId: varchar("brand_id")
+    .references(() => brands.id, { onDelete: "cascade" })
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("UQ_organization_brands_pair").on(table.organizationId, table.brandId),
+  index("IDX_organization_brands_org").on(table.organizationId),
+  index("IDX_organization_brands_brand").on(table.brandId),
+]);
+
 // Profiles (users)
 export const profiles = pgTable("profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -468,6 +498,14 @@ export type Preventivo = typeof preventivi.$inferSelect;
 export type OrganizationConfig = typeof organizationConfig.$inferSelect;
 
 export type InsertOrganization = typeof organizations.$inferInsert;
+
+// Brand (operatori telefonici, Task #277)
+export type Brand = typeof brands.$inferSelect;
+export const insertBrandSchema = createInsertSchema(brands).omit({ id: true, createdAt: true }).extend({
+  name: z.string().trim().min(2, "Il nome brand deve avere almeno 2 caratteri").max(100),
+});
+export type InsertBrand = z.infer<typeof insertBrandSchema>;
+export type OrganizationBrand = typeof organizationBrands.$inferSelect;
 export type InsertProfile = typeof profiles.$inferInsert;
 export type InsertPreventivo = typeof preventivi.$inferInsert;
 

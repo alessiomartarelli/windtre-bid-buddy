@@ -16,6 +16,7 @@ import { BiSuiteConnectionForm } from '@/components/BiSuiteConnectionForm';
 import { TelegramReportForm } from '@/components/TelegramReportForm';
 import { BiSuiteSalesTest } from '@/components/BiSuiteSalesTest';
 import { SmtpConfigForm } from '@/components/SmtpConfigForm';
+import { BrandsCard } from '@/components/BrandsCard';
 import { z } from 'zod';
 import {
   Dialog,
@@ -537,6 +538,9 @@ export default function SuperAdminPanel() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Brand operatori (Task #277) */}
+        <BrandsCard organizations={organizations} />
 
         {/* BiSuite API Connection */}
         <BiSuiteConnectionForm 

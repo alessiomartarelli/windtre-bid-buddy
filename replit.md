@@ -39,7 +39,9 @@ Preferred communication style: Simple, everyday language.
 ### Database
 - **DB**: PostgreSQL.
 - **ORM**: Drizzle ORM + `drizzle-zod`.
-- **Tabelle chiave**: `sessions`, `organizations`, `profiles`, `preventivi` (quotes JSONB), `organization_config` (config per-org JSONB), `gara_config` (config gara per-org/per-mese JSONB), `bisuite_sales`, `drms_uploads`, `cdg_*` (Controllo di Gestione).
+- **Tabelle chiave**: `sessions`, `organizations`, `profiles`, `preventivi` (quotes JSONB), `organization_config` (config per-org JSONB), `gara_config` (config gara per-org/per-mese JSONB), `brands` +
+  `organization_brands` (catalogo operatori telefonici del super admin,
+  associazione multiselect per org), `bisuite_sales`, `drms_uploads`, `cdg_*` (Controllo di Gestione).
 - **Migrations**: `drizzle-kit push`.
 
 ### Business Logic

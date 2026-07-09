@@ -250,6 +250,128 @@ test('scenario 3: admin cannot promote a user to super_admin on update-user', as
 });
 
 // ===========================================================================
+// SCENARIO 5 (Task #277): /api/admin/brands — CRUD riservato al super_admin.
+//   (a) admin => 403 su GET/POST; operatore => 403.
+//   (b) super_admin: crea, rinomina, associa a un'org (PUT multiselect),
+//       il duplicato case-insensitive => 409, delete rimuove le associazioni.
+// ===========================================================================
+test('scenario 5: brand catalog is super_admin only, with org multiselect association', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  const createdBrandIds = [];
+  try {
+    // (a) admin non può né leggere né creare brand.
+    await setRole(pool, session.profileId, 'admin');
+    const asAdminGet = await jsonReq(`${BASE}/api/admin/brands`, {
+      headers: { Cookie: session.cookieHeader },
+    });
+    assert.equal(asAdminGet.status, 403, `admin GET brands must be 403, got ${asAdminGet.status}`);
+    const asAdminPost = await jsonReq(`${BASE}/api/admin/brands`, {
+      method: 'POST',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ name: uniq('BrandX') }),
+    });
+    assert.equal(asAdminPost.status, 403, `admin POST brands must be 403, got ${asAdminPost.status}`);
+
+    // operatore idem.
+    await setRole(pool, session.profileId, 'operatore');
+    const asOper = await jsonReq(`${BASE}/api/admin/brands`, {
+      headers: { Cookie: session.cookieHeader },
+    });
+    assert.equal(asOper.status, 403, `operatore GET brands must be 403, got ${asOper.status}`);
+    const asOperPut = await jsonReq(`${BASE}/api/admin/organizations/${session.orgId}/brands`, {
+      method: 'PUT',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ brandIds: [] }),
+    });
+    assert.equal(asOperPut.status, 403, `operatore PUT org brands must be 403, got ${asOperPut.status}`);
+
+    // (b) super_admin: crea due brand.
+    await setRole(pool, session.profileId, 'super_admin');
+    const nameA = uniq('BrandA');
+    const createA = await jsonReq(`${BASE}/api/admin/brands`, {
+      method: 'POST',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ name: nameA }),
+    });
+    assert.equal(createA.status, 201, `create brand A failed: ${JSON.stringify(createA.body)}`);
+    createdBrandIds.push(createA.body.id);
+    const createB = await jsonReq(`${BASE}/api/admin/brands`, {
+      method: 'POST',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ name: uniq('BrandB') }),
+    });
+    assert.equal(createB.status, 201, `create brand B failed: ${JSON.stringify(createB.body)}`);
+    createdBrandIds.push(createB.body.id);
+
+    // Duplicato case-insensitive => 409.
+    const dupe = await jsonReq(`${BASE}/api/admin/brands`, {
+      method: 'POST',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ name: nameA.toUpperCase() }),
+    });
+    assert.equal(dupe.status, 409, `case-insensitive duplicate must be 409, got ${dupe.status}: ${JSON.stringify(dupe.body)}`);
+
+    // Rinomina.
+    const renamed = await jsonReq(`${BASE}/api/admin/brands/${createA.body.id}`, {
+      method: 'PATCH',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ name: `${nameA} Renamed` }),
+    });
+    assert.equal(renamed.status, 200, `rename failed: ${JSON.stringify(renamed.body)}`);
+    assert.equal(renamed.body.name, `${nameA} Renamed`);
+
+    // Associazione multiselect: entrambi i brand sull'org di test.
+    const putBoth = await jsonReq(`${BASE}/api/admin/organizations/${session.orgId}/brands`, {
+      method: 'PUT',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ brandIds: createdBrandIds }),
+    });
+    assert.equal(putBoth.status, 200, `PUT org brands failed: ${JSON.stringify(putBoth.body)}`);
+    const getAssoc = await jsonReq(`${BASE}/api/admin/organizations/${session.orgId}/brands`, {
+      headers: { Cookie: session.cookieHeader },
+    });
+    assert.equal(getAssoc.status, 200);
+    assert.deepEqual(
+      [...getAssoc.body.brandIds].sort(),
+      [...createdBrandIds].sort(),
+      'both brands must be associated to the org',
+    );
+
+    // Brand inesistente nel PUT => 400.
+    const putBad = await jsonReq(`${BASE}/api/admin/organizations/${session.orgId}/brands`, {
+      method: 'PUT',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ brandIds: ['nonexistent-brand-id'] }),
+    });
+    assert.equal(putBad.status, 400, `unknown brand id must be 400, got ${putBad.status}`);
+
+    // DELETE del brand A rimuove anche l'associazione.
+    const del = await jsonReq(`${BASE}/api/admin/brands/${createA.body.id}`, {
+      method: 'DELETE',
+      headers: { Cookie: session.cookieHeader },
+    });
+    assert.equal(del.status, 200, `delete failed: ${JSON.stringify(del.body)}`);
+    assert.equal(del.body.removedAssociations, 1, 'delete must report the removed association');
+    const leftover = await pool.query(
+      `SELECT id FROM organization_brands WHERE brand_id = $1`,
+      [createA.body.id],
+    );
+    assert.equal(leftover.rowCount, 0, 'associations must be removed with the brand');
+  } finally {
+    for (const id of createdBrandIds) {
+      await pool.query(`DELETE FROM brands WHERE id = $1`, [id]).catch(() => {});
+    }
+    await pool.query(
+      `DELETE FROM organization_brands WHERE organization_id = $1`,
+      [session.orgId],
+    ).catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
 // SCENARIO 4: POST /api/admin/update-user — scoping per organizzazione.
 //   (a) admin che modifica un utente di un'altra org => 403
 //       ("Cannot update users outside your organization"), nessuna modifica.
