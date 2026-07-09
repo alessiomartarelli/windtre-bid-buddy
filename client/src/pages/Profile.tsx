@@ -9,13 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Building2, User, Lock, Eye, EyeOff, Mail } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
 
 export default function Profile() {
   const [, setLocation] = useLocation();
-  const { user, profile, organization, loading: authLoading, refreshUser } = useAuth();
+  const { user, profile, organization, organizationBrands, loading: authLoading, refreshUser } = useAuth();
   const { toast } = useToast();
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -239,11 +240,28 @@ export default function Profile() {
               Informazioni sulla tua organizzazione
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div>
               <Label className="text-muted-foreground text-sm">Nome organizzazione</Label>
               <p className="font-medium" data-testid="text-org-name">{organization?.name || 'Non specificata'}</p>
             </div>
+            {organizationBrands.length > 0 && (
+              <div>
+                <Label className="text-muted-foreground text-sm">Operatori gestiti</Label>
+                <div className="flex flex-wrap gap-2 mt-1.5" data-testid="list-org-brands">
+                  {organizationBrands.map((brand) => (
+                    <Badge
+                      key={brand.id}
+                      variant="secondary"
+                      className="font-medium"
+                      data-testid={`badge-org-brand-${brand.id}`}
+                    >
+                      {brand.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

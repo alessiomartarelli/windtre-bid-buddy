@@ -19,6 +19,11 @@ interface Organization {
   enabledModules?: Record<string, boolean> | null;
 }
 
+interface OrganizationBrand {
+  id: string;
+  name: string;
+}
+
 interface User {
   id: string;
   email: string | null;
@@ -32,6 +37,7 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
+  const [organizationBrands, setOrganizationBrands] = useState<OrganizationBrand[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchUser = useCallback(async () => {
@@ -41,6 +47,7 @@ export function useAuth() {
         setUser(null);
         setProfile(null);
         setOrganization(null);
+        setOrganizationBrands([]);
         setLoading(false);
         return;
       }
@@ -56,6 +63,7 @@ export function useAuth() {
       if (data.organization) {
         setOrganization(data.organization);
       }
+      setOrganizationBrands(Array.isArray(data.organizationBrands) ? data.organizationBrands : []);
     } catch (error) {
       console.error('Error fetching user:', error);
       setUser(null);
@@ -93,6 +101,7 @@ export function useAuth() {
       if (data.organization) {
         setOrganization(data.organization);
       }
+      setOrganizationBrands(Array.isArray(data.organizationBrands) ? data.organizationBrands : []);
       return { error: null };
     } catch (error) {
       return { error: { message: 'Errore di connessione' } };
@@ -138,6 +147,7 @@ export function useAuth() {
       setUser(null);
       setProfile(null);
       setOrganization(null);
+      setOrganizationBrands([]);
       return { error: null };
     } catch (error) {
       return { error: { message: 'Errore durante il logout' } };
@@ -149,6 +159,7 @@ export function useAuth() {
     session: user ? { user } : null,
     profile,
     organization,
+    organizationBrands,
     loading,
     signIn,
     signUp,
