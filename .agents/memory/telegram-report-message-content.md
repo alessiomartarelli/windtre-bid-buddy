@@ -11,9 +11,19 @@ Energia per cliente / Proiezione fine mese) sono state **rimosse dal testo**:
 quel dettaglio vive ora **solo nell'allegato HTML** (`buildVenditeReportHtml`).
 
 **Regola durevole:** il testo è narrativo (saluto per fascia oraria + riepilogo
-del giorno in una frase + standout PDV/addetto + eventuale confronto col
-forecast mensile + chiusura motivazionale). Se serve aggiungere un nuovo dato
-di dettaglio, va nell'HTML, NON nel testo. Non reintrodurre elenchi nel testo.
+del giorno + standout PDV/addetto + eventuale confronto col forecast mensile +
+chiusura motivazionale). Se serve aggiungere un nuovo dato di dettaglio NON
+per-pista, va nell'HTML, NON nel testo.
+
+**Impaginazione (aggiornamento, sostituisce il "no elenco nel testo"):** su
+richiesta utente il commento è ora **impaginato a blocchi/paragrafi** (blocchi
+separati da riga vuota, `out.join("\n\n")` in `buildDirettoreCommento`) e le due
+sezioni per-pista sono **elenchi puntati** (`•`, una riga per pista): "Dettaglio
+di giornata" (`giornataFraming`) e "Sul mese …" (`meseFraming`) in
+`shared/venditeCommento.ts`. Questo è un elenco VOLUTO nel testo, diverso dalle
+vecchie sezioni-elenco rimosse (Per tipo/pista/PDV ecc., che restano solo
+nell'HTML). I test usano `.includes()`/regex: mantenere i marker "Finora",
+"In chiusura", "Sul mese", "proiezione", "obiettivo", "davanti/dietro al passo".
 
 **Forecast (config per-org, in chiaro, NON segreti):**
 `forecast_canvass_pezzi`, `forecast_telefoni_pezzi`, `forecast_accessori_euro`,

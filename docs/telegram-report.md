@@ -48,7 +48,13 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   **commento discorsivo** (`buildDirettoreCommento`). L'elenco dettagliato
   (per tipo/pista/PDV, fatturato prodotti/servizi, assicurazioni, energia,
   proiezione) **non è più nel testo**: resta tutto nell'**allegato HTML**,
-  invariato. Parametri: `aggregates` (giorno), `monthAggregates?`
+  invariato. **Impaginazione** (aggiornamento): il commento è diviso in
+  **blocchi/paragrafi** separati da riga vuota e le sezioni per-pista sono
+  **elenchi puntati** (`•`, una riga per pista, valore in `<b>`): "Dettaglio
+  di giornata" (pezzi/€ di oggi per pista) e "Sul mese …" (passo % +
+  proiezione su obiettivo per pista). Restano frasi discorsive apertura,
+  standout negozio/addetto, spunto strategico e chiusura motivazionale.
+  Parametri: `aggregates` (giorno), `monthAggregates?`
   (mese-a-oggi per passo/proiezioni, fallback al giorno), `forecast?`
   (`ForecastConfig`; assente ⇒ commento senza valutazione mensile),
   `fascia?` (derivata da `timeLabel` se assente). I giorni lavorativi del

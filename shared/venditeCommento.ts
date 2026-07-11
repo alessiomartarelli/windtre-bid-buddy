@@ -344,6 +344,9 @@ export function buildDirettoreCommento(p: CommentoParams): string {
     : null;
   const band = bandOf(overallMonthDelta);
 
+  // Ogni elemento di `out` è un "blocco" (paragrafo): i blocchi vengono
+  // separati da una riga vuota per impaginare il messaggio, mentre gli
+  // elenchi puntati per pista usano newline singole all'interno del blocco.
   const out: string[] = [];
   out.push(withPeriod(pick(APERTURA[fascia][band], seed)));
 
@@ -355,7 +358,7 @@ export function buildDirettoreCommento(p: CommentoParams): string {
       out.push(meseFraming(tracked, overallMonthDelta));
     }
     out.push(pick(CHIUSURA_MOTIVAZIONALE[fascia][band], (seed * 2654435761) >>> 0));
-    return out.join(" ");
+    return out.join("\n\n");
   }
 
   // ── Giornata ───────────────────────────────────────────────────────
@@ -377,7 +380,7 @@ export function buildDirettoreCommento(p: CommentoParams): string {
   // ── Chiusura motivazionale ─────────────────────────────────────────
   out.push(pick(CHIUSURA_MOTIVAZIONALE[fascia][band], (seed * 2654435761) >>> 0));
 
-  return out.join(" ");
+  return out.join("\n\n");
 }
 
 function giornataFraming(
@@ -386,26 +389,25 @@ function giornataFraming(
   tracked: DimEval[],
   overallDayDelta: number | null,
 ): string {
-  const bits: string[] = [];
-  bits.push(`<b>${today.vendite} vendite</b> per <b>${fmtEuro(today.importo)}</b>`);
-  const dimBits = tracked
-    .filter((d) => d.today > 0)
-    .map((d) => `${fmtVal(d.unit, d.today)} ${d.label}`);
   const lead = fascia === "parziale" ? "Finora" : "In chiusura";
-  let s = `${lead}: ${bits.join(", ")}`;
-  if (dimBits.length > 0) s += ` (${dimBits.join(", ")})`;
-  s += ".";
+  let head = `${lead}: <b>${today.vendite} vendite</b> per <b>${fmtEuro(today.importo)}</b>.`;
   if (overallDayDelta !== null) {
-    s +=
+    head +=
       overallDayDelta >= 0
         ? ` Siamo sopra l'obiettivo di giornata del <b>${signedPct(overallDayDelta)}</b>.`
         : ` Siamo sotto l'obiettivo di giornata del <b>${Math.abs(overallDayDelta)}%</b>.`;
   }
-  return s;
+  // Elenco puntato per pista (una riga per dimensione con vendite oggi).
+  const bullets = tracked
+    .filter((d) => d.today > 0)
+    .map((d) => `• ${d.label}: <b>${fmtVal(d.unit, d.today)}</b>`);
+  if (bullets.length === 0) return head;
+  return `${head}\nDettaglio di giornata:\n${bullets.join("\n")}`;
 }
 
 function meseFraming(tracked: DimEval[], overallMonthDelta: number | null): string {
-  const clauses = tracked.map((d) => {
+  // Elenco puntato per pista: passo mensile + proiezione a fine mese.
+  const bullets = tracked.map((d) => {
     const dir =
       d.monthDeltaPct === null
         ? "in avvio"
@@ -413,7 +415,7 @@ function meseFraming(tracked: DimEval[], overallMonthDelta: number | null): stri
           ? `avanti del ${signedPct(d.monthDeltaPct)}`
           : `indietro del ${Math.abs(d.monthDeltaPct)}%`;
     const proj = d.projection === null ? "—" : fmtVal(d.unit, d.projection);
-    return `<b>${d.label}</b> ${dir} sul passo (proiezione ${proj} su obiettivo ${fmtVal(d.unit, d.forecast)})`;
+    return `• <b>${d.label}</b>: ${dir} sul passo (proiezione ${proj} su obiettivo ${fmtVal(d.unit, d.forecast)})`;
   });
   let lead = "Sul mese";
   if (overallMonthDelta !== null) {
@@ -422,7 +424,7 @@ function meseFraming(tracked: DimEval[], overallMonthDelta: number | null): stri
         ? `Sul mese siamo davanti al passo di circa il ${signedPct(overallMonthDelta)}`
         : `Sul mese siamo dietro al passo di circa il ${Math.abs(overallMonthDelta)}%`;
   }
-  return `${lead}: ${clauses.join("; ")}.`;
+  return `${lead}:\n${bullets.join("\n")}`;
 }
 
 function standoutFraming(today: DailyReportAggregates, fc: ForecastConfig): string | null {

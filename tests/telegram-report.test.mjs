@@ -1167,6 +1167,36 @@ await test("messaggio: con forecast + monthAggregates ⇒ passo mensile e proiez
   assert.ok(!msg.includes("Proiezione fine mese"));
 });
 
+await test("messaggio: sezioni per-pista sono elenchi puntati (una riga per pista)", () => {
+  const today = aggregateDailyReport([
+    saleCli({ totale: "540", articoli: [art("TELEFONIA", 500), art("ACCESSORI", 40)] }),
+    saleCli({ totale: "30", articoli: [art("UNTIED", 30)] }),
+  ]);
+  const monthAgg = aggregateDailyReport([
+    saleCli({ totale: "540", articoli: [art("TELEFONIA", 500), art("ACCESSORI", 40)] }),
+    saleCli({ totale: "30", articoli: [art("UNTIED", 30)] }),
+  ]);
+  const msg = buildTelegramReportMessage({
+    orgName: "Org",
+    dateYMD: "2026-07-15",
+    timeLabel: "22:30",
+    aggregates: today,
+    monthAggregates: monthAgg,
+    forecast: parseForecastConfig({ mobileVolumi: 100, telefoniPezzi: 60, accessoriFatturato: 2000 }),
+  });
+  // Impaginazione a blocchi: presenza di righe vuote di separazione.
+  assert.ok(msg.includes("\n\n"));
+  // Elenco puntato per pista nella sezione giornata.
+  assert.ok(/Dettaglio di giornata:\n• /.test(msg), "manca l'elenco puntato della giornata");
+  // Elenco puntato per pista nella sezione mese.
+  assert.ok(/Sul mese[^]*\n• /.test(msg), "manca l'elenco puntato del mese");
+  // Ogni pista del mese è su una riga bullet a sé.
+  const bulletLines = msg.split("\n").filter((l) => l.startsWith("• "));
+  assert.ok(bulletLines.length >= 3, `attese più righe bullet, trovate ${bulletLines.length}`);
+  // I bullet del mese mantengono proiezione + obiettivo.
+  assert.ok(bulletLines.some((l) => /proiezione/.test(l) && /obiettivo/.test(l)));
+});
+
 await test("messaggio: senza forecast nessun framing mensile ma commento presente", () => {
   const aggregates = aggregateDailyReport([saleCli({ totale: "30", articoli: [art("UNTIED", 30)] })]);
   const msg = buildTelegramReportMessage({ orgName: "Org", dateYMD: "2026-07-15", aggregates });
