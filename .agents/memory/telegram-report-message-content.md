@@ -39,9 +39,31 @@ accessori €=`accessoriEuroOf(prodottiByCategoria)`, servizi €=`amountByType.
 `pick`): stesso giorno ⇒ stesso testo, giorni diversi ⇒ variano. I test che
 seminano una data fissa devono aspettarsi output stabile.
 
-**Why:** l'utente (Task #266) voleva che la chat Telegram non fosse più un muro
+**Why:** l'utente voleva che la chat Telegram non fosse più un muro
 di numeri ma un commento da direttore vendite che dà il polso sull'obiettivo
 mensile; il dettaglio completo resta comunque a portata nell'allegato HTML.
+
+**Ordinamento per PUNTEGGIO performance (non fatturato):** "il migliore" e le
+classifiche (testo E HTML) sono ordinati per `performanceScore` (somma pesata
+attivazioni per pista: mobile 1, fisso 3, energia 2, assicurazioni 2, protecta
+10, cb 0.5; quota P.IVA/business ×2 via `businessCountByPista`/`saleCustomerKind`;
+telefoni flat 1, sono un prodotto), NON per fatturato. `perPdv`/`perAddetto`
+espongono `punteggio` e ordinano per punteggio↓ (poi importo/vendite/nome).
+Accessori/servizi €: menzione SEPARATA, FUORI dal punteggio.
+**Why:** l'utente premia la qualità del mix venduto, non il volume di cassa; gli
+accessori gonfierebbero lo scontrino senza riflettere la performance commerciale.
+**How to apply:** se aggiungi una pista/prodotto al punteggio, aggiorna
+`PERFORMANCE_WEIGHTS`/`TELEFONI_WEIGHT`; per il raddoppio business serve che
+`businessCountByPista` sia popolato per quella pista via `saleCustomerKind`
+(livello vendita, per TUTTE le piste — non la descrizione).
+
+**WindTre Protetti SEMPRE citato:** sia il testo (`protettiFraming`) sia l'HTML
+(`protettiSection`, card presente in pagine giorno/mese e single-page) menzionano
+sempre i Protetti, con congratulazioni al miglior venditore (`bestProtettiSeller`)
+se >0, altrimenti richiamo a spingere. È la leva a più alto peso (10).
+**How to apply:** non gating su vendite>0 per questa card/riga; deve comparire
+anche a zero. Nei test i Protetti si seminano con `art("ALLARMI", …)` (categoria
+BiSuite ALLARMI ⇒ pista protecta), NON "PROTECTA".
 
 **Caveat parziale (13:30):** il "delta obiettivo di giornata" confronta il
 maturato **parziale** di oggi con un target giornaliero **a giornata piena**

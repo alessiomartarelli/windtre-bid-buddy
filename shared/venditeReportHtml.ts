@@ -26,7 +26,9 @@ import {
   REPORT_PISTA_ORDER,
   REPORT_TYPE_ORDER,
   buildTopPerKpi,
+  bestProtettiSeller,
   fmtEuro,
+  fmtPunti,
   fmtReportDate,
   pctDelta,
 } from "./venditeReport";
@@ -481,13 +483,15 @@ function rankRow(inner: string, drill: string): string {
 
 function pdvSection(a: DailyReportAggregates): string {
   if (a.perPdv.length === 0) return "";
-  const maxImporto = Math.max(...a.perPdv.map((p) => p.importo), 1);
+  // Classifica per PUNTEGGIO performance (Task #282): barra e valore in punti,
+  // fatturato mantenuto come informazione nella riga di dettaglio.
+  const maxPunti = Math.max(...a.perPdv.map((p) => p.punteggio), 1);
   const rows = a.perPdv
     .map((pdv) => {
       const name = pdv.nomeNegozio || "N/D";
-      const inner = `<span class="rank-top"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-val">${escapeHtml(fmtEuro(pdv.importo))}</span></span>
-        <span class="rank-sub"><span class="mono">${escapeHtml(pdv.codicePos)}</span> · ${pdv.vendite} vendite</span>
-        ${rankBar((pdv.importo / maxImporto) * 100, ORANGE)}`;
+      const inner = `<span class="rank-top"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-val">${escapeHtml(fmtPunti(pdv.punteggio))}</span></span>
+        <span class="rank-sub"><span class="mono">${escapeHtml(pdv.codicePos)}</span> · ${pdv.vendite} vendite · ${escapeHtml(fmtEuro(pdv.importo))}</span>
+        ${rankBar((pdv.punteggio / maxPunti) * 100, ORANGE)}`;
       return rankRow(inner, drillPanel(pdv.dettaglio));
     })
     .join("\n        ");
@@ -498,19 +502,55 @@ function pdvSection(a: DailyReportAggregates): string {
 
 function addettiSection(a: DailyReportAggregates): string {
   if (a.perAddetto.length === 0) return "";
-  const maxImporto = Math.max(...a.perAddetto.map((p) => p.importo), 1);
+  // Classifica per PUNTEGGIO performance (Task #282): medaglie sull'ordine
+  // per punteggio, fatturato come informazione secondaria nella riga.
+  const maxPunti = Math.max(...a.perAddetto.map((p) => p.punteggio), 1);
   const medals = ["🥇", "🥈", "🥉"];
   const rows = a.perAddetto
     .map((add, i) => {
       const medal = medals[i] ? `${medals[i]} ` : "";
-      const inner = `<span class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span><span class="rank-val">${escapeHtml(fmtEuro(add.importo))}</span></span>
-        <span class="rank-sub">${add.vendite} vendite</span>
-        ${rankBar((add.importo / maxImporto) * 100, "#60a5fa")}`;
+      const inner = `<span class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span><span class="rank-val">${escapeHtml(fmtPunti(add.punteggio))}</span></span>
+        <span class="rank-sub">${add.vendite} vendite · ${escapeHtml(fmtEuro(add.importo))}</span>
+        ${rankBar((add.punteggio / maxPunti) * 100, "#60a5fa")}`;
       return rankRow(inner, drillPanel(add.dettaglio));
     })
     .join("\n        ");
   return `<div class="card"><h2>Per addetto</h2>
         ${rows}
+    </div>`;
+}
+
+/**
+ * Card WindTre Protetti (Task #282): sempre presente nel report. Se sono
+ * stati venduti Protetti, celebra il miglior venditore (addetto e/o negozio);
+ * altrimenti ricorda che è la leva a più alto valore.
+ */
+function protettiSection(a: DailyReportAggregates, scope: "giorno" | "mese"): string {
+  const n = a.countByPista.protecta ?? 0;
+  const when = scope === "giorno" ? "oggi" : "nel mese";
+  if (n === 0) {
+    return `<div class="card"><h2>🛡️ WindTre Protetti</h2>
+        <div class="tk-row"><span class="tk-kpi">Nessun WindTre Protetti ${when}: è la leva a più alto valore, spingiamola.</span></div>
+    </div>`;
+  }
+  const { addetto, negozio } = bestProtettiSeller(a);
+  const cells: string[] = [];
+  if (addetto) {
+    cells.push(
+      `<span class="tk-cell">⭐ <span class="tk-who">Addetto</span> <b>${escapeHtml(addetto.nome)}</b> <span class="tk-val">${addetto.valore} pz</span></span>`,
+    );
+  }
+  if (negozio) {
+    cells.push(
+      `<span class="tk-cell">🏆 <span class="tk-who">Negozio</span> <b>${escapeHtml(negozio.nome)}</b> <span class="tk-val">${negozio.valore} pz</span></span>`,
+    );
+  }
+  const congrats = cells.length
+    ? `<div class="tk-row"><span class="tk-kpi">👏 Complimenti</span>${cells.join("")}</div>`
+    : "";
+  return `<div class="card"><h2>🛡️ WindTre Protetti</h2>
+        <div class="tk-row"><span class="tk-kpi">${n} pz ${when}</span></div>
+        ${congrats}
     </div>`;
 }
 
@@ -523,10 +563,12 @@ function daySections(
   const parts: string[] = [heroSection(a, trendSlice, hero)];
   if (a.vendite === 0) {
     parts.push(`<div class="card empty">Nessuna vendita registrata in questa giornata.</div>`);
+    parts.push(protettiSection(a, "giorno"));
     parts.push(trendSection(trendSlice));
   } else {
     parts.push(highlightsSection(a));
     parts.push(topPerKpiSection(a, "I migliori del giorno"));
+    parts.push(protettiSection(a, "giorno"));
     parts.push(trendSection(trendSlice));
     parts.push(pisteSection(a, trendSlice));
     parts.push(tipiSection(a));
@@ -552,9 +594,11 @@ function monthSections(
   ];
   if (a.vendite === 0) {
     parts.push(`<div class="card empty">Nessuna vendita registrata nel mese.</div>`);
+    parts.push(protettiSection(a, "mese"));
   } else {
     parts.push(highlightsSection(a));
     parts.push(topPerKpiSection(a, "I migliori del mese"));
+    parts.push(protettiSection(a, "mese"));
     // Andamento del mese: giorni dello storico che appartengono al mese.
     if (history && history.length >= 2) {
       const monthDays = history.filter((h) => h.ymd.slice(0, 7) === history[history.length - 1].ymd.slice(0, 7));
@@ -606,10 +650,12 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
     const sections: string[] = [heroSection(a, trend, hero)];
     if (a.vendite === 0) {
       sections.push(`<div class="card empty">Nessuna vendita registrata oggi.</div>`);
+      sections.push(protettiSection(a, "giorno"));
       sections.push(trendSection(trend));
     } else {
       sections.push(highlightsSection(a));
       sections.push(topPerKpiSection(a, "I migliori del giorno"));
+      sections.push(protettiSection(a, "giorno"));
       sections.push(trendSection(trend));
       sections.push(pisteSection(a, trend));
       sections.push(tipiSection(a));

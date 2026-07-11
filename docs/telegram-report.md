@@ -27,8 +27,15 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   eventuale tono "occhio a … sotto la sua media" quando ≥ 3 negozi);
   spunto strategico (spingere sulla dimensione più indietro, consolidare
   la più avanti) e chiusura motivazionale (diversa parziale/chiusura e per
-  banda). **Giornata al palo** (0 vendite) ⇒ frasi dedicate parziale/
-  chiusura. Il passo atteso a oggi usa `elapsed`/`total` giorni lavorativi.
+  banda). **Task #282**: lo standout negozio/addetto ora cita il miglior
+  **punteggio performance** (non più il fatturato); segue una riga
+  **WindTre Protetti** *sempre presente* (`protettiFraming`) — con
+  congratulazioni al miglior venditore (`bestProtettiSeller`) se ci sono
+  Protetti, altrimenti richiamo a spingere la leva a più alto valore; e una
+  menzione **accessori/servizi a parte** (`accessoriServiziFraming`, in €)
+  esplicitamente **fuori dal punteggio**. **Giornata al palo** (0 vendite)
+  ⇒ frasi dedicate parziale/chiusura. Il passo atteso a oggi usa
+  `elapsed`/`total` giorni lavorativi.
   Config di supporto: `parseForecastConfig(raw)` (normalizza il blocco
   forecast: stringhe/virgole ⇒ numeri, vuoti/≤0/NaN ⇒ null),
   `EMPTY_FORECAST`, `hasForecast(fc)`, `fasciaFromTimeLabel(label)`
@@ -77,6 +84,20 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   `buildCalendar`/`italianHolidays` dell'Incentivazione;
   `projectMonthEnd(value, elapsed, total)` = proporzione lineare, giorni
   non positivi ⇒ null).
+  **Punteggio performance (Task #282)**: `performanceScore(drilldown)` =
+  somma pesata delle attivazioni per pista (`PERFORMANCE_WEIGHTS`: mobile 1,
+  fisso 3, energia 2, assicurazioni 2, protecta 10, cb 0.5) con la quota
+  **P.IVA/business raddoppiata** (`IVA_PIVA_MULTIPLIER=2`, dal
+  `businessCountByPista` popolato via `saleCustomerKind` a livello vendita
+  per TUTTE le piste), più i telefoni a pezzo (`TELEFONI_WEIGHT=1`, flat, è
+  un prodotto non un'attivazione). **NON** include il fatturato
+  accessori/servizi. `perPdv`/`perAddetto` di `aggregateDailyReport`
+  espongono un campo `punteggio` e sono **ordinati per punteggio↓** (poi
+  importo, vendite, nome come spareggio). `topPerformer(a)` = miglior
+  addetto/negozio per punteggio (esclude N/D, punteggio>0);
+  `bestProtettiSeller(a)` = miglior venditore Protetti (pista protecta) per
+  pezzi; `fmtPunti(v)` formatta il punteggio ("1 punto"/"X punti", virgola
+  decimale it-IT).
   Per il trend (Task #250): `buildDailyTrend(rows, fromYMD, toYMD)`
   (serie per-giorno zero-filled, `TrendDay {ymd, vendite, importo,
   countByPista}`, ANNULLATA e righe senza data/fuori intervallo escluse),
@@ -123,7 +144,13 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   pagamentiElettronici⇒POS / bonifici+assegni+buoni+coupon+non
   scontrinato+altri⇒Altro); vendita senza mix ⇒ tutto in Altro;
   classifiche PDV e addetti (medaglie top 3) con barre
-  proporzionali all'importo. Documento standalone: CSS + SVG inline,
+  proporzionali al **punteggio performance** (Task #282: valore in punti
+  via `fmtPunti`, ordinamento per punteggio↓; il fatturato resta come
+  informazione secondaria nella riga di dettaglio). Card **🛡️ WindTre
+  Protetti** *sempre presente* (Task #282, nelle pagine giorno/mese e
+  single-page): se ci sono Protetti celebra il miglior venditore addetto
+  e/o negozio (`bestProtettiSeller`, pz), altrimenti ricorda che è la leva a
+  più alto valore. Documento standalone: CSS + SVG inline,
   nessuna risorsa esterna, escape HTML di tutti i valori dinamici. Il
   parametro `trend?: TrendDay[]` è opzionale: con meno di 2 giorni le
   sezioni comparative e i grafici semplicemente non compaiono. Giorno
@@ -239,9 +266,13 @@ no) e non si configurano.
 
 ## Test
 
-`tests/telegram-report.test.mjs` (90 test puri, inclusi 4 su
+`tests/telegram-report.test.mjs` (105 test puri, inclusi 4 su
 `buildTopPerKpi` — vincitori per KPI, N/D escluso, pareggi
-deterministici, input vuoto —, 4 sui cambi
+deterministici, input vuoto —, i test **punteggio performance**
+(Task #282: `performanceScore` pesi/telefoni/P.IVA×2, classifiche ordinate
+per punteggio non fatturato, `topPerformer`, `bestProtettiSeller`,
+`fmtPunti`, card HTML Protetti sempre presente, commento con Protetti
+sempre citato + congratulazioni e accessori/servizi a parte), 4 sui cambi
 ora legale — DST marzo 23h / ottobre 25h — e 4 sul redactor dei log,
 niente server né DB, via
 loader tsx): aggregazione (ANNULLATA escluse, tipi/piste/PDV/addetti,

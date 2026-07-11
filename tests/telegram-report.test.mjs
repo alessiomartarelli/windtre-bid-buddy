@@ -24,6 +24,11 @@ const {
   projectMonthEnd,
   buildMonthEndProjection,
   buildTopPerKpi,
+  performanceScore,
+  fmtPunti,
+  topPerformer,
+  bestProtettiSeller,
+  PERFORMANCE_WEIGHTS,
 } = await import("../shared/venditeReport.ts");
 const {
   buildVenditeReportHtml,
@@ -499,6 +504,107 @@ await test("migliori per KPI: pareggio deterministico (vince chi ha più importo
 
 await test("migliori per KPI: input vuoto ⇒ []", () => {
   assert.deepEqual(buildTopPerKpi(aggregateDailyReport([])), []);
+});
+
+await test("HTML: card WindTre Protetti sempre presente, con congrats se venduti", () => {
+  const conProtetti = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario Rossi", totale: "60", articoli: [art("ALLARMI", 60)] }),
+  ]);
+  const html = buildVenditeReportHtml({ orgName: "Org Test", dateYMD: "2026-07-15", timeLabel: "13:30", aggregates: conProtetti });
+  assert.ok(html.includes("🛡️ WindTre Protetti"));
+  assert.ok(html.includes("👏 Complimenti"));
+  assert.ok(html.includes("<b>Mario Rossi</b>"));
+  // Senza Protetti: card comunque presente con messaggio di spinta.
+  const senza = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Centro", totale: "30", articoli: [art("UNTIED", 30)] }),
+  ]);
+  const html2 = buildVenditeReportHtml({ orgName: "Org Test", dateYMD: "2026-07-15", timeLabel: "13:30", aggregates: senza });
+  assert.ok(html2.includes("🛡️ WindTre Protetti"));
+  assert.ok(html2.includes("Nessun WindTre Protetti"));
+});
+
+console.log("\n— punteggio performance (Task #282) —");
+
+await test("performanceScore: somma pesata per pista, telefoni flat", () => {
+  // 1 mobile (CF) = 1, 1 fisso = 3, 1 protecta = 10, 1 telefono = 1 ⇒ 15
+  const a = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeAddetto: "Mario", totale: "10", articoli: [art("UNTIED", 10)] }),
+    sale({ codicePos: "P1", nomeAddetto: "Mario", totale: "20", articoli: [art("ADSL/FIBRA/FWA CF", 20)] }),
+    sale({ codicePos: "P1", nomeAddetto: "Mario", totale: "30", articoli: [art("ALLARMI", 30)] }),
+    sale({ codicePos: "P1", nomeAddetto: "Mario", totale: "5", articoli: [art("TELEFONIA", 5)] }),
+  ]);
+  const mario = a.perAddetto.find((x) => x.nomeAddetto === "Mario");
+  assert.equal(performanceScore(mario.dettaglio), 15);
+});
+
+await test("performanceScore: attivazione P.IVA (business) vale il doppio", () => {
+  const priv = aggregateDailyReport([
+    sale({ nomeAddetto: "A", totale: "10", articoli: [art("UNTIED", 10)] }),
+  ]);
+  const biz = aggregateDailyReport([
+    { ...sale({ nomeAddetto: "A", totale: "10", articoli: [art("UNTIED", 10)] }),
+      rawData: { articoli: [art("UNTIED", 10)], cliente: { clienteTipo: "GIURIDICA" } } },
+  ]);
+  assert.equal(performanceScore(priv.perAddetto[0].dettaglio), 1);
+  assert.equal(performanceScore(biz.perAddetto[0].dettaglio), 2);
+});
+
+await test("classifiche ordinate per PUNTEGGIO, non per fatturato", () => {
+  // Bea: 1 protecta (score 10) ma solo 30€. Aldo: 1 mobile (score 1) ma 500€.
+  const a = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Uno", nomeAddetto: "Bea", totale: "30", articoli: [art("ALLARMI", 30)] }),
+    sale({ codicePos: "P2", nomeNegozio: "Due", nomeAddetto: "Aldo", totale: "500", articoli: [art("UNTIED", 500)] }),
+  ]);
+  assert.deepEqual(a.perAddetto.map((x) => x.nomeAddetto), ["Bea", "Aldo"]);
+  assert.deepEqual(a.perPdv.map((x) => x.codicePos), ["P1", "P2"]);
+});
+
+await test("topPerformer: primo con punteggio>0, esclude N/D", () => {
+  const a = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Uno", nomeAddetto: "Bea", totale: "30", articoli: [art("ALLARMI", 30)] }),
+    sale({ codicePos: null, nomeNegozio: null, nomeAddetto: null, totale: "500", articoli: [art("UNTIED", 500)] }),
+  ]);
+  const tp = topPerformer(a);
+  assert.deepEqual(tp.addetto, { nome: "Bea", valore: 10 });
+  assert.deepEqual(tp.negozio, { nome: "Uno", valore: 10 });
+});
+
+await test("topPerformer: nessuna vendita ⇒ null", () => {
+  const tp = topPerformer(aggregateDailyReport([]));
+  assert.equal(tp.addetto, null);
+  assert.equal(tp.negozio, null);
+});
+
+await test("bestProtettiSeller: vince chi ha più Protetti; null senza Protetti", () => {
+  const a = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Uno", nomeAddetto: "Bea", totale: "30", articoli: [art("ALLARMI", 30)] }),
+    sale({ codicePos: "P1", nomeNegozio: "Uno", nomeAddetto: "Bea", totale: "30", articoli: [art("ALLARMI", 30)] }),
+    sale({ codicePos: "P2", nomeNegozio: "Due", nomeAddetto: "Aldo", totale: "30", articoli: [art("ALLARMI", 30)] }),
+  ]);
+  const b = bestProtettiSeller(a);
+  assert.deepEqual(b.addetto, { nome: "Bea", valore: 2 });
+  assert.deepEqual(b.negozio, { nome: "Uno", valore: 2 });
+  const none = bestProtettiSeller(aggregateDailyReport([
+    sale({ nomeAddetto: "X", totale: "10", articoli: [art("UNTIED", 10)] }),
+  ]));
+  assert.equal(none.addetto, null);
+  assert.equal(none.negozio, null);
+});
+
+await test("PERFORMANCE_WEIGHTS: pesi attesi per pista", () => {
+  assert.equal(PERFORMANCE_WEIGHTS.mobile, 1);
+  assert.equal(PERFORMANCE_WEIGHTS.fisso, 3);
+  assert.equal(PERFORMANCE_WEIGHTS.energia, 2);
+  assert.equal(PERFORMANCE_WEIGHTS.assicurazioni, 2);
+  assert.equal(PERFORMANCE_WEIGHTS.protecta, 10);
+  assert.equal(PERFORMANCE_WEIGHTS.cb, 0.5);
+});
+
+await test("fmtPunti: singolare/plurale e virgola decimale it-IT", () => {
+  assert.equal(fmtPunti(1), "1 punto");
+  assert.equal(fmtPunti(0), "0 punti");
+  assert.equal(fmtPunti(15), "15 punti");
+  assert.equal(fmtPunti(2.5), "2,5 punti");
 });
 
 console.log("\n— storico navigabile + totale mese —");
@@ -1418,6 +1524,54 @@ await test("senza forecast: solo commento giornata, nessun framing mensile né s
   assert.ok(s.includes("Finora"));
   assert.ok(!s.includes("Sul mese"));
   assert.ok(!s.includes("passo"));
+});
+
+await test("WindTre Protetti: sempre citato anche a zero", () => {
+  const s = buildDirettoreCommento({
+    fascia: "parziale", dateYMD: "2026-07-15", forecast: cjForecast,
+    today: cjToday, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26,
+  });
+  assert.ok(s.includes("WindTre Protetti"));
+  assert.ok(s.includes("ancora a zero"));
+});
+
+await test("WindTre Protetti: citato anche a GIORNATA AL PALO (zero vendite)", () => {
+  const vuoto = aggregateDailyReport([]);
+  const s = buildDirettoreCommento({
+    fascia: "chiusura", dateYMD: "2026-07-15", forecast: cjForecast,
+    today: vuoto, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26,
+  });
+  assert.ok(/palo|Tabellone|dimenticare|domani/.test(s));
+  assert.ok(s.includes("WindTre Protetti"));
+});
+
+await test("HTML: card WindTre Protetti presente anche a zero vendite", () => {
+  const vuoto = aggregateDailyReport([]);
+  const html = buildVenditeReportHtml({ orgName: "Org Test", dateYMD: "2026-07-15", timeLabel: "22:30", aggregates: vuoto });
+  assert.ok(html.includes("Nessuna vendita registrata"));
+  assert.ok(html.includes("🛡️ WindTre Protetti"));
+});
+
+await test("WindTre Protetti: con vendite ⇒ congratulazioni al venditore", () => {
+  const conProtetti = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario Rossi", totale: "60", articoli: [art("ALLARMI", 60)] }),
+  ]);
+  const s = buildDirettoreCommento({
+    fascia: "chiusura", dateYMD: "2026-07-15", forecast: cjForecast,
+    today: conProtetti, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26,
+  });
+  assert.ok(s.includes("WindTre Protetti"));
+  assert.ok(s.includes("1 WindTre Protetti"));
+  assert.ok(s.includes("complimenti a <b>Mario Rossi</b>"));
+});
+
+await test("accessori/servizi: menzione a parte, fuori dal punteggio", () => {
+  const s = buildDirettoreCommento({
+    fascia: "parziale", dateYMD: "2026-07-15", forecast: cjForecast,
+    today: cjToday, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26,
+  });
+  assert.ok(s.includes("A parte dal punteggio"));
+  assert.ok(s.includes("accessori"));
 });
 
 console.log(`\nRisultato: ${passed} passati, ${failed} falliti`);

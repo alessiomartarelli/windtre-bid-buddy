@@ -7,10 +7,12 @@
 // giorno ma test stabili). Caricabile via loader tsx senza server/DB.
 import {
   type DailyReportAggregates,
-  buildTopPerKpi,
   telefoniPezziOf,
   businessPezziOf,
   accessoriImportoOf,
+  topPerformer,
+  bestProtettiSeller,
+  fmtPunti,
   projectMonthEnd,
   pctDelta,
   fmtEuro,
@@ -357,6 +359,8 @@ export function buildDirettoreCommento(p: CommentoParams): string {
     if (tracked.length > 0 && month.vendite > 0) {
       out.push(meseFraming(tracked, overallMonthDelta));
     }
+    // WindTre Protetti: sempre citato, anche a giornata al palo (Task #282).
+    out.push(protettiFraming(today));
     out.push(pick(CHIUSURA_MOTIVAZIONALE[fascia][band], (seed * 2654435761) >>> 0));
     return out.join("\n\n");
   }
@@ -369,9 +373,16 @@ export function buildDirettoreCommento(p: CommentoParams): string {
     out.push(meseFraming(tracked, overallMonthDelta));
   }
 
-  // ── Standout negozio/addetto ───────────────────────────────────────
+  // ── Standout negozio/addetto (per punteggio performance) ───────────
   const standout = standoutFraming(today, fc);
   if (standout) out.push(standout);
+
+  // ── WindTre Protetti: sempre citato, con congratulazioni ───────────
+  out.push(protettiFraming(today));
+
+  // ── Accessori/Servizi: menzione a parte, fuori dal punteggio ───────
+  const accServ = accessoriServiziFraming(today);
+  if (accServ) out.push(accServ);
 
   // ── Spunto strategico ──────────────────────────────────────────────
   const spunto = spuntoStrategico(tracked);
@@ -429,22 +440,17 @@ function meseFraming(tracked: DimEval[], overallMonthDelta: number | null): stri
 
 function standoutFraming(today: DailyReportAggregates, fc: ForecastConfig): string | null {
   const parts: string[] = [];
-  // Migliori per KPI (Task #272): stesso criterio della sezione "I migliori"
-  // dell'allegato HTML. Il KPI più rilevante è il primo con un vincitore
-  // (ordine TELCO → New Core → Telefoni → Accessori → Servizi).
-  const kpis = buildTopPerKpi(today);
-  const top = kpis[0];
-  const fmtKpiVal = (unit: "pz" | "€", v: number) => (unit === "€" ? fmtEuro(v) : `${v} pz`);
-  const topPdv = top?.negozio ?? null;
-  if (top && topPdv) {
+  // "Il migliore" per PUNTEGGIO performance (Task #282), non più per
+  // fatturato o per singolo KPI: miglior negozio e miglior addetto pesati.
+  const { negozio: topPdv, addetto: topAddetto } = topPerformer(today);
+  if (topPdv) {
     parts.push(
-      `In evidenza <b>${escTg(topPdv.nome)}</b> su ${top.label} (${fmtKpiVal(top.unit, topPdv.valore)})`,
+      `In evidenza <b>${escTg(topPdv.nome)}</b> con <b>${fmtPunti(topPdv.valore)}</b> di performance`,
     );
   }
-  const topAddetto = top?.addetto ?? null;
-  if (top && topAddetto) {
-    const frase = `l'addetto <b>${escTg(topAddetto.nome)}</b> con ${fmtKpiVal(top.unit, topAddetto.valore)} su ${top.label}`;
-    parts.push(parts.length > 0 ? `bene ${frase}` : `Bene ${frase}`);
+  if (topAddetto) {
+    const frase = `l'addetto <b>${escTg(topAddetto.nome)}</b> a <b>${fmtPunti(topAddetto.valore)}</b>`;
+    parts.push(parts.length > 0 ? `bravo ${frase}` : `Bravo ${frase}`);
   }
   if (parts.length === 0) return null;
   let s = parts.join(", ");
@@ -460,6 +466,39 @@ function standoutFraming(today: DailyReportAggregates, fc: ForecastConfig): stri
     }
   }
   return s + ".";
+}
+
+/**
+ * WindTre Protetti sempre citato (Task #282): è la leva a più alto valore.
+ * Se qualcuno ha venduto, congratulazioni al miglior venditore (addetto e/o
+ * negozio); altrimenti una spinta a lavorarlo.
+ */
+function protettiFraming(today: DailyReportAggregates): string {
+  const n = today.countByPista.protecta ?? 0;
+  if (n === 0) {
+    return "🛡️ <b>WindTre Protetti</b>: oggi ancora a zero — è la leva a più alto valore, spingiamola.";
+  }
+  const { addetto, negozio } = bestProtettiSeller(today);
+  const plur = n === 1 ? "1 WindTre Protetti" : `${n} WindTre Protetti`;
+  const chi: string[] = [];
+  if (addetto) chi.push(`complimenti a <b>${escTg(addetto.nome)}</b>`);
+  if (negozio) chi.push(`bene il negozio <b>${escTg(negozio.nome)}</b>`);
+  const coda = chi.length ? ` — ${chi.join(", ")}` : "";
+  return `🛡️ <b>WindTre Protetti</b>: oggi ${plur} 👏${coda}.`;
+}
+
+/**
+ * Fatturato accessori/servizi come menzione a parte (Task #282): resta FUORI
+ * dal punteggio performance ma va comunque valorizzato. null se entrambi a 0.
+ */
+function accessoriServiziFraming(today: DailyReportAggregates): string | null {
+  const acc = accessoriImportoOf(today);
+  const serv = today.amountByType.servizi;
+  const parts: string[] = [];
+  if (acc > 0) parts.push(`accessori <b>${fmtEuro(acc)}</b>`);
+  if (serv > 0) parts.push(`servizi <b>${fmtEuro(serv)}</b>`);
+  if (parts.length === 0) return null;
+  return `🎧 A parte dal punteggio, il fatturato di ${parts.join(" e ")} arricchisce lo scontrino.`;
 }
 
 function spuntoStrategico(tracked: DimEval[]): string | null {

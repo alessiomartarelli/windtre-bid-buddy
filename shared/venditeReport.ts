@@ -46,6 +46,13 @@ export interface CategoriaImportoAggregate {
 export interface ReportDrilldown {
   /** Pezzi canvass per pista. */
   countByPista: Partial<Record<PistaCanvass, number>>;
+  /**
+   * Di cui pezzi a clienti Business (P.IVA) per pista (Task #282): lo split
+   * P.IVA/CF a livello di addetto/negozio serve al punteggio performance
+   * (le attivazioni P.IVA valgono il doppio). Determinato da
+   * `saleCustomerKind` (tipo cliente della vendita), non dalla descrizione.
+   */
+  businessCountByPista: Partial<Record<PistaCanvass, number>>;
   /** Categorie Prodotti (accessori ecc.), ordinate per fatturato↓. */
   prodottiByCategoria: CategoriaImportoAggregate[];
   /** Categorie Servizi, ordinate per fatturato↓. */
@@ -57,6 +64,8 @@ export interface PdvReportAggregate {
   nomeNegozio: string;
   vendite: number;
   importo: number;
+  /** Punteggio performance pesato (Task #282), criterio di classifica. */
+  punteggio: number;
   /** Drill-down del negozio (Task #251). */
   dettaglio: ReportDrilldown;
 }
@@ -66,6 +75,8 @@ export interface AddettoReportAggregate {
   nomeAddetto: string;
   vendite: number;
   importo: number;
+  /** Punteggio performance pesato (Task #282), criterio di classifica. */
+  punteggio: number;
   /** Drill-down dell'addetto (Task #251). */
   dettaglio: ReportDrilldown;
 }
@@ -267,12 +278,13 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
   // Accumulatore del drill-down per singolo PDV/addetto (Task #251).
   interface DrillAcc {
     countByPista: Partial<Record<PistaCanvass, number>>;
+    businessCountByPista: Partial<Record<PistaCanvass, number>>;
     prodotti: Map<string, CategoriaImportoAggregate>;
     servizi: Map<string, CategoriaImportoAggregate>;
   }
-  const newDrillAcc = (): DrillAcc => ({ countByPista: {}, prodotti: new Map(), servizi: new Map() });
-  const pdvMap = new Map<string, Omit<PdvReportAggregate, "dettaglio">>();
-  const addettoMap = new Map<string, Omit<AddettoReportAggregate, "dettaglio">>();
+  const newDrillAcc = (): DrillAcc => ({ countByPista: {}, businessCountByPista: {}, prodotti: new Map(), servizi: new Map() });
+  const pdvMap = new Map<string, Omit<PdvReportAggregate, "dettaglio" | "punteggio">>();
+  const addettoMap = new Map<string, Omit<AddettoReportAggregate, "dettaglio" | "punteggio">>();
   const pdvDrill = new Map<string, DrillAcc>();
   const addettoDrill = new Map<string, DrillAcc>();
   let vendite = 0;
@@ -332,6 +344,13 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
         // Drill-down: canvass per pista del PDV e dell'addetto.
         pdvAcc.countByPista[article.pista] = (pdvAcc.countByPista[article.pista] ?? 0) + 1;
         addAcc.countByPista[article.pista] = (addAcc.countByPista[article.pista] ?? 0) + 1;
+        // Split P.IVA/CF per pista al livello di addetto/negozio (Task #282):
+        // determinato dal tipo cliente della vendita (`custKind`), coerente
+        // con `businessCountByPista` aggregato. Serve al punteggio performance.
+        if (custKind === "business") {
+          pdvAcc.businessCountByPista[article.pista] = (pdvAcc.businessCountByPista[article.pista] ?? 0) + 1;
+          addAcc.businessCountByPista[article.pista] = (addAcc.businessCountByPista[article.pista] ?? 0) + 1;
+        }
         // Split energia CF (Consumer) vs Business (P.IVA) dalla descrizione
         // dell'offerta, non dal tipo cliente della vendita (Task #264).
         if (article.pista === "energia") {
@@ -431,19 +450,37 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
     );
   const finalizeDrill = (acc: DrillAcc | undefined): ReportDrilldown => ({
     countByPista: acc?.countByPista ?? {},
+    businessCountByPista: acc?.businessCountByPista ?? {},
     prodottiByCategoria: acc ? sortDrillCategorie(acc.prodotti) : [],
     serviziByCategoria: acc ? sortDrillCategorie(acc.servizi) : [],
   });
 
+  // Classifiche ordinate per PUNTEGGIO performance (Task #282), non più per
+  // fatturato: il fatturato resta come informazione mostrata ma non è più il
+  // criterio. Tie-break su fatturato, poi vendite, poi nome (stabile).
   const perPdv: PdvReportAggregate[] = Array.from(pdvMap.entries())
-    .map(([k, p]) => ({ ...p, dettaglio: finalizeDrill(pdvDrill.get(k)) }))
+    .map(([k, p]) => {
+      const dettaglio = finalizeDrill(pdvDrill.get(k));
+      return { ...p, dettaglio, punteggio: performanceScore(dettaglio) };
+    })
     .sort(
-      (a, b) => b.importo - a.importo || b.vendite - a.vendite || a.codicePos.localeCompare(b.codicePos, "it"),
+      (a, b) =>
+        b.punteggio - a.punteggio ||
+        b.importo - a.importo ||
+        b.vendite - a.vendite ||
+        a.codicePos.localeCompare(b.codicePos, "it"),
     );
   const perAddetto: AddettoReportAggregate[] = Array.from(addettoMap.entries())
-    .map(([k, p]) => ({ ...p, dettaglio: finalizeDrill(addettoDrill.get(k)) }))
+    .map(([k, p]) => {
+      const dettaglio = finalizeDrill(addettoDrill.get(k));
+      return { ...p, dettaglio, punteggio: performanceScore(dettaglio) };
+    })
     .sort(
-      (a, b) => b.importo - a.importo || b.vendite - a.vendite || a.nomeAddetto.localeCompare(b.nomeAddetto, "it"),
+      (a, b) =>
+        b.punteggio - a.punteggio ||
+        b.importo - a.importo ||
+        b.vendite - a.vendite ||
+        a.nomeAddetto.localeCompare(b.nomeAddetto, "it"),
     );
 
   const categorieByPista: Partial<Record<PistaCanvass, PistaCategoriaAggregate[]>> = {};
@@ -636,6 +673,116 @@ export function businessPezziOf(a: DailyReportAggregates, pista: PistaCanvass): 
 export function accessoriImportoOf(a: DailyReportAggregates): number {
   const x = a.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === "ACCESSORI");
   return x?.importo ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// Punteggio performance (Task #282): "il migliore" e le classifiche
+// addetti/negozi non si misurano più sul fatturato ma su un punteggio pesato
+// per pista. Ogni attivazione vale i punti della sua pista; le attivazioni a
+// clienti P.IVA (Business) valgono il doppio. I telefoni contano a pezzo
+// (flat, nessun raddoppio: sono un prodotto, non un'attivazione). Fatturato
+// accessori/servizi resta FUORI dal punteggio (menzione a parte).
+// ---------------------------------------------------------------------------
+
+/** Punti per attivazione di ciascuna pista (parte CF; la P.IVA raddoppia). */
+export const PERFORMANCE_WEIGHTS: Record<PistaCanvass, number> = {
+  mobile: 1,
+  fisso: 3,
+  energia: 2,
+  assicurazioni: 2,
+  protecta: 10,
+  cb: 0.5,
+};
+
+/** Punti per ogni telefono venduto (categoria TELEFONIA), valore flat. */
+export const TELEFONI_WEIGHT = 1;
+
+/** Le attivazioni a cliente P.IVA (Business) valgono il doppio del CF. */
+export const IVA_PIVA_MULTIPLIER = 2;
+
+/**
+ * Punteggio performance di un drill-down (addetto o negozio): somma pesata
+ * delle attivazioni per pista con raddoppio della quota P.IVA, più i
+ * telefoni a pezzo. Non include il fatturato accessori/servizi.
+ */
+export function performanceScore(d: ReportDrilldown): number {
+  let score = 0;
+  for (const pista of Object.keys(PERFORMANCE_WEIGHTS) as PistaCanvass[]) {
+    const w = PERFORMANCE_WEIGHTS[pista];
+    const totale = d.countByPista[pista] ?? 0;
+    const business = Math.min(d.businessCountByPista[pista] ?? 0, totale);
+    const cf = totale - business;
+    score += cf * w + business * w * IVA_PIVA_MULTIPLIER;
+  }
+  const telefoni = d.prodottiByCategoria.find(
+    (c) => c.categoria.trim().toUpperCase() === TELEFONI_CATEGORIA,
+  );
+  score += (telefoni?.pezzi ?? 0) * TELEFONI_WEIGHT;
+  return score;
+}
+
+/** Formatta un punteggio performance in stile it-IT (max 1 decimale). */
+export function fmtPunti(v: number): string {
+  const r = Math.round(v * 10) / 10;
+  const s = Number.isInteger(r) ? String(r) : r.toFixed(1).replace(".", ",");
+  return `${s} ${r === 1 ? "punto" : "punti"}`;
+}
+
+/** Nome mostrato di un negozio: ragione sociale se presente, altrimenti codice. */
+function pdvNome(p: PdvReportAggregate): string {
+  return (p.nomeNegozio ?? "").trim() || p.codicePos;
+}
+
+/** Vincitore di una classifica con il valore associato. */
+export interface DrilldownWinner {
+  nome: string;
+  valore: number;
+}
+
+/**
+ * Miglior addetto e miglior negozio per PUNTEGGIO performance (Task #282).
+ * `perAddetto`/`perPdv` sono già ordinati per punteggio↓: si prende il primo
+ * con punteggio>0 e nome valido (esclude "N/D").
+ */
+export function topPerformer(a: DailyReportAggregates): {
+  addetto: DrilldownWinner | null;
+  negozio: DrilldownWinner | null;
+} {
+  const add = a.perAddetto.find((x) => x.nomeAddetto !== "N/D" && x.punteggio > 0);
+  const pdv = a.perPdv.find((x) => pdvNome(x) !== "N/D" && x.punteggio > 0);
+  return {
+    addetto: add ? { nome: add.nomeAddetto, valore: add.punteggio } : null,
+    negozio: pdv ? { nome: pdvNome(pdv), valore: pdv.punteggio } : null,
+  };
+}
+
+/**
+ * Miglior venditore di WindTre Protetti (pista `protecta`) per pezzi, tra
+ * addetti e negozi (Task #282): usato per le congratulazioni sempre citate.
+ * Restituisce null se nessuno ha venduto Protetti.
+ */
+export function bestProtettiSeller(a: DailyReportAggregates): {
+  addetto: DrilldownWinner | null;
+  negozio: DrilldownWinner | null;
+} {
+  const bestBy = <T,>(
+    items: T[],
+    getNome: (x: T) => string,
+    getDrill: (x: T) => ReportDrilldown,
+  ): DrilldownWinner | null => {
+    let win: DrilldownWinner | null = null;
+    for (const it of items) {
+      const nome = getNome(it);
+      if (!nome || nome === "N/D") continue;
+      const v = getDrill(it).countByPista.protecta ?? 0;
+      if (v > 0 && (win === null || v > win.valore)) win = { nome, valore: v };
+    }
+    return win;
+  };
+  return {
+    addetto: bestBy(a.perAddetto, (x) => x.nomeAddetto, (x) => x.dettaglio),
+    negozio: bestBy(a.perPdv, (x) => pdvNome(x), (x) => x.dettaglio),
+  };
 }
 
 // ---------------------------------------------------------------------------
