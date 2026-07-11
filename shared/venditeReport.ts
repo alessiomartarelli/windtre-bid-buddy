@@ -259,7 +259,10 @@ export function energiaClienteFromDescrizione(descrizione: string): "privato" | 
  *   (classifySaleArticles su rawData);
  * - l'importo totale e quello per PDV usano il campo `totale` della vendita.
  */
-export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggregates {
+export function aggregateDailyReport(
+  rows: VenditaReportRow[],
+  weights: PerformanceWeightsConfig = DEFAULT_PERFORMANCE_WEIGHTS,
+): DailyReportAggregates {
   const countByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
   const amountByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
   const countByPista: Partial<Record<PistaCanvass, number>> = {};
@@ -461,7 +464,7 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
   const perPdv: PdvReportAggregate[] = Array.from(pdvMap.entries())
     .map(([k, p]) => {
       const dettaglio = finalizeDrill(pdvDrill.get(k));
-      return { ...p, dettaglio, punteggio: performanceScore(dettaglio) };
+      return { ...p, dettaglio, punteggio: performanceScore(dettaglio, weights) };
     })
     .sort(
       (a, b) =>
@@ -473,7 +476,7 @@ export function aggregateDailyReport(rows: VenditaReportRow[]): DailyReportAggre
   const perAddetto: AddettoReportAggregate[] = Array.from(addettoMap.entries())
     .map(([k, p]) => {
       const dettaglio = finalizeDrill(addettoDrill.get(k));
-      return { ...p, dettaglio, punteggio: performanceScore(dettaglio) };
+      return { ...p, dettaglio, punteggio: performanceScore(dettaglio, weights) };
     })
     .sort(
       (a, b) =>
@@ -701,23 +704,75 @@ export const TELEFONI_WEIGHT = 1;
 export const IVA_PIVA_MULTIPLIER = 2;
 
 /**
+ * Pesi del punteggio performance configurabili per organizzazione (Task #283):
+ * i punti per pista, i punti per telefono e il moltiplicatore P.IVA non sono
+ * più costanti hardcoded ma leggibili da gara_config (per-org/per-mese) con
+ * fallback ai default di sistema. Consente al direttore di valorizzare
+ * diversamente le piste senza modifiche al codice.
+ */
+export interface PerformanceWeightsConfig {
+  /** Punti per attivazione di ciascuna pista (parte CF). */
+  pesi: Record<PistaCanvass, number>;
+  /** Punti per ogni telefono venduto (categoria TELEFONIA), flat. */
+  telefoni: number;
+  /** Moltiplicatore delle attivazioni a cliente P.IVA (Business). */
+  ivaMultiplier: number;
+}
+
+/** Config di default (costanti di sistema), usata come fallback. */
+export const DEFAULT_PERFORMANCE_WEIGHTS: PerformanceWeightsConfig = {
+  pesi: { ...PERFORMANCE_WEIGHTS },
+  telefoni: TELEFONI_WEIGHT,
+  ivaMultiplier: IVA_PIVA_MULTIPLIER,
+};
+
+/**
+ * Normalizza il blocco pesi salvato in config (i campi possono arrivare come
+ * stringhe dal form). Ogni campo non numerico o non valido ricade sul default
+ * di sistema (fallback per-campo): i pesi pista e i punti telefono accettano
+ * valori >= 0; il moltiplicatore P.IVA accetta valori >= 1 (un moltiplicatore
+ * < 1 renderebbe la P.IVA meno di un CF, contro la semantica).
+ */
+export function parsePerformanceWeights(raw: unknown): PerformanceWeightsConfig {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const num = (v: unknown, min: number, fallback: number): number => {
+    if (v === null || v === undefined || v === "") return fallback;
+    const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."));
+    return Number.isFinite(n) && n >= min ? n : fallback;
+  };
+  const pesi = {} as Record<PistaCanvass, number>;
+  for (const pista of Object.keys(PERFORMANCE_WEIGHTS) as PistaCanvass[]) {
+    pesi[pista] = num(o[pista], 0, PERFORMANCE_WEIGHTS[pista]);
+  }
+  return {
+    pesi,
+    telefoni: num(o.telefoni, 0, TELEFONI_WEIGHT),
+    ivaMultiplier: num(o.ivaMultiplier, 1, IVA_PIVA_MULTIPLIER),
+  };
+}
+
+/**
  * Punteggio performance di un drill-down (addetto o negozio): somma pesata
  * delle attivazioni per pista con raddoppio della quota P.IVA, più i
- * telefoni a pezzo. Non include il fatturato accessori/servizi.
+ * telefoni a pezzo. Non include il fatturato accessori/servizi. I pesi sono
+ * configurabili (Task #283); assenti ⇒ default di sistema.
  */
-export function performanceScore(d: ReportDrilldown): number {
+export function performanceScore(
+  d: ReportDrilldown,
+  weights: PerformanceWeightsConfig = DEFAULT_PERFORMANCE_WEIGHTS,
+): number {
   let score = 0;
-  for (const pista of Object.keys(PERFORMANCE_WEIGHTS) as PistaCanvass[]) {
-    const w = PERFORMANCE_WEIGHTS[pista];
+  for (const pista of Object.keys(weights.pesi) as PistaCanvass[]) {
+    const w = weights.pesi[pista];
     const totale = d.countByPista[pista] ?? 0;
     const business = Math.min(d.businessCountByPista[pista] ?? 0, totale);
     const cf = totale - business;
-    score += cf * w + business * w * IVA_PIVA_MULTIPLIER;
+    score += cf * w + business * w * weights.ivaMultiplier;
   }
   const telefoni = d.prodottiByCategoria.find(
     (c) => c.categoria.trim().toUpperCase() === TELEFONI_CATEGORIA,
   );
-  score += (telefoni?.pezzi ?? 0) * TELEFONI_WEIGHT;
+  score += (telefoni?.pezzi ?? 0) * weights.telefoni;
   return score;
 }
 
@@ -754,6 +809,42 @@ export function topPerformer(a: DailyReportAggregates): {
     addetto: add ? { nome: add.nomeAddetto, valore: add.punteggio } : null,
     negozio: pdv ? { nome: pdvNome(pdv), valore: pdv.punteggio } : null,
   };
+}
+
+/** Vincitore di una classifica col suo drill-down (per descrivere i pezzi). */
+export interface DrilldownWinnerDetail {
+  nome: string;
+  dettaglio: ReportDrilldown;
+}
+
+/**
+ * Come `topPerformer` ma restituisce anche il drill-down del vincitore, così
+ * il commento può citare i pezzi effettivi (canvass + telefoni) invece del
+ * punteggio. Stesso criterio: primo per punteggio↓, escluso "N/D".
+ */
+export function topPerformerDetail(a: DailyReportAggregates): {
+  addetto: DrilldownWinnerDetail | null;
+  negozio: DrilldownWinnerDetail | null;
+} {
+  const add = a.perAddetto.find((x) => x.nomeAddetto !== "N/D" && x.punteggio > 0);
+  const pdv = a.perPdv.find((x) => pdvNome(x) !== "N/D" && x.punteggio > 0);
+  return {
+    addetto: add ? { nome: add.nomeAddetto, dettaglio: add.dettaglio } : null,
+    negozio: pdv ? { nome: pdvNome(pdv), dettaglio: pdv.dettaglio } : null,
+  };
+}
+
+/** Pezzi canvass totali (tutte le piste) di un drill-down. */
+export function canvassPezziOf(d: ReportDrilldown): number {
+  return Object.values(d.countByPista).reduce<number>((s, n) => s + (n ?? 0), 0);
+}
+
+/** Pezzi telefoni (categoria TELEFONIA) di un drill-down. */
+export function telefoniPezziDrill(d: ReportDrilldown): number {
+  const t = d.prodottiByCategoria.find(
+    (c) => c.categoria.trim().toUpperCase() === TELEFONI_CATEGORIA,
+  );
+  return t?.pezzi ?? 0;
 }
 
 /**

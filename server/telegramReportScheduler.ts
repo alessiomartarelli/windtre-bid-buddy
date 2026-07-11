@@ -5,6 +5,7 @@ import { decryptSecret, isEncrypted } from "./cryptoSecret";
 import {
   addYmdDays,
   aggregateDailyReport,
+  parsePerformanceWeights,
   buildDailyHistory,
   buildDailyTrend,
   buildMonthEndProjection,
@@ -222,27 +223,32 @@ export async function sendDailyReportForOrg(params: {
     return d !== null && d >= monthFromYmd;
   });
   const todayRows = rows.filter((r) => trendYmdOf(r.dataVendita) === ymd);
-  const aggregates = aggregateDailyReport(todayRows);
+  // Pesi del punteggio performance (Task #283): per-org/per-mese dalla
+  // Configurazione gara (gara_config.config.performanceWeights), con fallback
+  // ai default di sistema. Caricati insieme al forecast (stesso record).
+  const gm = /^(\d{4})-(\d{2})-\d{2}$/.exec(ymd);
+  let garaCfgObj: Record<string, unknown> | undefined;
+  if (gm) {
+    const garaCfg = await storage.getGaraConfig(params.orgId, +gm[2], +gm[1]);
+    garaCfgObj = garaCfg?.config as Record<string, unknown> | undefined;
+  }
+  const weights = parsePerformanceWeights(garaCfgObj?.performanceWeights);
+  const aggregates = aggregateDailyReport(todayRows, weights);
   const trend = buildDailyTrend(trendRows, trendFromYmd, ymd);
   const history = buildDailyHistory(trendRows, trendFromYmd, ymd);
   // Le righe sono già senza ANNULLATA (includeAnnullate=false in query).
   const month = {
     label: monthLabelOf(ymd),
-    aggregates: aggregateDailyReport(monthRows),
+    aggregates: aggregateDailyReport(monthRows, weights),
   };
   // Proiezione a fine mese: un KPI per riga (volumi per pista + Telefoni + Accessori/Servizi)
   // stimati sui giorni lavorativi trascorsi, dagli aggregati del mese.
   const monthProjection = buildMonthEndProjection(ymd, month.aggregates) ?? undefined;
   // Commento "direttore vendite" (Task #266): forecast/obiettivi per-org e
-  // PER MESE dalla Configurazione gara (gara_config.config.venditeForecast)
+  // PER MESE dalla Configurazione gara (gara_config.config.venditeForecast),
+  // dallo stesso record già caricato per i pesi (Task #283)
   // + fascia dedotta dall'orario (13:30 parziale / 22:30 chiusura).
-  const gm = /^(\d{4})-(\d{2})-\d{2}$/.exec(ymd);
-  let forecast = parseForecastConfig(undefined);
-  if (gm) {
-    const garaCfg = await storage.getGaraConfig(params.orgId, +gm[2], +gm[1]);
-    const gcfg = garaCfg?.config as Record<string, unknown> | undefined;
-    forecast = parseForecastConfig(gcfg?.venditeForecast);
-  }
+  const forecast = parseForecastConfig(garaCfgObj?.venditeForecast);
   const message = buildTelegramReportMessage({
     orgName: params.orgName,
     dateYMD: ymd,

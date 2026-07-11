@@ -29,6 +29,8 @@ const {
   topPerformer,
   bestProtettiSeller,
   PERFORMANCE_WEIGHTS,
+  DEFAULT_PERFORMANCE_WEIGHTS,
+  parsePerformanceWeights,
 } = await import("../shared/venditeReport.ts");
 const {
   buildVenditeReportHtml,
@@ -598,6 +600,66 @@ await test("PERFORMANCE_WEIGHTS: pesi attesi per pista", () => {
   assert.equal(PERFORMANCE_WEIGHTS.assicurazioni, 2);
   assert.equal(PERFORMANCE_WEIGHTS.protecta, 10);
   assert.equal(PERFORMANCE_WEIGHTS.cb, 0.5);
+});
+
+await test("parsePerformanceWeights: undefined ⇒ default di sistema", () => {
+  const w = parsePerformanceWeights(undefined);
+  assert.deepEqual(w, DEFAULT_PERFORMANCE_WEIGHTS);
+  // Deve essere una copia, non un alias del default condiviso.
+  assert.notEqual(w.pesi, DEFAULT_PERFORMANCE_WEIGHTS.pesi);
+});
+
+await test("parsePerformanceWeights: fallback per-campo sui valori mancanti/non validi", () => {
+  const w = parsePerformanceWeights({ mobile: 5, protecta: "abc", telefoni: "2,5", ivaMultiplier: 0.5 });
+  assert.equal(w.pesi.mobile, 5); // override numerico
+  assert.equal(w.pesi.protecta, 10); // non numerico ⇒ default
+  assert.equal(w.pesi.fisso, 3); // assente ⇒ default
+  assert.equal(w.telefoni, 2.5); // stringa con virgola ⇒ 2.5
+  assert.equal(w.ivaMultiplier, 2); // < 1 ⇒ default (P.IVA non può valere meno di CF)
+});
+
+await test("parsePerformanceWeights: accetta peso pista 0 ma non negativo", () => {
+  const w = parsePerformanceWeights({ cb: 0, energia: -3 });
+  assert.equal(w.pesi.cb, 0); // 0 valido (pista esclusa dal punteggio)
+  assert.equal(w.pesi.energia, 2); // negativo ⇒ default
+});
+
+await test("performanceScore: usa i pesi configurati (override)", () => {
+  const a = aggregateDailyReport([
+    sale({ nomeAddetto: "Mario", totale: "10", articoli: [art("UNTIED", 10)] }),
+    sale({ nomeAddetto: "Mario", totale: "30", articoli: [art("ALLARMI", 30)] }),
+  ]);
+  const d = a.perAddetto.find((x) => x.nomeAddetto === "Mario").dettaglio;
+  // Default: 1 mobile (1) + 1 protecta (10) = 11.
+  assert.equal(performanceScore(d), 11);
+  // Pesi custom: mobile 5, protecta 1 ⇒ 5 + 1 = 6.
+  const custom = parsePerformanceWeights({ mobile: 5, protecta: 1 });
+  assert.equal(performanceScore(d, custom), 6);
+});
+
+await test("aggregateDailyReport: i pesi custom cambiano l'ordine delle classifiche", () => {
+  const rows = [
+    sale({ codicePos: "P1", nomeNegozio: "Uno", nomeAddetto: "Bea", totale: "30", articoli: [art("ALLARMI", 30)] }), // 1 protecta
+    sale({ codicePos: "P2", nomeNegozio: "Due", nomeAddetto: "Aldo", totale: "10", articoli: [art("UNTIED", 10)] }), // 1 mobile
+  ];
+  // Default: protecta (10) > mobile (1) ⇒ Bea prima.
+  assert.deepEqual(aggregateDailyReport(rows).perAddetto.map((x) => x.nomeAddetto), ["Bea", "Aldo"]);
+  // Custom: mobile 20, protecta 1 ⇒ Aldo prima.
+  const custom = parsePerformanceWeights({ mobile: 20, protecta: 1 });
+  assert.deepEqual(aggregateDailyReport(rows, custom).perAddetto.map((x) => x.nomeAddetto), ["Aldo", "Bea"]);
+});
+
+await test("performanceScore: moltiplicatore P.IVA configurabile", () => {
+  const biz = aggregateDailyReport([
+    { ...sale({ nomeAddetto: "A", totale: "10", articoli: [art("UNTIED", 10)] }),
+      rawData: { articoli: [art("UNTIED", 10)], cliente: { clienteTipo: "GIURIDICA" } } },
+  ]);
+  const d = biz.perAddetto[0].dettaglio;
+  // Default multiplier 2 ⇒ 1 mobile P.IVA = 2.
+  assert.equal(performanceScore(d), 2);
+  // Multiplier 3 ⇒ 3.
+  const custom = parsePerformanceWeights({ ivaMultiplier: 3 });
+  assert.equal(performanceScore(d, custom), 3);
 });
 
 await test("fmtPunti: singolare/plurale e virgola decimale it-IT", () => {
@@ -1455,6 +1517,9 @@ await test("parziale con vendite: apertura ☀️, lead 'Finora', standout negoz
   assert.ok(s.includes("Centro"));
   assert.ok(s.includes("Mario Rossi"));
   assert.ok(s.includes("Sul mese"));
+  // Standout cita i PEZZI (canvass/telefoni), non il punteggio.
+  assert.ok(/pezz[io] canvass|telefon[io]/.test(s));
+  assert.ok(!/di performance|punt[io]/.test(s));
 });
 
 await test("chiusura con vendite: apertura 🌙 e lead 'In chiusura'", () => {
@@ -1565,13 +1630,15 @@ await test("WindTre Protetti: con vendite ⇒ congratulazioni al venditore", () 
   assert.ok(s.includes("complimenti a <b>Mario Rossi</b>"));
 });
 
-await test("accessori/servizi: menzione a parte, fuori dal punteggio", () => {
+await test("accessori/servizi: menzione a parte, senza citare il punteggio", () => {
   const s = buildDirettoreCommento({
     fascia: "parziale", dateYMD: "2026-07-15", forecast: cjForecast,
     today: cjToday, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26,
   });
-  assert.ok(s.includes("A parte dal punteggio"));
+  assert.ok(s.includes("Il fatturato di"));
+  assert.ok(s.includes("arricchisce lo scontrino"));
   assert.ok(s.includes("accessori"));
+  assert.ok(!s.includes("A parte dal punteggio"));
 });
 
 console.log(`\nRisultato: ${passed} passati, ${failed} falliti`);

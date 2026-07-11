@@ -245,6 +245,16 @@ export interface GaraConfigData {
     numeroNegoziCc?: number | null;
     numeroNegoziStrada?: number | null;
   };
+  performanceWeights?: {
+    mobile?: number | null;
+    fisso?: number | null;
+    energia?: number | null;
+    assicurazioni?: number | null;
+    protecta?: number | null;
+    cb?: number | null;
+    telefoni?: number | null;
+    ivaMultiplier?: number | null;
+  };
 }
 
 export interface GaraConfigRecord {

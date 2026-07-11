@@ -27,13 +27,17 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   eventuale tono "occhio a … sotto la sua media" quando ≥ 3 negozi);
   spunto strategico (spingere sulla dimensione più indietro, consolidare
   la più avanti) e chiusura motivazionale (diversa parziale/chiusura e per
-  banda). **Task #282**: lo standout negozio/addetto ora cita il miglior
-  **punteggio performance** (non più il fatturato); segue una riga
+  banda). Lo standout negozio/addetto sceglie **il migliore per punteggio
+  performance** (Task #282) ma nel testo **non cita il punteggio**: mostra i
+  **pezzi effettivi** del vincitore — pezzi canvass (tutte le piste) +
+  telefoni — via `descriviPezzi`/`topPerformerDetail` (Task #283 follow-up).
+  Segue una riga
   **WindTre Protetti** *sempre presente* (`protettiFraming`) — con
   congratulazioni al miglior venditore (`bestProtettiSeller`) se ci sono
   Protetti, altrimenti richiamo a spingere la leva a più alto valore; e una
-  menzione **accessori/servizi a parte** (`accessoriServiziFraming`, in €)
-  esplicitamente **fuori dal punteggio**. **Giornata al palo** (0 vendite)
+  menzione **accessori/servizi a parte** (`accessoriServiziFraming`, in €,
+  "Il fatturato di … arricchisce lo scontrino", senza citare il punteggio).
+  **Giornata al palo** (0 vendite)
   ⇒ frasi dedicate parziale/chiusura. Il passo atteso a oggi usa
   `elapsed`/`total` giorni lavorativi.
   Config di supporto: `parseForecastConfig(raw)` (normalizza il blocco
@@ -84,13 +88,31 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   `buildCalendar`/`italianHolidays` dell'Incentivazione;
   `projectMonthEnd(value, elapsed, total)` = proporzione lineare, giorni
   non positivi ⇒ null).
-  **Punteggio performance (Task #282)**: `performanceScore(drilldown)` =
-  somma pesata delle attivazioni per pista (`PERFORMANCE_WEIGHTS`: mobile 1,
-  fisso 3, energia 2, assicurazioni 2, protecta 10, cb 0.5) con la quota
-  **P.IVA/business raddoppiata** (`IVA_PIVA_MULTIPLIER=2`, dal
+  **Punteggio performance (Task #282)**: `performanceScore(drilldown, weights?)` =
+  somma pesata delle attivazioni per pista con la quota
+  **P.IVA/business moltiplicata** (dal
   `businessCountByPista` popolato via `saleCustomerKind` a livello vendita
-  per TUTTE le piste), più i telefoni a pezzo (`TELEFONI_WEIGHT=1`, flat, è
-  un prodotto non un'attivazione). **NON** include il fatturato
+  per TUTTE le piste), più i telefoni a pezzo (flat, è
+  un prodotto non un'attivazione). **Pesi configurabili per-org/per-mese
+  (Task #283)**: `weights` è un `PerformanceWeightsConfig`
+  (`{pesi: {mobile, fisso, energia, assicurazioni, protecta, cb}, telefoni,
+  ivaMultiplier}`); se omesso usa `DEFAULT_PERFORMANCE_WEIGHTS` (mobile 1,
+  fisso 3, energia 2, assicurazioni 2, protecta 10, cb 0.5, telefoni 1,
+  ivaMultiplier 2 — costruiti dalle costanti storiche `PERFORMANCE_WEIGHTS`/
+  `TELEFONI_WEIGHT`/`IVA_PIVA_MULTIPLIER`, mantenute per retrocompat).
+  `parsePerformanceWeights(raw)` normalizza il blocco salvato con **fallback
+  per-campo** (stringhe/virgole ⇒ numeri; pesi pista/telefoni accettano ≥0,
+  `ivaMultiplier` ≥1 — la quota P.IVA non può valere meno del CF; valori
+  mancanti/non validi ⇒ default). `aggregateDailyReport(rows, weights?)` e
+  `performanceScore` accettano i pesi; lo scheduler li carica da
+  `gara_config.config.performanceWeights` (stesso record del forecast).
+  Attenzione a due forme distinte: il blocco **salvato** in
+  `gara_config.config.performanceWeights` è **flat**
+  (`{mobile, fisso, energia, assicurazioni, protecta, cb, telefoni,
+  ivaMultiplier}`, come lo scrive la card admin); `parsePerformanceWeights`
+  lo **normalizza** nella forma runtime `PerformanceWeightsConfig`
+  (`{pesi: {...}, telefoni, ivaMultiplier}`) consumata da `performanceScore`.
+  **NON** include il fatturato
   accessori/servizi. `perPdv`/`perAddetto` di `aggregateDailyReport`
   espongono un campo `punteggio` e sono **ordinati per punteggio↓** (poi
   importo, vendite, nome come spareggio). `topPerformer(a)` = miglior
@@ -264,9 +286,21 @@ servizi €, e due caselle manuali n. negozi CC / n. negozi strada. Salva in
 I giorni lavorativi del report sono automatici (CC incl. domeniche, strada
 no) e non si configurano.
 
+La card **"Pesi punteggio performance (report Telegram)"** (Task #283) vive
+nella stessa pagina (`ConfigurazioneGara.tsx`, subito sotto il forecast),
+per-mese/anno: input per il peso di ogni pista (mobile, fisso, energia,
+assicurazioni, protecta, cb), peso telefoni e moltiplicatore P.IVA. Regolano
+il **PUNTEGGIO PERFORMANCE** che ordina "il migliore" e le classifiche
+addetti/negozi del report. Salva in `gara_config.config.performanceWeights`;
+campo vuoto = default di sistema (`DEFAULT_PERFORMANCE_WEIGHTS`).
+
 ## Test
 
-`tests/telegram-report.test.mjs` (105 test puri, inclusi 4 su
+`tests/telegram-report.test.mjs` (111 test puri, inclusi i test **pesi
+configurabili** (Task #283: `parsePerformanceWeights` fallback per-campo/
+default, `performanceScore` e `aggregateDailyReport` con pesi custom che
+cambiano l'ordine delle classifiche, moltiplicatore P.IVA configurabile),
+inclusi 4 su
 `buildTopPerKpi` — vincitori per KPI, N/D escluso, pareggi
 deterministici, input vuoto —, i test **punteggio performance**
 (Task #282: `performanceScore` pesi/telefoni/P.IVA×2, classifiche ordinate

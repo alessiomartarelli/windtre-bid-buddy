@@ -7,12 +7,14 @@
 // giorno ma test stabili). Caricabile via loader tsx senza server/DB.
 import {
   type DailyReportAggregates,
+  type ReportDrilldown,
   telefoniPezziOf,
   businessPezziOf,
   accessoriImportoOf,
-  topPerformer,
+  topPerformerDetail,
+  canvassPezziOf,
+  telefoniPezziDrill,
   bestProtettiSeller,
-  fmtPunti,
   projectMonthEnd,
   pctDelta,
   fmtEuro,
@@ -438,18 +440,31 @@ function meseFraming(tracked: DimEval[], overallMonthDelta: number | null): stri
   return `${lead}:\n${bullets.join("\n")}`;
 }
 
+/**
+ * Descrive i pezzi effettivi di un vincitore: pezzi canvass (tutte le piste)
+ * + telefoni, senza citare il punteggio. Stringa vuota se entrambi a 0.
+ */
+function descriviPezzi(d: ReportDrilldown): string {
+  const canvass = canvassPezziOf(d);
+  const tel = telefoniPezziDrill(d);
+  const parts: string[] = [];
+  if (canvass > 0) parts.push(`<b>${canvass}</b> ${canvass === 1 ? "pezzo" : "pezzi"} canvass`);
+  if (tel > 0) parts.push(`<b>${tel}</b> ${tel === 1 ? "telefono" : "telefoni"}`);
+  return parts.join(" e ");
+}
+
 function standoutFraming(today: DailyReportAggregates, fc: ForecastConfig): string | null {
   const parts: string[] = [];
-  // "Il migliore" per PUNTEGGIO performance (Task #282), non più per
-  // fatturato o per singolo KPI: miglior negozio e miglior addetto pesati.
-  const { negozio: topPdv, addetto: topAddetto } = topPerformer(today);
+  // "Il migliore" resta scelto per punteggio performance (Task #282), ma il
+  // commento cita i PEZZI effettivi (canvass + telefoni), non il punteggio.
+  const { negozio: topPdv, addetto: topAddetto } = topPerformerDetail(today);
   if (topPdv) {
-    parts.push(
-      `In evidenza <b>${escTg(topPdv.nome)}</b> con <b>${fmtPunti(topPdv.valore)}</b> di performance`,
-    );
+    const desc = descriviPezzi(topPdv.dettaglio);
+    parts.push(`In evidenza <b>${escTg(topPdv.nome)}</b>${desc ? ` con ${desc}` : ""}`);
   }
   if (topAddetto) {
-    const frase = `l'addetto <b>${escTg(topAddetto.nome)}</b> a <b>${fmtPunti(topAddetto.valore)}</b>`;
+    const desc = descriviPezzi(topAddetto.dettaglio);
+    const frase = `l'addetto <b>${escTg(topAddetto.nome)}</b>${desc ? ` con ${desc}` : ""}`;
     parts.push(parts.length > 0 ? `bravo ${frase}` : `Bravo ${frase}`);
   }
   if (parts.length === 0) return null;
@@ -498,7 +513,7 @@ function accessoriServiziFraming(today: DailyReportAggregates): string | null {
   if (acc > 0) parts.push(`accessori <b>${fmtEuro(acc)}</b>`);
   if (serv > 0) parts.push(`servizi <b>${fmtEuro(serv)}</b>`);
   if (parts.length === 0) return null;
-  return `🎧 A parte dal punteggio, il fatturato di ${parts.join(" e ")} arricchisce lo scontrino.`;
+  return `🎧 Il fatturato di ${parts.join(" e ")} arricchisce lo scontrino.`;
 }
 
 function spuntoStrategico(tracked: DimEval[]): string | null {

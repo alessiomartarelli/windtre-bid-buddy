@@ -496,6 +496,63 @@ function forecastFormHasValue(f: ForecastForm): boolean {
   return (Object.keys(EMPTY_FORECAST_FORM) as ForecastFormKey[]).some((k) => f[k].trim() !== '');
 }
 
+// Pesi del punteggio performance del report Telegram (Task #283): configurabili
+// per-org/per-mese, con fallback ai default di sistema (allineati a
+// DEFAULT_PERFORMANCE_WEIGHTS in shared/venditeReport.ts).
+type WeightsFormKey =
+  | 'mobile' | 'fisso' | 'energia' | 'assicurazioni' | 'protecta' | 'cb'
+  | 'telefoni' | 'ivaMultiplier';
+
+const WEIGHTS_PISTA_FIELDS: Array<{ key: WeightsFormKey; label: string; placeholder: string }> = [
+  { key: 'mobile', label: 'Mobile', placeholder: 'default 1' },
+  { key: 'fisso', label: 'Fisso', placeholder: 'default 3' },
+  { key: 'energia', label: 'Energia', placeholder: 'default 2' },
+  { key: 'assicurazioni', label: 'Assicurazioni', placeholder: 'default 2' },
+  { key: 'protecta', label: 'Protetti', placeholder: 'default 10' },
+  { key: 'cb', label: 'Cb', placeholder: 'default 0,5' },
+];
+
+const WEIGHTS_ALTRI_FIELDS: Array<{ key: WeightsFormKey; label: string; placeholder: string }> = [
+  { key: 'telefoni', label: 'Telefoni (per pezzo)', placeholder: 'default 1' },
+  { key: 'ivaMultiplier', label: 'Moltiplicatore P.IVA', placeholder: 'default 2' },
+];
+
+type WeightsForm = Record<WeightsFormKey, string>;
+
+const EMPTY_WEIGHTS_FORM: WeightsForm = {
+  mobile: '', fisso: '', energia: '', assicurazioni: '', protecta: '', cb: '',
+  telefoni: '', ivaMultiplier: '',
+};
+
+function weightsToForm(raw: unknown): WeightsForm {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string =>
+    v === null || v === undefined || v === '' ? '' : String(v);
+  const out = { ...EMPTY_WEIGHTS_FORM };
+  (Object.keys(EMPTY_WEIGHTS_FORM) as WeightsFormKey[]).forEach((k) => {
+    out[k] = str(o[k]);
+  });
+  return out;
+}
+
+function weightsFormToPayload(f: WeightsForm): Record<WeightsFormKey, number | null> {
+  const num = (v: string): number | null => {
+    const t = v.trim();
+    if (t === '') return null;
+    const n = parseFloat(t.replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  };
+  const out = {} as Record<WeightsFormKey, number | null>;
+  (Object.keys(EMPTY_WEIGHTS_FORM) as WeightsFormKey[]).forEach((k) => {
+    out[k] = num(f[k]);
+  });
+  return out;
+}
+
+function weightsFormHasValue(f: WeightsForm): boolean {
+  return (Object.keys(EMPTY_WEIGHTS_FORM) as WeightsFormKey[]).some((k) => f[k].trim() !== '');
+}
+
 export default function ConfigurazioneGara() {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -614,6 +671,11 @@ export default function ConfigurazioneGara() {
   const [venditeForecast, setVenditeForecast] = useState<ForecastForm>(EMPTY_FORECAST_FORM);
   const setForecastField = useCallback((key: ForecastFormKey, value: string) => {
     setVenditeForecast((prev) => ({ ...prev, [key]: value }));
+    setIsDirty(true);
+  }, []);
+  const [performanceWeights, setPerformanceWeights] = useState<WeightsForm>(EMPTY_WEIGHTS_FORM);
+  const setWeightsField = useCallback((key: WeightsFormKey, value: string) => {
+    setPerformanceWeights((prev) => ({ ...prev, [key]: value }));
     setIsDirty(true);
   }, []);
 
@@ -769,6 +831,7 @@ export default function ConfigurazioneGara() {
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
       setVenditeForecast(forecastToForm(cfg.venditeForecast));
+      setPerformanceWeights(weightsToForm(cfg.performanceWeights));
     }
     setIsDirty(false);
     setInitialLoaded(true);
@@ -848,6 +911,7 @@ export default function ConfigurazioneGara() {
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
       setVenditeForecast(forecastToForm(cfg.venditeForecast));
+      setPerformanceWeights(weightsToForm(cfg.performanceWeights));
     } else {
       setConfigName('');
       setTipologiaGara('gara_operatore');
@@ -865,6 +929,7 @@ export default function ConfigurazioneGara() {
       setTabelleCalcolo(JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS({});
       setVenditeForecast(EMPTY_FORECAST_FORM);
+      setPerformanceWeights(EMPTY_WEIGHTS_FORM);
 
       const salesPdvs = await fetchPdvFromSales(month, year);
       if (salesPdvs.length > 0) {
@@ -908,10 +973,11 @@ export default function ConfigurazioneGara() {
     tabelleCalcolo,
     ...(Object.keys(extraGaraIvaSogliePerRS).length > 0 ? { extraGaraIvaSogliePerRS } : {}),
     ...(forecastFormHasValue(venditeForecast) ? { venditeForecast: forecastFormToPayload(venditeForecast) } : {}),
+    ...(weightsFormHasValue(performanceWeights) ? { performanceWeights: weightsFormToPayload(performanceWeights) } : {}),
     ...(garaConfigRecord?.config ? {
       importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
     } : {}),
-  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, garaConfigRecord]);
+  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, performanceWeights, garaConfigRecord]);
 
   const handleQuickSave = useCallback(async () => {
     if (!garaConfigRecord?.id) {
@@ -1665,6 +1731,64 @@ export default function ConfigurazioneGara() {
                             placeholder={f.placeholder}
                             value={venditeForecast[f.key]}
                             onChange={(e) => setForecastField(f.key, e.target.value)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card data-testid="card-performance-weights">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Medal className="h-4 w-4" />
+                    Pesi punteggio performance (report Telegram)
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Punti assegnati a ogni attivazione per il PUNTEGGIO PERFORMANCE che ordina
+                    "il migliore" e le classifiche addetti/negozi del report Telegram.
+                    Le attivazioni a cliente P.IVA valgono il moltiplicatore indicato; i telefoni
+                    contano a pezzo (flat). Campo vuoto = default di sistema.
+                    Valgono per {MONTHS.find(m => m.value === selectedMonth)?.label} {selectedYear}.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="text-xs font-semibold">Punti per pista</Label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
+                      {WEIGHTS_PISTA_FIELDS.map((f) => (
+                        <div key={f.key}>
+                          <Label htmlFor={`weight-${f.key}`} className="text-xs text-muted-foreground">{f.label}</Label>
+                          <Input
+                            id={`weight-${f.key}`}
+                            data-testid={`input-weight-${f.key}`}
+                            type="number"
+                            inputMode="decimal"
+                            className="h-8 text-sm"
+                            placeholder={f.placeholder}
+                            value={performanceWeights[f.key]}
+                            onChange={(e) => setWeightsField(f.key, e.target.value)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">Telefoni e moltiplicatore P.IVA</Label>
+                    <div className="grid grid-cols-2 gap-3 mt-2">
+                      {WEIGHTS_ALTRI_FIELDS.map((f) => (
+                        <div key={f.key}>
+                          <Label htmlFor={`weight-${f.key}`} className="text-xs text-muted-foreground">{f.label}</Label>
+                          <Input
+                            id={`weight-${f.key}`}
+                            data-testid={`input-weight-${f.key}`}
+                            type="number"
+                            inputMode="decimal"
+                            className="h-8 text-sm"
+                            placeholder={f.placeholder}
+                            value={performanceWeights[f.key]}
+                            onChange={(e) => setWeightsField(f.key, e.target.value)}
                           />
                         </div>
                       ))}
