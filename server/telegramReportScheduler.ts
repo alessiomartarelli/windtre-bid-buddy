@@ -241,14 +241,16 @@ export async function sendDailyReportForOrg(params: {
     label: monthLabelOf(ymd),
     aggregates: aggregateDailyReport(monthRows, weights),
   };
-  // Proiezione a fine mese: un KPI per riga (volumi per pista + Telefoni + Accessori/Servizi)
-  // stimati sui giorni lavorativi trascorsi, dagli aggregati del mese.
-  const monthProjection = buildMonthEndProjection(ymd, month.aggregates) ?? undefined;
   // Commento "direttore vendite" (Task #266): forecast/obiettivi per-org e
   // PER MESE dalla Configurazione gara (gara_config.config.venditeForecast),
   // dallo stesso record già caricato per i pesi (Task #283)
   // + fascia dedotta dall'orario (13:30 parziale / 22:30 chiusura).
   const forecast = parseForecastConfig(garaCfgObj?.venditeForecast);
+  // Proiezione a fine mese: un KPI per riga (volumi per pista + Telefoni + Accessori/Servizi)
+  // stimati sui giorni lavorativi trascorsi, dagli aggregati del mese. I giorni
+  // lavorativi tengono conto della divisione CC/strada (conteggi negozi dal
+  // forecast); senza conteggi ⇒ soli giorni feriali (lun–sab).
+  const monthProjection = buildMonthEndProjection(ymd, month.aggregates, forecast) ?? undefined;
   const message = buildTelegramReportMessage({
     orgName: params.orgName,
     dateYMD: ymd,

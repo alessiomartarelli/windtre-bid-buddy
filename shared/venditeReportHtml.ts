@@ -431,7 +431,7 @@ function projectionSection(proj: MonthEndProjection | undefined): string {
       </div>`;
   };
   const rows = proj.kpis.map(row).join("\n        ");
-  return `<div class="card"><h2>Proiezione fine mese <span class="h2-sub">${escapeHtml(proj.label)} · ${proj.elapsedWorkingDays}/${proj.totalWorkingDays} gg lavorativi</span></h2>
+  return `<div class="card"><h2>Proiezione fine mese <span class="h2-sub">${escapeHtml(proj.label)} · ${Math.round(proj.elapsedWorkingDays)}/${Math.round(proj.totalWorkingDays)} gg lavorativi</span></h2>
         ${rows}
     </div>`;
 }

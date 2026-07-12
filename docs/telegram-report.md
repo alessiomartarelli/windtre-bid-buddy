@@ -83,11 +83,19 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   `aggregateDailyReport`
   espone i nuovi aggregati `energiaByCliente` (split per pista energia) e
   `assicurazioniDettaglio` (ordinato per pezzi↓). La proiezione
-  (`buildMonthEndProjection(ymd, monthAgg)`) stima i pezzi a fine mese in
-  proporzione ai **giorni lavorativi** (`monthWorkingDays` riusa
-  `buildCalendar`/`italianHolidays` dell'Incentivazione;
-  `projectMonthEnd(value, elapsed, total)` = proporzione lineare, giorni
-  non positivi ⇒ null).
+  (`buildMonthEndProjection(ymd, monthAgg, storeCounts?)`) stima i pezzi a
+  fine mese in proporzione ai **giorni lavorativi**. I giorni lavorativi
+  usano `blendedWorkingDays(ymd, {numeroNegoziCc, numeroNegoziStrada})`: se
+  sono configurati i conteggi negozi CC/strada nel forecast, media pesata dei
+  due calendari (CC include le domeniche, strada no) → proiezione reale dei
+  negozi; **senza conteggi ⇒ soli giorni feriali** (calendario strada,
+  lun–sab, esclude domeniche+festivi), NON più solo lun–ven. `monthWorkingDays`
+  (lun–ven) e `monthWorkingDaysByType` riusano `buildCalendar`/`italianHolidays`
+  dell'Incentivazione; `projectMonthEnd(value, elapsed, total)` = proporzione
+  lineare, giorni non positivi ⇒ null. La card HTML arrotonda i giorni
+  (`elapsed`/`total`) solo in visualizzazione; il calcolo resta frazionario.
+  Lo **stesso** `blendedWorkingDays` alimenta il framing mensile del commento
+  "direttore" così testo e card restano coerenti.
   **Punteggio performance (Task #282)**: `performanceScore(drilldown, weights?)` =
   somma pesata delle attivazioni per pista con la quota
   **P.IVA/business moltiplicata** (dal

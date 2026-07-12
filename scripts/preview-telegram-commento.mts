@@ -143,7 +143,7 @@ async function main() {
   }
   console.log("─".repeat(72));
 
-  const projFull = buildMonthEndProjection(ymd, monthAgg);
+  const projFull = buildMonthEndProjection(ymd, monthAgg, forecast);
   console.log("Proiezione HTML (buildMonthEndProjection):", JSON.stringify(projFull));
   console.log("═".repeat(72));
 

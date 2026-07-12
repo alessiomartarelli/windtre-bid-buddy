@@ -21,6 +21,8 @@ const {
   energiaClienteFromDescrizione,
   telefoniPezziOf,
   monthWorkingDays,
+  monthWorkingDaysByType,
+  blendedWorkingDays,
   projectMonthEnd,
   buildMonthEndProjection,
   buildTopPerKpi,
@@ -1305,6 +1307,53 @@ await test("buildMonthEndProjection: un KPI per riga, maturato+proiezione arroto
   assert.ok(tel.proiezione >= tel.maturato);
   assert.equal(proj.label, "luglio 2026");
   assert.equal(buildMonthEndProjection("bad", monthAgg), null);
+});
+
+await test("blendedWorkingDays: senza conteggi ⇒ giorni feriali (lun–sab, > mon-fri)", () => {
+  // Luglio 2026: nessuna festività infrasettimanale.
+  const wdt = monthWorkingDaysByType("2026-07-15");
+  const feriali = blendedWorkingDays("2026-07-15"); // nessun conteggio negozi
+  assert.ok(feriali !== null);
+  // Il fallback usa il calendario "strada" = lun–sab (esclude domeniche+festivi).
+  assert.equal(feriali.total, wdt.strada.total);
+  // I feriali (lun–sab) sono più dei giorni lun–ven usati da monthWorkingDays.
+  const monfri = monthWorkingDays("2026-07-15");
+  assert.ok(feriali.total > monfri.total, `feriali=${feriali.total} monfri=${monfri.total}`);
+  assert.ok(feriali.elapsed <= feriali.total);
+  assert.equal(blendedWorkingDays("bad"), null);
+});
+
+await test("blendedWorkingDays: con conteggi CC/strada ⇒ media pesata dei due calendari", () => {
+  const wdt = monthWorkingDaysByType("2026-07-15");
+  // Solo negozi CC ⇒ calendario CC (include le domeniche).
+  const soloCc = blendedWorkingDays("2026-07-15", { numeroNegoziCc: 3, numeroNegoziStrada: 0 });
+  assert.equal(soloCc.total, wdt.cc.total);
+  assert.equal(soloCc.elapsed, wdt.cc.elapsed);
+  // Solo negozi strada ⇒ calendario strada.
+  const soloStrada = blendedWorkingDays("2026-07-15", { numeroNegoziCc: 0, numeroNegoziStrada: 5 });
+  assert.equal(soloStrada.total, wdt.strada.total);
+  // Mix ⇒ media pesata compresa fra i due totali.
+  const mix = blendedWorkingDays("2026-07-15", { numeroNegoziCc: 1, numeroNegoziStrada: 1 });
+  const atteso = (wdt.cc.total + wdt.strada.total) / 2;
+  assert.ok(Math.abs(mix.total - atteso) < 1e-9, `mix=${mix.total} atteso=${atteso}`);
+  assert.ok(mix.total >= wdt.strada.total && mix.total <= wdt.cc.total);
+});
+
+await test("buildMonthEndProjection: i conteggi CC/strada cambiano i giorni lavorativi e la stima", () => {
+  const monthAgg = aggregateDailyReport(
+    Array.from({ length: 40 }, () => saleCli({ articoli: [art("UNTIED", 30)] })),
+  );
+  const feriali = buildMonthEndProjection("2026-07-15", monthAgg);
+  const conCc = buildMonthEndProjection("2026-07-15", monthAgg, { numeroNegoziCc: 4, numeroNegoziStrada: 0 });
+  assert.ok(feriali !== null && conCc !== null);
+  // CC lavora anche la domenica ⇒ più giorni totali dei soli feriali.
+  assert.ok(conCc.totalWorkingDays > feriali.totalWorkingDays,
+    `cc=${conCc.totalWorkingDays} feriali=${feriali.totalWorkingDays}`);
+  // Stesso maturato, calendari diversi ⇒ proiezioni (grezze) diverse.
+  const mat = feriali.kpis.find((k) => k.key === "mobile").maturato;
+  const rawFeriali = projectMonthEnd(mat, feriali.elapsedWorkingDays, feriali.totalWorkingDays);
+  const rawCc = projectMonthEnd(mat, conCc.elapsedWorkingDays, conCc.totalWorkingDays);
+  assert.notEqual(rawFeriali, rawCc);
 });
 
 await test("messaggio: con forecast + monthAggregates ⇒ passo mensile e proiezione nel commento", () => {

@@ -19,9 +19,11 @@ divisori per standout e giorni lavorativi, non dimensioni valutate).
 
 **Giorni lavorativi automatici, pesati per tipologia negozio**
 (`monthWorkingDaysByType`): CC = tutti i giorni tranne festivi (domeniche
-INCLUSE); strada = tutti tranne domeniche e festivi. `total`/`elapsed` del
-passo mensile = media pesata su numeroNegoziCc/numeroNegoziStrada; senza
-conteggi negozi si ricade su `monthWorkingDays` standard.
+INCLUSE); strada = tutti tranne domeniche e festivi (= giorni feriali
+lun–sab). `total`/`elapsed` del passo mensile = media pesata su
+numeroNegoziCc/numeroNegoziStrada via `blendedWorkingDays`; **senza conteggi
+negozi il fallback sono i soli giorni feriali (strada, lun–sab)**, NON più
+`monthWorkingDays` (lun–ven). Stesso helper per commento e card HTML.
 
 **Why:** richiesta utente esplicita (obiettivi per mese, niente canvass,
 volumi per pista, negozi CC vs strada con calendari lavorativi diversi).
@@ -36,5 +38,9 @@ cui P.IVA, Fisso, di cui P.IVA, Energia, Assicurazioni, Protetti=protecta,
 Cb; + Telefoni pz; + Accessori/Servizi €). NON esiste più la riga "Canvass
 totali" (pezzi totali): l'utente l'ha esplicitamente rifiutata a favore
 della proiezione per-KPI. `MonthEndProjection.kpis: ProjectionEntry[]`
-(key/label/unit/maturato/proiezione). Base ritmo = `monthWorkingDays`
-standard lun–sab (la ponderazione CC/strada resta solo nel commento).
+(key/label/unit/maturato/proiezione). Base ritmo = `blendedWorkingDays`
+condiviso: **stessa** ponderazione CC/strada del commento (i conteggi negozi
+del forecast si passano a `buildMonthEndProjection(ymd, monthAgg, forecast)`).
+Senza conteggi il fallback NON è più lun–ven ma **solo giorni feriali**
+(calendario strada lun–sab). La card HTML arrotonda `elapsed/total` solo in
+display; il calcolo resta frazionario. Coerenza testo↔card è il punto.

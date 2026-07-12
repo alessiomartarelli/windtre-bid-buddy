@@ -1023,6 +1023,42 @@ export function monthWorkingDays(ymd: string): { elapsed: number; total: number 
   return { elapsed: cal.el, total: cal.tot };
 }
 
+/** Conteggio negozi per tipo, usato per pesare i calendari CC/strada. */
+export interface StoreTypeCounts {
+  numeroNegoziCc: number | null;
+  numeroNegoziStrada: number | null;
+}
+
+/**
+ * Giorni lavorativi del mese di `ymd` (trascorsi/totali) da usare per passo
+ * e proiezioni, tenendo conto della divisione CC/strada:
+ * - se sono configurati i conteggi negozi CC/strada, si mediano i due
+ *   calendari pesati sul numero di negozi (CC lavora anche la domenica,
+ *   strada no) → proiezione "reale" dei negozi;
+ * - altrimenti si ricade sui soli **giorni feriali** (calendario strada:
+ *   lunedì–sabato, esclude domeniche e festività nazionali).
+ * Data non valida ⇒ null.
+ */
+export function blendedWorkingDays(
+  ymd: string,
+  counts?: StoreTypeCounts,
+): { elapsed: number; total: number } | null {
+  const wdt = monthWorkingDaysByType(ymd);
+  if (!wdt) return null;
+  const nCc = counts?.numeroNegoziCc ?? 0;
+  const nStrada = counts?.numeroNegoziStrada ?? 0;
+  const nTot = nCc + nStrada;
+  if (nTot > 0) {
+    return {
+      total: (nCc * wdt.cc.total + nStrada * wdt.strada.total) / nTot,
+      elapsed: (nCc * wdt.cc.elapsed + nStrada * wdt.strada.elapsed) / nTot,
+    };
+  }
+  // Fallback: soli giorni feriali (lun–sab), come il calendario "strada".
+  const total = wdt.strada.total;
+  return { total, elapsed: total > 0 ? Math.min(wdt.strada.elapsed, total) : wdt.strada.elapsed };
+}
+
 /**
  * Proietta un valore maturato a fine mese in proporzione ai giorni
  * lavorativi. Giorni trascorsi o totali non positivi ⇒ null (non
@@ -1066,8 +1102,12 @@ export interface MonthEndProjection {
  * granularità del forecast/obiettivi) a partire dagli aggregati del mese in
  * corso e dalla data del report. Data non valida ⇒ null.
  */
-export function buildMonthEndProjection(ymd: string, monthAgg: DailyReportAggregates): MonthEndProjection | null {
-  const wd = monthWorkingDays(ymd);
+export function buildMonthEndProjection(
+  ymd: string,
+  monthAgg: DailyReportAggregates,
+  storeCounts?: StoreTypeCounts,
+): MonthEndProjection | null {
+  const wd = blendedWorkingDays(ymd, storeCounts);
   if (!wd) return null;
   const round = (v: number | null): number | null => (v === null ? null : Math.round(v));
   const mk = (key: string, label: string, unit: ProjectionUnit, maturato: number): ProjectionEntry => ({
@@ -1182,24 +1222,13 @@ export function buildTelegramReportMessage(p: TelegramReportParams): string {
   const forecast = p.forecast ?? EMPTY_FORECAST;
   const month = p.monthAggregates ?? a;
   // Giorni lavorativi (passo/proiezioni): calcolati in automatico per il mese
-  // in corso e mediati sul numero di negozi CC/strada configurato (i due tipi
+  // in corso, mediati sul numero di negozi CC/strada configurato (i due tipi
   // hanno calendari diversi: CC include le domeniche, strada no). Senza
-  // conteggi negozi si ricade sul calendario standard (esclude weekend+festivi).
-  const wdt = monthWorkingDaysByType(p.dateYMD);
-  const nCc = forecast.numeroNegoziCc ?? 0;
-  const nStrada = forecast.numeroNegoziStrada ?? 0;
-  const nTot = nCc + nStrada;
-  let total: number;
-  let elapsed: number;
-  if (wdt && nTot > 0) {
-    total = (nCc * wdt.cc.total + nStrada * wdt.strada.total) / nTot;
-    elapsed = (nCc * wdt.cc.elapsed + nStrada * wdt.strada.elapsed) / nTot;
-  } else {
-    const wd = monthWorkingDays(p.dateYMD);
-    total = wd?.total ?? 0;
-    const rawElapsed = wd?.elapsed ?? 0;
-    elapsed = total > 0 ? Math.min(rawElapsed, total) : rawElapsed;
-  }
+  // conteggi negozi si ricade sui soli giorni feriali (lun–sab). Stessa
+  // logica della card "Proiezione fine mese" per coerenza tra testo e HTML.
+  const wd = blendedWorkingDays(p.dateYMD, forecast);
+  const total = wd?.total ?? 0;
+  const elapsed = wd?.elapsed ?? 0;
 
   lines.push(
     buildDirettoreCommento({
