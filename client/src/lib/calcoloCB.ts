@@ -21,6 +21,9 @@ const CB_EVENT_LOOKUP = new Map(
   CB_EVENTS_CONFIG.map((e) => [e.type, e])
 );
 
+// Task #289: "coupon caring" offers are excluded from CB totals/premio/points.
+const COUPON_CARING_CATEGORY = "coupon_caring";
+
 export function clusterCBToLevel(clusterCB?: string): number {
   if (!clusterCB) return 0;
   const c = clusterCB.toLowerCase();
@@ -55,6 +58,7 @@ export function calcoloCBPerPdv(
   let totaleGettoni = 0;
   let totalePezzi = 0;
   for (const item of items) {
+    if (item.targetCategory === COUPON_CARING_CATEGORY) continue;
     totaleGettoni += item.count * getCBGettoniForCategory(item.targetCategory, clusterLevel);
     totalePezzi += item.count;
   }

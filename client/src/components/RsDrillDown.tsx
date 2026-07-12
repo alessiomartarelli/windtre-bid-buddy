@@ -350,7 +350,7 @@ export function RsDrillDown({ preventivo, forceExpandAll = false }: RsDrillDownP
       });
 
       /* ── Partnership ── */
-      const cbRaw = attivatoCBByRS?.[rsName] || [];
+      const cbRaw = (attivatoCBByRS?.[rsName] || []).filter((r) => r.eventType !== 'coupon_caring');
       const volumiPartnership = cbRaw.reduce((sum, r) => sum + (r.pezzi || 0), 0);
       const cbByKey: Record<string, { label: string; pezzi: number }> = {};
       cbRaw.forEach((r) => {

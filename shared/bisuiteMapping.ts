@@ -151,9 +151,14 @@ export const PARTNERSHIP_TARGETS = [
   { value: 'MIGRAZIONI_FTTH_FWA', label: 'Migrazioni FTTH/FWA' },
 ];
 
+export const COUPON_CARING_CATEGORY = 'coupon_caring';
+export const COUPON_CARING_LABEL = 'Coupon Caring';
+export const COUPON_CARING_TIPOLOGIE = ['COUPON CARING TIED', 'COUPON CARING UNTIED'];
+
 export const CB_TARGETS = [
   { value: 'cambio_offerta_untied', label: 'Cambio Offerta Untied' },
   { value: 'cambio_offerta_rivincoli', label: 'Cambio Offerta Rivincoli' },
+  { value: 'coupon_caring', label: 'Coupon Caring' },
   { value: 'cambio_offerta_smart_pack', label: 'Cambio Offerta Smart Pack OTP' },
   { value: 'telefono_incluso_var', label: 'Telefono Incluso' },
   { value: 'telefono_incluso_smart_pack_compass_findomestic', label: 'Smart Pack Compass/Findomestic' },
@@ -344,10 +349,10 @@ export function getDefaultMappingRules(): BiSuiteMappingRule[] {
     // ═══════════════ CB (CUSTOMER BASE) — BASE ═══════════════
     { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'MIA EASYPAY STANDARD' }, priority: 10, enabled: true, ruleType: 'base' },
     { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'MIA EASYPAY CYC' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'COUPON CARING TIED' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'coupon_caring', targetLabel: 'Coupon Caring', conditions: { categoriaBiSuite: 'MIA TIED', tipologiaBiSuite: 'COUPON CARING TIED' }, priority: 10, enabled: true, ruleType: 'base' },
     { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'MIA UNTIED', tipologiaBiSuite: 'MIA UNTIED STANDARD' }, priority: 10, enabled: true, ruleType: 'base' },
     { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'MIA UNTIED', tipologiaBiSuite: 'MIA UNTIED CYC' }, priority: 10, enabled: true, ruleType: 'base' },
-    { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_untied', targetLabel: 'Cambio Offerta Untied', conditions: { categoriaBiSuite: 'MIA UNTIED', tipologiaBiSuite: 'COUPON CARING UNTIED' }, priority: 10, enabled: true, ruleType: 'base' },
+    { id: ruleId(), pista: 'cb', targetCategory: 'coupon_caring', targetLabel: 'Coupon Caring', conditions: { categoriaBiSuite: 'MIA UNTIED', tipologiaBiSuite: 'COUPON CARING UNTIED' }, priority: 10, enabled: true, ruleType: 'base' },
     { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLO VOCE' }, priority: 10, enabled: true, ruleType: 'base' },
     { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLI IVA' }, priority: 10, enabled: true, ruleType: 'base' },
     { id: ruleId(), pista: 'cb', targetCategory: 'cambio_offerta_rivincoli', targetLabel: 'Cambio Offerta Rivincoli', conditions: { categoriaBiSuite: 'RIVINCOLO', tipologiaBiSuite: 'RIVINCOLO DATI' }, priority: 10, enabled: true, ruleType: 'base' },
@@ -913,7 +918,38 @@ export function diffSavedRuleAgainstDefault(
   return diffs;
 }
 
-const CB_TARGET_CATEGORIES = new Set(CB_TARGETS.map(t => t.value));
+const CB_TARGET_CATEGORIES = new Set(
+  CB_TARGETS.map(t => t.value).filter(v => v !== COUPON_CARING_CATEGORY),
+);
+
+/**
+ * Task #289: retarget any saved CB rule whose BiSuite tipologia is a "coupon
+ * caring" offer (COUPON CARING TIED / COUPON CARING UNTIED) to the dedicated
+ * `coupon_caring` category. Existing orgs saved these rules under
+ * `cambio_offerta_rivincoli` / `cambio_offerta_untied`; this migrates them so
+ * caring is excluded from CB totals without requiring a re-mapping.
+ */
+export function retargetCaringSavedRules(
+  rules: BiSuiteMappingRule[],
+): { rules: BiSuiteMappingRule[]; changed: boolean } {
+  let changed = false;
+  const out = rules.map((r) => {
+    if (
+      r.pista === 'cb' &&
+      r.targetCategory !== COUPON_CARING_CATEGORY &&
+      COUPON_CARING_TIPOLOGIE.includes((r.conditions.tipologiaBiSuite || '').toUpperCase())
+    ) {
+      changed = true;
+      return {
+        ...r,
+        targetCategory: COUPON_CARING_CATEGORY,
+        targetLabel: COUPON_CARING_LABEL,
+      };
+    }
+    return r;
+  });
+  return { rules: changed ? out : rules, changed };
+}
 
 function fullFingerprint(r: BiSuiteMappingRule): string {
   const c = r.conditions;
@@ -972,9 +1008,13 @@ export function mergeWithDefaultRules(
   // existing saved configs keep matching the broader pre-fix conditions
   // and continue to misclassify new SKUs.
   const { rules: patchedSaved } = patchSavedRulesWithDefaultExclusions(savedRules, defaults);
-  const existingKeys = new Set(patchedSaved.map(ruleFingerprint));
+  // Task #289: migrate any saved caring rules to the dedicated coupon_caring
+  // category before computing fingerprints, so we don't inject a duplicate
+  // default caring rule and so twins/totals treat caring consistently.
+  const { rules: retargetedSaved } = retargetCaringSavedRules(patchedSaved);
+  const existingKeys = new Set(retargetedSaved.map(ruleFingerprint));
   const missing = defaults.filter(d => !existingKeys.has(ruleFingerprint(d)));
-  const merged = missing.length === 0 ? patchedSaved : [...patchedSaved, ...missing];
+  const merged = missing.length === 0 ? retargetedSaved : [...retargetedSaved, ...missing];
   const partnershipTwins = synthesizePartnershipTwins(merged);
   return partnershipTwins.length === 0 ? merged : [...merged, ...partnershipTwins];
 }
