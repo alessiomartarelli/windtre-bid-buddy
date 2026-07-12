@@ -2849,18 +2849,20 @@ export default function DashboardGaraReale() {
         continue;
       }
 
-      const baseCategories = Object.values(pistaData).map((cat: any) => {
-        const proiezione = workdayInfo.elapsedWorkingDays > 0
-          ? Math.round((cat.pezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
-          : cat.pezzi;
-        return {
-          category: cat.targetCategory,
-          label: cat.targetLabel,
-          pezzi: cat.pezzi,
-          canone: cat.canone || 0,
-          proiezione,
-        };
-      });
+      const baseCategories = Object.values(pistaData)
+        .filter((cat: any) => !isCaringItem(pista, cat.targetCategory))
+        .map((cat: any) => {
+          const proiezione = workdayInfo.elapsedWorkingDays > 0
+            ? Math.round((cat.pezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+            : cat.pezzi;
+          return {
+            category: cat.targetCategory,
+            label: cat.targetLabel,
+            pezzi: cat.pezzi,
+            canone: cat.canone || 0,
+            proiezione,
+          };
+        });
       const addonPistaData = mappedData.totaliAddonsPerPista?.[pista];
       const addonCategories = addonPistaData ? Object.values(addonPistaData).map((cat: any) => {
         const proiezione = workdayInfo.elapsedWorkingDays > 0
