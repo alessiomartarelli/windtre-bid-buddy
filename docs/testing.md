@@ -184,6 +184,24 @@ consentiti; lista `WINDTRE_GATED_MODULES` attesa). Nessun prerequisito.
 Step di validation `brand-gating-tests`
 (`bash scripts/run-brand-gating-tests.sh`). Run ~1s.
 
+## Caring esclusi dai totali CB (`tests/caring-cb-exclusion.test.mjs`)
+
+7 test puri (Task #290, regressione di Task #289) che partono da un dataset
+BiSuite grezzo (MIA TIED / MIA UNTIED / RIVINCOLO + entrambe le tipologie
+COUPON CARING) mappato con `mergeWithDefaultRules` + `mapBiSuiteSale`
+(`shared/bisuiteMapping.ts`) e `calcoloCBPerPdv`
+(`client/src/lib/calcoloCB.ts`, alias `@/` risolto da tsx). Coprono: le
+tipologie caring mappano SOLO su `cb:coupon_caring` (nessuna altra pista);
+i veri eventi CB (rivincoli/untied) ottengono invece il gemello partnership;
+`calcoloCBPerPdv` ignora il caring in conteggio pezzi, premio e punti (con vs
+senza caring danno lo stesso risultato; PDV con solo caring ⇒ 0/0); la card
+"Caring utilizzate" conta i pezzi corretti per PDV e per Ragione Sociale
+(PDV senza caring esclusi); un'org con regole DB VECCHIE (caring sotto
+`cambio_offerta_*`) migra via `retargetCaringSavedRules`/`mergeWithDefaultRules`
+verso `coupon_caring` senza duplicati né gemelli partnership (idempotente).
+Nessun prerequisito. Step di validation `caring-cb-exclusion-tests`
+(`bash scripts/run-caring-cb-exclusion-tests.sh`). Run ~1s.
+
 ## Incentivazione Accessori/Servizi live tests (`tests/incentivazione-accessori-servizi.test.mjs`)
 
 4 scenari DB-backed (Task #174) su `aggregateAccessoriServizi`

@@ -28,7 +28,6 @@ import {
   buildTopPerKpi,
   bestProtettiSeller,
   fmtEuro,
-  fmtPunti,
   fmtReportDate,
   pctDelta,
 } from "./venditeReport";
@@ -483,13 +482,13 @@ function rankRow(inner: string, drill: string): string {
 
 function pdvSection(a: DailyReportAggregates): string {
   if (a.perPdv.length === 0) return "";
-  // Classifica per PUNTEGGIO performance (Task #282): barra e valore in punti,
+  // Classifica per PUNTEGGIO performance: solo barra (valore punti nascosto),
   // fatturato mantenuto come informazione nella riga di dettaglio.
   const maxPunti = Math.max(...a.perPdv.map((p) => p.punteggio), 1);
   const rows = a.perPdv
     .map((pdv) => {
       const name = pdv.nomeNegozio || "N/D";
-      const inner = `<span class="rank-top"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-val">${escapeHtml(fmtPunti(pdv.punteggio))}</span></span>
+      const inner = `<span class="rank-top"><span class="rank-name">${escapeHtml(name)}</span></span>
         <span class="rank-sub"><span class="mono">${escapeHtml(pdv.codicePos)}</span> · ${pdv.vendite} vendite · ${escapeHtml(fmtEuro(pdv.importo))}</span>
         ${rankBar((pdv.punteggio / maxPunti) * 100, ORANGE)}`;
       return rankRow(inner, drillPanel(pdv.dettaglio));
@@ -502,14 +501,14 @@ function pdvSection(a: DailyReportAggregates): string {
 
 function addettiSection(a: DailyReportAggregates): string {
   if (a.perAddetto.length === 0) return "";
-  // Classifica per PUNTEGGIO performance (Task #282): medaglie sull'ordine
-  // per punteggio, fatturato come informazione secondaria nella riga.
+  // Classifica per PUNTEGGIO performance: medaglie sull'ordine per punteggio
+  // (valore punti nascosto), fatturato come informazione secondaria nella riga.
   const maxPunti = Math.max(...a.perAddetto.map((p) => p.punteggio), 1);
   const medals = ["🥇", "🥈", "🥉"];
   const rows = a.perAddetto
     .map((add, i) => {
       const medal = medals[i] ? `${medals[i]} ` : "";
-      const inner = `<span class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span><span class="rank-val">${escapeHtml(fmtPunti(add.punteggio))}</span></span>
+      const inner = `<span class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span></span>
         <span class="rank-sub">${add.vendite} vendite · ${escapeHtml(fmtEuro(add.importo))}</span>
         ${rankBar((add.punteggio / maxPunti) * 100, "#60a5fa")}`;
       return rankRow(inner, drillPanel(add.dettaglio));

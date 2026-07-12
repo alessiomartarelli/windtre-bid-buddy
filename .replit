@@ -108,6 +108,10 @@ args = "brand-gating-tests"
 task = "workflow.run"
 args = "gara-weights-ui-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "caring-cb-exclusion-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -300,6 +304,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-gara-config-weights-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "caring-cb-exclusion-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-caring-cb-exclusion-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

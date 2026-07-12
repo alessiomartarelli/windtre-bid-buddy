@@ -28,3 +28,4 @@
 - [Brand → module gating](brand-module-gating.md) — moduli WindTre solo con brand WindTre associato; org senza brand = nessun filtro; gating server+client insieme; riavvia il workflow prima di testare routes via curl.
 - [Telegram forecast in gara_config](telegram-forecast-in-garaconfig.md) — forecast/obiettivi report Telegram sta per-mese in gara_config.config.venditeForecast (non telegramReport); giorni lavorativi auto CC(incl. domeniche)/strada.
 - [Telegram performance weights](telegram-performance-weights.md) — pesi punteggio in gara_config.config.performanceWeights riordinano standout(msg)+classifiche(HTML) insieme; preview script NON li applica; verify script DB-backed.
+- [BiSuite partnership twins](bisuite-partnership-twins.md) — mergeWithDefaultRules twins ogni regola CB su pista partnership; aggrega/filtra per pista o i veri eventi CB si contano doppi (caring escluso dai twin).
