@@ -152,6 +152,7 @@ Riepilogo — suite → script → prerequisiti:
 | Inc. dashboard authz | `run-incentivazione-dashboard-authz-tests.sh` | app attiva | ~1s |
 | CJ gettone UI (5, Playwright) | `run-customer-journey-gettone-ui-tests.sh` | app + DB + chromium | ~25s |
 | Inc. sort UI (2, Playwright) | `run-incentivazione-sort-ui-tests.sh` | app + DB + chromium | ~25s |
+| Pesi performance UI (2, Playwright) | `run-gara-config-weights-ui-tests.sh` | app + DB + chromium | ~25s |
 | Type-check | `run-typecheck.sh` | — (statico) | ~10-20s |
 | Integration orchestrator | `run-deploy-integration-tests.sh` | `DATABASE_URL` | ~70-90s |
 

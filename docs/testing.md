@@ -333,6 +333,23 @@ di validation `inc-sort-ui-tests`
 (`bash scripts/run-incentivazione-sort-ui-tests.sh`); richiede il workflow
 "Start application" attivo, `DATABASE_URL` e chromium di sistema. Run ~25s.
 
+## Pesi punteggio performance UI (Configurazione Gara)
+
+Suite Playwright a 2 scenari sulla card `card-performance-weights` della
+pagina `/configurazione-gara`. Perché serve un test UI: gli helper puri
+dei pesi (`weightsToForm`/`weightsFormToPayload`/`weightsFormHasValue`,
+allineati a `DEFAULT_PERFORMANCE_WEIGHTS`) sono già coperti; quello che
+NON lo era è il wiring React fra gli input `input-weight-*`, il
+salvataggio in `gara_config.config.performanceWeights` e il ricaricamento.
+Scenario 1: digita alcuni pesi (lasciandone altri vuoti), salva con un
+nome, verifica sia via DB (valori numerici persistiti, campi vuoti = null
+⇒ fallback ai default) sia ricaricando la pagina (gli input ripopolati, i
+vuoti restano vuoti). Scenario 2: dopo aver salvato il mese corrente,
+cambia mese verso uno senza config (i pesi si azzerano) e torna al mese
+salvato (i pesi si ricaricano). Step di validation `gara-weights-ui-tests`
+(`bash scripts/run-gara-config-weights-ui-tests.sh`); richiede il workflow
+"Start application" attivo, `DATABASE_URL` e chromium di sistema. Run ~25s.
+
 ## Type-check (Task #219)
 
 Step di validation `typecheck` (`bash scripts/run-typecheck.sh`) che

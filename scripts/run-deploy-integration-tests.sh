@@ -9,7 +9,8 @@
 #   - cj-authz, admin-authz, cj-reconcile, cj-trigger-date,
 #     inc-dashboard-authz, finplan        (richiedono il dev server)
 #   - incentivazione-accessori-servizi     (richiede solo DATABASE_URL)
-#   - cj-gettone-ui                         (dev server + DB + chromium)
+#   - cj-gettone-ui, inc-sort-ui, gara-weights-ui
+#                                           (dev server + DB + chromium)
 #
 # Strategia:
 #   1. Richiede DATABASE_URL. Le suite DB-backed seminano e ripuliscono i
@@ -110,6 +111,7 @@ SUITES=(
   "run-finplan-tests.sh"
   "run-incentivazione-sort-ui-tests.sh"
   "run-customer-journey-gettone-ui-tests.sh"
+  "run-gara-config-weights-ui-tests.sh"
 )
 
 echo "[integration-tests] eseguo ${#SUITES[@]} suite dev-server/DB-backed ..."
