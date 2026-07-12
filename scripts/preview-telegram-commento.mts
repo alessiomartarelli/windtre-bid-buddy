@@ -16,6 +16,7 @@ import { pool } from "../server/db";
 import {
   addYmdDays,
   aggregateDailyReport,
+  parsePerformanceWeights,
   monthStartYmd,
   monthLabelOf,
   monthWorkingDays,
@@ -82,8 +83,20 @@ async function main() {
     return d !== null && d >= monthFromYmd;
   });
   const todayRows = rows.filter((r) => trendYmdOf(r.dataVendita) === ymd);
-  const aggregates = aggregateDailyReport(todayRows);
-  const monthAgg = aggregateDailyReport(monthRows);
+  // Pesi del punteggio performance (Task #283): per-org/per-mese dalla
+  // Configurazione gara (gara_config.config.performanceWeights), con fallback
+  // ai default di sistema. Stessa catena dello scheduler
+  // (server/telegramReportScheduler.ts) così lo standout "il migliore" e le
+  // classifiche addetti/negozi combaciano col report inviato davvero.
+  const gm = /^(\d{4})-(\d{2})-\d{2}$/.exec(ymd);
+  let garaCfgObj: Record<string, unknown> | undefined;
+  if (gm) {
+    const garaCfg = await storage.getGaraConfig(org.id, +gm[2], +gm[1]);
+    garaCfgObj = garaCfg?.config as Record<string, unknown> | undefined;
+  }
+  const weights = parsePerformanceWeights(garaCfgObj?.performanceWeights);
+  const aggregates = aggregateDailyReport(todayRows, weights);
+  const monthAgg = aggregateDailyReport(monthRows, weights);
 
   console.log("═".repeat(72));
   console.log(`ORG: ${org.name} (${org.id})`);
@@ -91,6 +104,9 @@ async function main() {
   console.log(`telegramReport.enabled = ${tg?.enabled ?? "(assente)"}   chat_id = ${tg?.chat_id ? "presente" : "ASSENTE"}   bot_token = ${tg?.bot_token ? "presente" : "ASSENTE"}`);
   console.log(`forecast configurato? ${hasForecast(forecast)}`);
   console.log("forecast:", JSON.stringify(forecast));
+  const weightsConfigured = garaCfgObj?.performanceWeights !== undefined;
+  console.log(`pesi performance configurati (gara_config)? ${weightsConfigured}${weightsConfigured ? "" : " (default di sistema)"}`);
+  console.log("pesi performance:", JSON.stringify(weights.pesi));
   const wd = monthWorkingDays(ymd);
   console.log(`giorni lavorativi calendario: elapsed=${wd?.elapsed} total=${wd?.total}`);
   console.log("─".repeat(72));
