@@ -6,7 +6,7 @@ import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
-import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions } from "../shared/bisuiteMapping";
+import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions, retargetCaringSavedRules } from "../shared/bisuiteMapping";
 import { isModuleEnabled, isModuleAllowedForBrands, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
 import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
@@ -147,15 +147,19 @@ export async function registerRoutes(
         ? (mapping!.rules as BiSuiteMappingRule[])
         : [];
       if (savedRules.length === 0) return;
-      const { rules: patched, changed } = patchSavedRulesWithDefaultExclusions(savedRules);
-      if (!changed) return;
+      const { rules: patched, changed: patchChanged } = patchSavedRulesWithDefaultExclusions(savedRules);
+      // Task #289: migrate any saved "coupon caring" rules to the dedicated
+      // coupon_caring category so caring is excluded from CB totals on existing
+      // installations without requiring a re-mapping.
+      const { rules: migrated, changed: caringChanged } = retargetCaringSavedRules(patched);
+      if (!patchChanged && !caringChanged) return;
       const updatedBy = sysMapping?.updatedBy ?? null;
       await storage.upsertSystemConfig(
         "bisuite_mapping",
-        { ...(mapping || {}), rules: patched },
+        { ...(mapping || {}), rules: migrated },
         updatedBy as string,
       );
-      console.log("[bisuite-mapping] backfill: patched saved rules with new default exclusions");
+      console.log("[bisuite-mapping] backfill: patched saved rules with new default exclusions / caring retarget");
     } catch (e) {
       console.error("[bisuite-mapping] backfill failed:", e);
     }

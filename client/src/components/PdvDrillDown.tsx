@@ -344,13 +344,14 @@ export function PdvDrillDown({ preventivo, forceExpandAll = false }: PdvDrillDow
         });
 
         /* ── Partnership ── */
-        const cbRaw = attivatoCBByPos?.[pdvId] || attivatoCBByPos?.[code] || [];
+        const cbRaw = (attivatoCBByPos?.[pdvId] || attivatoCBByPos?.[code] || [])
+          .filter((r) => r.eventType !== 'coupon_caring');
         const volumiPartnership = cbRaw.reduce((sum, r) => sum + (r.pezzi || 0), 0);
 
         // Group CB by eventType+clusterCard for detailed breakdown
         const cbByKey: Record<string, { label: string; pezzi: number }> = {};
         cbRaw.forEach((r) => {
-          if ((r.pezzi || 0) > 0) {
+          if ((r.pezzi || 0) > 0 && r.eventType !== 'coupon_caring') {
             const eventType = r.eventType || 'altro';
             const cluster = r.clusterCard || '';
             const key = cluster ? `${eventType}__${cluster}` : eventType;

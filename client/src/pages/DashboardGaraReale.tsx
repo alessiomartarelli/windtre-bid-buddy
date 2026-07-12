@@ -45,6 +45,7 @@ import {
   RefreshCw,
   Briefcase,
   Users,
+  Ticket,
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
@@ -374,7 +375,14 @@ const FISSO_BUSINESS_CATEGORIES = new Set<string>([
   "FISSO_PIVA_1A_LINEA", "FISSO_PIVA_2A_LINEA", "CHIAMATE_ILLIMITATE",
 ]);
 
+// Task #289: "coupon caring" offers are excluded from CB totals/premio/points.
+const COUPON_CARING_CATEGORY = "coupon_caring";
+function isCaringItem(pista: string, targetCategory: string): boolean {
+  return pista === "cb" && targetCategory === COUPON_CARING_CATEGORY;
+}
+
 function isCorePezziItem(pista: string, targetCategory: string): boolean {
+  if (isCaringItem(pista, targetCategory)) return false;
   if (pista === "mobile") return SIM_CONSUMER_CORE.has(targetCategory) || SIM_PIVA_CORE.has(targetCategory);
   if (pista === "fisso") return FISSO_CONSUMER_CORE.has(targetCategory) || FISSO_BUSINESS_CORE.has(targetCategory);
   return true;
@@ -2883,7 +2891,7 @@ export default function DashboardGaraReale() {
 
       const pdvBreakdown = mappedData.pdvList
         .map((pdv) => {
-          const pdvItems = pdv.items.filter((i) => i.pista === pista);
+          const pdvItems = pdv.items.filter((i) => i.pista === pista && !isCaringItem(i.pista, i.targetCategory));
           const pdvPezzi = pista === "mobile"
             ? pdvItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
             : pista === "fisso"
@@ -3405,6 +3413,34 @@ export default function DashboardGaraReale() {
 
     return stats;
   }, [mappedData, workdayInfo, garaCalcConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear, orgSystemTcDefaults]);
+
+  // Task #289: "coupon caring" offers are excluded from CB totals; they are
+  // shown separately here (pezzi only, no premio/points) broken down per PDV
+  // and per RS.
+  const caringStats = useMemo(() => {
+    const perPdv: Array<{ codicePos: string; nomeNegozio: string; ragioneSociale: string; pezzi: number }> = [];
+    const rsMap = new Map<string, { ragioneSociale: string; pezzi: number }>();
+    let totale = 0;
+    if (!mappedData) return { totale, perPdv, perRs: [] as Array<{ ragioneSociale: string; pezzi: number }> };
+    const puntiVendita = puntiVenditaFromGara;
+    for (const pdv of mappedData.pdvList) {
+      const pezzi = pdv.items
+        .filter((i) => isCaringItem(i.pista, i.targetCategory))
+        .reduce((s, i) => s + i.pezzi, 0);
+      if (pezzi <= 0) continue;
+      const pdvConfig = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
+      const ragioneSociale = pdvConfig?.ragioneSociale || pdv.ragioneSociale || "N/D";
+      perPdv.push({ codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio, ragioneSociale, pezzi });
+      const rsKey = normalizeRS(ragioneSociale);
+      const existing = rsMap.get(rsKey);
+      if (existing) existing.pezzi += pezzi;
+      else rsMap.set(rsKey, { ragioneSociale, pezzi });
+      totale += pezzi;
+    }
+    perPdv.sort((a, b) => b.pezzi - a.pezzi);
+    const perRs = Array.from(rsMap.values()).sort((a, b) => b.pezzi - a.pezzi);
+    return { totale, perPdv, perRs };
+  }, [mappedData, puntiVenditaFromGara]);
 
   const premioPerRS = useMemo(() => {
     if (!pistaStats.length || garaConfigMissing) return [] as Array<{ displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>;
@@ -4137,6 +4173,63 @@ export default function DashboardGaraReale() {
                   </Card>
                 );
               })}
+
+              {caringStats.totale > 0 && (
+                <Card className="overflow-hidden" data-testid="card-caring-utilizzate">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="p-1.5 rounded bg-amber-500 text-white">
+                          <Ticket className="h-4 w-4" />
+                        </div>
+                        Caring utilizzate
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold" data-testid="text-pezzi-caring">{caringStats.totale}</span>
+                      <span className="text-sm text-gray-500 dark:text-slate-400">caring utilizzate</span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      Escluse dal conteggio, dal premio e dai punti Customer Base.
+                    </p>
+                    {caringStats.perRs.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-semibold text-gray-600 dark:text-slate-300">Per Ragione Sociale</div>
+                        {caringStats.perRs.map((rs) => (
+                          <div
+                            key={rs.ragioneSociale}
+                            className="flex items-center justify-between gap-2 text-sm"
+                            data-testid={`caring-rs-${rs.ragioneSociale}`}
+                          >
+                            <span className="truncate text-gray-700 dark:text-slate-200" title={rs.ragioneSociale}>{rs.ragioneSociale}</span>
+                            <span className="font-semibold shrink-0">{rs.pezzi}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {caringStats.perPdv.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-semibold text-gray-600 dark:text-slate-300">Per PDV</div>
+                        {caringStats.perPdv.map((pdv) => (
+                          <div
+                            key={pdv.codicePos}
+                            className="flex items-center justify-between gap-2 text-sm"
+                            data-testid={`caring-pdv-${pdv.codicePos}`}
+                          >
+                            <span className="truncate text-gray-700 dark:text-slate-200" title={`${pdv.nomeNegozio} · ${pdv.ragioneSociale}`}>
+                              {pdv.nomeNegozio}
+                              <span className="text-gray-400 dark:text-slate-500"> · {pdv.ragioneSociale}</span>
+                            </span>
+                            <span className="font-semibold shrink-0">{pdv.pezzi}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
             {(() => {
@@ -4523,6 +4616,7 @@ export default function DashboardGaraReale() {
 
                           const byPista: Record<string, { pezzi: number; corePezzi: number; items: AggregatedItem[] }> = {};
                           for (const item of pdv.items) {
+                            if (isCaringItem(item.pista, item.targetCategory)) continue;
                             if (!byPista[item.pista]) byPista[item.pista] = { pezzi: 0, corePezzi: 0, items: [] };
                             byPista[item.pista].pezzi += item.pezzi;
                             if (isCorePezziItem(item.pista, item.targetCategory)) {
@@ -5255,7 +5349,7 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
       const rs = pdv.ragioneSociale || "N/D";
       if (!grouped[rs]) grouped[rs] = { ragioneSociale: rs, pdvs: [], totalPezzi: 0 };
       grouped[rs].pdvs.push(pdv);
-      grouped[rs].totalPezzi += pdv.items.reduce((s, i) => s + i.pezzi, 0);
+      grouped[rs].totalPezzi += pdv.items.filter(i => !isCaringItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
     }
     return Object.values(grouped).sort((a, b) => b.totalPezzi - a.totalPezzi);
   }, [pdvList]);
@@ -5270,6 +5364,7 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
         const allItems: AggregatedItem[] = [];
         for (const pdv of rs.pdvs) {
           for (const item of pdv.items) {
+            if (isCaringItem(item.pista, item.targetCategory)) continue;
             const existing = allItems.find((i) => i.pista === item.pista && i.targetCategory === item.targetCategory);
             if (existing) existing.pezzi += item.pezzi;
             else allItems.push({ ...item });
