@@ -82,3 +82,58 @@ export function isModuleEnabled(
   if (!(key in enabledModules)) return true;
   return enabledModules[key] !== false;
 }
+
+// === Permessi moduli per-utente (Task #311) ===
+// `moduliConsentiti` su un profilo è una whitelist di chiavi modulo concesse
+// dall'admin. Semantica:
+//   - null/undefined => NESSUNA restrizione (l'utente eredita i moduli org);
+//   - array (anche vuoto) => whitelist esplicita: solo le chiavi elencate.
+// ATTENZIONE: un array vuoto NON significa "nessuna restrizione" ma "nessun
+// modulo concesso"; distinguere sempre `null` da `[]`.
+export function isModuleGrantedToUser(
+  granted: string[] | null | undefined,
+  key: string,
+): boolean {
+  if (granted == null) return true;
+  return granted.includes(key);
+}
+
+// Risoluzione dei permessi effettivi: un modulo è visibile/accessibile a un
+// utente solo se (a) abilitato per l'org, (b) consentito dal brand gating e
+// (c) concesso al profilo (o profilo senza restrizioni). `super_admin`
+// bypassa tutto. Helper condiviso da server (requireModule) e client
+// (useEnabledModules) per garantire coerenza.
+export function isModuleAccessible(params: {
+  isSuperAdmin?: boolean;
+  enabledModules: Record<string, boolean> | null | undefined;
+  brandNames: string[] | null | undefined;
+  moduliConsentiti: string[] | null | undefined;
+  key: string;
+}): boolean {
+  if (params.isSuperAdmin) return true;
+  return (
+    isModuleEnabled(params.enabledModules, params.key) &&
+    isModuleAllowedForBrands(params.brandNames, params.key) &&
+    isModuleGrantedToUser(params.moduliConsentiti, params.key)
+  );
+}
+
+// Filtra una lista di chiavi richieste (dall'admin) al perimetro concedibile
+// per l'org: solo chiavi modulo note, abilitate per l'org e consentite dal
+// brand gating, e non `superOnly`. Usato lato server per impedire che un
+// admin conceda moduli fuori dal perimetro org/brand.
+export function sanitizeGrantableModules(
+  requested: string[],
+  enabledModules: Record<string, boolean> | null | undefined,
+  brandNames: string[] | null | undefined,
+): string[] {
+  const superOnly = new Set(MODULES.filter((m) => m.superOnly).map((m) => m.key));
+  const known = new Set(MODULE_KEYS);
+  return Array.from(new Set(requested)).filter(
+    (k) =>
+      known.has(k) &&
+      !superOnly.has(k) &&
+      isModuleEnabled(enabledModules, k) &&
+      isModuleAllowedForBrands(brandNames, k),
+  );
+}

@@ -1,6 +1,7 @@
 - [Deploy prod staged](deploy-prod-via-workflow.md) — deploy a step separati (build+precompress, scp, schema sync via tunnel da ecosystem.config.cjs, swap+pm2 restart); mai toccare pm2 id 9/12/14.
 - [Git push dal main agent](git-push-main-agent.md) — push/fetch bloccati dal guard: il push può riuscire comunque; verifica con `ls-remote` vs `rev-parse HEAD`, ignora l'"ahead" stantio.
 - [Customer Journey operator isolation](cj-operator-isolation.md) — operator-scoped queries: guard `filter != null` (empty array => []), never `filter.length > 0`, or empty addetti leaks whole tenant.
+- [Per-user module permissions](module-permissions.md) — visibility = org ∩ brand ∩ user whitelist (moduli_consentiti); null=inherit, []=none; authz-test gated routes with a role the handler already allows.
 - [Dev DB schema drift](dev-db-schema-drift.md) — se signup/login danno 500 "column ... does not exist", il DB dev è disallineato da shared/schema.ts: lancia `npm run db:push`.
 - [CJ gettone analysis floor](cj-gettone-floor.md) — Analisi gettoni floored per data trigger per TUTTI i ruoli; non gating config su isAdmin; test che seminano now() devono abbassare il trigger.
 - [Test org cleanup leak](test-org-cleanup-leak.md) — cleanupOrg deve cancellare TUTTI i figli org-scoped prima dell'org; FK NO ACTION + .catch silenzioso = org di test vuote che restano nel DB dev.

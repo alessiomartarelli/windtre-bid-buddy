@@ -28,6 +28,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { MODULES, isModuleEnabled, isModuleAllowedForBrands } from '@shared/modules';
 
 const createOperatoreSchema = z.object({
   email: z.string().email('Email non valida'),
@@ -51,6 +52,7 @@ interface TeamMember {
   is_active?: boolean;
   isActive?: boolean;
   bisuiteAddetti?: string[] | null;
+  moduliConsentiti?: string[] | null;
 }
 
 interface ConfigPdv {
@@ -73,7 +75,20 @@ interface Dipendente {
 
 export default function AdminPanel() {
   const [, setLocation] = useLocation();
-  const { profile, organization, loading: authLoading } = useAuth();
+  const { profile, organization, organizationBrands, loading: authLoading } = useAuth();
+
+  // Moduli concedibili a un utente = perimetro org ∩ brand, escludendo quelli
+  // riservati al super_admin (superOnly). Usati nel dialog "Limita moduli".
+  const grantableModules = useMemo(() => {
+    const enabled = organization?.enabledModules ?? null;
+    const brandNames = organizationBrands?.map((b) => b.name) ?? null;
+    return MODULES.filter(
+      (m) =>
+        !m.superOnly &&
+        isModuleEnabled(enabled, m.key) &&
+        isModuleAllowedForBrands(brandNames, m.key),
+    );
+  }, [organization, organizationBrands]);
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState("struttura");
@@ -96,6 +111,8 @@ export default function AdminPanel() {
   const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState<'operatore' | 'admin'>('operatore');
+  const [editModuliRestricted, setEditModuliRestricted] = useState(false);
+  const [editModuli, setEditModuli] = useState<string[]>([]);
 
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -498,6 +515,13 @@ export default function AdminPanel() {
     setEditFullName(getMemberName(user));
     setEditEmail(user.email || '');
     setEditRole((user.role === 'admin' ? 'admin' : 'operatore') as 'operatore' | 'admin');
+    const restricted = Array.isArray(user.moduliConsentiti);
+    setEditModuliRestricted(restricted);
+    setEditModuli(
+      restricted
+        ? (user.moduliConsentiti as string[])
+        : grantableModules.map((m) => m.key),
+    );
     setEditDialogOpen(true);
   };
 
@@ -510,9 +534,17 @@ export default function AdminPanel() {
       return;
     }
     setLoading(true);
+    const body: Record<string, unknown> = {
+      userId: editingUser.id, fullName: editFullName, email: editEmail, role: editRole,
+    };
+    // Permessi moduli: inviati solo per utenti non super_admin. null azzera la
+    // restrizione (eredita l'org), un array è la whitelist selezionata.
+    if (editingUser.role !== 'super_admin') {
+      body.moduliConsentiti = editModuliRestricted ? editModuli : null;
+    }
     const res = await fetch(apiUrl('/api/admin/update-user'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({ userId: editingUser.id, fullName: editFullName, email: editEmail, role: editRole }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     setLoading(false);
@@ -649,6 +681,62 @@ export default function AdminPanel() {
                       <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+              {editingUser && editingUser.role !== 'super_admin' && (
+                <div className="space-y-3 rounded-md border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="switch-limita-moduli">Limita moduli visibili</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Disattivato: l'utente vede tutti i moduli dell'organizzazione.
+                      </p>
+                    </div>
+                    <Switch
+                      id="switch-limita-moduli"
+                      data-testid="switch-limita-moduli"
+                      checked={editModuliRestricted}
+                      onCheckedChange={(checked) => {
+                        setEditModuliRestricted(checked);
+                        if (checked && editModuli.length === 0) {
+                          setEditModuli(grantableModules.map((m) => m.key));
+                        }
+                      }}
+                    />
+                  </div>
+                  {editModuliRestricted && (
+                    <div className="space-y-2 pt-1">
+                      {grantableModules.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          Nessun modulo disponibile per questa organizzazione.
+                        </p>
+                      ) : (
+                        grantableModules.map((m) => {
+                          const checked = editModuli.includes(m.key);
+                          return (
+                            <label
+                              key={m.key}
+                              className="flex items-center gap-2 text-sm cursor-pointer"
+                              data-testid={`row-modulo-${m.key}`}
+                            >
+                              <Checkbox
+                                data-testid={`checkbox-modulo-${m.key}`}
+                                checked={checked}
+                                onCheckedChange={(v) => {
+                                  setEditModuli((prev) =>
+                                    v === true
+                                      ? Array.from(new Set([...prev, m.key]))
+                                      : prev.filter((k) => k !== m.key),
+                                  );
+                                }}
+                              />
+                              <span>{m.label}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               <Button type="submit" className="w-full" disabled={loading} data-testid="button-save-edit">

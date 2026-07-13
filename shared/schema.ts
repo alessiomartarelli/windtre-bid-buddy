@@ -69,6 +69,13 @@ export const profiles = pgTable("profiles", {
   // vede solo le vendite/CJ il cui `nomeAddetto` rientra in questa lista.
   // Matcha `bisuite_sales.nome_addetto` (case-insensitive lato query).
   bisuiteAddetti: text("bisuite_addetti").array().notNull().default(sql`ARRAY[]::text[]`),
+  // Permessi moduli per-utente (Task #311): whitelist di chiavi modulo
+  // concesse a questo profilo dall'admin dell'org. Semantica:
+  //   NULL  = nessuna restrizione (eredita i moduli abilitati per l'org);
+  //   array = whitelist esplicita (anche vuota = nessun modulo non-core).
+  // La visibilità effettiva è comunque l'intersezione org ∩ brand ∩ utente.
+  // `super_admin` bypassa sempre (questo campo è ininfluente sui super_admin).
+  moduliConsentiti: text("moduli_consentiti").array(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

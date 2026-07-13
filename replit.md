@@ -154,6 +154,7 @@ Riepilogo — suite → script → prerequisiti:
 | Telegram report (70) | `run-telegram-report-tests.sh` | — (puri) | ~1s |
 | Incentivazione (18) | `run-incentivazione-tests.sh` | — (puri) | ~1s |
 | Brand gating (7) | `run-brand-gating-tests.sh` | — (puri) | ~1s |
+| Permessi moduli utente (13) | `run-module-permissions-tests.sh` | app + DB (authz) | ~2s |
 | Canvass VF mapping (12) | `run-canvass-mapping-tests.sh` | — (puri) | ~1s |
 | Caring esclusi da CB (7) | `run-caring-cb-exclusion-tests.sh` | — (puri) | ~1s |
 | Caring esclusi da CB DB (3) | `run-caring-cb-exclusion-db-tests.sh` | `DATABASE_URL` | ~1-7s |

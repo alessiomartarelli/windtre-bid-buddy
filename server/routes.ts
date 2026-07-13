@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions, retargetCaringSavedRules } from "../shared/bisuiteMapping";
-import { isModuleEnabled, isModuleAllowedForBrands, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
+import { isModuleEnabled, isModuleAllowedForBrands, isModuleGrantedToUser, sanitizeGrantableModules, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
 import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
@@ -112,8 +112,15 @@ function requireModule(moduleKey: string | string[]): RequestHandler {
       if (keys.some((k) => WINDTRE_GATED_MODULES.includes(k))) {
         brandNames = (await storage.getOrganizationBrands(profile.organizationId)).map((b) => b.name);
       }
+      // Restrizione per-utente (Task #311): oltre a org e brand, il modulo
+      // deve essere concesso al profilo (moduliConsentiti). Se null =>
+      // nessuna restrizione (eredita l'org).
+      const granted = profile.moduliConsentiti ?? null;
       const anyEnabled = keys.some(
-        (k) => isModuleEnabled(enabled, k) && isModuleAllowedForBrands(brandNames, k),
+        (k) =>
+          isModuleEnabled(enabled, k) &&
+          isModuleAllowedForBrands(brandNames, k) &&
+          isModuleGrantedToUser(granted, k),
       );
       if (!anyEnabled) {
         return res.status(403).json({ error: "Modulo non abilitato" });
@@ -1961,11 +1968,11 @@ export async function registerRoutes(
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ message: "Forbidden" });
       }
-      const { user_id, userId: userIdAlt, full_name, fullName, email, role } = req.body;
+      const { user_id, userId: userIdAlt, full_name, fullName, email, role, moduliConsentiti } = req.body;
       const targetId = user_id || userIdAlt;
       const resolvedFullName = fullName || full_name;
+      const targetProfile = await storage.getProfile(targetId);
       if (profile.role === "admin") {
-        const targetProfile = await storage.getProfile(targetId);
         if (!targetProfile || targetProfile.organizationId !== profile.organizationId) {
           return res.status(403).json({ message: "Cannot update users outside your organization" });
         }
@@ -1978,6 +1985,32 @@ export async function registerRoutes(
           return res.status(403).json({ error: "Non puoi assegnare il ruolo super_admin" });
         }
         updateData.role = role;
+      }
+      // Permessi moduli per-utente (Task #311): null azzera la restrizione
+      // (eredita org); un array è una whitelist filtrata al perimetro
+      // org ∩ brand. Vietato modificare i permessi di un super_admin.
+      if (moduliConsentiti !== undefined) {
+        if (!targetProfile) return res.status(404).json({ error: "Utente non trovato" });
+        if (targetProfile.role === "super_admin") {
+          return res.status(403).json({ error: "Non puoi modificare i permessi di un super_admin" });
+        }
+        if (moduliConsentiti === null) {
+          updateData.moduliConsentiti = null;
+        } else if (Array.isArray(moduliConsentiti) && moduliConsentiti.every((k) => typeof k === "string")) {
+          const orgId = targetProfile.organizationId;
+          const org = orgId ? await storage.getOrganization(orgId) : undefined;
+          const enabled = org?.enabledModules ?? null;
+          const brandNames = orgId
+            ? (await storage.getOrganizationBrands(orgId)).map((b) => b.name)
+            : null;
+          updateData.moduliConsentiti = sanitizeGrantableModules(
+            moduliConsentiti as string[],
+            enabled,
+            brandNames,
+          );
+        } else {
+          return res.status(400).json({ error: "moduliConsentiti deve essere null o un array di stringhe" });
+        }
       }
       const updated = await storage.updateProfile(targetId, updateData);
       res.json(updated);

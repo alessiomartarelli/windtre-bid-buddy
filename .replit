@@ -136,6 +136,10 @@ args = "home-landing-ui-tests"
 task = "workflow.run"
 args = "canvass-mapping-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "module-permissions-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -405,6 +409,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-canvass-mapping-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "module-permissions-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-module-permissions-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

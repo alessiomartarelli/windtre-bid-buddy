@@ -11,6 +11,7 @@ interface Profile {
   role: string;
   profileImageUrl: string | null;
   emailNotificationsDisabled?: boolean;
+  moduliConsentiti?: string[] | null;
 }
 
 interface Organization {
