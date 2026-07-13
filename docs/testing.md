@@ -220,6 +220,28 @@ quindi dall'aggregazione. Prerequisito: `DATABASE_URL` (NON serve il dev
 server). Step di validation `caring-cb-exclusion-db-tests`
 (`bash scripts/run-caring-cb-exclusion-db-tests.sh`). Run ~1-7s.
 
+## Device + Accessori/Servizi — DB-backed (`tests/devices-accessori-servizi-db.test.mjs`)
+
+4 test DB-backed (Task #293, regressione di Task #291) che coprono la parte di
+`aggregateMappedSales` (`server/bisuiteMappedSales.ts`) NON esercitata dalla
+suite caring/CB: le card device/accessori/servizi della dashboard, che non
+passano dal mapping delle piste. Seminano righe `bisuite_sales` per un'org
+effimera, le rileggono con `storage.getBisuiteSalesByItalianMonth` (lo stesso
+load della route `GET /api/admin/bisuite-mapped-sales`) e le passano ad
+`aggregateMappedSales` con regole EFFETTIVE via `mergeWithDefaultRules`.
+Coprono: (1) conteggio device (smartphone da TELEFONIA, smartDevice da SMART
+DEVICE, internetDevice da INTERNET DEVICE + MODEM/ROUTER) con lo split
+finanziato/rate/altro dedotto dalle `domandeRisposte` (COMPASS/FINDOMESTIC/MULTI
+FINANZIAMENTO/MIA FINANZIAMENTO ⇒ finanziato; VAR/MIA VAR ⇒ rate; nessuna ⇒
+altro) e le descrizioni accumulate per modalità; (2) secchi Accessori e Servizi
+dashboard (SPEDIZIONE/ASSISTENZA/GARANTEASY) — pezzi + importo, con
+`importoImponibile` e fallback su `prezzo`; (3) separazione dei totali per PDV
+(nessun travaso tra PDV); (4) la modalità è dedotta a livello di VENDITA (una
+domanda su un articolo qualsiasi marca tutti i device della stessa vendita).
+Prerequisito: `DATABASE_URL` (NON serve il dev server). Step di validation
+`devices-accservizi-tests`
+(`bash scripts/run-devices-accessori-servizi-tests.sh`). Run ~1-5s.
+
 ## Incentivazione Accessori/Servizi live tests (`tests/incentivazione-accessori-servizi.test.mjs`)
 
 4 scenari DB-backed (Task #174) su `aggregateAccessoriServizi`

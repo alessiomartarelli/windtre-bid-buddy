@@ -116,6 +116,10 @@ args = "caring-cb-exclusion-tests"
 task = "workflow.run"
 args = "caring-cb-exclusion-db-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "devices-accservizi-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -330,6 +334,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-caring-cb-exclusion-db-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "devices-accservizi-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-devices-accessori-servizi-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
