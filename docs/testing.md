@@ -445,6 +445,31 @@ salvato (i pesi si ricaricano). Step di validation `gara-weights-ui-tests`
 (`bash scripts/run-gara-config-weights-ui-tests.sh`); richiede il workflow
 "Start application" attivo, `DATABASE_URL` e chromium di sistema. Run ~25s.
 
+## Home landing UI tests (`tests/home-landing-ui.test.mjs`)
+
+3 scenari Playwright sull'atterraggio post-login sulla Home hub. Il bug
+originale era il rimbalzo continuo su `/` per le org senza moduli WindTre
+(redirect verso un modulo disabilitato). Ora `/`
+(`client/src/pages/Index.tsx`) rende la Home hub per admin/operatore e
+reindirizza SOLO super_admin a `/super-admin`; la Home
+(`client/src/pages/Home.tsx`) non è mai un modulo gated e mostra le
+scorciatoie ai soli moduli attivi (o il messaggio "Nessun modulo attivo"
+quando non ce ne sono). La suite blinda questo comportamento contro
+regressioni future. Setup: signup admin+org (tutti i moduli abilitati di
+default, nessun brand ⇒ nessun filtro brand gating); gli helper
+`setRole`/`newAuthedContext` di `tests/helpers/uiTest.mjs` mutano ruolo e
+iniettano il cookie di sessione. Coprono: (1) un admin atterra sulla Home
+(URL resta `/`, `text-home-title` visibile, NON redirect su un modulo) e
+vede le scorciatoie `link-home-shortcut-*` dei moduli attivi
+(amministrazione, simulatore, customer_journey, ...), senza empty-state;
+(2) un operatore con un brand NON WindTre associato (tutti i moduli
+WindTre-gated filtrati via, le scorciatoie admin non gli spettano) vede la
+Home e il messaggio `text-home-no-modules` "Nessun modulo attivo" senza
+restare bloccato; (3) un super_admin viene reindirizzato da `/` a
+`/super-admin`. Step di validation `home-landing-ui-tests`
+(`bash scripts/run-home-landing-ui-tests.sh`); richiede il workflow "Start
+application" attivo, `DATABASE_URL` e chromium di sistema. Run ~25s.
+
 ## Type-check (Task #219)
 
 Step di validation `typecheck` (`bash scripts/run-typecheck.sh`) che
@@ -461,9 +486,10 @@ Step di validation `integration-tests`
 cancello di qualità pre-deploy. Esegue in un colpo solo tutte le suite che
 richiedono il dev server e/o `DATABASE_URL` — `cj-authz`, `admin-authz`,
 `cj-reconcile`, `cj-trigger-date`, `inc-dashboard-authz`,
-`incentivazione-accservizi`, `finplan`, `inc-sort-ui`, `cj-gettone-ui` —
-che prima andavano lanciate a mano. Richiede `DATABASE_URL` (riusa il DB
-di dev: ogni suite semina/pulisce i propri dati con prefissi univoci). Se
+`incentivazione-accservizi`, `finplan`, `inc-sort-ui`, `cj-gettone-ui`,
+`gara-weights-ui`, `home-landing-ui` — che prima andavano lanciate a
+mano. Richiede `DATABASE_URL` (riusa il DB di dev: ogni suite
+semina/pulisce i propri dati con prefissi univoci). Se
 l'app non è già su `localhost:5000`, avvia `npm run dev` in modo effimero,
 attende la readiness (fino a `APP_READY_TIMEOUT`, default 90s) e la ferma
 con teardown pulito dell'intero albero di processi al termine; se è già su

@@ -128,6 +128,10 @@ args = "pista-addon-tally-tests"
 task = "workflow.run"
 args = "dashboard-ingara-filter-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "home-landing-ui-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -375,6 +379,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-dashboard-ingara-filter-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "home-landing-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-home-landing-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

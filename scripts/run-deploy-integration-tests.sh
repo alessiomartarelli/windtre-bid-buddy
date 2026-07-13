@@ -9,7 +9,7 @@
 #   - cj-authz, admin-authz, cj-reconcile, cj-trigger-date,
 #     inc-dashboard-authz, finplan        (richiedono il dev server)
 #   - incentivazione-accessori-servizi     (richiede solo DATABASE_URL)
-#   - cj-gettone-ui, inc-sort-ui, gara-weights-ui
+#   - cj-gettone-ui, inc-sort-ui, gara-weights-ui, home-landing-ui
 #                                           (dev server + DB + chromium)
 #
 # Strategia:
@@ -112,6 +112,7 @@ SUITES=(
   "run-incentivazione-sort-ui-tests.sh"
   "run-customer-journey-gettone-ui-tests.sh"
   "run-gara-config-weights-ui-tests.sh"
+  "run-home-landing-ui-tests.sh"
 )
 
 echo "[integration-tests] eseguo ${#SUITES[@]} suite dev-server/DB-backed ..."
