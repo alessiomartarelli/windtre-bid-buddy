@@ -3516,14 +3516,8 @@ export async function registerRoutes(
 
       const allSales = await storage.getBisuiteSalesByItalianMonth(orgId, year, month);
 
-      type CalendarShape = {
-        weeklySchedule: { workingDays: number[] };
-        specialDays?: { date: string; isOpen: boolean }[];
-      };
-      const calendarByPos = new Map<string, CalendarShape>();
-      let calendarsAvailable = false;
+      let garaCfg = undefined as Awaited<ReturnType<typeof storage.getGaraConfigById>> | undefined;
       if (inGaraOnly) {
-        let garaCfg = undefined as Awaited<ReturnType<typeof storage.getGaraConfigById>> | undefined;
         if (garaConfigId) {
           garaCfg = await storage.getGaraConfigById(garaConfigId);
           // Authorization: la config deve appartenere alla stessa organizzazione
@@ -3533,47 +3527,11 @@ export async function registerRoutes(
         } else {
           garaCfg = await storage.getGaraConfig(orgId, month, year);
         }
-        const pdvList = ((garaCfg?.config as { pdvList?: Array<{ codicePos?: string; calendar?: CalendarShape }> } | undefined)?.pdvList) || [];
-        for (const p of pdvList) {
-          if (p.codicePos && p.calendar?.weeklySchedule?.workingDays) {
-            calendarByPos.set(p.codicePos, p.calendar);
-            calendarsAvailable = true;
-          }
-        }
       }
 
-      // Normalizza la data della vendita al fuso Europe/Rome per evitare
-      // disallineamenti rispetto al calendario italiano (DST e mezzanotte).
-      const romeDateFormatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Europe/Rome',
-        year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
-      });
-      const WEEKDAY_MAP: Record<string, number> = {
-        Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
-      };
-      const romeDateInfo = (d: Date): { iso: string; weekday: number } => {
-        const parts = romeDateFormatter.formatToParts(d);
-        const get = (t: string) => parts.find(p => p.type === t)?.value || '';
-        const iso = `${get('year')}-${get('month')}-${get('day')}`;
-        const weekday = WEEKDAY_MAP[get('weekday')] ?? d.getDay();
-        return { iso, weekday };
-      };
-
-      const isSaleInGara = (sale: typeof allSales[number]): boolean => {
-        if (!sale.dataVendita) return true;
-        const cal = sale.codicePos ? calendarByPos.get(sale.codicePos) : undefined;
-        if (!cal) return true; // Fallback: PDV senza calendario configurato
-        const { iso, weekday } = romeDateInfo(new Date(sale.dataVendita));
-        const special = cal.specialDays?.find((s) => s.date === iso);
-        if (special) return special.isOpen;
-        return cal.weeklySchedule.workingDays.includes(weekday);
-      };
-
-      const sales = inGaraOnly && calendarsAvailable
-        ? allSales.filter(isSaleInGara)
-        : allSales;
-      const totalSalesUnfiltered = allSales.length;
-      const salesExcludedOutOfGara = inGaraOnly ? totalSalesUnfiltered - sales.length : 0;
+      const { selectInGaraSales } = await import("./bisuiteGaraFilter");
+      const { sales, calendarsAvailable, totalSalesUnfiltered, salesExcludedOutOfGara } =
+        selectInGaraSales(allSales, inGaraOnly, garaCfg);
 
       const sysMapping = await storage.getSystemConfig("bisuite_mapping");
       const mappingConfig = sysMapping?.config as { rules?: BiSuiteMappingRule[] } | null;

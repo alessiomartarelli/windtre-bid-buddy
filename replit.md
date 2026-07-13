@@ -152,6 +152,7 @@ Riepilogo — suite → script → prerequisiti:
 | Caring esclusi da CB DB (3) | `run-caring-cb-exclusion-db-tests.sh` | `DATABASE_URL` | ~1-7s |
 | Device + Acc/Servizi DB (4) | `run-devices-accessori-servizi-tests.sh` | `DATABASE_URL` | ~1-5s |
 | Tally piste/addon DB (4) | `run-pista-addon-tally-tests.sh` | `DATABASE_URL` | ~1-6s |
+| Dashboard in-gara filter DB (5) | `run-dashboard-ingara-filter-tests.sh` | `DATABASE_URL` | ~1-5s |
 | Inc. Acc/Servizi live (4) | `run-incentivazione-accessori-servizi-tests.sh` | `DATABASE_URL` | ~5s |
 | Inc. dashboard authz | `run-incentivazione-dashboard-authz-tests.sh` | app attiva | ~1s |
 | CJ gettone UI (5, Playwright) | `run-customer-journey-gettone-ui-tests.sh` | app + DB + chromium | ~25s |

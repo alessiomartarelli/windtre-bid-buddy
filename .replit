@@ -124,6 +124,10 @@ args = "devices-accservizi-tests"
 task = "workflow.run"
 args = "pista-addon-tally-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "dashboard-ingara-filter-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -360,6 +364,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-pista-addon-tally-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "dashboard-ingara-filter-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-dashboard-ingara-filter-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

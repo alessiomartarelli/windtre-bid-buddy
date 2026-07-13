@@ -262,6 +262,23 @@ PDV. Prerequisito: `DATABASE_URL` (NON serve il dev server). Step di validation
 `pista-addon-tally-tests`
 (`bash scripts/run-pista-addon-tally-tests.sh`). Run ~1-6s.
 
+## Dashboard: solo vendite in-gara del mese — DB-backed (`tests/dashboard-ingara-filter-db.test.mjs`)
+
+5 test DB-backed (Task #298) che coprono il LAYER SOPRA `aggregateMappedSales`:
+il filtro della route `GET /api/admin/bisuite-mapped-sales` che decide QUALI
+righe `bisuite_sales` arrivano all'aggregatore. Seminano `bisuite_sales` (e la
+`gara_config` con i calendari per PDV) per un'org effimera e verificano:
+(1) la finestra mensile italiana di `storage.getBisuiteSalesByItalianMonth`
+(solo il mese/anno selezionato, ANNULLATA escluse); (2) il gating
+`inGaraOnly` + calendario di `selectInGaraSales` (`server/bisuiteGaraFilter.ts`),
+che con inGaraOnly attivo e calendari presenti tiene solo le vendite nei giorni
+di apertura del PDV (fuso Europe/Rome); (3) l'override `specialDays` (giorno
+feriale chiuso / weekend aperto); (4) il fallback quando non ci sono calendari
+(passa tutto anche con inGaraOnly); (5) il filtro per-PDV senza doppio
+conteggio. Prerequisito: `DATABASE_URL` (NON serve il dev server). Step di
+validation `dashboard-ingara-filter-tests`
+(`bash scripts/run-dashboard-ingara-filter-tests.sh`). Run ~1-5s.
+
 ## Incentivazione Accessori/Servizi live tests (`tests/incentivazione-accessori-servizi.test.mjs`)
 
 4 scenari DB-backed (Task #174) su `aggregateAccessoriServizi`
