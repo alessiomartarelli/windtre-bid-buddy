@@ -84,6 +84,7 @@ export interface IStorage {
   getSystemConfig(key: string): Promise<SystemConfig | undefined>;
   getAllSystemConfigs(): Promise<SystemConfig[]>;
   upsertSystemConfig(key: string, config: any, updatedBy: string | null): Promise<SystemConfig>;
+  deleteSystemConfig(key: string): Promise<void>;
 
   // BiSuite Sales
   upsertBisuiteSales(sales: InsertBisuiteSale[]): Promise<{ inserted: number; updated: number; total: number }>;
@@ -438,6 +439,10 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return result;
+  }
+
+  async deleteSystemConfig(key: string): Promise<void> {
+    await db.delete(systemConfig).where(eq(systemConfig.key, key));
   }
 
   // BiSuite Sales

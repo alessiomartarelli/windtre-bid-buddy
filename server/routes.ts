@@ -3781,6 +3781,31 @@ export async function registerRoutes(
     }
   });
 
+  // Ripristina il catalogo baked di sistema rimuovendo l'override salvato in
+  // system_config. Serve al super_admin per tornare al default dopo un upload
+  // sbagliato: resolveCanvassReference tornerà a leggere `shared/canvassCatalog`.
+  app.post("/api/admin/canvass-catalog/reset", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+      await storage.deleteSystemConfig(CANVASS_CONFIG_KEY);
+      const { reference, source } = await resolveCanvassReference();
+      res.json({
+        success: true,
+        source,
+        periodo: reference.periodo,
+        offersCount: reference.offers.length,
+        stepsCount: reference.steps.length,
+      });
+    } catch (error: unknown) {
+      console.error("Canvass catalog reset error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore nel ripristino del catalogo canvass", details: msg });
+    }
+  });
+
   app.get("/api/admin/canvass-mapped-sales", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);

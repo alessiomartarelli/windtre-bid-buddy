@@ -29,6 +29,7 @@ import {
   Upload,
   FileSpreadsheet,
   CheckCircle2,
+  RotateCcw,
 } from 'lucide-react';
 import {
   buildCanvassReferenceFromRows,
@@ -87,6 +88,7 @@ export default function CanvassVodafoneFastweb() {
   const [search, setSearch] = useState('');
   const [selectedOrg, setSelectedOrg] = useState<string>('');
   const [importing, setImporting] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [periodo, setPeriodo] = useState('');
   const [parsedRef, setParsedRef] = useState<CanvassReference | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -175,6 +177,35 @@ export default function CanvassVodafoneFastweb() {
       toast({ title: 'Errore', description: 'Impossibile importare il catalogo.', variant: 'destructive' });
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!window.confirm('Ripristinare il catalogo di sistema? Il listino caricato verrà rimosso e si tornerà al catalogo di default.')) {
+      return;
+    }
+    try {
+      setResetting(true);
+      const res = await fetch(apiUrl('/api/admin/canvass-catalog/reset'), {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.details || data?.error || 'Errore');
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/canvass-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/canvass-mapped-sales'] });
+      toast({
+        title: 'Catalogo di sistema ripristinato',
+        description: `${data.offersCount} offerte, ${data.stepsCount} step (${data.periodo}).`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Errore',
+        description: err instanceof Error ? err.message : 'Impossibile ripristinare il catalogo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -303,13 +334,25 @@ export default function CanvassVodafoneFastweb() {
       <AppNavbar title="MyStoreDesk">
         {catalog && (
           <Badge variant="outline" data-testid="badge-canvass-periodo">
-            {catalog.periodo} · {catalog.offersCount} offerte
+            {catalog.periodo} · {catalog.offersCount} offerte · {catalog.source === 'saved' ? 'catalogo caricato' : 'catalogo di sistema'}
           </Badge>
         )}
         {isSuperAdmin && (
           <Button size="sm" onClick={handleImport} disabled={importing} data-testid="btn-import-canvass">
             {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
             Importa catalogo
+          </Button>
+        )}
+        {isSuperAdmin && catalog?.source === 'saved' && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleReset}
+            disabled={resetting}
+            data-testid="btn-reset-canvass"
+          >
+            {resetting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+            Ripristina catalogo di sistema
           </Button>
         )}
       </AppNavbar>
