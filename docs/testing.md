@@ -242,6 +242,26 @@ Prerequisito: `DATABASE_URL` (NON serve il dev server). Step di validation
 `devices-accservizi-tests`
 (`bash scripts/run-devices-accessori-servizi-tests.sh`). Run ~1-5s.
 
+## Tally piste/addon — DB-backed (`tests/pista-addon-tally-db.test.mjs`)
+
+4 test DB-backed (Task #297, regressione di Task #291) che coprono il CUORE del
+mapping per pista di `aggregateMappedSales` (`server/bisuiteMappedSales.ts`) NON
+esercitato dalle suite caring/CB e device/accessori/servizi. Seminano righe
+`bisuite_sales` per un'org effimera, le rileggono con
+`storage.getBisuiteSalesByItalianMonth` (lo stesso load della route
+`GET /api/admin/bisuite-mapped-sales`) e le passano ad `aggregateMappedSales`
+con regole EFFETTIVE via `mergeWithDefaultRules`. Coprono: (1) gli item BASE
+(pezzi + canone accumulati per pista/targetCategory) con rollup `totaliPerPista`
+e conteggi globali; (2) il percorso ADDITIONAL/addon (occorrenze + canone, con
+il canone accumulato SOLO per il set `CANONE_BASED_ADDONS` — es. CONVERGENZA —
+e canone 0 per gli altri, es. NETFLIX_CON_ADV), con base + addon dallo stesso
+articolo e rollup `totaliAddonsPerPista`; (3) le descrizioni accumulate per gli
+item SIM_IVA; (4) i conteggi globali `totalMapped` / `totalUnmapped` /
+`totalArticoli` con un mix mappato/non mappato e l'isolamento dei totali per
+PDV. Prerequisito: `DATABASE_URL` (NON serve il dev server). Step di validation
+`pista-addon-tally-tests`
+(`bash scripts/run-pista-addon-tally-tests.sh`). Run ~1-6s.
+
 ## Incentivazione Accessori/Servizi live tests (`tests/incentivazione-accessori-servizi.test.mjs`)
 
 4 scenari DB-backed (Task #174) su `aggregateAccessoriServizi`

@@ -120,6 +120,10 @@ args = "caring-cb-exclusion-db-tests"
 task = "workflow.run"
 args = "devices-accservizi-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "pista-addon-tally-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -345,6 +349,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-devices-accessori-servizi-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "pista-addon-tally-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-pista-addon-tally-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
