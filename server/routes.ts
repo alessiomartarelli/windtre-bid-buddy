@@ -3667,6 +3667,127 @@ export async function registerRoutes(
     }
   });
 
+  // === Canvass Vodafone/Fastweb: catalogo di riferimento + categorizzazione ===
+  // Modulo separato dalle regole WindTre (`bisuite_mapping`): il catalogo
+  // canvass (listino offerte + step di vendita) è un lookup CODICE→pista/
+  // categoria/tipologia/canone. Il default deployato è il catalogo baked
+  // `shared/canvassCatalog.ts` (generato dagli Excel forniti); un super_admin
+  // può "importarlo" in system_config (`canvass_reference`) per aggiornarlo
+  // senza redeploy. La categorizzazione resta pura in `shared/canvassMapping.ts`.
+  const CANVASS_CONFIG_KEY = "canvass_reference";
+
+  async function resolveCanvassReference() {
+    const { CANVASS_CATALOG } = await import("../shared/canvassCatalog");
+    const sys = await storage.getSystemConfig(CANVASS_CONFIG_KEY);
+    const saved = sys?.config as
+      | { periodo?: string; offers?: unknown[]; steps?: unknown[] }
+      | null
+      | undefined;
+    if (saved && Array.isArray(saved.offers) && saved.offers.length > 0) {
+      return { reference: saved as typeof CANVASS_CATALOG, source: "saved" as const };
+    }
+    return { reference: CANVASS_CATALOG, source: "default" as const };
+  }
+
+  app.get("/api/admin/canvass-catalog", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+      const { groupStepsByPista } = await import("../shared/canvassMapping");
+      const { reference, source } = await resolveCanvassReference();
+      res.json({
+        periodo: reference.periodo,
+        source,
+        offersCount: reference.offers.length,
+        stepsCount: reference.steps.length,
+        offers: reference.offers,
+        stepsByPista: groupStepsByPista(reference.steps),
+      });
+    } catch (error: unknown) {
+      console.error("Canvass catalog error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore nel caricamento del catalogo canvass", details: msg });
+    }
+  });
+
+  app.post("/api/admin/canvass-catalog/import", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || profile.role !== "super_admin") {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+      // Import idempotente: riporta in system_config il catalogo baked
+      // (default deployato). Re-import = upsert, non duplica.
+      const { CANVASS_CATALOG } = await import("../shared/canvassCatalog");
+      await storage.upsertSystemConfig(CANVASS_CONFIG_KEY, CANVASS_CATALOG, profile.id);
+      res.json({
+        success: true,
+        periodo: CANVASS_CATALOG.periodo,
+        offersCount: CANVASS_CATALOG.offers.length,
+        stepsCount: CANVASS_CATALOG.steps.length,
+      });
+    } catch (error: unknown) {
+      console.error("Canvass catalog import error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore nell'import del catalogo canvass", details: msg });
+    }
+  });
+
+  app.get("/api/admin/canvass-mapped-sales", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const orgId = req.query.organization_id || profile.organizationId;
+      if (!orgId) return res.status(400).json({ error: "Organizzazione non specificata" });
+      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      // Brand gating: la categorizzazione canvass si applica solo alle org che
+      // hanno il brand Vodafone e/o Fastweb associato.
+      const orgBrands = await storage.getOrganizationBrands(orgId);
+      const hasCanvassBrand = orgBrands.some((b) => /vodafone|fastweb/i.test(b.name));
+
+      const month = parseInt(req.query.month as string) || new Date().getMonth() + 1;
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+
+      const { buildCanvassIndex, aggregateCanvassSales } = await import("../shared/canvassMapping");
+      const { reference, source } = await resolveCanvassReference();
+      const index = buildCanvassIndex(reference.offers);
+
+      if (!hasCanvassBrand) {
+        return res.json({
+          month, year, hasCanvassBrand: false, periodo: reference.periodo, source,
+          byPista: {}, unmapped: [], totalArticoli: 0, totalMapped: 0, totalUnmapped: 0,
+          matchCounts: { codice: 0, offerId: 0, catTip: 0 },
+        });
+      }
+
+      const sales = await storage.getBisuiteSalesByItalianMonth(orgId, year, month);
+      const agg = aggregateCanvassSales(sales, index);
+      res.json({
+        month, year, hasCanvassBrand: true, periodo: reference.periodo, source,
+        totalSales: sales.length,
+        byPista: agg.byPista,
+        items: agg.items,
+        unmapped: agg.unmapped,
+        totalArticoli: agg.totalArticoli,
+        totalMapped: agg.totalMapped,
+        totalUnmapped: agg.totalUnmapped,
+        matchCounts: agg.matchCounts,
+      });
+    } catch (error: unknown) {
+      console.error("Canvass mapped sales error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore nell'aggregazione vendite canvass", details: msg });
+    }
+  });
+
   // === Struttura Organizzativa: CRUD RS / PDV (admin/super_admin) ===
   // Scrive su organization_config.puntiVendita e propaga rinomine/eliminazioni
   // alle tabelle CdG (cdg_spese, cdg_pdv_manuali, cdg_categorie, cdg_fornitori,

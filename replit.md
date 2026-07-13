@@ -118,6 +118,12 @@ mantenere snello questo file:
   giornaliero su Telegram: bot per-org (token cifrato), scheduler
   13:30/22:30 Europe/Rome, aggregati condivisi con Vendite BiSuite,
   report HTML navigabile allegato, API admin + card di config, test puri.
+- [`docs/canvass-vodafone-fastweb.md`](docs/canvass-vodafone-fastweb.md) —
+  Mapping canvass Vodafone/Fastweb: catalogo baked (listino 306 offerte +
+  76 step, `shared/canvassCatalog.ts`) + engine puro
+  (`shared/canvassMapping.ts`) per categorizzare le vendite BiSuite per
+  pista/categoria/tipologia/canone; route admin gate `mappatura_bisuite`,
+  pagina read-only "Canvass VF", brand gating Vodafone/Fastweb.
 - [`docs/incentivazione-interna.md`](docs/incentivazione-interna.md) —
   Modulo Incentivazione interna (gare addetto): valenze piste da Excel +
   Accessori/Servizi live BiSuite, config admin per-mese multi-gara
@@ -148,6 +154,7 @@ Riepilogo — suite → script → prerequisiti:
 | Telegram report (70) | `run-telegram-report-tests.sh` | — (puri) | ~1s |
 | Incentivazione (18) | `run-incentivazione-tests.sh` | — (puri) | ~1s |
 | Brand gating (7) | `run-brand-gating-tests.sh` | — (puri) | ~1s |
+| Canvass VF mapping (12) | `run-canvass-mapping-tests.sh` | — (puri) | ~1s |
 | Caring esclusi da CB (7) | `run-caring-cb-exclusion-tests.sh` | — (puri) | ~1s |
 | Caring esclusi da CB DB (3) | `run-caring-cb-exclusion-db-tests.sh` | `DATABASE_URL` | ~1-7s |
 | Device + Acc/Servizi DB (4) | `run-devices-accessori-servizi-tests.sh` | `DATABASE_URL` | ~1-5s |

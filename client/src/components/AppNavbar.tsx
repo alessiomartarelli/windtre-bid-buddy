@@ -120,6 +120,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
     ...(isEnabled('customer_journey') ? [{ path: '/customer-journey', label: 'Customer Journey', icon: Route }] : []),
     ...(isEnabled('incentivazione_interna') ? [{ path: '/incentivazione-interna', label: 'Incentivazione interna', icon: Medal }] : []),
     ...(isSuperAdmin ? [{ path: '/mappatura-bisuite', label: 'Mappatura', icon: MapPin }] : []),
+    ...(isAdminOrSuper && isEnabled('mappatura_bisuite') ? [{ path: '/canvass-vodafone-fastweb', label: 'Canvass VF', icon: MapPin }] : []),
   ];
 
   const simulatoreItems: Array<{ path: string; label: string; icon: typeof Shield }> = [

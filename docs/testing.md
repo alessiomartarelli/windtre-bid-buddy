@@ -184,6 +184,24 @@ consentiti; lista `WINDTRE_GATED_MODULES` attesa). Nessun prerequisito.
 Step di validation `brand-gating-tests`
 (`bash scripts/run-brand-gating-tests.sh`). Run ~1s.
 
+## Canvass VF mapping tests (`tests/canvass-mapping.test.mjs`)
+
+12 test puri sull'engine di categorizzazione canvass Vodafone/Fastweb
+(`shared/canvassMapping.ts` + catalogo baked `shared/canvassCatalog.ts`).
+Coprono: forma del catalogo baked (306 offerte, 76 step, periodo);
+`normalizeCodice`/`extractOfferId` (5 char centrali di `CAN·····dddd`,
+null su forma/suffisso non valido); `deriveBrandFromPista`
+(FASTWEB⇒fastweb, resto incl. VERISURE/ENERGIA VODAFONE⇒vodafone);
+`buildCanvassIndex` (indici byCodice/byOfferId + esclusione coppie
+categoria|tipologia ambigue, es. "FASTWEB ENERGIA|LUCE FASTWEB");
+`categorizeCanvassArticle` (match a cascata codice→offerId→catTip→null,
+incluso fallback su edizione diversa); `aggregateCanvassSales`
+(pezzi/canone per pista, non mappati raggruppati per codice, matchCounts);
+`groupStepsByPista` (raggruppamento + ordinamento). Logica pura: nessun
+prerequisito (né dev server né DB), moduli TS via loader `tsx`. Step di
+validation `canvass-mapping-tests`
+(`bash scripts/run-canvass-mapping-tests.sh`). Run ~1s.
+
 ## Caring esclusi dai totali CB (`tests/caring-cb-exclusion.test.mjs`)
 
 7 test puri (Task #290, regressione di Task #289) che partono da un dataset

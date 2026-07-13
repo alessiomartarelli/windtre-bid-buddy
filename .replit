@@ -132,6 +132,10 @@ args = "dashboard-ingara-filter-tests"
 task = "workflow.run"
 args = "home-landing-ui-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "canvass-mapping-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -390,6 +394,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-home-landing-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "canvass-mapping-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-canvass-mapping-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

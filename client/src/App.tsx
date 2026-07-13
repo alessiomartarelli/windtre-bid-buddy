@@ -30,6 +30,7 @@ const TabelleCalcolo = lazy(() => import("@/pages/TabelleCalcolo"));
 const VenditeBiSuite = lazy(() => import("@/pages/VenditeBiSuite"));
 const CustomerJourney = lazy(() => import("@/pages/CustomerJourney"));
 const MappaturaBiSuite = lazy(() => import("@/pages/MappaturaBiSuite"));
+const CanvassVodafoneFastweb = lazy(() => import("@/pages/CanvassVodafoneFastweb"));
 const DashboardGaraReale = lazy(() => import("@/pages/DashboardGaraReale"));
 const ConfigurazioneGara = lazy(() => import("@/pages/ConfigurazioneGara"));
 const Amministrazione = lazy(() => import("@/pages/Amministrazione"));
@@ -126,6 +127,9 @@ function Router() {
         </Route>
         <Route path="/mappatura-bisuite">
           {() => <ModuleRoute component={MappaturaBiSuite} moduleKey="mappatura_bisuite" />}
+        </Route>
+        <Route path="/canvass-vodafone-fastweb">
+          {() => <ModuleRoute component={CanvassVodafoneFastweb} moduleKey="mappatura_bisuite" />}
         </Route>
         <Route path="/dashboard-gara-reale">
           {() => <ModuleRoute component={DashboardGaraReale} moduleKey="gara_dashboard" />}
