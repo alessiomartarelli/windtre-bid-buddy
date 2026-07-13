@@ -3712,21 +3712,67 @@ export async function registerRoutes(
     }
   });
 
+  // Schema di validazione del listino caricato da UI. L'Excel viene letto e
+  // convertito in `CanvassReference` lato browser (buildCanvassReferenceFromRows
+  // in shared/canvassMapping.ts); qui si valida la forma prima del salvataggio.
+  const canvassOfferSchema = z.object({
+    codice: z.string(),
+    offerId: z.string().nullable(),
+    nomeEtichetta: z.string(),
+    pista: z.string(),
+    categoria: z.string(),
+    tipologia: z.string(),
+    canone: z.number(),
+    brand: z.enum(["vodafone", "fastweb"]),
+  });
+  const canvassStepSchema = z.object({
+    externalId: z.number().nullable(),
+    pistaAssociata: z.string(),
+    pistaForm: z.string(),
+    domanda: z.string(),
+    ordine: z.number().nullable(),
+    attivo: z.boolean(),
+    brand: z.string(),
+  });
+  const canvassReferenceSchema = z.object({
+    periodo: z.string().min(1, "Periodo mancante"),
+    offers: z.array(canvassOfferSchema).min(1, "Il listino non contiene offerte"),
+    steps: z.array(canvassStepSchema),
+  });
+
   app.post("/api/admin/canvass-catalog/import", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile || profile.role !== "super_admin") {
         return res.status(403).json({ error: "Accesso non autorizzato" });
       }
-      // Import idempotente: riporta in system_config il catalogo baked
-      // (default deployato). Re-import = upsert, non duplica.
-      const { CANVASS_CATALOG } = await import("../shared/canvassCatalog");
-      await storage.upsertSystemConfig(CANVASS_CONFIG_KEY, CANVASS_CATALOG, profile.id);
+
+      // Due modalità:
+      // 1) body con `reference`: listino caricato da UI (Excel elaborato nel
+      //    browser). Validato con zod, poi salvato in system_config.
+      // 2) body vuoto: import idempotente del catalogo baked (default
+      //    deployato). Re-import = upsert, non duplica.
+      let reference;
+      if (req.body && req.body.reference) {
+        const parsed = canvassReferenceSchema.safeParse(req.body.reference);
+        if (!parsed.success) {
+          return res.status(400).json({
+            error: "Listino non valido",
+            details: parsed.error.issues.map((i) => i.message).join("; "),
+          });
+        }
+        reference = parsed.data;
+      } else {
+        const { CANVASS_CATALOG } = await import("../shared/canvassCatalog");
+        reference = CANVASS_CATALOG;
+      }
+
+      await storage.upsertSystemConfig(CANVASS_CONFIG_KEY, reference, profile.id);
       res.json({
         success: true,
-        periodo: CANVASS_CATALOG.periodo,
-        offersCount: CANVASS_CATALOG.offers.length,
-        stepsCount: CANVASS_CATALOG.steps.length,
+        periodo: reference.periodo,
+        offersCount: reference.offers.length,
+        stepsCount: reference.steps.length,
       });
     } catch (error: unknown) {
       console.error("Canvass catalog import error:", error);

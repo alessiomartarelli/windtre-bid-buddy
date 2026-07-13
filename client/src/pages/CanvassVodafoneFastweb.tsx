@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { apiUrl } from '@/lib/basePath';
@@ -25,13 +26,18 @@ import {
   ChevronRight,
   AlertTriangle,
   ListChecks,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
 } from 'lucide-react';
-import type {
-  CanvassOffer,
-  CanvassStepGroup,
-  CanvassAggregatedItem,
-  CanvassUnmappedItem,
-  CanvassMatchType,
+import {
+  buildCanvassReferenceFromRows,
+  type CanvassOffer,
+  type CanvassStepGroup,
+  type CanvassAggregatedItem,
+  type CanvassUnmappedItem,
+  type CanvassMatchType,
+  type CanvassReference,
 } from '@shared/canvassMapping';
 
 interface CatalogData {
@@ -81,6 +87,16 @@ export default function CanvassVodafoneFastweb() {
   const [search, setSearch] = useState('');
   const [selectedOrg, setSelectedOrg] = useState<string>('');
   const [importing, setImporting] = useState(false);
+  const [periodo, setPeriodo] = useState('');
+  const [parsedRef, setParsedRef] = useState<CanvassReference | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const listinoInputRef = useRef<HTMLInputElement>(null);
+  const stepInputRef = useRef<HTMLInputElement>(null);
+  const [listinoName, setListinoName] = useState('');
+  const [stepName, setStepName] = useState('');
+  const listinoRowsRef = useRef<Record<string, unknown>[] | null>(null);
+  const stepRowsRef = useRef<Record<string, unknown>[] | null>(null);
 
   const { data: catalog, isLoading: loadingCatalog } = useQuery<CatalogData>({
     queryKey: ['/api/admin/canvass-catalog'],
@@ -162,6 +178,109 @@ export default function CanvassVodafoneFastweb() {
     }
   };
 
+  const readRows = (file: File): Promise<Record<string, unknown>[]> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const buf = new Uint8Array(e.target?.result as ArrayBuffer);
+          const wb = XLSX.read(buf, { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          resolve(XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, unknown>[]);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(file);
+    });
+
+  const rebuildPreview = () => {
+    if (!listinoRowsRef.current || !stepRowsRef.current) {
+      setParsedRef(null);
+      return;
+    }
+    const per = periodo.trim() || catalog?.periodo || '';
+    try {
+      const ref = buildCanvassReferenceFromRows(listinoRowsRef.current, stepRowsRef.current, per);
+      if (ref.offers.length === 0) {
+        setParseError('Il listino caricato non contiene offerte valide (colonna CODICE mancante o vuota).');
+        setParsedRef(null);
+        return;
+      }
+      setParseError(null);
+      setParsedRef(ref);
+    } catch {
+      setParseError('Impossibile elaborare i file Excel. Verifica il formato.');
+      setParsedRef(null);
+    }
+  };
+
+  const handleFile = async (kind: 'listino' | 'step', file: File | undefined) => {
+    if (!file) return;
+    setParseError(null);
+    try {
+      const rows = await readRows(file);
+      if (kind === 'listino') {
+        listinoRowsRef.current = rows;
+        setListinoName(file.name);
+      } else {
+        stepRowsRef.current = rows;
+        setStepName(file.name);
+      }
+      rebuildPreview();
+    } catch {
+      setParseError(`Impossibile leggere il file "${file.name}". Deve essere un Excel (.xlsx/.xls).`);
+    }
+  };
+
+  useEffect(() => {
+    rebuildPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodo]);
+
+  const resetUpload = () => {
+    listinoRowsRef.current = null;
+    stepRowsRef.current = null;
+    setListinoName('');
+    setStepName('');
+    setParsedRef(null);
+    setParseError(null);
+    setPeriodo('');
+    if (listinoInputRef.current) listinoInputRef.current.value = '';
+    if (stepInputRef.current) stepInputRef.current.value = '';
+  };
+
+  const handleUpload = async () => {
+    if (!parsedRef) return;
+    try {
+      setUploading(true);
+      const res = await fetch(apiUrl('/api/admin/canvass-catalog/import'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference: parsedRef }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.details || data?.error || 'Errore');
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/canvass-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/canvass-mapped-sales'] });
+      toast({
+        title: 'Listino caricato',
+        description: `${data.offersCount} offerte, ${data.stepsCount} step (${data.periodo}).`,
+      });
+      resetUpload();
+    } catch (err) {
+      toast({
+        title: 'Errore',
+        description: err instanceof Error ? err.message : 'Impossibile caricare il listino.',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const changeMonth = (delta: number) => {
     let m = month + delta;
     let y = year;
@@ -206,6 +325,115 @@ export default function CanvassVodafoneFastweb() {
             </CardDescription>
           </CardHeader>
         </Card>
+
+        {isSuperAdmin && (
+          <Card className="mb-6" data-testid="card-upload-canvass">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Upload className="h-4 w-4" /> Carica listino aggiornato
+              </CardTitle>
+              <CardDescription>
+                Carica i due file Excel del mese (listino offerte + step di vendita). I file vengono
+                elaborati nel browser e, dopo l'anteprima dei conteggi, salvati come catalogo di
+                riferimento attivo per tutte le organizzazioni.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Listino offerte (Excel)</label>
+                  <input
+                    ref={listinoInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(e) => handleFile('listino', e.target.files?.[0])}
+                    className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted/80"
+                    data-testid="input-file-listino"
+                  />
+                  {listinoName && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1" data-testid="text-listino-name">
+                      <FileSpreadsheet className="h-3 w-3" /> {listinoName}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Step di vendita (Excel)</label>
+                  <input
+                    ref={stepInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(e) => handleFile('step', e.target.files?.[0])}
+                    className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-muted/80"
+                    data-testid="input-file-step"
+                  />
+                  {stepName && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1" data-testid="text-step-name">
+                      <FileSpreadsheet className="h-3 w-3" /> {stepName}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1.5 max-w-xs">
+                <label className="text-sm font-medium">Periodo</label>
+                <Input
+                  placeholder={catalog?.periodo || 'es. AGOSTO 2026'}
+                  value={periodo}
+                  onChange={(e) => setPeriodo(e.target.value)}
+                  data-testid="input-periodo"
+                />
+              </div>
+
+              {parseError && (
+                <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" data-testid="text-parse-error">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{parseError}</span>
+                </div>
+              )}
+
+              {parsedRef && (
+                <div className="rounded-md border bg-muted/40 p-3" data-testid="preview-canvass">
+                  <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Anteprima
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Offerte</div>
+                      <div className="text-lg font-semibold" data-testid="preview-offers-count">{parsedRef.offers.length}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Step</div>
+                      <div className="text-lg font-semibold" data-testid="preview-steps-count">{parsedRef.steps.length}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Periodo</div>
+                      <div className="text-lg font-semibold" data-testid="preview-periodo">{parsedRef.periodo || '—'}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleUpload}
+                  disabled={!parsedRef || uploading || !parsedRef?.periodo}
+                  data-testid="btn-save-canvass"
+                >
+                  {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                  Salva listino
+                </Button>
+                {(listinoName || stepName) && (
+                  <Button variant="ghost" onClick={resetUpload} disabled={uploading} data-testid="btn-reset-upload">
+                    Annulla
+                  </Button>
+                )}
+              </div>
+              {parsedRef && !parsedRef.periodo && (
+                <p className="text-xs text-muted-foreground">Inserisci il periodo per abilitare il salvataggio.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs defaultValue="listino">
           <TabsList data-testid="tabs-canvass">

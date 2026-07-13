@@ -21,6 +21,7 @@ const {
   categorizeCanvassArticle,
   aggregateCanvassSales,
   groupStepsByPista,
+  buildCanvassReferenceFromRows,
 } = await import('../shared/canvassMapping.ts');
 const { CANVASS_CATALOG } = await import('../shared/canvassCatalog.ts');
 
@@ -154,4 +155,40 @@ test('groupStepsByPista: raggruppa per pista FORM e ordina per ordine', () => {
   const mobile = groups.find((g) => g.pista === 'PISTA MOBILE');
   assert.ok(mobile);
   assert.ok(mobile.steps.length > 0);
+});
+
+test('buildCanvassReferenceFromRows: costruisce reference da righe Excel grezze', () => {
+  const listinoRows = [
+    { CODICE: ' can ohewd 2208 ', 'NOME ETICHETTA': 'Offerta A', PISTA: 'PISTA MOBILE', CATEGORIA: 'MOBILE', TIPOLOGIA: 'RIC', CANONE: '9,99' },
+    { CODICE: 'CANABCDE1111', 'NOME ETICHETTA': 'Offerta FW', PISTA: 'FASTWEB CASA', CATEGORIA: 'FISSO', TIPOLOGIA: 'FTTH', CANONE: 24.9 },
+    { CODICE: '', 'NOME ETICHETTA': 'da scartare', PISTA: 'X', CATEGORIA: '', TIPOLOGIA: '', CANONE: '' },
+  ];
+  const stepRows = [
+    { ID: '5', 'Pista Associata': 'PA', 'Pista FORM': 'PISTA MOBILE', Domanda: 'Domanda 1', Ordine: '2', ATTIVO: 'S', Brand: 'vodafone' },
+    { ID: '', 'Pista Associata': '', 'Pista FORM': '', Domanda: '', Ordine: '', ATTIVO: 'N', Brand: '' },
+  ];
+  const ref = buildCanvassReferenceFromRows(listinoRows, stepRows, '  AGOSTO 2026  ');
+  assert.equal(ref.periodo, 'AGOSTO 2026');
+  assert.equal(ref.offers.length, 2);
+  const [a, b] = ref.offers;
+  assert.equal(a.codice, 'CANOHEWD2208');
+  assert.equal(a.offerId, 'OHEWD');
+  assert.equal(a.canone, 9.99);
+  assert.equal(a.brand, 'vodafone');
+  assert.equal(b.brand, 'fastweb');
+  assert.equal(b.canone, 24.9);
+  assert.equal(ref.steps.length, 1);
+  assert.equal(ref.steps[0].externalId, 5);
+  assert.equal(ref.steps[0].ordine, 2);
+  assert.equal(ref.steps[0].attivo, true);
+});
+
+test('buildCanvassReferenceFromRows: nessuna offerta se manca CODICE', () => {
+  const ref = buildCanvassReferenceFromRows(
+    [{ CODICE: '', PISTA: 'X' }],
+    [],
+    'SETTEMBRE 2026',
+  );
+  assert.equal(ref.offers.length, 0);
+  assert.equal(ref.steps.length, 0);
 });

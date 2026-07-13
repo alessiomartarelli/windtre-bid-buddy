@@ -276,6 +276,61 @@ export function aggregateCanvassSales(
   };
 }
 
+/** Riga grezza del foglio "listino" (chiavi = intestazioni di colonna). */
+export type CanvassRawRow = Record<string, unknown>;
+
+/** Converte un canone grezzo (numero o stringa con virgola) in number. */
+function parseCanone(raw: unknown): number {
+  if (typeof raw === "number") return raw;
+  return parseFloat(String(raw ?? "").replace(",", ".")) || 0;
+}
+
+/**
+ * Costruisce un `CanvassReference` a partire dalle righe grezze dei due fogli
+ * Excel (listino offerte + step di vendita), già lette con
+ * `XLSX.utils.sheet_to_json(ws, { defval: "" })`.
+ *
+ * Logica pura, allineata a `scripts/generate-canvass-catalog.mjs`: è tenuta
+ * qui in shared/ così sia lo script (baked catalog) sia l'upload da UI
+ * producono lo stesso formato. Il brand delle offerte è derivato dalla pista.
+ */
+export function buildCanvassReferenceFromRows(
+  listinoRows: CanvassRawRow[],
+  stepRows: CanvassRawRow[],
+  periodo: string,
+): CanvassReference {
+  const offers: CanvassOffer[] = listinoRows
+    .filter((r) => String(r["CODICE"] ?? "").trim() !== "")
+    .map((r) => {
+      const codice = normalizeCodice(r["CODICE"]);
+      const pista = String(r["PISTA"] ?? "").trim();
+      return {
+        codice,
+        offerId: extractOfferId(codice),
+        nomeEtichetta: String(r["NOME ETICHETTA"] ?? "").trim(),
+        pista,
+        categoria: String(r["CATEGORIA"] ?? "").trim(),
+        tipologia: String(r["TIPOLOGIA"] ?? "").trim(),
+        canone: parseCanone(r["CANONE"]),
+        brand: deriveBrandFromPista(pista),
+      };
+    });
+
+  const steps: CanvassStep[] = stepRows
+    .filter((r) => String(r["Domanda"] ?? "").trim() !== "")
+    .map((r) => ({
+      externalId: r["ID"] === "" || r["ID"] == null ? null : Number(r["ID"]),
+      pistaAssociata: String(r["Pista Associata"] ?? "").trim(),
+      pistaForm: String(r["Pista FORM"] ?? "").trim(),
+      domanda: String(r["Domanda"] ?? "").trim(),
+      ordine: r["Ordine"] === "" || r["Ordine"] == null ? null : Number(r["Ordine"]),
+      attivo: String(r["ATTIVO"] ?? "").trim().toUpperCase() === "S",
+      brand: String(r["Brand"] ?? "").trim(),
+    }));
+
+  return { periodo: periodo.trim(), offers, steps };
+}
+
 export interface CanvassStepGroup {
   pista: string;
   steps: CanvassStep[];
