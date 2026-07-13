@@ -202,6 +202,24 @@ verso `coupon_caring` senza duplicati né gemelli partnership (idempotente).
 Nessun prerequisito. Step di validation `caring-cb-exclusion-tests`
 (`bash scripts/run-caring-cb-exclusion-tests.sh`). Run ~1s.
 
+## Caring esclusi dai totali CB — DB-backed (`tests/caring-cb-exclusion-db.test.mjs`)
+
+3 test DB-backed (Task #291, regressione di Task #289/#290) che esercitano il
+VERO percorso di aggregazione server-side, non solo le funzioni pure di mapping.
+Seminano righe `bisuite_sales` persistite per un'org effimera (COUPON CARING
+TIED/UNTIED + veri eventi CB rivincoli/untied su più PDV), le rileggono con
+`storage.getBisuiteSalesByItalianMonth` (lo stesso load della route
+`GET /api/admin/bisuite-mapped-sales`) e le passano ad `aggregateMappedSales`
+(`server/bisuiteMappedSales.ts`, la funzione estratta dalla route e da essa
+richiamata), con regole EFFETTIVE via `mergeWithDefaultRules`. Coprono: il
+caring atterra SOLO su `cb:coupon_caring` con i pezzi corretti per PDV e nei
+totali per pista, senza gonfiare i veri eventi CB (`cambio_offerta_rivincoli` /
+`cambio_offerta_untied`); il caring NON genera gemello `partnership` mentre i
+veri eventi CB sì; le vendite ANNULLATA (caring o CB) sono escluse dal load e
+quindi dall'aggregazione. Prerequisito: `DATABASE_URL` (NON serve il dev
+server). Step di validation `caring-cb-exclusion-db-tests`
+(`bash scripts/run-caring-cb-exclusion-db-tests.sh`). Run ~1-7s.
+
 ## Incentivazione Accessori/Servizi live tests (`tests/incentivazione-accessori-servizi.test.mjs`)
 
 4 scenari DB-backed (Task #174) su `aggregateAccessoriServizi`
