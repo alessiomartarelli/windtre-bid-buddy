@@ -16,6 +16,7 @@ import {
   trendYmdOf,
 } from "@shared/venditeReport";
 import { buildVenditeReportHtml, reportHtmlFileName } from "@shared/venditeReportHtml";
+import { aggregateDtsReport, filterDtsLeads, type DtsReportAggregates } from "@shared/dtsReport";
 import { fasciaFromTimeLabel, parseForecastConfig } from "@shared/venditeCommento";
 
 /**
@@ -268,6 +269,48 @@ export async function sendDailyReportForOrg(params: {
   // Allegato HTML (Task #248): replica leggibile della pagina Vendite
   // BiSuite. Un fallimento dell'allegato NON blocca il report: il testo è
   // già arrivato, logghiamo e segnaliamo docError al chiamante.
+  // Sezione DTS (Task #321): incidenza dei lead drive-to-store sulle
+  // vendite del mese. Solo se l'org ha lead caricati; qualsiasi errore
+  // non blocca il report (la sezione semplicemente non compare).
+  let dts: DtsReportAggregates | undefined;
+  try {
+    const dtsLeadRows = await storage.getDtsLeads(params.orgId);
+    if (dtsLeadRows.length > 0) {
+      const monthKey = ymd.slice(0, 7);
+      const leads = filterDtsLeads(
+        dtsLeadRows.map((l) => ({
+          leadKey: l.leadKey,
+          consulente: l.consulente,
+          campagna: l.campagna,
+          nominativo: l.nominativo,
+          email: l.email,
+          codiceFiscale: l.codiceFiscale,
+          telefono: l.telefono,
+          inCarico: l.inCarico,
+          stato: l.stato,
+          data: l.data,
+          idVendita: l.idVendita,
+          addettoVendita: l.addettoVendita,
+          origineLead: l.origineLead,
+        })),
+        { month: monthKey },
+      );
+      const agg = aggregateDtsReport(
+        leads,
+        monthRows.map((r) => ({
+          bisuiteId: r.bisuiteId,
+          stato: r.stato,
+          codicePos: r.codicePos,
+          nomeNegozio: r.nomeNegozio,
+          rawData: r.rawData,
+        })),
+      );
+      if (agg.totaleLead > 0 || agg.vendite.dts > 0) dts = agg;
+    }
+  } catch (e) {
+    console.error(`[telegram-report] sezione DTS fallita per org ${params.orgId}:`, e);
+  }
+
   const html = buildVenditeReportHtml({
     orgName: params.orgName,
     dateYMD: ymd,
@@ -277,6 +320,7 @@ export async function sendDailyReportForOrg(params: {
     history,
     month,
     monthProjection,
+    dts,
   });
   const fileName = reportHtmlFileName(params.orgName, ymd, params.timeLabel);
   const docResult = await sendTelegramDocument(params.botToken, params.chatId, fileName, html, {

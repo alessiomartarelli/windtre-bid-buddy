@@ -23,6 +23,7 @@ export const MODULES: ModuleDef[] = [
   { key: "incentivazione_interna", label: "Incentivazione Interna", group: "pagine", description: "Gare addetto: valenze + Accessori/Servizi live, sblocco gara" },
   { key: "vendite_bisuite", label: "Vendite BiSuite", group: "pagine" },
   { key: "customer_journey", label: "Customer Journey", group: "pagine", description: "Cross-sell strutturato sui clienti da nuova attivazione mobile" },
+  { key: "gestione_dts", label: "Gestione DTS", group: "pagine", description: "Lead drive-to-store: upload Excel, conversioni e incidenza sulle vendite" },
   { key: "mappatura_bisuite", label: "Mappatura BiSuite", group: "pagine", superOnly: true },
   { key: "simulatore", label: "Simulatore Preventivi", group: "pagine" },
   { key: "tabelle_calcolo", label: "Tabelle Calcolo", group: "pagine" },

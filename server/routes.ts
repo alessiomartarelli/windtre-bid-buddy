@@ -1229,6 +1229,102 @@ export async function registerRoutes(
     }
   });
 
+  // === Gestione DTS (Task #321) ===
+  // Lead drive-to-store: upload Excel (parsing client-side), lista lead e
+  // vendite del periodo per il calcolo dell'incidenza. Upload/cancellazione
+  // solo admin; lettura per chiunque abbia il modulo.
+  const dtsLeadSchema = z.object({
+    leadKey: z.string().min(1).max(500),
+    consulente: z.string().max(255).default(""),
+    campagna: z.string().max(500).default(""),
+    nominativo: z.string().max(255).default(""),
+    email: z.string().max(255).default(""),
+    codiceFiscale: z.string().max(64).default(""),
+    telefono: z.string().max(64).default(""),
+    inCarico: z.string().max(255).default(""),
+    stato: z.string().max(255).default(""),
+    data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    idVendita: z.number().int().positive().nullable(),
+    addettoVendita: z.string().max(255).default(""),
+    origineLead: z.string().max(255).default(""),
+  });
+  const dtsUploadSchema = z.object({
+    fileName: z.string().min(1).max(255),
+    leads: z.array(dtsLeadSchema).min(1).max(50000),
+  });
+
+  app.get("/api/dts/leads", isAuthenticated, requireModule("gestione_dts"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ message: "Profilo senza organizzazione" });
+      const leads = await storage.getDtsLeads(profile.organizationId);
+      res.json(leads);
+    } catch (e) {
+      console.error("Error listing DTS leads:", e);
+      res.status(500).json({ message: "Errore nel recupero dei lead DTS" });
+    }
+  });
+
+  // Vendite del periodo (range YMD in path, vedi convenzione queryKey→path)
+  // nella forma minima per il report DTS, ANNULLATA escluse.
+  app.get("/api/dts/sales/:from/:to", isAuthenticated, requireModule("gestione_dts"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ message: "Profilo senza organizzazione" });
+      const re = /^\d{4}-\d{2}-\d{2}$/;
+      const { from, to } = req.params as { from: string; to: string };
+      if (!re.test(from) || !re.test(to) || from > to) {
+        return res.status(400).json({ message: "Intervallo date non valido (YYYY-MM-DD)" });
+      }
+      const sales = await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, from, to, false);
+      res.json(sales.map((s) => ({
+        bisuiteId: s.bisuiteId,
+        stato: s.stato,
+        codicePos: s.codicePos,
+        nomeNegozio: s.nomeNegozio,
+        nomeAddetto: s.nomeAddetto,
+        rawData: s.rawData,
+      })));
+    } catch (e) {
+      console.error("Error fetching DTS sales:", e);
+      res.status(500).json({ message: "Errore nel recupero delle vendite per il report DTS" });
+    }
+  });
+
+  app.post("/api/dts/upload", isAuthenticated, requireModule("gestione_dts"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const parsed = dtsUploadSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Dati DTS non validi", errors: parsed.error.flatten() });
+      }
+      const { fileName, leads } = parsed.data;
+      const count = await storage.upsertDtsLeads(leads.map((l) => ({
+        ...l,
+        organizationId: profile.organizationId!,
+        fileName,
+        uploadedBy: profile.id,
+      })));
+      res.json({ ok: true, count });
+    } catch (e) {
+      console.error("Error saving DTS upload:", e);
+      res.status(500).json({ message: "Errore nel salvataggio dei lead DTS" });
+    }
+  });
+
+  app.delete("/api/dts/leads", isAuthenticated, requireModule("gestione_dts"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      await storage.deleteDtsLeads(profile.organizationId!);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("Error deleting DTS leads:", e);
+      res.status(500).json({ message: "Errore nell'eliminazione dei lead DTS" });
+    }
+  });
+
   // === Incentivazione interna (gare addetto, Task #170) ===
   // Config per org+mese+anno: sezioni/piste/target/lucchetti, categorie
   // connettore Accessori/Servizi, festività. Admin-editabile in-app.

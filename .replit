@@ -148,6 +148,10 @@ args = "canvass-authz-tests"
 task = "workflow.run"
 args = "non-windtre-authz-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "dts-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -450,6 +454,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-non-windtre-authz-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "dts-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-dts-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

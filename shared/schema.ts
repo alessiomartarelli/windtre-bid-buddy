@@ -276,6 +276,35 @@ export const drmsUploads = pgTable("drms_uploads", {
   index("IDX_drms_uploads_org_month_year").on(table.organizationId, table.month, table.year),
 ]);
 
+// Gestione DTS (Task #321): lead drive-to-store caricati da Excel, una riga
+// per lead, deduplicati per (organization_id, lead_key) con upsert (re-upload
+// = merge idempotente). `idVendita` aggancia la vendita BiSuite
+// (`bisuite_sales.bisuite_id`) quando il DTS è scaricato in cassa.
+export const dtsLeads = pgTable("dts_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  leadKey: varchar("lead_key").notNull(),
+  consulente: varchar("consulente").notNull().default(""),
+  campagna: varchar("campagna").notNull().default(""),
+  nominativo: varchar("nominativo").notNull().default(""),
+  email: varchar("email").notNull().default(""),
+  codiceFiscale: varchar("codice_fiscale").notNull().default(""),
+  telefono: varchar("telefono").notNull().default(""),
+  inCarico: varchar("in_carico").notNull().default(""),
+  stato: varchar("stato").notNull().default(""),
+  // Data del DTS in formato YYYY-MM-DD (null se assente nell'Excel).
+  data: varchar("data"),
+  idVendita: integer("id_vendita"),
+  addettoVendita: varchar("addetto_vendita").notNull().default(""),
+  origineLead: varchar("origine_lead").notNull().default(""),
+  fileName: varchar("file_name").notNull().default(""),
+  uploadedBy: varchar("uploaded_by").references(() => profiles.id),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("UQ_dts_leads_org_lead_key").on(table.organizationId, table.leadKey),
+  index("IDX_dts_leads_org_data").on(table.organizationId, table.data),
+]);
+
 // Incentivazione interna (gare addetto, Task #170): configurazione per
 // organizzazione e per mese/anno. `config` JSONB contiene sezioni, piste
 // (tracks), categorie connettore Accessori/Servizi e festività override.
@@ -550,6 +579,9 @@ export type InsertGaraConfig = typeof garaConfig.$inferInsert;
 
 export type DrmsUpload = typeof drmsUploads.$inferSelect;
 export type InsertDrmsUpload = typeof drmsUploads.$inferInsert;
+
+export type DtsLeadRow = typeof dtsLeads.$inferSelect;
+export type InsertDtsLeadRow = typeof dtsLeads.$inferInsert;
 
 export type IncentivazioneConfigRow = typeof incentivazioneConfig.$inferSelect;
 export type InsertIncentivazioneConfigRow = typeof incentivazioneConfig.$inferInsert;

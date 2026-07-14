@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
+import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets } from "@shared/customerJourney";
 
@@ -111,6 +111,11 @@ export interface IStorage {
   createDrmsUpload(upload: InsertDrmsUpload): Promise<DrmsUpload>;
   deleteDrmsUploadsByPeriod(orgId: string, month: number, year: number): Promise<void>;
   deleteDrmsUpload(id: string): Promise<void>;
+
+  // Gestione DTS (Task #321)
+  getDtsLeads(orgId: string): Promise<DtsLeadRow[]>;
+  upsertDtsLeads(rows: InsertDtsLeadRow[]): Promise<number>;
+  deleteDtsLeads(orgId: string): Promise<void>;
 
   // Incentivazione interna (gare addetto)
   getIncentivazioneConfig(orgId: string, month: number, year: number): Promise<IncentivazioneConfigRow | undefined>;
@@ -698,6 +703,53 @@ export class DatabaseStorage implements IStorage {
 
   async deleteDrmsUpload(id: string): Promise<void> {
     await db.delete(drmsUploads).where(eq(drmsUploads.id, id));
+  }
+
+  // === Gestione DTS (Task #321) ===
+
+  async getDtsLeads(orgId: string): Promise<DtsLeadRow[]> {
+    return db.select().from(dtsLeads)
+      .where(eq(dtsLeads.organizationId, orgId))
+      .orderBy(desc(dtsLeads.data), asc(dtsLeads.nominativo));
+  }
+
+  // Upsert batch per (organization_id, lead_key): il re-upload aggiorna i
+  // campi mutevoli (STATO, ID VENDITA, ...) senza duplicare i lead. Un ID
+  // VENDITA già noto non viene mai azzerato da un export che lo ha vuoto.
+  async upsertDtsLeads(rows: InsertDtsLeadRow[]): Promise<number> {
+    if (rows.length === 0) return 0;
+    const CHUNK = 200;
+    let count = 0;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK);
+      await db.insert(dtsLeads).values(chunk)
+        .onConflictDoUpdate({
+          target: [dtsLeads.organizationId, dtsLeads.leadKey],
+          set: {
+            consulente: sql`excluded.consulente`,
+            campagna: sql`excluded.campagna`,
+            nominativo: sql`excluded.nominativo`,
+            email: sql`excluded.email`,
+            codiceFiscale: sql`excluded.codice_fiscale`,
+            telefono: sql`excluded.telefono`,
+            inCarico: sql`excluded.in_carico`,
+            stato: sql`excluded.stato`,
+            data: sql`excluded.data`,
+            idVendita: sql`COALESCE(excluded.id_vendita, ${dtsLeads.idVendita})`,
+            addettoVendita: sql`excluded.addetto_vendita`,
+            origineLead: sql`excluded.origine_lead`,
+            fileName: sql`excluded.file_name`,
+            uploadedBy: sql`excluded.uploaded_by`,
+            uploadedAt: sql`now()`,
+          },
+        });
+      count += chunk.length;
+    }
+    return count;
+  }
+
+  async deleteDtsLeads(orgId: string): Promise<void> {
+    await db.delete(dtsLeads).where(eq(dtsLeads.organizationId, orgId));
   }
 
   // Incentivazione interna (gare addetto)

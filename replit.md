@@ -124,6 +124,10 @@ mantenere snello questo file:
   (`shared/canvassMapping.ts`) per categorizzare le vendite BiSuite per
   pista/categoria/tipologia/canone; route admin gate `mappatura_bisuite`,
   pagina read-only "Canvass VF", brand gating Vodafone/Fastweb.
+- [`docs/gestione-dts.md`](docs/gestione-dts.md) — Modulo Gestione DTS:
+  upload Excel lead drive-to-store (parsing client-side), match ID VENDITA
+  ↔ vendite BiSuite, dashboard incidenza per negozio/pista/categoria/
+  prodotto/consulente, sezione DTS nell'allegato HTML Telegram.
 - [`docs/incentivazione-interna.md`](docs/incentivazione-interna.md) —
   Modulo Incentivazione interna (gare addetto): valenze piste da Excel +
   Accessori/Servizi live BiSuite, config admin per-mese multi-gara
@@ -153,6 +157,7 @@ Riepilogo — suite → script → prerequisiti:
 | CJ report + filtri (28) | `run-customer-journey-report-tests.sh` | — (puri) | ~1s |
 | Telegram report (70) | `run-telegram-report-tests.sh` | — (puri) | ~1s |
 | Incentivazione (18) | `run-incentivazione-tests.sh` | — (puri) | ~1s |
+| Gestione DTS (16) | `run-dts-tests.sh` | — (puri) | ~1s |
 | Brand gating (7) | `run-brand-gating-tests.sh` | — (puri) | ~1s |
 | Org non-WindTre authz (2) | `run-non-windtre-authz-tests.sh` | app + DB | ~2s |
 | Permessi moduli utente (13) | `run-module-permissions-tests.sh` | app + DB (authz) | ~2s |

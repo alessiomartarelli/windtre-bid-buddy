@@ -127,6 +127,7 @@ test('scenario 2: org without WindTre modules sees Home with "Nessun modulo atti
         vendite_bisuite: false,
         customer_journey: false,
         incentivazione_interna: false,
+        gestione_dts: false,
         amministrazione: false,
         controllo_gestione: false,
       })],

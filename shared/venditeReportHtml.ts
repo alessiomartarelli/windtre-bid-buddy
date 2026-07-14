@@ -37,6 +37,7 @@ import {
   PISTA_CANVASS_LABELS,
   TYPE_LABELS,
 } from "./bisuiteClassification";
+import { type DtsReportAggregates, type DtsIncidenza } from "./dtsReport";
 
 // Palette per pista su fondo scuro (varianti luminose dei colori badge app).
 const PISTA_THEME: Record<PistaCanvass, string> = {
@@ -112,6 +113,12 @@ export interface VenditeReportHtmlParams {
    * Assente ⇒ non compare.
    */
   monthProjection?: MonthEndProjection;
+  /**
+   * Incidenza DTS del mese (Task #321): sezione dedicata nella pagina
+   * "Totale mese" con totale, per negozio e dettaglio pista/categoria/
+   * prodotto. Assente ⇒ la sezione non compare.
+   */
+  dts?: DtsReportAggregates;
 }
 
 // ---------------------------------------------------------------------------
@@ -580,10 +587,64 @@ function daySections(
   return parts.filter(Boolean).join("\n    ");
 }
 
+// --- Sezione DTS (Task #321) -----------------------------------------------
+
+const DTS_GREEN = "#4ade80";
+
+function dtsPct(i: DtsIncidenza): string {
+  return i.incidenzaPct === null ? "—" : `${String(i.incidenzaPct).replace(".", ",")}%`;
+}
+
+function dtsIncRow(nome: string, i: DtsIncidenza): string {
+  const pct = Math.max(0, Math.min(100, i.incidenzaPct ?? 0));
+  return `<div class="row">
+    <div class="row-top"><span>${escapeHtml(nome)}</span><b>${i.dts}<span class="muted"> / ${i.totale}</span> · ${dtsPct(i)}</b></div>
+    ${rankBar(pct, DTS_GREEN)}
+  </div>`;
+}
+
+/**
+ * Sezione "Drive to Store" della pagina mese: KPI lead (fissati, convertiti,
+ * tasso), incidenza sulle vendite totale e per negozio, dettaglio per
+ * pista, categoria canvass e prodotto. Aggregato vuoto (nessun lead e
+ * nessuna vendita) ⇒ stringa vuota.
+ */
+function dtsSection(dts: DtsReportAggregates | undefined): string {
+  if (!dts) return "";
+  if (dts.totaleLead === 0 && dts.vendite.totale === 0) return "";
+  const kpi = `<div class="dts-kpis">
+    <div><span class="muted">DTS fissati</span><b>${dts.totaleLead}</b></div>
+    <div><span class="muted">Convertiti</span><b>${dts.leadConvertiti}</b></div>
+    <div><span class="muted">Conversione</span><b>${dts.conversionePct === null ? "—" : String(dts.conversionePct).replace(".", ",") + "%"}</b></div>
+    <div><span class="muted">Incidenza vendite</span><b>${dtsPct(dts.vendite)}</b></div>
+  </div>`;
+  const piste = (Object.entries(dts.perPista) as Array<[PistaCanvass, DtsIncidenza]>)
+    .filter(([, v]) => v.totale > 0)
+    .sort((a, b) => b[1].dts - a[1].dts || b[1].totale - a[1].totale)
+    .map(([p, v]) => dtsIncRow(PISTA_CANVASS_LABELS[p] ?? p, v))
+    .join("");
+  const cats = dts.perCategoriaCanvass.slice(0, 8).map((c) => dtsIncRow(c.nome, c)).join("");
+  const prods = dts.perProdotto.slice(0, 8).map((c) => dtsIncRow(c.nome, c)).join("");
+  const negozi = dts.perNegozio
+    .map((n) => dtsIncRow(n.nomeNegozio || n.codicePos, n.vendite))
+    .join("");
+  const sub = (title: string, inner: string) =>
+    inner ? `<div class="dts-sub">${escapeHtml(title)}</div>${inner}` : "";
+  return `<section class="card">
+    <h2>Drive to Store · incidenza sulle vendite</h2>
+    ${kpi}
+    ${sub("Per negozio", negozi)}
+    ${sub("Per pista", piste)}
+    ${sub("Per categoria canvass", cats)}
+    ${sub("Per prodotto", prods)}
+  </section>`;
+}
+
 function monthSections(
   month: { label: string; aggregates: DailyReportAggregates },
   history: DayHistoryEntry[] | undefined,
   projection?: MonthEndProjection,
+  dts?: DtsReportAggregates,
 ): string {
   const a = month.aggregates;
   const parts: string[] = [
@@ -620,6 +681,7 @@ function monthSections(
     parts.push(pdvSection(a));
     parts.push(addettiSection(a));
   }
+  parts.push(dtsSection(dts));
   return parts.filter(Boolean).join("\n    ");
 }
 
@@ -666,7 +728,7 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
     }
     body = `<div class="page" data-page="d0">${sections.filter(Boolean).join("\n    ")}</div>`;
     if (p.month) {
-      body += `\n    <div class="page" data-page="month" hidden>${monthSections(p.month, undefined, p.monthProjection)}</div>`;
+      body += `\n    <div class="page" data-page="month" hidden>${monthSections(p.month, undefined, p.monthProjection, p.dts)}</div>`;
       script = navScript([{ ymd: p.dateYMD }], true);
       nav = navBar(true);
     }
@@ -689,7 +751,7 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
       return `<div class="page" data-page="d${i}"${isLast ? "" : " hidden"}>${daySections(day.aggregates, trendSlice, hero)}</div>`;
     });
     if (p.month) {
-      pages.push(`<div class="page" data-page="month" hidden>${monthSections(p.month, days, p.monthProjection)}</div>`);
+      pages.push(`<div class="page" data-page="month" hidden>${monthSections(p.month, days, p.monthProjection, p.dts)}</div>`);
     }
     body = pages.join("\n    ");
     nav = navBar(Boolean(p.month));
@@ -804,6 +866,17 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
   .bar { display: block; height: 6px; background: rgba(255,255,255,.06); border-radius: 999px; overflow: hidden; }
   .bar i { display: block; height: 100%; border-radius: 999px; }
+  .dts-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+  .dts-kpis > div { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+                    border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .dts-kpis .muted { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+  .dts-kpis b { font-size: 16px; }
+  .dts-sub { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8;
+             margin: 12px 0 4px; font-weight: 700; }
+  .row { padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .row:last-child { border-bottom: none; }
+  .row-top { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; margin-bottom: 5px; }
+  .muted { color: #94a3b8; }
   footer { color: #64748b; font-size: 12px; text-align: center; margin: 18px 0 8px; }
 </style>
 </head>

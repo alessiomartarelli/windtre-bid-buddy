@@ -16,6 +16,7 @@ import {
   FileText,
   Table2,
   PackageOpen,
+  CalendarClock,
 } from "lucide-react";
 
 function greeting(): string {
@@ -109,6 +110,13 @@ const SHORTCUTS: ShortcutDef[] = [
     label: "Incentivazione Interna",
     description: "Gare addetto e valenze",
     icon: Medal,
+  },
+  {
+    key: "gestione_dts",
+    path: "/gestione-dts",
+    label: "Gestione DTS",
+    description: "Lead drive-to-store e incidenza vendite",
+    icon: CalendarClock,
   },
   {
     key: "simulatore",
