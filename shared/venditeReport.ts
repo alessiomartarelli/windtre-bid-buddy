@@ -695,6 +695,9 @@ export const PERFORMANCE_WEIGHTS: Record<PistaCanvass, number> = {
   assicurazioni: 2,
   protecta: 10,
   cb: 0.5,
+  // Pista P.IVA del canvass VF (Task #317): usata solo dalla pagina Vendite
+  // BiSuite; il report Telegram resta WindTre-only, peso allineato al mobile.
+  iva: 1,
 };
 
 /** Punti per ogni telefono venduto (categoria TELEFONIA), valore flat. */

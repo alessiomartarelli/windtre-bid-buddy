@@ -43,6 +43,7 @@ const PISTA_THEME: Record<PistaCanvass, string> = {
   mobile: "#60a5fa",
   fisso: "#a78bfa",
   cb: "#fbbf24",
+  iva: "#818cf8",
   assicurazioni: "#2dd4bf",
   protecta: "#f87171",
   energia: "#4ade80",

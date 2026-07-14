@@ -3892,6 +3892,42 @@ export async function registerRoutes(
     }
   });
 
+  // Task #317 — reference canvass VF per la pagina Vendite BiSuite.
+  // Restituisce le offerte del listino canvass solo se l'org ha il brand
+  // Vodafone/Fastweb: la pagina le usa per classificare gli articoli come
+  // "canvass" (con pista dal listino) invece che come "prodotti". Gate sul
+  // modulo vendite_bisuite (accessibile anche agli operatori, a differenza
+  // delle route /api/admin/canvass-*).
+  app.get("/api/bisuite-canvass-reference", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile) return res.status(401).json({ error: "Unauthorized" });
+      const orgId = (req.query.organization_id as string) || profile.organizationId;
+      if (!orgId) return res.status(400).json({ error: "Organizzazione non specificata" });
+      if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+        return res.status(403).json({ error: "Accesso non autorizzato" });
+      }
+
+      const orgBrands = await storage.getOrganizationBrands(orgId);
+      const hasCanvassBrand = orgBrands.some((b) => /vodafone|fastweb/i.test(b.name));
+      if (!hasCanvassBrand) {
+        return res.json({ hasCanvassBrand: false, periodo: null, source: null, offers: [] });
+      }
+
+      const { reference, source } = await resolveCanvassReference();
+      res.json({
+        hasCanvassBrand: true,
+        periodo: reference.periodo,
+        source,
+        offers: reference.offers,
+      });
+    } catch (error: unknown) {
+      console.error("Bisuite canvass reference error:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: "Errore nel caricamento del listino canvass", details: msg });
+    }
+  });
+
   // === Struttura Organizzativa: CRUD RS / PDV (admin/super_admin) ===
   // Scrive su organization_config.puntiVendita e propaga rinomine/eliminazioni
   // alle tabelle CdG (cdg_spese, cdg_pdv_manuali, cdg_categorie, cdg_fornitori,

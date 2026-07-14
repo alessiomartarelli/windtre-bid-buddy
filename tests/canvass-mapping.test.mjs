@@ -243,3 +243,86 @@ test('validateCanvassHeaders: tollera spazi nelle intestazioni', () => {
   assert.equal(res.valid, true);
   assert.deepEqual(res.missing, []);
 });
+
+// === Task #317: classificazione brand-aware in Vendite BiSuite ===
+
+const {
+  classifyArticle,
+  classifySaleArticles,
+  pistaFromCanvassListino,
+  PISTA_CANVASS_LABELS,
+  PISTA_CANVASS_COLORS,
+} = await import('../shared/bisuiteClassification.ts');
+
+test('pistaFromCanvassListino: piste del listino VF → PistaCanvass', () => {
+  assert.equal(pistaFromCanvassListino('PISTA IVA'), 'iva');
+  assert.equal(pistaFromCanvassListino('PISTA MOBILE'), 'mobile');
+  assert.equal(pistaFromCanvassListino('PISTA MOBILE FASTWEB'), 'mobile');
+  assert.equal(pistaFromCanvassListino('PISTA FISSO'), 'fisso');
+  assert.equal(pistaFromCanvassListino('PISTA FISSO FASTWEB'), 'fisso');
+  assert.equal(pistaFromCanvassListino('PISTA CB'), 'cb');
+  assert.equal(pistaFromCanvassListino('ENERGIA FASTWEB'), 'energia');
+  assert.equal(pistaFromCanvassListino('ENERGIA VODAFONE'), 'energia');
+  assert.equal(pistaFromCanvassListino('VERISURE'), 'protecta');
+  assert.equal(pistaFromCanvassListino('QUALCOSA DI NUOVO'), undefined);
+});
+
+test('pista "iva" ha label e colore per la UI', () => {
+  assert.equal(PISTA_CANVASS_LABELS.iva, 'P.IVA');
+  assert.ok(PISTA_CANVASS_COLORS.iva);
+});
+
+test('classifyArticle con indice VF: articolo del listino → canvass con pista dal listino', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  // Codice esatto del listino (pista mobile).
+  const m = classifyArticle({ codice: 'CANOHEWD2208' }, index);
+  assert.deepEqual(m, { type: 'canvass', pista: 'mobile' });
+  // Un'offerta PISTA IVA del catalogo baked.
+  const ivaOffer = CANVASS_CATALOG.offers.find((o) => o.pista === 'PISTA IVA');
+  assert.ok(ivaOffer);
+  const mIva = classifyArticle({ codice: ivaOffer.codice }, index);
+  assert.deepEqual(mIva, { type: 'canvass', pista: 'iva' });
+  // Match per categoria/tipologia non ambigua, codice sconosciuto.
+  const mCat = classifyArticle(
+    { codice: 'ZZZ', categoria: { nome: 'OFFERTE VOCE' }, tipologia: { nome: 'OFFERTE VOCE WALLET PAY' } },
+    index,
+  );
+  assert.deepEqual(mCat, { type: 'canvass', pista: 'mobile' });
+});
+
+test('classifyArticle senza indice (org WindTre): comportamento invariato', () => {
+  // Articolo VF non presente nella mappa WindTre → null (poi default prodotti).
+  assert.equal(classifyArticle({ codice: 'CANOHEWD2208', categoria: { nome: 'OFFERTE VOCE' } }), null);
+  // Categorie WindTre classificate come prima.
+  assert.deepEqual(classifyArticle({ categoria: { nome: 'UNTIED' } }), { type: 'canvass', pista: 'mobile' });
+  assert.deepEqual(classifyArticle({ categoria: { nome: 'RICARICHE' } }), { type: 'prodotti' });
+});
+
+test('classifyArticle con indice: prodotti veri restano prodotti, categorie WindTre intatte', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  assert.deepEqual(classifyArticle({ codice: 'RIC5', categoria: { nome: 'RICARICHE' } }, index), { type: 'prodotti' });
+  assert.deepEqual(classifyArticle({ categoria: { nome: 'ACCESSORI' } }, index), { type: 'prodotti' });
+  assert.deepEqual(classifyArticle({ categoria: { nome: 'UNTIED' } }, index), { type: 'canvass', pista: 'mobile' });
+});
+
+test('classifySaleArticles con indice VF: card Canvass e countByPista coerenti', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const ivaOffer = CANVASS_CATALOG.offers.find((o) => o.pista === 'PISTA IVA');
+  const rawData = {
+    articoli: [
+      { codice: 'CANOHEWD2208', categoria: { nome: 'OFFERTE VOCE' }, tipologia: { nome: 'X' }, descrizione: 'Offerta mobile', dettaglio: { prezzo: '10.00', scontrino: 1 } },
+      { codice: ivaOffer.codice, categoria: { nome: ivaOffer.categoria }, tipologia: { nome: ivaOffer.tipologia }, descrizione: 'Offerta IVA', dettaglio: { prezzo: '20.00', scontrino: 1 } },
+      { codice: 'RICX', categoria: { nome: 'RICARICHE' }, tipologia: { nome: 'RICARICA' }, descrizione: 'Ricarica', dettaglio: { prezzo: '5.00', scontrino: 1 } },
+    ],
+  };
+  const sc = classifySaleArticles(rawData, index);
+  assert.equal(sc.countByType.canvass, 2);
+  assert.equal(sc.countByType.prodotti, 1);
+  assert.equal(sc.countByPista.mobile, 1);
+  assert.equal(sc.countByPista.iva, 1);
+  assert.equal(sc.hasCanvass, true);
+  // Stessa vendita senza indice: tutto ciò che non è in CATEGORY_MAP → prodotti.
+  const scNoIdx = classifySaleArticles(rawData);
+  assert.equal(scNoIdx.countByType.canvass, 0);
+  assert.equal(scNoIdx.countByType.prodotti, 3);
+});

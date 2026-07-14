@@ -1,6 +1,8 @@
+import { categorizeCanvassArticle, type CanvassIndex } from './canvassMapping';
+
 export type ArticleType = 'canvass' | 'prodotti' | 'servizi';
 
-export type PistaCanvass = 'mobile' | 'fisso' | 'cb' | 'assicurazioni' | 'protecta' | 'energia';
+export type PistaCanvass = 'mobile' | 'fisso' | 'cb' | 'iva' | 'assicurazioni' | 'protecta' | 'energia';
 
 export interface CategoryClassification {
   type: ArticleType;
@@ -67,10 +69,58 @@ export function classifyCategory(categoryName: string): CategoryClassification |
   return CATEGORY_MAP[key] || null;
 }
 
+/**
+ * Task #317 — mappa la pista "libera" del listino canvass Vodafone/Fastweb
+ * (es. "PISTA MOBILE", "PISTA IVA", "ENERGIA FASTWEB") sulla PistaCanvass
+ * usata dalla UI di Vendite BiSuite. Ritorna undefined se non riconosciuta
+ * (l'articolo resta comunque "canvass", solo senza chip pista).
+ */
+export function pistaFromCanvassListino(pista: string): PistaCanvass | undefined {
+  const p = (pista || '').toUpperCase();
+  if (/\bIVA\b/.test(p)) return 'iva';
+  if (p.includes('MOBILE')) return 'mobile';
+  if (p.includes('FISSO')) return 'fisso';
+  if (p.includes('CB')) return 'cb';
+  if (p.includes('ENERGIA')) return 'energia';
+  if (p.includes('VERISURE') || p.includes('ALLARM')) return 'protecta';
+  if (p.includes('ASSICURA')) return 'assicurazioni';
+  return undefined;
+}
+
+/** Forma minima di articolo BiSuite per la classificazione brand-aware. */
+export interface ClassifiableArticle {
+  codice?: unknown;
+  categoria?: { nome?: unknown } | null;
+  tipologia?: { nome?: unknown } | null;
+  descrizione?: unknown;
+}
+
+/**
+ * Classificatore brand-aware (Task #317): se è disponibile l'indice del
+ * listino canvass Vodafone/Fastweb (org con brand VF), prova prima il match
+ * canvass (codice → offerId → categoria/tipologia); se combacia, l'articolo
+ * è "canvass" con la pista derivata dal listino. Altrimenti ricade sulla
+ * mappa categorie WindTre (comportamento invariato per org WindTre/senza
+ * brand VF, dove canvassIndex è null/undefined).
+ */
+export function classifyArticle(
+  article: ClassifiableArticle,
+  canvassIndex?: CanvassIndex | null,
+): CategoryClassification | null {
+  if (canvassIndex) {
+    const match = categorizeCanvassArticle(article, canvassIndex);
+    if (match) {
+      return { type: 'canvass', pista: pistaFromCanvassListino(match.pista) };
+    }
+  }
+  return classifyCategory(String(article.categoria?.nome ?? '').trim());
+}
+
 export const PISTA_CANVASS_LABELS: Record<PistaCanvass, string> = {
   mobile: 'Mobile',
   fisso: 'Fisso',
   cb: 'CB',
+  iva: 'P.IVA',
   assicurazioni: 'Assicurazioni',
   protecta: 'Windtre Protetti',
   energia: 'Energia',
@@ -80,6 +130,7 @@ export const PISTA_CANVASS_COLORS: Record<PistaCanvass, string> = {
   mobile: 'bg-blue-500/10 text-blue-700 border-blue-500/20',
   fisso: 'bg-purple-500/10 text-purple-700 border-purple-500/20',
   cb: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
+  iva: 'bg-indigo-500/10 text-indigo-700 border-indigo-500/20',
   assicurazioni: 'bg-teal-500/10 text-teal-700 border-teal-500/20',
   protecta: 'bg-red-500/10 text-red-700 border-red-500/20',
   energia: 'bg-green-500/10 text-green-700 border-green-500/20',
@@ -130,7 +181,10 @@ export interface SaleClassification {
 
 const _warnedCategories = new Set<string>();
 
-export function classifySaleArticles(rawData: any): SaleClassification {
+export function classifySaleArticles(
+  rawData: any,
+  canvassIndex?: CanvassIndex | null,
+): SaleClassification {
   const articoli = rawData?.articoli || [];
   const articles: ClassifiedArticle[] = [];
   const countByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
@@ -153,7 +207,7 @@ export function classifySaleArticles(rawData: any): SaleClassification {
       flagScontrinoRaw === 1 ||
       flagScontrinoRaw === '1' ||
       flagScontrinoRaw === true;
-    const classification = classifyCategory(catNome);
+    const classification = classifyArticle(art, canvassIndex);
 
     if (classification) {
       const classified: ClassifiedArticle = {

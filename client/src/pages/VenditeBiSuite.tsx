@@ -89,12 +89,13 @@ import {
   type PistaCanvass,
   type SaleClassification,
   classifySaleArticles,
-  classifyCategory,
+  classifyArticle,
   PISTA_CANVASS_LABELS,
   PISTA_CANVASS_COLORS,
   TYPE_LABELS,
   TYPE_COLORS,
 } from "@/lib/bisuiteClassification";
+import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
 
 interface BisuiteSale {
   id: string;
@@ -138,6 +139,7 @@ const PISTA_ICONS: Record<PistaCanvass, React.ReactNode> = {
   mobile: <Smartphone className="h-3.5 w-3.5" />,
   fisso: <Wifi className="h-3.5 w-3.5" />,
   cb: <Users className="h-3.5 w-3.5" />,
+  iva: <Landmark className="h-3.5 w-3.5" />,
   assicurazioni: <Shield className="h-3.5 w-3.5" />,
   protecta: <Lock className="h-3.5 w-3.5" />,
   energia: <Zap className="h-3.5 w-3.5" />,
@@ -349,6 +351,30 @@ export default function VenditeBiSuite() {
     enabled: !!orgId,
   });
 
+  // Task #317 — listino canvass Vodafone/Fastweb: se l'org ha il brand VF il
+  // server restituisce le offerte del listino, usate per classificare gli
+  // articoli come "canvass" (con pista dal listino) invece che "prodotti".
+  // Per org WindTre/senza brand VF: offers vuoto → classificazione invariata.
+  const { data: canvassRef } = useQuery<{ hasCanvassBrand: boolean; offers: CanvassOffer[] }>({
+    queryKey: ["/api/bisuite-canvass-reference", orgId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (orgId) params.set("organization_id", orgId);
+      const res = await fetch(apiUrl(`/api/bisuite-canvass-reference?${params.toString()}`), {
+        credentials: "include",
+      });
+      if (!res.ok) return { hasCanvassBrand: false, offers: [] };
+      return res.json();
+    },
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const canvassIndex = useMemo(() => {
+    if (!canvassRef?.hasCanvassBrand || !canvassRef.offers?.length) return null;
+    return buildCanvassIndex(canvassRef.offers);
+  }, [canvassRef]);
+
   // rawSales include anche le ANNULLATA (visibili nella tabella grezza con badge),
   // mentre `sales` viene usato per tutti i conteggi/aggregati e le esclude.
   const rawSales = data?.sales || [];
@@ -360,10 +386,10 @@ export default function VenditeBiSuite() {
   const saleClassifications = useMemo(() => {
     const map = new Map<string, SaleClassification>();
     rawSales.forEach((s) => {
-      map.set(s.id, classifySaleArticles(s.rawData));
+      map.set(s.id, classifySaleArticles(s.rawData, canvassIndex));
     });
     return map;
-  }, [rawSales]);
+  }, [rawSales, canvassIndex]);
 
   // Indica se almeno un filtro "componente" (Tipo / Pista) è attivo: in tal
   // caso gli aggregati di pezzi/importi devono essere calcolati a livello
@@ -707,11 +733,11 @@ export default function VenditeBiSuite() {
     const articoli: any[] = raw.articoli || [];
     const cliente = raw.cliente || {};
     const canvassArts = articoli.filter((a: any) => {
-      const cls = classifyCategory((a.categoria?.nome || '').trim());
+      const cls = classifyArticle(a, canvassIndex);
       return cls?.type === 'canvass';
     });
     const prodottiArts = articoli.filter((a: any) => {
-      const cls = classifyCategory((a.categoria?.nome || '').trim());
+      const cls = classifyArticle(a, canvassIndex);
       return cls?.type === 'prodotti' || cls?.type === 'servizi';
     });
     const domandeMap: Record<string, string> = {};
@@ -736,7 +762,7 @@ export default function VenditeBiSuite() {
       piva: cliente.piva || '',
       nomeCliente: sale.nomeCliente || cliente.nominativo || '',
     };
-  }, []);
+  }, [canvassIndex]);
 
   const exportExcelDettaglio = useCallback(() => {
     const rows: Record<string, any>[] = [];
@@ -788,7 +814,7 @@ export default function VenditeBiSuite() {
         const articoli: any[] = sale.rawData?.articoli || [];
         for (const art of articoli) {
           const catName = (art.categoria?.nome || '').trim();
-          const cls = classifyCategory(catName);
+          const cls = classifyArticle(art, canvassIndex);
           if (cls?.type === 'canvass') canvassCounts[catName] = (canvassCounts[catName] || 0) + 1;
           if (cls?.type === 'prodotti' || cls?.type === 'servizi') prodottiCounts[catName] = (prodottiCounts[catName] || 0) + 1;
           const qas: any[] = art.dettaglio?.domandeRisposte || [];
@@ -1714,6 +1740,7 @@ export default function VenditeBiSuite() {
       <SaleDetailDialog
         sale={selectedSale}
         classification={selectedSale ? saleClassifications.get(selectedSale.id) : undefined}
+        canvassIndex={canvassIndex}
         onClose={() => setSelectedSale(null)}
       />
 
@@ -1851,10 +1878,12 @@ function SalePistaBadges({ classification }: { classification?: SaleClassificati
 function SaleDetailDialog({
   sale,
   classification,
+  canvassIndex,
   onClose,
 }: {
   sale: BisuiteSale | null;
   classification?: SaleClassification;
+  canvassIndex?: ReturnType<typeof buildCanvassIndex> | null;
   onClose: () => void;
 }) {
   if (!sale) return null;
@@ -1988,8 +2017,7 @@ function SaleDetailDialog({
                   </TableHeader>
                   <TableBody>
                     {articoli.map((art: any, idx: number) => {
-                      const catNome = (art.categoria?.nome || '').trim();
-                      const cls = classifyCategory(catNome);
+                      const cls = classifyArticle(art, canvassIndex);
                       return (
                         <TableRow key={idx}>
                           <TableCell className="text-sm font-medium">
