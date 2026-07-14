@@ -80,10 +80,20 @@ test("isModuleAccessible: intersezione org ∩ brand ∩ utente", () => {
     isModuleAccessible({
       enabledModules: {},
       brandNames: ["Vodafone"],
+      moduliConsentiti: ["gara_dashboard"],
+      key: "gara_dashboard",
+    }),
+    false,
+  );
+  // Moduli BiSuite NON sono più brand-gated: ok anche con brand non WindTre.
+  assert.equal(
+    isModuleAccessible({
+      enabledModules: {},
+      brandNames: ["Vodafone"],
       moduliConsentiti: ["customer_journey"],
       key: "customer_journey",
     }),
-    false,
+    true,
   );
 });
 
@@ -119,12 +129,14 @@ test("sanitizeGrantableModules: scarta moduli disabilitati per l'org", () => {
 
 test("sanitizeGrantableModules: scarta moduli WindTre-gated se il brand non è WindTre", () => {
   const out = sanitizeGrantableModules(
-    ["customer_journey", "controllo_gestione"],
+    ["gara_dashboard", "customer_journey", "controllo_gestione"],
     {},
     ["Vodafone"],
   );
-  // customer_journey è WindTre-gated => scartato; controllo_gestione no.
-  assert.ok(!out.includes("customer_journey"));
+  // gara_dashboard è WindTre-gated => scartato; customer_journey e
+  // controllo_gestione non sono più gated.
+  assert.ok(!out.includes("gara_dashboard"));
+  assert.ok(out.includes("customer_journey"));
   assert.ok(out.includes("controllo_gestione"));
   for (const k of WINDTRE_GATED_MODULES) {
     assert.ok(!out.includes(k), `${k} non deve passare senza brand WindTre`);

@@ -134,7 +134,7 @@ test('scenario 2: update-user clamps granted modules to org and brand perimeter'
     await setRole(pool, session.profileId, 'admin');
 
     // Disabilita controllo_gestione per l'org e associa un brand NON WindTre,
-    // così i moduli WindTre-gated (es. customer_journey) sono fuori perimetro.
+    // così i moduli WindTre-gated (es. tabelle_calcolo) sono fuori perimetro.
     await pool.query(
       `UPDATE organizations SET enabled_modules = $2 WHERE id = $1`,
       [session.orgId, JSON.stringify({ controllo_gestione: false })],
@@ -156,7 +156,7 @@ test('scenario 2: update-user clamps granted modules to org and brand perimeter'
         user_id: targetId,
         moduliConsentiti: [
           'controllo_gestione', // disabilitato per l'org => scartato
-          'customer_journey', // WindTre-gated, brand non WindTre => scartato
+          'customer_journey', // NON più brand-gated => tenuto
           'chiave_inventata', // ignota => scartata
           'tabelle_calcolo', // WindTre-gated => scartato
           'mappatura_bisuite', // superOnly => scartato
@@ -171,7 +171,7 @@ test('scenario 2: update-user clamps granted modules to org and brand perimeter'
     );
     const moduli = saved.rows[0]?.moduli_consentiti ?? [];
     assert.ok(!moduli.includes('controllo_gestione'), 'org-disabled module must be dropped');
-    assert.ok(!moduli.includes('customer_journey'), 'brand-gated module must be dropped');
+    assert.ok(moduli.includes('customer_journey'), 'non-gated module must be kept');
     assert.ok(!moduli.includes('tabelle_calcolo'), 'brand-gated module must be dropped');
     assert.ok(!moduli.includes('chiave_inventata'), 'unknown key must be dropped');
     assert.ok(!moduli.includes('mappatura_bisuite'), 'superOnly module must be dropped');

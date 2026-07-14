@@ -22,7 +22,14 @@ test("isWindtreBrandName rifiuta altri brand", () => {
 });
 
 test("moduli non gated sempre consentiti anche senza WindTre", () => {
-  for (const key of ["amministrazione", "controllo_gestione", "mappatura_bisuite"]) {
+  for (const key of [
+    "amministrazione",
+    "controllo_gestione",
+    "mappatura_bisuite",
+    "vendite_bisuite",
+    "incentivazione_interna",
+    "customer_journey",
+  ]) {
     assert.equal(isModuleAllowedForBrands(["Vodafone"], key), true, key);
   }
 });
@@ -52,14 +59,11 @@ test("lista moduli gated attesa", () => {
   assert.deepEqual(
     [...WINDTRE_GATED_MODULES].sort(),
     [
-      "customer_journey",
       "drms_commissioning",
       "gara_configurazione",
       "gara_dashboard",
-      "incentivazione_interna",
       "simulatore",
       "tabelle_calcolo",
-      "vendite_bisuite",
     ].sort(),
   );
 });

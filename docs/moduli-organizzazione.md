@@ -23,8 +23,10 @@ Oltre a `enabledModules`, i moduli WindTre-specifici sono visibili solo se
 l'org ha il brand WindTre associato (`organization_brands`). Lista in
 `WINDTRE_GATED_MODULES` (`shared/modules.ts`): `simulatore`,
 `tabelle_calcolo`, `gara_dashboard`, `gara_configurazione`,
-`drms_commissioning`, `incentivazione_interna`, `vendite_bisuite`,
-`customer_journey`.
+`drms_commissioning`. I moduli basati su BiSuite (`vendite_bisuite`,
+`incentivazione_interna`, `customer_journey`) NON sono brand-gated
+(Task #314): BiSuite è usato anche da org Vodafone/Fastweb, quindi
+questi moduli dipendono solo da org toggle e whitelist utente.
 
 - **Fallback sicuro**: org SENZA alcun brand associato ⇒ nessun filtro
   (comportamento pre-esistente). Il filtro scatta solo quando l'org ha

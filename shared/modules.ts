@@ -47,9 +47,6 @@ export const WINDTRE_GATED_MODULES: string[] = [
   "gara_dashboard",
   "gara_configurazione",
   "drms_commissioning",
-  "incentivazione_interna",
-  "vendite_bisuite",
-  "customer_journey",
 ];
 
 // Riconosce il brand WindTre in modo tollerante: "WindTre", "Wind Tre",
