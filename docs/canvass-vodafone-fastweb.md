@@ -49,10 +49,17 @@ Un **super_admin** può "importare" il catalogo baked in `system_config`
 **upsert idempotente** (re-import = sovrascrittura, non duplica). L'engine e
 le route usano `system_config` se presente, altrimenti il baked.
 
-> **Nota**: al momento non c'è upload Excel dalla UI (il server non monta
-> `multer`; aggiungerlo sarebbe una modifica di dipendenze da concordare).
-> L'aggiornamento del listino passa quindi da rigenerazione baked + deploy,
-> oppure da import del baked. Upload da UI = possibile follow-up.
+L'aggiornamento mensile del listino si fa **dalla UI** (Task #303, solo
+super_admin): la card "Carica listino aggiornato" legge i due Excel nel
+browser (`xlsx`, nessun `multer`), li converte con
+`buildCanvassReferenceFromRows` e li salva via
+`POST /api/admin/canvass-catalog/import` con body `{ reference }` (zod).
+Le colonne dei fogli sono validate PRIMA del salvataggio con
+`validateCanvassColumns` (Task #305): colonne mancanti/sbagliate =>
+messaggio d'errore con l'elenco delle colonne e salvataggio bloccato; il
+server rifiuta comunque con 400 un reference senza offerte. Il pulsante
+"Ripristina catalogo di sistema" (Task #306) rimuove l'override e torna al
+baked.
 
 ## Engine puro — `shared/canvassMapping.ts`
 
@@ -79,7 +86,8 @@ Funzioni pure, senza dipendenze da server/DB/React:
 | Metodo | Route | Ruolo | Descrizione |
 |---|---|---|---|
 | GET  | `/api/admin/canvass-catalog` | super_admin/admin | Listino + step raggruppati per pista + `source` (`saved`/`default`). |
-| POST | `/api/admin/canvass-catalog/import` | super_admin | Upsert idempotente del baked in `system_config`. |
+| POST | `/api/admin/canvass-catalog/import` | super_admin | Con body `{reference}`: salva il listino caricato da UI (zod). Senza body: upsert idempotente del baked in `system_config`. |
+| POST | `/api/admin/canvass-catalog/reset` | super_admin | Rimuove l'override caricato e torna al catalogo baked. |
 | GET  | `/api/admin/canvass-mapped-sales` | super_admin (qualsiasi org) / admin (propria org) | Categorizza le vendite dell'org per `month`/`year`. |
 
 **Brand gating**: `canvass-mapped-sales` applica la categorizzazione solo
@@ -110,7 +118,14 @@ le org Vodafone/Fastweb esistono solo in **produzione** (il DB dev ha solo
 
 ## Test
 
-Suite pura `tests/canvass-mapping.test.mjs` (12 test) via
+Suite pura `tests/canvass-mapping.test.mjs` (17 test) via
 `scripts/run-canvass-mapping-tests.sh` — validation/workflow
 `canvass-mapping-tests`. Non richiede né dev server né DB (moduli TS via
-loader `tsx`). Vedi `docs/testing.md`.
+loader `tsx`).
+
+Suite authz `tests/canvass-authz.test.mjs` (3 scenari, Task #302) via
+`scripts/run-canvass-authz-tests.sh` — validation `canvass-authz-tests`:
+operatore => 403 su tutte le route, admin limitato alla propria org e senza
+import/reset, import senza offerte => 400. Richiede app attiva + DB.
+
+Vedi `docs/testing.md`.

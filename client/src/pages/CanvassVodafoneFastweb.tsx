@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import {
   buildCanvassReferenceFromRows,
+  validateCanvassColumns,
   type CanvassOffer,
   type CanvassStepGroup,
   type CanvassAggregatedItem,
@@ -233,6 +234,15 @@ export default function CanvassVodafoneFastweb() {
     }
     const per = periodo.trim() || catalog?.periodo || '';
     try {
+      const cols = validateCanvassColumns(listinoRowsRef.current, stepRowsRef.current);
+      if (!cols.ok) {
+        const parts: string[] = [];
+        if (cols.missingListino.length > 0) parts.push(`listino: ${cols.missingListino.join(', ')}`);
+        if (cols.missingStep.length > 0) parts.push(`step: ${cols.missingStep.join(', ')}`);
+        setParseError(`Colonne mancanti nei file caricati — ${parts.join(' · ')}. Verifica di aver selezionato i file giusti.`);
+        setParsedRef(null);
+        return;
+      }
       const ref = buildCanvassReferenceFromRows(listinoRowsRef.current, stepRowsRef.current, per);
       if (ref.offers.length === 0) {
         setParseError('Il listino caricato non contiene offerte valide (colonna CODICE mancante o vuota).');

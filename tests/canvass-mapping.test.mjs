@@ -22,6 +22,7 @@ const {
   aggregateCanvassSales,
   groupStepsByPista,
   buildCanvassReferenceFromRows,
+  validateCanvassColumns,
 } = await import('../shared/canvassMapping.ts');
 const { CANVASS_CATALOG } = await import('../shared/canvassCatalog.ts');
 
@@ -191,4 +192,36 @@ test('buildCanvassReferenceFromRows: nessuna offerta se manca CODICE', () => {
   );
   assert.equal(ref.offers.length, 0);
   assert.equal(ref.steps.length, 0);
+});
+
+test('validateCanvassColumns: ok con le colonne attese (Task #305)', () => {
+  const listinoRows = [
+    { CODICE: 'CANABCDE1111', 'NOME ETICHETTA': 'X', PISTA: 'PISTA MOBILE', CATEGORIA: 'MOBILE', TIPOLOGIA: 'RIC', CANONE: '9,99' },
+  ];
+  const stepRows = [
+    { ID: '1', 'Pista Associata': 'PA', 'Pista FORM': 'PISTA MOBILE', Domanda: 'D1', Ordine: '1', ATTIVO: 'S', Brand: 'vodafone' },
+  ];
+  const v = validateCanvassColumns(listinoRows, stepRows);
+  assert.equal(v.ok, true);
+  assert.deepEqual(v.missingListino, []);
+  assert.deepEqual(v.missingStep, []);
+});
+
+test('validateCanvassColumns: rileva colonne sbagliate/mancanti (Task #305)', () => {
+  // File sbagliato per il listino (es. un export vendite qualsiasi).
+  const wrongListino = [{ Cliente: 'Mario', Importo: 10 }];
+  const wrongSteps = [{ Question: 'D1', Track: 'X' }];
+  const v = validateCanvassColumns(wrongListino, wrongSteps);
+  assert.equal(v.ok, false);
+  assert.ok(v.missingListino.includes('CODICE'));
+  assert.ok(v.missingListino.includes('PISTA'));
+  assert.ok(v.missingStep.includes('Domanda'));
+  assert.ok(v.missingStep.includes('Pista FORM'));
+});
+
+test('validateCanvassColumns: fogli vuoti = tutte le colonne mancanti (Task #305)', () => {
+  const v = validateCanvassColumns([], []);
+  assert.equal(v.ok, false);
+  assert.equal(v.missingListino.length, 6);
+  assert.equal(v.missingStep.length, 2);
 });

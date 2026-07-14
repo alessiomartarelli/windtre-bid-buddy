@@ -155,7 +155,8 @@ Riepilogo — suite → script → prerequisiti:
 | Incentivazione (18) | `run-incentivazione-tests.sh` | — (puri) | ~1s |
 | Brand gating (7) | `run-brand-gating-tests.sh` | — (puri) | ~1s |
 | Permessi moduli utente (13) | `run-module-permissions-tests.sh` | app + DB (authz) | ~2s |
-| Canvass VF mapping (12) | `run-canvass-mapping-tests.sh` | — (puri) | ~1s |
+| Canvass VF mapping (17) | `run-canvass-mapping-tests.sh` | — (puri) | ~1s |
+| Canvass VF authz (3) | `run-canvass-authz-tests.sh` | app + DB | ~6s |
 | Caring esclusi da CB (7) | `run-caring-cb-exclusion-tests.sh` | — (puri) | ~1s |
 | Caring esclusi da CB DB (3) | `run-caring-cb-exclusion-db-tests.sh` | `DATABASE_URL` | ~1-7s |
 | Device + Acc/Servizi DB (4) | `run-devices-accessori-servizi-tests.sh` | `DATABASE_URL` | ~1-5s |

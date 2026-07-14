@@ -279,6 +279,54 @@ export function aggregateCanvassSales(
 /** Riga grezza del foglio "listino" (chiavi = intestazioni di colonna). */
 export type CanvassRawRow = Record<string, unknown>;
 
+/** Colonne richieste nel foglio listino offerte canvass. */
+export const REQUIRED_LISTINO_COLUMNS = [
+  "CODICE",
+  "NOME ETICHETTA",
+  "PISTA",
+  "CATEGORIA",
+  "TIPOLOGIA",
+  "CANONE",
+] as const;
+
+/** Colonne richieste nel foglio step di vendita. */
+export const REQUIRED_STEP_COLUMNS = ["Pista FORM", "Domanda"] as const;
+
+export interface CanvassColumnsValidation {
+  ok: boolean;
+  missingListino: string[];
+  missingStep: string[];
+}
+
+/**
+ * Verifica che i fogli Excel caricati abbiano le colonne attese PRIMA di
+ * costruire il reference (Task #305). Le righe arrivano da
+ * `XLSX.utils.sheet_to_json(ws, { defval: "" })`, quindi ogni riga contiene
+ * tutte le intestazioni come chiavi: si controlla l'unione delle chiavi delle
+ * prime righe. Un foglio vuoto conta come "tutte le colonne mancanti".
+ */
+export function validateCanvassColumns(
+  listinoRows: CanvassRawRow[],
+  stepRows: CanvassRawRow[],
+): CanvassColumnsValidation {
+  const collectKeys = (rows: CanvassRawRow[]): Set<string> => {
+    const keys = new Set<string>();
+    for (const row of rows.slice(0, 25)) {
+      for (const k of Object.keys(row)) keys.add(k.trim());
+    }
+    return keys;
+  };
+  const listinoKeys = collectKeys(listinoRows);
+  const stepKeys = collectKeys(stepRows);
+  const missingListino = REQUIRED_LISTINO_COLUMNS.filter((c) => !listinoKeys.has(c));
+  const missingStep = REQUIRED_STEP_COLUMNS.filter((c) => !stepKeys.has(c));
+  return {
+    ok: missingListino.length === 0 && missingStep.length === 0,
+    missingListino: [...missingListino],
+    missingStep: [...missingStep],
+  };
+}
+
 /** Converte un canone grezzo (numero o stringa con virgola) in number. */
 function parseCanone(raw: unknown): number {
   if (typeof raw === "number") return raw;

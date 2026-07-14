@@ -186,7 +186,7 @@ Step di validation `brand-gating-tests`
 
 ## Canvass VF mapping tests (`tests/canvass-mapping.test.mjs`)
 
-12 test puri sull'engine di categorizzazione canvass Vodafone/Fastweb
+17 test puri sull'engine di categorizzazione canvass Vodafone/Fastweb
 (`shared/canvassMapping.ts` + catalogo baked `shared/canvassCatalog.ts`).
 Coprono: forma del catalogo baked (306 offerte, 76 step, periodo);
 `normalizeCodice`/`extractOfferId` (5 char centrali di `CAN·····dddd`,
@@ -197,10 +197,28 @@ categoria|tipologia ambigue, es. "FASTWEB ENERGIA|LUCE FASTWEB");
 `categorizeCanvassArticle` (match a cascata codice→offerId→catTip→null,
 incluso fallback su edizione diversa); `aggregateCanvassSales`
 (pezzi/canone per pista, non mappati raggruppati per codice, matchCounts);
-`groupStepsByPista` (raggruppamento + ordinamento). Logica pura: nessun
+`groupStepsByPista` (raggruppamento + ordinamento);
+`buildCanvassReferenceFromRows` (reference da righe Excel grezze, Task #303);
+`validateCanvassColumns` (colonne richieste nei due fogli Excel, colonne
+sbagliate/mancanti rilevate prima del salvataggio, fogli vuoti, Task #305).
+Logica pura: nessun
 prerequisito (né dev server né DB), moduli TS via loader `tsx`. Step di
 validation `canvass-mapping-tests`
 (`bash scripts/run-canvass-mapping-tests.sh`). Run ~1s.
+
+## Canvass VF authz tests (`tests/canvass-authz.test.mjs`)
+
+3 scenari (Task #302) sui confini di ruolo/organizzazione delle route
+canvass Vodafone/Fastweb: (1) `operatore` => 403 su tutte e 4 le route
+(`/api/admin/canvass-catalog`, `.../canvass-mapped-sales`,
+`.../canvass-catalog/import`, `.../canvass-catalog/reset`); (2) `admin` =>
+200 su catalogo e vendite della PROPRIA org, 403 su
+`organization_id` estraneo e su import/reset (riservati al super_admin);
+(3) `super_admin` che importa un reference senza offerte (colonne Excel
+sbagliate, Task #305) => 400. Stessa strategia di admin-authz: signup +
+mutazione ruolo via SQL, cleanup org di test. Prerequisiti: app attiva su
+`localhost:5000` + `DATABASE_URL`. Step di validation `canvass-authz-tests`
+(`bash scripts/run-canvass-authz-tests.sh`). Run ~6s.
 
 ## Caring esclusi dai totali CB (`tests/caring-cb-exclusion.test.mjs`)
 

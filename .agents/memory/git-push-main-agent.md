@@ -19,3 +19,11 @@ si sistema da solo al prossimo ciclo della piattaforma).
 `rm` su path dentro `.git`), ma si rimuove con `fs.unlinkSync` nel notebook
 code_execution. Rimuoverlo NON sblocca però fetch/push successivi: il guard
 scatta comunque. Non insistere: verifica con ls-remote e chiudi.
+
+**Divergenza con la sync piattaforma:** la sync GitHub di Replit può pushare
+sul remoto commit paralleli (stesso contenuto, SHA diversi) rendendo main
+locale e remoto divergenti: il push viene rifiutato non-fast-forward e il
+main agent non può fare merge/rebase (guard blocca anche add/commit e i
+plumbing write-tree/commit-tree; anche i subagent locali sono bloccati).
+La riconciliazione va fatta da un task agent in ambiente isolato (project
+task in Plan mode) — pattern già usato in passato.
