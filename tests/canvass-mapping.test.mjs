@@ -22,7 +22,9 @@ const {
   aggregateCanvassSales,
   groupStepsByPista,
   buildCanvassReferenceFromRows,
-  validateCanvassColumns,
+  validateCanvassHeaders,
+  CANVASS_LISTINO_COLUMNS,
+  CANVASS_STEP_COLUMNS,
 } = await import('../shared/canvassMapping.ts');
 const { CANVASS_CATALOG } = await import('../shared/canvassCatalog.ts');
 
@@ -194,34 +196,50 @@ test('buildCanvassReferenceFromRows: nessuna offerta se manca CODICE', () => {
   assert.equal(ref.steps.length, 0);
 });
 
-test('validateCanvassColumns: ok con le colonne attese (Task #305)', () => {
-  const listinoRows = [
-    { CODICE: 'CANABCDE1111', 'NOME ETICHETTA': 'X', PISTA: 'PISTA MOBILE', CATEGORIA: 'MOBILE', TIPOLOGIA: 'RIC', CANONE: '9,99' },
+test('validateCanvassHeaders: listino valido', () => {
+  const rows = [
+    { CODICE: 'CANOHEWD2208', PISTA: 'PISTA MOBILE', 'NOME ETICHETTA': 'A', CATEGORIA: 'MOBILE', TIPOLOGIA: 'RIC', CANONE: '9,99' },
   ];
-  const stepRows = [
-    { ID: '1', 'Pista Associata': 'PA', 'Pista FORM': 'PISTA MOBILE', Domanda: 'D1', Ordine: '1', ATTIVO: 'S', Brand: 'vodafone' },
-  ];
-  const v = validateCanvassColumns(listinoRows, stepRows);
-  assert.equal(v.ok, true);
-  assert.deepEqual(v.missingListino, []);
-  assert.deepEqual(v.missingStep, []);
+  const res = validateCanvassHeaders(rows, CANVASS_LISTINO_COLUMNS);
+  assert.equal(res.valid, true);
+  assert.equal(res.empty, false);
+  assert.deepEqual(res.missing, []);
 });
 
-test('validateCanvassColumns: rileva colonne sbagliate/mancanti (Task #305)', () => {
-  // File sbagliato per il listino (es. un export vendite qualsiasi).
-  const wrongListino = [{ Cliente: 'Mario', Importo: 10 }];
-  const wrongSteps = [{ Question: 'D1', Track: 'X' }];
-  const v = validateCanvassColumns(wrongListino, wrongSteps);
-  assert.equal(v.ok, false);
-  assert.ok(v.missingListino.includes('CODICE'));
-  assert.ok(v.missingListino.includes('PISTA'));
-  assert.ok(v.missingStep.includes('Domanda'));
-  assert.ok(v.missingStep.includes('Pista FORM'));
+test('validateCanvassHeaders: step valido', () => {
+  const rows = [
+    { ID: '5', 'Pista Associata': 'PA', 'Pista FORM': 'PISTA MOBILE', Domanda: 'D1', Ordine: '2', ATTIVO: 'S', Brand: 'vodafone' },
+  ];
+  const res = validateCanvassHeaders(rows, CANVASS_STEP_COLUMNS);
+  assert.equal(res.valid, true);
+  assert.deepEqual(res.missing, []);
 });
 
-test('validateCanvassColumns: fogli vuoti = tutte le colonne mancanti (Task #305)', () => {
-  const v = validateCanvassColumns([], []);
-  assert.equal(v.ok, false);
-  assert.equal(v.missingListino.length, 6);
-  assert.equal(v.missingStep.length, 2);
+test('validateCanvassHeaders: elenca le colonne mancanti (intestazioni rinominate)', () => {
+  const rows = [
+    { CODICE: 'CANOHEWD2208', PISTA: 'PISTA MOBILE', ETICHETTA: 'A', CATEGORIA: 'MOBILE', TIPO: 'RIC', PREZZO: '9,99' },
+  ];
+  const res = validateCanvassHeaders(rows, CANVASS_LISTINO_COLUMNS);
+  assert.equal(res.valid, false);
+  assert.equal(res.empty, false);
+  assert.deepEqual(res.missing, ['NOME ETICHETTA', 'TIPOLOGIA', 'CANONE']);
+});
+
+test('validateCanvassHeaders: foglio vuoto => empty + tutte mancanti', () => {
+  const res = validateCanvassHeaders([], CANVASS_LISTINO_COLUMNS);
+  assert.equal(res.valid, false);
+  assert.equal(res.empty, true);
+  assert.deepEqual(res.missing, [...CANVASS_LISTINO_COLUMNS]);
+  const resNull = validateCanvassHeaders(null, CANVASS_STEP_COLUMNS);
+  assert.equal(resNull.empty, true);
+  assert.deepEqual(resNull.missing, [...CANVASS_STEP_COLUMNS]);
+});
+
+test('validateCanvassHeaders: tollera spazi nelle intestazioni', () => {
+  const rows = [
+    { ' CODICE ': 'X', ' PISTA': 'Y', 'NOME ETICHETTA ': 'A', CATEGORIA: 'C', TIPOLOGIA: 'T', ' CANONE ': '1' },
+  ];
+  const res = validateCanvassHeaders(rows, CANVASS_LISTINO_COLUMNS);
+  assert.equal(res.valid, true);
+  assert.deepEqual(res.missing, []);
 });

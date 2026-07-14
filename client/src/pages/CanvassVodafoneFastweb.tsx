@@ -33,7 +33,9 @@ import {
 } from 'lucide-react';
 import {
   buildCanvassReferenceFromRows,
-  validateCanvassColumns,
+  validateCanvassHeaders,
+  CANVASS_LISTINO_COLUMNS,
+  CANVASS_STEP_COLUMNS,
   type CanvassOffer,
   type CanvassStepGroup,
   type CanvassAggregatedItem,
@@ -232,17 +234,30 @@ export default function CanvassVodafoneFastweb() {
       setParsedRef(null);
       return;
     }
+    const listinoCheck = validateCanvassHeaders(listinoRowsRef.current, CANVASS_LISTINO_COLUMNS);
+    const stepCheck = validateCanvassHeaders(stepRowsRef.current, CANVASS_STEP_COLUMNS);
+    if (!listinoCheck.valid || !stepCheck.valid) {
+      const parts: string[] = [];
+      if (!listinoCheck.valid) {
+        parts.push(
+          listinoCheck.empty
+            ? 'Il foglio listino è vuoto o non ha intestazioni riconoscibili.'
+            : `Nel foglio listino mancano le colonne: ${listinoCheck.missing.join(', ')}.`,
+        );
+      }
+      if (!stepCheck.valid) {
+        parts.push(
+          stepCheck.empty
+            ? 'Il foglio step è vuoto o non ha intestazioni riconoscibili.'
+            : `Nel foglio step mancano le colonne: ${stepCheck.missing.join(', ')}.`,
+        );
+      }
+      setParseError(parts.join(' '));
+      setParsedRef(null);
+      return;
+    }
     const per = periodo.trim() || catalog?.periodo || '';
     try {
-      const cols = validateCanvassColumns(listinoRowsRef.current, stepRowsRef.current);
-      if (!cols.ok) {
-        const parts: string[] = [];
-        if (cols.missingListino.length > 0) parts.push(`listino: ${cols.missingListino.join(', ')}`);
-        if (cols.missingStep.length > 0) parts.push(`step: ${cols.missingStep.join(', ')}`);
-        setParseError(`Colonne mancanti nei file caricati — ${parts.join(' · ')}. Verifica di aver selezionato i file giusti.`);
-        setParsedRef(null);
-        return;
-      }
       const ref = buildCanvassReferenceFromRows(listinoRowsRef.current, stepRowsRef.current, per);
       if (ref.offers.length === 0) {
         setParseError('Il listino caricato non contiene offerte valide (colonna CODICE mancante o vuota).');
