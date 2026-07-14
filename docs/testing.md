@@ -184,6 +184,23 @@ consentiti; lista `WINDTRE_GATED_MODULES` attesa). Nessun prerequisito.
 Step di validation `brand-gating-tests`
 (`bash scripts/run-brand-gating-tests.sh`). Run ~1s.
 
+## Non-WindTre org authz tests (`tests/non-windtre-authz.test.mjs`)
+
+2 test end-to-end (Task #315) sulle route HTTP con `requireModule`
+(`server/routes.ts`): congelano il perimetro del brand gating post
+Task #314 (caso Phone&Phone). Scenario 1: org admin con SOLO brand
+Fastweb ⇒ `/api/customer-journeys`, `/api/bisuite-sales`,
+`/api/incentivazione/config` rispondono 200; `/api/preventivi`,
+`/api/gara-config`, `/api/drms` rispondono 403 "Modulo non abilitato".
+Scenario 2 (controllo del setup): stessa org SENZA brand associati ⇒
+tutte e sei le route 200 (fallback: nessun filtro). Se qualcuno
+reintroduce Vendite BiSuite/CJ/Incentivazione in
+`WINDTRE_GATED_MODULES` (`shared/modules.ts`) o cambia i gate in
+`requireModule`, la suite fallisce. Prerequisiti: app su
+`localhost:5000` + `DATABASE_URL`. Step di validation
+`non-windtre-authz-tests`
+(`bash scripts/run-non-windtre-authz-tests.sh`). Run ~2s.
+
 ## Canvass VF mapping tests (`tests/canvass-mapping.test.mjs`)
 
 17 test puri sull'engine di categorizzazione canvass Vodafone/Fastweb

@@ -105,6 +105,7 @@ SUITES=(
   "run-customer-journey-authz-tests.sh"
   "run-admin-authz-tests.sh"
   "run-canvass-authz-tests.sh"
+  "run-non-windtre-authz-tests.sh"
   "run-customer-journey-reconcile-tests.sh"
   "run-customer-journey-trigger-date-tests.sh"
   "run-incentivazione-dashboard-authz-tests.sh"

@@ -144,6 +144,10 @@ args = "module-permissions-tests"
 task = "workflow.run"
 args = "canvass-authz-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "non-windtre-authz-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -435,6 +439,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-canvass-authz-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "non-windtre-authz-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-non-windtre-authz-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

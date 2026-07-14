@@ -154,6 +154,7 @@ Riepilogo — suite → script → prerequisiti:
 | Telegram report (70) | `run-telegram-report-tests.sh` | — (puri) | ~1s |
 | Incentivazione (18) | `run-incentivazione-tests.sh` | — (puri) | ~1s |
 | Brand gating (7) | `run-brand-gating-tests.sh` | — (puri) | ~1s |
+| Org non-WindTre authz (2) | `run-non-windtre-authz-tests.sh` | app + DB | ~2s |
 | Permessi moduli utente (13) | `run-module-permissions-tests.sh` | app + DB (authz) | ~2s |
 | Canvass VF mapping (17) | `run-canvass-mapping-tests.sh` | — (puri) | ~1s |
 | Canvass VF authz (3) | `run-canvass-authz-tests.sh` | app + DB | ~6s |
