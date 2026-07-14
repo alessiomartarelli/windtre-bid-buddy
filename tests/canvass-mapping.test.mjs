@@ -326,3 +326,131 @@ test('classifySaleArticles con indice VF: card Canvass e countByPista coerenti',
   assert.equal(scNoIdx.countByType.canvass, 0);
   assert.equal(scNoIdx.countByType.prodotti, 3);
 });
+
+// === Regole KPI configurabili (canvassKpiRules) ===
+
+const {
+  matchesCanvassKpiRule,
+  resolveCanvassKpiTarget,
+  sanitizeCanvassKpiRules,
+} = await import('../shared/canvassKpiRules.ts');
+const { getPistaCanvassLabels, PISTA_CANVASS_LABELS_VF } =
+  await import('../shared/bisuiteClassification.ts');
+
+const artVerisure = {
+  codice: 'XYZ',
+  categoria: { nome: 'SICUREZZA' },
+  tipologia: { nome: 'LEAD VERISURE' },
+  descrizione: 'Appuntamento Verisure casa',
+  dettaglio: { domandeRisposte: [{ domandaTesto: 'Interessato a Verisure?', risposta: 'SI' }] },
+};
+
+test('KPI rules: match contiene case-insensitive su tutte le condizioni compilate', () => {
+  const rule = {
+    id: 'r1',
+    target: 'protecta',
+    conditions: { categoria: 'sicurezza', descrizione: 'verisure' },
+    enabled: true,
+  };
+  assert.equal(matchesCanvassKpiRule(artVerisure, rule), true);
+  assert.equal(
+    matchesCanvassKpiRule({ ...artVerisure, descrizione: 'altro' }, rule),
+    false,
+  );
+});
+
+test('KPI rules: domanda+risposta matchano su domandeRisposte', () => {
+  const rule = {
+    id: 'r2',
+    target: 'protecta',
+    conditions: { domanda: 'verisure', risposta: 'si' },
+    enabled: true,
+  };
+  assert.equal(matchesCanvassKpiRule(artVerisure, rule), true);
+  const ruleNo = { ...rule, conditions: { domanda: 'verisure', risposta: 'no' } };
+  assert.equal(matchesCanvassKpiRule(artVerisure, ruleNo), false);
+});
+
+test('KPI rules: regola senza condizioni non matcha mai', () => {
+  const rule = { id: 'r3', target: 'escludi', conditions: {}, enabled: true };
+  assert.equal(matchesCanvassKpiRule(artVerisure, rule), false);
+  assert.equal(resolveCanvassKpiTarget(artVerisure, [rule]), undefined);
+});
+
+test('KPI rules: prima regola abilitata che matcha vince; disabled saltate', () => {
+  const rules = [
+    { id: 'a', target: 'energia', conditions: { categoria: 'sicurezza' }, enabled: false },
+    { id: 'b', target: 'protecta', conditions: { categoria: 'sicurezza' }, enabled: true },
+    { id: 'c', target: 'escludi', conditions: { categoria: 'sicurezza' }, enabled: true },
+  ];
+  assert.equal(resolveCanvassKpiTarget(artVerisure, rules), 'protecta');
+});
+
+test('KPI rules: classifyArticle applica le regole solo con canvassIndex', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const rules = [
+    { id: 'r', target: 'protecta', conditions: { descrizione: 'verisure' }, enabled: true },
+  ];
+  const cls = classifyArticle(artVerisure, index, rules);
+  assert.deepEqual(cls, { type: 'canvass', pista: 'protecta' });
+  // Senza canvassIndex (org non-VF) le regole NON si applicano.
+  const clsNoIndex = classifyArticle(artVerisure, null, rules);
+  assert.notEqual(clsNoIndex?.pista, 'protecta');
+});
+
+test('KPI rules: target escludi toglie la pista ma mantiene il tipo', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const rules = [
+    { id: 'r', target: 'escludi', conditions: { descrizione: 'verisure' }, enabled: true },
+  ];
+  const cls = classifyArticle(artVerisure, index, rules);
+  assert.equal(cls?.pista ?? undefined, undefined);
+  // articolo che matcha il listino per codice, escluso dalla pista ma resta canvass
+  const artListino = { codice: 'CANOHEWD2208', categoria: { nome: 'OFFERTE VOCE' }, descrizione: 'offerta verisure test' };
+  const cls2 = classifyArticle(artListino, index, rules);
+  assert.equal(cls2?.type, 'canvass');
+  assert.equal(cls2?.pista, undefined);
+});
+
+test('KPI rules: regola che override la pista del listino', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const rules = [
+    { id: 'r', target: 'energia', conditions: { categoria: 'OFFERTE VOCE' }, enabled: true },
+  ];
+  const cls = classifyArticle({ codice: 'CANOHEWD2208', categoria: { nome: 'OFFERTE VOCE' } }, index, rules);
+  assert.deepEqual(cls, { type: 'canvass', pista: 'energia' });
+});
+
+test('KPI rules: condizione codice matcha contiene case-insensitive', () => {
+  const rule = { id: 'rc', target: 'protecta', conditions: { codice: 'xyz' }, enabled: true };
+  assert.equal(matchesCanvassKpiRule(artVerisure, rule), true);
+  assert.equal(matchesCanvassKpiRule({ ...artVerisure, codice: 'ABC' }, rule), false);
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const rules = [{ id: 'rc2', target: 'escludi', conditions: { codice: 'CANOHEWD2208' }, enabled: true }];
+  const cls = classifyArticle({ codice: 'CANOHEWD2208', categoria: { nome: 'OFFERTE VOCE' } }, index, rules);
+  assert.equal(cls?.type, 'canvass');
+  assert.equal(cls?.pista, undefined);
+});
+
+test('sanitizeCanvassKpiRules: scarta target invalidi e forme rotte', () => {
+  const out = sanitizeCanvassKpiRules([
+    { id: 'ok', target: 'protecta', conditions: { categoria: 'X' }, enabled: true },
+    { id: 'bad', target: 'nope', conditions: {}, enabled: true },
+    'stringa',
+    null,
+    { target: 'escludi', conditions: { categoria: 42 }, enabled: 'yes' },
+  ]);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].id, 'ok');
+  assert.equal(out[1].target, 'escludi');
+  assert.equal(out[1].conditions.categoria, undefined);
+  assert.equal(out[1].enabled, true);
+  assert.deepEqual(sanitizeCanvassKpiRules('junk'), []);
+});
+
+test('label piste VF: protecta → Verisure solo per org VF', () => {
+  assert.equal(PISTA_CANVASS_LABELS_VF.protecta, 'Verisure');
+  assert.equal(getPistaCanvassLabels(true).protecta, 'Verisure');
+  assert.equal(getPistaCanvassLabels(false).protecta, 'Windtre Protetti');
+  assert.equal(getPistaCanvassLabels(true).mobile, 'Mobile');
+});

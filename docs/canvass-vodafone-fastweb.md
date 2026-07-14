@@ -89,6 +89,36 @@ Funzioni pure, senza dipendenze da server/DB/React:
 | POST | `/api/admin/canvass-catalog/import` | super_admin | Con body `{reference}`: salva il listino caricato da UI (zod). Senza body: upsert idempotente del baked in `system_config`. |
 | POST | `/api/admin/canvass-catalog/reset` | super_admin | Rimuove l'override caricato e torna al catalogo baked. |
 | GET  | `/api/admin/canvass-mapped-sales` | super_admin (qualsiasi org) / admin (propria org) | Categorizza le vendite dell'org per `month`/`year`. |
+| GET  | `/api/admin/canvass-kpi-rules` | super_admin (qualsiasi org) / admin (propria org) | Regole KPI configurabili dell'org (`organization_config.config.canvassKpiRules`). |
+| POST | `/api/admin/canvass-kpi-rules` | super_admin (qualsiasi org) / admin (propria org) | Salva le regole KPI (zod; ogni regola deve avere ≥1 condizione). |
+
+## Regole KPI configurabili (`shared/canvassKpiRules.ts`)
+
+Per le org VF le piste WindTre "vere" non esistono (es. lead **Verisure**
+al posto di "Windtre Protetti"): l'admin può definire **regole** che
+associano gli articoli BiSuite a una pista del conteggio KPI di **Vendite
+BiSuite**, o li **escludono** dal conteggio.
+
+- Condizioni (tutte "contiene", case-insensitive, in AND): `codice`,
+  `categoria`, `tipologia`, `descrizione`, `domanda` (+ `risposta`
+  opzionale, valutata solo insieme a `domanda` su
+  `dettaglio.domandeRisposte`). Regola senza condizioni = mai match.
+- Target: una pista canvass (`mobile|fisso|cb|iva|assicurazioni|protecta|
+  energia`) oppure `escludi` (l'articolo mantiene il tipo ma perde la
+  pista).
+- La **prima regola abilitata** che matcha vince (ordine lista).
+- Le regole sono applicate in `classifyArticle`/`classifySaleArticles`
+  **solo se è presente il `canvassIndex`** (org VF): le org WindTre sono
+  invariate.
+- UI: card "Regole conteggio KPI piste" nella pagina Canvass VF (Select
+  target, input condizioni con datalist categorie/tipologie, switch
+  abilitata, add/remove, salvataggio).
+- Le regole arrivano al client via `GET /api/bisuite-canvass-reference`
+  (campo `kpiRules`) e sono usate ovunque in `VenditeBiSuite.tsx`, incluso
+  export Excel e dialog dettaglio.
+- Label piste: `getPistaCanvassLabels(isVfOrg)` — in contesto VF
+  `protecta` è etichettata **"Verisure"** (WindTre invariato: "Windtre
+  Protetti").
 
 **Brand gating**: `canvass-mapped-sales` applica la categorizzazione solo
 alle org con brand **Vodafone** e/o **Fastweb** associato; le altre org
@@ -118,7 +148,8 @@ le org Vodafone/Fastweb esistono solo in **produzione** (il DB dev ha solo
 
 ## Test
 
-Suite pura `tests/canvass-mapping.test.mjs` (17 test) via
+Suite pura `tests/canvass-mapping.test.mjs` (35 test, incluse le regole
+KPI configurabili e le label Verisure) via
 `scripts/run-canvass-mapping-tests.sh` — validation/workflow
 `canvass-mapping-tests`. Non richiede né dev server né DB (moduli TS via
 loader `tsx`).

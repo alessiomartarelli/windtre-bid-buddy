@@ -30,7 +30,14 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   RotateCcw,
+  Plus,
+  Trash2,
+  Save,
+  SlidersHorizontal,
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { getPistaCanvassLabels, type PistaCanvass } from '@shared/bisuiteClassification';
+import type { CanvassKpiRule } from '@shared/canvassKpiRules';
 import {
   buildCanvassReferenceFromRows,
   validateCanvassHeaders,
@@ -139,6 +146,109 @@ export default function CanvassVodafoneFastweb() {
     if (!catalog) return [];
     return Array.from(new Set(catalog.offers.map((o) => o.pista))).sort();
   }, [catalog]);
+
+  // === Regole conteggio KPI piste (per-org) ===
+  const [kpiRules, setKpiRules] = useState<CanvassKpiRule[]>([]);
+  const [kpiDirty, setKpiDirty] = useState(false);
+  const [savingKpi, setSavingKpi] = useState(false);
+  const kpiLabels = getPistaCanvassLabels(true);
+
+  const { data: kpiData, isLoading: loadingKpi } = useQuery<{ organizationId: string; rules: CanvassKpiRule[] }>({
+    queryKey: ['/api/admin/canvass-kpi-rules', orgParam],
+    enabled: !!profile && !!orgParam,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (orgParam) params.set('organization_id', orgParam);
+      const res = await fetch(apiUrl(`/api/admin/canvass-kpi-rules?${params.toString()}`), {
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('Errore nel caricamento delle regole KPI');
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    setKpiRules(kpiData?.rules ?? []);
+    setKpiDirty(false);
+  }, [kpiData]);
+
+  const categorieDistinct = useMemo(
+    () => (catalog ? Array.from(new Set(catalog.offers.map((o) => o.categoria).filter(Boolean))).sort() : []),
+    [catalog],
+  );
+  const tipologieDistinct = useMemo(
+    () => (catalog ? Array.from(new Set(catalog.offers.map((o) => o.tipologia).filter(Boolean))).sort() : []),
+    [catalog],
+  );
+
+  const updateKpiRule = (id: string, patch: Partial<CanvassKpiRule> | { conditions: Partial<CanvassKpiRule['conditions']> }) => {
+    setKpiRules((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        if ('conditions' in patch && patch.conditions) {
+          return { ...r, conditions: { ...r.conditions, ...patch.conditions } };
+        }
+        return { ...r, ...(patch as Partial<CanvassKpiRule>) };
+      }),
+    );
+    setKpiDirty(true);
+  };
+
+  const addKpiRule = () => {
+    setKpiRules((prev) => [
+      ...prev,
+      {
+        id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        target: 'escludi',
+        conditions: {},
+        enabled: true,
+      },
+    ]);
+    setKpiDirty(true);
+  };
+
+  const removeKpiRule = (id: string) => {
+    setKpiRules((prev) => prev.filter((r) => r.id !== id));
+    setKpiDirty(true);
+  };
+
+  const saveKpiRules = async () => {
+    try {
+      setSavingKpi(true);
+      const invalid = kpiRules.filter(
+        (r) => !Object.values(r.conditions).some((v) => (v || '').trim() !== ''),
+      );
+      if (invalid.length > 0) {
+        toast({
+          title: 'Regole incomplete',
+          description: 'Ogni regola deve avere almeno una condizione (codice, categoria, tipologia, descrizione, domanda o risposta).',
+          variant: 'destructive',
+        });
+        return;
+      }
+      const res = await fetch(apiUrl('/api/admin/canvass-kpi-rules'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgParam, rules: kpiRules }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.details || data?.error || 'Errore');
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/canvass-kpi-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bisuite-canvass-reference'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/canvass-mapped-sales'] });
+      setKpiDirty(false);
+      toast({ title: 'Regole salvate', description: `${kpiRules.length} regole KPI attive per l'organizzazione.` });
+    } catch (err) {
+      toast({
+        title: 'Errore',
+        description: err instanceof Error ? err.message : 'Impossibile salvare le regole.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingKpi(false);
+    }
+  };
 
   const filteredOffers = useMemo(() => {
     if (!catalog) return [];
@@ -392,6 +502,138 @@ export default function CanvassVodafoneFastweb() {
               dalla mappatura WindTre.
             </CardDescription>
           </CardHeader>
+        </Card>
+
+        <Card className="mb-6" data-testid="card-kpi-rules">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4" /> Regole conteggio KPI piste
+            </CardTitle>
+            <CardDescription>
+              Regole per-organizzazione che associano articoli BiSuite (per categoria,
+              tipologia, descrizione o domanda/risposta) a una pista del conteggio KPI di
+              Vendite BiSuite, oppure li escludono dal conteggio. La prima regola attiva che
+              corrisponde vince; le condizioni compilate devono valere tutte (match "contiene",
+              senza distinzione maiuscole/minuscole).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {loadingKpi ? (
+              <DataTableSkeleton rows={2} columns={6} />
+            ) : (
+              <>
+                {kpiRules.length === 0 && (
+                  <p className="text-sm text-muted-foreground" data-testid="text-no-kpi-rules">
+                    Nessuna regola configurata: il conteggio segue la classificazione automatica del listino.
+                  </p>
+                )}
+                {kpiRules.map((rule, idx) => (
+                  <div
+                    key={rule.id}
+                    className="rounded-md border p-3 space-y-2"
+                    data-testid={`row-kpi-rule-${idx}`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground w-6">#{idx + 1}</span>
+                      <Select
+                        value={rule.target}
+                        onValueChange={(v) => updateKpiRule(rule.id, { target: v as CanvassKpiRule['target'] })}
+                      >
+                        <SelectTrigger className="w-[200px]" data-testid={`select-kpi-target-${idx}`}>
+                          <SelectValue placeholder="Pista" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(kpiLabels) as PistaCanvass[]).map((p) => (
+                            <SelectItem key={p} value={p}>Conta in: {kpiLabels[p]}</SelectItem>
+                          ))}
+                          <SelectItem value="escludi">Non contare (escludi)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <Switch
+                          checked={rule.enabled}
+                          onCheckedChange={(c) => updateKpiRule(rule.id, { enabled: c })}
+                          data-testid={`switch-kpi-enabled-${idx}`}
+                        />
+                        <span className="text-xs text-muted-foreground">{rule.enabled ? 'Attiva' : 'Disattivata'}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeKpiRule(rule.id)}
+                          data-testid={`btn-remove-kpi-rule-${idx}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+                      <Input
+                        placeholder="Codice contiene…"
+                        value={rule.conditions.codice || ''}
+                        onChange={(e) => updateKpiRule(rule.id, { conditions: { codice: e.target.value } })}
+                        data-testid={`input-kpi-codice-${idx}`}
+                      />
+                      <Input
+                        placeholder="Categoria contiene…"
+                        list="kpi-categorie"
+                        value={rule.conditions.categoria || ''}
+                        onChange={(e) => updateKpiRule(rule.id, { conditions: { categoria: e.target.value } })}
+                        data-testid={`input-kpi-categoria-${idx}`}
+                      />
+                      <Input
+                        placeholder="Tipologia contiene…"
+                        list="kpi-tipologie"
+                        value={rule.conditions.tipologia || ''}
+                        onChange={(e) => updateKpiRule(rule.id, { conditions: { tipologia: e.target.value } })}
+                        data-testid={`input-kpi-tipologia-${idx}`}
+                      />
+                      <Input
+                        placeholder="Descrizione contiene…"
+                        value={rule.conditions.descrizione || ''}
+                        onChange={(e) => updateKpiRule(rule.id, { conditions: { descrizione: e.target.value } })}
+                        data-testid={`input-kpi-descrizione-${idx}`}
+                      />
+                      <Input
+                        placeholder="Domanda contiene…"
+                        value={rule.conditions.domanda || ''}
+                        onChange={(e) => updateKpiRule(rule.id, { conditions: { domanda: e.target.value } })}
+                        data-testid={`input-kpi-domanda-${idx}`}
+                      />
+                      <Input
+                        placeholder="Risposta contiene…"
+                        value={rule.conditions.risposta || ''}
+                        onChange={(e) => updateKpiRule(rule.id, { conditions: { risposta: e.target.value } })}
+                        data-testid={`input-kpi-risposta-${idx}`}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <datalist id="kpi-categorie">
+                  {categorieDistinct.map((c) => <option key={c} value={c} />)}
+                </datalist>
+                <datalist id="kpi-tipologie">
+                  {tipologieDistinct.map((t) => <option key={t} value={t} />)}
+                </datalist>
+                <div className="flex items-center gap-2 pt-1">
+                  <Button variant="outline" size="sm" onClick={addKpiRule} data-testid="btn-add-kpi-rule">
+                    <Plus className="h-4 w-4 mr-1" /> Aggiungi regola
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={saveKpiRules}
+                    disabled={!kpiDirty || savingKpi}
+                    data-testid="btn-save-kpi-rules"
+                  >
+                    {savingKpi ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                    Salva regole
+                  </Button>
+                  {kpiDirty && (
+                    <span className="text-xs text-amber-600" data-testid="text-kpi-dirty">Modifiche non salvate</span>
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
         </Card>
 
         {isSuperAdmin && (

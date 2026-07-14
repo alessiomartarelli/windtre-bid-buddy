@@ -1,4 +1,5 @@
 import { categorizeCanvassArticle, type CanvassIndex } from './canvassMapping';
+import { resolveCanvassKpiTarget, type CanvassKpiRule } from './canvassKpiRules';
 
 export type ArticleType = 'canvass' | 'prodotti' | 'servizi';
 
@@ -93,6 +94,9 @@ export interface ClassifiableArticle {
   categoria?: { nome?: unknown } | null;
   tipologia?: { nome?: unknown } | null;
   descrizione?: unknown;
+  dettaglio?: {
+    domandeRisposte?: Array<{ domandaTesto?: string; risposta?: string }>;
+  } | null;
 }
 
 /**
@@ -106,8 +110,22 @@ export interface ClassifiableArticle {
 export function classifyArticle(
   article: ClassifiableArticle,
   canvassIndex?: CanvassIndex | null,
+  kpiRules?: CanvassKpiRule[] | null,
 ): CategoryClassification | null {
   if (canvassIndex) {
+    // Regole KPI per-org (solo org VF, dove esiste il canvassIndex): la prima
+    // regola abilitata che matcha vince SULLA classificazione automatica.
+    // Target 'escludi' = l'articolo non conta in nessuna pista KPI.
+    const target = resolveCanvassKpiTarget(article, kpiRules);
+    if (target === 'escludi') {
+      const match = categorizeCanvassArticle(article, canvassIndex);
+      if (match) return { type: 'canvass' };
+      const fallback = classifyCategory(String(article.categoria?.nome ?? '').trim());
+      return fallback ? { type: fallback.type } : null;
+    }
+    if (target) {
+      return { type: 'canvass', pista: target };
+    }
     const match = categorizeCanvassArticle(article, canvassIndex);
     if (match) {
       return { type: 'canvass', pista: pistaFromCanvassListino(match.pista) };
@@ -125,6 +143,20 @@ export const PISTA_CANVASS_LABELS: Record<PistaCanvass, string> = {
   protecta: 'Windtre Protetti',
   energia: 'Energia',
 };
+
+/**
+ * Label piste per le org con brand Vodafone/Fastweb: lì "Windtre Protetti"
+ * non esiste — si prendono lead per Verisure. Le altre piste restano uguali.
+ */
+export const PISTA_CANVASS_LABELS_VF: Record<PistaCanvass, string> = {
+  ...PISTA_CANVASS_LABELS,
+  protecta: 'Verisure',
+};
+
+/** Restituisce le label piste corrette per il contesto (VF = Verisure). */
+export function getPistaCanvassLabels(isVfOrg: boolean): Record<PistaCanvass, string> {
+  return isVfOrg ? PISTA_CANVASS_LABELS_VF : PISTA_CANVASS_LABELS;
+}
 
 export const PISTA_CANVASS_COLORS: Record<PistaCanvass, string> = {
   mobile: 'bg-blue-500/10 text-blue-700 border-blue-500/20',
@@ -184,6 +216,7 @@ const _warnedCategories = new Set<string>();
 export function classifySaleArticles(
   rawData: any,
   canvassIndex?: CanvassIndex | null,
+  kpiRules?: CanvassKpiRule[] | null,
 ): SaleClassification {
   const articoli = rawData?.articoli || [];
   const articles: ClassifiedArticle[] = [];
@@ -207,7 +240,7 @@ export function classifySaleArticles(
       flagScontrinoRaw === 1 ||
       flagScontrinoRaw === '1' ||
       flagScontrinoRaw === true;
-    const classification = classifyArticle(art, canvassIndex);
+    const classification = classifyArticle(art, canvassIndex, kpiRules);
 
     if (classification) {
       const classified: ClassifiedArticle = {

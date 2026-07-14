@@ -91,11 +91,13 @@ import {
   classifySaleArticles,
   classifyArticle,
   PISTA_CANVASS_LABELS,
+  getPistaCanvassLabels,
   PISTA_CANVASS_COLORS,
   TYPE_LABELS,
   TYPE_COLORS,
 } from "@/lib/bisuiteClassification";
 import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
+import type { CanvassKpiRule } from "@shared/canvassKpiRules";
 
 interface BisuiteSale {
   id: string;
@@ -355,7 +357,7 @@ export default function VenditeBiSuite() {
   // server restituisce le offerte del listino, usate per classificare gli
   // articoli come "canvass" (con pista dal listino) invece che "prodotti".
   // Per org WindTre/senza brand VF: offers vuoto → classificazione invariata.
-  const { data: canvassRef } = useQuery<{ hasCanvassBrand: boolean; offers: CanvassOffer[] }>({
+  const { data: canvassRef } = useQuery<{ hasCanvassBrand: boolean; offers: CanvassOffer[]; kpiRules?: CanvassKpiRule[] }>({
     queryKey: ["/api/bisuite-canvass-reference", orgId],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -375,6 +377,14 @@ export default function VenditeBiSuite() {
     return buildCanvassIndex(canvassRef.offers);
   }, [canvassRef]);
 
+  // Regole KPI per-org (solo org VF): associano categorie/tipologie/
+  // descrizioni/domande alle piste del conteggio, o le escludono.
+  const kpiRules = canvassIndex ? (canvassRef?.kpiRules ?? null) : null;
+
+  // Per le org VF la pista "protecta" si chiama "Verisure" (lead Verisure,
+  // non esiste "Windtre Protetti").
+  const pistaLabels = getPistaCanvassLabels(!!canvassIndex);
+
   // rawSales include anche le ANNULLATA (visibili nella tabella grezza con badge),
   // mentre `sales` viene usato per tutti i conteggi/aggregati e le esclude.
   const rawSales = data?.sales || [];
@@ -386,10 +396,10 @@ export default function VenditeBiSuite() {
   const saleClassifications = useMemo(() => {
     const map = new Map<string, SaleClassification>();
     rawSales.forEach((s) => {
-      map.set(s.id, classifySaleArticles(s.rawData, canvassIndex));
+      map.set(s.id, classifySaleArticles(s.rawData, canvassIndex, kpiRules));
     });
     return map;
-  }, [rawSales, canvassIndex]);
+  }, [rawSales, canvassIndex, kpiRules]);
 
   // Indica se almeno un filtro "componente" (Tipo / Pista) è attivo: in tal
   // caso gli aggregati di pezzi/importi devono essere calcolati a livello
@@ -733,11 +743,11 @@ export default function VenditeBiSuite() {
     const articoli: any[] = raw.articoli || [];
     const cliente = raw.cliente || {};
     const canvassArts = articoli.filter((a: any) => {
-      const cls = classifyArticle(a, canvassIndex);
+      const cls = classifyArticle(a, canvassIndex, kpiRules);
       return cls?.type === 'canvass';
     });
     const prodottiArts = articoli.filter((a: any) => {
-      const cls = classifyArticle(a, canvassIndex);
+      const cls = classifyArticle(a, canvassIndex, kpiRules);
       return cls?.type === 'prodotti' || cls?.type === 'servizi';
     });
     const domandeMap: Record<string, string> = {};
@@ -762,7 +772,7 @@ export default function VenditeBiSuite() {
       piva: cliente.piva || '',
       nomeCliente: sale.nomeCliente || cliente.nominativo || '',
     };
-  }, [canvassIndex]);
+  }, [canvassIndex, kpiRules]);
 
   const exportExcelDettaglio = useCallback(() => {
     const rows: Record<string, any>[] = [];
@@ -814,7 +824,7 @@ export default function VenditeBiSuite() {
         const articoli: any[] = sale.rawData?.articoli || [];
         for (const art of articoli) {
           const catName = (art.categoria?.nome || '').trim();
-          const cls = classifyArticle(art, canvassIndex);
+          const cls = classifyArticle(art, canvassIndex, kpiRules);
           if (cls?.type === 'canvass') canvassCounts[catName] = (canvassCounts[catName] || 0) + 1;
           if (cls?.type === 'prodotti' || cls?.type === 'servizi') prodottiCounts[catName] = (prodottiCounts[catName] || 0) + 1;
           const qas: any[] = art.dettaglio?.domandeRisposte || [];
@@ -1033,9 +1043,9 @@ export default function VenditeBiSuite() {
                 </SelectTrigger>
                 <SelectContent className="bg-popover z-50">
                   <SelectItem value="all">Tutte le piste</SelectItem>
-                  {(Object.keys(PISTA_CANVASS_LABELS) as PistaCanvass[]).map((p) => (
+                  {(Object.keys(pistaLabels) as PistaCanvass[]).map((p) => (
                     <SelectItem key={p} value={p}>
-                      {PISTA_CANVASS_LABELS[p]}
+                      {pistaLabels[p]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1076,7 +1086,7 @@ export default function VenditeBiSuite() {
                     {componentFilterActive
                       ? (filterType !== "all"
                           ? `Articoli ${TYPE_LABELS[filterType as ArticleType]}`
-                          : `Articoli ${PISTA_CANVASS_LABELS[filterPista as PistaCanvass]}`)
+                          : `Articoli ${pistaLabels[filterPista as PistaCanvass]}`)
                       : "Vendite Totali"}
                   </p>
                 </CardContent>
@@ -1177,7 +1187,7 @@ export default function VenditeBiSuite() {
                         <div key={pista} className="flex items-center justify-between text-xs">
                           <div className="flex items-center gap-1.5">
                             {PISTA_ICONS[pista]}
-                            <span>{PISTA_CANVASS_LABELS[pista]}</span>
+                            <span>{pistaLabels[pista]}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] text-muted-foreground">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span>
@@ -1466,7 +1476,7 @@ export default function VenditeBiSuite() {
                                       className={PISTA_CANVASS_COLORS[pista] + " text-xs gap-1"}
                                     >
                                       {PISTA_ICONS[pista]}
-                                      {PISTA_CANVASS_LABELS[pista]}: {count}
+                                      {pistaLabels[pista]}: {count}
                                       <span className="text-[10px] opacity-75">({formatCurrency(addetto.amountByPista[pista] || 0)})</span>
                                     </Badge>
                                   ))}
@@ -1581,7 +1591,7 @@ export default function VenditeBiSuite() {
                                       className={PISTA_CANVASS_COLORS[pista] + " text-xs gap-1"}
                                     >
                                       {PISTA_ICONS[pista]}
-                                      {PISTA_CANVASS_LABELS[pista]}: {count}
+                                      {pistaLabels[pista]}: {count}
                                       <span className="text-[10px] opacity-75">({formatCurrency(pdv.amountByPista[pista] || 0)})</span>
                                     </Badge>
                                   ))}
@@ -1701,7 +1711,7 @@ export default function VenditeBiSuite() {
                                 {sale.nomeCliente || "-"}
                               </TableCell>
                               <TableCell>
-                                <SalePistaBadges classification={sc} />
+                                <SalePistaBadges classification={sc} pistaLabels={pistaLabels} />
                               </TableCell>
                               <TableCell className="hidden sm:table-cell">
                                 <Badge
@@ -1741,6 +1751,8 @@ export default function VenditeBiSuite() {
         sale={selectedSale}
         classification={selectedSale ? saleClassifications.get(selectedSale.id) : undefined}
         canvassIndex={canvassIndex}
+        kpiRules={kpiRules}
+        pistaLabels={pistaLabels}
         onClose={() => setSelectedSale(null)}
       />
 
@@ -1842,7 +1854,7 @@ export default function VenditeBiSuite() {
   );
 }
 
-function SalePistaBadges({ classification }: { classification?: SaleClassification }) {
+function SalePistaBadges({ classification, pistaLabels = PISTA_CANVASS_LABELS }: { classification?: SaleClassification; pistaLabels?: Record<PistaCanvass, string> }) {
   if (!classification) return <span className="text-xs text-muted-foreground">-</span>;
 
   const pistaBadges = (Object.entries(classification.countByPista) as [PistaCanvass, number][])
@@ -1857,7 +1869,7 @@ function SalePistaBadges({ classification }: { classification?: SaleClassificati
           className={PISTA_CANVASS_COLORS[pista] + " text-[10px] px-1.5 py-0 gap-0.5"}
         >
           {PISTA_ICONS[pista]}
-          {PISTA_CANVASS_LABELS[pista]}
+          {pistaLabels[pista]}
           {count > 1 && <span className="ml-0.5 font-bold">x{count}</span>}
         </Badge>
       ))}
@@ -1879,11 +1891,15 @@ function SaleDetailDialog({
   sale,
   classification,
   canvassIndex,
+  kpiRules,
+  pistaLabels = PISTA_CANVASS_LABELS,
   onClose,
 }: {
   sale: BisuiteSale | null;
   classification?: SaleClassification;
   canvassIndex?: ReturnType<typeof buildCanvassIndex> | null;
+  kpiRules?: CanvassKpiRule[] | null;
+  pistaLabels?: Record<PistaCanvass, string>;
   onClose: () => void;
 }) {
   if (!sale) return null;
@@ -1953,7 +1969,7 @@ function SaleDetailDialog({
 
           {classification && (
             <div className="flex flex-wrap gap-2">
-              <SalePistaBadges classification={classification} />
+              <SalePistaBadges classification={classification} pistaLabels={pistaLabels} />
             </div>
           )}
 
@@ -2017,7 +2033,7 @@ function SaleDetailDialog({
                   </TableHeader>
                   <TableBody>
                     {articoli.map((art: any, idx: number) => {
-                      const cls = classifyArticle(art, canvassIndex);
+                      const cls = classifyArticle(art, canvassIndex, kpiRules);
                       return (
                         <TableRow key={idx}>
                           <TableCell className="text-sm font-medium">
@@ -2075,7 +2091,7 @@ function SaleDetailDialog({
                             {cls?.pista ? (
                               <Badge className={PISTA_CANVASS_COLORS[cls.pista] + " text-[10px] gap-0.5"}>
                                 {PISTA_ICONS[cls.pista]}
-                                {PISTA_CANVASS_LABELS[cls.pista]}
+                                {pistaLabels[cls.pista]}
                               </Badge>
                             ) : cls ? (
                               <Badge className={TYPE_COLORS[cls.type] + " text-[10px]"}>

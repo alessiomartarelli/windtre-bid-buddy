@@ -3915,16 +3915,101 @@ export async function registerRoutes(
       }
 
       const { reference, source } = await resolveCanvassReference();
+      // Regole KPI per-org (associazione categorie/tipologie/descrizioni/
+      // domande → piste per il conteggio KPI di Vendite BiSuite).
+      const { sanitizeCanvassKpiRules } = await import("../shared/canvassKpiRules");
+      const orgCfg = await storage.getOrgConfig(orgId);
+      const kpiRules = sanitizeCanvassKpiRules(
+        (orgCfg?.config as Record<string, unknown> | null)?.canvassKpiRules,
+      );
       res.json({
         hasCanvassBrand: true,
         periodo: reference.periodo,
         source,
         offers: reference.offers,
+        kpiRules,
       });
     } catch (error: unknown) {
       console.error("Bisuite canvass reference error:", error);
       const msg = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: "Errore nel caricamento del listino canvass", details: msg });
+    }
+  });
+
+  // === Regole KPI canvass VF (per-org): associano categorie/tipologie/
+  // descrizioni/domande BiSuite alle piste del conteggio KPI di Vendite
+  // BiSuite (o escludono dal conteggio). Config in
+  // organization_config.config.canvassKpiRules. Admin/super_admin.
+  const canvassKpiRuleSchema = z.object({
+    id: z.string().min(1),
+    target: z.enum(["mobile", "fisso", "cb", "iva", "assicurazioni", "protecta", "energia", "escludi"]),
+    conditions: z.object({
+      codice: z.string().optional(),
+      categoria: z.string().optional(),
+      tipologia: z.string().optional(),
+      descrizione: z.string().optional(),
+      domanda: z.string().optional(),
+      risposta: z.string().optional(),
+    }),
+    enabled: z.boolean(),
+  }).refine(
+    (r) => [r.conditions.codice, r.conditions.categoria, r.conditions.tipologia, r.conditions.descrizione, r.conditions.domanda]
+      .some((v) => (v || "").trim() !== ""),
+    { message: "Ogni regola deve avere almeno una condizione (codice, categoria, tipologia, descrizione o domanda)" },
+  );
+
+  async function resolveKpiRulesOrg(req: any, res: any): Promise<string | null> {
+    const profile = await storage.getProfile(req.session.userId);
+    if (!profile || !["super_admin", "admin"].includes(profile.role)) {
+      res.status(403).json({ error: "Accesso non autorizzato" });
+      return null;
+    }
+    const orgId = (req.query.organization_id as string) || (req.body?.organizationId as string) || profile.organizationId;
+    if (!orgId) {
+      res.status(400).json({ error: "Organizzazione non specificata" });
+      return null;
+    }
+    if (profile.role !== "super_admin" && orgId !== profile.organizationId) {
+      res.status(403).json({ error: "Accesso non autorizzato" });
+      return null;
+    }
+    return orgId;
+  }
+
+  app.get("/api/admin/canvass-kpi-rules", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
+    try {
+      const orgId = await resolveKpiRulesOrg(req, res);
+      if (!orgId) return;
+      const { sanitizeCanvassKpiRules } = await import("../shared/canvassKpiRules");
+      const cfg = await storage.getOrgConfig(orgId);
+      const rules = sanitizeCanvassKpiRules(
+        (cfg?.config as Record<string, unknown> | null)?.canvassKpiRules,
+      );
+      res.json({ organizationId: orgId, rules });
+    } catch (error: unknown) {
+      console.error("Canvass KPI rules get error:", error);
+      res.status(500).json({ error: "Errore nel caricamento delle regole KPI canvass" });
+    }
+  });
+
+  app.post("/api/admin/canvass-kpi-rules", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
+    try {
+      const orgId = await resolveKpiRulesOrg(req, res);
+      if (!orgId) return;
+      const parsed = z.array(canvassKpiRuleSchema).max(200).safeParse(req.body?.rules);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: "Regole non valide",
+          details: parsed.error.issues.map((i) => i.message).join("; "),
+        });
+      }
+      const cfg = await storage.getOrgConfig(orgId);
+      const config = { ...((cfg?.config as Record<string, unknown> | null) || {}), canvassKpiRules: parsed.data };
+      await storage.upsertOrgConfig(orgId, config, cfg?.configVersion || "2.0");
+      res.json({ success: true, organizationId: orgId, count: parsed.data.length });
+    } catch (error: unknown) {
+      console.error("Canvass KPI rules save error:", error);
+      res.status(500).json({ error: "Errore nel salvataggio delle regole KPI canvass" });
     }
   });
 
