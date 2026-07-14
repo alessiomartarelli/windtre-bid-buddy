@@ -237,6 +237,20 @@ mutazione ruolo via SQL, cleanup org di test. Prerequisiti: app attiva su
 `localhost:5000` + `DATABASE_URL`. Step di validation `canvass-authz-tests`
 (`bash scripts/run-canvass-authz-tests.sh`). Run ~6s.
 
+## Gestione DTS authz tests (`tests/dts-authz.test.mjs`)
+
+2 scenari (Task #322) sui confini di ruolo/organizzazione delle route di
+scrittura del modulo Gestione DTS: (1) `operatore` => 403 su
+`POST /api/dts/upload` (nessun lead scritto) e su `DELETE /api/dts/leads`
+(i lead esistenti restano), mentre la lettura `GET /api/dts/leads` resta
+consentita; (2) `admin` => 200 su upload/delete SOLO nella propria org
+(il lead caricato appartiene alla sua org, il GET non mostra i lead di
+un'altra org, il DELETE non tocca l'org estranea, seminata via SQL).
+Stessa strategia di admin-authz: signup + mutazione ruolo via SQL,
+cleanup org di test. Prerequisiti: app attiva su `localhost:5000` +
+`DATABASE_URL`. Step di validation `dts-authz-tests`
+(`bash scripts/run-dts-authz-tests.sh`). Run ~2s.
+
 ## Caring esclusi dai totali CB (`tests/caring-cb-exclusion.test.mjs`)
 
 7 test puri (Task #290, regressione di Task #289) che partono da un dataset

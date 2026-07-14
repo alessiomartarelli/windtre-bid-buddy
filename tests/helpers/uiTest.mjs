@@ -200,6 +200,7 @@ export async function cleanupOrg(pool, session) {
     'cdg_fornitori',
     'cdg_ragioni_sociali',
     'bisuite_sales',
+    'dts_leads',
     'drms_uploads',
     'gara_config',
     'incentivazione_valenze',

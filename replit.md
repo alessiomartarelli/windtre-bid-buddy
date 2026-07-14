@@ -158,6 +158,7 @@ Riepilogo — suite → script → prerequisiti:
 | Telegram report (70) | `run-telegram-report-tests.sh` | — (puri) | ~1s |
 | Incentivazione (18) | `run-incentivazione-tests.sh` | — (puri) | ~1s |
 | Gestione DTS (16) | `run-dts-tests.sh` | — (puri) | ~1s |
+| Gestione DTS authz (2) | `run-dts-authz-tests.sh` | app + DB | ~2s |
 | Brand gating (7) | `run-brand-gating-tests.sh` | — (puri) | ~1s |
 | Org non-WindTre authz (2) | `run-non-windtre-authz-tests.sh` | app + DB | ~2s |
 | Permessi moduli utente (13) | `run-module-permissions-tests.sh` | app + DB (authz) | ~2s |
