@@ -521,7 +521,7 @@ Step di validation `integration-tests`
 (`bash scripts/run-deploy-integration-tests.sh`) + step **1b** del
 cancello di qualità pre-deploy. Esegue in un colpo solo tutte le suite che
 richiedono il dev server e/o `DATABASE_URL` — `cj-authz`, `admin-authz`,
-`cj-reconcile`, `cj-trigger-date`, `inc-dashboard-authz`,
+`canvass-authz`, `cj-reconcile`, `cj-trigger-date`, `inc-dashboard-authz`,
 `incentivazione-accservizi`, `finplan`, `inc-sort-ui`, `cj-gettone-ui`,
 `gara-weights-ui`, `home-landing-ui` — che prima andavano lanciate a
 mano. Richiede `DATABASE_URL` (riusa il DB di dev: ogni suite

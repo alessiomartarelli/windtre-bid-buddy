@@ -6,7 +6,7 @@
 # cj-export, incentivazione, cj-report) girano già nel cancello di
 # deploy-prod.sh senza dipendenze esterne. Questo script chiude il buco di
 # copertura lanciando ANCHE le suite che richiedono il dev server e/o il DB:
-#   - cj-authz, admin-authz, cj-reconcile, cj-trigger-date,
+#   - cj-authz, admin-authz, canvass-authz, cj-reconcile, cj-trigger-date,
 #     inc-dashboard-authz, finplan        (richiedono il dev server)
 #   - incentivazione-accessori-servizi     (richiede solo DATABASE_URL)
 #   - cj-gettone-ui, inc-sort-ui, gara-weights-ui, home-landing-ui
@@ -104,6 +104,7 @@ fi
 SUITES=(
   "run-customer-journey-authz-tests.sh"
   "run-admin-authz-tests.sh"
+  "run-canvass-authz-tests.sh"
   "run-customer-journey-reconcile-tests.sh"
   "run-customer-journey-trigger-date-tests.sh"
   "run-incentivazione-dashboard-authz-tests.sh"
