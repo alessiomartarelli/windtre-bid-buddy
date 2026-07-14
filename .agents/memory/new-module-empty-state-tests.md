@@ -6,8 +6,8 @@ description: Adding a new non-brand-gated module makes it default-enabled and br
 Rule: every time a new module key is added to `MODULES` that is NOT
 WindTre-gated, the home-landing UI test scenario "org without modules"
 must explicitly disable it in the seeded org's `enabled_modules`
-(pattern already used for vendite_bisuite/customer_journey/... after
-Task #314).
+(pattern already used for vendite_bisuite/customer_journey/... since
+BiSuite modules stopped being brand-gated).
 
 **Why:** modules default to enabled when absent from `enabled_modules`,
 so the new Home shortcut appears and `text-home-no-modules` never shows;
