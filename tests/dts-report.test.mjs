@@ -14,6 +14,7 @@ import {
   mergeDtsLeads,
   filterDtsLeads,
   aggregateDtsReport,
+  dtsSaleCodiceEsterno,
   dtsAvailableMonths,
   dtsMonthLabel,
 } from "../shared/dtsReport.ts";
@@ -61,12 +62,16 @@ test("parseIdVendita: numeri, stringhe, vuoti", () => {
   assert.equal(parseIdVendita(0), null);
 });
 
-test("dtsLeadKey stabile: telefono > CF > nominativo, insensibile a case", () => {
-  const a = dtsLeadKey({ data: "2026-07-05", telefono: "333 123", codiceFiscale: "X", nominativo: "N", campagna: "CAMP" });
-  const b = dtsLeadKey({ data: "2026-07-05", telefono: "333  123", codiceFiscale: "", nominativo: "altro", campagna: "camp" });
+test("dtsLeadKey stabile: telefono > CF, nominativo sempre incluso, insensibile a case", () => {
+  const a = dtsLeadKey({ data: "2026-07-05", telefono: "333 123", codiceFiscale: "X", nominativo: "Mario  Rossi", campagna: "CAMP" });
+  const b = dtsLeadKey({ data: "2026-07-05", telefono: "333  123", codiceFiscale: "", nominativo: "MARIO ROSSI", campagna: "camp" });
   assert.equal(a, b);
-  const c = dtsLeadKey({ data: "2026-07-05", telefono: "", codiceFiscale: "RSSMRA", nominativo: "N", campagna: "CAMP" });
+  const c = dtsLeadKey({ data: "2026-07-05", telefono: "", codiceFiscale: "RSSMRA", nominativo: "MARIO ROSSI", campagna: "CAMP" });
   assert.notEqual(a, c);
+  // Task #324: stesso telefono/data/campagna ma nominativo diverso ⇒ chiavi
+  // diverse (lead distinti, es. coniugi con lo stesso numero).
+  const d = dtsLeadKey({ data: "2026-07-05", telefono: "333 123", codiceFiscale: "", nominativo: "LUCIA VERDI", campagna: "CAMP" });
+  assert.notEqual(a, d);
 });
 
 test("validateDtsHeaders: ok con tutte le colonne, missing elencate", () => {
@@ -121,8 +126,18 @@ const LEADS = parseDtsRows([
   row({ src: "BRUNO.csv", nom: "M5", tel: "5", data: "05/06/2026", id: 30 }), // mese prima
 ]).leads;
 
-function sale(bisuiteId, { stato = "OK", pos = "P1", neg = "Negozio 1", raw = null } = {}) {
-  return { bisuiteId, stato, codicePos: pos, nomeNegozio: neg, rawData: raw };
+// Task #324: il match usa il CODICE ESTERNO (rawData.codiceEsterno / campo
+// codiceEsterno), NON il bisuiteId interno. I bisuiteId qui sono volutamente
+// grandi (~1.1M come in prod) per accorgersi di regressioni sul campo usato.
+function sale(codiceEsterno, { stato = "OK", pos = "P1", neg = "Negozio 1", raw = undefined } = {}) {
+  return {
+    bisuiteId: 1_100_000 + codiceEsterno,
+    codiceEsterno,
+    stato,
+    codicePos: pos,
+    nomeNegozio: neg,
+    rawData: raw === undefined ? { codiceEsterno: String(codiceEsterno) } : raw,
+  };
 }
 
 const SALES = [
@@ -132,6 +147,70 @@ const SALES = [
   sale(12, { pos: "P2", neg: "Negozio 2" }),
   sale(30, { stato: "ANNULLATA" }), // esclusa
 ];
+
+test("parseDtsRows: lead distinti con stesso telefono/data/campagna NON collassano (Task #324)", () => {
+  const matrix = [
+    HEADERS,
+    row({ nom: "MARIO ROSSI", tel: "3937577885", data: "09/07/2026", id: 250838 }),
+    row({ nom: "LUCIA VERDI", tel: "3937577885", data: "09/07/2026", id: 250839 }),
+  ];
+  const { leads } = parseDtsRows(matrix);
+  assert.equal(leads.length, 2);
+  assert.deepEqual(leads.map((l) => l.idVendita).sort(), [250838, 250839]);
+});
+
+test("parseDtsRows: stessa persona con DUE ID VENDITA diversi = due lead (Task #324)", () => {
+  // Caso reale: doppio acquisto lo stesso giorno (250838 MANUALE + 250839 CSV).
+  const matrix = [
+    HEADERS,
+    row({ nom: "EUSEPI RICCARDO", tel: "3937577885", data: "09/07/2026", id: 250838 }),
+    row({ nom: "EUSEPI RICCARDO", tel: "3937577885", data: "09/07/2026", id: 250839 }),
+  ];
+  const { leads } = parseDtsRows(matrix);
+  assert.equal(leads.length, 2);
+  assert.deepEqual(leads.map((l) => l.idVendita).sort(), [250838, 250839]);
+  // Le chiavi restano uniche (vincolo DB) e stabili.
+  assert.equal(new Set(leads.map((l) => l.leadKey)).size, 2);
+  // Ma la stessa persona SENZA id o con lo stesso id continua a fondersi.
+  const dup = parseDtsRows([
+    HEADERS,
+    row({ nom: "EUSEPI RICCARDO", tel: "3937577885", data: "09/07/2026", id: null }),
+    row({ nom: "EUSEPI RICCARDO", tel: "3937577885", data: "09/07/2026", id: 250838 }),
+  ]).leads;
+  assert.equal(dup.length, 1);
+  assert.equal(dup[0].idVendita, 250838);
+});
+
+test("dtsSaleCodiceEsterno: precedenza campo esplicito su rawData, null se assente", () => {
+  assert.equal(dtsSaleCodiceEsterno({ codiceEsterno: 111, rawData: { codiceEsterno: "222" } }), 111);
+  assert.equal(dtsSaleCodiceEsterno({ codiceEsterno: null, rawData: { codiceEsterno: "222" } }), 222);
+  assert.equal(dtsSaleCodiceEsterno({ rawData: { codiceEsterno: "222" } }), 222);
+  assert.equal(dtsSaleCodiceEsterno({ rawData: {} }), null);
+  assert.equal(dtsSaleCodiceEsterno({ rawData: null }), null);
+  assert.equal(dtsSaleCodiceEsterno({ rawData: { codiceEsterno: "abc" } }), null);
+});
+
+test("aggregateDtsReport: match via codiceEsterno, NON via bisuiteId (Task #324)", () => {
+  const leads = parseDtsRows([HEADERS, row({ nom: "X", tel: "9", data: "05/07/2026", id: 250838 })]).leads;
+  // codiceEsterno solo in rawData (come dalla tabella bisuite_sales).
+  const s = {
+    bisuiteId: 1145531,
+    stato: "FINALIZZATA IN CASSA",
+    codicePos: "P1",
+    nomeNegozio: "Negozio 1",
+    rawData: { codiceEsterno: "250838" },
+  };
+  const a = aggregateDtsReport(leads, [s]);
+  assert.equal(a.leadConvertiti, 1);
+  assert.equal(a.vendite.dts, 1);
+  // Un lead con id = bisuiteId NON deve matchare.
+  const leads2 = parseDtsRows([HEADERS, row({ nom: "X", tel: "9", data: "05/07/2026", id: 1145531 })]).leads;
+  const b = aggregateDtsReport(leads2, [s]);
+  assert.equal(b.leadConvertiti, 0);
+  // rawData senza codiceEsterno ⇒ vendita non agganciabile, nessun errore.
+  const c = aggregateDtsReport(leads, [{ ...s, rawData: {} }]);
+  assert.equal(c.leadConvertiti, 0);
+});
 
 test("filterDtsLeads: mese e consulente", () => {
   assert.equal(filterDtsLeads(LEADS, { month: "2026-07" }).length, 4);

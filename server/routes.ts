@@ -11,6 +11,7 @@ import { isModuleEnabled, isModuleAllowedForBrands, isModuleGrantedToUser, sanit
 import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
+import { dtsSaleCodiceEsterno } from "@shared/dtsReport";
 import { registerCdgRoutes } from "./cdgRoutes";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import {
@@ -1279,6 +1280,9 @@ export async function registerRoutes(
       const sales = await storage.getBisuiteSalesByItalianDateRange(profile.organizationId, from, to, false);
       res.json(sales.map((s) => ({
         bisuiteId: s.bisuiteId,
+        // ID VENDITA del file DTS = codice esterno BiSuite (Task #324),
+        // NON il bisuiteId interno.
+        codiceEsterno: dtsSaleCodiceEsterno({ rawData: s.rawData }),
         stato: s.stato,
         codicePos: s.codicePos,
         nomeNegozio: s.nomeNegozio,
@@ -1300,7 +1304,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Dati DTS non validi", errors: parsed.error.flatten() });
       }
       const { fileName, leads } = parsed.data;
-      const count = await storage.upsertDtsLeads(leads.map((l) => ({
+      // Upload full-file (Task #324): i lead dell'org vengono RIGENERATI a
+      // ogni upload (delete+insert transazionale), così le righe legacy con
+      // la vecchia chiave di dedup non producono duplicati.
+      const count = await storage.replaceDtsLeads(profile.organizationId!, leads.map((l) => ({
         ...l,
         organizationId: profile.organizationId!,
         fileName,

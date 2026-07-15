@@ -1,8 +1,9 @@
 // Modulo Gestione DTS (Task #321): upload dell'Excel dei lead drive-to-store
 // e dashboard di incidenza sulle vendite BiSuite. Il parsing dell'Excel
 // avviene nel browser (come Canvass VF): al server arrivano solo i lead già
-// normalizzati. Il report incrocia ID VENDITA ↔ bisuiteId con filtri
-// mese (colonna DATA), consulente e negozio.
+// normalizzati. Il report incrocia ID VENDITA ↔ codice esterno della vendita
+// (rawData.codiceEsterno, Task #324) con filtri mese (colonna DATA),
+// consulente e negozio.
 import { useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/hooks/useAuth';

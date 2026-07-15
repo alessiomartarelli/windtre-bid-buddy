@@ -114,7 +114,7 @@ export interface IStorage {
 
   // Gestione DTS (Task #321)
   getDtsLeads(orgId: string): Promise<DtsLeadRow[]>;
-  upsertDtsLeads(rows: InsertDtsLeadRow[]): Promise<number>;
+  replaceDtsLeads(orgId: string, rows: InsertDtsLeadRow[]): Promise<number>;
   deleteDtsLeads(orgId: string): Promise<void>;
 
   // Incentivazione interna (gare addetto)
@@ -713,39 +713,24 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(dtsLeads.data), asc(dtsLeads.nominativo));
   }
 
-  // Upsert batch per (organization_id, lead_key): il re-upload aggiorna i
-  // campi mutevoli (STATO, ID VENDITA, ...) senza duplicare i lead. Un ID
-  // VENDITA già noto non viene mai azzerato da un export che lo ha vuoto.
-  async upsertDtsLeads(rows: InsertDtsLeadRow[]): Promise<number> {
-    if (rows.length === 0) return 0;
+  // Sostituzione full-file (Task #324): l'upload DTS è sempre l'export
+  // completo, quindi i lead dell'org vengono rigenerati (delete+insert in
+  // transazione). Così le righe legacy con la vecchia chiave di dedup non
+  // creano duplicati e i lead rispecchiano esattamente il file caricato
+  // (la preservazione dell'ID VENDITA sui duplicati in-file resta nella
+  // logica pura di parseDtsRows/mergeDtsLeads).
+  async replaceDtsLeads(orgId: string, rows: InsertDtsLeadRow[]): Promise<number> {
     const CHUNK = 200;
-    let count = 0;
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const chunk = rows.slice(i, i + CHUNK);
-      await db.insert(dtsLeads).values(chunk)
-        .onConflictDoUpdate({
-          target: [dtsLeads.organizationId, dtsLeads.leadKey],
-          set: {
-            consulente: sql`excluded.consulente`,
-            campagna: sql`excluded.campagna`,
-            nominativo: sql`excluded.nominativo`,
-            email: sql`excluded.email`,
-            codiceFiscale: sql`excluded.codice_fiscale`,
-            telefono: sql`excluded.telefono`,
-            inCarico: sql`excluded.in_carico`,
-            stato: sql`excluded.stato`,
-            data: sql`excluded.data`,
-            idVendita: sql`COALESCE(excluded.id_vendita, ${dtsLeads.idVendita})`,
-            addettoVendita: sql`excluded.addetto_vendita`,
-            origineLead: sql`excluded.origine_lead`,
-            fileName: sql`excluded.file_name`,
-            uploadedBy: sql`excluded.uploaded_by`,
-            uploadedAt: sql`now()`,
-          },
-        });
-      count += chunk.length;
-    }
-    return count;
+    return await db.transaction(async (tx) => {
+      await tx.delete(dtsLeads).where(eq(dtsLeads.organizationId, orgId));
+      let count = 0;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK);
+        await tx.insert(dtsLeads).values(chunk);
+        count += chunk.length;
+      }
+      return count;
+    });
   }
 
   async deleteDtsLeads(orgId: string): Promise<void> {

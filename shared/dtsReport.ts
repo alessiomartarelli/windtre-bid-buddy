@@ -101,8 +101,12 @@ export function parseIdVendita(v: unknown): number | null {
 /**
  * Chiave stabile del lead per il merge idempotente su re-upload: data +
  * miglior identificativo della persona (telefono, poi codice fiscale, poi
- * nominativo) + campagna, tutto normalizzato. Due export dello stesso lead
- * producono la stessa chiave anche se cambia lo STATO o arriva l'ID VENDITA.
+ * nominativo) + NOMINATIVO + campagna, tutto normalizzato. Il nominativo è
+ * sempre incluso (Task #324): due lead distinti possono condividere
+ * telefono/data/campagna (es. coniugi con lo stesso numero) e con la sola
+ * chiave data|telefono|campagna uno sovrascriveva l'altro. Due export dello
+ * stesso lead producono la stessa chiave anche se cambia lo STATO o arriva
+ * l'ID VENDITA.
  */
 export function dtsLeadKey(l: {
   data: string | null;
@@ -113,7 +117,7 @@ export function dtsLeadKey(l: {
 }): string {
   const norm = (s: string) => s.trim().toUpperCase().replace(/\s+/g, " ");
   const who = norm(l.telefono) || norm(l.codiceFiscale) || norm(l.nominativo);
-  return `${l.data ?? ""}|${who}|${norm(l.campagna)}`;
+  return `${l.data ?? ""}|${who}|${norm(l.nominativo)}|${norm(l.campagna)}`;
 }
 
 export interface DtsHeaderValidation {
@@ -191,12 +195,20 @@ export function parseDtsRows(matrix: unknown[][]): DtsParseResult {
       addettoVendita: str(row, col.addetto),
       origineLead: str(row, col.origine),
     };
-    const leadKey = dtsLeadKey(base);
-    const prev = byKey.get(leadKey);
+    const baseKey = dtsLeadKey(base);
+    const prev = byKey.get(baseKey);
+    // Stessa persona/data/campagna ma DUE ID VENDITA diversi = due vendite
+    // distinte (Task #324, es. doppio acquisto lo stesso giorno): non vanno
+    // fuse o si perde una conversione. La chiave diventa unica con l'ID.
+    const leadKey =
+      prev && prev.idVendita !== null && base.idVendita !== null && prev.idVendita !== base.idVendita
+        ? `${baseKey}|${base.idVendita}`
+        : baseKey;
+    const prevSameKey = byKey.get(leadKey);
     byKey.set(leadKey, {
       ...base,
       leadKey,
-      idVendita: base.idVendita ?? prev?.idVendita ?? null,
+      idVendita: base.idVendita ?? prevSameKey?.idVendita ?? null,
     });
   }
   return { leads: Array.from(byKey.values()), skipped };
@@ -226,11 +238,31 @@ export function mergeDtsLeads(existing: DtsLead[], incoming: DtsLead[]): DtsLead
 /** Vendita BiSuite nella forma minima necessaria al report DTS. */
 export interface DtsSaleRow {
   bisuiteId: number;
+  /**
+   * Codice esterno della vendita (rawData.codiceEsterno): è QUESTO il
+   * numero che compare come ID VENDITA nel file DTS, non il bisuiteId
+   * (id interno BiSuite). Opzionale: se assente viene estratto da rawData.
+   */
+  codiceEsterno?: number | null;
   stato: string | null;
   codicePos: string | null;
   nomeNegozio: string | null;
   nomeAddetto?: string | null;
   rawData: unknown;
+}
+
+/**
+ * Codice esterno di una vendita per il match con l'ID VENDITA del file DTS
+ * (Task #324): usa `codiceEsterno` se già presente nella riga, altrimenti
+ * lo estrae da `rawData.codiceEsterno` (stringa o numero); assente o non
+ * numerico ⇒ null (la vendita non è agganciabile).
+ */
+export function dtsSaleCodiceEsterno(s: Pick<DtsSaleRow, "codiceEsterno" | "rawData">): number | null {
+  if (s.codiceEsterno !== undefined && s.codiceEsterno !== null) {
+    return parseIdVendita(s.codiceEsterno);
+  }
+  const raw = s.rawData as { codiceEsterno?: unknown } | null | undefined;
+  return parseIdVendita(raw && typeof raw === "object" ? raw.codiceEsterno : undefined);
 }
 
 /** Conteggio DTS vs totale, con incidenza percentuale (0-100, 1 decimale). */
@@ -319,8 +351,9 @@ function isAnnullata(stato: string | null | undefined): boolean {
 
 /**
  * Aggregato del report DTS: incrocia i lead (già filtrati per mese e/o
- * consulente) con le vendite BiSuite del periodo via ID VENDITA ↔
- * `bisuiteId`. Le vendite ANNULLATA sono escluse da tutti i conteggi. Il
+ * consulente) con le vendite BiSuite del periodo via ID VENDITA ↔ codice
+ * esterno della vendita (`dtsSaleCodiceEsterno`, Task #324 — NON il
+ * bisuiteId interno). Le vendite ANNULLATA sono escluse da tutti i conteggi. Il
  * filtro negozio (`codicePos`) agisce sulle vendite (i lead non hanno il
  * negozio) e quindi su incidenza e conversioni.
  */
@@ -341,7 +374,8 @@ export function aggregateDtsReport(
   }
   const matchedIds = new Set<number>();
   for (const s of activeSales) {
-    if (dtsIds.has(s.bisuiteId)) matchedIds.add(s.bisuiteId);
+    const ext = dtsSaleCodiceEsterno(s);
+    if (ext !== null && dtsIds.has(ext)) matchedIds.add(ext);
   }
 
   // Lead KPI + per consulente.
@@ -383,7 +417,8 @@ export function aggregateDtsReport(
   const negMap = new Map<string, NegAcc>();
 
   for (const s of activeSales) {
-    const isDts = dtsIds.has(s.bisuiteId);
+    const ext = dtsSaleCodiceEsterno(s);
+    const isDts = ext !== null && dtsIds.has(ext);
     venditeTot++;
     if (isDts) venditeDts++;
     const posKey = (s.codicePos ?? "").trim() || "N/D";
