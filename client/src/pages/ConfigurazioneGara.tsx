@@ -706,6 +706,25 @@ export default function ConfigurazioneGara() {
     setIsDirty(true);
   }, []);
 
+  // "Dati aggiornati al" modificabile: yyyy-MM-dd per l'input date,
+  // persistito come ISO ancorato a mezzogiorno UTC (stabile in it-IT).
+  const sosUploadedAtInputValue = useMemo(() => {
+    if (!sosCaring?.uploadedAt) return '';
+    const d = new Date(sosCaring.uploadedAt);
+    if (isNaN(d.getTime())) return '';
+    // Giorno locale (stessa semantica di toLocaleDateString in dashboard).
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const g = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${g}`;
+  }, [sosCaring?.uploadedAt]);
+
+  const setSosUploadedAt = useCallback((value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+    setSosCaring((prev) => (prev ? { ...prev, uploadedAt: `${value}T12:00:00.000Z` } : prev));
+    setIsDirty(true);
+  }, []);
+
   const { profile, organizationBrands } = useAuth();
   const { toast } = useToast();
   const { isEnabled } = useEnabledModules();
@@ -1033,7 +1052,15 @@ export default function ConfigurazioneGara() {
       if (rows.length === 0) throw new Error('Nessun PDV valido trovato nel file.');
       setSosCaring((prev) => ({
         fileName: file.name,
-        uploadedAt: new Date().toISOString(),
+        // Mezzogiorno UTC del giorno locale: stessa convenzione della
+        // modifica manuale, evita slittamenti di un giorno in it-IT.
+        uploadedAt: (() => {
+          const oggi = new Date();
+          const y = oggi.getFullYear();
+          const m = String(oggi.getMonth() + 1).padStart(2, '0');
+          const g = String(oggi.getDate()).padStart(2, '0');
+          return `${y}-${m}-${g}T12:00:00.000Z`;
+        })(),
         annoMese,
         rows,
         premioConfig: prev?.premioConfig || null,
@@ -1919,8 +1946,15 @@ export default function ConfigurazioneGara() {
                           {sosCaring.fileName} · {sosCaring.rows.length} PDV
                           {sosCaring.annoMese ? ` · ${formatAnnoMese(sosCaring.annoMese)}` : ''}
                         </Badge>
-                        <span className="text-xs text-muted-foreground" data-testid="text-sos-caring-uploaded-at">
-                          Dati aggiornati al {new Date(sosCaring.uploadedAt).toLocaleDateString('it-IT')}
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="text-sos-caring-uploaded-at">
+                          Dati aggiornati al
+                          <Input
+                            type="date"
+                            className="h-7 w-[140px] text-xs"
+                            value={sosUploadedAtInputValue}
+                            onChange={(e) => setSosUploadedAt(e.target.value)}
+                            data-testid="input-sos-caring-uploaded-at"
+                          />
                         </span>
                         <Button
                           type="button"
