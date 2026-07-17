@@ -1,5 +1,6 @@
 import { useState, useMemo, Fragment, useCallback, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { isModuleAllowedForBrands } from "@shared/modules";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -2175,8 +2176,14 @@ function getPistaRsRowKeys(pista: any): string[] {
 export default function DashboardGaraReale() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const { profile, loading: authLoading } = useAuth();
+  const { profile, organizationBrands, loading: authLoading } = useAuth();
   const orgId = profile?.organizationId ?? null;
+  // Stesso gating brand degli altri moduli WindTre: org senza brand = nessun
+  // filtro, org con brand = serve WindTre (vedi shared/modules.ts).
+  const sosCaringAllowed = isModuleAllowedForBrands(
+    organizationBrands?.map((b) => b.name) ?? null,
+    "gara_dashboard",
+  );
   const now = new Date();
   const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
   const [expandedPistaCategories, setExpandedPistaCategories] = useState<Set<string>>(new Set());
@@ -5086,7 +5093,7 @@ export default function DashboardGaraReale() {
 
             <TabellaPdvPista pistaStats={pistaStats} orgId={orgId} mese={selMonth} anno={selYear} />
 
-            {garaCalcConfig.sosCaring && garaCalcConfig.sosCaring.rows.length > 0 && (
+            {sosCaringAllowed && garaCalcConfig.sosCaring && garaCalcConfig.sosCaring.rows.length > 0 && (
               <SosCaringSection
                 data={garaCalcConfig.sosCaring}
                 garaPdvList={garaPdvList}

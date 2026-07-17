@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { isModuleAllowedForBrands } from '@shared/modules';
 import { useGaraConfig, GaraConfigPdv, GaraConfigData } from '@/hooks/useGaraConfig';
 import { CLUSTER_OPTIONS, CLUSTER_PIVA_OPTIONS, WEEKDAY_LABELS, ClusterCode, type ClusterPIvaCode } from '@/types/preventivatore';
 import { getDefaultTarget100, calculateTarget80, calculatePremio80 } from '@/types/partnership-reward';
@@ -705,9 +706,15 @@ export default function ConfigurazioneGara() {
     setIsDirty(true);
   }, []);
 
-  const { profile } = useAuth();
+  const { profile, organizationBrands } = useAuth();
   const { toast } = useToast();
   const { isEnabled } = useEnabledModules();
+  // Stesso gating brand degli altri moduli WindTre: org senza brand = nessun
+  // filtro, org con brand = serve WindTre (vedi shared/modules.ts).
+  const sosCaringAllowed = isModuleAllowedForBrands(
+    organizationBrands?.map((b) => b.name) ?? null,
+    'gara_configurazione',
+  );
   const incentivazioneEnabled = isEnabled('incentivazione_interna');
   const {
     config: garaConfigRecord,
@@ -1867,6 +1874,7 @@ export default function ConfigurazioneGara() {
                 </CardContent>
               </Card>
 
+              {sosCaringAllowed && (
               <Card data-testid="card-sos-caring">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -1964,6 +1972,7 @@ export default function ConfigurazioneGara() {
                   )}
                 </CardContent>
               </Card>
+              )}
 
               <Card>
                 <CardHeader className="pb-3">
