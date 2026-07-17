@@ -115,6 +115,7 @@ SUITES=(
   "run-incentivazione-sort-ui-tests.sh"
   "run-customer-journey-gettone-ui-tests.sh"
   "run-gara-config-weights-ui-tests.sh"
+  "run-sos-caring-import-ui-tests.sh"
   "run-home-landing-ui-tests.sh"
 )
 

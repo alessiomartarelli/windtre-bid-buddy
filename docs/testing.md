@@ -532,6 +532,27 @@ salvato (i pesi si ricaricano). Step di validation `gara-weights-ui-tests`
 (`bash scripts/run-gara-config-weights-ui-tests.sh`); richiede il workflow
 "Start application" attivo, `DATABASE_URL` e chromium di sistema. Run ~25s.
 
+## SOS Caring import dal simulatore UI (`tests/sos-caring-import-ui.test.mjs`)
+
+Suite Playwright a 1 scenario di regressione (Task #328, bug emerso in
+review del Task #327): importando una configurazione dal simulatore, i
+dati SOS Caring già caricati in memoria restavano attivi e potevano
+essere risalvati per sbaglio. Il fix è `setSosCaring(cfg.sosCaring ||
+null)` in `handleImport` (`client/src/pages/ConfigurazioneGara.tsx`); il
+bug vive interamente nel wiring React fra lo stato `sosCaring`,
+`handleImport` e `buildConfigData`, quindi nessun test puro può coprirlo.
+Scenario: signup admin + seed di `organization_config.puntiVendita`
+(sorgente dell'import, senza sosCaring); upload di un Excel SOS Caring
+valido generato in memoria (badge `badge-sos-caring-file` visibile);
+salvataggio → `gara_config.config.sosCaring` PERSISTITO (sanity);
+import dal simulatore (`button-import` → `button-import-org-config`) →
+la card si svuota (badge sparito, bottone torna a "Carica file Excel");
+nuovo salvataggio → il record NON contiene più la chiave `sosCaring`,
+mentre la `pdvList` importata è presente. Step di validation
+`sos-caring-import-ui-tests`
+(`bash scripts/run-sos-caring-import-ui-tests.sh`); richiede il workflow
+"Start application" attivo, `DATABASE_URL` e chromium di sistema. Run ~25s.
+
 ## Home landing UI tests (`tests/home-landing-ui.test.mjs`)
 
 3 scenari Playwright sull'atterraggio post-login sulla Home hub. Il bug
@@ -574,7 +595,7 @@ cancello di qualità pre-deploy. Esegue in un colpo solo tutte le suite che
 richiedono il dev server e/o `DATABASE_URL` — `cj-authz`, `admin-authz`,
 `canvass-authz`, `cj-reconcile`, `cj-trigger-date`, `inc-dashboard-authz`,
 `incentivazione-accservizi`, `finplan`, `inc-sort-ui`, `cj-gettone-ui`,
-`gara-weights-ui`, `home-landing-ui` — che prima andavano lanciate a
+`gara-weights-ui`, `sos-caring-import-ui`, `home-landing-ui` — che prima andavano lanciate a
 mano. Richiede `DATABASE_URL` (riusa il DB di dev: ogni suite
 semina/pulisce i propri dati con prefissi univoci). Se
 l'app non è già su `localhost:5000`, avvia `npm run dev` in modo effimero,
