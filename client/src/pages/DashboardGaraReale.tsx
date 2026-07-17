@@ -51,6 +51,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   Download,
+  ShieldAlert,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -115,6 +116,10 @@ import {
   PARTNERSHIP_DEFAULTS,
 } from "@/types/partnership-cb-events";
 import { calcoloCBPerPdv, clusterCBToLevel, getCBGettoniForCategory, type CBCalcItem } from "@/lib/calcoloCB";
+import {
+  aggregateSosCaring, computeSosCaringPremio, formatAnnoMese,
+  type SosCaringData, type SosCaringRsAggregate, type SosCaringTotals,
+} from "@shared/sosCaring";
 import {
   type PartnershipRewardPosConfig,
 } from "@/types/partnership-reward";
@@ -2346,6 +2351,7 @@ export default function DashboardGaraReale() {
       extraGaraIvaConfig: cfg?.extraGaraIvaConfig as ExtraGaraConfigOverrides | undefined,
       extraGaraIvaSogliePerRS: cfg?.extraGaraIvaSogliePerRS as ExtraGaraSogliePerRS | undefined,
       tabelleCalcolo: cfg?.tabelleCalcolo as Record<string, unknown> | undefined,
+      sosCaring: (cfg?.sosCaring as SosCaringData | null | undefined) || null,
     };
   }, [garaConfig]);
 
@@ -5080,6 +5086,16 @@ export default function DashboardGaraReale() {
 
             <TabellaPdvPista pistaStats={pistaStats} orgId={orgId} mese={selMonth} anno={selYear} />
 
+            {garaCalcConfig.sosCaring && garaCalcConfig.sosCaring.rows.length > 0 && (
+              <SosCaringSection
+                data={garaCalcConfig.sosCaring}
+                garaPdvList={garaPdvList}
+                isRSPerRS={garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs'}
+                partnershipRSConfigs={garaCalcConfig.partnershipRewardRSConfig?.configPerRS || []}
+                partnershipPosConfigs={garaCalcConfig.partnershipRewardConfig?.configPerPos || []}
+              />
+            )}
+
             <Card data-testid="card-rs-breakdown">
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -5494,5 +5510,217 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
         );
       })}
     </Accordion>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Gara SOS Caring (Task #327): tabella KPI per negozio + premio/malus su
+// % Balance RS. Dati dal file Excel caricato in Configurazione Gara.
+// ---------------------------------------------------------------------------
+
+const fmtSosInt = (v: number): string => Math.round(v).toLocaleString("it-IT");
+const fmtSosPct = (v: number): string =>
+  `${v.toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+const fmtSosEuro = (v: number): string =>
+  v.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+
+function SosCaringSection({
+  data,
+  garaPdvList,
+  isRSPerRS,
+  partnershipRSConfigs,
+  partnershipPosConfigs,
+}: {
+  data: SosCaringData;
+  garaPdvList: GaraConfigPdv[];
+  isRSPerRS: boolean;
+  partnershipRSConfigs: Array<{ ragioneSociale: string; premio100: number }>;
+  partnershipPosConfigs: Array<{ posCode: string; config?: { premio100?: number } }>;
+}) {
+  const agg = useMemo(() => aggregateSosCaring(data.rows), [data.rows]);
+
+  const pdvNameByCod = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of garaPdvList) {
+      if (p.codicePos) m.set(String(p.codicePos).trim(), p.nome || "");
+    }
+    return m;
+  }, [garaPdvList]);
+
+  const premioForRS = useMemo(() => {
+    const map = new Map<string, { premio: ReturnType<typeof computeSosCaringPremio>; premioPartnership: number; negoziInGara: number }>();
+    for (const rs of agg.perRS) {
+      const rsKey = normalizeRS(rs.ragioneSociale);
+      const pdvsOfRS = garaPdvList.filter(p => normalizeRS(p.ragioneSociale || "") === rsKey);
+      const negoziInGara = pdvsOfRS.length > 0 ? pdvsOfRS.length : rs.rows.length;
+      let premioPartnership = 0;
+      if (isRSPerRS) {
+        const rsCfg = partnershipRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rsKey);
+        premioPartnership = rsCfg?.premio100 || 0;
+      } else {
+        for (const p of pdvsOfRS) {
+          const cfg = partnershipPosConfigs.find(c => c.posCode === p.codicePos);
+          premioPartnership += cfg?.config?.premio100 || 0;
+        }
+      }
+      const premio = computeSosCaringPremio({
+        balancePct: rs.totals.balancePct,
+        premioPartnership,
+        negoziInGara,
+        config: data.premioConfig,
+      });
+      map.set(rs.ragioneSociale, { premio, premioPartnership, negoziInGara });
+    }
+    return map;
+  }, [agg.perRS, garaPdvList, isRSPerRS, partnershipRSConfigs, partnershipPosConfigs, data.premioConfig]);
+
+  const periodo = formatAnnoMese(data.annoMese);
+  const uploadedLabel = new Date(data.uploadedAt).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+
+  const numCols = [
+    "text-right tabular-nums px-2 py-1.5 whitespace-nowrap",
+  ][0];
+
+  const renderTotalsCells = (t: SosCaringTotals, opts?: { showBalance?: boolean }) => (
+    <>
+      <td className={numCols}>{fmtSosInt(t.allarmiActual)}</td>
+      <td className={numCols}>{fmtSosInt(t.mnpOut)}</td>
+      <td className={numCols}>{fmtSosInt(t.mnpOutMicro)}</td>
+      <td className={numCols}>{fmtSosInt(t.gaGara)}</td>
+      <td className={numCols}>{fmtSosInt(t.cambiPianoTied)}</td>
+      <td className={numCols}>{fmtSosInt(t.cambiPianoTiedMicro)}</td>
+      <td className={numCols}>—</td>
+      <td className={numCols}>—</td>
+      <td className={`${numCols} bg-emerald-50 dark:bg-emerald-950/40 font-bold text-emerald-700 dark:text-emerald-300`}>
+        {opts?.showBalance === false ? "—" : fmtSosPct(t.balancePct)}
+      </td>
+      <td className={numCols}>{fmtSosInt(t.leveMax)}</td>
+      <td className={numCols}>{fmtSosInt(t.leveSosActual)}</td>
+    </>
+  );
+
+  return (
+    <Card data-testid="card-sos-caring-kpi" className="overflow-hidden">
+      <CardHeader>
+        <div className="flex items-start justify-between flex-wrap gap-2">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-emerald-600" />
+              SOS Caring — KPI per Negozio
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1" data-testid="text-sos-caring-periodo">
+              {periodo ? `Periodo ${periodo}${data.annoMese ? ` (${data.annoMese})` : ""} · ` : ""}
+              Suddivisione per Ragione Sociale
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Dati aggiornati al</p>
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400" data-testid="text-sos-caring-updated">
+              {uploadedLabel}
+            </p>
+            <p className="text-xs text-muted-foreground">{agg.totaleRete.pdvCount} PDV</p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse" data-testid="table-sos-caring">
+            <thead>
+              <tr className="bg-emerald-900 text-white">
+                <th className="text-left px-2 py-2 font-semibold whitespace-nowrap">Punto Vendita</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Allarmi<br />Actual</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">MNP Out<br />su Linee All.</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">MNP Out<br />Micro (di cui)</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">GA<br />Gara</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">CambiPiano<br />TIED</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">CP TIED Micro<br />(di cui)</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">% Balance<br />Actual</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">% Balance<br />Forecast</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap bg-emerald-700">% Balance<br />RS</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Leve<br />Max</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Leve SOS<br />Caring Actual</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agg.perRS.map((rs: SosCaringRsAggregate) => (
+                <Fragment key={rs.ragioneSociale}>
+                  <tr className="bg-emerald-100/70 dark:bg-emerald-950/50">
+                    <td colSpan={12} className="px-2 py-1.5 font-bold text-emerald-800 dark:text-emerald-300" data-testid={`row-sos-rs-${normalizeRS(rs.ragioneSociale)}`}>
+                      {rs.ragioneSociale} <span className="font-normal text-emerald-600 dark:text-emerald-400">{rs.totals.pdvCount} PDV</span>
+                    </td>
+                  </tr>
+                  {rs.rows.map((r, i) => (
+                    <tr key={`${rs.ragioneSociale}-${r.codicePos}`} className={i % 2 === 1 ? "bg-muted/30" : ""} data-testid={`row-sos-pdv-${r.codicePos}`}>
+                      <td className="px-2 py-1.5">
+                        <span className="text-muted-foreground mr-1">{i + 1}</span>
+                        <span className="font-semibold">{pdvNameByCod.get(r.codicePos) || "—"}</span>
+                        <span className="text-muted-foreground"> · cod. {r.codicePos}</span>
+                      </td>
+                      <td className={numCols}>{fmtSosInt(r.allarmiActual)}</td>
+                      <td className={numCols}>{fmtSosInt(r.mnpOut)}</td>
+                      <td className={numCols}>{fmtSosInt(r.mnpOutMicro)}</td>
+                      <td className={numCols}>{fmtSosInt(r.gaGara)}</td>
+                      <td className={numCols}>{fmtSosInt(r.cambiPianoTied)}</td>
+                      <td className={numCols}>{fmtSosInt(r.cambiPianoTiedMicro)}</td>
+                      <td className={numCols}>{fmtSosPct(r.balanceActualPct)}</td>
+                      <td className={numCols}>{fmtSosPct(r.balanceForecastPct)}</td>
+                      <td className={`${numCols} bg-emerald-50 dark:bg-emerald-950/40 font-semibold text-emerald-700 dark:text-emerald-300`}>
+                        {fmtSosPct(rs.totals.balancePct)}
+                      </td>
+                      <td className={numCols}>{fmtSosInt(r.leveMax)}</td>
+                      <td className={numCols}>{fmtSosInt(r.leveSosActual)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t font-semibold bg-muted/50" data-testid={`row-sos-subtotale-${normalizeRS(rs.ragioneSociale)}`}>
+                    <td className="px-2 py-1.5 uppercase">Subtotale {rs.ragioneSociale}</td>
+                    {renderTotalsCells(rs.totals)}
+                  </tr>
+                </Fragment>
+              ))}
+              <tr className="border-t-2 border-emerald-700 font-bold bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200" data-testid="row-sos-totale-rete">
+                <td className="px-2 py-2">TOTALE RETE ({agg.totaleRete.pdvCount} PDV)</td>
+                {renderTotalsCells(agg.totaleRete)}
+              </tr>
+            </tbody>
+          </table>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            <span className="font-semibold text-emerald-700 dark:text-emerald-400">% Balance RS</span> = MNP Out su Linee Allarmate / (GA Gara + CambiPiano TIED), calcolata sui valori aggregati di ragione sociale e sul totale rete.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="grid-sos-caring-premi">
+          {agg.perRS.map((rs) => {
+            const info = premioForRS.get(rs.ragioneSociale);
+            if (!info) return null;
+            const isMalus = info.premio.fascia === "malus";
+            return (
+              <div
+                key={rs.ragioneSociale}
+                className={`rounded-lg border p-3 ${isMalus ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30" : "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"}`}
+                data-testid={`card-sos-premio-${normalizeRS(rs.ragioneSociale)}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold truncate">{rs.ragioneSociale}</p>
+                  <Badge variant={isMalus ? "destructive" : "secondary"} className="text-[10px]">
+                    {isMalus ? "MALUS" : "BONUS"} {info.premio.fasciaLabel}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  % Balance RS: <span className="font-semibold">{fmtSosPct(rs.totals.balancePct)}</span>
+                </p>
+                <p className={`text-xl font-bold mt-1 ${isMalus ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`} data-testid={`text-sos-premio-importo-${normalizeRS(rs.ragioneSociale)}`}>
+                  {info.premio.importo >= 0 ? "+" : ""}{fmtSosEuro(info.premio.importo)}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {isMalus
+                    ? `${fmtSosEuro((data.premioConfig?.malusPerNegozio ?? 500))} × ${info.negoziInGara} negozi in gara`
+                    : `${info.premio.bonusPct}% del premio Partnership (${fmtSosEuro(info.premioPartnership)})`}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -157,6 +157,7 @@ Riepilogo — suite → script → prerequisiti:
 | CJ report + filtri (28) | `run-customer-journey-report-tests.sh` | — (puri) | ~1s |
 | Telegram report (70) | `run-telegram-report-tests.sh` | — (puri) | ~1s |
 | Incentivazione (18) | `run-incentivazione-tests.sh` | — (puri) | ~1s |
+| Gara SOS Caring (15) | `run-sos-caring-tests.sh` | — (puri) | ~1s |
 | Gestione DTS (16) | `run-dts-tests.sh` | — (puri) | ~1s |
 | Gestione DTS authz (2) | `run-dts-authz-tests.sh` | app + DB | ~2s |
 | Brand gating (7) | `run-brand-gating-tests.sh` | — (puri) | ~1s |

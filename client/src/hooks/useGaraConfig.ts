@@ -255,6 +255,8 @@ export interface GaraConfigData {
     telefoni?: number | null;
     ivaMultiplier?: number | null;
   };
+  /** Gara SOS Caring (Task #327): dataset Excel caring PDV + fasce premio. */
+  sosCaring?: import('@shared/sosCaring').SosCaringData | null;
 }
 
 export interface GaraConfigRecord {

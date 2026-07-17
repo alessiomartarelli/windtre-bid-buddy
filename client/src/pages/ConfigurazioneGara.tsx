@@ -30,6 +30,12 @@ import { TabelleCalcoloGara, deepMergeTabelleCalcolo, type TabelleCalcoloConfig 
 import { useTabelleCalcoloConfig } from '@/hooks/useTabelleCalcoloConfig';
 import type { ExtraGaraSogliePerRS } from '@/lib/calcoloExtraGaraIva';
 import { parseGaraPdf, type PdfGaraData, type PdfType } from '@/lib/parseGaraPdf';
+import * as XLSX from 'xlsx';
+import {
+  validateSosCaringHeaders, parseSosCaringRows, formatAnnoMese,
+  DEFAULT_SOS_CARING_PREMIO_CONFIG,
+  type SosCaringData, type SosCaringPremioConfig,
+} from '@shared/sosCaring';
 
 const MONTHS = [
   { value: 1, label: 'Gennaio' },
@@ -679,6 +685,26 @@ export default function ConfigurazioneGara() {
     setIsDirty(true);
   }, []);
 
+  // === Gara SOS Caring (Task #327) ===
+  const [sosCaring, setSosCaring] = useState<SosCaringData | null>(null);
+  const [sosUploading, setSosUploading] = useState(false);
+  const sosFileInputRef = useRef<HTMLInputElement>(null);
+  const setSosPremioField = useCallback((key: keyof SosCaringPremioConfig, value: string) => {
+    setSosCaring((prev) => {
+      if (!prev) return prev;
+      const premioConfig = { ...(prev.premioConfig || {}) } as Partial<SosCaringPremioConfig>;
+      if (value === '') {
+        delete premioConfig[key];
+      } else {
+        const n = parseFloat(value.replace(',', '.'));
+        if (!Number.isFinite(n)) return prev;
+        premioConfig[key] = n;
+      }
+      return { ...prev, premioConfig: Object.keys(premioConfig).length > 0 ? premioConfig : null };
+    });
+    setIsDirty(true);
+  }, []);
+
   const { profile } = useAuth();
   const { toast } = useToast();
   const { isEnabled } = useEnabledModules();
@@ -832,6 +858,7 @@ export default function ConfigurazioneGara() {
       setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
       setVenditeForecast(forecastToForm(cfg.venditeForecast));
       setPerformanceWeights(weightsToForm(cfg.performanceWeights));
+      setSosCaring(cfg.sosCaring || null);
     }
     setIsDirty(false);
     setInitialLoaded(true);
@@ -912,6 +939,7 @@ export default function ConfigurazioneGara() {
       setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
       setVenditeForecast(forecastToForm(cfg.venditeForecast));
       setPerformanceWeights(weightsToForm(cfg.performanceWeights));
+      setSosCaring(cfg.sosCaring || null);
     } else {
       setConfigName('');
       setTipologiaGara('gara_operatore');
@@ -930,6 +958,7 @@ export default function ConfigurazioneGara() {
       setExtraGaraIvaSogliePerRS({});
       setVenditeForecast(EMPTY_FORECAST_FORM);
       setPerformanceWeights(EMPTY_WEIGHTS_FORM);
+      setSosCaring(null);
 
       const salesPdvs = await fetchPdvFromSales(month, year);
       if (salesPdvs.length > 0) {
@@ -974,10 +1003,50 @@ export default function ConfigurazioneGara() {
     ...(Object.keys(extraGaraIvaSogliePerRS).length > 0 ? { extraGaraIvaSogliePerRS } : {}),
     ...(forecastFormHasValue(venditeForecast) ? { venditeForecast: forecastFormToPayload(venditeForecast) } : {}),
     ...(weightsFormHasValue(performanceWeights) ? { performanceWeights: weightsFormToPayload(performanceWeights) } : {}),
+    ...(sosCaring ? { sosCaring } : {}),
     ...(garaConfigRecord?.config ? {
       importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
     } : {}),
-  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, performanceWeights, garaConfigRecord]);
+  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, performanceWeights, sosCaring, garaConfigRecord]);
+
+  const handleSosCaringFile = useCallback(async (file: File) => {
+    setSosUploading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      if (!sheet) throw new Error('Il file non contiene fogli.');
+      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' }) as unknown[][];
+      if (matrix.length < 2) throw new Error('Il file non contiene righe di dati.');
+      const headerCheck = validateSosCaringHeaders(matrix[0]);
+      if (!headerCheck.ok) {
+        throw new Error(`Colonne mancanti nel file: ${headerCheck.missing.join(', ')}`);
+      }
+      const { rows, skipped, annoMese } = parseSosCaringRows(matrix);
+      if (rows.length === 0) throw new Error('Nessun PDV valido trovato nel file.');
+      setSosCaring((prev) => ({
+        fileName: file.name,
+        uploadedAt: new Date().toISOString(),
+        annoMese,
+        rows,
+        premioConfig: prev?.premioConfig || null,
+      }));
+      setIsDirty(true);
+      toast({
+        title: 'File SOS Caring caricato',
+        description: `${rows.length} PDV importati${skipped > 0 ? `, ${skipped} righe scartate` : ''}. Ricorda di salvare la configurazione.`,
+      });
+    } catch (e) {
+      toast({
+        title: 'File non valido',
+        description: e instanceof Error ? e.message : 'Errore nella lettura del file.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSosUploading(false);
+      if (sosFileInputRef.current) sosFileInputRef.current.value = '';
+    }
+  }, [toast]);
 
   const handleQuickSave = useCallback(async () => {
     if (!garaConfigRecord?.id) {
@@ -1453,6 +1522,7 @@ export default function ConfigurazioneGara() {
       if (cfg.decurtazioneRSConfig?.configPerRS?.length) setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
       if (cfg.importedFiles?.length) setImportedFiles(cfg.importedFiles as Array<{ label: string; type: PdfType; fileName: string }>);
       else setImportedFiles([]);
+      setSosCaring(cfg.sosCaring || null);
 
       if (cfg.energiaConfig) {
         setEnergiaConfig(cfg.energiaConfig);
@@ -1794,6 +1864,104 @@ export default function ConfigurazioneGara() {
                       ))}
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card data-testid="card-sos-caring">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4" />
+                    Gara SOS Caring
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Carica il file Excel caring PDV WindTre (KPI allarmi, MNP Out, GA Gara, Cambi Piano TIED).
+                    La % Balance per Ragione Sociale determina il premio (% del premio Partnership Reward)
+                    o il malus per negozio. La tabella KPI è visibile nella Dashboard Gara Reale.
+                    Vale per {MONTHS.find(m => m.value === selectedMonth)?.label} {selectedYear}.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <input
+                      ref={sosFileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      data-testid="input-sos-caring-file"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleSosCaringFile(f);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={sosUploading}
+                      onClick={() => sosFileInputRef.current?.click()}
+                      data-testid="button-upload-sos-caring"
+                    >
+                      {sosUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                      {sosCaring ? 'Sostituisci file Excel' : 'Carica file Excel'}
+                    </Button>
+                    {sosCaring && (
+                      <>
+                        <Badge variant="secondary" className="text-xs" data-testid="badge-sos-caring-file">
+                          <FileText className="h-3 w-3 mr-1" />
+                          {sosCaring.fileName} · {sosCaring.rows.length} PDV
+                          {sosCaring.annoMese ? ` · ${formatAnnoMese(sosCaring.annoMese)}` : ''}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground" data-testid="text-sos-caring-uploaded-at">
+                          Dati aggiornati al {new Date(sosCaring.uploadedAt).toLocaleDateString('it-IT')}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          onClick={() => { setSosCaring(null); setIsDirty(true); }}
+                          data-testid="button-remove-sos-caring"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" /> Rimuovi
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  {sosCaring && (
+                    <div>
+                      <Label className="text-xs font-semibold">Fasce premio su % Balance RS (campo vuoto = default)</Label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
+                        {([
+                          { key: 'soglia1' as const, label: 'Soglia 1 (%)', def: DEFAULT_SOS_CARING_PREMIO_CONFIG.soglia1 },
+                          { key: 'soglia2' as const, label: 'Soglia 2 (%)', def: DEFAULT_SOS_CARING_PREMIO_CONFIG.soglia2 },
+                          { key: 'soglia3' as const, label: 'Soglia 3 (%)', def: DEFAULT_SOS_CARING_PREMIO_CONFIG.soglia3 },
+                          { key: 'malusPerNegozio' as const, label: 'Malus €/negozio', def: DEFAULT_SOS_CARING_PREMIO_CONFIG.malusPerNegozio },
+                          { key: 'bonus1Pct' as const, label: `Bonus < soglia 1 (%)`, def: DEFAULT_SOS_CARING_PREMIO_CONFIG.bonus1Pct },
+                          { key: 'bonus2Pct' as const, label: `Bonus soglia 1–2 (%)`, def: DEFAULT_SOS_CARING_PREMIO_CONFIG.bonus2Pct },
+                          { key: 'bonus3Pct' as const, label: `Bonus soglia 2–3 (%)`, def: DEFAULT_SOS_CARING_PREMIO_CONFIG.bonus3Pct },
+                        ]).map((f) => (
+                          <div key={f.key}>
+                            <Label htmlFor={`sos-${f.key}`} className="text-xs text-muted-foreground">{f.label}</Label>
+                            <Input
+                              id={`sos-${f.key}`}
+                              data-testid={`input-sos-${f.key}`}
+                              type="number"
+                              inputMode="decimal"
+                              className="h-8 text-sm"
+                              placeholder={String(f.def)}
+                              value={sosCaring.premioConfig?.[f.key] ?? ''}
+                              onChange={(e) => setSosPremioField(f.key, e.target.value)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-2">
+                        % Balance &lt; soglia 1 ⇒ bonus massimo; tra soglia 1 e 2 ⇒ bonus medio; tra soglia 2 e 3
+                        (inclusa) ⇒ bonus minimo; oltre soglia 3 ⇒ malus € × negozi in gara della Ragione Sociale.
+                        Il bonus è calcolato in % del premio Partnership Reward configurato.
+                      </p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

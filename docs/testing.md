@@ -173,6 +173,26 @@ Marginalità" (non più "Smartphone") e che separatore vuoto, 2ª
 validation `incentivazione-tests`
 (`bash scripts/run-incentivazione-tests.sh`). Run ~1s.
 
+## Gara SOS Caring tests (`tests/sos-caring.test.mjs`)
+
+15 test puri (Task #327) su `shared/sosCaring.ts` (gara SOS Caring
+WindTre, upload Excel caring PDV in Configurazione Gara → Performance).
+Coprono: (1) `validateSosCaringHeaders` (14 colonne richieste, extra
+ignorate, elenco delle mancanti); (2) `parseSosCaringRows`
+(normalizzazione righe, percentuali frazione→punti percentuali via
+`parseSosPercent`, periodo AnnoMese più frequente, scarto righe senza
+PDV/RS); (3) `parseSosNumber`/`parseSosPercent` (tolleranza formati
+"1.204", virgola decimale, stringhe con "%"); (4) `aggregateSosCaring`
+(subtotali per RS + totale rete con % Balance = Σ MNP Out / (Σ GA Gara +
+Σ CP TIED) sui valori aggregati, RS deduplicata case-insensitive,
+denominatore 0 ⇒ 0%); (5) `computeSosCaringPremio`: fasce default
+10/20/30% con bonus 30/20/10% del premio Partnership e malus 500€ ×
+negozi in gara, INCLUSI i confini (10 ⇒ fascia 10–20, 20 ⇒ 20–30, 30 ⇒
+ancora bonus, 30,01 ⇒ malus), override di config e malus mai positivo;
+(6) `formatAnnoMese`. Nessun prerequisito (logica pura via loader tsx).
+Step di validation `sos-caring-tests`
+(`bash scripts/run-sos-caring-tests.sh`). Run ~1s.
+
 ## Brand gating tests (`tests/brand-gating.test.mjs`)
 
 7 test puri (Task #279) su `shared/modules.ts`: `isWindtreBrandName`

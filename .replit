@@ -156,6 +156,10 @@ args = "dts-tests"
 task = "workflow.run"
 args = "dts-authz-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "sos-caring-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -480,6 +484,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-dts-authz-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "sos-caring-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-sos-caring-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
