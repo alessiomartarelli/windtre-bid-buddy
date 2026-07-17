@@ -118,7 +118,7 @@ import {
 } from "@/types/partnership-cb-events";
 import { calcoloCBPerPdv, clusterCBToLevel, getCBGettoniForCategory, type CBCalcItem } from "@/lib/calcoloCB";
 import {
-  aggregateSosCaring, computeSosCaringPremio, formatAnnoMese,
+  aggregateSosCaring, computeSosCaringPremio, formatAnnoMese, normalizeSosPosCode,
   type SosCaringData, type SosCaringRsAggregate, type SosCaringTotals,
 } from "@shared/sosCaring";
 import {
@@ -5549,7 +5549,7 @@ function SosCaringSection({
   const pdvNameByCod = useMemo(() => {
     const m = new Map<string, string>();
     for (const p of garaPdvList) {
-      if (p.codicePos) m.set(String(p.codicePos).trim(), p.nome || "");
+      if (p.codicePos) m.set(normalizeSosPosCode(p.codicePos), p.nome || "");
     }
     return m;
   }, [garaPdvList]);
@@ -5566,7 +5566,7 @@ function SosCaringSection({
         premioPartnership = rsCfg?.premio100 || 0;
       } else {
         for (const p of pdvsOfRS) {
-          const cfg = partnershipPosConfigs.find(c => c.posCode === p.codicePos);
+          const cfg = partnershipPosConfigs.find(c => normalizeSosPosCode(c.posCode) === normalizeSosPosCode(p.codicePos));
           premioPartnership += cfg?.config?.premio100 || 0;
         }
       }
@@ -5660,7 +5660,7 @@ function SosCaringSection({
                     <tr key={`${rs.ragioneSociale}-${r.codicePos}`} className={i % 2 === 1 ? "bg-muted/30" : ""} data-testid={`row-sos-pdv-${r.codicePos}`}>
                       <td className="px-2 py-1.5">
                         <span className="text-muted-foreground mr-1">{i + 1}</span>
-                        <span className="font-semibold">{pdvNameByCod.get(r.codicePos) || "—"}</span>
+                        <span className="font-semibold">{pdvNameByCod.get(normalizeSosPosCode(r.codicePos)) || "—"}</span>
                         <span className="text-muted-foreground"> · cod. {r.codicePos}</span>
                       </td>
                       <td className={numCols}>{fmtSosInt(r.allarmiActual)}</td>

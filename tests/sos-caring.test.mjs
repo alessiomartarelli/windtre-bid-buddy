@@ -8,6 +8,7 @@ import {
   validateSosCaringHeaders,
   parseSosCaringRows,
   parseSosNumber,
+  normalizeSosPosCode,
   parseSosPercent,
   aggregateSosCaring,
   computeBalancePct,
@@ -108,6 +109,44 @@ test("parseSosNumber / parseSosPercent: tolleranza formati", () => {
   assert.ok(Math.abs(parseSosPercent(9.7) - 9.7) < 1e-9);  // già in punti %
   assert.ok(Math.abs(parseSosPercent("12,5%") - 12.5) < 1e-9);
   assert.equal(parseSosPercent(""), 0);
+});
+
+// --- Normalizzazione codici POS (Task #329) ---------------------------------
+
+test("normalizeSosPosCode: trim, zeri iniziali, numeri Excel, casi limite", () => {
+  assert.equal(normalizeSosPosCode("01234 "), "1234");
+  assert.equal(normalizeSosPosCode(" 1234"), "1234");
+  assert.equal(normalizeSosPosCode("0001234"), "1234");
+  assert.equal(normalizeSosPosCode(1234), "1234");        // numero Excel
+  assert.equal(normalizeSosPosCode("9001426892"), "9001426892");
+  assert.equal(normalizeSosPosCode("000"), "0");          // tutto zeri
+  assert.equal(normalizeSosPosCode("0"), "0");
+  assert.equal(normalizeSosPosCode(" ab12 "), "AB12");    // non numerico: trim+upper
+  assert.equal(normalizeSosPosCode(""), "");
+  assert.equal(normalizeSosPosCode(null), "");
+  assert.equal(normalizeSosPosCode(undefined), "");
+});
+
+test("normalizeSosPosCode: '01234 ' e '1234' matchano dopo la normalizzazione", () => {
+  assert.equal(normalizeSosPosCode("01234 "), normalizeSosPosCode("1234"));
+});
+
+test("parseSosCaringRows: codicePos normalizzato al parsing (zeri iniziali/spazi)", () => {
+  const { rows } = parseSosCaringRows([
+    HEADER,
+    row({ codicePos: "01234 " }),
+    row({ codicePos: 567 }),
+  ]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].codicePos, "1234");
+  assert.equal(rows[1].codicePos, "567");
+});
+
+test("parseSosCaringRows: codice PDV di soli zeri non viene scartato", () => {
+  const { rows, skipped } = parseSosCaringRows([HEADER, row({ codicePos: "000" })]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].codicePos, "0");
+  assert.equal(skipped, 0);
 });
 
 // --- Aggregazione RS / rete --------------------------------------------------

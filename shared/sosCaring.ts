@@ -49,6 +49,22 @@ export interface SosCaringRow {
   leveSosActual: number;
 }
 
+/**
+ * Normalizzazione condivisa dei codici POS per il match Excel ↔ config gara:
+ * trim + rimozione degli zeri iniziali sui codici interamente numerici
+ * ("01234 " e "1234" ⇒ "1234"). I codici non numerici vengono solo trimmati
+ * e uppercasati per un confronto case-insensitive. Vuoto ⇒ "".
+ */
+export function normalizeSosPosCode(v: unknown): string {
+  const s = String(v ?? "").trim();
+  if (!s) return "";
+  if (/^\d+$/.test(s)) {
+    const stripped = s.replace(/^0+/, "");
+    return stripped === "" ? "0" : stripped;
+  }
+  return s.toUpperCase();
+}
+
 /** Numero tollerante: "1.204", "1204", 1204 ⇒ 1204; vuoto/non numerico ⇒ 0. */
 export function parseSosNumber(v: unknown): number {
   if (v === null || v === undefined || v === "") return 0;
@@ -118,7 +134,7 @@ export function parseSosCaringRows(matrix: unknown[][]): {
   for (let i = 1; i < matrix.length; i++) {
     const r = matrix[i] || [];
     const cell = (j: number): unknown => (j >= 0 ? r[j] : "");
-    const codicePos = String(cell(col.codicePos) ?? "").trim();
+    const codicePos = normalizeSosPosCode(cell(col.codicePos));
     const ragioneSociale = String(cell(col.rs) ?? "").trim();
     if (!codicePos || !ragioneSociale) {
       // Riga vuota o di servizio: scarta ma non è un errore.
