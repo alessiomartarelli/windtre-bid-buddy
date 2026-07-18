@@ -27,7 +27,9 @@ const CATEGORY_MAP: Record<string, CategoryClassification> = {
 
   'RIVINCOLO': { type: 'canvass', pista: 'cb' },
   'WINDTRE SECURITY PRO CB': { type: 'canvass', pista: 'cb' },
-  'ALTRI EVENTI CB': { type: 'canvass', pista: 'cb' },
+  // "ALTRI EVENTI CB" resta canvass ma SENZA pista: non deve contare nei
+  // pezzi CB (dashboard Vendite BiSuite e report Telegram).
+  'ALTRI EVENTI CB': { type: 'canvass' },
   'ADD-ON CB': { type: 'canvass', pista: 'cb' },
   'MIA UNTIED': { type: 'canvass', pista: 'cb' },
   'MIA TIED': { type: 'canvass', pista: 'cb' },

@@ -121,6 +121,18 @@ await test("aggregazione per tipo e pista su più vendite", () => {
   assert.equal(a.amountByPista.fisso, 25);
 });
 
+await test("ALTRI EVENTI CB: canvass ma NON conta nei pezzi CB (countByPista/categorieByPista)", () => {
+  const a = aggregateDailyReport([
+    sale({ totale: "40", articoli: [art("ALTRI EVENTI CB", 10), art("RIVINCOLO", 30)] }),
+  ]);
+  assert.equal(a.countByType.canvass, 2);
+  assert.equal(a.countByPista.cb, 1); // solo RIVINCOLO
+  assert.equal(a.amountByPista.cb, 30);
+  const catCb = (a.categorieByPista.cb ?? []).map((c) => c.categoria);
+  assert.ok(!catCb.includes("ALTRI EVENTI CB"));
+  assert.ok(catCb.includes("RIVINCOLO"));
+});
+
 await test("per-PDV: raggruppa per codicePos, ordina per importo↓, N/D per mancante", () => {
   const a = aggregateDailyReport([
     sale({ codicePos: "A", nomeNegozio: "Alfa", totale: "10" }),
