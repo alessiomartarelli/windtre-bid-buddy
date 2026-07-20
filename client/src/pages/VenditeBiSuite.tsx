@@ -491,6 +491,7 @@ export default function VenditeBiSuite() {
     const amtByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
     const byPista: Partial<Record<PistaCanvass, number>> = {};
     const amtByPista: Partial<Record<PistaCanvass, number>> = {};
+    const couponCaring = { pezzi: 0, importo: 0 };
     let totalArticles = 0;
     let filteredArticles = 0;
     let filteredAmount = 0;
@@ -528,6 +529,11 @@ export default function VenditeBiSuite() {
           byPista[art.pista] = (byPista[art.pista] || 0) + 1;
           amtByPista[art.pista] = (amtByPista[art.pista] || 0) + art.prezzo;
         }
+        // Coupon Caring: esclusi dai pezzi CB, contati in un riquadro dedicato.
+        if (art.couponCaring) {
+          couponCaring.pezzi++;
+          couponCaring.importo += art.prezzo;
+        }
         if (art.type === 'prodotti' && art.categoriaNome) {
           const key = art.categoriaNome.toUpperCase();
           if (!prodottiByCategory[key]) prodottiByCategory[key] = { pezzi: 0, importo: 0 };
@@ -547,6 +553,7 @@ export default function VenditeBiSuite() {
       amtByType,
       byPista,
       amtByPista,
+      couponCaring,
       totalArticles,
       filteredArticles,
       filteredAmount,
@@ -1197,6 +1204,21 @@ export default function VenditeBiSuite() {
                           </div>
                         </div>
                       ))}
+                    {globalCounts.couponCaring.pezzi > 0 && (
+                      <div className="flex items-center justify-between text-xs pt-1.5 mt-1 border-t border-dashed" data-testid="row-coupon-caring">
+                        <div className="flex items-center gap-1.5">
+                          <Tag className="h-3 w-3 text-amber-600" />
+                          <span>Coupon Caring</span>
+                          <span className="text-[9px] text-muted-foreground">(esclusi da CB)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground">{formatCurrency(globalCounts.couponCaring.importo)}</span>
+                          <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/20 text-[10px]" data-testid="badge-coupon-caring-pezzi">
+                            {globalCounts.couponCaring.pezzi}
+                          </Badge>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <ArticleIncassoRecap incasso={globalCounts.incassoByType.canvass} formatCurrency={formatCurrency} />
                 </CardContent>

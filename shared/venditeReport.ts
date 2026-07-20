@@ -177,6 +177,12 @@ export interface DailyReportAggregates {
    * servizi (pezzi/fatturato) restano in countByType/amountByType.
    */
   serviziByCategoria: CategoriaReportAggregate[];
+  /**
+   * Report dedicato Coupon Caring (MIA TIED/UNTIED con tipologia COUPON
+   * CARING …): esclusi dai pezzi CB, conteggiati qui con breakdown per
+   * categoria BiSuite (pezzi decrescenti).
+   */
+  couponCaring: { pezzi: number; importo: number; byCategoria: CategoriaImportoAggregate[] };
   /** Aggregato per punto vendita, ordinato per importo decrescente. */
   perPdv: PdvReportAggregate[];
   /**
@@ -278,6 +284,8 @@ export function aggregateDailyReport(
     business: { pezzi: 0, importo: 0 },
   };
   const assicurazioniMap = new Map<string, CategoriaImportoAggregate>();
+  const couponCaring = { pezzi: 0, importo: 0 };
+  const couponCaringMap = new Map<string, CategoriaImportoAggregate>();
   // Accumulatore del drill-down per singolo PDV/addetto (Task #251).
   interface DrillAcc {
     countByPista: Partial<Record<PistaCanvass, number>>;
@@ -324,6 +332,17 @@ export function aggregateDailyReport(
     }
     const mix = saleIncassoMix(row.rawData);
     for (const article of sc.articles) {
+      // Report dedicato Coupon Caring (esclusi dai pezzi CB): totale +
+      // breakdown per categoria BiSuite (MIA TIED / MIA UNTIED).
+      if (article.couponCaring) {
+        couponCaring.pezzi++;
+        couponCaring.importo += article.prezzo;
+        const ccLabel = article.categoriaNome.trim() || "Altro";
+        const ccEntry = couponCaringMap.get(ccLabel) ?? { categoria: ccLabel, pezzi: 0, importo: 0 };
+        ccEntry.pezzi++;
+        ccEntry.importo += article.prezzo;
+        couponCaringMap.set(ccLabel, ccEntry);
+      }
       if (article.pista) {
         // Etichetta dei chip nella card "La gara delle piste". Per la maggior
         // parte delle piste è la categoria BiSuite (es. mobile ⇒ TIED CF /
@@ -513,6 +532,12 @@ export function aggregateDailyReport(
     categorieByPista,
     prodottiByCategoria: sortCategorie(catByType.prodotti),
     serviziByCategoria: sortCategorie(catByType.servizi),
+    couponCaring: {
+      ...couponCaring,
+      byCategoria: Array.from(couponCaringMap.values()).sort(
+        (a, b) => b.pezzi - a.pezzi || b.importo - a.importo || a.categoria.localeCompare(b.categoria, "it"),
+      ),
+    },
     perPdv,
     perAddetto,
   };

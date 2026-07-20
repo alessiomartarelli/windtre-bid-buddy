@@ -561,6 +561,31 @@ function protettiSection(a: DailyReportAggregates, scope: "giorno" | "mese"): st
     </div>`;
 }
 
+/**
+ * Report dedicato Coupon Caring (Task utente): pezzi esclusi dal contatore
+ * CB, mostrati in una card a parte con breakdown per categoria BiSuite
+ * (MIA TIED / MIA UNTIED). Nessun coupon ⇒ nessuna card.
+ */
+function couponCaringSection(a: DailyReportAggregates, scope: "giorno" | "mese"): string {
+  const cc = a.couponCaring;
+  if (!cc || cc.pezzi === 0) return "";
+  const when = scope === "giorno" ? "oggi" : "nel mese";
+  const maxPezzi = Math.max(...cc.byCategoria.map((c) => c.pezzi), 1);
+  const rows = cc.byCategoria
+    .map((c) => {
+      const width = Math.max(6, Math.round((c.pezzi / maxPezzi) * 100));
+      return `<div class="prow">
+        <div class="prow-head"><span class="pname" style="color:#f59e0b">${escapeHtml(c.categoria)}</span><span class="pval">${c.pezzi} pz · ${escapeHtml(fmtEuro(c.importo))}</span></div>
+        <div class="pbar"><i style="width:${width}%;background:linear-gradient(90deg,#f59e0b,#f59e0b66)"></i></div>
+      </div>`;
+    })
+    .join("\n        ");
+  return `<div class="card"><h2>🎟️ Coupon Caring</h2>
+      <div class="tk-row"><span class="tk-kpi">${cc.pezzi} pz ${when} · ${escapeHtml(fmtEuro(cc.importo))} — esclusi dai pezzi CB</span></div>
+      ${rows}
+    </div>`;
+}
+
 /** Sezioni complete di una giornata (hero + card), riusate per ogni pagina. */
 function daySections(
   a: DailyReportAggregates,
@@ -578,6 +603,7 @@ function daySections(
     parts.push(protettiSection(a, "giorno"));
     parts.push(trendSection(trendSlice));
     parts.push(pisteSection(a, trendSlice));
+    parts.push(couponCaringSection(a, "giorno"));
     parts.push(tipiSection(a));
     parts.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
     parts.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));
@@ -675,6 +701,7 @@ function monthSections(
     }
     parts.push(projectionSection(projection));
     parts.push(pisteSection(a, undefined, "La gara delle piste · mese"));
+    parts.push(couponCaringSection(a, "mese"));
     parts.push(tipiSection(a));
     parts.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
     parts.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));
@@ -720,6 +747,7 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
       sections.push(protettiSection(a, "giorno"));
       sections.push(trendSection(trend));
       sections.push(pisteSection(a, trend));
+      sections.push(couponCaringSection(a, "giorno"));
       sections.push(tipiSection(a));
       sections.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
       sections.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));

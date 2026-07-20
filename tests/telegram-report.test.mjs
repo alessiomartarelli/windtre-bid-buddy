@@ -121,16 +121,76 @@ await test("aggregazione per tipo e pista su più vendite", () => {
   assert.equal(a.amountByPista.fisso, 25);
 });
 
-await test("ALTRI EVENTI CB: canvass ma NON conta nei pezzi CB (countByPista/categorieByPista)", () => {
+await test("pezzi CB = SOLO MIA TIED + MIA UNTIED + RIVINCOLO (altre categorie CB escluse)", () => {
   const a = aggregateDailyReport([
-    sale({ totale: "40", articoli: [art("ALTRI EVENTI CB", 10), art("RIVINCOLO", 30)] }),
+    sale({
+      totale: "70",
+      articoli: [
+        art("ALTRI EVENTI CB", 10),
+        art("WINDTRE SECURITY PRO CB", 5),
+        art("ADD-ON CB", 5),
+        art("MIGRAZIONE EXTRA TRAMITE ASK", 5),
+        art("RIVINCOLO", 30),
+        art("MIA TIED", 10),
+        art("MIA UNTIED", 5),
+      ],
+    }),
   ]);
-  assert.equal(a.countByType.canvass, 2);
-  assert.equal(a.countByPista.cb, 1); // solo RIVINCOLO
-  assert.equal(a.amountByPista.cb, 30);
+  assert.equal(a.countByType.canvass, 7); // restano tutti canvass
+  assert.equal(a.countByPista.cb, 3); // RIVINCOLO + MIA TIED + MIA UNTIED
+  assert.equal(a.amountByPista.cb, 45);
   const catCb = (a.categorieByPista.cb ?? []).map((c) => c.categoria);
-  assert.ok(!catCb.includes("ALTRI EVENTI CB"));
-  assert.ok(catCb.includes("RIVINCOLO"));
+  assert.deepEqual(catCb.sort(), ["MIA TIED", "MIA UNTIED", "RIVINCOLO"]);
+});
+
+await test("Coupon Caring: esclusi dai pezzi CB, conteggiati nel report dedicato", () => {
+  const a = aggregateDailyReport([
+    sale({
+      totale: "60",
+      articoli: [
+        art("MIA TIED", 20, { tipologia: "COUPON CARING TIED" }),
+        art("MIA UNTIED", 10, { tipologia: "COUPON CARING UNTIED" }),
+        art("MIA TIED", 15, { tipologia: "OFFERTA MIA" }),
+        art("RIVINCOLO", 15),
+      ],
+    }),
+  ]);
+  assert.equal(a.countByPista.cb, 2); // MIA TIED normale + RIVINCOLO
+  assert.equal(a.amountByPista.cb, 30);
+  assert.equal(a.countByType.canvass, 4); // i coupon restano canvass
+  assert.equal(a.couponCaring.pezzi, 2);
+  assert.equal(a.couponCaring.importo, 30);
+  assert.deepEqual(
+    a.couponCaring.byCategoria.map((c) => c.categoria).sort(),
+    ["MIA TIED", "MIA UNTIED"],
+  );
+  const catCb = (a.categorieByPista.cb ?? []).map((c) => c.categoria);
+  assert.deepEqual(catCb.sort(), ["MIA TIED", "RIVINCOLO"]);
+});
+
+await test("report HTML: sezione dedicata Coupon Caring presente solo se > 0", () => {
+  const withCoupon = aggregateDailyReport([
+    sale({ totale: "20", articoli: [art("MIA TIED", 20, { tipologia: "COUPON CARING TIED" })] }),
+  ]);
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-17",
+    timeLabel: "13:30",
+    aggregates: withCoupon,
+  });
+  assert.ok(html.includes("Coupon Caring"));
+  assert.ok(html.includes("esclusi dai pezzi CB"));
+
+  const senza = aggregateDailyReport([
+    sale({ totale: "10", articoli: [art("RIVINCOLO", 10)] }),
+  ]);
+  const html2 = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-17",
+    timeLabel: "13:30",
+    aggregates: senza,
+  });
+  assert.ok(!html2.includes("Coupon Caring"));
 });
 
 await test("per-PDV: raggruppa per codicePos, ordina per importo↓, N/D per mancante", () => {

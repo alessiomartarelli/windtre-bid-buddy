@@ -25,15 +25,16 @@ const CATEGORY_MAP: Record<string, CategoryClassification> = {
   'FISSO VOCE': { type: 'canvass', pista: 'fisso' },
   'ADD-ON FISSI': { type: 'canvass', pista: 'fisso' },
 
-  'RIVINCOLO': { type: 'canvass', pista: 'cb' },
-  'WINDTRE SECURITY PRO CB': { type: 'canvass', pista: 'cb' },
-  // "ALTRI EVENTI CB" resta canvass ma SENZA pista: non deve contare nei
+  // Pezzi CB = SOLO MIA TIED + MIA UNTIED + RIVINCOLO (richiesta utente).
+  // Le altre categorie CB restano canvass ma SENZA pista: non contano nei
   // pezzi CB (dashboard Vendite BiSuite e report Telegram).
-  'ALTRI EVENTI CB': { type: 'canvass' },
-  'ADD-ON CB': { type: 'canvass', pista: 'cb' },
+  'RIVINCOLO': { type: 'canvass', pista: 'cb' },
   'MIA UNTIED': { type: 'canvass', pista: 'cb' },
   'MIA TIED': { type: 'canvass', pista: 'cb' },
-  'MIGRAZIONE EXTRA TRAMITE ASK': { type: 'canvass', pista: 'cb' },
+  'WINDTRE SECURITY PRO CB': { type: 'canvass' },
+  'ALTRI EVENTI CB': { type: 'canvass' },
+  'ADD-ON CB': { type: 'canvass' },
+  'MIGRAZIONE EXTRA TRAMITE ASK': { type: 'canvass' },
 
   'ASSICURAZIONI': { type: 'canvass', pista: 'assicurazioni' },
   'ASSICURAZIONI BUSINESS PRO': { type: 'canvass', pista: 'assicurazioni' },
@@ -201,6 +202,9 @@ export interface ClassifiedArticle {
    * con `scontrino=1` finanziati o a credito.
    */
   scontrinato: boolean;
+  /** Coupon Caring (MIA TIED/UNTIED + tipologia COUPON CARING …): escluso
+   * dai pezzi CB, conteggiato nel report dedicato. */
+  couponCaring?: boolean;
 }
 
 export interface SaleClassification {
@@ -211,6 +215,19 @@ export interface SaleClassification {
   amountByPista: Partial<Record<PistaCanvass, number>>;
   hasCanvass: boolean;
   primaryPista: PistaCanvass | null;
+  /** Coupon Caring: pezzi e importo (esclusi dai pezzi/importi pista CB). */
+  couponCaring: { pezzi: number; importo: number };
+}
+
+/**
+ * Coupon Caring: offerte MIA TIED / MIA UNTIED con tipologia
+ * "COUPON CARING TIED" / "COUPON CARING UNTIED". NON contano nei pezzi CB:
+ * vengono conteggiate in un report dedicato (dashboard + allegato Telegram).
+ */
+export function isCouponCaring(categoriaNome: string, tipologiaNome: string): boolean {
+  const cat = categoriaNome.toUpperCase().trim();
+  if (cat !== 'MIA TIED' && cat !== 'MIA UNTIED') return false;
+  return tipologiaNome.toUpperCase().trim().startsWith('COUPON CARING');
 }
 
 const _warnedCategories = new Set<string>();
@@ -226,6 +243,7 @@ export function classifySaleArticles(
   const amountByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
   const countByPista: Partial<Record<PistaCanvass, number>> = {};
   const amountByPista: Partial<Record<PistaCanvass, number>> = {};
+  const couponCaring = { pezzi: 0, importo: 0 };
 
   for (const art of articoli) {
     const catNome = (art.categoria?.nome || '').trim();
@@ -245,12 +263,18 @@ export function classifySaleArticles(
     const classification = classifyArticle(art, canvassIndex, kpiRules);
 
     if (classification) {
+      // Coupon Caring: resta canvass ma NON conta nella pista CB; viene
+      // conteggiato a parte per il report dedicato (solo path WindTre:
+      // la classificazione da listino VF non produce queste categorie).
+      const coupon = classification.type === 'canvass' && isCouponCaring(catNome, tipNome);
+      const pista = coupon ? undefined : classification.pista;
       const classified: ClassifiedArticle = {
         categoriaNome: catNome,
         tipologiaNome: tipNome,
         descrizione: desc,
         type: classification.type,
-        pista: classification.pista,
+        pista,
+        couponCaring: coupon || undefined,
         prezzo,
         importoScontrino,
         importoFinanziato,
@@ -260,9 +284,13 @@ export function classifySaleArticles(
       articles.push(classified);
       countByType[classification.type]++;
       amountByType[classification.type] += prezzo;
-      if (classification.pista) {
-        countByPista[classification.pista] = (countByPista[classification.pista] || 0) + 1;
-        amountByPista[classification.pista] = (amountByPista[classification.pista] || 0) + prezzo;
+      if (coupon) {
+        couponCaring.pezzi++;
+        couponCaring.importo += prezzo;
+      }
+      if (pista) {
+        countByPista[pista] = (countByPista[pista] || 0) + 1;
+        amountByPista[pista] = (amountByPista[pista] || 0) + prezzo;
       }
     } else if (catNome) {
       if (typeof window !== 'undefined' && !_warnedCategories.has(catNome)) {
@@ -298,5 +326,6 @@ export function classifySaleArticles(
     amountByPista,
     hasCanvass: countByType.canvass > 0,
     primaryPista,
+    couponCaring,
   };
 }
