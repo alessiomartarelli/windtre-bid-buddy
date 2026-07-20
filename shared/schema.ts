@@ -259,6 +259,24 @@ export const garaConfig = pgTable("gara_config", {
   index("IDX_gara_config_org_month_year").on(table.organizationId, table.month, table.year),
 ]);
 
+// Report Telegram inviati (Task #332): traccia per org+data+slot l'esito
+// dell'invio schedulato, così al riavvio del processo (es. restart PM2 per
+// memoria) la run interrotta può essere recuperata SOLO per le org rimaste
+// senza report, senza duplicare i messaggi già arrivati.
+export const telegramReportSends = pgTable("telegram_report_sends", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  // Giorno del report in ora italiana, formato YYYY-MM-DD.
+  reportDate: varchar("report_date").notNull(),
+  // Slot di invio: "13:30" o "22:30".
+  timeLabel: varchar("time_label").notNull(),
+  sentAt: timestamp("sent_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("UQ_telegram_report_sends_org_date_slot").on(
+    table.organizationId, table.reportDate, table.timeLabel,
+  ),
+]);
+
 // DRMS Uploads (DRMS Commissioning Excel uploads, per org+month)
 export const drmsUploads = pgTable("drms_uploads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -580,6 +598,7 @@ export type InsertGaraConfig = typeof garaConfig.$inferInsert;
 export type DrmsUpload = typeof drmsUploads.$inferSelect;
 export type InsertDrmsUpload = typeof drmsUploads.$inferInsert;
 
+export type TelegramReportSend = typeof telegramReportSends.$inferSelect;
 export type DtsLeadRow = typeof dtsLeads.$inferSelect;
 export type InsertDtsLeadRow = typeof dtsLeads.$inferInsert;
 

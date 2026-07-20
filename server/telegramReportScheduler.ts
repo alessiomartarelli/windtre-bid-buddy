@@ -139,6 +139,37 @@ export function msUntilNextSend(now: Date = new Date()): { delayMs: number; labe
   return { delayMs: 60_000, label: SEND_TIMES[0].label };
 }
 
+/**
+ * Slot recuperabile al boot (Task #332): se il processo riparte (es. restart
+ * PM2 per memoria) poco dopo un orario di invio, la run interrotta va
+ * recuperata. Ritorna lo slot più recente già scattato se:
+ * - è passato da meno di `windowMinutes` (default 90);
+ * - il suo giorno (ora italiana) è ancora il giorno corrente (mai
+ *   recuperare il 22:30 di ieri dopo mezzanotte: il report è del giorno).
+ * Altrimenti null (nessun recupero).
+ */
+export function recoverableSlot(
+  now: Date = new Date(),
+  windowMinutes = 90,
+): { ymd: string; label: string } | null {
+  const p = romeParts(now);
+  const nowMs = now.getTime();
+  let best: { epoch: number; ymd: string; label: string } | null = null;
+  for (const dayOffset of [-1, 0]) {
+    for (const t of SEND_TIMES) {
+      const epoch = romeWallTimeToEpoch(p.year, p.month, p.day + dayOffset, t.minutes);
+      if (epoch <= nowMs && (!best || epoch > best.epoch)) {
+        const slotYmd = romeParts(new Date(epoch)).ymd;
+        best = { epoch, ymd: slotYmd, label: t.label };
+      }
+    }
+  }
+  if (!best) return null;
+  if (nowMs - best.epoch > windowMinutes * 60_000) return null;
+  if (best.ymd !== p.ymd) return null;
+  return { ymd: best.ymd, label: best.label };
+}
+
 function formatRomeNow(): string {
   return new Intl.DateTimeFormat("it-IT", {
     timeZone: ROME_TZ,
@@ -214,8 +245,8 @@ export async function sendDailyReportForOrg(params: {
   const trendFromYmd = addYmdDays(ymd, -(TREND_DAYS - 1));
   const monthFromYmd = monthStartYmd(ymd);
   const fromYmd = trendFromYmd < monthFromYmd ? trendFromYmd : monthFromYmd;
-  const rows = await storage.getBisuiteSalesByItalianDateRange(params.orgId, fromYmd, ymd, false);
-  const trendRows = rows.filter((r) => {
+  let rows = await storage.getBisuiteSalesByItalianDateRange(params.orgId, fromYmd, ymd, false);
+  let trendRows = rows.filter((r) => {
     const d = trendYmdOf(r.dataVendita);
     return d !== null && d >= trendFromYmd;
   });
@@ -242,6 +273,12 @@ export async function sendDailyReportForOrg(params: {
     label: monthLabelOf(ymd),
     aggregates: aggregateDailyReport(monthRows, weights),
   };
+  // Riduzione del picco di memoria (Task #332): gli array derivati non
+  // servono più (gli aggregati sono già calcolati); azzeriamo i riferimenti
+  // così il GC può liberare le righe non più raggiungibili mentre si
+  // costruisce l'HTML. `monthRows` resta viva solo per la sezione DTS.
+  rows = [];
+  trendRows = [];
   // Commento "direttore vendite" (Task #266): forecast/obiettivi per-org e
   // PER MESE dalla Configurazione gara (gara_config.config.venditeForecast),
   // dallo stesso record già caricato per i pesi (Task #283)
@@ -335,13 +372,27 @@ export async function sendDailyReportForOrg(params: {
   return { ok: true };
 }
 
-async function runScheduledSend(timeLabel: string): Promise<void> {
+async function runScheduledSend(timeLabel: string, opts?: { recovery?: boolean }): Promise<void> {
   const orgs = await storage.getOrganizations();
+  const { ymd } = romeNowParts();
+  // Dedup (Task #332): salta le org che hanno GIÀ ricevuto il report di
+  // questo slot (es. run interrotta a metà e poi recuperata al riavvio).
+  let alreadySent = new Set<string>();
+  try {
+    alreadySent = await storage.getTelegramReportSentOrgIds(ymd, timeLabel);
+  } catch (err) {
+    console.warn(`[telegram-report] lettura invii registrati fallita, procedo senza dedup: ${err}`);
+  }
   let sent = 0;
   let failed = 0;
   let skipped = 0;
+  let deduped = 0;
   for (const org of orgs) {
     try {
+      if (alreadySent.has(org.id)) {
+        deduped++;
+        continue;
+      }
       const orgConfig = await storage.getOrgConfig(org.id);
       const cfg = orgConfig?.config as Record<string, unknown> | undefined;
       const tg = resolveTelegramConfig(cfg?.telegramReport);
@@ -360,6 +411,13 @@ async function runScheduledSend(timeLabel: string): Promise<void> {
       if (r.ok) {
         sent++;
         console.log(`[telegram-report] inviato report ${timeLabel} org=${org.id} (${org.name})`);
+        // Registra l'invio per il dedup/recovery (Task #332). Un errore di
+        // scrittura non deve far ripartire l'org (il messaggio è già arrivato).
+        try {
+          await storage.recordTelegramReportSend(org.id, ymd, timeLabel);
+        } catch (err) {
+          console.warn(`[telegram-report] registrazione invio fallita org=${org.id}: ${err}`);
+        }
       } else {
         failed++;
         console.error(
@@ -375,8 +433,8 @@ async function runScheduledSend(timeLabel: string): Promise<void> {
     }
   }
   console.log(
-    `[telegram-report] run ${timeLabel} completata — inviati: ${sent}, falliti: ${failed}, ` +
-      `org senza bot: ${skipped}`,
+    `[telegram-report] run ${timeLabel}${opts?.recovery ? " (RECOVERY)" : ""} completata — ` +
+      `inviati: ${sent}, falliti: ${failed}, org senza bot: ${skipped}, già inviati: ${deduped}`,
   );
 }
 
@@ -391,6 +449,21 @@ let started = false;
 export function startTelegramReportScheduler(): void {
   if (started) return;
   started = true;
+
+  // Recovery al boot (Task #332): se il processo è appena ripartito (es.
+  // restart PM2 per --max-memory-restart) dentro la finestra di uno slot
+  // già scattato, recupera la run interrotta per le sole org rimaste senza
+  // report (dedup via telegram_report_sends). Async, non blocca l'avvio.
+  const rec = recoverableSlot();
+  if (rec) {
+    console.log(
+      `[telegram-report] recovery: slot ${rec.label} del ${rec.ymd} dentro la finestra, ` +
+        `verifico le org senza report (Roma: ${formatRomeNow()})`,
+    );
+    void runScheduledSend(rec.label, { recovery: true }).catch((err) => {
+      console.error(`[telegram-report] recovery ${rec.label} fallita: ${err}`);
+    });
+  }
 
   const scheduleNext = () => {
     const { delayMs, label } = msUntilNextSend();

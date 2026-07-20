@@ -959,6 +959,42 @@ if (msUntilNextSend) {
     assert.ok(Math.abs(delayMs - expected) < 60_000, `delay ${delayMs} lontano da ${expected}`);
   });
 
+  // ── recoverableSlot (Task #332): recupero al boot della run interrotta ──
+  const { recoverableSlot } = await import("../server/telegramReportScheduler.ts");
+
+  await test("recoverableSlot: 20 min dopo le 22:30 ⇒ slot 22:30 di oggi", () => {
+    const r = recoverableSlot(romeDate(22, 50));
+    assert.deepEqual(r, { ymd: "2026-07-02", label: "22:30" });
+  });
+
+  await test("recoverableSlot: 45 min dopo le 13:30 ⇒ slot 13:30", () => {
+    const r = recoverableSlot(romeDate(14, 15));
+    assert.deepEqual(r, { ymd: "2026-07-02", label: "13:30" });
+  });
+
+  await test("recoverableSlot: oltre la finestra (default 90 min) ⇒ null", () => {
+    assert.equal(recoverableSlot(romeDate(15, 1)), null); // 13:30 + 91 min
+    assert.equal(recoverableSlot(romeDate(10, 0)), null); // nessuno slot passato oggi, ieri 22:30 lontano
+  });
+
+  await test("recoverableSlot: finestra custom", () => {
+    // 15:30 = 120 min dopo le 13:30: dentro con finestra 130, fuori con 100.
+    assert.deepEqual(recoverableSlot(romeDate(15, 30), 130), { ymd: "2026-07-02", label: "13:30" });
+    assert.equal(recoverableSlot(romeDate(15, 30), 100), null);
+  });
+
+  await test("recoverableSlot: mai il 22:30 di ieri dopo mezzanotte (giorno diverso)", () => {
+    // 3 luglio 00:30 Roma (22:30 UTC del 2/7): 22:30 di ieri è a 120 min
+    // ma anche con finestra larga NON va recuperato — il report è del giorno.
+    const after = new Date(Date.UTC(2026, 6, 2, 22, 30, 0)); // 00:30 Roma del 3/7
+    assert.equal(recoverableSlot(after, 600), null);
+  });
+
+  await test("recoverableSlot: esattamente all'orario dello slot ⇒ recuperabile", () => {
+    const r = recoverableSlot(romeDate(13, 30));
+    assert.deepEqual(r, { ymd: "2026-07-02", label: "13:30" });
+  });
+
   const { resolveTelegramConfig } = await import("../server/telegramReportScheduler.ts");
 
   await test("resolveTelegramConfig: null/disabled/incompleta ⇒ null", () => {

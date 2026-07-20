@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
+import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets } from "@shared/customerJourney";
 
@@ -94,6 +94,10 @@ export interface IStorage {
   getBisuiteSale(id: string): Promise<BisuiteSale | undefined>;
   deleteBisuiteSalesByOrg(orgId: string): Promise<void>;
   reconcileBisuiteSales(orgId: string, fromYMD: string, toYMD: string, threshold: Date): Promise<{ deleted: number }>;
+
+  // Telegram report sends (Task #332): dedup/recovery delle run schedulate
+  getTelegramReportSentOrgIds(reportDate: string, timeLabel: string): Promise<Set<string>>;
+  recordTelegramReportSend(orgId: string, reportDate: string, timeLabel: string): Promise<void>;
 
   // Gara Config
   getGaraConfig(orgId: string, month: number, year: number): Promise<GaraConfig | undefined>;
@@ -584,6 +588,23 @@ export class DatabaseStorage implements IStorage {
       sql`(${bisuiteSales.lastSeenAt} IS NULL OR ${bisuiteSales.lastSeenAt} < ${threshold.toISOString()})`,
     )).returning({ id: bisuiteSales.id });
     return { deleted: result.length };
+  }
+
+  // Telegram report sends (Task #332)
+  async getTelegramReportSentOrgIds(reportDate: string, timeLabel: string): Promise<Set<string>> {
+    const rows = await db.select({ orgId: telegramReportSends.organizationId })
+      .from(telegramReportSends)
+      .where(and(
+        eq(telegramReportSends.reportDate, reportDate),
+        eq(telegramReportSends.timeLabel, timeLabel),
+      ));
+    return new Set(rows.map((r) => r.orgId));
+  }
+
+  async recordTelegramReportSend(orgId: string, reportDate: string, timeLabel: string): Promise<void> {
+    await db.insert(telegramReportSends)
+      .values({ organizationId: orgId, reportDate, timeLabel })
+      .onConflictDoNothing();
   }
 
   // Gara Config

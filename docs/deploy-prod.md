@@ -16,6 +16,13 @@ Dettaglio operativo della produzione. La sintesi (VPS, path, PM2) resta in
   `pm2 delete`+`start` necessario per ricaricare env). Riferirsi sempre al
   nome, non all'id, perché può cambiare. NEVER toccare pm2 id 9
   (easycashflows), 12 (protecta) o 14 (easystripe).
+- **PM2 max_memory_restart**: `900M` in `ecosystem.config.cjs` (era 500M:
+  il picco di memoria della run Telegram 22:30 del 20/07/2026 — fetch
+  BiSuite + reconcile CJ + report — superava i 500M e PM2 uccideva l'app
+  prima dell'invio). Per cambiarlo serve `pm2 delete` + `start` + `save`
+  (un semplice restart non rilegge l'opzione). Lo scheduler Telegram ha
+  comunque il recovery al boot + dedup su `telegram_report_sends`
+  (vedi `docs/telegram-report.md`).
 - **Env vars di prod**: caricate da
   `/var/www/incentive-w3/ecosystem.config.cjs` (NON da `.env` — l'app non
   usa dotenv). Per modificarle: editare ecosystem +

@@ -22,6 +22,7 @@
 - [CJ schede date filter](cj-schede-date-filter.md) — il dal–al delle Schede filtra per data INSERIMENTO SIM (non "aperta il"/openedAt); scelta voluta dall'utente, non è un bug: non switchare a openedAt.
 - [Prod SMTP_SECRET_KEY differs](prod-secret-key-differs.md) — segreti per il DB di prod vanno cifrati SUL VPS (chiave diversa da dev); plaintext via stdin, verifica round-trip.
 - [Static precompress sidecars](static-precompress-sidecars.md) — mai comprimere asset in sync al boot; sidecar .gz/.br generati al build + warm-up async di fallback; regole duplicate build↔server da tenere allineate.
+- [Telegram report recovery](telegram-report-recovery.md) — invii registrati in telegram_report_sends; recovery al boot entro 90 min stesso giorno Roma + dedup; PM2 900M, cambio limite = delete+start+save.
 - [Prod scheduled-path rehearsal](prod-scheduled-path-rehearsal.md) — per verificare un percorso schedulato di prod senza aspettare il timer: stesse funzioni via tsx da dev + tunnel SSH al DB prod.
 - [Telegram report message content](telegram-report-message-content.md) — testo = commento discorsivo "direttore vendite" (no elenco, forecast per-org, seed su data); il dettaglio vive SOLO nell'allegato HTML (chip pista: assic=descrizione, energia=CF/IVA da descrizione offerta).
 - [Rebrand color semantics](rebrand-color-semantics.md) — arancione residuo = semantico (warning/categoria/●live), NON residuo brand; brand = indaco --brand-indigo.

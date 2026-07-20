@@ -215,7 +215,19 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   giorno corrente (se le credenziali sono configurate; un errore di sync
   NON blocca l'invio) → lettura vendite di oggi dal DB → invio. Errori
   loggati per-org senza bloccare le altre. Avviato da `server/index.ts`
-  SOLO in produzione (come lo scheduler BiSuite). Dopo il messaggio di
+  SOLO in produzione (come lo scheduler BiSuite).
+  **Recupero run persa + dedup (Task #332)**: ogni invio riuscito è
+  registrato in `telegram_report_sends` (org + data YMD Roma + slot, indice
+  UNIQUE). All'avvio dello scheduler `recoverableSlot(now, window=90min)`
+  controlla se il processo è ripartito (es. restart PM2 per
+  `--max-memory-restart`) entro 90 minuti da uno slot 13:30/22:30 già
+  scattato **dello stesso giorno** (mai il 22:30 di ieri dopo mezzanotte):
+  in tal caso rilancia `runScheduledSend` in modalità recovery, che salta
+  le org già registrate come inviate (dedup) e recupera solo quelle rimaste
+  senza report. Il dedup vale anche per le run normali (doppio scatto ⇒
+  nessun duplicato). Un errore di lettura/scrittura del registro non blocca
+  mai l'invio (warn nel log). Riduzione picco memoria: gli array derivati
+  (rows/trendRows) vengono azzerati appena calcolati gli aggregati. Dopo il messaggio di
   testo, `sendDailyReportForOrg` invia anche l'**allegato HTML**
   (Task #248): se l'allegato fallisce il report NON è considerato
   fallito — warn nel log, `docError` nel risultato (l'endpoint di prova
