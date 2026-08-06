@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DEFAULT_SEND_TIMES } from "@shared/telegramSendTimes";
 
 interface Organization {
   id: string;
@@ -26,7 +27,8 @@ interface TelegramReportFormProps {
 
 // Card admin per il report vendite giornaliero su Telegram (Task #239):
 // configura bot token + chat ID del gruppo per organizzazione, abilita
-// l'invio automatico (13:30 e 22:30 ora italiana) e invia un test.
+// l'invio automatico e invia un test. Orari di invio configurabili
+// (Task #334), default 13:30 e 22:15 ora italiana.
 export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) => {
   const { toast } = useToast();
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
@@ -39,6 +41,8 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
   const [isTesting, setIsTesting] = useState(false);
   const [hasExistingConfig, setHasExistingConfig] = useState(false);
   const [hasSavedToken, setHasSavedToken] = useState(false);
+  const [oraParziale, setOraParziale] = useState(DEFAULT_SEND_TIMES.parziale);
+  const [oraChiusura, setOraChiusura] = useState(DEFAULT_SEND_TIMES.chiusura);
 
   useEffect(() => {
     if (selectedOrgId) {
@@ -49,6 +53,8 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
       setChatId("");
       setHasExistingConfig(false);
       setHasSavedToken(false);
+      setOraParziale(DEFAULT_SEND_TIMES.parziale);
+      setOraChiusura(DEFAULT_SEND_TIMES.chiusura);
     }
   }, [selectedOrgId]);
 
@@ -67,12 +73,16 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
         setChatId(data.chat_id || "");
         setHasSavedToken(data.has_token === true);
         setHasExistingConfig(Boolean(data.has_token || data.chat_id));
+        setOraParziale(data.send_times?.parziale || DEFAULT_SEND_TIMES.parziale);
+        setOraChiusura(data.send_times?.chiusura || DEFAULT_SEND_TIMES.chiusura);
       } else {
         setEnabled(false);
         setBotToken("");
         setChatId("");
         setHasSavedToken(false);
         setHasExistingConfig(false);
+        setOraParziale(DEFAULT_SEND_TIMES.parziale);
+        setOraChiusura(DEFAULT_SEND_TIMES.chiusura);
       }
     } catch (error) {
       console.error("Error loading Telegram config:", error);
@@ -107,6 +117,7 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
           enabled,
           bot_token: botToken.trim(),
           chat_id: chatId.trim(),
+          send_times: { parziale: oraParziale, chiusura: oraChiusura },
         }),
       });
       const data = await res.json().catch(() => null);
@@ -117,7 +128,7 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
       toast({
         title: "Configurazione salvata",
         description: enabled
-          ? "Report automatico attivo: invio alle 13:30 e alle 22:30"
+          ? `Report automatico attivo: invio alle ${oraParziale} e alle ${oraChiusura}`
           : "Configurazione salvata (invio automatico disattivato)",
       });
     } catch (error: unknown) {
@@ -206,8 +217,8 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
           Report vendite su Telegram
         </CardTitle>
         <CardDescription>
-          Invia automaticamente il riepilogo vendite del giorno in un gruppo Telegram alle 13:30
-          e alle 22:30 (ora italiana)
+          Invia automaticamente il riepilogo vendite del giorno in un gruppo Telegram due volte al
+          giorno, agli orari configurati qui sotto (ora italiana)
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -317,11 +328,42 @@ export const TelegramReportForm = ({ organizations }: TelegramReportFormProps) =
                 </p>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="tg-ora-parziale">Orario report parziale</Label>
+                  <Input
+                    id="tg-ora-parziale"
+                    data-testid="input-telegram-ora-parziale"
+                    type="time"
+                    value={oraParziale}
+                    onChange={(e) => setOraParziale(e.target.value)}
+                    disabled={!selectedOrgId}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tg-ora-chiusura">Orario report di chiusura</Label>
+                  <Input
+                    id="tg-ora-chiusura"
+                    data-testid="input-telegram-ora-chiusura"
+                    type="time"
+                    value={oraChiusura}
+                    onChange={(e) => setOraChiusura(e.target.value)}
+                    disabled={!selectedOrgId}
+                  />
+                </div>
+                <p className="col-span-2 text-xs text-muted-foreground">
+                  Ora italiana. Il primo invio è il parziale di metà giornata, il secondo la
+                  chiusura serale (default {DEFAULT_SEND_TIMES.parziale} e {DEFAULT_SEND_TIMES.chiusura}).
+                  La fascia 02:00–02:59 non è ammessa.
+                </p>
+              </div>
+
               <div className="flex items-center justify-between rounded-lg border border-border p-3">
                 <div className="space-y-0.5">
                   <Label htmlFor="tg-enabled">Invio automatico</Label>
                   <p className="text-xs text-muted-foreground">
-                    Report giornaliero alle 13:30 e alle 22:30 (ora italiana)
+                    Report giornaliero alle {oraParziale || DEFAULT_SEND_TIMES.parziale} e alle{" "}
+                    {oraChiusura || DEFAULT_SEND_TIMES.chiusura} (ora italiana)
                   </p>
                 </div>
                 <Switch

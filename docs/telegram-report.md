@@ -1,7 +1,9 @@
 # Report vendite giornaliero su Telegram (Task #239)
 
 Invio automatico del riepilogo vendite BiSuite del giorno corrente in un
-gruppo Telegram, due volte al giorno alle **13:30** e alle **22:30** ora
+gruppo Telegram, due volte al giorno (default **13:30** e **22:15**,
+configurabili per organizzazione dalla card admin —
+`telegramReport.send_times` — Task #334) ora
 italiana (Europe/Rome, corretto anche col cambio ora legale).
 
 ## Architettura
@@ -16,7 +18,7 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   fasce, selezione **deterministica** legata alla data (hash FNV-1a di
   `dateYMD` ⇒ seme; stessa data ⇒ stesso testo, ma varietà giorno-per-
   giorno). `buildDirettoreCommento(params)` compone: apertura per fascia
-  (☀️ parziale 13:30 / 🌙 chiusura 22:30) e **banda di performance**
+  (☀️ parziale / 🌙 chiusura, sugli orari configurati) e **banda di performance**
   (moltoSopra ≥ +15%, sopra ≥ +5%, inLinea −5..+5%, sotto ≤ −5%,
   moltoSotto ≤ −15% sul delta medio mensile); riassunto della giornata
   (vendite + importo, dimensioni con pezzi/€, delta % vs obiettivo
@@ -210,7 +212,9 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   semantica never-throw.
 - **`server/telegramReportScheduler.ts`** — scheduler con lo stesso
   pattern Intl/Europe/Rome di `bisuiteScheduler.ts`: `msUntilNextSend`
-  calcola il prossimo orario fra 13:30/22:30, setTimeout ricalcolato dopo
+  calcola il prossimo orario fra l'unione degli orari configurati dalle org
+  (default 13:30/22:15; validazione in `shared/telegramSendTimes.ts`, la
+  fascia 02:00–02:59 è vietata perché ambigua col cambio ora), setTimeout ricalcolato dopo
   ogni run (`.unref()`). Per ogni org con bot abilitato: sync BiSuite del
   giorno corrente (se le credenziali sono configurate; un errore di sync
   NON blocca l'invio) → lettura vendite di oggi dal DB → invio. Errori
@@ -220,8 +224,8 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   registrato in `telegram_report_sends` (org + data YMD Roma + slot, indice
   UNIQUE). All'avvio dello scheduler `recoverableSlot(now, window=90min)`
   controlla se il processo è ripartito (es. restart PM2 per
-  `--max-memory-restart`) entro 90 minuti da uno slot 13:30/22:30 già
-  scattato **dello stesso giorno** (mai il 22:30 di ieri dopo mezzanotte):
+  `--max-memory-restart`) entro 90 minuti da uno slot già
+  scattato **dello stesso giorno** (mai la chiusura di ieri dopo mezzanotte):
   in tal caso rilancia `runScheduledSend` in modalità recovery, che salta
   le org già registrate come inviate (dedup) e recupera solo quelle rimaste
   senza report. Il dedup vale anche per le run normali (doppio scatto ⇒
@@ -406,7 +410,7 @@ Il verify script accetta ora `TIME_LABEL=<testo>` (override dell'etichetta
 oraria in intestazione — determina anche la fascia: `22:xx` ⇒ chiusura) e
 `SYNC_FIRST=0` (salta la sync BiSuite, utile per un 2° invio ravvicinato
 senza risincronizzare). Così un solo giro può inviare sia il parziale
-(13:30) sia la chiusura (22:30).
+(13:30) sia la chiusura (22:15).
 
 ## Verifica del commento "direttore vendite" con dati reali (Task #267)
 
@@ -433,7 +437,7 @@ momento): delta % e proiezioni del commento coincidono con
 standout PDV+addetto leggibili. **Org prod senza forecast** ⇒ il commento
 live salta il framing mensile (scelta: nessun obiettivo mensile inventato
 scritto in prod). Su richiesta utente inviati poi 2 messaggi reali
-(parziale 13:30 + chiusura 22:30, label "(verifica commento)") nel gruppo
+(parziale 13:30 + chiusura 22:15, label "(verifica commento)") nel gruppo
 "Windtre test" — variante **senza forecast**. Fix di forma emerso nella
 verifica: le aperture di banda che finiscono con `!` (es. "Chiusura col
 botto, squadra!") non prendono più il punto in coda ("!." ⇒ "!", helper

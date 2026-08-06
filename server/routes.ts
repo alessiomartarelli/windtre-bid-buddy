@@ -12,6 +12,7 @@ import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, inse
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
 import { dtsSaleCodiceEsterno } from "@shared/dtsReport";
+import { normalizeTimeLabel, parseSendTimes } from "@shared/telegramSendTimes";
 import { registerCdgRoutes } from "./cdgRoutes";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import {
@@ -23,7 +24,7 @@ import {
   type SmtpConfig,
 } from "./email";
 import { decryptSecret, encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
-import { sendDailyReportForOrg } from "./telegramReportScheduler";
+import { sendDailyReportForOrg, rescheduleTelegramReports } from "./telegramReportScheduler";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 // FinPlan PRELOAD: rimosso in Task #148 (cutover finale). Le route
@@ -2638,6 +2639,7 @@ export async function registerRoutes(
         enabled: tg.enabled === true,
         has_token: rawToken.length > 0,
         chat_id: typeof tg.chat_id === "string" ? tg.chat_id : "",
+        send_times: parseSendTimes(tg.send_times),
       });
     } catch (error) {
       console.error("Error loading Telegram report config:", error);
@@ -2652,7 +2654,7 @@ export async function registerRoutes(
       if (!profile || !["super_admin", "admin"].includes(profile.role)) {
         return res.status(403).json({ error: "Solo gli amministratori possono gestire la configurazione Telegram" });
       }
-      const { organization_id, enabled, bot_token, chat_id, clear_token } = req.body ?? {};
+      const { organization_id, enabled, bot_token, chat_id, clear_token, send_times } = req.body ?? {};
       if (!organization_id || typeof organization_id !== "string") {
         return res.status(400).json({ error: "organization_id è obbligatorio" });
       }
@@ -2685,17 +2687,37 @@ export async function registerRoutes(
       if (isEnabled && (!encToken || !chatId)) {
         return res.status(400).json({ error: "Per abilitare il report servono bot token e chat ID" });
       }
+      // Orari di invio (Task #334): validati e normalizzati "HH:MM"; campi
+      // invalidi o uguali fra loro ⇒ 400 (mai salvare orari ambigui).
+      let sendTimes = undefined as ReturnType<typeof parseSendTimes> | undefined;
+      if (send_times !== undefined) {
+        const parziale = normalizeTimeLabel((send_times as Record<string, unknown>)?.parziale);
+        const chiusura = normalizeTimeLabel((send_times as Record<string, unknown>)?.chiusura);
+        if (!parziale || !chiusura || parziale === chiusura) {
+          return res.status(400).json({
+            error:
+              "Orari di invio non validi: servono due orari HH:MM distinti (esclusa la fascia 02:00–02:59)",
+          });
+        }
+        sendTimes = { parziale, chiusura };
+      }
       // Il forecast/obiettivi vive ora nella Configurazione gara
       // (gara_config.config.venditeForecast), per-mese: qui restano solo
       // token, chat_id e flag di abilitazione. Un eventuale forecast già
       // salvato in questo blocco viene preservato ma non più usato.
       const existingForecast = existingTg?.forecast;
+      const existingSendTimes = existingTg?.send_times;
       const updatedConfig = {
         ...existingConfig,
         telegramReport: {
           enabled: isEnabled,
           bot_token: encToken,
           chat_id: chatId,
+          ...(sendTimes !== undefined
+            ? { send_times: sendTimes }
+            : existingSendTimes !== undefined
+              ? { send_times: existingSendTimes }
+              : {}),
           ...(existingForecast !== undefined ? { forecast: existingForecast } : {}),
         },
       };
@@ -2704,6 +2726,10 @@ export async function registerRoutes(
         updatedConfig,
         orgConfig?.configVersion || "2.0",
       );
+      // Ri-arma subito il timer dello scheduler (Task #334): un nuovo orario
+      // ancora futuro di OGGI vale da subito, non dal prossimo giro. No-op
+      // se lo scheduler non è avviato (dev).
+      rescheduleTelegramReports();
       res.json({ success: true });
     } catch (error) {
       console.error("Error saving Telegram report config:", error);

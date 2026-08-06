@@ -97,6 +97,7 @@ export interface IStorage {
 
   // Telegram report sends (Task #332): dedup/recovery delle run schedulate
   getTelegramReportSentOrgIds(reportDate: string, timeLabel: string): Promise<Set<string>>;
+  getTelegramReportSendLabels(reportDate: string): Promise<Map<string, string[]>>;
   recordTelegramReportSend(orgId: string, reportDate: string, timeLabel: string): Promise<void>;
 
   // Gara Config
@@ -599,6 +600,25 @@ export class DatabaseStorage implements IStorage {
         eq(telegramReportSends.timeLabel, timeLabel),
       ));
     return new Set(rows.map((r) => r.orgId));
+  }
+
+  // Tutti gli invii del giorno, per il dedup per fascia logica (Task #334):
+  // se un'org cambia orario a metà giornata, il label dell'invio già fatto
+  // non coincide più con lo slot corrente ma la fascia sì.
+  async getTelegramReportSendLabels(reportDate: string): Promise<Map<string, string[]>> {
+    const rows = await db.select({
+      orgId: telegramReportSends.organizationId,
+      timeLabel: telegramReportSends.timeLabel,
+    })
+      .from(telegramReportSends)
+      .where(eq(telegramReportSends.reportDate, reportDate));
+    const map = new Map<string, string[]>();
+    for (const r of rows) {
+      const list = map.get(r.orgId) ?? [];
+      list.push(r.timeLabel);
+      map.set(r.orgId, list);
+    }
+    return map;
   }
 
   async recordTelegramReportSend(orgId: string, reportDate: string, timeLabel: string): Promise<void> {

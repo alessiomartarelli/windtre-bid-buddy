@@ -116,7 +116,7 @@ mantenere snello questo file:
   scaricate da altre pagine compaiono senza "Rigenera", via watermark).
 - [`docs/telegram-report.md`](docs/telegram-report.md) — Report vendite
   giornaliero su Telegram: bot per-org (token cifrato), scheduler
-  13:30/22:30 Europe/Rome, aggregati condivisi con Vendite BiSuite,
+  13:30/22:15 di default (orari configurabili per org) Europe/Rome, aggregati condivisi con Vendite BiSuite,
   report HTML navigabile allegato, API admin + card di config, test puri.
 - [`docs/canvass-vodafone-fastweb.md`](docs/canvass-vodafone-fastweb.md) —
   Mapping canvass Vodafone/Fastweb: catalogo baked (listino 306 offerte +

@@ -899,11 +899,31 @@ if (msUntilNextSend) {
     assert.ok(Math.abs(delayMs - expected) < 60_000, `delay ${delayMs} lontano da ${expected}`);
   });
 
-  await test("alle 14:00 Roma il prossimo invio è alle 22:30", () => {
+  await test("alle 14:00 Roma il prossimo invio è alle 22:15 (nuovo default)", () => {
     const { delayMs, label } = msUntilNextSend(romeDate(14, 0));
-    assert.equal(label, "22:30");
-    const expected = 8.5 * 3600 * 1000;
+    assert.equal(label, "22:15");
+    const expected = 8.25 * 3600 * 1000;
     assert.ok(Math.abs(delayMs - expected) < 60_000);
+  });
+
+  await test("orari custom (Task #334): 21:00 configurato ⇒ prossimo invio 21:00", () => {
+    const customTimes = [
+      { label: "12:00", minutes: 12 * 60 },
+      { label: "21:00", minutes: 21 * 60 },
+    ];
+    const { delayMs, label } = msUntilNextSend(romeDate(14, 0), customTimes);
+    assert.equal(label, "21:00");
+    assert.ok(Math.abs(delayMs - 7 * 3600 * 1000) < 60_000);
+  });
+
+  await test("orari custom non ordinati: sceglie comunque il più vicino", () => {
+    const customTimes = [
+      { label: "22:00", minutes: 22 * 60 },
+      { label: "13:00", minutes: 13 * 60 },
+      { label: "20:00", minutes: 20 * 60 },
+    ];
+    const { label } = msUntilNextSend(romeDate(14, 0), customTimes);
+    assert.equal(label, "20:00");
   });
 
   await test("alle 23:00 Roma il prossimo invio è il 13:30 di domani", () => {
@@ -941,12 +961,12 @@ if (msUntilNextSend) {
     );
   });
 
-  await test("DST: anche 13:30 → 22:30 nello STESSO giorno del cambio resta 9h", () => {
+  await test("DST: anche 13:30 → 22:15 nello STESSO giorno del cambio resta corretto", () => {
     // Domenica 29/03/2026 14:00 Roma = 12:00 UTC (CEST già attivo).
     const now = new Date(Date.UTC(2026, 2, 29, 12, 0, 0));
     const { delayMs, label } = msUntilNextSend(now);
-    assert.equal(label, "22:30");
-    const expected = 8.5 * 3600 * 1000; // 22:30 - 14:00, nessuna transizione in mezzo
+    assert.equal(label, "22:15");
+    const expected = 8.25 * 3600 * 1000; // 22:15 - 14:00, nessuna transizione in mezzo
     assert.ok(Math.abs(delayMs - expected) < 60_000, `delay ${delayMs} lontano da ${expected}`);
   });
 
@@ -959,12 +979,61 @@ if (msUntilNextSend) {
     assert.ok(Math.abs(delayMs - expected) < 60_000, `delay ${delayMs} lontano da ${expected}`);
   });
 
+  // ── telegramSendTimes (Task #334): orari configurabili ──
+  const { parseSendTimes, normalizeTimeLabel, fasciaForLabel, DEFAULT_SEND_TIMES } =
+    await import("../shared/telegramSendTimes.ts");
+
+  await test("normalizeTimeLabel: valida e normalizza HH:MM", () => {
+    assert.equal(normalizeTimeLabel("9:05"), "09:05");
+    assert.equal(normalizeTimeLabel(" 22:15 "), "22:15");
+    assert.equal(normalizeTimeLabel("24:00"), null);
+    assert.equal(normalizeTimeLabel("12:60"), null);
+    assert.equal(normalizeTimeLabel("2:30"), null); // finestra DST
+    assert.equal(normalizeTimeLabel("02:00"), null);
+    assert.equal(normalizeTimeLabel("abc"), null);
+    assert.equal(normalizeTimeLabel(1330), null);
+  });
+
+  await test("parseSendTimes: default, per-campo e orari uguali", () => {
+    assert.deepEqual(parseSendTimes(undefined), DEFAULT_SEND_TIMES);
+    assert.deepEqual(parseSendTimes({ parziale: "12:00", chiusura: "21:00" }),
+      { parziale: "12:00", chiusura: "21:00" });
+    // Campo invalido ⇒ default solo per quel campo.
+    assert.deepEqual(parseSendTimes({ parziale: "x", chiusura: "21:00" }),
+      { parziale: "13:30", chiusura: "21:00" });
+    // Orari coincidenti ⇒ default completi.
+    assert.deepEqual(parseSendTimes({ parziale: "21:00", chiusura: "21:00" }), DEFAULT_SEND_TIMES);
+  });
+
+  await test("fasciaForLabel: chiusura sul label configurato, fallback ≥18", () => {
+    const times = { parziale: "13:30", chiusura: "22:15" };
+    assert.equal(fasciaForLabel("22:15", times), "chiusura");
+    assert.equal(fasciaForLabel("13:30", times), "parziale");
+    // Orario inatteso: fallback sull'ora.
+    assert.equal(fasciaForLabel("19:00", times), "chiusura");
+    assert.equal(fasciaForLabel("11:00", times), "parziale");
+    // Chiusura anticipata configurata prima delle 18 resta chiusura.
+    assert.equal(fasciaForLabel("17:00", { parziale: "12:00", chiusura: "17:00" }), "chiusura");
+  });
+
   // ── recoverableSlot (Task #332): recupero al boot della run interrotta ──
   const { recoverableSlot } = await import("../server/telegramReportScheduler.ts");
 
-  await test("recoverableSlot: 20 min dopo le 22:30 ⇒ slot 22:30 di oggi", () => {
+  await test("recoverableSlot: 35 min dopo le 22:15 ⇒ slot 22:15 di oggi", () => {
     const r = recoverableSlot(romeDate(22, 50));
-    assert.deepEqual(r, { ymd: "2026-07-02", label: "22:30" });
+    assert.deepEqual(r, { ymd: "2026-07-02", label: "22:15" });
+  });
+
+  await test("recoverableSlot con orari custom (Task #334)", () => {
+    const customTimes = [
+      { label: "12:00", minutes: 12 * 60 },
+      { label: "21:00", minutes: 21 * 60 },
+    ];
+    assert.deepEqual(recoverableSlot(romeDate(21, 30), 90, customTimes), {
+      ymd: "2026-07-02",
+      label: "21:00",
+    });
+    assert.equal(recoverableSlot(romeDate(14, 0), 90, customTimes), null); // 12:00 + 120 min
   });
 
   await test("recoverableSlot: 45 min dopo le 13:30 ⇒ slot 13:30", () => {
@@ -983,8 +1052,8 @@ if (msUntilNextSend) {
     assert.equal(recoverableSlot(romeDate(15, 30), 100), null);
   });
 
-  await test("recoverableSlot: mai il 22:30 di ieri dopo mezzanotte (giorno diverso)", () => {
-    // 3 luglio 00:30 Roma (22:30 UTC del 2/7): 22:30 di ieri è a 120 min
+  await test("recoverableSlot: mai la chiusura di ieri dopo mezzanotte (giorno diverso)", () => {
+    // 3 luglio 00:30 Roma (22:30 UTC del 2/7): 22:15 di ieri è a ~135 min
     // ma anche con finestra larga NON va recuperato — il report è del giorno.
     const after = new Date(Date.UTC(2026, 6, 2, 22, 30, 0)); // 00:30 Roma del 3/7
     assert.equal(recoverableSlot(after, 600), null);

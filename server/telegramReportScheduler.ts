@@ -18,21 +18,30 @@ import {
 import { buildVenditeReportHtml, reportHtmlFileName } from "@shared/venditeReportHtml";
 import { aggregateDtsReport, filterDtsLeads, type DtsReportAggregates } from "@shared/dtsReport";
 import { fasciaFromTimeLabel, parseForecastConfig } from "@shared/venditeCommento";
+import {
+  DEFAULT_SEND_TIMES,
+  fasciaForLabel,
+  minutesOfLabel,
+  parseSendTimes,
+  type SendTimes,
+} from "@shared/telegramSendTimes";
 
 /**
  * Scheduler del report vendite giornaliero su Telegram (Task #239).
- * Due invii al giorno alle 13:30 e alle 22:30 ora italiana (Europe/Rome,
- * corretto anche col cambio ora legale). Per ogni organizzazione con il
- * bot configurato e abilitato: sync BiSuite del giorno corrente e invio
- * del riepilogo nel gruppo. Errori loggati senza bloccare le altre org.
+ * Due invii al giorno (default 13:30 e 22:15 ora italiana, configurabili
+ * per organizzazione in telegramReport.send_times — Task #334), corretti
+ * anche col cambio ora legale. Per ogni organizzazione con il bot
+ * configurato e abilitato: sync BiSuite del giorno corrente e invio del
+ * riepilogo nel gruppo. Errori loggati senza bloccare le altre org.
  */
 
 const ROME_TZ = "Europe/Rome";
 
-// Orari di invio (ora italiana), in minuti dalla mezzanotte.
+// Orari di invio di default (ora italiana), usati se un'org non ha
+// send_times configurati e come fallback se la lettura config fallisce.
 const SEND_TIMES: Array<{ label: string; minutes: number }> = [
-  { label: "13:30", minutes: 13 * 60 + 30 },
-  { label: "22:30", minutes: 22 * 60 + 30 },
+  { label: DEFAULT_SEND_TIMES.parziale, minutes: minutesOfLabel(DEFAULT_SEND_TIMES.parziale) },
+  { label: DEFAULT_SEND_TIMES.chiusura, minutes: minutesOfLabel(DEFAULT_SEND_TIMES.chiusura) },
 ];
 
 // Config Telegram per-organizzazione salvata in organization_config.config.
@@ -40,6 +49,8 @@ export interface TelegramReportConfig {
   enabled?: boolean;
   bot_token?: string; // cifrato at-rest (enc:v1:...)
   chat_id?: string;
+  // Orari di invio per-org (Task #334): { parziale, chiusura } "HH:MM".
+  send_times?: Partial<SendTimes>;
   // Il forecast/obiettivi mensile vive ora in gara_config.config.venditeForecast
   // (per-mese), non più qui: questo blocco tiene solo il trasporto Telegram.
 }
@@ -116,12 +127,16 @@ function romeWallTimeToEpoch(year: number, month: number, day: number, minutes: 
  * resta corretta anche quando attraversa il cambio ora legale (giorni da
  * 23h/25h), senza assumere giornate da 24h fisse.
  */
-export function msUntilNextSend(now: Date = new Date()): { delayMs: number; label: string } {
+export function msUntilNextSend(
+  now: Date = new Date(),
+  sendTimes: Array<{ label: string; minutes: number }> = SEND_TIMES,
+): { delayMs: number; label: string } {
+  const times = sendTimes.length > 0 ? sendTimes : SEND_TIMES;
   const p = romeParts(now);
   const nowMs = now.getTime();
   const candidates: Array<{ epoch: number; label: string }> = [];
   for (const dayOffset of [0, 1]) {
-    for (const t of SEND_TIMES) {
+    for (const t of times) {
       candidates.push({
         // Date.UTC normalizza l'overflow del giorno (es. 31+1 ⇒ 1 del mese dopo).
         epoch: romeWallTimeToEpoch(p.year, p.month, p.day + dayOffset, t.minutes),
@@ -129,14 +144,17 @@ export function msUntilNextSend(now: Date = new Date()): { delayMs: number; labe
       });
     }
   }
+  // Con orari per-org diversi i candidati non sono più ordinati: si sceglie
+  // il più vicino nel futuro.
+  candidates.sort((a, b) => a.epoch - b.epoch);
   for (const c of candidates) {
     if (c.epoch > nowMs) {
       // +5s di margine per non arrivare un attimo prima dell'orario.
       return { delayMs: c.epoch - nowMs + 5_000, label: c.label };
     }
   }
-  // Irraggiungibile (domani 13:30 è sempre nel futuro), fallback difensivo.
-  return { delayMs: 60_000, label: SEND_TIMES[0].label };
+  // Irraggiungibile (il primo orario di domani è sempre nel futuro), fallback difensivo.
+  return { delayMs: 60_000, label: times[0].label };
 }
 
 /**
@@ -151,12 +169,14 @@ export function msUntilNextSend(now: Date = new Date()): { delayMs: number; labe
 export function recoverableSlot(
   now: Date = new Date(),
   windowMinutes = 90,
+  sendTimes: Array<{ label: string; minutes: number }> = SEND_TIMES,
 ): { ymd: string; label: string } | null {
+  const times = sendTimes.length > 0 ? sendTimes : SEND_TIMES;
   const p = romeParts(now);
   const nowMs = now.getTime();
   let best: { epoch: number; ymd: string; label: string } | null = null;
   for (const dayOffset of [-1, 0]) {
-    for (const t of SEND_TIMES) {
+    for (const t of times) {
       const epoch = romeWallTimeToEpoch(p.year, p.month, p.day + dayOffset, t.minutes);
       if (epoch <= nowMs && (!best || epoch > best.epoch)) {
         const slotYmd = romeParts(new Date(epoch)).ymd;
@@ -213,6 +233,8 @@ export async function sendDailyReportForOrg(params: {
   botToken: string;
   chatId: string;
   timeLabel?: string;
+  /** Fascia del commento; se assente si deduce dal timeLabel. */
+  fascia?: "parziale" | "chiusura";
   syncFirst?: boolean;
 }): Promise<{ ok: boolean; error?: string; docError?: string }> {
   const { ymd } = romeNowParts();
@@ -296,7 +318,7 @@ export async function sendDailyReportForOrg(params: {
     aggregates,
     monthAggregates: month.aggregates,
     forecast,
-    fascia: fasciaFromTimeLabel(params.timeLabel),
+    fascia: params.fascia ?? fasciaFromTimeLabel(params.timeLabel),
   });
   const result = await sendTelegramMessage(params.botToken, params.chatId, message);
   if (!result.ok) {
@@ -375,11 +397,14 @@ export async function sendDailyReportForOrg(params: {
 async function runScheduledSend(timeLabel: string, opts?: { recovery?: boolean }): Promise<void> {
   const orgs = await storage.getOrganizations();
   const { ymd } = romeNowParts();
-  // Dedup (Task #332): salta le org che hanno GIÀ ricevuto il report di
-  // questo slot (es. run interrotta a metà e poi recuperata al riavvio).
-  let alreadySent = new Set<string>();
+  // Dedup (Task #332/#334): salta le org che hanno GIÀ ricevuto il report
+  // della stessa FASCIA logica (parziale/chiusura) oggi. Confronto per
+  // fascia e non per label: se un'org cambia orario a metà giornata, il
+  // label registrato (es. "13:30") non coincide più con lo slot nuovo
+  // (es. "12:00") ma la fascia sì — così niente doppioni né invii soppressi.
+  let sentLabelsByOrg = new Map<string, string[]>();
   try {
-    alreadySent = await storage.getTelegramReportSentOrgIds(ymd, timeLabel);
+    sentLabelsByOrg = await storage.getTelegramReportSendLabels(ymd);
   } catch (err) {
     console.warn(`[telegram-report] lettura invii registrati fallita, procedo senza dedup: ${err}`);
   }
@@ -389,15 +414,26 @@ async function runScheduledSend(timeLabel: string, opts?: { recovery?: boolean }
   let deduped = 0;
   for (const org of orgs) {
     try {
-      if (alreadySent.has(org.id)) {
-        deduped++;
-        continue;
-      }
       const orgConfig = await storage.getOrgConfig(org.id);
       const cfg = orgConfig?.config as Record<string, unknown> | undefined;
       const tg = resolveTelegramConfig(cfg?.telegramReport);
       if (!tg) {
         skipped++;
+        continue;
+      }
+      // Orari per-org (Task #334): questa run riguarda solo le org il cui
+      // orario configurato coincide con lo slot scattato.
+      const times = parseSendTimes(
+        (cfg?.telegramReport as TelegramReportConfig | undefined)?.send_times,
+      );
+      if (timeLabel !== times.parziale && timeLabel !== times.chiusura) {
+        skipped++;
+        continue;
+      }
+      const fascia = fasciaForLabel(timeLabel, times);
+      const sentLabels = sentLabelsByOrg.get(org.id) ?? [];
+      if (sentLabels.some((l) => fasciaForLabel(l, times) === fascia)) {
+        deduped++;
         continue;
       }
       const r = await sendDailyReportForOrg({
@@ -406,6 +442,7 @@ async function runScheduledSend(timeLabel: string, opts?: { recovery?: boolean }
         botToken: tg.botToken,
         chatId: tg.chatId,
         timeLabel,
+        fascia,
         syncFirst: true,
       });
       if (r.ok) {
@@ -439,6 +476,52 @@ async function runScheduledSend(timeLabel: string, opts?: { recovery?: boolean }
 }
 
 let started = false;
+let currentTimer: ReturnType<typeof setTimeout> | null = null;
+let scheduleGeneration = 0;
+let scheduleNextFn: (() => Promise<void>) | null = null;
+
+/**
+ * Ri-arma il timer dello scheduler (Task #334): da chiamare dopo un
+ * salvataggio della config Telegram, così un nuovo orario ancora futuro
+ * di OGGI viene pianificato subito (senza aspettare il prossimo giro).
+ * No-op se lo scheduler non è avviato (es. ambiente dev).
+ */
+export function rescheduleTelegramReports(): void {
+  if (!started || !scheduleNextFn) return;
+  if (currentTimer) clearTimeout(currentTimer);
+  currentTimer = null;
+  scheduleGeneration++;
+  void scheduleNextFn();
+}
+
+/**
+ * Unione degli orari di invio configurati da tutte le org (Task #334):
+ * lo scheduler pianifica il prossimo timer sull'orario più vicino fra
+ * quelli configurati; alla run ogni org riceve solo i propri slot.
+ * Se la lettura config fallisce si ricade sui default.
+ */
+async function collectSendTimes(): Promise<Array<{ label: string; minutes: number }>> {
+  try {
+    const orgs = await storage.getOrganizations();
+    const labels = new Set<string>();
+    for (const org of orgs) {
+      const orgConfig = await storage.getOrgConfig(org.id);
+      const cfg = orgConfig?.config as Record<string, unknown> | undefined;
+      const tg = cfg?.telegramReport as TelegramReportConfig | undefined;
+      if (!tg?.enabled) continue;
+      const times = parseSendTimes(tg.send_times);
+      labels.add(times.parziale);
+      labels.add(times.chiusura);
+    }
+    if (labels.size === 0) return SEND_TIMES;
+    return Array.from(labels)
+      .map((label) => ({ label, minutes: minutesOfLabel(label) }))
+      .sort((a, b) => a.minutes - b.minutes);
+  } catch (err) {
+    console.warn(`[telegram-report] lettura orari configurati fallita, uso i default: ${err}`);
+    return SEND_TIMES;
+  }
+}
 
 /**
  * Avvia lo scheduler dei report Telegram. Idempotente: chiamandolo più
@@ -454,25 +537,34 @@ export function startTelegramReportScheduler(): void {
   // restart PM2 per --max-memory-restart) dentro la finestra di uno slot
   // già scattato, recupera la run interrotta per le sole org rimaste senza
   // report (dedup via telegram_report_sends). Async, non blocca l'avvio.
-  const rec = recoverableSlot();
-  if (rec) {
-    console.log(
-      `[telegram-report] recovery: slot ${rec.label} del ${rec.ymd} dentro la finestra, ` +
-        `verifico le org senza report (Roma: ${formatRomeNow()})`,
-    );
-    void runScheduledSend(rec.label, { recovery: true }).catch((err) => {
-      console.error(`[telegram-report] recovery ${rec.label} fallita: ${err}`);
-    });
-  }
+  // Gli slot considerati sono quelli configurati (Task #334).
+  void collectSendTimes().then((times) => {
+    const rec = recoverableSlot(new Date(), 90, times);
+    if (rec) {
+      console.log(
+        `[telegram-report] recovery: slot ${rec.label} del ${rec.ymd} dentro la finestra, ` +
+          `verifico le org senza report (Roma: ${formatRomeNow()})`,
+      );
+      void runScheduledSend(rec.label, { recovery: true }).catch((err) => {
+        console.error(`[telegram-report] recovery ${rec.label} fallita: ${err}`);
+      });
+    }
+  });
 
-  const scheduleNext = () => {
-    const { delayMs, label } = msUntilNextSend();
+  const scheduleNext = async () => {
+    // Orari riletti a ogni giro; inoltre rescheduleTelegramReports() ri-arma
+    // subito il timer al salvataggio della config (la generazione invalida
+    // un giro ormai superato, evitando doppi timer).
+    const gen = ++scheduleGeneration;
+    const times = await collectSendTimes();
+    if (gen !== scheduleGeneration) return; // superato da un reschedule
+    const { delayMs, label } = msUntilNextSend(new Date(), times);
     const nextRun = new Date(Date.now() + delayMs);
     console.log(
       `[telegram-report] prossimo report ${label} programmato per ` +
         `${nextRun.toISOString()} (tra ~${Math.round(delayMs / 60000)} min, ora attuale Roma: ${formatRomeNow()})`,
     );
-    setTimeout(async () => {
+    currentTimer = setTimeout(async () => {
       try {
         console.log(`[telegram-report] avvio run ${label} (Roma: ${formatRomeNow()})`);
         await runScheduledSend(label);
@@ -480,10 +572,12 @@ export function startTelegramReportScheduler(): void {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[telegram-report] errore fatale durante la run ${label}: ${msg}`);
       } finally {
-        scheduleNext();
+        void scheduleNext();
       }
-    }, delayMs).unref?.();
+    }, delayMs);
+    currentTimer.unref?.();
   };
 
-  scheduleNext();
+  scheduleNextFn = scheduleNext;
+  void scheduleNext();
 }

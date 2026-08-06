@@ -268,7 +268,7 @@ export const telegramReportSends = pgTable("telegram_report_sends", {
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
   // Giorno del report in ora italiana, formato YYYY-MM-DD.
   reportDate: varchar("report_date").notNull(),
-  // Slot di invio: "13:30" o "22:30".
+  // Slot di invio "HH:MM" (default 13:30/22:15, configurabile per org).
   timeLabel: varchar("time_label").notNull(),
   sentAt: timestamp("sent_at").defaultNow(),
 }, (table) => [
