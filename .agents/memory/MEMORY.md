@@ -25,6 +25,7 @@
 - [Telegram report recovery](telegram-report-recovery.md) — invii registrati in telegram_report_sends; recovery al boot entro 90 min stesso giorno Roma + dedup PER FASCIA (non per label); PM2 900M, cambio limite = delete+start+save.
 - [Telegram send times](telegram-send-times.md) — orari per-org in telegramReport.send_times (default 13:30/22:15); scheduler su unione orari, reschedule al save, fascia 02:00–02:59 vietata (DST).
 - [Prod scheduled-path rehearsal](prod-scheduled-path-rehearsal.md) — per verificare un percorso schedulato di prod senza aspettare il timer: stesse funzioni via tsx da dev + tunnel SSH al DB prod.
+- [Telegram report IVA & annullate](telegram-report-iva-annullate.md) — accessori+servizi mostrati NETTO IVA (÷1.22 via transform post-aggregazione, anche history); i conteggi BiSuite UI includono le ANNULLATE, il report no.
 - [Telegram report message content](telegram-report-message-content.md) — testo = commento discorsivo "direttore vendite" (no elenco, forecast per-org, seed su data); il dettaglio vive SOLO nell'allegato HTML (chip pista: assic=descrizione, energia=CF/IVA da descrizione offerta).
 - [Rebrand color semantics](rebrand-color-semantics.md) — arancione residuo = semantico (warning/categoria/●live), NON residuo brand; brand = indaco --brand-indigo.
 - [Dark mode status & mapping](dark-mode-status.md) — dark mode NON è raggiungibile (nessun toggle/provider); `.dark` esiste in index.css. Per test: `class="dark"` in index.html. Convenzione dark: variants.

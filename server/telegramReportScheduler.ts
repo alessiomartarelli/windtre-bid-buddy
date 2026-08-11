@@ -5,6 +5,7 @@ import { decryptSecret, isEncrypted } from "./cryptoSecret";
 import {
   addYmdDays,
   aggregateDailyReport,
+  applyNettoIvaAccessoriServizi,
   parsePerformanceWeights,
   buildDailyHistory,
   buildDailyTrend,
@@ -305,13 +306,21 @@ export async function sendDailyReportForOrg(params: {
     garaCfgObj = garaCfg?.config as Record<string, unknown> | undefined;
   }
   const weights = parsePerformanceWeights(garaCfgObj?.performanceWeights);
-  const aggregates = aggregateDailyReport(todayRows, weights);
+  // Accessori e Servizi al netto dell'IVA (Task #335): applicato subito
+  // dopo l'aggregazione così messaggio, HTML, proiezione e top-KPI sono
+  // tutti coerenti (÷1.22 su fatturati ACCESSORI + tutti i Servizi).
+  const aggregates = applyNettoIvaAccessoriServizi(aggregateDailyReport(todayRows, weights));
   const trend = buildDailyTrend(trendRows, trendFromYmd, ymd);
-  const history = buildDailyHistory(trendRows, trendFromYmd, ymd);
+  // Anche le pagine storiche per-giorno dell'HTML vanno al netto IVA
+  // (accessori/servizi), coerenti con oggi e Totale mese.
+  const history = buildDailyHistory(trendRows, trendFromYmd, ymd).map((h) => ({
+    ...h,
+    aggregates: applyNettoIvaAccessoriServizi(h.aggregates),
+  }));
   // Le righe sono già senza ANNULLATA (includeAnnullate=false in query).
   const month = {
     label: monthLabelOf(ymd),
-    aggregates: aggregateDailyReport(monthRows, weights),
+    aggregates: applyNettoIvaAccessoriServizi(aggregateDailyReport(monthRows, weights)),
   };
   // Riduzione del picco di memoria (Task #332): gli array derivati non
   // servono più (gli aggregati sono già calcolati); azzeriamo i riferimenti

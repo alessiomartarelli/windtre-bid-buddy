@@ -704,6 +704,76 @@ export function accessoriImportoOf(a: DailyReportAggregates): number {
 }
 
 // ---------------------------------------------------------------------------
+// Netto IVA per Accessori e Servizi (Task #335): nel report Telegram i
+// fatturati di Accessori (categoria ACCESSORI) e di TUTTI i Servizi vanno
+// mostrati al netto dell'IVA (aliquota ordinaria 22%). La trasformazione è
+// applicata agli aggregati PRIMA della costruzione di messaggio/HTML, così
+// proiezione, top per KPI, tabelle categoria e drill-down restano coerenti.
+// Telefonia e gli altri prodotti restano LORDI (prezzi come da BiSuite).
+// ---------------------------------------------------------------------------
+
+export const IVA_RATE = 1.22;
+
+const nettoIva = (v: number): number => v / IVA_RATE;
+
+function isAccessori(categoria: string): boolean {
+  return categoria.trim().toUpperCase() === "ACCESSORI";
+}
+
+function nettoPagamenti(p: PagamentoSplit): PagamentoSplit {
+  return {
+    contanti: nettoIva(p.contanti),
+    pos: nettoIva(p.pos),
+    finanziato: nettoIva(p.finanziato),
+    varCredito: nettoIva(p.varCredito),
+    altro: nettoIva(p.altro),
+  };
+}
+
+function nettoDrilldown(d: ReportDrilldown): ReportDrilldown {
+  return {
+    ...d,
+    prodottiByCategoria: d.prodottiByCategoria.map((c) =>
+      isAccessori(c.categoria) ? { ...c, importo: nettoIva(c.importo) } : c,
+    ),
+    serviziByCategoria: d.serviziByCategoria.map((c) => ({ ...c, importo: nettoIva(c.importo) })),
+  };
+}
+
+/**
+ * Ritorna una copia degli aggregati con i fatturati di Accessori e Servizi
+ * al netto dell'IVA (÷1.22): totali per tipo, dettaglio per categoria
+ * (incluso lo split pagamenti) e drill-down per addetto/negozio. Pezzi,
+ * punteggi e tutti gli altri importi restano invariati.
+ */
+export function applyNettoIvaAccessoriServizi(a: DailyReportAggregates): DailyReportAggregates {
+  const accessoriLordo = a.prodottiByCategoria
+    .filter((c) => isAccessori(c.categoria))
+    .reduce((s, c) => s + c.importo, 0);
+  const accessoriScorporo = accessoriLordo - nettoIva(accessoriLordo);
+  return {
+    ...a,
+    amountByType: {
+      ...a.amountByType,
+      prodotti: a.amountByType.prodotti - accessoriScorporo,
+      servizi: nettoIva(a.amountByType.servizi),
+    },
+    prodottiByCategoria: a.prodottiByCategoria.map((c) =>
+      isAccessori(c.categoria)
+        ? { ...c, importo: nettoIva(c.importo), pagamenti: nettoPagamenti(c.pagamenti) }
+        : c,
+    ),
+    serviziByCategoria: a.serviziByCategoria.map((c) => ({
+      ...c,
+      importo: nettoIva(c.importo),
+      pagamenti: nettoPagamenti(c.pagamenti),
+    })),
+    perPdv: a.perPdv.map((p) => ({ ...p, dettaglio: nettoDrilldown(p.dettaglio) })),
+    perAddetto: a.perAddetto.map((p) => ({ ...p, dettaglio: nettoDrilldown(p.dettaglio) })),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Punteggio performance (Task #282): "il migliore" e le classifiche
 // addetti/negozi non si misurano più sul fatturato ma su un punteggio pesato
 // per pista. Ogni attivazione vale i punti della sua pista; le attivazioni a

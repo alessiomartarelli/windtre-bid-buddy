@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 
 const {
   aggregateDailyReport,
+  applyNettoIvaAccessoriServizi,
+  IVA_RATE,
   buildTelegramReportMessage,
   fmtEuro,
   fmtReportDate,
@@ -119,6 +121,30 @@ await test("aggregazione per tipo e pista su più vendite", () => {
   assert.equal(a.countByPista.energia, 1);
   assert.equal(a.countByPista.fisso, 1);
   assert.equal(a.amountByPista.fisso, 25);
+});
+
+await test("applyNettoIvaAccessoriServizi: netto IVA solo su ACCESSORI e Servizi", () => {
+  const lordo = aggregateDailyReport([
+    sale({ totale: "244", articoli: [art("TELEFONIA", 122), art("ACCESSORI", 61), art("SPEDIZIONE", 61)] }),
+  ]);
+  const a = applyNettoIvaAccessoriServizi(lordo);
+  const cat = (list, name) => list.find((c) => c.categoria === name);
+  // Telefonia resta LORDA
+  assert.equal(cat(a.prodottiByCategoria, "TELEFONIA").importo, 122);
+  // Accessori e servizi ÷ 1.22
+  assert.ok(Math.abs(cat(a.prodottiByCategoria, "ACCESSORI").importo - 61 / IVA_RATE) < 1e-9);
+  assert.ok(Math.abs(cat(a.serviziByCategoria, "SPEDIZIONE").importo - 61 / IVA_RATE) < 1e-9);
+  // Totali per tipo coerenti (prodotti = telefonia lorda + accessori netti)
+  assert.ok(Math.abs(a.amountByType.prodotti - (122 + 61 / IVA_RATE)) < 1e-9);
+  assert.ok(Math.abs(a.amountByType.servizi - 61 / IVA_RATE) < 1e-9);
+  // Pezzi e importo vendita invariati; drill-down PDV nettato
+  assert.equal(a.countByType.prodotti, 2);
+  assert.equal(a.importo, lordo.importo);
+  const drill = a.perPdv[0].dettaglio;
+  assert.ok(Math.abs(cat(drill.prodottiByCategoria, "ACCESSORI").importo - 61 / IVA_RATE) < 1e-9);
+  assert.ok(Math.abs(cat(drill.serviziByCategoria, "SPEDIZIONE").importo - 61 / IVA_RATE) < 1e-9);
+  // L'originale non è mutato
+  assert.equal(cat(lordo.prodottiByCategoria, "ACCESSORI").importo, 61);
 });
 
 await test("pezzi CB = SOLO MIA TIED + MIA UNTIED + RIVINCOLO (altre categorie CB escluse)", () => {
@@ -1265,7 +1291,7 @@ await test("HTML: card Prodotti per categoria e Servizi con chip pagamenti", () 
     aggregates: aggregateDailyReport(rows),
   });
   assert.ok(html.includes("Prodotti per categoria"), "manca la card prodotti");
-  assert.ok(html.includes(">Servizi <span"), "manca la card servizi");
+  assert.ok(html.includes(">Servizi (netto IVA) <span"), "manca la card servizi");
   assert.ok(html.includes("TELEFONIA"), "manca la categoria TELEFONIA");
   assert.ok(html.includes("🏦 Finanziato 500,00 €"), "manca il chip finanziato");
   assert.ok(html.includes("💵 Contanti"), "manca il chip contanti");
@@ -1280,7 +1306,7 @@ await test("HTML: giornata senza prodotti/servizi ⇒ card assenti", () => {
     aggregates: aggregateDailyReport([salePay({ totale: "30", articoli: [artPay("UNTIED", 30)] })]),
   });
   assert.ok(!html.includes("Prodotti per categoria"));
-  assert.ok(!html.includes(">Servizi <span"));
+  assert.ok(!html.includes(">Servizi (netto IVA) <span"));
 });
 
 console.log("\n— drill-down negozio/addetto (Task #251) —");

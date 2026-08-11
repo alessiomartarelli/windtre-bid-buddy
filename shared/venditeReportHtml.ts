@@ -472,8 +472,8 @@ function drillPanel(d: ReportDrilldown): string {
       .join("");
     parts.push(`<div class="drill-sec"><div class="drill-k">${escapeHtml(label)}</div>${rows}</div>`);
   };
-  catBlock("Accessori e prodotti", d.prodottiByCategoria, TYPE_THEME.prodotti);
-  catBlock("Servizi", d.serviziByCategoria, TYPE_THEME.servizi);
+  catBlock("Accessori e prodotti (accessori netto IVA)", d.prodottiByCategoria, TYPE_THEME.prodotti);
+  catBlock("Servizi (netto IVA)", d.serviziByCategoria, TYPE_THEME.servizi);
   if (parts.length === 0) return "";
   return `<div class="drill">${parts.join("")}</div>`;
 }
@@ -605,8 +605,8 @@ function daySections(
     parts.push(pisteSection(a, trendSlice));
     parts.push(couponCaringSection(a, "giorno"));
     parts.push(tipiSection(a));
-    parts.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
-    parts.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));
+    parts.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
+    parts.push(categorieSection("Servizi (netto IVA)", a.serviziByCategoria, TYPE_THEME.servizi));
     parts.push(pdvSection(a));
     parts.push(addettiSection(a));
   }
@@ -703,8 +703,8 @@ function monthSections(
     parts.push(pisteSection(a, undefined, "La gara delle piste · mese"));
     parts.push(couponCaringSection(a, "mese"));
     parts.push(tipiSection(a));
-    parts.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
-    parts.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));
+    parts.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
+    parts.push(categorieSection("Servizi (netto IVA)", a.serviziByCategoria, TYPE_THEME.servizi));
     parts.push(pdvSection(a));
     parts.push(addettiSection(a));
   }
@@ -749,8 +749,8 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
       sections.push(pisteSection(a, trend));
       sections.push(couponCaringSection(a, "giorno"));
       sections.push(tipiSection(a));
-      sections.push(categorieSection("Prodotti per categoria", a.prodottiByCategoria, TYPE_THEME.prodotti));
-      sections.push(categorieSection("Servizi", a.serviziByCategoria, TYPE_THEME.servizi));
+      sections.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
+      sections.push(categorieSection("Servizi (netto IVA)", a.serviziByCategoria, TYPE_THEME.servizi));
       sections.push(pdvSection(a));
       sections.push(addettiSection(a));
     }
