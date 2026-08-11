@@ -173,6 +173,12 @@ interface DeviceTally {
   internetDevice: DeviceKindTally;
 }
 
+/** Aliquota IVA ordinaria: Accessori e Servizi mostrati al netto per
+ *  coerenza con il report Telegram (÷1.22). */
+const IVA_RATE = 1.22;
+const nettoIva = (v: number) => v / IVA_RATE;
+const ivaOf = (lordo: number) => lordo - nettoIva(lordo);
+
 const EMPTY_DEVICE_KIND: DeviceKindTally = {
   finanziato: { pezzi: 0, descriptions: {} },
   rate: { pezzi: 0, descriptions: {} },
@@ -4499,8 +4505,8 @@ export default function DashboardGaraReale() {
                   case 'premio': return premioByPdv.get(pdv.codicePos) || 0;
                   case 'smartphone': return pdvSmartphoneMobileCount(pdv) + pdvSmartphoneCBCount(pdv);
                   case 'accessori_pezzi': return pdv.accessori?.pezzi || 0;
-                  case 'accessori_fatturato': return pdv.accessori?.importo || 0;
-                  case 'servizi_fatturato': return pdv.servizi?.importo || 0;
+                  case 'accessori_fatturato': return nettoIva(pdv.accessori?.importo || 0);
+                  case 'servizi_fatturato': return nettoIva(pdv.servizi?.importo || 0);
                   case 'nome_az': return (pdv.nomeNegozio || '').toLowerCase();
                   case 'punti_mobile': return punti.mobile || 0;
                   case 'punti_fisso': return punti.fisso || 0;
@@ -4953,15 +4959,19 @@ export default function DashboardGaraReale() {
                                     const total = workdayInfo.totalWorkingDays;
                                     const acc = pdv.accessori || { pezzi: 0, importo: 0 };
                                     const srv = pdv.servizi || { pezzi: 0, importo: 0 };
+                                    const accNetto = nettoIva(acc.importo);
+                                    const accIva = ivaOf(acc.importo);
+                                    const srvNetto = nettoIva(srv.importo);
+                                    const srvIva = ivaOf(srv.importo);
                                     const projAccPz = elapsed > 0 ? Math.round((acc.pezzi / elapsed) * total) : acc.pezzi;
-                                    const projAccImp = elapsed > 0 ? (acc.importo / elapsed) * total : acc.importo;
+                                    const projAccImp = elapsed > 0 ? (accNetto / elapsed) * total : accNetto;
                                     const projSrvPz = elapsed > 0 ? Math.round((srv.pezzi / elapsed) * total) : srv.pezzi;
-                                    const projSrvImp = elapsed > 0 ? (srv.importo / elapsed) * total : srv.importo;
+                                    const projSrvImp = elapsed > 0 ? (srvNetto / elapsed) * total : srvNetto;
                                     return (
                                       <>
                                         <div className="rounded-lg border p-3 bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-200" data-testid={`pdv-accessori-${pdv.codicePos}`}>
                                           <div className="font-medium text-sm mb-2 flex items-center justify-between">
-                                            <span>Accessori</span>
+                                            <span>Accessori <span className="text-[10px] font-normal opacity-60">(netto IVA)</span></span>
                                             <span className="font-bold">{acc.pezzi}</span>
                                           </div>
                                           <div className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
@@ -4969,7 +4979,8 @@ export default function DashboardGaraReale() {
                                               <span className="font-medium">Attuali:</span>
                                               <span>{acc.pezzi} pz</span>
                                               <span>·</span>
-                                              <span>{formatEuro(acc.importo)}</span>
+                                              <span>{formatEuro(accNetto)}</span>
+                                              {accIva > 0 && <span className="opacity-60">(IVA {formatEuro(accIva)})</span>}
                                             </div>
                                             <div className="flex items-center gap-1 flex-wrap">
                                               <span className="font-medium">Proiezione:</span>
@@ -4981,7 +4992,7 @@ export default function DashboardGaraReale() {
                                         </div>
                                         <div className="rounded-lg border p-3 bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-200" data-testid={`pdv-servizi-${pdv.codicePos}`}>
                                           <div className="font-medium text-sm mb-2 flex items-center justify-between">
-                                            <span>Servizi</span>
+                                            <span>Servizi <span className="text-[10px] font-normal opacity-60">(netto IVA)</span></span>
                                             <span className="font-bold">{srv.pezzi}</span>
                                           </div>
                                           <div className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
@@ -4989,7 +5000,8 @@ export default function DashboardGaraReale() {
                                               <span className="font-medium">Attuali:</span>
                                               <span>{srv.pezzi} pz</span>
                                               <span>·</span>
-                                              <span>{formatEuro(srv.importo)}</span>
+                                              <span>{formatEuro(srvNetto)}</span>
+                                              {srvIva > 0 && <span className="opacity-60">(IVA {formatEuro(srvIva)})</span>}
                                             </div>
                                             <div className="flex items-center gap-1 flex-wrap">
                                               <span className="font-medium">Proiezione:</span>
@@ -5142,9 +5154,9 @@ const DETTAGLIO_RS_AGG_COLS: { key: DettaglioRsAggColKey; label: string }[] = [
   { key: "smartphone_mobile", label: "Smartphone Mobile" },
   { key: "smartphone_cb", label: "Smartphone CB" },
   { key: "accessori_pezzi", label: "Accessori (pz)" },
-  { key: "accessori_importo", label: "Accessori (€)" },
+  { key: "accessori_importo", label: "Accessori netto IVA (€)" },
   { key: "servizi_pezzi", label: "Servizi (pz)" },
-  { key: "servizi_importo", label: "Servizi (€)" },
+  { key: "servizi_importo", label: "Servizi netto IVA (€)" },
 ];
 
 function DettaglioRsPdfExport({
@@ -5254,9 +5266,9 @@ function DettaglioRsPdfExport({
         case "smartphone_mobile": return { num: pdvSmartphoneMobileCount(pdv), isEuro: false };
         case "smartphone_cb": return { num: pdvSmartphoneCBCount(pdv), isEuro: false };
         case "accessori_pezzi": return { num: pdv.accessori?.pezzi ?? 0, isEuro: false };
-        case "accessori_importo": return { num: pdv.accessori?.importo ?? 0, isEuro: true };
+        case "accessori_importo": return { num: nettoIva(pdv.accessori?.importo ?? 0), isEuro: true };
         case "servizi_pezzi": return { num: pdv.servizi?.pezzi ?? 0, isEuro: false };
-        case "servizi_importo": return { num: pdv.servizi?.importo ?? 0, isEuro: true };
+        case "servizi_importo": return { num: nettoIva(pdv.servizi?.importo ?? 0), isEuro: true };
       }
     };
 
@@ -5483,14 +5495,14 @@ function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[];
                         <div className="text-[11px] text-gray-500 dark:text-slate-400">Proiezione: {pj(spCB)}</div>
                       </div>
                       <div className="rounded-lg border p-3 bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-200" data-testid={`rs-accessori-${rs.ragioneSociale}`}>
-                        <div className="text-xs font-medium">Accessori</div>
-                        <div className="text-lg font-bold">{accPz} pz · {formatEuro(accImp)}</div>
-                        <div className="text-[11px] text-gray-500 dark:text-slate-400">Proiezione: {pj(accPz)} pz · {formatEuro(pje(accImp))}</div>
+                        <div className="text-xs font-medium">Accessori <span className="font-normal opacity-60">(netto IVA)</span></div>
+                        <div className="text-lg font-bold">{accPz} pz · {formatEuro(nettoIva(accImp))}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400">IVA {formatEuro(ivaOf(accImp))} · Proiezione: {pj(accPz)} pz · {formatEuro(pje(nettoIva(accImp)))}</div>
                       </div>
                       <div className="rounded-lg border p-3 bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-200" data-testid={`rs-servizi-${rs.ragioneSociale}`}>
-                        <div className="text-xs font-medium">Servizi</div>
-                        <div className="text-lg font-bold">{srvPz} pz · {formatEuro(srvImp)}</div>
-                        <div className="text-[11px] text-gray-500 dark:text-slate-400">Proiezione: {pj(srvPz)} pz · {formatEuro(pje(srvImp))}</div>
+                        <div className="text-xs font-medium">Servizi <span className="font-normal opacity-60">(netto IVA)</span></div>
+                        <div className="text-lg font-bold">{srvPz} pz · {formatEuro(nettoIva(srvImp))}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400">IVA {formatEuro(ivaOf(srvImp))} · Proiezione: {pj(srvPz)} pz · {formatEuro(pje(nettoIva(srvImp)))}</div>
                       </div>
                     </div>
                   );

@@ -131,6 +131,8 @@ interface PdvSummary {
   totaleImporto: number;
   countByType: Record<ArticleType, number>;
   amountByType: Record<ArticleType, number>;
+  /** Importo lordo degli articoli categoria ACCESSORI (per scorporo IVA a display). */
+  accessoriImporto: number;
   countByPista: Partial<Record<PistaCanvass, number>>;
   amountByPista: Partial<Record<PistaCanvass, number>>;
   vendite: BisuiteSale[];
@@ -225,6 +227,12 @@ function ArticleIncassoRecap({
     </div>
   );
 }
+
+/** Aliquota IVA ordinaria: Accessori (cat. ACCESSORI) e tutti i Servizi
+ *  vengono mostrati al netto per coerenza con il report Telegram. */
+const IVA_RATE = 1.22;
+const nettoIva = (v: number) => v / IVA_RATE;
+const ivaOf = (lordo: number) => lordo - nettoIva(lordo);
 
 function getDefaultDates() {
   const now = new Date();
@@ -548,6 +556,10 @@ export default function VenditeBiSuite() {
       }
     }
 
+    // Lordo pre-scorporo: serve a mostrare il separato importo IVA in UI.
+    const accessoriLordo = prodottiByCategory['ACCESSORI']?.importo ?? 0;
+    const serviziLordo = amtByType.servizi;
+
     return {
       byType,
       amtByType,
@@ -560,6 +572,10 @@ export default function VenditeBiSuite() {
       prodottiByCategory,
       serviziByLabel,
       incassoByType,
+      /** Fatturato lordo Accessori (categoria ACCESSORI), usato per calcolare IVA a display. */
+      accessoriLordo,
+      /** Fatturato lordo Servizi, usato per calcolare IVA a display. */
+      serviziLordo,
     };
   }, [aggregateSales, saleClassifications, articleMatchesFilter]);
 
@@ -600,6 +616,7 @@ export default function VenditeBiSuite() {
           totaleImporto: 0,
           countByType: { canvass: 0, prodotti: 0, servizi: 0 },
           amountByType: { canvass: 0, prodotti: 0, servizi: 0 },
+          accessoriImporto: 0,
           countByPista: {},
           amountByPista: {},
           vendite: [],
@@ -619,6 +636,9 @@ export default function VenditeBiSuite() {
           saleFilteredAmount += art.prezzo;
           entry.countByType[art.type]++;
           entry.amountByType[art.type] += art.prezzo;
+          if (art.type === 'prodotti' && (art.categoriaNome ?? '').toUpperCase() === 'ACCESSORI') {
+            entry.accessoriImporto += art.prezzo;
+          }
           if (art.scontrinato) entry.articleIncasso.scontrinato += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
           else entry.articleIncasso.fuoriScontrino += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
           entry.articleIncasso.finanziato += art.importoFinanziato;
@@ -690,6 +710,8 @@ export default function VenditeBiSuite() {
       pdvCodes: Set<string>;
       countByType: Record<ArticleType, number>;
       amountByType: Record<ArticleType, number>;
+      /** Importo lordo degli articoli di categoria ACCESSORI (per scorporo IVA a display). */
+      accessoriImporto: number;
       countByPista: Partial<Record<PistaCanvass, number>>;
       amountByPista: Partial<Record<PistaCanvass, number>>;
       articleIncasso: ArticleIncasso;
@@ -700,6 +722,7 @@ export default function VenditeBiSuite() {
         nomeAddetto: addetto, vendite: [], totaleImporto: 0, pdvCodes: new Set(),
         countByType: { canvass: 0, prodotti: 0, servizi: 0 },
         amountByType: { canvass: 0, prodotti: 0, servizi: 0 },
+        accessoriImporto: 0,
         countByPista: {}, amountByPista: {},
         articleIncasso: { scontrinato: 0, fuoriScontrino: 0, finanziato: 0, credito: 0 },
       });
@@ -714,6 +737,9 @@ export default function VenditeBiSuite() {
           saleFilteredAmount += art.prezzo;
           entry.countByType[art.type]++;
           entry.amountByType[art.type] += art.prezzo;
+          if (art.type === 'prodotti' && (art.categoriaNome ?? '').toUpperCase() === 'ACCESSORI') {
+            entry.accessoriImporto += art.prezzo;
+          }
           if (art.scontrinato) entry.articleIncasso.scontrinato += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
           else entry.articleIncasso.fuoriScontrino += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
           entry.articleIncasso.finanziato += art.importoFinanziato;
@@ -782,8 +808,11 @@ export default function VenditeBiSuite() {
   }, [canvassIndex, kpiRules]);
 
   const exportExcelDettaglio = useCallback(() => {
+    // Esporta la selezione corrente (stessi filtri della tabella a schermo: PDV,
+    // stato, tipo, pista, ricerca, pagamento). Le ANNULLATE sono incluse solo
+    // se il filtro Stato è "annullate" o "all", coerente con la vista.
     const rows: Record<string, any>[] = [];
-    for (const sale of sales) {
+    for (const sale of aggregateSales) {
       const r = buildSaleRow(sale);
       const row: Record<string, any> = {
         'Addetto': sale.nomeAddetto || '-',
@@ -805,22 +834,35 @@ export default function VenditeBiSuite() {
       row['CF'] = r.cf || '-';
       row['P.IVA'] = r.piva || '-';
       row['Cliente'] = r.nomeCliente || '-';
-      row['Importo'] = parseFloat(sale.totale || '0') || 0;
+      row['Importo (IVA incl.)'] = parseFloat(sale.totale || '0') || 0;
+      // Calcola "di cui IVA" su Accessori + Servizi della singola vendita.
+      const sc = saleClassifications.get(sale.id);
+      let accSrvLordo = 0;
+      if (sc) {
+        for (const art of sc.articles) {
+          if (art.type === 'servizi') accSrvLordo += art.prezzo;
+          if (art.type === 'prodotti' && (art.categoriaNome ?? '').toUpperCase() === 'ACCESSORI') accSrvLordo += art.prezzo;
+        }
+      }
+      row['Di cui IVA Acc.+Serv.'] = accSrvLordo > 0 ? Math.round(ivaOf(accSrvLordo) * 100) / 100 : 0;
       rows.push(row);
     }
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Vendite Dettaglio');
     XLSX.writeFile(wb, `vendite_dettaglio_${fromDate}_${toDate}.xlsx`);
-  }, [sales, allDomande, buildSaleRow, fromDate, toDate]);
+  }, [aggregateSales, saleClassifications, allDomande, buildSaleRow, fromDate, toDate]);
 
   const exportExcelPerAddetto = useCallback(() => {
     const rows: Record<string, any>[] = [];
     for (const addetto of addettoSummaries) {
+      const accIva = ivaOf(addetto.accessoriImporto);
+      const srvIva = ivaOf(addetto.amountByType.servizi);
       const row: Record<string, any> = {
         'Addetto': addetto.nomeAddetto,
         'N. Vendite': addetto.vendite.length,
-        'Importo Totale': addetto.totaleImporto,
+        'Importo Totale (IVA incl.)': addetto.totaleImporto,
+        'Di cui IVA Acc.+Serv.': Math.round((accIva + srvIva) * 100) / 100,
         'N. PDV': addetto.pdvCodes.size,
         'PDV': Array.from(addetto.pdvCodes).join(', '),
       };
@@ -1224,66 +1266,99 @@ export default function VenditeBiSuite() {
                 </CardContent>
               </Card>
               )}
-              {(filterType === "all" || filterType === "prodotti") && (
-              <Card className="border-l-4 border-l-slate-400">
-                <CardContent className="p-3 sm:p-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <Package className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-                      <span className="font-semibold text-sm">Prodotti</span>
+              {(filterType === "all" || filterType === "prodotti") && (() => {
+                // Prodotti lordo ma con ACCESSORI scorporati (÷1.22): il totale card
+                // mostra il mix (telefonia lorda + accessori netti), ogni riga mostra
+                // netto IVA per ACCESSORI e importo IVA separato.
+                const accLordo = globalCounts.accessoriLordo;
+                const accNetto = nettoIva(accLordo);
+                const prodTotNetto = globalCounts.amtByType.prodotti - accLordo + accNetto;
+                return (
+                <Card className="border-l-4 border-l-slate-400">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                        <span className="font-semibold text-sm">Prodotti</span>
+                        {accLordo > 0 && <span className="text-[9px] text-muted-foreground">(acc. netto IVA)</span>}
+                      </div>
+                      <Badge className={TYPE_COLORS.prodotti + " text-sm font-bold"}>
+                        {globalCounts.byType.prodotti}
+                      </Badge>
                     </div>
-                    <Badge className={TYPE_COLORS.prodotti + " text-sm font-bold"}>
-                      {globalCounts.byType.prodotti}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.prodotti)}</p>
-                  <div className="space-y-1">
-                    {Object.entries(globalCounts.prodottiByCategory)
-                      .sort(([, a], [, b]) => b.pezzi - a.pezzi)
-                      .map(([cat, { pezzi, importo }]) => (
-                        <div key={cat} className="flex items-center justify-between text-xs">
-                          <span className="truncate mr-2 text-muted-foreground">{cat}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {importo > 0 && <span className="text-[10px] text-green-600">{formatCurrency(importo)}</span>}
-                            <Badge variant="outline" className="text-[10px]">{pezzi}</Badge>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                  <ArticleIncassoRecap incasso={globalCounts.incassoByType.prodotti} formatCurrency={formatCurrency} />
-                </CardContent>
-              </Card>
-              )}
-              {(filterType === "all" || filterType === "servizi") && (
-              <Card className="border-l-4 border-l-cyan-500">
-                <CardContent className="p-3 sm:p-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <Wrench className="h-4 w-4 text-cyan-600" />
-                      <span className="font-semibold text-sm">Servizi</span>
+                    <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(prodTotNetto)}</p>
+                    <div className="space-y-1">
+                      {Object.entries(globalCounts.prodottiByCategory)
+                        .sort(([, a], [, b]) => b.pezzi - a.pezzi)
+                        .map(([cat, { pezzi, importo }]) => {
+                          const isAcc = cat === 'ACCESSORI';
+                          const dispImporto = isAcc ? nettoIva(importo) : importo;
+                          const iva = isAcc ? ivaOf(importo) : 0;
+                          return (
+                            <div key={cat} className="flex items-center justify-between text-xs">
+                              <span className="truncate mr-2 text-muted-foreground">{cat}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {dispImporto > 0 && (
+                                  <span className="text-[10px] text-green-600">
+                                    {formatCurrency(dispImporto)}
+                                    {isAcc && <span className="text-muted-foreground ml-0.5">(n.IVA)</span>}
+                                  </span>
+                                )}
+                                {iva > 0 && <span className="text-[10px] text-muted-foreground">IVA {formatCurrency(iva)}</span>}
+                                <Badge variant="outline" className="text-[10px]">{pezzi}</Badge>
+                              </div>
+                            </div>
+                          );
+                        })}
                     </div>
-                    <Badge className={TYPE_COLORS.servizi + " text-sm font-bold"}>
-                      {globalCounts.byType.servizi}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(globalCounts.amtByType.servizi)}</p>
-                  <div className="space-y-1">
-                    {Object.entries(globalCounts.serviziByLabel)
-                      .sort(([, a], [, b]) => b.pezzi - a.pezzi)
-                      .map(([label, { pezzi, importo }]) => (
-                        <div key={label} className="flex items-center justify-between text-xs">
-                          <span className="truncate mr-2 text-muted-foreground">{label}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {importo > 0 && <span className="text-[10px] text-green-600">{formatCurrency(importo)}</span>}
-                            <Badge variant="outline" className="text-[10px]">{pezzi}</Badge>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                  <ArticleIncassoRecap incasso={globalCounts.incassoByType.servizi} formatCurrency={formatCurrency} />
-                </CardContent>
-              </Card>
-              )}
+                    <ArticleIncassoRecap incasso={globalCounts.incassoByType.prodotti} formatCurrency={formatCurrency} />
+                  </CardContent>
+                </Card>
+                );
+              })()}
+              {(filterType === "all" || filterType === "servizi") && (() => {
+                const serviziNetto = nettoIva(globalCounts.serviziLordo);
+                const serviziIva = ivaOf(globalCounts.serviziLordo);
+                return (
+                <Card className="border-l-4 border-l-cyan-500">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="h-4 w-4 text-cyan-600" />
+                        <span className="font-semibold text-sm">Servizi</span>
+                        {globalCounts.serviziLordo > 0 && <span className="text-[9px] text-muted-foreground">(netto IVA)</span>}
+                      </div>
+                      <Badge className={TYPE_COLORS.servizi + " text-sm font-bold"}>
+                        {globalCounts.byType.servizi}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <p className="text-xs text-green-600 font-medium">{formatCurrency(serviziNetto)}</p>
+                      {serviziIva > 0 && <span className="text-[10px] text-muted-foreground">IVA {formatCurrency(serviziIva)}</span>}
+                    </div>
+                    <div className="space-y-1">
+                      {Object.entries(globalCounts.serviziByLabel)
+                        .sort(([, a], [, b]) => b.pezzi - a.pezzi)
+                        .map(([label, { pezzi, importo }]) => {
+                          const netto = nettoIva(importo);
+                          const iva = ivaOf(importo);
+                          return (
+                            <div key={label} className="flex items-center justify-between text-xs">
+                              <span className="truncate mr-2 text-muted-foreground">{label}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {netto > 0 && <span className="text-[10px] text-green-600">{formatCurrency(netto)}</span>}
+                                {iva > 0 && <span className="text-[10px] text-muted-foreground">IVA {formatCurrency(iva)}</span>}
+                                <Badge variant="outline" className="text-[10px]">{pezzi}</Badge>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                    <ArticleIncassoRecap incasso={globalCounts.incassoByType.servizi} formatCurrency={formatCurrency} />
+                  </CardContent>
+                </Card>
+                );
+              })()}
             </div>
 
             {!selectedPdv && rsSummaries.length > 1 && (
@@ -1502,18 +1577,29 @@ export default function VenditeBiSuite() {
                                       <span className="text-[10px] opacity-75">({formatCurrency(addetto.amountByPista[pista] || 0)})</span>
                                     </Badge>
                                   ))}
-                                {addetto.countByType.prodotti > 0 && (
-                                  <Badge className={TYPE_COLORS.prodotti + " text-xs"}>
-                                    Prodotti: {addetto.countByType.prodotti}
-                                    <span className="text-[10px] opacity-75 ml-1">({formatCurrency(addetto.amountByType.prodotti)})</span>
-                                  </Badge>
-                                )}
-                                {addetto.countByType.servizi > 0 && (
-                                  <Badge className={TYPE_COLORS.servizi + " text-xs"}>
-                                    Servizi: {addetto.countByType.servizi}
-                                    <span className="text-[10px] opacity-75 ml-1">({formatCurrency(addetto.amountByType.servizi)})</span>
-                                  </Badge>
-                                )}
+                                {addetto.countByType.prodotti > 0 && (() => {
+                                  const accL = addetto.accessoriImporto;
+                                  const prodNetto = addetto.amountByType.prodotti - accL + nettoIva(accL);
+                                  const accIva = ivaOf(accL);
+                                  return (
+                                    <Badge className={TYPE_COLORS.prodotti + " text-xs"}>
+                                      Prodotti: {addetto.countByType.prodotti}
+                                      <span className="text-[10px] opacity-75 ml-1">({formatCurrency(prodNetto)}{accL > 0 ? " n.IVA acc." : ""})</span>
+                                      {accIva > 0 && <span className="text-[10px] opacity-60 ml-1">IVA {formatCurrency(accIva)}</span>}
+                                    </Badge>
+                                  );
+                                })()}
+                                {addetto.countByType.servizi > 0 && (() => {
+                                  const srvNetto = nettoIva(addetto.amountByType.servizi);
+                                  const srvIva = ivaOf(addetto.amountByType.servizi);
+                                  return (
+                                    <Badge className={TYPE_COLORS.servizi + " text-xs"}>
+                                      Servizi: {addetto.countByType.servizi}
+                                      <span className="text-[10px] opacity-75 ml-1">({formatCurrency(srvNetto)} n.IVA)</span>
+                                      {srvIva > 0 && <span className="text-[10px] opacity-60 ml-1">IVA {formatCurrency(srvIva)}</span>}
+                                    </Badge>
+                                  );
+                                })()}
                               </div>
                               {!componentFilterActive && (() => {
                                 const addettoInc = computeIncassoTotals(addetto.vendite);
@@ -1617,18 +1703,29 @@ export default function VenditeBiSuite() {
                                       <span className="text-[10px] opacity-75">({formatCurrency(pdv.amountByPista[pista] || 0)})</span>
                                     </Badge>
                                   ))}
-                                {pdv.countByType.prodotti > 0 && (
-                                  <Badge className={TYPE_COLORS.prodotti + " text-xs"}>
-                                    Prodotti: {pdv.countByType.prodotti}
-                                    <span className="text-[10px] opacity-75 ml-1">({formatCurrency(pdv.amountByType.prodotti)})</span>
-                                  </Badge>
-                                )}
-                                {pdv.countByType.servizi > 0 && (
-                                  <Badge className={TYPE_COLORS.servizi + " text-xs"}>
-                                    Servizi: {pdv.countByType.servizi}
-                                    <span className="text-[10px] opacity-75 ml-1">({formatCurrency(pdv.amountByType.servizi)})</span>
-                                  </Badge>
-                                )}
+                                {pdv.countByType.prodotti > 0 && (() => {
+                                  const accL = pdv.accessoriImporto;
+                                  const prodNetto = pdv.amountByType.prodotti - accL + nettoIva(accL);
+                                  const accIva = ivaOf(accL);
+                                  return (
+                                    <Badge className={TYPE_COLORS.prodotti + " text-xs"}>
+                                      Prodotti: {pdv.countByType.prodotti}
+                                      <span className="text-[10px] opacity-75 ml-1">({formatCurrency(prodNetto)}{accL > 0 ? " n.IVA acc." : ""})</span>
+                                      {accIva > 0 && <span className="text-[10px] opacity-60 ml-1">IVA {formatCurrency(accIva)}</span>}
+                                    </Badge>
+                                  );
+                                })()}
+                                {pdv.countByType.servizi > 0 && (() => {
+                                  const srvNetto = nettoIva(pdv.amountByType.servizi);
+                                  const srvIva = ivaOf(pdv.amountByType.servizi);
+                                  return (
+                                    <Badge className={TYPE_COLORS.servizi + " text-xs"}>
+                                      Servizi: {pdv.countByType.servizi}
+                                      <span className="text-[10px] opacity-75 ml-1">({formatCurrency(srvNetto)} n.IVA)</span>
+                                      {srvIva > 0 && <span className="text-[10px] opacity-60 ml-1">IVA {formatCurrency(srvIva)}</span>}
+                                    </Badge>
+                                  );
+                                })()}
                               </div>
                               {!componentFilterActive && (() => {
                                 const pdvInc = incassoByPdv.get(pdv.codicePos);
