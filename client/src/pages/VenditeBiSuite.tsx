@@ -1696,6 +1696,7 @@ export default function VenditeBiSuite() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-[80px] sm:w-[100px]">Data</TableHead>
+                          <TableHead className="hidden sm:table-cell w-[80px]">ID BiSuite</TableHead>
                           <TableHead>Negozio</TableHead>
                           <TableHead className="hidden md:table-cell">Addetto</TableHead>
                           <TableHead className="hidden lg:table-cell">Cliente</TableHead>
@@ -1717,6 +1718,12 @@ export default function VenditeBiSuite() {
                             >
                               <TableCell className="text-xs whitespace-nowrap">
                                 {formatDate(sale.dataVendita)}
+                              </TableCell>
+                              <TableCell
+                                className="hidden sm:table-cell text-xs font-mono text-muted-foreground"
+                                data-testid={`cell-bisuite-id-${sale.bisuiteId}`}
+                              >
+                                {sale.bisuiteId}
                               </TableCell>
                               <TableCell>
                                 <div className="text-sm font-medium">
