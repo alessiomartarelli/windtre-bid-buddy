@@ -18,3 +18,10 @@ id = "jJOw5w9xfhdIgTMe2HzwF"
 uri = "file://screenshots/home-preview.jpg"
 type = "image"
 title = "Anteprima Home — Benvenuto essenziale"
+
+[[outputs]]
+id = "fVvZISlyCOdbABw1XaiyE"
+uri = "file://exports/telefoni-luglio-2026.xlsx"
+type = "table"
+title = "Telefoni luglio 2026 — ID vendite BiSuite"
+description = "1005 telefoni (998 su vendite finalizzate + 7 su annullate): una riga per telefono con ID BiSuite, data, stato, negozio, addetto, cliente, modello e prezzo."
