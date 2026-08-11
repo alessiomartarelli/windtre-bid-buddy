@@ -1867,5 +1867,352 @@ await test("accessori/servizi: menzione a parte, senza citare il punteggio", () 
   assert.ok(!s.includes("A parte dal punteggio"));
 });
 
+// ── Scheduler con storage mockato (Task #333) ────────────────────────
+// Cambio orari a metà giornata: niente slot persi, niente doppi invii,
+// recovery al boot senza duplicati. Si mockano i metodi del singleton
+// `storage` e il fetch globale (Telegram API), così runScheduledSend gira
+// end-to-end senza DB né rete.
+console.log("\n— scheduler: runScheduledSend con storage mockato (Task #333) —");
+
+const schedMod = await import("../server/telegramReportScheduler.ts").catch(() => ({}));
+const storageMod = await import("../server/storage.ts").catch(() => ({}));
+
+if (schedMod.runScheduledSend && storageMod.storage) {
+  const { runScheduledSend, collectSendTimes, recoverableSlot: recSlot } = schedMod;
+  const { storage } = storageMod;
+
+  // Stato del mock, reimpostato da setupScenario per ogni test.
+  let mockOrgs = [];
+  let mockConfigs = new Map(); // orgId -> config object
+  let mockSentLabels = new Map(); // orgId -> string[] (label già inviati oggi)
+  let recordedSends = []; // { orgId, ymd, label } registrati dalla run
+  let telegramCalls = []; // URL delle chiamate api.telegram.org intercettate
+
+  const originals = {};
+  const patch = (name, fn) => {
+    if (!(name in originals)) originals[name] = storage[name];
+    storage[name] = fn;
+  };
+  patch("getOrganizations", async () => mockOrgs);
+  patch("getOrgConfig", async (orgId) => {
+    const config = mockConfigs.get(orgId);
+    return config ? { organizationId: orgId, config } : undefined;
+  });
+  patch("getTelegramReportSendLabels", async () => new Map(mockSentLabels));
+  patch("recordTelegramReportSend", async (orgId, ymd, label) => {
+    recordedSends.push({ orgId, ymd, label });
+    const prev = mockSentLabels.get(orgId) ?? [];
+    mockSentLabels.set(orgId, [...prev, label]);
+  });
+  patch("getBisuiteSalesByItalianDateRange", async () => []);
+  patch("getGaraConfig", async () => undefined);
+  patch("getDtsLeads", async () => []);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("api.telegram.org")) {
+      telegramCalls.push(u);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      };
+    }
+    throw new Error(`fetch inatteso nel test: ${u}`);
+  };
+
+  const tgConfig = (sendTimes) => ({
+    telegramReport: {
+      enabled: true,
+      bot_token: "123:abc", // in chiaro: resolveTelegramConfig fa passthrough
+      chat_id: "-100999",
+      ...(sendTimes ? { send_times: sendTimes } : {}),
+    },
+  });
+
+  const setupScenario = ({ orgs, sent = {} }) => {
+    mockOrgs = orgs.map((o) => ({ id: o.id, name: o.name ?? o.id }));
+    mockConfigs = new Map(orgs.map((o) => [o.id, tgConfig(o.sendTimes)]));
+    mockSentLabels = new Map(Object.entries(sent));
+    recordedSends = [];
+    telegramCalls = [];
+  };
+
+  // Ogni invio riuscito = 2 chiamate Telegram (sendMessage + sendDocument).
+  const sendsFor = (orgId) => recordedSends.filter((r) => r.orgId === orgId);
+
+  try {
+    await test("orario spostato a un momento futuro di oggi ⇒ lo scheduler mira al nuovo slot e l'invio parte (nessuno slot perso)", async () => {
+      // L'org sposta il parziale da 13:30 a 15:00 alle 14:00: il vecchio
+      // slot è già passato ma il nuovo è futuro ⇒ va pianificato oggi.
+      setupScenario({ orgs: [{ id: "org-a", sendTimes: { parziale: "15:00", chiusura: "22:15" } }] });
+      const times = await collectSendTimes();
+      assert.deepEqual(times.map((t) => t.label), ["15:00", "22:15"]);
+      // Alle 14:00 Roma (CEST) il prossimo slot è il nuovo 15:00 di oggi.
+      const at1400 = new Date(Date.UTC(2026, 6, 2, 12, 0, 0));
+      const { label } = schedMod.msUntilNextSend(at1400, times);
+      assert.equal(label, "15:00");
+      // Allo scatto del timer la run invia davvero al nuovo orario.
+      await runScheduledSend("15:00");
+      assert.equal(sendsFor("org-a").length, 1);
+      assert.equal(sendsFor("org-a")[0].label, "15:00");
+      assert.equal(telegramCalls.length, 2); // messaggio + allegato HTML
+    });
+
+    await test("cambio orario dopo il parziale già inviato ⇒ nessun doppio parziale, la chiusura parte regolarmente", async () => {
+      // Parziale inviato alle 13:30, poi l'orario cambia a 12:00: lo slot
+      // "12:00" (es. ri-armato da un reschedule o run di un'altra org) NON
+      // deve produrre un secondo parziale (dedup per fascia, non per label).
+      setupScenario({
+        orgs: [{ id: "org-a", sendTimes: { parziale: "12:00", chiusura: "22:15" } }],
+        sent: { "org-a": ["13:30"] },
+      });
+      await runScheduledSend("12:00");
+      assert.equal(sendsFor("org-a").length, 0, "doppio parziale non atteso");
+      assert.equal(telegramCalls.length, 0);
+      // La chiusura invece parte regolarmente.
+      await runScheduledSend("22:15");
+      assert.equal(sendsFor("org-a").length, 1);
+      assert.equal(sendsFor("org-a")[0].label, "22:15");
+      assert.equal(telegramCalls.length, 2);
+    });
+
+    await test("recovery al boot con orari cambiati rispetto agli invii registrati ⇒ nessun duplicato", async () => {
+      // Ieri sera l'org aveva parziale=13:30 (inviato e registrato come
+      // "13:30"); oggi l'orario è 14:00 e il processo riparte alle 14:30:
+      // recoverableSlot indica 14:00 ma la fascia parziale è già coperta.
+      setupScenario({
+        orgs: [{ id: "org-a", sendTimes: { parziale: "14:00", chiusura: "22:15" } }],
+        sent: { "org-a": ["13:30"] },
+      });
+      const times = await collectSendTimes();
+      const boot = new Date(Date.UTC(2026, 6, 2, 12, 30, 0)); // 14:30 Roma
+      const rec = recSlot(boot, 90, times);
+      assert.deepEqual(rec, { ymd: "2026-07-02", label: "14:00" });
+      await runScheduledSend(rec.label, { recovery: true });
+      assert.equal(sendsFor("org-a").length, 0, "recovery non deve duplicare il parziale");
+      assert.equal(telegramCalls.length, 0);
+    });
+
+    await test("recovery al boot recupera davvero le org rimaste senza report", async () => {
+      // Stessa finestra di recovery, ma nessun invio registrato: la run
+      // di recovery DEVE inviare (lo slot era andato perso per il restart).
+      setupScenario({
+        orgs: [{ id: "org-a", sendTimes: { parziale: "14:00", chiusura: "22:15" } }],
+      });
+      await runScheduledSend("14:00", { recovery: true });
+      assert.equal(sendsFor("org-a").length, 1);
+      assert.equal(sendsFor("org-a")[0].label, "14:00");
+    });
+
+    await test("slot di un'altra org ⇒ chi non ha quell'orario viene saltato senza invio", async () => {
+      // org-b sposta il parziale a 15:00: allo scatto delle 15:00 solo
+      // org-b invia; org-a (13:30 già inviato o meno) non deve partire.
+      setupScenario({
+        orgs: [
+          { id: "org-a" }, // default 13:30/22:15
+          { id: "org-b", sendTimes: { parziale: "15:00", chiusura: "22:15" } },
+        ],
+        sent: { "org-a": ["13:30"] },
+      });
+      const times = await collectSendTimes();
+      assert.deepEqual(times.map((t) => t.label), ["13:30", "15:00", "22:15"]);
+      await runScheduledSend("15:00");
+      assert.equal(sendsFor("org-a").length, 0);
+      assert.equal(sendsFor("org-b").length, 1);
+      assert.equal(sendsFor("org-b")[0].label, "15:00");
+    });
+
+    await test("run ripetuta dello stesso slot (timer doppio) ⇒ il secondo giro non re-invia", async () => {
+      setupScenario({
+        orgs: [{ id: "org-a", sendTimes: { parziale: "15:00", chiusura: "22:15" } }],
+      });
+      await runScheduledSend("15:00");
+      await runScheduledSend("15:00");
+      assert.equal(sendsFor("org-a").length, 1, "seconda run stesso slot deduplicata");
+      assert.equal(telegramCalls.length, 2);
+    });
+
+    // ── Integrazione timer: startTelegramReportScheduler + rescheduleTelegramReports ──
+    // setTimeout/clearTimeout globali fintati: si verifica il percorso REALE
+    // di salvataggio config ⇒ reschedule (timer vecchio cancellato, uno solo
+    // attivo, recovery immediata di uno slot spostato su un orario passato).
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    const flush = (ms = 50) => new Promise((r) => realSetTimeout(r, ms));
+    let fakeTimers = []; // { id, fn, delay, cleared }
+    let nextTimerId = 1;
+    globalThis.setTimeout = (fn, delay, ...args) => {
+      // I timer "lunghi" sono dello scheduler; quelli brevi (< 5s) passano
+      // al setTimeout reale per non rompere eventuali attese interne.
+      if (typeof delay === "number" && delay >= 5000) {
+        const t = { id: { unref() {} }, fn, delay, cleared: false };
+        t.id.__fake = t;
+        fakeTimers.push(t);
+        return t.id;
+      }
+      return realSetTimeout(fn, delay, ...args);
+    };
+    globalThis.clearTimeout = (id) => {
+      if (id && id.__fake) {
+        id.__fake.cleared = true;
+        return;
+      }
+      return realClearTimeout(id);
+    };
+    const activeTimers = () => fakeTimers.filter((t) => !t.cleared);
+
+    // Orario di Roma "adesso", per costruire label passati/futuri validi.
+    const romeNowMinutes = () => {
+      const fmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Rome",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const [h, m] = fmt.format(new Date()).split(":").map((x) => parseInt(x, 10));
+      return (h % 24) * 60 + m;
+    };
+    const labelOfMinutes = (min) => {
+      const norm = ((min % 1440) + 1440) % 1440;
+      const h = Math.floor(norm / 60);
+      return `${String(h).padStart(2, "0")}:${String(norm % 60).padStart(2, "0")}`;
+    };
+
+    try {
+      const nowMin = romeNowMinutes();
+      // Serve un orario di OGGI passato da ~30 min (finestra recovery 90 min),
+      // fuori dalla fascia vietata 02:00–02:59. Vicino a mezzanotte o alle 02
+      // il test non è costruibile in modo affidabile: si salta (raro).
+      let pastMin = nowMin - 30;
+      if (Math.floor(pastMin / 60) === 2) pastMin = 119; // 01:59, comunque entro 90 min
+      const feasible = nowMin >= 35 && Math.floor(pastMin / 60) !== 2;
+      const pastLabel = labelOfMinutes(pastMin);
+      const futureLabel = labelOfMinutes(nowMin + 300); // sempre valido come "altro" orario
+      const otherLabel = futureLabel === pastLabel ? labelOfMinutes(nowMin + 360) : futureLabel;
+
+      await test("startTelegramReportScheduler arma UN solo timer sul prossimo slot", async () => {
+        // Entrambe le fasce già inviate: il recovery al boot non deve inviare.
+        setupScenario({
+          orgs: [{ id: "org-a" }], // default 13:30/22:15
+          sent: { "org-a": ["13:30", "22:15"] },
+        });
+        schedMod.startTelegramReportScheduler();
+        await flush();
+        assert.equal(activeTimers().length, 1, "un solo timer attivo dopo lo start");
+        assert.equal(recordedSends.length, 0, "boot recovery deduplicata, nessun invio");
+      });
+
+      await test("salvataggio config ⇒ reschedule: timer vecchio cancellato, uno solo attivo", async () => {
+        setupScenario({
+          orgs: [{ id: "org-a", sendTimes: { parziale: otherLabel, chiusura: "23:59" === otherLabel ? "23:58" : "23:59" } }],
+          sent: { "org-a": ["13:30", "22:15"] },
+        });
+        const before = activeTimers()[0];
+        schedMod.rescheduleTelegramReports();
+        await flush();
+        assert.ok(before.cleared, "il timer precedente va cancellato");
+        assert.equal(activeTimers().length, 1, "dopo il reschedule resta UN solo timer");
+      });
+
+      await test("recoverableSlots: TUTTI gli slot in finestra, dal più vecchio al più recente", () => {
+        // 2 luglio 2026, 15:00 Roma (CEST): 14:00 e 14:40 in finestra 90 min,
+        // 13:00 fuori finestra, 16:00 futuro, 22:15 futuro.
+        const at1500 = new Date(Date.UTC(2026, 6, 2, 13, 0, 0));
+        const times = ["13:00", "14:00", "14:40", "16:00", "22:15"].map((label) => ({
+          label,
+          minutes: parseInt(label.slice(0, 2), 10) * 60 + parseInt(label.slice(3), 10),
+        }));
+        assert.deepEqual(schedMod.recoverableSlots(at1500, 90, times), [
+          { ymd: "2026-07-02", label: "14:00" },
+          { ymd: "2026-07-02", label: "14:40" },
+        ]);
+        // recoverableSlot resta il più recente.
+        assert.deepEqual(schedMod.recoverableSlot(at1500, 90, times), {
+          ymd: "2026-07-02",
+          label: "14:40",
+        });
+      });
+
+      if (feasible && nowMin >= 65) {
+        await test("due org con slot passati DIVERSI ⇒ il reschedule recupera entrambe (non solo lo slot più recente)", async () => {
+          // org-a ha spostato il parziale a now-60 (non inviato), org-b a
+          // now-30 (GIÀ inviato): recuperare solo lo slot più recente
+          // lascerebbe org-a senza report.
+          const olderLabel = labelOfMinutes(nowMin - 60);
+          const olderOk = Math.floor((nowMin - 60) / 60) !== 2 && olderLabel !== pastLabel;
+          if (!olderOk) return; // fascia 02:xx: caso non costruibile ora
+          setupScenario({
+            orgs: [
+              { id: "org-a", sendTimes: { parziale: olderLabel, chiusura: otherLabel } },
+              { id: "org-b", sendTimes: { parziale: pastLabel, chiusura: otherLabel } },
+            ],
+            sent: { "org-b": [pastLabel] },
+          });
+          schedMod.rescheduleTelegramReports();
+          await flush(200);
+          assert.equal(sendsFor("org-a").length, 1, "anche lo slot meno recente va recuperato");
+          assert.equal(sendsFor("org-a")[0].label, olderLabel);
+          assert.equal(sendsFor("org-b").length, 0, "org-b già servita: nessun doppione");
+        });
+      }
+
+      if (feasible) {
+        await test("reschedule CONCORRENTI (salvataggi ravvicinati) ⇒ un solo invio per org (run serializzate)", async () => {
+          setupScenario({
+            orgs: [{ id: "org-a", sendTimes: { parziale: pastLabel, chiusura: otherLabel } }],
+          });
+          // Due reschedule back-to-back senza attese: senza serializzazione
+          // entrambe le recovery leggerebbero "non inviato" e duplicherebbero.
+          schedMod.rescheduleTelegramReports();
+          schedMod.rescheduleTelegramReports();
+          await flush(200);
+          assert.equal(sendsFor("org-a").length, 1, "recovery concorrenti non devono duplicare");
+          assert.equal(
+            telegramCalls.length,
+            2,
+            "un solo messaggio + un solo allegato nonostante il doppio reschedule",
+          );
+          assert.equal(activeTimers().length, 1);
+        });
+
+        await test("parziale NON inviato spostato a un orario già passato ⇒ recovery immediata al reschedule (nessuno slot perso)", async () => {
+          setupScenario({
+            orgs: [{ id: "org-a", sendTimes: { parziale: pastLabel, chiusura: otherLabel } }],
+          });
+          schedMod.rescheduleTelegramReports();
+          await flush(150);
+          assert.equal(sendsFor("org-a").length, 1, "lo slot spostato all'indietro va recuperato subito");
+          assert.equal(sendsFor("org-a")[0].label, pastLabel);
+          assert.equal(activeTimers().length, 1);
+        });
+
+        await test("parziale GIÀ inviato spostato a un orario passato ⇒ il reschedule non re-invia", async () => {
+          setupScenario({
+            orgs: [{ id: "org-a", sendTimes: { parziale: pastLabel, chiusura: otherLabel } }],
+            sent: { "org-a": ["13:30", "22:15"] },
+          });
+          schedMod.rescheduleTelegramReports();
+          await flush(150);
+          assert.equal(sendsFor("org-a").length, 0, "fascia già coperta: nessun doppione dal reschedule");
+          assert.equal(activeTimers().length, 1);
+        });
+      } else {
+        console.log("  (orario attuale a ridosso di mezzanotte/02:00 — test recovery-reschedule saltati)");
+      }
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      globalThis.clearTimeout = realClearTimeout;
+    }
+  } finally {
+    for (const [name, fn] of Object.entries(originals)) storage[name] = fn;
+    globalThis.fetch = originalFetch;
+  }
+} else {
+  console.log("  (scheduler/storage non importabili in questo ambiente — sezione saltata)");
+  failed++;
+}
+
 console.log(`\nRisultato: ${passed} passati, ${failed} falliti`);
 if (failed > 0) process.exit(1);

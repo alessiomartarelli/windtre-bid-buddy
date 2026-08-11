@@ -171,23 +171,41 @@ export function recoverableSlot(
   windowMinutes = 90,
   sendTimes: Array<{ label: string; minutes: number }> = SEND_TIMES,
 ): { ymd: string; label: string } | null {
+  const all = recoverableSlots(now, windowMinutes, sendTimes);
+  return all.length > 0 ? all[all.length - 1] : null;
+}
+
+/**
+ * TUTTI gli slot recuperabili adesso (Task #333): con orari per-org diversi
+ * l'unione può contenere più slot dentro la finestra (es. org A ha spostato
+ * il parziale a un orario appena passato mentre org B ne ha uno più recente
+ * già inviato). Recuperare solo il più recente farebbe perdere lo slot di A:
+ * qui si ritornano tutti quelli entro `windowMinutes` e ancora nel giorno
+ * corrente (ora italiana), dal più vecchio al più recente. Il dedup per
+ * fascia in runScheduledSend evita ogni doppione per le org già servite.
+ */
+export function recoverableSlots(
+  now: Date = new Date(),
+  windowMinutes = 90,
+  sendTimes: Array<{ label: string; minutes: number }> = SEND_TIMES,
+): Array<{ ymd: string; label: string }> {
   const times = sendTimes.length > 0 ? sendTimes : SEND_TIMES;
   const p = romeParts(now);
   const nowMs = now.getTime();
-  let best: { epoch: number; ymd: string; label: string } | null = null;
+  const found: Array<{ epoch: number; ymd: string; label: string }> = [];
   for (const dayOffset of [-1, 0]) {
     for (const t of times) {
       const epoch = romeWallTimeToEpoch(p.year, p.month, p.day + dayOffset, t.minutes);
-      if (epoch <= nowMs && (!best || epoch > best.epoch)) {
-        const slotYmd = romeParts(new Date(epoch)).ymd;
-        best = { epoch, ymd: slotYmd, label: t.label };
-      }
+      if (epoch > nowMs) continue;
+      if (nowMs - epoch > windowMinutes * 60_000) continue;
+      const slotYmd = romeParts(new Date(epoch)).ymd;
+      if (slotYmd !== p.ymd) continue; // mai recuperare slot di ieri
+      found.push({ epoch, ymd: slotYmd, label: t.label });
     }
   }
-  if (!best) return null;
-  if (nowMs - best.epoch > windowMinutes * 60_000) return null;
-  if (best.ymd !== p.ymd) return null;
-  return { ymd: best.ymd, label: best.label };
+  return found
+    .sort((a, b) => a.epoch - b.epoch)
+    .map(({ ymd, label }) => ({ ymd, label }));
 }
 
 function formatRomeNow(): string {
@@ -394,7 +412,29 @@ export async function sendDailyReportForOrg(params: {
   return { ok: true };
 }
 
-async function runScheduledSend(timeLabel: string, opts?: { recovery?: boolean }): Promise<void> {
+// Serializzazione delle run (Task #333): timer, recovery al boot e recovery
+// da reschedule possono sovrapporsi (es. salvataggi config ravvicinati).
+// Il dedup è read-then-send-then-record: due run CONCORRENTI potrebbero
+// entrambe leggere "non inviato" e duplicare il messaggio prima della
+// registrazione. Accodandole, ogni run rilegge gli invii registrati dopo
+// che la precedente li ha scritti. (Il processo scheduler è singolo — PM2
+// senza cluster — quindi la serializzazione in-process è sufficiente;
+// telegram_report_sends resta comunque con vincolo di unicità come rete.)
+let runQueue: Promise<void> = Promise.resolve();
+
+export function runScheduledSend(
+  timeLabel: string,
+  opts?: { recovery?: boolean },
+): Promise<void> {
+  const next = runQueue.then(() => runScheduledSendInner(timeLabel, opts));
+  runQueue = next.catch(() => {});
+  return next;
+}
+
+async function runScheduledSendInner(
+  timeLabel: string,
+  opts?: { recovery?: boolean },
+): Promise<void> {
   const orgs = await storage.getOrganizations();
   const { ymd } = romeNowParts();
   // Dedup (Task #332/#334): salta le org che hanno GIÀ ricevuto il report
@@ -481,9 +521,41 @@ let scheduleGeneration = 0;
 let scheduleNextFn: (() => Promise<void>) | null = null;
 
 /**
+ * Recovery bounded di uno slot già scattato (Task #332/#333): se "adesso"
+ * cade entro la finestra (90 min, stesso giorno Roma) di uno degli orari
+ * configurati, esegue la run per le sole org rimaste senza report di quella
+ * fascia (il dedup per fascia logica evita ogni doppione). Usata al boot e
+ * dopo un reschedule: così spostare uno slot NON ancora inviato su un orario
+ * già passato di oggi non fa perdere l'invio.
+ */
+function maybeRecoverElapsedSlot(context: string): void {
+  void collectSendTimes()
+    .then(async (times) => {
+      // TUTTI gli slot in finestra, non solo il più recente: con orari
+      // per-org diversi un solo slot lascerebbe indietro le org il cui
+      // orario spostato è meno recente di quello (magari già inviato) di
+      // un'altra org. Le run sono comunque serializzate e deduplicate.
+      const recs = recoverableSlots(new Date(), 90, times);
+      for (const rec of recs) {
+        console.log(
+          `[telegram-report] ${context}: slot ${rec.label} del ${rec.ymd} dentro la finestra, ` +
+            `verifico le org senza report (Roma: ${formatRomeNow()})`,
+        );
+        await runScheduledSend(rec.label, { recovery: true });
+      }
+    })
+    .catch((err) => {
+      console.error(`[telegram-report] ${context} fallita: ${err}`);
+    });
+}
+
+/**
  * Ri-arma il timer dello scheduler (Task #334): da chiamare dopo un
  * salvataggio della config Telegram, così un nuovo orario ancora futuro
  * di OGGI viene pianificato subito (senza aspettare il prossimo giro).
+ * Inoltre (Task #333) recupera subito uno slot spostato su un orario già
+ * passato di oggi (entro 90 min): senza questo, un'org che sposta il
+ * parziale non ancora inviato all'indietro lo perderebbe fino al riavvio.
  * No-op se lo scheduler non è avviato (es. ambiente dev).
  */
 export function rescheduleTelegramReports(): void {
@@ -491,6 +563,7 @@ export function rescheduleTelegramReports(): void {
   if (currentTimer) clearTimeout(currentTimer);
   currentTimer = null;
   scheduleGeneration++;
+  maybeRecoverElapsedSlot("reschedule");
   void scheduleNextFn();
 }
 
@@ -500,7 +573,7 @@ export function rescheduleTelegramReports(): void {
  * quelli configurati; alla run ogni org riceve solo i propri slot.
  * Se la lettura config fallisce si ricade sui default.
  */
-async function collectSendTimes(): Promise<Array<{ label: string; minutes: number }>> {
+export async function collectSendTimes(): Promise<Array<{ label: string; minutes: number }>> {
   try {
     const orgs = await storage.getOrganizations();
     const labels = new Set<string>();
@@ -538,18 +611,7 @@ export function startTelegramReportScheduler(): void {
   // già scattato, recupera la run interrotta per le sole org rimaste senza
   // report (dedup via telegram_report_sends). Async, non blocca l'avvio.
   // Gli slot considerati sono quelli configurati (Task #334).
-  void collectSendTimes().then((times) => {
-    const rec = recoverableSlot(new Date(), 90, times);
-    if (rec) {
-      console.log(
-        `[telegram-report] recovery: slot ${rec.label} del ${rec.ymd} dentro la finestra, ` +
-          `verifico le org senza report (Roma: ${formatRomeNow()})`,
-      );
-      void runScheduledSend(rec.label, { recovery: true }).catch((err) => {
-        console.error(`[telegram-report] recovery ${rec.label} fallita: ${err}`);
-      });
-    }
-  });
+  maybeRecoverElapsedSlot("recovery al boot");
 
   const scheduleNext = async () => {
     // Orari riletti a ogni giro; inoltre rescheduleTelegramReports() ri-arma
