@@ -455,6 +455,89 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
 
   const [spesaDialog, setSpesaDialog] = useState<{ open: boolean; editing?: CdgSpesa }>({ open: false });
 
+  // Nomi foglio Excel: max 31 caratteri, senza caratteri vietati, univoci.
+  const sanitizeSheetName = (name: string, used: Set<string>): string => {
+    let base = name.replace(/[\\/?*[\]:]/g, " ").replace(/\s+/g, " ").trim() || "Foglio";
+    base = base.slice(0, 31).trim();
+    let candidate = base;
+    let n = 2;
+    while (used.has(candidate.toLowerCase())) {
+      const suffix = ` (${n})`;
+      candidate = base.slice(0, 31 - suffix.length).trim() + suffix;
+      n += 1;
+    }
+    used.add(candidate.toLowerCase());
+    return candidate;
+  };
+
+  // Export pivot: un foglio per Ragione Sociale + foglio "Totale" aggregato.
+  // Usa gli stessi dati della tabella a schermo (netto IVA, periodo/vista attivi).
+  const exportPivotXlsx = () => {
+    const { colonne, righe, colTot, totaleGenerale } = pivotData;
+    if (righe.length === 0) return;
+    const wb = XLSX.utils.book_new();
+    const usedNames = new Set<string>();
+
+    // RS in ordine di totale decrescente (ordine di prima apparizione nelle righe già ordinate).
+    const rsOrder: string[] = [];
+    const byRs = new Map<string, typeof righe>();
+    for (const r of righe) {
+      if (!byRs.has(r.rs)) { byRs.set(r.rs, []); rsOrder.push(r.rs); }
+      byRs.get(r.rs)!.push(r);
+    }
+
+    const rowLabelHeader = pivotRaggr === "rs" ? "Ragione Sociale" : "Punto Vendita";
+
+    // Foglio riepilogativo "Totale": replica la vista aggregata a schermo.
+    {
+      const rows: Record<string, string | number>[] = righe.map(r => {
+        const o: Record<string, string | number> = { [rowLabelHeader]: r.label };
+        for (const c of colonne) o[c] = r.values.get(c) || 0;
+        o["Totale"] = r.totale;
+        return o;
+      });
+      const totRow: Record<string, string | number> = { [rowLabelHeader]: "Totale" };
+      for (const c of colonne) totRow[c] = colTot.get(c) || 0;
+      totRow["Totale"] = totaleGenerale;
+      rows.push(totRow);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sanitizeSheetName("Totale", usedNames));
+    }
+
+    // Un foglio per ogni RS.
+    for (const rs of rsOrder) {
+      const rsRows = byRs.get(rs)!;
+      let rows: Record<string, string | number>[];
+      if (pivotRaggr === "rs") {
+        // Voci di costo come righe con importo + riga Totale RS.
+        const r = rsRows[0];
+        rows = colonne
+          .filter(c => (r.values.get(c) || 0) !== 0)
+          .map(c => ({ "Voce di costo": c, "Importo": r.values.get(c) || 0 }));
+        rows.push({ "Voce di costo": "Totale", "Importo": r.totale });
+      } else {
+        // PDV come righe × categorie in colonna + colonna e riga Totale.
+        const rsCols = colonne.filter(c => rsRows.some(r => (r.values.get(c) || 0) !== 0));
+        rows = rsRows.map(r => {
+          const o: Record<string, string | number> = { "Punto Vendita": r.label };
+          for (const c of rsCols) o[c] = r.values.get(c) || 0;
+          o["Totale"] = r.totale;
+          return o;
+        });
+        const totRow: Record<string, string | number> = { "Punto Vendita": "Totale" };
+        for (const c of rsCols) {
+          totRow[c] = rsRows.reduce((s, r) => s + (r.values.get(c) || 0), 0);
+        }
+        totRow["Totale"] = rsRows.reduce((s, r) => s + r.totale, 0);
+        rows.push(totRow);
+      }
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sanitizeSheetName(rs, usedNames));
+    }
+
+    const mesiAbbr = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
+    const periodoStr = pivotPeriodo === "mese" ? `${mesiAbbr[pivotMese - 1]}-${dashboardAnno}` : String(dashboardAnno);
+    XLSX.writeFile(wb, `pivot-costi-${periodoStr}-${annoVista}.xlsx`);
+  };
+
   const exportXlsx = () => {
     const wb = XLSX.utils.book_new();
     const rows = spese.map(s => {
@@ -992,6 +1075,16 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         >Punto Vendita</button>
                       </div>
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9"
+                      onClick={exportPivotXlsx}
+                      disabled={pivotData.righe.length === 0}
+                      data-testid="button-export-pivot-xlsx"
+                    >
+                      <Download className="h-4 w-4 mr-1" /> Excel
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
@@ -1390,7 +1483,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   );
 }
 
-// ============ Spesa Dialog ============
+// ---- Spesa Dialog ----
 function SpesaDialog({
   open, onClose, editing, ragioniSociali, categorie, fornitori, pdvList,
 }: {
@@ -1905,7 +1998,7 @@ function SpesaDialog({
   );
 }
 
-// ============ Anagrafiche ============
+// ---- Anagrafiche ----
 function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagioneSociale[] }) {
   const { toast } = useToast();
   const qc = useQueryClient();
