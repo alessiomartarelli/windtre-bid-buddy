@@ -490,7 +490,7 @@ export async function registerRoutes(
           });
         }
       }
-      const result = await storage.upsertOrgConfig(profile.organizationId, effectiveConfig, configVersion || "2.0");
+      const result = await storage.upsertOrgConfig(profile.organizationId, effectiveConfig, configVersion || "2.0", userId);
       res.json(result);
     } catch (error) {
       res.status(500).json({ message: "Error saving config" });
@@ -4200,19 +4200,19 @@ export async function registerRoutes(
     const arr = ((cfg?.config as Record<string, unknown> | null)?.ragioniSociali || []) as string[];
     return Array.isArray(arr) ? arr.map(s => String(s).trim()).filter(Boolean) : [];
   }
-  async function writePv(orgId: string, mutator: (pv: StructPdv[]) => StructPdv[]): Promise<void> {
+  async function writePv(orgId: string, mutator: (pv: StructPdv[]) => StructPdv[], changedBy?: string | null): Promise<void> {
     const cfg = await storage.getOrgConfig(orgId);
     const config = (cfg?.config as Record<string, unknown> | null) || {};
     const pv = ((config.puntiVendita as StructPdv[] | undefined) || []).map(p => ({ ...p }));
     const next = mutator(pv);
     const newConfig = { ...config, puntiVendita: next };
-    await storage.upsertOrgConfig(orgId, newConfig, cfg?.configVersion || "2.0");
+    await storage.upsertOrgConfig(orgId, newConfig, cfg?.configVersion || "2.0", changedBy);
   }
-  async function writeConfigKeys(orgId: string, mutator: (cfg: Record<string, unknown>) => Record<string, unknown>): Promise<void> {
+  async function writeConfigKeys(orgId: string, mutator: (cfg: Record<string, unknown>) => Record<string, unknown>, changedBy?: string | null): Promise<void> {
     const cfg = await storage.getOrgConfig(orgId);
     const config = (cfg?.config as Record<string, unknown> | null) || {};
     const next = mutator({ ...config });
-    await storage.upsertOrgConfig(orgId, next, cfg?.configVersion || "2.0");
+    await storage.upsertOrgConfig(orgId, next, cfg?.configVersion || "2.0", changedBy);
   }
   const norm = (s: unknown) => String(s ?? "").trim();
   const normLow = (s: unknown) => norm(s).toLowerCase();
@@ -4238,7 +4238,7 @@ export async function registerRoutes(
       return res.status(409).json({ error: `Codice POS "${parsed.data.codicePos}" già esistente` });
     }
     const newId = `pdv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await writePv(orgId, (pv) => [...pv, { id: newId, ...parsed.data }]);
+    await writePv(orgId, (pv) => [...pv, { id: newId, ...parsed.data }], profile.id);
     res.status(201).json({ success: true, id: newId });
   });
 
@@ -4262,7 +4262,7 @@ export async function registerRoutes(
       added.push(p.codicePos);
     }
     if (toAdd.length > 0) {
-      await writePv(orgId, (pv) => [...pv, ...toAdd]);
+      await writePv(orgId, (pv) => [...pv, ...toAdd], profile.id);
     }
     res.json({ success: true, added, skipped });
   });
@@ -4311,7 +4311,7 @@ export async function registerRoutes(
       clusterMobile: parsed.data.clusterMobile ?? p.clusterMobile,
       clusterFisso: parsed.data.clusterFisso ?? p.clusterFisso,
       clusterCB: parsed.data.clusterCB ?? p.clusterCB,
-    } : p));
+    } : p), profile.id);
     // Propagazione su CdG: rename codicePos e/o ragioneSociale
     if (normLow(newCodice) !== normLow(oldCodicePos) || normLow(newRs) !== normLow(oldRagioneSociale)) {
       try {
@@ -4381,7 +4381,7 @@ export async function registerRoutes(
     if (cur.some(p => normLow(p.ragioneSociale) === normLow(nome)) || rsList.some(r => normLow(r) === normLow(nome))) {
       return res.status(409).json({ error: `Ragione Sociale "${nome}" già esistente` });
     }
-    await writeConfigKeys(orgId, (c) => ({ ...c, ragioniSociali: [...rsList, nome] }));
+    await writeConfigKeys(orgId, (c) => ({ ...c, ragioniSociali: [...rsList, nome] }), profile.id);
     try {
       await db.execute(sql`INSERT INTO cdg_ragioni_sociali (organization_id, nome) VALUES (${orgId}, ${nome}) ON CONFLICT DO NOTHING`);
     } catch (e) { console.error("[struttura] create RS cdg insert failed", e); }
@@ -4405,7 +4405,7 @@ export async function registerRoutes(
     await writePv(orgId, (pv) => pv.filter(p =>
       !(normLow(p.ragioneSociale) === normLow(ragioneSociale) &&
         normLow(p.codicePos || p.nome) === normLow(codicePos))
-    ));
+    ), profile.id);
     res.json({ success: true });
   });
 
@@ -4436,7 +4436,7 @@ export async function registerRoutes(
       const rs = (((c.ragioniSociali as string[] | undefined) || [])
         .map(r => normLow(r) === normLow(oldName) ? newName : r));
       return { ...c, puntiVendita: pv, ragioniSociali: rs };
-    });
+    }, profile.id);
     if (normLow(newName) !== normLow(oldName)) {
       try {
         await db.execute(sql`
@@ -4470,7 +4470,7 @@ export async function registerRoutes(
       const pv = ((c.puntiVendita as StructPdv[] | undefined) || []).filter(p => normLow(p.ragioneSociale) !== normLow(nome));
       const rs = ((c.ragioniSociali as string[] | undefined) || []).filter(r => normLow(r) !== normLow(nome));
       return { ...c, puntiVendita: pv, ragioniSociali: rs };
-    });
+    }, profile.id);
     try {
       await db.execute(sql`DELETE FROM cdg_spese WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
       await db.execute(sql`DELETE FROM cdg_pdv_manuali WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
@@ -4481,6 +4481,85 @@ export async function registerRoutes(
       await db.execute(sql`DELETE FROM cdg_ragioni_sociali WHERE organization_id = ${orgId} AND nome = ${nome}`);
     } catch (e) { console.error("[struttura] cascade delete RS failed", e); }
     res.json({ success: true });
+  });
+
+  // === Storico struttura RS/PDV (Task #339) ===
+  // Ogni upsert di organization_config che cambia puntiVendita/ragioniSociali
+  // archivia automaticamente la versione precedente (vedi upsertOrgConfig).
+  // Questi endpoint permettono a admin/super_admin di ispezionare lo storico
+  // e ripristinare una versione in un click.
+
+  // GET /api/admin/struttura/history → lista versioni (metadati + conteggi)
+  app.get("/api/admin/struttura/history", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    try {
+      const rows = await storage.listOrgConfigHistory(orgId);
+      // Risolvi i nomi degli utenti (changedBy) in una passata.
+      const userIds = Array.from(new Set(rows.map(r => r.changedBy).filter((v): v is string => !!v)));
+      const users = new Map<string, { fullName: string | null; email: string | null }>();
+      for (const uid of userIds) {
+        const p = await storage.getProfile(uid);
+        if (p) users.set(uid, { fullName: p.fullName, email: p.email });
+      }
+      res.json(rows.map(r => ({
+        id: r.id,
+        createdAt: r.createdAt,
+        changedBy: r.changedBy,
+        changedByName: r.changedBy ? (users.get(r.changedBy)?.fullName ?? users.get(r.changedBy)?.email ?? null) : null,
+        puntiVenditaCount: Array.isArray(r.puntiVendita) ? (r.puntiVendita as unknown[]).length : 0,
+        ragioniSocialiCount: Array.isArray(r.ragioniSociali) ? (r.ragioniSociali as unknown[]).length : 0,
+      })));
+    } catch (e) {
+      console.error("[struttura-history] list failed:", e);
+      res.status(500).json({ error: "Errore nel caricamento dello storico struttura" });
+    }
+  });
+
+  // GET /api/admin/struttura/history/:id → snapshot completo di una versione
+  app.get("/api/admin/struttura/history/:id", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    try {
+      const row = await storage.getOrgConfigHistoryEntry(req.params.id, orgId);
+      if (!row) return res.status(404).json({ error: "Versione non trovata" });
+      res.json(row);
+    } catch (e) {
+      console.error("[struttura-history] get failed:", e);
+      res.status(500).json({ error: "Errore nel caricamento della versione" });
+    }
+  });
+
+  // POST /api/admin/struttura/history/:id/restore → ripristina la versione
+  // (la struttura corrente viene a sua volta archiviata prima del ripristino,
+  // quindi anche il restore è annullabile).
+  app.post("/api/admin/struttura/history/:id/restore", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    try {
+      const row = await storage.getOrgConfigHistoryEntry(req.params.id, orgId);
+      if (!row) return res.status(404).json({ error: "Versione non trovata" });
+      const cfg = await storage.getOrgConfig(orgId);
+      const config = { ...((cfg?.config as Record<string, unknown> | null) || {}) };
+      if (row.puntiVendita === null || row.puntiVendita === undefined) delete config.puntiVendita;
+      else config.puntiVendita = row.puntiVendita;
+      if (row.ragioniSociali === null || row.ragioniSociali === undefined) delete config.ragioniSociali;
+      else config.ragioniSociali = row.ragioniSociali;
+      await storage.upsertOrgConfig(orgId, config, cfg?.configVersion || "2.0", profile.id);
+      console.log(`[struttura-history] restored version ${row.id} (org=${orgId}, user=${profile.id})`);
+      res.json({
+        success: true,
+        restoredId: row.id,
+        puntiVenditaCount: Array.isArray(row.puntiVendita) ? (row.puntiVendita as unknown[]).length : 0,
+        ragioniSocialiCount: Array.isArray(row.ragioniSociali) ? (row.ragioniSociali as unknown[]).length : 0,
+      });
+    } catch (e) {
+      console.error("[struttura-history] restore failed:", e);
+      res.status(500).json({ error: "Errore nel ripristino della versione" });
+    }
   });
 
   // === Controllo di Gestione ===

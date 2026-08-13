@@ -101,6 +101,29 @@ export const organizationConfig = pgTable("organization_config", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Storico struttura RS/PDV (Task #339): ogni upsert di organization_config
+// che CAMBIA puntiVendita e/o ragioniSociali archivia qui la versione
+// PRECEDENTE (snapshot delle sole chiavi strutturali). Retention: ultime
+// 20 versioni per organizzazione (trim automatico in upsertOrgConfig).
+// Rende recuperabile in un click qualsiasi sovrascrittura accidentale
+// della struttura (es. autosave difettoso, import sbagliato).
+export const organizationConfigHistory = pgTable("organization_config_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  // Snapshot della struttura PRIMA della sovrascrittura.
+  puntiVendita: jsonb("punti_vendita"),
+  ragioniSociali: jsonb("ragioni_sociali"),
+  configVersion: varchar("config_version"),
+  // Utente che ha eseguito la scrittura che ha archiviato questa versione
+  // (null per scritture di sistema, es. scheduler).
+  changedBy: varchar("changed_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("IDX_org_config_history_org_created").on(table.organizationId, table.createdAt),
+]);
+
+export type OrganizationConfigHistory = typeof organizationConfigHistory.$inferSelect;
+
 // PDV Configurations (named, per-organization)
 export const pdvConfigurations = pgTable("pdv_configurations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

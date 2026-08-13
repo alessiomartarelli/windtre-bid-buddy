@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
+import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets } from "@shared/customerJourney";
 
@@ -7,6 +7,10 @@ import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVe
 // nuove attivazioni di pista mobile a partire da questa data (Task #158).
 // È sovrascrivibile per organizzazione tramite la config
 // (`config.customerJourneyTriggerDate`, Task #167); qui resta il fallback.
+// Retention dello storico struttura RS/PDV (Task #339): quante versioni
+// precedenti di puntiVendita/ragioniSociali tenere per organizzazione.
+export const ORG_CONFIG_HISTORY_RETENTION = 20;
+
 export const CJ_DEFAULT_TRIGGER_DATE = new Date("2026-07-01T00:00:00.000Z");
 
 // Converte una data trigger in stringa "YYYY-MM-DD" (UTC) per la UI/API.
@@ -71,7 +75,9 @@ export interface IStorage {
 
   // Organization Config
   getOrgConfig(orgId: string): Promise<OrganizationConfig | undefined>;
-  upsertOrgConfig(orgId: string, config: any, version: string): Promise<OrganizationConfig>;
+  upsertOrgConfig(orgId: string, config: any, version: string, changedBy?: string | null): Promise<OrganizationConfig>;
+  listOrgConfigHistory(orgId: string): Promise<OrganizationConfigHistory[]>;
+  getOrgConfigHistoryEntry(id: string, orgId: string): Promise<OrganizationConfigHistory | undefined>;
 
   // PDV Configurations
   getPdvConfigurations(orgId: string): Promise<PdvConfiguration[]>;
@@ -382,7 +388,56 @@ export class DatabaseStorage implements IStorage {
     return config;
   }
 
-  async upsertOrgConfig(orgId: string, config: any, version: string): Promise<OrganizationConfig> {
+  async upsertOrgConfig(orgId: string, config: any, version: string, changedBy?: string | null): Promise<OrganizationConfig> {
+    // Backup automatico della struttura RS/PDV (Task #339): se l'upsert
+    // cambia puntiVendita e/o ragioniSociali, archivia la versione
+    // PRECEDENTE in organization_config_history prima di sovrascriverla.
+    try {
+      const [cur] = await db.select().from(organizationConfig)
+        .where(eq(organizationConfig.organizationId, orgId));
+      if (cur) {
+        const curCfg = (cur.config as Record<string, unknown> | null) || {};
+        const nextCfg = (config as Record<string, unknown> | null) || {};
+        // Confronto insensibile all'ordine delle chiavi: jsonb di Postgres
+        // riordina le chiavi degli oggetti, quindi JSON.stringify "naive"
+        // darebbe falsi positivi (archiviazioni spurie) a ogni save.
+        const stableSer = (v: unknown): string => {
+          if (v === null || v === undefined) return "null";
+          if (Array.isArray(v)) return `[${v.map(stableSer).join(",")}]`;
+          if (typeof v === "object") {
+            const o = v as Record<string, unknown>;
+            return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${stableSer(o[k])}`).join(",")}}`;
+          }
+          return JSON.stringify(v);
+        };
+        const changed =
+          stableSer(curCfg.puntiVendita) !== stableSer(nextCfg.puntiVendita) ||
+          stableSer(curCfg.ragioniSociali) !== stableSer(nextCfg.ragioniSociali);
+        if (changed) {
+          await db.insert(organizationConfigHistory).values({
+            organizationId: orgId,
+            puntiVendita: curCfg.puntiVendita ?? null,
+            ragioniSociali: curCfg.ragioniSociali ?? null,
+            configVersion: cur.configVersion,
+            changedBy: changedBy ?? null,
+          });
+          // Retention: tieni solo le ultime N versioni per org.
+          await db.execute(sql`
+            DELETE FROM organization_config_history
+             WHERE organization_id = ${orgId}
+               AND id NOT IN (
+                 SELECT id FROM organization_config_history
+                  WHERE organization_id = ${orgId}
+                  ORDER BY created_at DESC, id DESC
+                  LIMIT ${ORG_CONFIG_HISTORY_RETENTION}
+               )
+          `);
+        }
+      }
+    } catch (e) {
+      // Il backup non deve mai bloccare il salvataggio, ma l'errore va loggato.
+      console.error(`[org-config-history] archive failed (org=${orgId}):`, e);
+    }
     const [result] = await db.insert(organizationConfig)
       .values({
         organizationId: orgId,
@@ -400,6 +455,19 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return result;
   }
+  // Storico struttura RS/PDV (Task #339)
+  async listOrgConfigHistory(orgId: string): Promise<OrganizationConfigHistory[]> {
+    return await db.select().from(organizationConfigHistory)
+      .where(eq(organizationConfigHistory.organizationId, orgId))
+      .orderBy(desc(organizationConfigHistory.createdAt), desc(organizationConfigHistory.id));
+  }
+
+  async getOrgConfigHistoryEntry(id: string, orgId: string): Promise<OrganizationConfigHistory | undefined> {
+    const [row] = await db.select().from(organizationConfigHistory)
+      .where(and(eq(organizationConfigHistory.id, id), eq(organizationConfigHistory.organizationId, orgId)));
+    return row;
+  }
+
   // PDV Configurations
   async getPdvConfigurations(orgId: string): Promise<PdvConfiguration[]> {
     return await db.select().from(pdvConfigurations)
