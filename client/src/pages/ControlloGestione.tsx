@@ -1390,13 +1390,23 @@ function SpesaDialog({
       }
       let resp: any;
       if (editing) resp = await apiJson("PUT", `/api/cdg/spese/${editing.id}`, body);
-      else resp = await apiJson<{ ricorrenzaGenerati?: number }>("POST", `/api/cdg/spese`, body);
+      else resp = await apiJson<{ ricorrenzaGenerati?: number; ricorrenzaAttesi?: number }>("POST", `/api/cdg/spese`, body);
       qc.invalidateQueries({ queryKey: ["/api/cdg/spese"] });
       const generati = (resp as any)?.ricorrenzaGenerati || 0;
-      toast({
-        title: editing ? "Spesa aggiornata" : "Spesa creata",
-        description: !editing && generati > 0 ? `+${generati} occorrenze mensili generate fino a ${dataFineRicorrenza}` : undefined,
-      });
+      const attesi = (resp as any)?.ricorrenzaAttesi ?? generati;
+      if (!editing && attesi > generati) {
+        const mancanti = attesi - generati;
+        toast({
+          title: "Attenzione: occorrenze ricorrenti incomplete",
+          description: `La spesa è stata creata ma ${mancanti} occorrenz${mancanti === 1 ? "a" : "e"} su ${attesi} non ${mancanti === 1 ? "è stata salvata" : "sono state salvate"}. Verifica l'elenco spese e aggiungi manualmente le mensilità mancanti.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: editing ? "Spesa aggiornata" : "Spesa creata",
+          description: !editing && generati > 0 ? `+${generati} occorrenze mensili generate fino a ${dataFineRicorrenza}` : undefined,
+        });
+      }
       onClose();
     } catch (e) {
       toast({ title: "Errore", description: (e as Error).message, variant: "destructive" });

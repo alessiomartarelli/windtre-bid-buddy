@@ -1093,7 +1093,9 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     } catch (e) {
       console.error("[cdg] ricorrenza generation failed:", e);
     }
-    res.status(201).json({ ...r, ricorrenzaGenerati: generati });
+    // occorrenze.length - 1 = cloni attesi (la master è già creata). Se
+    // generati < attesi la UI deve avvisare l'utente delle mensilità mancanti.
+    res.status(201).json({ ...r, ricorrenzaGenerati: generati, ricorrenzaAttesi: occorrenze.length - 1 });
   });
 
   app.put("/api/cdg/spese/:id", ...gate, async (req: any, res) => {
