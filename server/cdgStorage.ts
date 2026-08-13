@@ -519,6 +519,16 @@ export const cdgStorage = {
       imponibile: string; aliquotaIva: string; iva: string; importo: string;
       dataPagamento: string; meseCompetenza: string;
       metodoPagamento: string | null; note: string | null;
+      // Ricorrenza pianificata (dalla preview): se presente, la riga genera
+      // un'occorrenza per elemento di `occorrenze` (stesse regole del
+      // dialogo "Nuova spesa"). Se null, spesa una tantum.
+      ricorrenza?: {
+        periodicita: "mensile" | "annuale";
+        dataInizio: string;
+        dataFine: string;
+        offsetMesi: number;
+        occorrenze: Array<{ dataPagamento: string; meseCompetenza: string }>;
+      } | null;
     }>,
   ): Promise<{ speseCreate: number; categorieCreate: number; fornitoriCreati: number; pdvCreati: number }> {
     return await db.transaction(async (tx) => {
@@ -605,43 +615,54 @@ export const cdgStorage = {
       for (const r of rows) {
         const categoriaId = r.categoriaId ?? (r.categoriaNew ? catIdByLower.get(r.categoriaNew.toLowerCase()) ?? null : null);
         const fornitoreId = r.fornitoreId ?? (r.fornitoreNew ? fornIdByLower.get(r.fornitoreNew.toLowerCase()) ?? null : null);
-        const dup = await tx.execute(sql`
-          SELECT 1 FROM cdg_spese
-           WHERE organization_id = ${orgId}
-             AND ragione_sociale = ${r.rs}
-             AND descrizione = ${r.descrizione}
-             AND importo = ${r.importo}
-             AND data_pagamento = ${r.dataPagamento}
-             AND mese_competenza = ${r.meseCompetenza}
-             AND imponibile IS NOT DISTINCT FROM ${r.imponibile}::numeric
-             AND aliquota_iva IS NOT DISTINCT FROM ${r.aliquotaIva}::numeric
-             AND pdv_codice IS NOT DISTINCT FROM ${r.pdvCodice}
-             AND categoria_id IS NOT DISTINCT FROM ${categoriaId}
-             AND fornitore_id IS NOT DISTINCT FROM ${fornitoreId}
-             AND metodo_pagamento IS NOT DISTINCT FROM ${r.metodoPagamento}
-             AND note IS NOT DISTINCT FROM ${r.note}
-           LIMIT 1
-        `);
-        if ((dup as unknown as { rows?: unknown[] }).rows?.length) { duplicati += 1; continue; }
-        inserite += 1;
-        await tx.insert(cdgSpese).values({
-          organizationId: orgId,
-          createdBy,
-          ragioneSociale: r.rs,
-          categoriaId,
-          fornitoreId,
-          pdvCodice: r.pdvCodice,
-          descrizione: r.descrizione,
-          imponibile: r.imponibile,
-          aliquotaIva: r.aliquotaIva,
-          iva: r.iva,
-          importo: r.importo,
-          dataPagamento: r.dataPagamento,
-          meseCompetenza: r.meseCompetenza,
-          metodoPagamento: r.metodoPagamento,
-          note: r.note,
-          ricorrente: false,
-        });
+        // Una riga ricorrente si espande in N occorrenze (come il dialogo
+        // "Nuova spesa"); il dedupe da doppio import è per occorrenza.
+        const occorrenze = r.ricorrenza
+          ? r.ricorrenza.occorrenze
+          : [{ dataPagamento: r.dataPagamento, meseCompetenza: r.meseCompetenza }];
+        for (const occ of occorrenze) {
+          const dup = await tx.execute(sql`
+            SELECT 1 FROM cdg_spese
+             WHERE organization_id = ${orgId}
+               AND ragione_sociale = ${r.rs}
+               AND descrizione = ${r.descrizione}
+               AND importo = ${r.importo}
+               AND data_pagamento = ${occ.dataPagamento}
+               AND mese_competenza = ${occ.meseCompetenza}
+               AND imponibile IS NOT DISTINCT FROM ${r.imponibile}::numeric
+               AND aliquota_iva IS NOT DISTINCT FROM ${r.aliquotaIva}::numeric
+               AND pdv_codice IS NOT DISTINCT FROM ${r.pdvCodice}
+               AND categoria_id IS NOT DISTINCT FROM ${categoriaId}
+               AND fornitore_id IS NOT DISTINCT FROM ${fornitoreId}
+               AND metodo_pagamento IS NOT DISTINCT FROM ${r.metodoPagamento}
+               AND note IS NOT DISTINCT FROM ${r.note}
+             LIMIT 1
+          `);
+          if ((dup as unknown as { rows?: unknown[] }).rows?.length) { duplicati += 1; continue; }
+          inserite += 1;
+          await tx.insert(cdgSpese).values({
+            organizationId: orgId,
+            createdBy,
+            ragioneSociale: r.rs,
+            categoriaId,
+            fornitoreId,
+            pdvCodice: r.pdvCodice,
+            descrizione: r.descrizione,
+            imponibile: r.imponibile,
+            aliquotaIva: r.aliquotaIva,
+            iva: r.iva,
+            importo: r.importo,
+            dataPagamento: occ.dataPagamento,
+            meseCompetenza: occ.meseCompetenza,
+            metodoPagamento: r.metodoPagamento,
+            note: r.note,
+            ricorrente: !!r.ricorrenza,
+            periodicita: r.ricorrenza?.periodicita ?? null,
+            dataInizioRicorrenza: r.ricorrenza?.dataInizio ?? null,
+            dataFineRicorrenza: r.ricorrenza?.dataFine ?? null,
+            cashFlowOffsetMesi: r.ricorrenza?.offsetMesi ?? 0,
+          });
+        }
       }
       return {
         speseCreate: inserite,

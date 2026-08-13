@@ -112,16 +112,7 @@ function computeImporti(imponibileStr: string, aliquotaStr: string): { imponibil
   return { imponibile: fmt(impCent), aliquotaIva: aliq.toFixed(2), iva: fmt(ivaCent), importo: fmt(totCent) };
 }
 
-// Back-fill una tantum:
-// 1) imponibile/iva (legacy pre-IVA): imponibile=importo, aliquotaIva=0, iva=0.
-// 2) ragioni_sociali (multi-RS migration): popola array da ragione_sociale legacy.
-// 3) pdv_codice remap → puntiVendita.codicePos: rimappa eventuali pdv_codice
-//    legacy (impostati pre Task #71 via join con la vecchia tabella cdg_pdv,
-//    ora droppata) al vero codicePos in organization_config.puntiVendita.
-// Backfill retry-safe: il flag viene impostato solo dopo il completamento di
-// tutti gli step. Se uno step fallisce transitoriamente (es. DB unreachable),
-// l'intera procedura verrà rieseguita al prossimo register/restart. I singoli
-// step sono già idempotenti (WHERE clauses che escludono righe già migrate).
+export type OccorrenzaRicorrente = { dataPagamento: string; meseCompetenza: string };
 let cdgBackfillDone = false;
 let cdgBackfillRunning = false;
 async function backfillCdg(): Promise<void> {
@@ -1037,24 +1028,12 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       }
       const periodicita = (rest.periodicita as "mensile" | "annuale" | null | undefined) || "mensile";
       rest.periodicita = periodicita;
-      const stepMonths = periodicita === "annuale" ? 12 : 1;
       const [siy, sim, sid] = String(rest.dataInizioRicorrenza).split("-").map(Number);
       const [fy, fm] = String(rest.dataFineRicorrenza).split("-").map(Number);
-      const endMs = Date.UTC(fy, fm - 1, 1);
-      occorrenze = [];
-      for (let i = 0; i < 600; i++) {
-        let cy = siy; let cm = sim + i * stepMonths;
-        while (cm > 12) { cm -= 12; cy += 1; }
-        const cMs = Date.UTC(cy, cm - 1, 1);
-        if (cMs > endMs) break;
-        let py = cy; let pm = cm + offset;
-        while (pm > 12) { pm -= 12; py += 1; }
-        const lastDay = new Date(Date.UTC(py, pm, 0)).getUTCDate();
-        const pd = Math.min(sid, lastDay);
-        const newPag = `${py}-${String(pm).padStart(2, "0")}-${String(pd).padStart(2, "0")}`;
-        const newComp = `${cy}-${String(cm).padStart(2, "0")}`;
-        occorrenze.push({ dataPagamento: newPag, meseCompetenza: newComp });
-      }
+      occorrenze = generaOccorrenzeRicorrenti({
+        startYear: siy, startMonth: sim, giornoPagamento: sid,
+        endYear: fy, endMonth: fm, periodicita, offsetMesi: offset,
+      });
       if (occorrenze.length === 0) {
         return res.status(400).json({ error: "Nessuna occorrenza generata: verifica date inizio/fine" });
       }
@@ -1212,6 +1191,8 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     meseCompetenza: z.string().optional().default(""),
     metodoPagamento: z.string().optional().default(""),
     note: z.string().optional().default(""),
+    ricorrente: z.string().optional().default(""),
+    ricorrenzaFine: z.string().optional().default(""),
   });
   const importBodySchema = z.object({ rows: z.array(importRowSchema).min(1).max(2000) });
 
@@ -1233,6 +1214,10 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       meseCompetenza: string;
       metodoPagamento: string | null;
       note: string | null;
+      // Ricorrenza (colonne facoltative): null = una tantum.
+      periodicita: "mensile" | "annuale" | null;
+      ricorrenzaFine: string | null; // YYYY-MM
+      occorrenze: number; // 1 se una tantum
     };
     // Risoluzioni: id esistente, oppure marcatore di creazione (chiave lower)
     categoriaId: string | null;
@@ -1242,6 +1227,14 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     fornitoreNew: string | null;
     fornitoreAssocId: string | null;
     pdvNew: { codice: string; nome: string } | null;
+    // Occorrenze pianificate (>=2 solo per righe ricorrenti valide).
+    ricorrenza: {
+      periodicita: "mensile" | "annuale";
+      dataInizio: string; // YYYY-MM-DD: mese = competenza di partenza, giorno = giorno pagamento (come il dialogo manuale)
+      dataFine: string;   // YYYY-MM-DD (ultimo giorno del mese "Fino a")
+      offsetMesi: number; // offset cassa 0..3 (competenza → pagamento)
+      occorrenze: OccorrenzaRicorrente[];
+    } | null;
   };
 
   function parseDataIt(s: string): string | null {
@@ -1345,6 +1338,64 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
         meseCompetenza = dataPagamento.slice(0, 7);
       }
 
+      // Ricorrenza (colonne facoltative). "Ricorrente" accetta mensile o
+      // annuale; "Fino a" è MM/AAAA. Le occorrenze seguono le stesse regole
+      // dell'inserimento manuale: competenze da quella di partenza fino a
+      // "Fino a" inclusa, giorno pagamento clampato, offset cassa = mesi tra
+      // competenza e data pagamento (max 3).
+      let periodicita: "mensile" | "annuale" | null = null;
+      const ricIn = raw.ricorrente.trim().toLowerCase();
+      if (ricIn && !["no", "-"].includes(ricIn)) {
+        if (ricIn === "mensile") periodicita = "mensile";
+        else if (ricIn === "annuale") periodicita = "annuale";
+        else errori.push(`Ricorrente non valido ("${raw.ricorrente}") — usa "mensile" o "annuale" (o lascia vuoto)`);
+      }
+      let ricorrenzaFine: string | null = null;
+      if (raw.ricorrenzaFine.trim()) {
+        ricorrenzaFine = parseMeseCompetenza(raw.ricorrenzaFine);
+        if (!ricorrenzaFine) errori.push(`"Fino a" non valido ("${raw.ricorrenzaFine}") — usa MM/AAAA`);
+        else if (!periodicita && !ricIn) errori.push(`"Fino a" indicato senza la colonna Ricorrente: specifica mensile o annuale`);
+      } else if (periodicita) {
+        errori.push(`Spesa ricorrente senza "Fino a (MM/AAAA)": indica il mese finale`);
+      }
+      let ricorrenza: ImportRowPlan["ricorrenza"] = null;
+      if (periodicita && ricorrenzaFine && dataPagamento && meseCompetenza) {
+        const [cy, cm] = meseCompetenza.split("-").map(Number);
+        const [fy, fm] = ricorrenzaFine.split("-").map(Number);
+        const [py, pm, pd] = dataPagamento.split("-").map(Number);
+        const offsetMesi = (py * 12 + pm) - (cy * 12 + cm);
+        if (fy * 12 + fm < cy * 12 + cm) {
+          errori.push(`"Fino a" (${raw.ricorrenzaFine}) è precedente al mese di competenza di partenza`);
+        } else if (offsetMesi < 0 || offsetMesi > 3) {
+          // Stesso vincolo del dialogo manuale (offset cassa 0–3 mesi): mai
+          // riscrivere silenziosamente le date fornite dall'utente.
+          errori.push(offsetMesi < 0
+            ? `Data pagamento (${raw.dataPagamento}) precedente al mese di competenza (${raw.meseCompetenza}): per le ricorrenti l'offset cassa deve essere tra 0 e 3 mesi`
+            : `Data pagamento (${raw.dataPagamento}) oltre 3 mesi dopo la competenza (${raw.meseCompetenza}): l'offset cassa massimo per le ricorrenti è 3 mesi`);
+        } else {
+          const occ = generaOccorrenzeRicorrenti({
+            startYear: cy, startMonth: cm, giornoPagamento: pd,
+            endYear: fy, endMonth: fm, periodicita, offsetMesi,
+          });
+          if (occ.length === 0) {
+            errori.push("Nessuna occorrenza generata: verifica competenza e \"Fino a\"");
+          } else {
+            // dataInizio come nel dialogo manuale: mese/anno = competenza di
+            // partenza, giorno = giorno pagamento (clampato al mese).
+            const startLastDay = new Date(Date.UTC(cy, cm, 0)).getUTCDate();
+            const lastDay = new Date(Date.UTC(fy, fm, 0)).getUTCDate();
+            ricorrenza = {
+              periodicita,
+              dataInizio: `${cy}-${String(cm).padStart(2, "0")}-${String(Math.min(pd, startLastDay)).padStart(2, "0")}`,
+              dataFine: `${fy}-${String(fm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+              offsetMesi,
+              occorrenze: occ,
+            };
+            azioni.push(`Genererà ${occ.length} occorrenze (${periodicita}, fino a ${String(fm).padStart(2, "0")}/${fy})`);
+          }
+        }
+      }
+
       // Categoria / Fornitore per nome (case-insensitive)
       let categoriaId: string | null = null, categoriaNew: string | null = null, categoriaAssocId: string | null = null;
       const catIn = raw.categoria.trim();
@@ -1401,10 +1452,14 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
           meseCompetenza: meseCompetenza || "",
           metodoPagamento: raw.metodoPagamento.trim() || null,
           note: raw.note.trim() || null,
+          periodicita: ricorrenza ? ricorrenza.periodicita : null,
+          ricorrenzaFine,
+          occorrenze: ricorrenza ? ricorrenza.occorrenze.length : 1,
         },
         categoriaId, categoriaNew, categoriaAssocId,
         fornitoreId, fornitoreNew, fornitoreAssocId,
         pdvNew,
+        ricorrenza,
       };
     });
   }
@@ -1445,6 +1500,7 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
         meseCompetenza: p.dati.meseCompetenza,
         metodoPagamento: p.dati.metodoPagamento,
         note: p.dati.note,
+        ricorrenza: p.ricorrenza,
       })));
       res.json({ ...result, importate: result.speseCreate, scartate: plans.length - valid.length });
     } catch (e) {
@@ -1458,4 +1514,30 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       res.status(500).json({ error: "Import non riuscito: nessuna riga è stata scritta. Riprova o contatta l'assistenza." });
     }
   });
+}
+
+export function generaOccorrenzeRicorrenti(opts: {
+  startYear: number; startMonth: number; giornoPagamento: number;
+  endYear: number; endMonth: number;
+  periodicita: "mensile" | "annuale"; offsetMesi: number;
+}): OccorrenzaRicorrente[] {
+  const stepMonths = opts.periodicita === "annuale" ? 12 : 1;
+  const offset = Math.max(0, Math.min(3, opts.offsetMesi));
+  const endMs = Date.UTC(opts.endYear, opts.endMonth - 1, 1);
+  const out: OccorrenzaRicorrente[] = [];
+  for (let i = 0; i < 600; i++) {
+    let cy = opts.startYear; let cm = opts.startMonth + i * stepMonths;
+    while (cm > 12) { cm -= 12; cy += 1; }
+    const cMs = Date.UTC(cy, cm - 1, 1);
+    if (cMs > endMs) break;
+    let py = cy; let pm = cm + offset;
+    while (pm > 12) { pm -= 12; py += 1; }
+    const lastDay = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+    const pd = Math.min(opts.giornoPagamento, lastDay);
+    out.push({
+      dataPagamento: `${py}-${String(pm).padStart(2, "0")}-${String(pd).padStart(2, "0")}`,
+      meseCompetenza: `${cy}-${String(cm).padStart(2, "0")}`,
+    });
+  }
+  return out;
 }

@@ -18,5 +18,4 @@ può essere stantia, quindi un predicato per nome riproduce lo stesso bug.
 
 **How to apply:** qualsiasi nuovo percorso che rinomina o sposta RS/PDV nel CdG
 passa dal registro (helper di storage), mai nuovi UPDATE per nome; nuove
-scritture figlie popolano sempre l'id. Regressioni coperte dalla suite
-cdg-rs-id (workflow cdg-rs-id-tests).
+scritture figlie popolano sempre l'id.

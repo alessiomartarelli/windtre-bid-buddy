@@ -20,6 +20,7 @@ const HEADERS = [
   "Ragione Sociale*", "Codice PDV", "Nome PDV", "Categoria", "Fornitore",
   "Descrizione*", "Imponibile*", "Aliquota IVA (%)", "Data Pagamento*",
   "Mese Competenza", "Metodo Pagamento", "Note",
+  "Ricorrente (mensile/annuale)", "Fino a (MM/AAAA)",
 ] as const;
 
 type RawRow = {
@@ -27,6 +28,7 @@ type RawRow = {
   categoria: string; fornitore: string; descrizione: string;
   imponibile: string; aliquotaIva: string; dataPagamento: string;
   meseCompetenza: string; metodoPagamento: string; note: string;
+  ricorrente: string; ricorrenzaFine: string;
 };
 
 type PreviewRiga = {
@@ -38,6 +40,7 @@ type PreviewRiga = {
     ragioneSociale: string; pdvCodice: string | null; categoriaNome: string | null;
     fornitoreNome: string | null; descrizione: string; imponibile: string;
     dataPagamento: string; meseCompetenza: string;
+    periodicita: "mensile" | "annuale" | null; occorrenze: number;
   };
 };
 
@@ -61,6 +64,10 @@ const FIELD_BY_HEADER: Record<string, keyof RawRow> = {
   "mese competenza": "meseCompetenza",
   "metodo pagamento": "metodoPagamento",
   "note": "note",
+  "ricorrente (mensile/annuale)": "ricorrente",
+  "ricorrente": "ricorrente",
+  "fino a (mm/aaaa)": "ricorrenzaFine",
+  "fino a": "ricorrenzaFine",
 };
 
 // Excel può consegnare le date come numero seriale: convertiamo in DD/MM/YYYY.
@@ -101,7 +108,7 @@ export function ImportSpeseExcel({
 
     const spese = XLSX.utils.aoa_to_sheet([
       [...HEADERS],
-      ["", "", "", "", "", "", "", "22", "", "", "", ""],
+      ["", "", "", "", "", "", "", "22", "", "", "", "", "", ""],
     ]);
     spese["!cols"] = HEADERS.map(h => ({ wch: Math.max(h.length + 2, 16) }));
     XLSX.utils.book_append_sheet(wb, spese, "Spese");
@@ -123,6 +130,8 @@ export function ImportSpeseExcel({
       ["Mese Competenza", "Formato MM/AAAA. Se vuoto viene usato il mese della data di pagamento."],
       ["Metodo Pagamento", "Es. Bonifico, Contanti, POS, RID/SDD…"],
       ["Note", "Facoltative."],
+      ["Ricorrente (mensile/annuale)", "Facoltativa. Scrivi 'mensile' o 'annuale' per generare automaticamente le occorrenze come nel dialogo Nuova spesa: una spesa per ogni mese (o anno) dal Mese Competenza fino al mese 'Fino a' incluso."],
+      ["Fino a (MM/AAAA)", "Obbligatoria se Ricorrente è compilata. Ultimo mese di competenza generato, es. 12/2027. Il giorno di pagamento segue la Data Pagamento (adattato ai mesi più corti) e l'eventuale sfasamento tra competenza e pagamento (max 3 mesi) è mantenuto su tutte le occorrenze."],
       [""],
       ["Dopo il caricamento vedrai un'anteprima riga per riga prima di confermare: nulla viene scritto senza la tua conferma."],
     ]);
@@ -166,6 +175,7 @@ export function ImportSpeseExcel({
           ragioneSociale: "", pdvCodice: "", pdvNome: "", categoria: "", fornitore: "",
           descrizione: "", imponibile: "", aliquotaIva: "", dataPagamento: "",
           meseCompetenza: "", metodoPagamento: "", note: "",
+          ricorrente: "", ricorrenzaFine: "",
         };
         let any = false;
         for (let c = 0; c < colMap.length; c++) {
@@ -271,6 +281,7 @@ export function ImportSpeseExcel({
                   <TableHead>Descrizione</TableHead>
                   <TableHead>RS / PDV</TableHead>
                   <TableHead>Imponibile</TableHead>
+                  <TableHead>Occorrenze</TableHead>
                   <TableHead>Dettagli</TableHead>
                 </TableRow>
               </TableHeader>
@@ -291,6 +302,13 @@ export function ImportSpeseExcel({
                       {r.dati.pdvCodice ? <span className="text-muted-foreground"> · {r.dati.pdvCodice}</span> : null}
                     </TableCell>
                     <TableCell>{r.dati.imponibile || "—"}</TableCell>
+                    <TableCell data-testid={`cell-import-occorrenze-${r.index}`}>
+                      {r.esito === "ok" ? (
+                        r.dati.periodicita
+                          ? `${r.dati.occorrenze} (${r.dati.periodicita})`
+                          : "1"
+                      ) : "—"}
+                    </TableCell>
                     <TableCell className="text-xs">
                       {r.errori.map((e, i) => <div key={i} className="text-destructive">{e}</div>)}
                       {r.azioni.map((a, i) => <div key={i} className="text-amber-600">{a}</div>)}
