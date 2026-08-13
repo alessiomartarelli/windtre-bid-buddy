@@ -1109,6 +1109,8 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         <TableHead>PDV</TableHead>
                         <TableHead>Descrizione</TableHead>
                         <TableHead>Metodo</TableHead>
+                        <TableHead className="text-right">Imponibile</TableHead>
+                        <TableHead className="text-right">IVA</TableHead>
                         <TableHead className="text-right">
                           <button
                             type="button"
@@ -1116,7 +1118,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                             onClick={() => setSpeseSort(s => ({ key: "importo", dir: s.key === "importo" && s.dir === "desc" ? "asc" : "desc" }))}
                             data-testid="sort-importo"
                           >
-                            Importo {speseSort.key === "importo" ? (speseSort.dir === "desc" ? "▼" : "▲") : "↕"}
+                            Totale {speseSort.key === "importo" ? (speseSort.dir === "desc" ? "▼" : "▲") : "↕"}
                           </button>
                         </TableHead>
                         <TableHead></TableHead>
@@ -1164,7 +1166,21 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                               </div>
                             </TableCell>
                             <TableCell className="text-xs">{s.metodoPagamento || ""}</TableCell>
-                            <TableCell className="text-right font-mono">{fmtEur(parseImporto(s.importo))}</TableCell>
+                            {(() => {
+                              const totale = parseImporto(s.importo);
+                              const imp = s.imponibile != null ? parseImporto(s.imponibile) : totale;
+                              const iva = totale - imp;
+                              const aliq = s.aliquotaIva != null ? parseFloat(s.aliquotaIva as unknown as string) : null;
+                              return (
+                                <>
+                                  <TableCell className="text-right font-mono" data-testid={`cell-imponibile-${s.id}`}>{fmtEur(imp)}</TableCell>
+                                  <TableCell className="text-right font-mono text-muted-foreground" data-testid={`cell-iva-${s.id}`} title={aliq != null ? `Aliquota ${aliq}%` : undefined}>
+                                    {iva > 0.004 ? fmtEur(iva) : "—"}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono">{fmtEur(totale)}</TableCell>
+                                </>
+                              );
+                            })()}
                             <TableCell>
                               {s.allegatoPath && (
                                 <a href={apiUrl(`/api/cdg/spese/${s.id}/allegato`)} target="_blank" rel="noreferrer" title={s.allegatoNome || "Allegato"} data-testid={`link-allegato-${s.id}`}>
