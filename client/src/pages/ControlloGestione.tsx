@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import * as XLSX from "xlsx";
@@ -29,7 +29,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Wallet, Plus, Pencil, Trash2, Loader2, Building2, Tag, Truck, Store, Download,
-  TrendingUp, FileText, Paperclip, ExternalLink, Info,
+  TrendingUp, FileText, Paperclip, ExternalLink, Info, ChevronRight,
 } from "lucide-react";
 import { KpiCardsSkeleton, DataTableSkeleton } from "@/components/skeletons";
 import { ImportSpeseExcel } from "@/components/cdg/ImportSpeseExcel";
@@ -159,6 +159,8 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const [annoMeseSel, setAnnoMeseSel] = useState<number>(new Date().getMonth() + 1);
   const [annoVista, setAnnoVista] = useState<"competenza" | "cassa">("competenza");
   const [speseSort, setSpeseSort] = useState<{ key: "dataPagamento" | "meseCompetenza" | "importo"; dir: "asc" | "desc" }>({ key: "dataPagamento", dir: "desc" });
+  // Gruppi di ricorrenza espansi nel drill-down della lista spese.
+  const [gruppiEspansi, setGruppiEspansi] = useState<Set<string>>(new Set());
   const [rsSelezionata, setRsSelezionata] = useState<string | null>(null);
   const [pivotRaggr, setPivotRaggr] = useState<"rs" | "pdv">("rs");
   const [pivotPeriodo, setPivotPeriodo] = useState<"anno" | "mese">("anno");
@@ -1127,6 +1129,8 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         <TableHead>PDV</TableHead>
                         <TableHead>Descrizione</TableHead>
                         <TableHead>Metodo</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Ricorrenza</TableHead>
                         <TableHead className="text-right">Imponibile</TableHead>
                         <TableHead className="text-right">IVA</TableHead>
                         <TableHead className="text-right">
@@ -1144,93 +1148,202 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {[...spese].sort((a, b) => {
-                        const dir = speseSort.dir === "asc" ? 1 : -1;
-                        if (speseSort.key === "importo") {
-                          return (parseImporto(a.importo) - parseImporto(b.importo)) * dir;
+                      {(() => {
+                        // Accorpa PRIMA le occorrenze della stessa ricorrenza,
+                        // POI ordina: i gruppi si ordinano sui valori mostrati
+                        // (totale = somma delle rate, date = prima occorrenza),
+                        // non su una singola occorrenza arbitraria.
+                        type Spesa = (typeof spese)[number];
+                        type Item = { tipo: "singola"; s: Spesa } | { tipo: "gruppo"; id: string; occ: Spesa[] };
+                        const items: Item[] = [];
+                        const gruppi = new Map<string, Spesa[]>();
+                        for (const s of spese) {
+                          if (s.ricorrente && s.ricorrenzaId) {
+                            let g = gruppi.get(s.ricorrenzaId);
+                            if (!g) { g = []; gruppi.set(s.ricorrenzaId, g); items.push({ tipo: "gruppo", id: s.ricorrenzaId, occ: g }); }
+                            g.push(s);
+                          } else {
+                            items.push({ tipo: "singola", s });
+                          }
                         }
-                        const va = (a[speseSort.key] || "") as string;
-                        const vb = (b[speseSort.key] || "") as string;
-                        return va.localeCompare(vb) * dir;
-                      }).map(s => {
-                        const cat = s.categoriaId ? catById.get(s.categoriaId) : null;
-                        const forn = s.fornitoreId ? fornById.get(s.fornitoreId) : null;
-                        // Fallback: se pdvCodice esiste ma non è risolvibile in
-                        // puntiVendita (legacy non rimappato), mostra comunque
-                        // il codice grezzo invece di "—" silenzioso.
-                        const pdv = s.pdvCodice ? pdvByCodice.get(s.pdvCodice) : null;
-                        const pdvLabel = pdv ? pdv.nome : (s.pdvCodice ? `${s.pdvCodice} (?)` : "—");
-                        return (
-                          <TableRow key={s.id} data-testid={`row-spesa-${s.id}`}>
-                            <TableCell>{fmtDateIt(s.dataPagamento)}</TableCell>
-                            <TableCell><Badge variant="outline">{monthLabel(s.meseCompetenza)}</Badge></TableCell>
-                            <TableCell className="text-xs">{s.ragioneSociale}</TableCell>
-                            <TableCell>{cat?.nome || <span className="text-muted-foreground">—</span>}</TableCell>
-                            <TableCell>{forn?.nome || <span className="text-muted-foreground">—</span>}</TableCell>
-                            <TableCell>{pdv ? pdv.nome : (s.pdvCodice ? <span className="text-amber-600" title="PDV legacy non risolvibile in puntiVendita">{pdvLabel}</span> : <span className="text-muted-foreground">—</span>)}</TableCell>
-                            <TableCell className="max-w-[220px] truncate" title={s.descrizione}>
-                              <div className="flex items-center gap-1">
-                                <span className="truncate">{s.descrizione}</span>
-                                {s.ricorrente && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-[10px] px-1 py-0"
-                                    title={s.dataFineRicorrenza ? `Ricorrenza fino a ${fmtDateIt(s.dataFineRicorrenza)}` : "Ricorrente"}
-                                    data-testid={`badge-ricorrente-${s.id}`}
-                                  >
-                                    ↻
-                                  </Badge>
+                        // Occorrenze in ordine cronologico stabile: la prima è
+                        // la rappresentante del gruppo (metadati + Modifica),
+                        // indipendentemente dall'ordinamento scelto in tabella.
+                        for (const g of gruppi.values()) {
+                          g.sort((a, b) => (a.meseCompetenza || "").localeCompare(b.meseCompetenza || ""));
+                        }
+                        const sortVal = (it: Item): string | number => {
+                          if (speseSort.key === "importo") {
+                            return it.tipo === "singola"
+                              ? parseImporto(it.s.importo)
+                              : it.occ.reduce((acc, o) => acc + parseImporto(o.importo), 0);
+                          }
+                          if (it.tipo === "singola") return (it.s[speseSort.key] || "") as string;
+                          // Gruppo: data/competenza della prima occorrenza.
+                          return (it.occ[0]?.[speseSort.key] || "") as string;
+                        };
+                        items.sort((a, b) => {
+                          const dir = speseSort.dir === "asc" ? 1 : -1;
+                          const va = sortVal(a), vb = sortVal(b);
+                          if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+                          return String(va).localeCompare(String(vb)) * dir;
+                        });
+                        const fmtMeseAnno = (d: string | null | undefined) => d ? `${d.slice(5, 7)}/${d.slice(0, 4)}` : null;
+                        const ricorrenzaLabel = (s: any) => {
+                          if (!s.ricorrente) return null;
+                          const per = s.periodicita === "annuale" ? "Annuale" : "Mensile";
+                          const da = fmtMeseAnno(s.dataInizioRicorrenza);
+                          const a = fmtMeseAnno(s.dataFineRicorrenza);
+                          return da && a ? `${per} · ${da} → ${a}` : per;
+                        };
+                        const rigaSpesa = (s: Spesa, child: boolean) => {
+                          const cat = s.categoriaId ? catById.get(s.categoriaId) : null;
+                          const forn = s.fornitoreId ? fornById.get(s.fornitoreId) : null;
+                          // Fallback: se pdvCodice esiste ma non è risolvibile in
+                          // puntiVendita (legacy non rimappato), mostra comunque
+                          // il codice grezzo invece di "—" silenzioso.
+                          const pdv = s.pdvCodice ? pdvByCodice.get(s.pdvCodice) : null;
+                          const pdvLabel = pdv ? pdv.nome : (s.pdvCodice ? `${s.pdvCodice} (?)` : "—");
+                          return (
+                            <TableRow key={s.id} data-testid={`row-spesa-${s.id}`} className={child ? "bg-muted/40" : undefined}>
+                              <TableCell className={child ? "pl-8" : undefined}>{fmtDateIt(s.dataPagamento)}</TableCell>
+                              <TableCell><Badge variant="outline">{monthLabel(s.meseCompetenza)}</Badge></TableCell>
+                              <TableCell className="text-xs">{child ? "" : s.ragioneSociale}</TableCell>
+                              <TableCell>{child ? "" : (cat?.nome || <span className="text-muted-foreground">—</span>)}</TableCell>
+                              <TableCell>{child ? "" : (forn?.nome || <span className="text-muted-foreground">—</span>)}</TableCell>
+                              <TableCell>{child ? "" : (pdv ? pdv.nome : (s.pdvCodice ? <span className="text-amber-600" title="PDV legacy non risolvibile in puntiVendita">{pdvLabel}</span> : <span className="text-muted-foreground">—</span>))}</TableCell>
+                              <TableCell className="max-w-[220px] truncate" title={s.descrizione}>
+                                <div className="flex items-center gap-1">
+                                  <span className={`truncate ${child ? "text-muted-foreground text-xs" : ""}`}>{child ? "occorrenza" : s.descrizione}</span>
+                                  {s.ricorrente && !child && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px] px-1 py-0"
+                                      title={s.dataFineRicorrenza ? `Ricorrenza fino a ${fmtDateIt(s.dataFineRicorrenza)}` : "Ricorrente"}
+                                      data-testid={`badge-ricorrente-${s.id}`}
+                                    >
+                                      ↻
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs">{s.metodoPagamento || ""}</TableCell>
+                              <TableCell className="text-xs whitespace-nowrap">{child ? "" : (s.ricorrente ? "Ricorrente" : "Una tantum")}</TableCell>
+                              <TableCell className="text-xs whitespace-nowrap">{child ? "" : (ricorrenzaLabel(s) || <span className="text-muted-foreground">—</span>)}</TableCell>
+                              {(() => {
+                                const totale = parseImporto(s.importo);
+                                const imp = s.imponibile != null ? parseImporto(s.imponibile) : totale;
+                                const iva = totale - imp;
+                                const aliq = s.aliquotaIva != null ? parseFloat(s.aliquotaIva as unknown as string) : null;
+                                return (
+                                  <>
+                                    <TableCell className="text-right font-mono" data-testid={`cell-imponibile-${s.id}`}>{fmtEur(imp)}</TableCell>
+                                    <TableCell className="text-right font-mono text-muted-foreground" data-testid={`cell-iva-${s.id}`} title={aliq != null ? `Aliquota ${aliq}%` : undefined}>
+                                      {iva > 0.004 ? fmtEur(iva) : "—"}
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono">{fmtEur(totale)}</TableCell>
+                                  </>
+                                );
+                              })()}
+                              <TableCell>
+                                {s.allegatoPath && (
+                                  <a href={apiUrl(`/api/cdg/spese/${s.id}/allegato`)} target="_blank" rel="noreferrer" title={s.allegatoNome || "Allegato"} data-testid={`link-allegato-${s.id}`}>
+                                    <Paperclip className="h-4 w-4 text-blue-600" />
+                                  </a>
                                 )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-xs">{s.metodoPagamento || ""}</TableCell>
-                            {(() => {
-                              const totale = parseImporto(s.importo);
-                              const imp = s.imponibile != null ? parseImporto(s.imponibile) : totale;
-                              const iva = totale - imp;
-                              const aliq = s.aliquotaIva != null ? parseFloat(s.aliquotaIva as unknown as string) : null;
-                              return (
-                                <>
-                                  <TableCell className="text-right font-mono" data-testid={`cell-imponibile-${s.id}`}>{fmtEur(imp)}</TableCell>
-                                  <TableCell className="text-right font-mono text-muted-foreground" data-testid={`cell-iva-${s.id}`} title={aliq != null ? `Aliquota ${aliq}%` : undefined}>
-                                    {iva > 0.004 ? fmtEur(iva) : "—"}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono">{fmtEur(totale)}</TableCell>
-                                </>
-                              );
-                            })()}
-                            <TableCell>
-                              {s.allegatoPath && (
-                                <a href={apiUrl(`/api/cdg/spese/${s.id}/allegato`)} target="_blank" rel="noreferrer" title={s.allegatoNome || "Allegato"} data-testid={`link-allegato-${s.id}`}>
-                                  <Paperclip className="h-4 w-4 text-blue-600" />
-                                </a>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Button size="icon" variant="ghost" onClick={() => setSpesaDialog({ open: true, editing: s })} data-testid={`button-edit-spesa-${s.id}`}>
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button size="icon" variant="ghost" data-testid={`button-delete-spesa-${s.id}`}><Trash2 className="h-4 w-4 text-red-600" /></Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Eliminare la spesa?</AlertDialogTitle>
-                                      <AlertDialogDescription>{s.descrizione} — {fmtEur(parseImporto(s.importo))}</AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Annulla</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => deleteSpesaMut.mutate(s.id)}>Elimina</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-1">
+                                  <Button size="icon" variant="ghost" onClick={() => setSpesaDialog({ open: true, editing: s })} data-testid={`button-edit-spesa-${s.id}`}>
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button size="icon" variant="ghost" data-testid={`button-delete-spesa-${s.id}`}><Trash2 className="h-4 w-4 text-red-600" /></Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Eliminare la spesa?</AlertDialogTitle>
+                                        <AlertDialogDescription>{s.descrizione} — {fmtEur(parseImporto(s.importo))}</AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Annulla</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => deleteSpesaMut.mutate(s.id)}>Elimina</AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        };
+                        const rigaGruppo = (id: string, occ: Spesa[]) => {
+                          const prima = occ[0];
+                          const cat = prima.categoriaId ? catById.get(prima.categoriaId) : null;
+                          const forn = prima.fornitoreId ? fornById.get(prima.fornitoreId) : null;
+                          const pdv = prima.pdvCodice ? pdvByCodice.get(prima.pdvCodice) : null;
+                          const espanso = gruppiEspansi.has(id);
+                          const mesi = occ.map(o => o.meseCompetenza).sort();
+                          let totale = 0, imp = 0;
+                          for (const o of occ) {
+                            const t = parseImporto(o.importo);
+                            totale += t;
+                            imp += o.imponibile != null ? parseImporto(o.imponibile) : t;
+                          }
+                          const iva = totale - imp;
+                          const toggle = () => setGruppiEspansi(prev => {
+                            const next = new Set(prev);
+                            if (next.has(id)) next.delete(id); else next.add(id);
+                            return next;
+                          });
+                          return (
+                            <Fragment key={`grp-${id}`}>
+                              <TableRow data-testid={`row-ricorrenza-${id}`} className="cursor-pointer hover:bg-muted/50" onClick={toggle}>
+                                <TableCell>
+                                  <div className="flex items-center gap-1">
+                                    <ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${espanso ? "rotate-90" : ""}`} data-testid={`toggle-ricorrenza-${id}`} />
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">{occ.length} rate</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell><Badge variant="outline">{monthLabel(mesi[0])} → {monthLabel(mesi[mesi.length - 1])}</Badge></TableCell>
+                                <TableCell className="text-xs">{prima.ragioneSociale}</TableCell>
+                                <TableCell>{cat?.nome || <span className="text-muted-foreground">—</span>}</TableCell>
+                                <TableCell>{forn?.nome || <span className="text-muted-foreground">—</span>}</TableCell>
+                                <TableCell>{pdv ? pdv.nome : (prima.pdvCodice ? <span className="text-amber-600">{prima.pdvCodice} (?)</span> : <span className="text-muted-foreground">—</span>)}</TableCell>
+                                <TableCell className="max-w-[220px] truncate" title={prima.descrizione}>
+                                  <div className="flex items-center gap-1">
+                                    <span className="truncate">{prima.descrizione}</span>
+                                    <Badge variant="secondary" className="text-[10px] px-1 py-0" data-testid={`badge-ricorrente-gruppo-${id}`}>↻</Badge>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-xs">{prima.metodoPagamento || ""}</TableCell>
+                                <TableCell className="text-xs whitespace-nowrap">Ricorrente</TableCell>
+                                <TableCell className="text-xs whitespace-nowrap" data-testid={`cell-ricorrenza-info-${id}`}>{ricorrenzaLabel(prima) || "—"}</TableCell>
+                                <TableCell className="text-right font-mono" title="Somma imponibile di tutte le rate">{fmtEur(imp)}</TableCell>
+                                <TableCell className="text-right font-mono text-muted-foreground">{iva > 0.004 ? fmtEur(iva) : "—"}</TableCell>
+                                <TableCell className="text-right font-mono" title={`Totale di ${occ.length} rate — ${fmtEur(parseImporto(prima.importo))}/rata`} data-testid={`cell-totale-gruppo-${id}`}>{fmtEur(totale)}</TableCell>
+                                <TableCell>
+                                  {(() => {
+                                    const nAllegati = occ.filter(o => o.allegatoPath).length;
+                                    return nAllegati > 0 ? (
+                                      <span className="flex items-center gap-0.5 text-xs text-blue-600" title={`${nAllegati} allegat${nAllegati === 1 ? "o" : "i"} nelle rate: espandi per aprirli`} data-testid={`badge-allegati-gruppo-${id}`}>
+                                        <Paperclip className="h-4 w-4" />{nAllegati > 1 ? nAllegati : ""}
+                                      </span>
+                                    ) : null;
+                                  })()}
+                                </TableCell>
+                                <TableCell onClick={(e) => e.stopPropagation()}>
+                                  <Button size="icon" variant="ghost" title="Modifica la ricorrenza (tutte le rate o una sola)" onClick={() => setSpesaDialog({ open: true, editing: prima })} data-testid={`button-edit-ricorrenza-${id}`}>
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                              {espanso && occ.map(o => rigaSpesa(o, true))}
+                            </Fragment>
+                          );
+                        };
+                        return items.map(item => item.tipo === "singola" ? rigaSpesa(item.s, false) : rigaGruppo(item.id, item.occ));
+                      })()}
                     </TableBody>
                   </Table>
                 )}
