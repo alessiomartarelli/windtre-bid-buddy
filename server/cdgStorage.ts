@@ -87,8 +87,19 @@ function resolveMultiRs<T extends { ragioniSociali: string[]; ragioneSocialeIds?
     if (ids.length === 0) return r;
     const nomi = ids.map(id => map.get(id)).filter((n): n is string => !!n);
     if (nomi.length === 0) return r; // anchor spariti: fallback ai nomi salvati
-    nomi.sort((a, b) => a.localeCompare(b, "it"));
-    return { ...r, ragioniSociali: nomi };
+    // Gli id sono canonici (rinomine), ma NON devono far sparire associazioni
+    // salvate solo per nome (id non ancora backfillato, es. RS ereditate):
+    // tieni ogni nome salvato il cui id di registro non è già coperto dagli
+    // id della riga (o che non è nel registro affatto).
+    const idByName = new Map(Array.from(map.entries()).map(([id, nome]) => [nome, id]));
+    const idSet = new Set(ids);
+    const nomiSet = new Set(nomi);
+    for (const nome of r.ragioniSociali || []) {
+      const regId = idByName.get(nome);
+      if ((!regId || !idSet.has(regId)) && !nomiSet.has(nome)) nomiSet.add(nome);
+    }
+    const out = Array.from(nomiSet).sort((a, b) => a.localeCompare(b, "it"));
+    return { ...r, ragioniSociali: out };
   });
 }
 

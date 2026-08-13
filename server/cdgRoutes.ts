@@ -232,8 +232,12 @@ async function backfillCdg(): Promise<void> {
                SELECT COALESCE(array_agg(r.id ORDER BY r.nome), ARRAY[]::text[])
                  FROM cdg_ragioni_sociali r
                 WHERE r.organization_id = c.organization_id AND r.nome = ANY(c.ragioni_sociali))
-       WHERE COALESCE(array_length(c.ragione_sociale_ids, 1), 0) = 0
-         AND COALESCE(array_length(c.ragioni_sociali, 1), 0) > 0
+       WHERE COALESCE(array_length(c.ragioni_sociali, 1), 0) > 0
+         AND NOT (
+               (SELECT COALESCE(array_agg(r.id)::text[], ARRAY[]::text[])
+                  FROM cdg_ragioni_sociali r
+                 WHERE r.organization_id = c.organization_id AND r.nome = ANY(c.ragioni_sociali))
+               <@ c.ragione_sociale_ids::text[])
     `);
     await db.execute(sql`
       UPDATE cdg_fornitori f
@@ -241,8 +245,12 @@ async function backfillCdg(): Promise<void> {
                SELECT COALESCE(array_agg(r.id ORDER BY r.nome), ARRAY[]::text[])
                  FROM cdg_ragioni_sociali r
                 WHERE r.organization_id = f.organization_id AND r.nome = ANY(f.ragioni_sociali))
-       WHERE COALESCE(array_length(f.ragione_sociale_ids, 1), 0) = 0
-         AND COALESCE(array_length(f.ragioni_sociali, 1), 0) > 0
+       WHERE COALESCE(array_length(f.ragioni_sociali, 1), 0) > 0
+         AND NOT (
+               (SELECT COALESCE(array_agg(r.id)::text[], ARRAY[]::text[])
+                  FROM cdg_ragioni_sociali r
+                 WHERE r.organization_id = f.organization_id AND r.nome = ANY(f.ragioni_sociali))
+               <@ f.ragione_sociale_ids::text[])
     `);
   } catch (e) {
     allOk = false;
