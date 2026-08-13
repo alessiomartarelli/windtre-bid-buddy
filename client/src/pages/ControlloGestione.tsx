@@ -96,6 +96,10 @@ const METODI_PAGAMENTO = [
 ];
 
 const parseImporto = (s: CdgSpesa["importo"]): number => parseFloat(s as unknown as string) || 0;
+// Costi al NETTO IVA per tutte le dashboard: usa l'imponibile quando presente,
+// altrimenti (spese legacy senza scorporo) il totale registrato.
+const parseNettoIva = (s: CdgSpesa): number =>
+  s.imponibile != null ? parseImporto(s.imponibile) : parseImporto(s.importo);
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -252,7 +256,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     const catTotMese = new Map<string, number>();
 
     for (const s of spese) {
-      const imp = parseImporto(s.importo);
+      const imp = parseNettoIva(s);
       const mPag = (s.dataPagamento || "").slice(0, 7);
       const mComp = s.meseCompetenza || mPag;
       const inMese = mPag === dashboardMese || mComp === dashboardMese;
@@ -312,7 +316,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     let totCassaAnno = 0;
     let totCompAnno = 0;
     for (const s of spese) {
-      const imp = parseImporto(s.importo);
+      const imp = parseNettoIva(s);
       const mPag = (s.dataPagamento || "").slice(0, 7);
       const mComp = s.meseCompetenza || mPag;
       const [pY, pM] = mPag.split("-").map(Number);
@@ -348,7 +352,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     const pdvTot = new Map<string, { codice: string; nome: string; importo: number; conteggio: number }>();
     const pdvSpese: { id: string; data: string; meseComp: string; categoria: string; descrizione: string; importo: number; pdvCodice: string | null }[] = [];
     for (const s of spese) {
-      const imp = parseImporto(s.importo);
+      const imp = parseNettoIva(s);
       const mPag = (s.dataPagamento || "").slice(0, 7);
       const mComp = s.meseCompetenza || mPag;
       const ym = annoVista === "competenza" ? mComp : mPag;
@@ -392,7 +396,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
 
     const ymTarget = `${dashboardAnno}-${String(pivotMese).padStart(2, "0")}`;
     for (const s of spese) {
-      const imp = parseImporto(s.importo);
+      const imp = parseNettoIva(s);
       const mPag = (s.dataPagamento || "").slice(0, 7);
       const mComp = s.meseCompetenza || mPag;
       const ym = annoVista === "competenza" ? mComp : mPag;
@@ -598,11 +602,11 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Totale cassa ({monthLabel(dashboardMese)})</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Totale cassa netto IVA ({monthLabel(dashboardMese)})</CardTitle></CardHeader>
                 <CardContent><div className="text-2xl font-bold" data-testid="kpi-cassa">{fmtEur(dashboard.totaleCassaMese)}</div><p className="text-xs text-muted-foreground mt-1">Pagato nel mese</p></CardContent>
               </Card>
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Totale competenza ({monthLabel(dashboardMese)})</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Totale competenza netto IVA ({monthLabel(dashboardMese)})</CardTitle></CardHeader>
                 <CardContent><div className="text-2xl font-bold" data-testid="kpi-competenza">{fmtEur(dashboard.totaleCompetenzaMese)}</div><p className="text-xs text-muted-foreground mt-1">Costo di competenza</p></CardContent>
               </Card>
               <Card>
@@ -681,7 +685,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                   <div>
                     <CardTitle className="text-base">Spese annuali — anno {dashboardAnno}</CardTitle>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Totale competenza anno: <strong>{fmtEur(dashboardAnnuale.totCompAnno)}</strong> · Totale cassa anno: <strong>{fmtEur(dashboardAnnuale.totCassaAnno)}</strong>
+                      Importi netto IVA · Totale competenza anno: <strong>{fmtEur(dashboardAnnuale.totCompAnno)}</strong> · Totale cassa anno: <strong>{fmtEur(dashboardAnnuale.totCassaAnno)}</strong>
                     </p>
                   </div>
                   <div className="flex items-end gap-3 flex-wrap">
