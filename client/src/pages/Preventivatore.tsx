@@ -26,6 +26,7 @@ import { StepSceltaModalitaRS } from "@/components/wizard/StepSceltaModalitaRS";
 import { usePreventivatoreStorage } from "@/hooks/use-preventivatore-storage";
 import { useOrganizationConfig } from "@/hooks/useOrganizationConfig";
 import { apiUrl } from "@/lib/basePath";
+import { hasAnagrafica } from "@shared/strutturaGuard";
 import { useTabelleCalcoloConfig } from "@/hooks/useTabelleCalcoloConfig";
 import { usePreventivi } from "@/hooks/usePreventivi";
 import { useToast } from "@/hooks/use-toast";
@@ -714,7 +715,20 @@ const Preventivatore = () => {
 
     // Salva su localStorage (immediato)
     saveConfig(configToSave);
-    
+
+    // Airbag (Task #338): non spingere sul backend PDV "scheletro" senza
+    // anagrafica (nome/codicePos/RS tutti vuoti) — sovrascriverebbero la
+    // struttura reale in organization_config. In quel caso omettiamo la
+    // chiave puntiVendita: il server re-inietta il valore corrente e le
+    // altre impostazioni vengono comunque salvate. Il server ha anche la
+    // guardia lato route (409 sugli azzeramenti di massa).
+    const hasPdvReali = puntiVendita.some(hasAnagrafica);
+    if (!hasPdvReali) {
+      const { puntiVendita: _omessi, ...senzaStruttura } = configToSave;
+      saveRemoteConfigDebounced(senzaStruttura as typeof configToSave);
+      return;
+    }
+
     // Salva su backend con debounce (ogni ~2.5s)
     saveRemoteConfigDebounced(configToSave);
   }, [configGara, numeroPdv, puntiVendita, pistaMobileConfig, pistaFissoConfig, partnershipRewardConfig, calendarioOverrides, energiaConfig, energiaPdvInGara, assicurazioniConfig, assicurazioniPdvInGara, pistaMobileRSConfig, pistaFissoRSConfig, partnershipRewardRSConfig, modalitaInserimentoRS, extraGaraSoglieOverride, saveConfig, saveRemoteConfigDebounced, isLoaded]);

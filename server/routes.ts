@@ -13,6 +13,7 @@ import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/c
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
 import { dtsSaleCodiceEsterno } from "@shared/dtsReport";
 import { normalizeTimeLabel, parseSendTimes } from "@shared/telegramSendTimes";
+import { wouldMassBlankPuntiVendita } from "@shared/strutturaGuard";
 import { registerCdgRoutes } from "./cdgRoutes";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import {
@@ -444,9 +445,9 @@ export async function registerRoutes(
       // verrebbe rimossa dal save → re-inietto il valore corrente. Se la include
       // con valore diverso → 403.
       let effectiveConfig: Record<string, unknown> = (config as Record<string, unknown> | null) || {};
+      const cur = await storage.getOrgConfig(profile.organizationId);
+      const curCfg = (cur?.config as Record<string, unknown> | null) || {};
       if (!['admin', 'super_admin'].includes(profile.role)) {
-        const cur = await storage.getOrgConfig(profile.organizationId);
-        const curCfg = (cur?.config as Record<string, unknown> | null) || {};
         const ser = (v: unknown) => JSON.stringify(v ?? null);
         const protectedKeys: ReadonlyArray<"puntiVendita" | "ragioniSociali"> = ["puntiVendita", "ragioniSociali"];
         const merged: Record<string, unknown> = { ...effectiveConfig };
@@ -462,6 +463,32 @@ export async function registerRoutes(
           }
         }
         effectiveConfig = merged;
+      } else {
+        // Guardia anti-distruzione anche per admin/super_admin (Task #338):
+        // 1) se il payload OMETTE una chiave strutturale presente nella config
+        //    corrente, re-inietto il valore corrente (la struttura si modifica
+        //    dagli endpoint /api/admin/struttura/*, non per omissione qui);
+        // 2) se il payload azzererebbe in massa l'anagrafica dei PDV
+        //    (tutti senza nome/codicePos/RS mentre oggi almeno uno li ha),
+        //    rifiuto con 409: è il pattern dell'autosave del Simulatore con
+        //    PDV scheletro, mai una modifica intenzionale.
+        for (const k of ["puntiVendita", "ragioniSociali"] as const) {
+          const incomingHas = Object.prototype.hasOwnProperty.call(effectiveConfig, k);
+          const curHas = Object.prototype.hasOwnProperty.call(curCfg, k);
+          // Chiave omessa, o presente ma non-array (null/{}): mai un edit
+          // strutturale intenzionale → re-inietto il valore corrente.
+          if ((!incomingHas || !Array.isArray(effectiveConfig[k])) && curHas) {
+            effectiveConfig[k] = curCfg[k];
+          } else if (incomingHas && !Array.isArray(effectiveConfig[k]) && !curHas) {
+            delete effectiveConfig[k];
+          }
+        }
+        if (wouldMassBlankPuntiVendita(curCfg.puntiVendita, effectiveConfig.puntiVendita)) {
+          console.warn(`[org-config] BLOCKED mass-blank puntiVendita save (org=${profile.organizationId}, user=${userId})`);
+          return res.status(409).json({
+            message: "Salvataggio bloccato: il salvataggio azzererebbe nome, codice POS e ragione sociale di tutti i punti vendita. Modifica la struttura da Gestione organizzazione → Struttura.",
+          });
+        }
       }
       const result = await storage.upsertOrgConfig(profile.organizationId, effectiveConfig, configVersion || "2.0");
       res.json(result);

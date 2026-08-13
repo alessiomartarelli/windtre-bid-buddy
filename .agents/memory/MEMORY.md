@@ -33,4 +33,5 @@
 - [Telegram forecast in gara_config](telegram-forecast-in-garaconfig.md) — forecast/obiettivi report Telegram sta per-mese in gara_config.config.venditeForecast (non telegramReport); giorni lavorativi auto CC(incl. domeniche)/strada.
 - [Telegram performance weights](telegram-performance-weights.md) — pesi punteggio in gara_config.config.performanceWeights riordinano standout(msg)+classifiche(HTML) insieme; preview script NON li applica; verify script DB-backed.
 - [New module vs Home empty-state test](new-module-empty-state-tests.md) — ogni nuovo modulo non gated è default-enabled: va disabilitato esplicitamente nel test home-landing "Nessun modulo attivo".
+- [Org-config struttura guard](org-config-struttura-guard.md) — il PUT generico org-config re-inietta/blocca (409) azzeramenti di massa dei PDV; l'autosave del Simulatore può spingere scheletri vuoti.
 - [BiSuite partnership twins](bisuite-partnership-twins.md) — mergeWithDefaultRules twins ogni regola CB su pista partnership; aggrega/filtra per pista o i veri eventi CB si contano doppi (caring escluso dai twin).
