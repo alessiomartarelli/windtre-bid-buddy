@@ -392,6 +392,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     const colonne = new Set<string>();
     const righe = new Map<string, { label: string; rs: string; values: Map<string, number>; totale: number }>();
     const colTot = new Map<string, number>();
+    const catRs = new Map<string, { categoria: string; rs: string; importo: number; conteggio: number }>();
     let totaleGenerale = 0;
 
     const ymTarget = `${dashboardAnno}-${String(pivotMese).padStart(2, "0")}`;
@@ -425,11 +426,20 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
 
       colTot.set(cat, (colTot.get(cat) || 0) + imp);
       totaleGenerale += imp;
+
+      // Riepilogo categoria × RS: STESSO periodo della pivot (anno o mese
+      // selezionato), non tutte le spese storiche — un totale pluriennale
+      // qui non è informativo.
+      const sKey = `${s.ragioneSociale}|${cat}`;
+      const sCur = catRs.get(sKey) || { categoria: cat, rs: s.ragioneSociale, importo: 0, conteggio: 0 };
+      sCur.importo += imp; sCur.conteggio += 1;
+      catRs.set(sKey, sCur);
     }
 
     const colonneArr = Array.from(colonne).sort((a, b) => (colTot.get(b) || 0) - (colTot.get(a) || 0));
     const righeArr = Array.from(righe.values()).sort((a, b) => b.totale - a.totale);
-    return { colonne: colonneArr, righe: righeArr, colTot, totaleGenerale };
+    const summaryRows = Array.from(catRs.values()).sort((a, b) => b.importo - a.importo);
+    return { colonne: colonneArr, righe: righeArr, colTot, totaleGenerale, summaryRows };
   }, [spese, dashboardAnno, annoVista, pivotRaggr, pivotPeriodo, pivotMese, catById, pdvByCodice]);
 
   const deleteSpesaMut = useMutation({
@@ -470,7 +480,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Spese");
 
-    const summary = dashboard.summaryRows.map(r => ({
+    const summary = pivotData.summaryRows.map(r => ({
       "Categoria": r.categoria,
       "Ragione Sociale": r.rs,
       "Numero spese": r.conteggio,
@@ -1030,9 +1040,13 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="text-base">Riepilogo per categoria × Ragione Sociale</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Riepilogo per categoria × Ragione Sociale — {pivotPeriodo === "mese" ? `${monthLabel(`${dashboardAnno}-${String(pivotMese).padStart(2, "0")}`)}` : dashboardAnno} ({annoVista})
+                </CardTitle>
+              </CardHeader>
               <CardContent>
-                {dashboard.summaryRows.length === 0 ? (
+                {pivotData.summaryRows.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4">Nessun dato.</p>
                 ) : (
                   <Table>
@@ -1045,7 +1059,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {dashboard.summaryRows.map((r, i) => (
+                      {pivotData.summaryRows.map((r, i) => (
                         <TableRow key={i} data-testid={`row-summary-${i}`}>
                           <TableCell className="font-medium">{r.categoria}</TableCell>
                           <TableCell className="text-xs">{r.rs}</TableCell>
