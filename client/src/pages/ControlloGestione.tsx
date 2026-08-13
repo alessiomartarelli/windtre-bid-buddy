@@ -32,6 +32,7 @@ import {
   TrendingUp, FileText, Paperclip, ExternalLink, Info,
 } from "lucide-react";
 import { KpiCardsSkeleton, DataTableSkeleton } from "@/components/skeletons";
+import { ImportSpeseExcel } from "@/components/cdg/ImportSpeseExcel";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   PieChart, Pie, Cell,
@@ -1057,11 +1058,19 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
 
           <TabsContent value="spese" className="space-y-4">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <CardTitle className="text-base">Elenco spese ({spese.length})</CardTitle>
-                <Button onClick={() => setSpesaDialog({ open: true })} data-testid="button-new-spesa">
-                  <Plus className="h-4 w-4 mr-1" /> Nuova spesa
-                </Button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <ImportSpeseExcel
+                    ragioniSociali={ragioniSociali.map(r => r.nome)}
+                    categorie={categorie}
+                    fornitori={fornitori}
+                    pdvList={pdvList.map(p => ({ codice: p.codice, nome: p.nome, ragioneSociale: p.ragioneSociale }))}
+                  />
+                  <Button onClick={() => setSpesaDialog({ open: true })} data-testid="button-new-spesa">
+                    <Plus className="h-4 w-4 mr-1" /> Nuova spesa
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {speseQ.isLoading ? (

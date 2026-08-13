@@ -252,4 +252,153 @@ export const cdgStorage = {
     await db.delete(cdgPdvManuali)
       .where(and(eq(cdgPdvManuali.id, id), eq(cdgPdvManuali.organizationId, orgId)));
   },
+
+  // Import massivo spese da Excel: crea in un'unica transazione le anagrafiche
+  // mancanti (categorie/fornitori/PDV manuali), associa le esistenti alla RS
+  // dove serve, poi inserisce le spese. O tutto o niente.
+  async importSpese(
+    orgId: string,
+    createdBy: string,
+    rows: Array<{
+      rs: string;
+      categoriaId: string | null; categoriaNew: string | null; categoriaAssocId: string | null;
+      fornitoreId: string | null; fornitoreNew: string | null; fornitoreAssocId: string | null;
+      pdvCodice: string | null; pdvNew: { codice: string; nome: string } | null;
+      descrizione: string;
+      imponibile: string; aliquotaIva: string; iva: string; importo: string;
+      dataPagamento: string; meseCompetenza: string;
+      metodoPagamento: string | null; note: string | null;
+    }>,
+  ): Promise<{ speseCreate: number; categorieCreate: number; fornitoriCreati: number; pdvCreati: number }> {
+    return await db.transaction(async (tx) => {
+      // 1) Categorie/fornitori nuovi: dedupe per nome (case-insensitive),
+      //    RS = unione delle RS delle righe che li citano.
+      const newCats = new Map<string, { nome: string; rs: Set<string> }>();
+      const newForns = new Map<string, { nome: string; rs: Set<string> }>();
+      const newPdvs = new Map<string, { rs: string; codice: string; nome: string }>();
+      for (const r of rows) {
+        if (r.categoriaNew) {
+          const k = r.categoriaNew.toLowerCase();
+          const e = newCats.get(k) || { nome: r.categoriaNew, rs: new Set<string>() };
+          e.rs.add(r.rs); newCats.set(k, e);
+        }
+        if (r.fornitoreNew) {
+          const k = r.fornitoreNew.toLowerCase();
+          const e = newForns.get(k) || { nome: r.fornitoreNew, rs: new Set<string>() };
+          e.rs.add(r.rs); newForns.set(k, e);
+        }
+        if (r.pdvNew) newPdvs.set(`${r.rs}||${r.pdvNew.codice}`, { rs: r.rs, ...r.pdvNew });
+      }
+      // Insert conflict-safe: se un'altra sessione ha creato la stessa voce
+      // nel frattempo (unique org+nome), riusa l'esistente e associa le RS.
+      const catIdByLower = new Map<string, string>();
+      for (const e of Array.from(newCats.values())) {
+        const [c] = await tx.insert(cdgCategorie)
+          .values({ organizationId: orgId, nome: e.nome, ragioniSociali: Array.from(e.rs) })
+          .onConflictDoNothing()
+          .returning();
+        let id = c?.id;
+        if (!id) {
+          const [existing] = await tx.select().from(cdgCategorie)
+            .where(and(eq(cdgCategorie.organizationId, orgId), eq(cdgCategorie.nome, e.nome)));
+          if (!existing) throw new Error(`Categoria "${e.nome}" non creabile`);
+          id = existing.id;
+          for (const rs of Array.from(e.rs)) {
+            await tx.execute(sql`UPDATE cdg_categorie SET ragioni_sociali = array_append(ragioni_sociali, ${rs}) WHERE id = ${id} AND NOT (${rs} = ANY(ragioni_sociali))`);
+          }
+        }
+        catIdByLower.set(e.nome.toLowerCase(), id);
+      }
+      const fornIdByLower = new Map<string, string>();
+      for (const e of Array.from(newForns.values())) {
+        const [f] = await tx.insert(cdgFornitori)
+          .values({ organizationId: orgId, nome: e.nome, ragioniSociali: Array.from(e.rs) })
+          .onConflictDoNothing()
+          .returning();
+        let id = f?.id;
+        if (!id) {
+          const [existing] = await tx.select().from(cdgFornitori)
+            .where(and(eq(cdgFornitori.organizationId, orgId), eq(cdgFornitori.nome, e.nome)));
+          if (!existing) throw new Error(`Fornitore "${e.nome}" non creabile`);
+          id = existing.id;
+          for (const rs of Array.from(e.rs)) {
+            await tx.execute(sql`UPDATE cdg_fornitori SET ragioni_sociali = array_append(ragioni_sociali, ${rs}) WHERE id = ${id} AND NOT (${rs} = ANY(ragioni_sociali))`);
+          }
+        }
+        fornIdByLower.set(e.nome.toLowerCase(), id);
+      }
+      // 2) Associazioni RS mancanti su anagrafiche esistenti (idempotente).
+      const assocCat = new Map<string, Set<string>>();
+      const assocForn = new Map<string, Set<string>>();
+      for (const r of rows) {
+        if (r.categoriaAssocId) (assocCat.get(r.categoriaAssocId) || assocCat.set(r.categoriaAssocId, new Set()).get(r.categoriaAssocId)!).add(r.rs);
+        if (r.fornitoreAssocId) (assocForn.get(r.fornitoreAssocId) || assocForn.set(r.fornitoreAssocId, new Set()).get(r.fornitoreAssocId)!).add(r.rs);
+      }
+      for (const [id, rsSet] of Array.from(assocCat.entries())) for (const rs of Array.from(rsSet)) {
+        await tx.execute(sql`UPDATE cdg_categorie SET ragioni_sociali = array_append(ragioni_sociali, ${rs}) WHERE id = ${id} AND organization_id = ${orgId} AND NOT (${rs} = ANY(ragioni_sociali))`);
+      }
+      for (const [id, rsSet] of Array.from(assocForn.entries())) for (const rs of Array.from(rsSet)) {
+        await tx.execute(sql`UPDATE cdg_fornitori SET ragioni_sociali = array_append(ragioni_sociali, ${rs}) WHERE id = ${id} AND organization_id = ${orgId} AND NOT (${rs} = ANY(ragioni_sociali))`);
+      }
+      // 3) PDV manuali nuovi (conflict-safe: riusa se già creato altrove).
+      for (const p of Array.from(newPdvs.values())) {
+        await tx.insert(cdgPdvManuali)
+          .values({ organizationId: orgId, ragioneSociale: p.rs, codice: p.codice, nome: p.nome })
+          .onConflictDoNothing();
+      }
+      // 4) Spese. Protezione da doppio import (retry dello stesso file):
+      //    una riga identica già presente (stessa RS, descrizione, importo e
+      //    data pagamento) viene saltata e conteggiata come duplicato.
+      let duplicati = 0;
+      let inserite = 0;
+      for (const r of rows) {
+        const categoriaId = r.categoriaId ?? (r.categoriaNew ? catIdByLower.get(r.categoriaNew.toLowerCase()) ?? null : null);
+        const fornitoreId = r.fornitoreId ?? (r.fornitoreNew ? fornIdByLower.get(r.fornitoreNew.toLowerCase()) ?? null : null);
+        const dup = await tx.execute(sql`
+          SELECT 1 FROM cdg_spese
+           WHERE organization_id = ${orgId}
+             AND ragione_sociale = ${r.rs}
+             AND descrizione = ${r.descrizione}
+             AND importo = ${r.importo}
+             AND data_pagamento = ${r.dataPagamento}
+             AND mese_competenza = ${r.meseCompetenza}
+             AND imponibile IS NOT DISTINCT FROM ${r.imponibile}::numeric
+             AND aliquota_iva IS NOT DISTINCT FROM ${r.aliquotaIva}::numeric
+             AND pdv_codice IS NOT DISTINCT FROM ${r.pdvCodice}
+             AND categoria_id IS NOT DISTINCT FROM ${categoriaId}
+             AND fornitore_id IS NOT DISTINCT FROM ${fornitoreId}
+             AND metodo_pagamento IS NOT DISTINCT FROM ${r.metodoPagamento}
+             AND note IS NOT DISTINCT FROM ${r.note}
+           LIMIT 1
+        `);
+        if ((dup as unknown as { rows?: unknown[] }).rows?.length) { duplicati += 1; continue; }
+        inserite += 1;
+        await tx.insert(cdgSpese).values({
+          organizationId: orgId,
+          createdBy,
+          ragioneSociale: r.rs,
+          categoriaId,
+          fornitoreId,
+          pdvCodice: r.pdvCodice,
+          descrizione: r.descrizione,
+          imponibile: r.imponibile,
+          aliquotaIva: r.aliquotaIva,
+          iva: r.iva,
+          importo: r.importo,
+          dataPagamento: r.dataPagamento,
+          meseCompetenza: r.meseCompetenza,
+          metodoPagamento: r.metodoPagamento,
+          note: r.note,
+          ricorrente: false,
+        });
+      }
+      return {
+        speseCreate: inserite,
+        duplicati,
+        categorieCreate: newCats.size,
+        fornitoriCreati: newForns.size,
+        pdvCreati: newPdvs.size,
+      };
+    });
+  },
 };

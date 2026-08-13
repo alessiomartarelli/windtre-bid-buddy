@@ -1126,4 +1126,268 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     res.setHeader("Content-Disposition", `${disposition}; filename="${encodeURIComponent(safeFileName)}"`);
     res.sendFile(resolved);
   });
+
+  // === Import spese da Excel ===
+  // Il client parsa il file .xlsx e invia righe già in forma testuale; il
+  // server valida (preview) e applica (confirm) con la stessa analisi, così
+  // l'anteprima mostrata all'utente coincide con quanto verrà scritto.
+  const importRowSchema = z.object({
+    ragioneSociale: z.string().optional().default(""),
+    pdvCodice: z.string().optional().default(""),
+    pdvNome: z.string().optional().default(""),
+    categoria: z.string().optional().default(""),
+    fornitore: z.string().optional().default(""),
+    descrizione: z.string().optional().default(""),
+    imponibile: z.string().optional().default(""),
+    aliquotaIva: z.string().optional().default(""),
+    dataPagamento: z.string().optional().default(""),
+    meseCompetenza: z.string().optional().default(""),
+    metodoPagamento: z.string().optional().default(""),
+    note: z.string().optional().default(""),
+  });
+  const importBodySchema = z.object({ rows: z.array(importRowSchema).min(1).max(2000) });
+
+  type ImportRowPlan = {
+    index: number;
+    esito: "ok" | "errore";
+    errori: string[];
+    azioni: string[];
+    dati: {
+      ragioneSociale: string;
+      pdvCodice: string | null;
+      pdvNome: string | null;
+      categoriaNome: string | null;
+      fornitoreNome: string | null;
+      descrizione: string;
+      imponibile: string;
+      aliquotaIva: string;
+      dataPagamento: string;
+      meseCompetenza: string;
+      metodoPagamento: string | null;
+      note: string | null;
+    };
+    // Risoluzioni: id esistente, oppure marcatore di creazione (chiave lower)
+    categoriaId: string | null;
+    categoriaNew: string | null; // nome canonico da creare
+    categoriaAssocId: string | null; // esistente ma da associare alla RS
+    fornitoreId: string | null;
+    fornitoreNew: string | null;
+    fornitoreAssocId: string | null;
+    pdvNew: { codice: string; nome: string } | null;
+  };
+
+  function parseDataIt(s: string): string | null {
+    const t = s.trim();
+    let y = 0, m = 0, d = 0;
+    let mm = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
+    if (mm) { y = +mm[1]; m = +mm[2]; d = +mm[3]; }
+    else {
+      mm = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(t);
+      if (!mm) return null;
+      d = +mm[1]; m = +mm[2]; y = +mm[3];
+      // Ambiguità mm/dd: se il "giorno" è ≤12 e il "mese" >12 era mm/dd
+      if (m > 12 && d <= 12) { const tmp = d; d = m; m = tmp; }
+    }
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  // Parser rigoroso per importi in formato italiano o anglosassone.
+  // Accetta: "1234", "1234,56", "1234.56", "1.234,56", "1,234.56", "1 234,56".
+  // Rifiuta input ambigui o con caratteri estranei ("100abc", "1.23.4").
+  // Ritorna la stringa decimale normalizzata con punto, o null.
+  function parseImportoStrict(s: string): string | null {
+    const t = s.trim().replace(/€/g, "").replace(/\s/g, "");
+    if (!t) return null;
+    let norm: string | null = null;
+    if (/^\d+$/.test(t)) norm = t;
+    else if (/^\d+,\d{1,2}$/.test(t)) norm = t.replace(",", ".");
+    else if (/^\d+\.\d{1,2}$/.test(t)) norm = t;
+    else if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(t)) norm = t.replace(/\./g, "").replace(",", ".");
+    else if (/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/.test(t)) norm = t.replace(/,/g, "");
+    if (norm === null) return null;
+    const n = Number.parseFloat(norm);
+    return Number.isFinite(n) && n > 0 ? norm : null;
+  }
+
+  function parseMeseCompetenza(s: string): string | null {
+    const t = s.trim();
+    let mm = /^(\d{4})-(\d{1,2})$/.exec(t);
+    if (mm) { const y = +mm[1], m = +mm[2]; return m >= 1 && m <= 12 ? `${y}-${String(m).padStart(2, "0")}` : null; }
+    mm = /^(\d{1,2})[/.-](\d{4})$/.exec(t);
+    if (mm) { const m = +mm[1], y = +mm[2]; return m >= 1 && m <= 12 ? `${y}-${String(m).padStart(2, "0")}` : null; }
+    return null;
+  }
+
+  async function analyzeImportRows(orgId: string, rows: z.infer<typeof importRowSchema>[]): Promise<ImportRowPlan[]> {
+    const [validRs, categorie, fornitori, pdvCfg, pdvMan] = await Promise.all([
+      getValidRsNames(orgId),
+      cdgStorage.listCategorie(orgId),
+      cdgStorage.listFornitori(orgId),
+      getOrgPuntiVendita(orgId),
+      cdgStorage.listPdvManuali(orgId),
+    ]);
+    const rsByLower = new Map<string, string>();
+    for (const n of Array.from(validRs)) rsByLower.set(n.trim().toLowerCase(), n);
+    const catByLower = new Map(categorie.map(c => [c.nome.trim().toLowerCase(), c]));
+    const fornByLower = new Map(fornitori.map(f => [f.nome.trim().toLowerCase(), f]));
+    // PDV esistenti per RS: chiave `${rs}||${codice}` (config: codicePos o nome)
+    const pdvKeys = new Set<string>();
+    for (const p of pdvCfg) {
+      const rs = String(p?.ragioneSociale || "").trim();
+      const key = String(p?.codicePos || "").trim() || String(p?.nome || "").trim();
+      if (rs && key) pdvKeys.add(`${rs}||${key}`);
+    }
+    for (const m of pdvMan) pdvKeys.add(`${m.ragioneSociale}||${m.codice}`);
+    // PDV creati da righe precedenti dello stesso import (dedupe intra-file)
+    const pdvPlanned = new Set<string>();
+    const catPlanned = new Map<string, string>(); // lower -> nome canonico
+    const fornPlanned = new Map<string, string>();
+
+    return rows.map((raw, index) => {
+      const errori: string[] = [];
+      const azioni: string[] = [];
+      const rsIn = raw.ragioneSociale.trim();
+      const rs = rsIn ? (validRs.has(rsIn) ? rsIn : rsByLower.get(rsIn.toLowerCase()) || null) : null;
+      if (!rsIn) errori.push("Ragione Sociale mancante");
+      else if (!rs) errori.push(`Ragione Sociale "${rsIn}" inesistente`);
+
+      const descrizione = raw.descrizione.trim();
+      if (!descrizione) errori.push("Descrizione mancante");
+
+      const imponibile = parseImportoStrict(raw.imponibile) || "";
+      if (!imponibile) errori.push(`Imponibile non valido ("${raw.imponibile}") — usa es. 1250,50`);
+      const aliquotaRaw = raw.aliquotaIva.trim().replace(/%|\s/g, "");
+      let aliquota = "22";
+      if (aliquotaRaw !== "") {
+        if (/^\d{1,3}([.,]\d{1,2})?$/.test(aliquotaRaw)) aliquota = aliquotaRaw.replace(",", ".");
+        else aliquota = "";
+      }
+      const aliqNum = Number.parseFloat(aliquota);
+      if (!aliquota || !Number.isFinite(aliqNum) || aliqNum < 0 || aliqNum > 100) errori.push(`Aliquota IVA non valida ("${raw.aliquotaIva}")`);
+
+      const dataPagamento = raw.dataPagamento.trim() ? parseDataIt(raw.dataPagamento) : null;
+      if (!dataPagamento) errori.push(raw.dataPagamento.trim() ? `Data pagamento non valida ("${raw.dataPagamento}")` : "Data pagamento mancante");
+      let meseCompetenza: string | null = null;
+      if (raw.meseCompetenza.trim()) {
+        meseCompetenza = parseMeseCompetenza(raw.meseCompetenza);
+        if (!meseCompetenza) errori.push(`Mese competenza non valido ("${raw.meseCompetenza}") — usa MM/AAAA`);
+      } else if (dataPagamento) {
+        meseCompetenza = dataPagamento.slice(0, 7);
+      }
+
+      // Categoria / Fornitore per nome (case-insensitive)
+      let categoriaId: string | null = null, categoriaNew: string | null = null, categoriaAssocId: string | null = null;
+      const catIn = raw.categoria.trim();
+      if (catIn && rs) {
+        const found = catByLower.get(catIn.toLowerCase());
+        if (found) {
+          categoriaId = found.id;
+          if (!(found.ragioniSociali || []).includes(rs)) { categoriaAssocId = found.id; azioni.push(`Associa la categoria "${found.nome}" a ${rs}`); }
+        } else {
+          categoriaNew = catPlanned.get(catIn.toLowerCase()) || catIn;
+          if (!catPlanned.has(catIn.toLowerCase())) { catPlanned.set(catIn.toLowerCase(), catIn); azioni.push(`Crea la categoria "${catIn}"`); }
+        }
+      }
+      let fornitoreId: string | null = null, fornitoreNew: string | null = null, fornitoreAssocId: string | null = null;
+      const fornIn = raw.fornitore.trim();
+      if (fornIn && rs) {
+        const found = fornByLower.get(fornIn.toLowerCase());
+        if (found) {
+          fornitoreId = found.id;
+          if (!(found.ragioniSociali || []).includes(rs)) { fornitoreAssocId = found.id; azioni.push(`Associa il fornitore "${found.nome}" a ${rs}`); }
+        } else {
+          fornitoreNew = fornPlanned.get(fornIn.toLowerCase()) || fornIn;
+          if (!fornPlanned.has(fornIn.toLowerCase())) { fornPlanned.set(fornIn.toLowerCase(), fornIn); azioni.push(`Crea il fornitore "${fornIn}"`); }
+        }
+      }
+
+      // PDV per codice all'interno della RS
+      let pdvNew: { codice: string; nome: string } | null = null;
+      const pdvCodice = raw.pdvCodice.trim() || null;
+      const pdvNome = raw.pdvNome.trim() || null;
+      if (!pdvCodice && pdvNome) errori.push("Nome PDV indicato senza Codice PDV: il codice è obbligatorio per riconoscere il punto vendita");
+      if (pdvCodice && rs) {
+        const key = `${rs}||${pdvCodice}`;
+        if (!pdvKeys.has(key) && !pdvPlanned.has(key)) {
+          pdvNew = { codice: pdvCodice, nome: pdvNome || pdvCodice };
+          pdvPlanned.add(key);
+          azioni.push(`Crea il PDV "${pdvCodice}${pdvNome ? ` – ${pdvNome}` : ""}" per ${rs}`);
+        }
+      }
+
+      return {
+        index,
+        esito: errori.length ? "errore" as const : "ok" as const,
+        errori,
+        azioni: errori.length ? [] : azioni,
+        dati: {
+          ragioneSociale: rs || rsIn,
+          pdvCodice, pdvNome,
+          categoriaNome: catIn || null,
+          fornitoreNome: fornIn || null,
+          descrizione,
+          imponibile, aliquotaIva: aliquota,
+          dataPagamento: dataPagamento || raw.dataPagamento.trim(),
+          meseCompetenza: meseCompetenza || "",
+          metodoPagamento: raw.metodoPagamento.trim() || null,
+          note: raw.note.trim() || null,
+        },
+        categoriaId, categoriaNew, categoriaAssocId,
+        fornitoreId, fornitoreNew, fornitoreAssocId,
+        pdvNew,
+      };
+    });
+  }
+
+  app.post("/api/cdg/spese/import/preview", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const parsed = importBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const plans = await analyzeImportRows(profile.organizationId!, parsed.data.rows);
+    res.json({
+      righe: plans.map(p => ({ index: p.index, esito: p.esito, errori: p.errori, azioni: p.azioni, dati: p.dati })),
+      valide: plans.filter(p => p.esito === "ok").length,
+      scartate: plans.filter(p => p.esito === "errore").length,
+    });
+  });
+
+  app.post("/api/cdg/spese/import/confirm", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const parsed = importBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const orgId = profile.organizationId!;
+    const plans = await analyzeImportRows(orgId, parsed.data.rows);
+    const valid = plans.filter(p => p.esito === "ok");
+    if (valid.length === 0) {
+      return res.status(400).json({ error: "Nessuna riga valida da importare", righe: plans.map(p => ({ index: p.index, esito: p.esito, errori: p.errori })) });
+    }
+    try {
+      const result = await cdgStorage.importSpese(orgId, profile.id, valid.map(p => ({
+        rs: p.dati.ragioneSociale,
+        categoriaId: p.categoriaId, categoriaNew: p.categoriaNew, categoriaAssocId: p.categoriaAssocId,
+        fornitoreId: p.fornitoreId, fornitoreNew: p.fornitoreNew, fornitoreAssocId: p.fornitoreAssocId,
+        pdvCodice: p.dati.pdvCodice, pdvNew: p.pdvNew,
+        descrizione: p.dati.descrizione,
+        ...computeImporti(p.dati.imponibile, p.dati.aliquotaIva),
+        dataPagamento: p.dati.dataPagamento,
+        meseCompetenza: p.dati.meseCompetenza,
+        metodoPagamento: p.dati.metodoPagamento,
+        note: p.dati.note,
+      })));
+      res.json({ ...result, importate: result.speseCreate, scartate: plans.length - valid.length });
+    } catch (e) {
+      console.error("[cdg] import spese failed:", e);
+      // Race con altre modifiche (unique/FK): niente è stato scritto, basta
+      // ricaricare l'anteprima con lo stato aggiornato.
+      const code = (e as { code?: string })?.code;
+      if (code === "23505" || code === "23503") {
+        return res.status(409).json({ error: "I dati sono cambiati durante l'import (nessuna riga scritta): ricarica il file per una nuova anteprima e riprova." });
+      }
+      res.status(500).json({ error: "Import non riuscito: nessuna riga è stata scritta. Riprova o contatta l'assistenza." });
+    }
+  });
 }
