@@ -1074,28 +1074,25 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       allegatoNome: allegatoPath ? allegatoNome ?? null : null,
       allegatoMime: allegatoPath ? safeMime : null,
     };
-    const r = await cdgStorage.createSpesa(baseSpesa);
-
-    // Cloni per le occorrenze successive (i>=1). L'allegato NON è duplicato.
-    let generati = 0;
+    // Master + cloni (occorrenze i>=1, allegato NON duplicato) creati in
+    // un'unica transazione: o tutte le occorrenze o nessuna riga scritta.
+    let r;
     try {
-      for (let i = 1; i < occorrenze.length; i++) {
-        await cdgStorage.createSpesa({
-          ...baseSpesa,
-          allegatoPath: null,
-          allegatoNome: null,
-          allegatoMime: null,
-          dataPagamento: occorrenze[i].dataPagamento,
-          meseCompetenza: occorrenze[i].meseCompetenza,
-        });
-        generati += 1;
-      }
+      r = await cdgStorage.createSpesaConRicorrenza(baseSpesa, occorrenze.slice(1));
     } catch (e) {
-      console.error("[cdg] ricorrenza generation failed:", e);
+      console.error("[cdg] creazione spesa (con ricorrenza) fallita:", e);
+      // Nessuna riga scritta: rimuovi l'eventuale allegato appena salvato.
+      await deleteAllegato(allegatoPath);
+      return res.status(500).json({
+        error: rest.ricorrente
+          ? "Errore durante la creazione della spesa ricorrente: nessuna occorrenza è stata salvata. Riprova."
+          : "Errore durante la creazione della spesa. Riprova.",
+      });
     }
-    // occorrenze.length - 1 = cloni attesi (la master è già creata). Se
-    // generati < attesi la UI deve avvisare l'utente delle mensilità mancanti.
-    res.status(201).json({ ...r, ricorrenzaGenerati: generati, ricorrenzaAttesi: occorrenze.length - 1 });
+    // Rete di sicurezza per la UI: con la transazione i cloni generati
+    // coincidono sempre con gli attesi (altrimenti l'intera creazione fallisce).
+    const attesi = occorrenze.length - 1;
+    res.status(201).json({ ...r, ricorrenzaGenerati: attesi, ricorrenzaAttesi: attesi });
   });
 
   app.put("/api/cdg/spese/:id", ...gate, async (req: any, res) => {

@@ -446,6 +446,33 @@ export const cdgStorage = {
     const [r] = await db.insert(cdgSpese).values({ ...data, ragioneSocialeId: rsId }).returning();
     return r;
   },
+  /**
+   * Crea la spesa master e tutti i cloni ricorrenti in un'UNICA transazione
+   * (come importSpese): o tutte le occorrenze o nessuna. I cloni non
+   * duplicano l'allegato. Ritorna la master.
+   */
+  async createSpesaConRicorrenza(
+    data: InsertCdgSpesa,
+    cloni: Array<{ dataPagamento: string; meseCompetenza: string }>,
+  ): Promise<CdgSpesa> {
+    return await db.transaction(async (tx) => {
+      const rsId = data.ragioneSocialeId
+        ?? (data.ragioneSociale ? await ensureRsAnchor(tx, data.organizationId, data.ragioneSociale) : null);
+      const [master] = await tx.insert(cdgSpese).values({ ...data, ragioneSocialeId: rsId }).returning();
+      for (const c of cloni) {
+        await tx.insert(cdgSpese).values({
+          ...data,
+          ragioneSocialeId: rsId,
+          allegatoPath: null,
+          allegatoNome: null,
+          allegatoMime: null,
+          dataPagamento: c.dataPagamento,
+          meseCompetenza: c.meseCompetenza,
+        });
+      }
+      return master;
+    });
+  },
   async updateSpesa(id: string, orgId: string, updates: Partial<InsertCdgSpesa>): Promise<CdgSpesa | null> {
     const set: Partial<InsertCdgSpesa> = { ...updates };
     if (updates.ragioneSociale && updates.ragioneSocialeId === undefined) {
