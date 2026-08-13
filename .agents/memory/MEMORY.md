@@ -36,4 +36,5 @@
 - [Org-config struttura guard](org-config-struttura-guard.md) — il PUT generico org-config re-inietta/blocca (409) azzeramenti di massa dei PDV; l'autosave del Simulatore può spingere scheletri vuoti.
 - [jsonb change detection](jsonb-change-detection.md) — mai confrontare jsonb letto dal DB con JSON.stringify naive: Postgres riordina le chiavi; usa un serializer stabile (chiavi ordinate).
 - [CdG RS registry by id](cdg-rs-registry.md) — RS CdG collegate per id via registro cdg_ragioni_sociali (anchor 'auto' per le ereditate); rinomine SOLO via registro, mai nuovi UPDATE per nome.
+- [Fault injection header](test-fault-injection-header.md) — per testare rollback+cleanup di una route transazionale: hook non-prod via header che forza il fallimento DB reale; mai replicare il cleanup nel test.
 - [BiSuite partnership twins](bisuite-partnership-twins.md) — mergeWithDefaultRules twins ogni regola CB su pista partnership; aggrega/filtra per pista o i veri eventi CB si contano doppi (caring escluso dai twin).

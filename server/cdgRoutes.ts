@@ -1074,6 +1074,13 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       allegatoNome: allegatoPath ? allegatoNome ?? null : null,
       allegatoMime: allegatoPath ? safeMime : null,
     };
+    // Fault injection SOLO fuori produzione (test cdg-spese-ricorrenza-
+    // rollback, Task #353): aggiunge un clone invalido a livello DB per
+    // forzare il fallimento della VERA transazione master+cloni e verificare
+    // rollback totale + cleanup dell'allegato appena salvato.
+    if (process.env.NODE_ENV !== "production" && req.get("x-test-cdg-force-tx-fail") === "1") {
+      occorrenze = [...occorrenze, { dataPagamento: String(rest.dataPagamento), meseCompetenza: "INVALID-COMPETENZA" }];
+    }
     // Master + cloni (occorrenze i>=1, allegato NON duplicato) creati in
     // un'unica transazione: o tutte le occorrenze o nessuna riga scritta.
     let r;
