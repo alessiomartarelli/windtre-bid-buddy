@@ -422,7 +422,34 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     if (!profile) return;
     const parsed = insertCdgRagioneSocialeSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
-    const r = await cdgStorage.updateRagioneSociale(req.params.id, profile.organizationId!, parsed.data);
+    const orgId = profile.organizationId!;
+    const existing = await cdgStorage.getRagioneSociale(req.params.id, orgId);
+    if (!existing) return res.status(404).json({ error: "Non trovato" });
+    const newName = (parsed.data.nome ?? existing.nome).trim();
+    const renamed = parsed.data.nome !== undefined && newName !== existing.nome;
+    if (renamed) {
+      const valid = await getValidRsNames(orgId);
+      if (valid.has(newName)) return res.status(409).json({ error: `Esiste già una Ragione Sociale "${newName}"` });
+      // Preflight: la rinomina propaga anche sui PDV manuali (vincolo unico
+      // org+RS+codice). Se il nuovo nome ha già un PDV con lo stesso codice
+      // (es. dati orfani), blocco con 409 invece di fallire a metà.
+      const clash = await db.execute(sql`
+        SELECT a.codice FROM cdg_pdv_manuali a
+         WHERE a.organization_id = ${orgId} AND a.ragione_sociale = ${existing.nome}
+           AND EXISTS (SELECT 1 FROM cdg_pdv_manuali b
+                        WHERE b.organization_id = ${orgId}
+                          AND b.ragione_sociale = ${newName}
+                          AND b.codice = a.codice)
+         LIMIT 1
+      `);
+      const clashRow = (clash as unknown as { rows?: Array<{ codice: string }> }).rows?.[0];
+      if (clashRow) {
+        return res.status(409).json({ error: `Impossibile rinominare: esiste già un PDV con codice "${clashRow.codice}" nella RS "${newName}"` });
+      }
+    }
+    // La propagazione della rinomina (categorie/fornitori/spese/PDV manuali)
+    // avviene in un'unica transazione dentro cdgStorage.updateRagioneSociale.
+    const r = await cdgStorage.updateRagioneSociale(req.params.id, orgId, { ...parsed.data, ...(parsed.data.nome !== undefined ? { nome: newName } : {}) });
     if (!r) return res.status(404).json({ error: "Non trovato" });
     res.json(r);
   });
@@ -754,11 +781,20 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
       const data = parsed.data as Record<string, unknown>;
-      const rsArr = Array.isArray(data.ragioniSociali) ? (data.ragioniSociali as string[]) : [];
+      let rsArr = Array.isArray(data.ragioniSociali) ? (data.ragioniSociali as string[]) : [];
       if (rsArr.length > 0) {
+        // RS "fantasma" (es. rinominate/rimosse): vengono scartate invece di
+        // bloccare il salvataggio, purché resti almeno una RS valida.
         const valid = await getValidRsNames(profile.organizationId!);
-        const bad = rsArr.find(n => !valid.has(n));
-        if (bad) return res.status(400).json({ error: `Ragione Sociale "${bad}" non valida` });
+        const validArr = rsArr.filter(n => valid.has(n));
+        if (validArr.length === 0) {
+          return res.status(400).json({ error: `Nessuna Ragione Sociale valida selezionata: "${rsArr[0]}" non esiste più. Seleziona una RS esistente.` });
+        }
+        if (validArr.length < rsArr.length) {
+          console.warn(`[cdg] ${base} create: scartate RS obsolete ${JSON.stringify(rsArr.filter(n => !valid.has(n)))} per org ${profile.organizationId}`);
+        }
+        rsArr = validArr;
+        data.ragioniSociali = validArr;
       }
       const nome = String(data.nome || "").trim();
       const overlapErr = await checkAnagraficaOverlap(base, profile.organizationId!, nome, rsArr);
@@ -783,9 +819,17 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       if (Array.isArray(data.ragioniSociali)) {
         const rsArr = data.ragioniSociali as string[];
         if (rsArr.length === 0) return res.status(400).json({ error: "Seleziona almeno una Ragione Sociale" });
+        // RS "fantasma" (es. rinominate/rimosse): scartate invece di bloccare
+        // il salvataggio, purché resti almeno una RS valida.
         const valid = await getValidRsNames(profile.organizationId!);
-        const bad = rsArr.find(n => !valid.has(n));
-        if (bad) return res.status(400).json({ error: `Ragione Sociale "${bad}" non valida` });
+        const validArr = rsArr.filter(n => valid.has(n));
+        if (validArr.length === 0) {
+          return res.status(400).json({ error: `Nessuna Ragione Sociale valida selezionata: "${rsArr[0]}" non esiste più. Seleziona una RS esistente.` });
+        }
+        if (validArr.length < rsArr.length) {
+          console.warn(`[cdg] ${base} update: scartate RS obsolete ${JSON.stringify(rsArr.filter(n => !valid.has(n)))} per org ${profile.organizationId}`);
+        }
+        data.ragioniSociali = validArr;
       }
       // Overlap check su PUT: se sto cambiando nome o RS, verifico che non
       // esista già un'altra voce con stesso nome e RS sovrapposte.

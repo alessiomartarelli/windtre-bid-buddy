@@ -2082,6 +2082,21 @@ function MultiRsAnagraficaCrud<T extends { id: string; nome: string; ragioniSoci
             <div>
               <Label>Ragioni Sociali *</Label>
               <div className="rounded-md border p-2 max-h-48 overflow-y-auto space-y-1" data-testid={`rs-multiselect-${testidPrefix}`}>
+                {/* RS "fantasma": selezionate sulla voce ma non più esistenti
+                    (es. rinominate). Mostrate come deselezionabili, altrimenti
+                    il contatore non torna e il salvataggio le include a vuoto
+                    (il server comunque le scarta). */}
+                {selectedRs.filter(n => !ragioniSociali.some(rs => rs.nome === n)).map(n => (
+                  <label key={`obsoleta-${n}`} className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-muted cursor-pointer text-sm opacity-80">
+                    <Checkbox
+                      checked
+                      onCheckedChange={(v) => toggleRs(n, v === true)}
+                      data-testid={`checkbox-${testidPrefix}-rs-${n}`}
+                    />
+                    <span className="flex-1 line-through text-muted-foreground">{n}</span>
+                    <Badge variant="destructive" className="text-[10px]">non più esistente</Badge>
+                  </label>
+                ))}
                 {ragioniSociali.map(rs => {
                   const checked = selectedRs.includes(rs.nome);
                   return (

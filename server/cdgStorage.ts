@@ -50,6 +50,10 @@ export const cdgStorage = {
         `);
         await tx.update(cdgSpese).set({ ragioneSociale: newName })
           .where(and(eq(cdgSpese.organizationId, orgId), eq(cdgSpese.ragioneSociale, oldName)));
+        await tx.execute(sql`
+          UPDATE cdg_pdv_manuali SET ragione_sociale = ${newName}
+           WHERE organization_id = ${orgId} AND ragione_sociale = ${oldName}
+        `);
       }
       return r || null;
     });
