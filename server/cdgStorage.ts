@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { db } from "./db";
 import { and, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import {
@@ -469,11 +470,14 @@ export const cdgStorage = {
     return await db.transaction(async (tx) => {
       const rsId = data.ragioneSocialeId
         ?? (data.ragioneSociale ? await ensureRsAnchor(tx, data.organizationId, data.ragioneSociale) : null);
-      const [master] = await tx.insert(cdgSpese).values({ ...data, ragioneSocialeId: rsId }).returning();
+      // Id di gruppo: lega master + cloni per le modifiche "tutto il periodo".
+      const ricorrenzaId = data.ricorrente ? randomUUID() : null;
+      const [master] = await tx.insert(cdgSpese).values({ ...data, ragioneSocialeId: rsId, ricorrenzaId }).returning();
       for (const c of cloni) {
         await tx.insert(cdgSpese).values({
           ...data,
           ragioneSocialeId: rsId,
+          ricorrenzaId,
           allegatoPath: null,
           allegatoNome: null,
           allegatoMime: null,
@@ -482,6 +486,71 @@ export const cdgStorage = {
         });
       }
       return master;
+    });
+  },
+  /**
+   * Applica una modifica a TUTTE le occorrenze di una ricorrenza (stesso
+   * ricorrenza_id) in un'unica transazione. `occorrenze` è l'insieme atteso
+   * (ricalcolato dal chiamante su inizio/fine/periodicita/offset):
+   * - righe con meseCompetenza presente → aggiornate (dataPagamento ricalcolata)
+   * - righe con meseCompetenza fuori dal periodo → eliminate
+   * - meseCompetenza attesi senza riga → creati (clone senza allegato)
+   * Ritorna i contatori e gli allegati delle righe eliminate (file da
+   * rimuovere DOPO il commit, a cura del chiamante).
+   */
+  async updateSpeseRicorrenza(
+    ricorrenzaId: string,
+    orgId: string,
+    updates: Partial<InsertCdgSpesa>,
+    occorrenze: Array<{ dataPagamento: string; meseCompetenza: string }>,
+  ): Promise<{ aggiornate: number; create: number; eliminate: number; allegatiEliminati: string[] }> {
+    return await db.transaction(async (tx) => {
+      const set: Partial<InsertCdgSpesa> = { ...updates };
+      if (updates.ragioneSociale && updates.ragioneSocialeId === undefined) {
+        set.ragioneSocialeId = await ensureRsAnchor(tx, orgId, updates.ragioneSociale);
+      }
+      const rows = await tx.select().from(cdgSpese)
+        .where(and(eq(cdgSpese.organizationId, orgId), eq(cdgSpese.ricorrenzaId, ricorrenzaId)))
+        .for("update");
+      const byMese = new Map(occorrenze.map(o => [o.meseCompetenza, o]));
+      const presenti = new Set<string>();
+      const allegatiEliminati: string[] = [];
+      let aggiornate = 0, eliminate = 0;
+      for (const r of rows) {
+        const occ = byMese.get(r.meseCompetenza);
+        if (!occ) {
+          await tx.delete(cdgSpese).where(eq(cdgSpese.id, r.id));
+          if (r.allegatoPath) allegatiEliminati.push(r.allegatoPath);
+          eliminate++;
+          continue;
+        }
+        presenti.add(r.meseCompetenza);
+        await tx.update(cdgSpese)
+          .set({ ...set, dataPagamento: occ.dataPagamento, updatedAt: new Date() })
+          .where(eq(cdgSpese.id, r.id));
+        aggiornate++;
+      }
+      // Periodo esteso: crea le occorrenze mancanti clonando una riga
+      // superstite (già coerente col gruppo), senza duplicare l'allegato.
+      let create = 0;
+      const base = rows.find(r => presenti.has(r.meseCompetenza));
+      if (base) {
+        const { id: _id, createdAt: _c, updatedAt: _u, ...baseData } = base;
+        for (const o of occorrenze) {
+          if (presenti.has(o.meseCompetenza)) continue;
+          await tx.insert(cdgSpese).values({
+            ...(baseData as InsertCdgSpesa),
+            ...set,
+            allegatoPath: null,
+            allegatoNome: null,
+            allegatoMime: null,
+            dataPagamento: o.dataPagamento,
+            meseCompetenza: o.meseCompetenza,
+          });
+          create++;
+        }
+      }
+      return { aggiornate, create, eliminate, allegatiEliminati };
     });
   },
   async updateSpesa(id: string, orgId: string, updates: Partial<InsertCdgSpesa>): Promise<CdgSpesa | null> {

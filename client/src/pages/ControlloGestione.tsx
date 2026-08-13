@@ -1326,6 +1326,11 @@ function SpesaDialog({
   );
   const [dataInizioRicorrenza, setDataInizioRicorrenza] = useState<string>(editing?.dataInizioRicorrenza || editing?.dataPagamento || "");
   const [dataFineRicorrenza, setDataFineRicorrenza] = useState<string>(editing?.dataFineRicorrenza || "");
+  // Modifica ricorrenza: applica a tutte le occorrenze del periodo (default)
+  // oppure solo alla riga selezionata. Disponibile solo se la riga è legata
+  // a un gruppo di ricorrenza.
+  const puoApplicareATutte = !!(editing?.ricorrente && editing?.ricorrenzaId);
+  const [applicaATutte, setApplicaATutte] = useState<boolean>(puoApplicareATutte);
   const [submitting, setSubmitting] = useState(false);
 
   const [quickAdd, setQuickAdd] = useState<{ kind: "categoria" | "fornitore"; nome: string } | null>(null);
@@ -1422,6 +1427,7 @@ function SpesaDialog({
         body.dataPagamento = dataInizioRicorrenza;
         body.meseCompetenza = dataInizioRicorrenza.slice(0, 7);
       }
+      if (editing && puoApplicareATutte && applicaATutte) body.applicaATutte = true;
       let resp: any;
       if (editing) resp = await apiJson("PUT", `/api/cdg/spese/${editing.id}`, body);
       else resp = await apiJson<{ ricorrenzaGenerati?: number; ricorrenzaAttesi?: number }>("POST", `/api/cdg/spese`, body);
@@ -1434,6 +1440,18 @@ function SpesaDialog({
           title: "Attenzione: occorrenze ricorrenti incomplete",
           description: `La spesa è stata creata ma ${mancanti} occorrenz${mancanti === 1 ? "a" : "e"} su ${attesi} non ${mancanti === 1 ? "è stata salvata" : "sono state salvate"}. Verifica l'elenco spese e aggiungi manualmente le mensilità mancanti.`,
           variant: "destructive",
+        });
+      } else if (editing && puoApplicareATutte && applicaATutte) {
+        const agg = Number((resp as any)?.ricorrenzaAggiornate || 0);
+        const nuove = Number((resp as any)?.ricorrenzaCreate || 0);
+        const rimosse = Number((resp as any)?.ricorrenzaEliminate || 0);
+        const extra = [
+          nuove > 0 ? `+${nuove} nuove` : "",
+          rimosse > 0 ? `-${rimosse} fuori periodo` : "",
+        ].filter(Boolean).join(", ");
+        toast({
+          title: "Ricorrenza aggiornata",
+          description: `${agg} occorrenz${agg === 1 ? "a aggiornata" : "e aggiornate"}${extra ? ` (${extra})` : ""}.`,
         });
       } else {
         toast({
@@ -1672,7 +1690,41 @@ function SpesaDialog({
                   L'allegato non viene duplicato.
                 </p>
               )}
-              {ricorrente && editing && (
+              {ricorrente && editing && puoApplicareATutte && (
+                <div className="space-y-2 rounded-md border p-3">
+                  <Label>Applica le modifiche a</Label>
+                  <div className="flex flex-col gap-1.5 text-sm">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="applica-ricorrenza"
+                        checked={applicaATutte}
+                        onChange={() => setApplicaATutte(true)}
+                        data-testid="radio-applica-tutte"
+                      />
+                      Tutte le occorrenze (intero periodo di ricorrenza)
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="applica-ricorrenza"
+                        checked={!applicaATutte}
+                        onChange={() => setApplicaATutte(false)}
+                        data-testid="radio-applica-solo-questa"
+                      />
+                      Solo questa occorrenza
+                    </label>
+                  </div>
+                  {applicaATutte && (
+                    <p className="text-xs text-muted-foreground">
+                      Le modifiche (importo, categoria, fornitore, PDV, descrizione, note, sfasamento cassa) valgono per tutte le occorrenze.
+                      Cambiando la data fine, le occorrenze vengono aggiunte o rimosse di conseguenza. Data inizio e periodicità restano invariate;
+                      date pagamento e mesi di competenza delle singole occorrenze vengono ricalcolati automaticamente.
+                    </p>
+                  )}
+                </div>
+              )}
+              {ricorrente && editing && !puoApplicareATutte && (
                 <p className="text-xs text-amber-600">
                   In modifica i flag aggiornano solo questa riga: le occorrenze già create restano invariate.
                 </p>

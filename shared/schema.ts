@@ -504,6 +504,10 @@ export const cdgSpese = pgTable("cdg_spese", {
   cashFlowOffsetMesi: integer("cash_flow_offset_mesi").notNull().default(0),
   dataInizioRicorrenza: date("data_inizio_ricorrenza"),
   dataFineRicorrenza: date("data_fine_ricorrenza"),
+  // Id di gruppo che lega master + cloni di una stessa ricorrenza: permette
+  // di applicare una modifica a TUTTE le occorrenze del periodo. Backfillato
+  // al boot per le ricorrenze storiche (raggruppate per campi identici).
+  ricorrenzaId: varchar("ricorrenza_id"),
   allegatoPath: varchar("allegato_path"),
   allegatoNome: varchar("allegato_nome"),
   allegatoMime: varchar("allegato_mime"),

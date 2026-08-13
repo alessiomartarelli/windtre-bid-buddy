@@ -256,6 +256,43 @@ async function backfillCdg(): Promise<void> {
     allOk = false;
     console.error("[cdg] backfill RS id linkage failed:", e);
   }
+  try {
+    // Ricorrenze storiche (pre ricorrenza_id): raggruppa le occorrenze
+    // identiche (stessi campi clonati alla creazione) sotto un id di gruppo
+    // deterministico. PRUDENZA anti-fusione: il gruppo viene assegnato SOLO
+    // se i mesi di competenza al suo interno sono tutti distinti — due serie
+    // indipendenti ma identiche (stesso periodo/importo/campi) produrrebbero
+    // mesi duplicati e restano quindi NON raggruppate (modifica per-riga).
+    await db.execute(sql`
+      WITH cand AS (
+        SELECT s.id, s.organization_id, s.mese_competenza,
+               md5(
+                 s.organization_id || '|' || s.ragione_sociale || '|' ||
+                 COALESCE(s.categoria_id,'') || '|' || COALESCE(s.fornitore_id,'') || '|' ||
+                 COALESCE(s.pdv_codice,'') || '|' || s.descrizione || '|' ||
+                 s.importo::text || '|' || COALESCE(s.periodicita,'') || '|' ||
+                 s.cash_flow_offset_mesi::text || '|' ||
+                 COALESCE(s.metodo_pagamento,'') || '|' ||
+                 COALESCE(s.data_inizio_ricorrenza::text,'') || '|' ||
+                 COALESCE(s.data_fine_ricorrenza::text,'')) AS gid
+          FROM cdg_spese s
+         WHERE s.ricorrente AND s.ricorrenza_id IS NULL
+      ), sicuri AS (
+        SELECT organization_id, gid
+          FROM cand
+         GROUP BY organization_id, gid
+        HAVING count(*) = count(DISTINCT mese_competenza)
+      )
+      UPDATE cdg_spese s
+         SET ricorrenza_id = c.gid
+        FROM cand c
+        JOIN sicuri k ON k.organization_id = c.organization_id AND k.gid = c.gid
+       WHERE s.id = c.id
+    `);
+  } catch (e) {
+    allOk = false;
+    console.error("[cdg] backfill ricorrenza_id failed:", e);
+  }
   cdgBackfillRunning = false;
   if (allOk) cdgBackfillDone = true;
 }
@@ -1014,6 +1051,7 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const parsed = insertCdgSpesaSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const { allegatoBase64, allegatoNome, allegatoMime, ...rest } = parsed.data;
+    delete (rest as Record<string, unknown>).ricorrenzaId; // sempre server-side
     const fkErr = await validateSpesaFks(profile.organizationId!, rest.ragioneSociale, rest.categoriaId, rest.fornitoreId, rest.pdvCodice);
     if (fkErr) return res.status(400).json({ error: fkErr });
     if (rest.imponibile === undefined || rest.imponibile === null || rest.aliquotaIva === undefined || rest.aliquotaIva === null) {
@@ -1118,6 +1156,7 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const parsed = insertCdgSpesaSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const { allegatoBase64, allegatoNome, allegatoMime, ...rest } = parsed.data;
+    delete (rest as Record<string, unknown>).ricorrenzaId; // sempre server-side
 
     const targetRs = rest.ragioneSociale ?? existing.ragioneSociale;
     const targetCat = rest.categoriaId !== undefined ? rest.categoriaId : existing.categoriaId;
@@ -1140,11 +1179,26 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       }
     }
 
+    // Modifica dell'INTERA ricorrenza (tutte le occorrenze del periodo).
+    // I campi per-occorrenza (dataPagamento/meseCompetenza) e strutturali
+    // (ricorrente/periodicita/dataInizio) vengono ignorati: valgono quelli
+    // esistenti. La dataFineRicorrenza può essere estesa (nuove occorrenze)
+    // o accorciata (occorrenze fuori periodo eliminate). L'allegato resta
+    // per-riga e viene applicato solo alla riga in modifica.
+    const applicaATutte = req.body?.applicaATutte === true
+      && existing.ricorrente && !!existing.ricorrenzaId;
     const updates: Record<string, unknown> = { ...rest };
+    // Nel percorso "tutte le occorrenze" il vecchio allegato NON viene
+    // toccato prima del commit della transazione: se questa fallisce le
+    // righe tornano com'erano e il file deve esistere ancora.
+    let nuovoAllegatoPath: string | null = null;
+    let vecchioAllegatoDaEliminare: string | null = null;
     if (allegatoBase64 && allegatoNome) {
       try {
         const saved = await saveAllegato(profile.organizationId!, allegatoBase64, allegatoNome, allegatoMime);
-        await deleteAllegato(existing.allegatoPath);
+        if (applicaATutte) vecchioAllegatoDaEliminare = existing.allegatoPath;
+        else await deleteAllegato(existing.allegatoPath);
+        nuovoAllegatoPath = saved.filePath;
         updates.allegatoPath = saved.filePath;
         updates.allegatoNome = allegatoNome;
         updates.allegatoMime = saved.mime;
@@ -1152,10 +1206,76 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
         return res.status(400).json({ error: e instanceof Error ? e.message : "Errore upload" });
       }
     } else if (req.body?.removeAllegato === true) {
-      await deleteAllegato(existing.allegatoPath);
+      if (applicaATutte) vecchioAllegatoDaEliminare = existing.allegatoPath;
+      else await deleteAllegato(existing.allegatoPath);
       updates.allegatoPath = null;
       updates.allegatoNome = null;
       updates.allegatoMime = null;
+    }
+    if (applicaATutte) {
+      delete updates.dataPagamento;
+      delete updates.meseCompetenza;
+      delete updates.ricorrente;
+      delete updates.periodicita;
+      delete updates.dataInizioRicorrenza;
+      const inizio = existing.dataInizioRicorrenza;
+      const fine = (rest.dataFineRicorrenza ?? existing.dataFineRicorrenza) as string | null;
+      if (!inizio || !fine) {
+        return res.status(400).json({ error: "Ricorrenza senza date inizio/fine: modifica le occorrenze singolarmente" });
+      }
+      if (fine < inizio) {
+        return res.status(400).json({ error: "Data fine ricorrenza deve essere >= data inizio" });
+      }
+      const offset = Math.max(0, Math.min(3, Number(rest.cashFlowOffsetMesi ?? existing.cashFlowOffsetMesi ?? 0)));
+      updates.cashFlowOffsetMesi = offset;
+      updates.dataFineRicorrenza = fine;
+      const periodicita = (existing.periodicita as "mensile" | "annuale") || "mensile";
+      const [siy, sim, sid] = String(inizio).split("-").map(Number);
+      const [fy, fm] = String(fine).split("-").map(Number);
+      const occorrenze = generaOccorrenzeRicorrenti({
+        startYear: siy, startMonth: sim, giornoPagamento: sid,
+        endYear: fy, endMonth: fm, periodicita, offsetMesi: offset,
+      });
+      if (occorrenze.length === 0) {
+        return res.status(400).json({ error: "Nessuna occorrenza nel periodo: verifica le date" });
+      }
+      const hasAllegatoUpd = "allegatoPath" in updates;
+      const { allegatoPath: updAllegatoPath, allegatoNome: updAllegatoNome, allegatoMime: updAllegatoMime, ...condivisi } = updates;
+      let esito;
+      try {
+        esito = await cdgStorage.updateSpeseRicorrenza(
+          existing.ricorrenzaId!, profile.organizationId!, condivisi, occorrenze,
+        );
+      } catch (e) {
+        console.error("[cdg] aggiornamento ricorrenza fallito:", e);
+        // Rollback DB: rimuovi solo il file appena caricato; il vecchio
+        // allegato non è mai stato toccato ed è ancora referenziato.
+        await deleteAllegato(nuovoAllegatoPath);
+        return res.status(500).json({ error: "Errore durante l'aggiornamento della ricorrenza: nessuna occorrenza è stata modificata. Riprova." });
+      }
+      // File delle occorrenze eliminate: rimossi DOPO il commit.
+      for (const p of esito.allegatiEliminati) await deleteAllegato(p);
+      const r = await cdgStorage.getSpesa(req.params.id, profile.organizationId!);
+      if (r && hasAllegatoUpd) {
+        await cdgStorage.updateSpesa(req.params.id, profile.organizationId!, {
+          allegatoPath: updAllegatoPath as string | null,
+          allegatoNome: (updAllegatoNome as string | null) ?? null,
+          allegatoMime: (updAllegatoMime as string | null) ?? null,
+        });
+      } else if (!r && hasAllegatoUpd && updAllegatoPath) {
+        // La riga in modifica è uscita dal periodo: niente riga a cui
+        // agganciare il nuovo allegato, rimuovi il file appena salvato.
+        await deleteAllegato(updAllegatoPath as string);
+      }
+      // Solo a commit avvenuto: elimina il vecchio allegato sostituito/rimosso.
+      await deleteAllegato(vecchioAllegatoDaEliminare);
+      const aggiornata = r ? await cdgStorage.getSpesa(req.params.id, profile.organizationId!) : undefined;
+      return res.json({
+        ...(aggiornata ?? {}),
+        ricorrenzaAggiornate: esito.aggiornate,
+        ricorrenzaCreate: esito.create,
+        ricorrenzaEliminate: esito.eliminate,
+      });
     }
     const r = await cdgStorage.updateSpesa(req.params.id, profile.organizationId!, updates);
     res.json(r);
