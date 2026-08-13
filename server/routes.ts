@@ -15,6 +15,7 @@ import { dtsSaleCodiceEsterno } from "@shared/dtsReport";
 import { normalizeTimeLabel, parseSendTimes } from "@shared/telegramSendTimes";
 import { wouldMassBlankPuntiVendita } from "@shared/strutturaGuard";
 import { registerCdgRoutes } from "./cdgRoutes";
+import { cdgStorage } from "./cdgStorage";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import {
   loadEmailConfig,
@@ -4315,19 +4316,27 @@ export async function registerRoutes(
     // Propagazione su CdG: rename codicePos e/o ragioneSociale
     if (normLow(newCodice) !== normLow(oldCodicePos) || normLow(newRs) !== normLow(oldRagioneSociale)) {
       try {
+        // Task #345: aggiorna anche il collegamento per id al registro RS.
+        // Le righe figlie si selezionano per id (cache nomi possibilmente
+        // stantia); il nome resta solo come fallback per righe scollegate.
+        const newRsId = await cdgStorage.ensureRsId(orgId, newRs);
+        const oldRsId = await cdgStorage.getRsIdByName(orgId, oldRagioneSociale);
+        const oldRsPred = oldRsId
+          ? sql`(ragione_sociale_id = ${oldRsId} OR (ragione_sociale_id IS NULL AND ragione_sociale = ${oldRagioneSociale}))`
+          : sql`ragione_sociale = ${oldRagioneSociale}`;
         await db.execute(sql`
           UPDATE cdg_spese
-             SET pdv_codice = ${newCodice}, ragione_sociale = ${newRs}
+             SET pdv_codice = ${newCodice}, ragione_sociale = ${newRs}, ragione_sociale_id = ${newRsId}
            WHERE organization_id = ${orgId}
-             AND ragione_sociale = ${oldRagioneSociale}
+             AND ${oldRsPred}
              AND pdv_codice = ${oldCodicePos}
         `);
         // cdg_pdv_manuali: stesso (org, rs, codice) → aggiorna a nuovi valori
         await db.execute(sql`
           UPDATE cdg_pdv_manuali
-             SET codice = ${newCodice}, ragione_sociale = ${newRs}
+             SET codice = ${newCodice}, ragione_sociale = ${newRs}, ragione_sociale_id = ${newRsId}
            WHERE organization_id = ${orgId}
-             AND ragione_sociale = ${oldRagioneSociale}
+             AND ${oldRsPred}
              AND codice = ${oldCodicePos}
         `);
         // bisuite_sales: rinomina codicePos sulle vendite storiche dell'org
@@ -4439,21 +4448,10 @@ export async function registerRoutes(
     }, profile.id);
     if (normLow(newName) !== normLow(oldName)) {
       try {
-        await db.execute(sql`
-          UPDATE cdg_categorie
-             SET ragioni_sociali = array_replace(ragioni_sociali, ${oldName}, ${newName}),
-                 ragione_sociale = CASE WHEN ragione_sociale = ${oldName} THEN ${newName} ELSE ragione_sociale END
-           WHERE organization_id = ${orgId} AND ${oldName} = ANY(ragioni_sociali)
-        `);
-        await db.execute(sql`
-          UPDATE cdg_fornitori
-             SET ragioni_sociali = array_replace(ragioni_sociali, ${oldName}, ${newName}),
-                 ragione_sociale = CASE WHEN ragione_sociale = ${oldName} THEN ${newName} ELSE ragione_sociale END
-           WHERE organization_id = ${orgId} AND ${oldName} = ANY(ragioni_sociali)
-        `);
-        await db.execute(sql`UPDATE cdg_pdv_manuali SET ragione_sociale = ${newName} WHERE organization_id = ${orgId} AND ragione_sociale = ${oldName}`);
-        await db.execute(sql`UPDATE cdg_spese SET ragione_sociale = ${newName} WHERE organization_id = ${orgId} AND ragione_sociale = ${oldName}`);
-        await db.execute(sql`UPDATE cdg_ragioni_sociali SET nome = ${newName} WHERE organization_id = ${orgId} AND nome = ${oldName}`);
+        // Task #345: la rinomina passa dal registro RS (cdg_ragioni_sociali):
+        // aggiorna l'anchor e sincronizza le tabelle CdG per ID in una
+        // transazione — nessuna propagazione per nome che possa mancare righe.
+        await cdgStorage.renameRsByName(orgId, oldName, newName);
       } catch (e) { console.error("[struttura] propagate rename RS failed", e); }
     }
     res.json({ success: true, nome: newName });
@@ -4472,13 +4470,19 @@ export async function registerRoutes(
       return { ...c, puntiVendita: pv, ragioniSociali: rs };
     }, profile.id);
     try {
-      await db.execute(sql`DELETE FROM cdg_spese WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
-      await db.execute(sql`DELETE FROM cdg_pdv_manuali WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
-      await db.execute(sql`UPDATE cdg_categorie SET ragioni_sociali = array_remove(ragioni_sociali, ${nome}) WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)`);
-      await db.execute(sql`DELETE FROM cdg_categorie WHERE organization_id = ${orgId} AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0`);
-      await db.execute(sql`UPDATE cdg_fornitori SET ragioni_sociali = array_remove(ragioni_sociali, ${nome}) WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)`);
-      await db.execute(sql`DELETE FROM cdg_fornitori WHERE organization_id = ${orgId} AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0`);
-      await db.execute(sql`DELETE FROM cdg_ragioni_sociali WHERE organization_id = ${orgId} AND nome = ${nome}`);
+      // Task #345: cascade per ID via registro (fallback per nome se la RS
+      // non è mai stata referenziata e non ha anchor).
+      const rsId = await cdgStorage.getRsIdByName(orgId, nome);
+      if (rsId) {
+        await cdgStorage.deleteRagioneSociale(rsId, orgId);
+      } else {
+        await db.execute(sql`DELETE FROM cdg_spese WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
+        await db.execute(sql`DELETE FROM cdg_pdv_manuali WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
+        await db.execute(sql`UPDATE cdg_categorie SET ragioni_sociali = array_remove(ragioni_sociali, ${nome}) WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)`);
+        await db.execute(sql`DELETE FROM cdg_categorie WHERE organization_id = ${orgId} AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0 AND COALESCE(array_length(ragione_sociale_ids, 1), 0) = 0`);
+        await db.execute(sql`UPDATE cdg_fornitori SET ragioni_sociali = array_remove(ragioni_sociali, ${nome}) WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)`);
+        await db.execute(sql`DELETE FROM cdg_fornitori WHERE organization_id = ${orgId} AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0 AND COALESCE(array_length(ragione_sociale_ids, 1), 0) = 0`);
+      }
     } catch (e) { console.error("[struttura] cascade delete RS failed", e); }
     res.json({ success: true });
   });

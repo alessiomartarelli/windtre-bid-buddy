@@ -393,6 +393,14 @@ export const cdgRagioniSociali = pgTable("cdg_ragioni_sociali", {
   nome: varchar("nome").notNull(),
   partitaIva: varchar("partita_iva"),
   note: text("note"),
+  // Task #345: questa tabella è il REGISTRO canonico delle RS. Ogni RS
+  // referenziata dalle tabelle CdG ha una riga qui (anchor con id stabile).
+  //   'manuale' = creata dall'utente (CRUD Anagrafiche / struttura), visibile
+  //               come voce manuale nella lista unificata;
+  //   'auto'    = anchor creato automaticamente per una RS ereditata da
+  //               organization_config.puntiVendita (solo portatore di id,
+  //               NON mostrato come voce manuale).
+  origine: varchar("origine").notNull().default("manuale"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [
   index("IDX_cdg_rs_org").on(t.organizationId),
@@ -407,6 +415,10 @@ export const cdgCategorie = pgTable("cdg_categorie", {
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
   ragioneSociale: varchar("ragione_sociale"),
   ragioniSociali: text("ragioni_sociali").array().notNull().default(sql`ARRAY[]::text[]`),
+  // Task #345: riferimento canonico per ID alle RS (cdg_ragioni_sociali.id).
+  // `ragioniSociali` (nomi) resta come cache denormalizzata/back-compat: in
+  // lettura i nomi vengono risolti dagli id.
+  ragioneSocialeIds: text("ragione_sociale_ids").array().notNull().default(sql`ARRAY[]::text[]`),
   nome: varchar("nome").notNull(),
   colore: varchar("colore"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -420,6 +432,8 @@ export const cdgFornitori = pgTable("cdg_fornitori", {
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
   ragioneSociale: varchar("ragione_sociale"),
   ragioniSociali: text("ragioni_sociali").array().notNull().default(sql`ARRAY[]::text[]`),
+  // Task #345: riferimento canonico per ID (vedi cdg_categorie).
+  ragioneSocialeIds: text("ragione_sociale_ids").array().notNull().default(sql`ARRAY[]::text[]`),
   nome: varchar("nome").notNull(),
   partitaIva: varchar("partita_iva"),
   note: text("note"),
@@ -438,6 +452,8 @@ export const cdgPdvManuali = pgTable("cdg_pdv_manuali", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
   ragioneSociale: varchar("ragione_sociale").notNull(),
+  // Task #345: riferimento canonico per ID alla RS (nome risolto in lettura).
+  ragioneSocialeId: varchar("ragione_sociale_id").references(() => cdgRagioniSociali.id, { onDelete: 'set null' }),
   codice: varchar("codice").notNull(),
   nome: varchar("nome").notNull(),
   indirizzo: text("indirizzo"),
@@ -459,6 +475,8 @@ export const cdgSpese = pgTable("cdg_spese", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
   ragioneSociale: varchar("ragione_sociale").notNull(),
+  // Task #345: riferimento canonico per ID alla RS (nome risolto in lettura).
+  ragioneSocialeId: varchar("ragione_sociale_id").references(() => cdgRagioniSociali.id, { onDelete: 'set null' }),
   categoriaId: varchar("categoria_id").references(() => cdgCategorie.id, { onDelete: 'set null' }),
   fornitoreId: varchar("fornitore_id").references(() => cdgFornitori.id, { onDelete: 'set null' }),
   pdvCodice: varchar("pdv_codice"),
@@ -644,9 +662,9 @@ export type InsertCdgSpesa = typeof cdgSpese.$inferInsert;
 export type CdgPdvManuale = typeof cdgPdvManuali.$inferSelect;
 export type InsertCdgPdvManuale = typeof cdgPdvManuali.$inferInsert;
 
-export const insertCdgRagioneSocialeSchema = createInsertSchema(cdgRagioniSociali).omit({ id: true, createdAt: true, organizationId: true });
+export const insertCdgRagioneSocialeSchema = createInsertSchema(cdgRagioniSociali).omit({ id: true, createdAt: true, organizationId: true, origine: true });
 export const insertCdgPdvManualeSchema = createInsertSchema(cdgPdvManuali)
-  .omit({ id: true, createdAt: true, organizationId: true })
+  .omit({ id: true, createdAt: true, organizationId: true, ragioneSocialeId: true })
   .extend({
     ragioneSociale: z.string().trim().min(1, "Ragione Sociale obbligatoria"),
     codice: z.string().trim().min(1, "Codice obbligatorio"),
@@ -658,13 +676,13 @@ export const insertCdgPdvManualeSchema = createInsertSchema(cdgPdvManuali)
 // `ragioneSociale` legacy resta opzionale per back-compat in lettura/insert ma
 // è ignorato in scrittura dalla UI nuova.
 export const insertCdgCategoriaSchema = createInsertSchema(cdgCategorie)
-  .omit({ id: true, createdAt: true, organizationId: true })
+  .omit({ id: true, createdAt: true, organizationId: true, ragioneSocialeIds: true })
   .extend({
     ragioneSociale: z.string().optional().nullable(),
     ragioniSociali: z.array(z.string().min(1)).min(1, "Seleziona almeno una Ragione Sociale"),
   });
 export const insertCdgFornitoreSchema = createInsertSchema(cdgFornitori)
-  .omit({ id: true, createdAt: true, organizationId: true })
+  .omit({ id: true, createdAt: true, organizationId: true, ragioneSocialeIds: true })
   .extend({
     ragioneSociale: z.string().optional().nullable(),
     ragioniSociali: z.array(z.string().min(1)).min(1, "Seleziona almeno una Ragione Sociale"),
@@ -676,7 +694,7 @@ const numericString = z.union([z.string(), z.number()])
   .transform((v) => typeof v === 'number' ? v.toString() : v);
 export const insertCdgSpesaSchema = createInsertSchema(cdgSpese).omit({
   id: true, createdAt: true, updatedAt: true, organizationId: true, createdBy: true,
-  allegatoPath: true, allegatoNome: true, allegatoMime: true,
+  allegatoPath: true, allegatoNome: true, allegatoMime: true, ragioneSocialeId: true,
 }).extend({
   importo: numericString.optional(),
   imponibile: numericString.optional().nullable(),

@@ -200,6 +200,63 @@ async function backfillCdg(): Promise<void> {
     allOk = false;
     console.error("[cdg] remap pdv_codice → codicePos failed:", e);
   }
+  // 4) Task #345 — collegamento per ID al registro RS:
+  //    a. crea un anchor in cdg_ragioni_sociali (origine='auto') per ogni
+  //       nome RS referenziato da spese/pdv manuali/categorie/fornitori;
+  //    b. popola ragione_sociale_id / ragione_sociale_ids dove mancanti.
+  //    Idempotente: ON CONFLICT DO NOTHING + WHERE su righe non collegate.
+  try {
+    await db.execute(sql`
+      INSERT INTO cdg_ragioni_sociali (organization_id, nome, origine)
+      SELECT DISTINCT organization_id, ragione_sociale, 'auto' FROM cdg_spese
+       WHERE ragione_sociale IS NOT NULL AND ragione_sociale <> ''
+      UNION
+      SELECT DISTINCT organization_id, ragione_sociale, 'auto' FROM cdg_pdv_manuali
+       WHERE ragione_sociale IS NOT NULL AND ragione_sociale <> ''
+      UNION
+      SELECT DISTINCT c.organization_id, n.nome, 'auto'
+        FROM cdg_categorie c, unnest(c.ragioni_sociali) AS n(nome)
+       WHERE n.nome IS NOT NULL AND n.nome <> ''
+      UNION
+      SELECT DISTINCT f.organization_id, n.nome, 'auto'
+        FROM cdg_fornitori f, unnest(f.ragioni_sociali) AS n(nome)
+       WHERE n.nome IS NOT NULL AND n.nome <> ''
+      ON CONFLICT (organization_id, nome) DO NOTHING
+    `);
+    await db.execute(sql`
+      UPDATE cdg_spese s SET ragione_sociale_id = r.id
+        FROM cdg_ragioni_sociali r
+       WHERE s.ragione_sociale_id IS NULL
+         AND r.organization_id = s.organization_id AND r.nome = s.ragione_sociale
+    `);
+    await db.execute(sql`
+      UPDATE cdg_pdv_manuali p SET ragione_sociale_id = r.id
+        FROM cdg_ragioni_sociali r
+       WHERE p.ragione_sociale_id IS NULL
+         AND r.organization_id = p.organization_id AND r.nome = p.ragione_sociale
+    `);
+    await db.execute(sql`
+      UPDATE cdg_categorie c
+         SET ragione_sociale_ids = (
+               SELECT COALESCE(array_agg(r.id ORDER BY r.nome), ARRAY[]::text[])
+                 FROM cdg_ragioni_sociali r
+                WHERE r.organization_id = c.organization_id AND r.nome = ANY(c.ragioni_sociali))
+       WHERE COALESCE(array_length(c.ragione_sociale_ids, 1), 0) = 0
+         AND COALESCE(array_length(c.ragioni_sociali, 1), 0) > 0
+    `);
+    await db.execute(sql`
+      UPDATE cdg_fornitori f
+         SET ragione_sociale_ids = (
+               SELECT COALESCE(array_agg(r.id ORDER BY r.nome), ARRAY[]::text[])
+                 FROM cdg_ragioni_sociali r
+                WHERE r.organization_id = f.organization_id AND r.nome = ANY(f.ragioni_sociali))
+       WHERE COALESCE(array_length(f.ragione_sociale_ids, 1), 0) = 0
+         AND COALESCE(array_length(f.ragioni_sociali, 1), 0) > 0
+    `);
+  } catch (e) {
+    allOk = false;
+    console.error("[cdg] backfill RS id linkage failed:", e);
+  }
   cdgBackfillRunning = false;
   if (allOk) cdgBackfillDone = true;
 }
@@ -244,7 +301,12 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
     const orgId = profile.organizationId!;
-    const manuali = await cdgStorage.listRagioniSociali(orgId);
+    // Il registro contiene sia le RS manuali sia gli anchor 'auto' (portatori
+    // di id per le RS ereditate): gli anchor non sono voci manuali, ma i loro
+    // id/partitaIva/note vengono attaccati alle RS ereditate corrispondenti.
+    const tutte = await cdgStorage.listRagioniSociali(orgId, { includeAuto: true });
+    const manuali = tutte.filter(r => r.origine === "manuale");
+    const anchorByNome = new Map(tutte.map(r => [r.nome, r] as const));
     const pdvList = await getOrgPuntiVendita(orgId);
     const pdvNames = new Set<string>();
     for (const p of pdvList) {
@@ -257,7 +319,11 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       out.push({ nome: r.nome, origine: "manuale", id: r.id, partitaIva: r.partitaIva, note: r.note });
     }
     for (const nome of Array.from(pdvNames).sort((a, b) => a.localeCompare(b, "it"))) {
-      if (!manualiByNome.has(nome)) out.push({ nome, origine: "pdv" });
+      if (manualiByNome.has(nome)) continue;
+      const anchor = anchorByNome.get(nome);
+      out.push(anchor
+        ? { nome, origine: "pdv", id: anchor.id, partitaIva: anchor.partitaIva, note: anchor.note }
+        : { nome, origine: "pdv" });
     }
     out.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
     res.json(out);
@@ -369,21 +435,29 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     try {
       const r = await cdgStorage.updatePdvManuale(req.params.id, orgId, parsed.data);
       if (!r) return res.status(404).json({ error: "Non trovato" });
+      // Predicato RS per ID registro (Task #345): la cache nomi può essere
+      // stantia, quindi il nome vale solo come fallback per righe scollegate.
+      const oldRsId = await cdgStorage.getRsIdByName(orgId, existing.ragioneSociale);
+      const oldRsPred = oldRsId
+        ? sql`(ragione_sociale_id = ${oldRsId} OR (ragione_sociale_id IS NULL AND ragione_sociale = ${existing.ragioneSociale}))`
+        : sql`ragione_sociale = ${existing.ragioneSociale}`;
       // Se è cambiato il codice, propaga sulle spese che lo riferiscono
       if (parsed.data.codice && parsed.data.codice !== existing.codice) {
         await db.execute(sql`
           UPDATE cdg_spese SET pdv_codice = ${parsed.data.codice}
            WHERE organization_id = ${orgId}
-             AND ragione_sociale = ${existing.ragioneSociale}
+             AND ${oldRsPred}
              AND pdv_codice = ${existing.codice}
         `);
       }
-      // Se è cambiata la RS, propaga sulle spese (mantenendo codice)
+      // Se è cambiata la RS, propaga sulle spese (mantenendo codice),
+      // aggiornando anche il collegamento per id (Task #345).
       if (parsed.data.ragioneSociale && parsed.data.ragioneSociale !== existing.ragioneSociale) {
+        const newRsId = await cdgStorage.ensureRsId(orgId, parsed.data.ragioneSociale);
         await db.execute(sql`
-          UPDATE cdg_spese SET ragione_sociale = ${parsed.data.ragioneSociale}
+          UPDATE cdg_spese SET ragione_sociale = ${parsed.data.ragioneSociale}, ragione_sociale_id = ${newRsId}
            WHERE organization_id = ${orgId}
-             AND ragione_sociale = ${existing.ragioneSociale}
+             AND ${oldRsPred}
              AND pdv_codice = ${parsed.data.codice ?? existing.codice}
         `);
       }
@@ -520,45 +594,18 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
             ? { ...p, ragioneSociale: newName }
             : p
         ));
-        // 2) cat/forn arrays
-        await db.execute(sql`
-          UPDATE cdg_categorie
-             SET ragioni_sociali = array_replace(ragioni_sociali, ${oldName}, ${newName}),
-                 ragione_sociale = CASE WHEN ragione_sociale = ${oldName} THEN ${newName} ELSE ragione_sociale END
-           WHERE organization_id = ${orgId}
-             AND ${oldName} = ANY(ragioni_sociali)
-        `);
-        await db.execute(sql`
-          UPDATE cdg_fornitori
-             SET ragioni_sociali = array_replace(ragioni_sociali, ${oldName}, ${newName}),
-                 ragione_sociale = CASE WHEN ragione_sociale = ${oldName} THEN ${newName} ELSE ragione_sociale END
-           WHERE organization_id = ${orgId}
-             AND ${oldName} = ANY(ragioni_sociali)
-        `);
-        // 3) pdv manuali
-        await db.execute(sql`
-          UPDATE cdg_pdv_manuali SET ragione_sociale = ${newName}
-           WHERE organization_id = ${orgId} AND ragione_sociale = ${oldName}
-        `);
-        // 4) spese
-        await db.execute(sql`
-          UPDATE cdg_spese SET ragione_sociale = ${newName}
-           WHERE organization_id = ${orgId} AND ragione_sociale = ${oldName}
-        `);
-        // 5) eventuale RS manuale con vecchio nome → rinomina
-        await db.execute(sql`
-          UPDATE cdg_ragioni_sociali SET nome = ${newName}
-           WHERE organization_id = ${orgId} AND nome = ${oldName}
-        `);
+        // 2) registro RS: rinomina l'anchor (creandolo se mancante) e
+        //    sincronizza le tabelle figlie per ID (Task #345).
+        await cdgStorage.renameRsByName(orgId, oldName, newName);
       }
 
       // Upsert override partitaIva/note in cdg_ragioni_sociali sul nome attuale
       const piva = parsed.data.partitaIva ?? null;
       const note = parsed.data.note ?? null;
-      const allManuali = await cdgStorage.listRagioniSociali(orgId);
-      const existingManual = allManuali.find(r => r.nome === newName);
-      if (existingManual) {
-        await cdgStorage.updateRagioneSociale(existingManual.id, orgId, { partitaIva: piva, note });
+      const registro = await cdgStorage.listRagioniSociali(orgId, { includeAuto: true });
+      const existingRow = registro.find(r => r.nome === newName);
+      if (existingRow) {
+        await cdgStorage.updateRagioneSociale(existingRow.id, orgId, { partitaIva: piva, note });
       } else if (piva || note) {
         await cdgStorage.createRagioneSociale({ organizationId: orgId, nome: newName, partitaIva: piva, note });
       }
@@ -587,26 +634,35 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       await mutateOrgPuntiVendita(orgId, (pv) => pv.filter(p =>
         String(p?.ragioneSociale || "").trim() !== nome
       ));
-      // Cascade
-      await db.execute(sql`DELETE FROM cdg_spese WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
-      await db.execute(sql`DELETE FROM cdg_pdv_manuali WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
-      await db.execute(sql`
-        UPDATE cdg_categorie SET ragioni_sociali = array_remove(ragioni_sociali, ${nome})
-         WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)
-      `);
-      await db.execute(sql`
-        DELETE FROM cdg_categorie WHERE organization_id = ${orgId}
-           AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
-      `);
-      await db.execute(sql`
-        UPDATE cdg_fornitori SET ragioni_sociali = array_remove(ragioni_sociali, ${nome})
-         WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)
-      `);
-      await db.execute(sql`
-        DELETE FROM cdg_fornitori WHERE organization_id = ${orgId}
-           AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
-      `);
-      await db.execute(sql`DELETE FROM cdg_ragioni_sociali WHERE organization_id = ${orgId} AND nome = ${nome}`);
+      // Cascade per ID via registro (con fallback per nome per righe legacy):
+      // deleteRagioneSociale elimina spese/pdv collegati, rimuove la RS dagli
+      // array di categorie/fornitori (per id e nome) e cancella l'anchor.
+      const rsId = await cdgStorage.getRsIdByName(orgId, nome);
+      if (rsId) {
+        await cdgStorage.deleteRagioneSociale(rsId, orgId);
+      } else {
+        // Nessun anchor (RS mai referenziata): pulizia per nome come prima.
+        await db.execute(sql`DELETE FROM cdg_spese WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
+        await db.execute(sql`DELETE FROM cdg_pdv_manuali WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
+        await db.execute(sql`
+          UPDATE cdg_categorie SET ragioni_sociali = array_remove(ragioni_sociali, ${nome})
+           WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)
+        `);
+        await db.execute(sql`
+          DELETE FROM cdg_categorie WHERE organization_id = ${orgId}
+             AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
+             AND COALESCE(array_length(ragione_sociale_ids, 1), 0) = 0
+        `);
+        await db.execute(sql`
+          UPDATE cdg_fornitori SET ragioni_sociali = array_remove(ragioni_sociali, ${nome})
+           WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)
+        `);
+        await db.execute(sql`
+          DELETE FROM cdg_fornitori WHERE organization_id = ${orgId}
+             AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
+             AND COALESCE(array_length(ragione_sociale_ids, 1), 0) = 0
+        `);
+      }
       res.json({ success: true });
     } catch (e) {
       console.error("[cdg] delete inherited RS failed:", e);
@@ -695,11 +751,17 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       // Propaga rename codice/RS sulle spese collegate (incluso il caso in cui
       // il codice effettivo cambi a causa del rename del solo nome).
       if (effNewCod !== oldCod || newRs !== oldRs) {
+        const newRsId = await cdgStorage.ensureRsId(orgId, newRs);
+        // Match per id registro con fallback nome per righe scollegate (Task #345).
+        const oldRsId = await cdgStorage.getRsIdByName(orgId, oldRs);
+        const oldRsPred = oldRsId
+          ? sql`(ragione_sociale_id = ${oldRsId} OR (ragione_sociale_id IS NULL AND ragione_sociale = ${oldRs}))`
+          : sql`ragione_sociale = ${oldRs}`;
         await db.execute(sql`
           UPDATE cdg_spese
-             SET pdv_codice = ${effNewCod}, ragione_sociale = ${newRs}
+             SET pdv_codice = ${effNewCod}, ragione_sociale = ${newRs}, ragione_sociale_id = ${newRsId}
            WHERE organization_id = ${orgId}
-             AND ragione_sociale = ${oldRs}
+             AND ${oldRsPred}
              AND pdv_codice = ${oldCod}
         `);
       }
@@ -741,7 +803,9 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
   // Validazione RS contro la lista unificata (manuali + PDV ereditate).
   // Ritorna l'insieme dei nomi RS validi per l'organizzazione.
   async function getValidRsNames(orgId: string): Promise<Set<string>> {
-    const manuali = await cdgStorage.listRagioniSociali(orgId);
+    // Include anche gli anchor 'auto': i nomi serviti in lettura sono risolti
+    // dal registro, quindi devono essere accettati in validazione.
+    const manuali = await cdgStorage.listRagioniSociali(orgId, { includeAuto: true });
     const pdvList = await getOrgPuntiVendita(orgId);
     const out = new Set<string>(manuali.map(r => r.nome));
     for (const p of pdvList) {
@@ -901,15 +965,19 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     fornitoreId: string | null | undefined,
     pdvCodice: string | null | undefined,
   ): Promise<string | null> {
+    // Match per id registro (canonico) con fallback sui nomi denormalizzati.
+    const rsId = await cdgStorage.getRsIdByName(orgId, rs);
+    const matchRs = (nomi: string[] | null, ids: string[] | null) =>
+      (rsId && (ids || []).includes(rsId)) || (nomi || []).includes(rs);
     if (categoriaId) {
       const cat = await cdgStorage.getCategoria(categoriaId, orgId);
       if (!cat) return "Categoria non trovata o non appartiene a questa organizzazione";
-      if (!(cat.ragioniSociali || []).includes(rs)) return "La categoria non è associata alla Ragione Sociale selezionata";
+      if (!matchRs(cat.ragioniSociali, cat.ragioneSocialeIds)) return "La categoria non è associata alla Ragione Sociale selezionata";
     }
     if (fornitoreId) {
       const f = await cdgStorage.getFornitore(fornitoreId, orgId);
       if (!f) return "Fornitore non trovato o non appartiene a questa organizzazione";
-      if (!(f.ragioniSociali || []).includes(rs)) return "Il fornitore non è associato alla Ragione Sociale selezionata";
+      if (!matchRs(f.ragioniSociali, f.ragioneSocialeIds)) return "Il fornitore non è associato alla Ragione Sociale selezionata";
     }
     if (pdvCodice) {
       const [pdvList, pdvMan] = await Promise.all([
