@@ -470,6 +470,22 @@ export default function Amministrazione() {
     enabled: !!orgId && isAuthorized && !!fromDate && !!toDate,
   });
 
+  // ── Spese CdG del periodo (per il Bilancio IVA debito/credito) ──
+  // Criterio lato spese: data di PAGAMENTO nel range Dal–Al (coerente col
+  // registro per cassa). 401/403 (modulo CdG non accessibile) => sezione
+  // senza credito, senza rompere la pagina.
+  const cdgSpeseBilancioQ = useQuery<Array<{ ragioneSociale?: string | null; iva?: string | number | null }> | null>({
+    queryKey: ["/api/cdg/spese", "bilancio-iva", orgId, fromDate, toDate],
+    queryFn: async () => {
+      const params = new URLSearchParams({ from: fromDate, to: toDate });
+      const res = await fetch(apiUrl(`/api/cdg/spese?${params.toString()}`), { credentials: "include" });
+      if (res.status === 401 || res.status === 403) return null; // niente accesso CdG
+      if (!res.ok) throw new Error("Errore nel caricamento spese CdG");
+      return res.json();
+    },
+    enabled: !!orgId && isAuthorized && !!fromDate && !!toDate,
+  });
+
   // Il backend filtra già per mese italiano lato server (Task #54), quindi qui
   // basta usare i dati così come sono restituiti.
   const sales = useMemo(() => data?.sales || [], [data]);
@@ -705,6 +721,33 @@ export default function Amministrazione() {
 
   const ivaRiepilogo = useMemo(() => computeIvaRiepilogo(ivaRowsAll), [ivaRowsAll]);
   const ivaTotals = useMemo(() => computeIvaTotals(ivaRiepilogo), [ivaRiepilogo]);
+
+  // ── Bilancio IVA per Ragione Sociale: debito (imposta vendite) vs credito
+  // (IVA spese CdG). Join per nome normalizzato (trim/case/spazi); RS presenti
+  // solo da un lato compaiono con l'altro valore a 0. Il debito riusa le
+  // stesse righe IVA dei totali (natura/da-verificare hanno imposta 0).
+  const bilancioIva = useMemo(() => {
+    const norm = (s: string) => s.trim().replace(/\s+/g, " ").toUpperCase();
+    const SENZA_RS = "— Senza Ragione Sociale —";
+    const map = new Map<string, { rs: string; debito: number; credito: number }>();
+    const ensure = (name: string | null | undefined) => {
+      const display = (name || "").trim() || SENZA_RS;
+      const key = norm(display);
+      let e = map.get(key);
+      if (!e) { e = { rs: display, debito: 0, credito: 0 }; map.set(key, e); }
+      return e;
+    };
+    for (const r of ivaRowsAll) ensure(r.ragioneSociale).debito += r.imposta;
+    for (const s of cdgSpeseBilancioQ.data ?? []) ensure(s.ragioneSociale).credito += toNum(s.iva);
+    let rows = Array.from(map.values()).map((e) => ({ ...e, saldo: e.debito - e.credito }));
+    if (selectedRs !== "all") rows = rows.filter((e) => norm(e.rs) === norm(selectedRs));
+    rows.sort((a, b) => a.rs.localeCompare(b.rs));
+    const tot = rows.reduce(
+      (acc, e) => ({ debito: acc.debito + e.debito, credito: acc.credito + e.credito, saldo: acc.saldo + e.saldo }),
+      { debito: 0, credito: 0, saldo: 0 },
+    );
+    return { rows, tot, cdgNonAccessibile: cdgSpeseBilancioQ.data === null };
+  }, [ivaRowsAll, cdgSpeseBilancioQ.data, selectedRs]);
 
   // ── Layer leggero IVA-filtrato: ricava `ivaRows` per RS senza ricostruire
   // mai contabile/aggregati. Cambiare `escludiZero`/`ivaCategoryFilter` ora
@@ -1672,6 +1715,68 @@ export default function Amministrazione() {
                   />
                 </div>
               </div>
+
+              {/* ── Bilancio IVA: debito (vendite) vs credito (spese CdG) ── */}
+              <Card data-testid="card-bilancio-iva">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Bilancio IVA — debito vs credito per Ragione Sociale</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    IVA a debito = imposta sulle vendite emesse nel periodo Dal–Al · IVA a credito = IVA delle spese del Controllo di Gestione con <strong>data pagamento</strong> nel periodo. Confronto gestionale, non è una liquidazione IVA fiscale.
+                  </p>
+                </CardHeader>
+                <CardContent className="min-w-0">
+                  {bilancioIva.cdgNonAccessibile && (
+                    <p className="text-xs text-amber-600 mb-2" data-testid="text-bilancio-no-cdg">
+                      Modulo Controllo di Gestione non accessibile: l'IVA a credito non è disponibile (mostrata a 0).
+                    </p>
+                  )}
+                  {bilancioIva.rows.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4">Nessun dato IVA nel periodo selezionato.</p>
+                  ) : (
+                    <ScrollableTable>
+                      <Table className="min-w-[520px]">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs">Ragione Sociale</TableHead>
+                            <TableHead className="text-xs text-right whitespace-nowrap">IVA a debito (vendite)</TableHead>
+                            <TableHead className="text-xs text-right whitespace-nowrap">IVA a credito (spese)</TableHead>
+                            <TableHead className="text-xs text-right whitespace-nowrap">Saldo</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {bilancioIva.rows.map((r) => (
+                            <TableRow key={r.rs} data-testid={`row-bilancio-${r.rs}`}>
+                              <TableCell className="text-xs font-medium">{r.rs}</TableCell>
+                              <TableCell className="text-xs text-right font-mono" data-testid={`bilancio-debito-${r.rs}`}>{fmtCurrency(r.debito)}</TableCell>
+                              <TableCell className="text-xs text-right font-mono" data-testid={`bilancio-credito-${r.rs}`}>{fmtCurrency(r.credito)}</TableCell>
+                              <TableCell
+                                className={`text-xs text-right font-mono font-semibold ${r.saldo > 0.005 ? "text-rose-600" : r.saldo < -0.005 ? "text-emerald-600" : "text-muted-foreground"}`}
+                                data-testid={`bilancio-saldo-${r.rs}`}
+                              >
+                                {fmtCurrency(r.saldo)}
+                                <span className="ml-1 font-normal text-[10px]">{r.saldo > 0.005 ? "da versare" : r.saldo < -0.005 ? "a credito" : ""}</span>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                        <TableFooter>
+                          <TableRow>
+                            <TableCell className="text-xs font-bold">TOTALE</TableCell>
+                            <TableCell className="text-xs text-right font-bold font-mono" data-testid="bilancio-tot-debito">{fmtCurrency(bilancioIva.tot.debito)}</TableCell>
+                            <TableCell className="text-xs text-right font-bold font-mono" data-testid="bilancio-tot-credito">{fmtCurrency(bilancioIva.tot.credito)}</TableCell>
+                            <TableCell
+                              className={`text-xs text-right font-bold font-mono ${bilancioIva.tot.saldo > 0.005 ? "text-rose-600" : bilancioIva.tot.saldo < -0.005 ? "text-emerald-600" : ""}`}
+                              data-testid="bilancio-tot-saldo"
+                            >
+                              {fmtCurrency(bilancioIva.tot.saldo)}
+                            </TableCell>
+                          </TableRow>
+                        </TableFooter>
+                      </Table>
+                    </ScrollableTable>
+                  )}
+                </CardContent>
+              </Card>
 
               {displayedRsGroups.length === 0 ? (
                 <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Nessun articolo nel periodo selezionato</CardContent></Card>
