@@ -195,6 +195,139 @@ test('drill-down categoria: righe e totale del dialog coerenti con l\'aggregato 
   }
 });
 
+// Task #361: come sopra ma per il filtro PDV della toolbar. Il memo `spese`
+// confronta s.pdvCodice con il codice selezionato (select-filter-pdv), che
+// richiede PDV validi per la RS (ereditati da organization_config o manuali
+// via /api/cdg/pdv-manuali). Qui seminiamo due PDV manuali + una spesa senza
+// PDV e verifichiamo che legenda torta, riga riepilogo e dialog escludano le
+// spese degli altri PDV (e quelle senza PDV) quando il filtro è attivo.
+test('drill-down categoria: legenda, riepilogo e dialog rispettano il filtro PDV della toolbar', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'cdg_catdet_pdv', fullName: 'Cdg CatDet Pdv Test' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+
+    const rs = uniq('RS CatDetPdv');
+    const createRs = await api(session, 'POST', '/api/cdg/ragioni-sociali', { nome: rs });
+    assert.equal(createRs.status, 201, `create RS: ${JSON.stringify(createRs.body)}`);
+
+    const cat = await api(session, 'POST', '/api/cdg/categorie', {
+      nome: uniq('CatDetPdv UI'), ragioniSociali: [rs],
+    });
+    assert.equal(cat.status, 201, `create cat: ${JSON.stringify(cat.body)}`);
+    const catId = cat.body.id;
+
+    // Due PDV manuali (validi per la RS) con codici diversi.
+    const pdv1Codice = uniq('P1');
+    const pdv1Nome = uniq('Negozio Uno');
+    const pdv2Codice = uniq('P2');
+    const pdv2Nome = uniq('Negozio Due');
+    const pdv1 = await api(session, 'POST', '/api/cdg/pdv-manuali', {
+      codice: pdv1Codice, nome: pdv1Nome, ragioneSociale: rs,
+    });
+    assert.equal(pdv1.status, 201, `create pdv 1: ${JSON.stringify(pdv1.body)}`);
+    const pdv2 = await api(session, 'POST', '/api/cdg/pdv-manuali', {
+      codice: pdv2Codice, nome: pdv2Nome, ragioneSociale: rs,
+    });
+    assert.equal(pdv2.status, 201, `create pdv 2: ${JSON.stringify(pdv2.body)}`);
+
+    // Tutte le spese nel mese corrente (comp = pag = ym1):
+    //   A: 100, PDV1
+    //   B: 200, PDV2
+    //   C:  50, senza PDV (costi generali)
+    // Attesi (netto IVA):
+    //   nessun filtro : A+B+C = 350 (3 spese)
+    //   PDV = PDV1    : A     = 100 (1 spesa; B e C escluse)
+    const seed = [
+      { key: 'A', imp: '100.00', pdvCodice: pdv1Codice },
+      { key: 'B', imp: '200.00', pdvCodice: pdv2Codice },
+      { key: 'C', imp: '50.00', pdvCodice: null },
+    ];
+    const ids = {};
+    for (const s of seed) {
+      const r = await api(session, 'POST', '/api/cdg/spese', {
+        ragioneSociale: rs,
+        descrizione: `Spesa ${s.key} catdetpdv`,
+        categoriaId: catId,
+        pdvCodice: s.pdvCodice,
+        imponibile: s.imp,
+        aliquotaIva: '22.00',
+        dataPagamento: `${ym1}-05`,
+        meseCompetenza: ym1,
+        ricorrente: false,
+      });
+      assert.equal(r.status, 201, `create spesa ${s.key}: ${JSON.stringify(r.body)}`);
+      ids[s.key] = r.body.id;
+    }
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/amministrazione#controllo`, { waitUntil: 'networkidle' });
+    await page.getByTestId('row-summary-0').waitFor({ timeout: 15000 });
+
+    // --- Baseline senza filtri: tutte le spese ovunque ---
+    await waitForFlatText(page, 'legend-cat-0', '350,00');
+    {
+      const { text, rowIds } = await openAndReadDialog(page, 'legend-cat-0');
+      assert.ok(text.includes('3 spese'), `baseline: 3 spese nel dialog: ${text}`);
+      assert.ok(flat(text).includes('350,00'), `baseline: totale dialog = 350,00: ${text}`);
+      assert.deepEqual(rowIds.sort(), [ids.A, ids.B, ids.C].sort(), 'baseline: tutte le spese');
+      await closeDialog(page);
+    }
+
+    // --- Filtro PDV = PDV1: restano solo le spese con quel pdvCodice ---
+    await page.getByTestId('select-filter-pdv').click();
+    await page.getByRole('option', { name: pdv1Nome, exact: true }).click();
+    await waitForFlatText(page, 'legend-cat-0', '100,00');
+    {
+      const legendText = flat(await page.getByTestId('legend-cat-0').innerText());
+      assert.ok(legendText.includes('100,00'), `legenda con filtro PDV = 100,00: ${legendText}`);
+      const { text, rowIds } = await openAndReadDialog(page, 'legend-cat-0');
+      assert.ok(text.includes('1 spes'), `PDV1: 1 spesa nel dialog: ${text}`);
+      assert.ok(flat(text).includes('100,00'), `PDV1: totale dialog = 100,00: ${text}`);
+      assert.deepEqual(rowIds, [ids.A], 'PDV1: solo A nel dialog');
+      assert.ok(!rowIds.includes(ids.B), 'la spesa dell\'altro PDV non appare nel dialog');
+      assert.ok(!rowIds.includes(ids.C), 'la spesa senza PDV non appare nel dialog');
+      await closeDialog(page);
+    }
+
+    // Anche la riga del riepilogo categoria × RS (periodo anno) riflette
+    // il filtro PDV: 100 e stessa riga nel dialog.
+    await waitForFlatText(page, 'row-summary-0', '100,00');
+    {
+      const { text, rowIds } = await openAndReadDialog(page, 'row-summary-0');
+      assert.ok(flat(text).includes('100,00'), `riepilogo con filtro PDV: totale = 100,00: ${text}`);
+      assert.deepEqual(rowIds, [ids.A], 'riepilogo: solo A con il filtro PDV');
+      await closeDialog(page);
+    }
+
+    // --- Filtro PDV = PDV2: solo B ---
+    await page.getByTestId('select-filter-pdv').click();
+    await page.getByRole('option', { name: pdv2Nome, exact: true }).click();
+    await waitForFlatText(page, 'legend-cat-0', '200,00');
+    {
+      const { rowIds } = await openAndReadDialog(page, 'legend-cat-0');
+      assert.deepEqual(rowIds, [ids.B], 'PDV2: solo B nel dialog');
+      await closeDialog(page);
+    }
+
+    // --- Reset filtri: tutto torna visibile ---
+    await page.getByTestId('button-reset-filters').click();
+    await waitForFlatText(page, 'legend-cat-0', '350,00');
+    {
+      const { rowIds } = await openAndReadDialog(page, 'legend-cat-0');
+      assert.deepEqual(rowIds.sort(), [ids.A, ids.B, ids.C].sort(), 'reset: tutte le spese di nuovo nel dialog');
+      await closeDialog(page);
+    }
+  } finally {
+    if (browser) await browser.close();
+    await cleanupOrg(pool, session);
+    await pool.end();
+  }
+});
+
 // Task #360: il dialog di drill-down deve rispettare anche i filtri attivi
 // nella toolbar (fornitore, importo min/max, ...). Il memo `spese` riduce
 // l'array client-side PRIMA di dashboard/pivot/dialog: qui verifichiamo che
