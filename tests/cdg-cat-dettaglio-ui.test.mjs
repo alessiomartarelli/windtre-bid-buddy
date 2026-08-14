@@ -328,6 +328,161 @@ test('drill-down categoria: legenda, riepilogo e dialog rispettano il filtro PDV
   }
 });
 
+// Task #362: come sopra ma per il filtro Ragione Sociale (server-side: param
+// `rs` della query /api/cdg/spese) e per il filtro "Mese pagamento"
+// (client-side sul prefisso YYYY-MM di dataPagamento nel memo `spese`).
+// Semina due RS con spese distinte sulla stessa categoria + spese con mesi
+// pagamento diversi, e verifica che legenda torta, riga riepilogo e dialog
+// escludano le spese fuori filtro (anche coi filtri combinati).
+test('drill-down categoria: legenda, riepilogo e dialog rispettano i filtri RS e mese pagamento', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'cdg_catdet_rs', fullName: 'Cdg CatDet Rs Test' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+
+    const rs1 = uniq('RS CatDetUno');
+    const rs2 = uniq('RS CatDetDue');
+    for (const nome of [rs1, rs2]) {
+      const r = await api(session, 'POST', '/api/cdg/ragioni-sociali', { nome });
+      assert.equal(r.status, 201, `create RS ${nome}: ${JSON.stringify(r.body)}`);
+    }
+
+    // Un'unica categoria condivisa fra le due RS: legend-cat-0 aggrega
+    // entrambe finché il filtro RS non è attivo.
+    const cat = await api(session, 'POST', '/api/cdg/categorie', {
+      nome: uniq('CatDetRs UI'), ragioniSociali: [rs1, rs2],
+    });
+    assert.equal(cat.status, 201, `create cat: ${JSON.stringify(cat.body)}`);
+    const catId = cat.body.id;
+
+    // Tutte le spese con competenza ym1 (la torta parte dal mese corrente);
+    // il mese di PAGAMENTO varia per esercitare filterMesePagamento:
+    //   A: rs1, pag ym1, 110
+    //   B: rs1, pag ym2,  40
+    //   C: rs2, pag ym1, 200
+    // Attesi (netto IVA, vista competenza mese ym1):
+    //   nessun filtro          : A+B+C = 350 (3 spese)
+    //   RS = rs1               : A+B   = 150 (2 spese; C esclusa)
+    //   RS = rs1 + pag = ym1   : A     = 110 (B esclusa: pagata in ym2)
+    //   solo pag = ym2         : B     =  40 (A e C escluse)
+    const seed = [
+      { key: 'A', rs: rs1, pag: ym1, imp: '110.00' },
+      { key: 'B', rs: rs1, pag: ym2, imp: '40.00' },
+      { key: 'C', rs: rs2, pag: ym1, imp: '200.00' },
+    ];
+    const ids = {};
+    for (const s of seed) {
+      const r = await api(session, 'POST', '/api/cdg/spese', {
+        ragioneSociale: s.rs,
+        descrizione: `Spesa ${s.key} catdetrs`,
+        categoriaId: catId,
+        imponibile: s.imp,
+        aliquotaIva: '22.00',
+        dataPagamento: `${s.pag}-05`,
+        meseCompetenza: ym1,
+        ricorrente: false,
+      });
+      assert.equal(r.status, 201, `create spesa ${s.key}: ${JSON.stringify(r.body)}`);
+      ids[s.key] = r.body.id;
+    }
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/amministrazione#controllo`, { waitUntil: 'networkidle' });
+    await page.getByTestId('row-summary-0').waitFor({ timeout: 15000 });
+
+    // --- Baseline senza filtri: entrambe le RS nella legenda e nel dialog ---
+    await waitForFlatText(page, 'legend-cat-0', '350,00');
+    {
+      const { text, rowIds } = await openAndReadDialog(page, 'legend-cat-0');
+      assert.ok(text.includes('3 spese'), `baseline: 3 spese nel dialog: ${text}`);
+      assert.ok(flat(text).includes('350,00'), `baseline: totale dialog = 350,00: ${text}`);
+      assert.deepEqual(rowIds.sort(), [ids.A, ids.B, ids.C].sort(), 'baseline: spese di entrambe le RS');
+      await closeDialog(page);
+    }
+
+    // --- Filtro RS = rs1 (server-side): le spese di rs2 spariscono ovunque ---
+    await page.getByTestId('select-filter-rs').click();
+    await page.getByRole('option', { name: rs1, exact: true }).click();
+    await waitForFlatText(page, 'legend-cat-0', '150,00');
+    {
+      const { text, rowIds } = await openAndReadDialog(page, 'legend-cat-0');
+      assert.ok(text.includes('2 spese'), `RS filtro: 2 spese nel dialog: ${text}`);
+      assert.ok(flat(text).includes('150,00'), `RS filtro: totale dialog = 150,00: ${text}`);
+      assert.deepEqual(rowIds.sort(), [ids.A, ids.B].sort(), 'RS filtro: solo le spese di rs1');
+      assert.ok(!rowIds.includes(ids.C), 'la spesa dell\'altra RS non appare nel dialog');
+      await closeDialog(page);
+    }
+
+    // Anche la riga del riepilogo categoria × RS (periodo anno) riflette il
+    // filtro RS: una sola riga (rs1), 150, stesse righe nel dialog.
+    await waitForFlatText(page, 'row-summary-0', '150,00');
+    {
+      const rowText = await page.getByTestId('row-summary-0').innerText();
+      assert.ok(rowText.includes(rs1), `riga riepilogo = rs1: ${rowText}`);
+      const rows2 = await page.getByTestId('row-summary-1').count();
+      assert.equal(rows2, 0, 'nessuna seconda riga di riepilogo con il filtro RS attivo');
+      const { text, rowIds } = await openAndReadDialog(page, 'row-summary-0');
+      assert.ok(flat(text).includes('150,00'), `riepilogo con filtro RS: totale = 150,00: ${text}`);
+      assert.deepEqual(rowIds.sort(), [ids.A, ids.B].sort(), 'riepilogo: solo le spese di rs1');
+      await closeDialog(page);
+    }
+
+    // --- Filtro combinato: RS = rs1 + mese pagamento = ym1 ---
+    // B (pagata in ym2) sparisce anche se la competenza è nel mese.
+    await page.getByTestId('input-filter-pagamento').fill(ym1);
+    await waitForFlatText(page, 'legend-cat-0', '110,00');
+    {
+      const { text, rowIds } = await openAndReadDialog(page, 'legend-cat-0');
+      assert.ok(text.includes('1 spes'), `RS+pag: 1 spesa nel dialog: ${text}`);
+      assert.ok(flat(text).includes('110,00'), `RS+pag: totale dialog = 110,00: ${text}`);
+      assert.deepEqual(rowIds, [ids.A], 'RS+pag: solo A nel dialog');
+      await closeDialog(page);
+    }
+    await waitForFlatText(page, 'row-summary-0', '110,00');
+    {
+      const { text, rowIds } = await openAndReadDialog(page, 'row-summary-0');
+      assert.deepEqual(rowIds, [ids.A], 'riepilogo con filtri combinati: solo A');
+      assert.ok(flat(text).includes('110,00'), `riepilogo filtri combinati: totale = 110,00: ${text}`);
+      await closeDialog(page);
+    }
+
+    // --- Reset filtri: tutto torna visibile ---
+    await page.getByTestId('button-reset-filters').click();
+    await waitForFlatText(page, 'legend-cat-0', '350,00');
+    {
+      const { rowIds } = await openAndReadDialog(page, 'legend-cat-0');
+      assert.deepEqual(rowIds.sort(), [ids.A, ids.B, ids.C].sort(), 'reset: tutte le spese di nuovo nel dialog');
+      await closeDialog(page);
+    }
+
+    // --- Solo mese pagamento = ym2 (client-side, senza filtro RS) ---
+    // Resta solo B: A e C sono pagate in ym1.
+    await page.getByTestId('input-filter-pagamento').fill(ym2);
+    await waitForFlatText(page, 'legend-cat-0', '40,00');
+    {
+      const { text, rowIds } = await openAndReadDialog(page, 'legend-cat-0');
+      assert.ok(text.includes('1 spes'), `pag=ym2: 1 spesa nel dialog: ${text}`);
+      assert.ok(flat(text).includes('40,00'), `pag=ym2: totale dialog = 40,00: ${text}`);
+      assert.deepEqual(rowIds, [ids.B], 'pag=ym2: solo B nel dialog');
+      assert.ok(!rowIds.includes(ids.A) && !rowIds.includes(ids.C), 'le spese pagate in altri mesi non appaiono');
+      await closeDialog(page);
+    }
+    await waitForFlatText(page, 'row-summary-0', '40,00');
+    {
+      const { rowIds } = await openAndReadDialog(page, 'row-summary-0');
+      assert.deepEqual(rowIds, [ids.B], 'riepilogo con mese pagamento: solo B');
+      await closeDialog(page);
+    }
+  } finally {
+    if (browser) await browser.close();
+    await cleanupOrg(pool, session);
+    await pool.end();
+  }
+});
+
 // Task #360: il dialog di drill-down deve rispettare anche i filtri attivi
 // nella toolbar (fornitore, importo min/max, ...). Il memo `spese` riduce
 // l'array client-side PRIMA di dashboard/pivot/dialog: qui verifichiamo che
