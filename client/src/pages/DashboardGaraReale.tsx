@@ -1,6 +1,7 @@
 import { useState, useMemo, Fragment, useCallback, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { isModuleAllowedForBrands } from "@shared/modules";
+import { normalizeRsName } from "@shared/ragioneSociale";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -541,9 +542,8 @@ function sogliaToLabel(soglia: number, maxSoglia: number = 5): string {
   return `S${soglia}`;
 }
 
-function normalizeRS(s: string): string {
-  return s.trim().toUpperCase().replace(/\./g, '').replace(/\s+/g, ' ');
-}
+// Task #367: normalizzazione condivisa client+server (shared/ragioneSociale).
+const normalizeRS = normalizeRsName;
 
 function clusterToNumber(cluster?: string): 1 | 2 | 3 {
   if (!cluster) return 1;

@@ -29,7 +29,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Wallet, Plus, Pencil, Trash2, Loader2, Building2, Tag, Truck, Store, Download,
-  TrendingUp, FileText, Paperclip, ExternalLink, Info, ChevronRight,
+  TrendingUp, FileText, Paperclip, ExternalLink, Info, ChevronRight, X,
 } from "lucide-react";
 import { KpiCardsSkeleton, DataTableSkeleton } from "@/components/skeletons";
 import { ImportSpeseExcel } from "@/components/cdg/ImportSpeseExcel";
@@ -148,6 +148,7 @@ type UnifiedRagioneSociale = {
   id?: string;
   partitaIva?: string | null;
   note?: string | null;
+  alias?: string[];
 };
 
 export default function ControlloGestione({ embedded = false }: { embedded?: boolean } = {}) {
@@ -2052,18 +2053,39 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
   const [nome, setNome] = useState("");
   const [partitaIva, setPartitaIva] = useState("");
   const [note, setNote] = useState("");
+  // Task #367: alias (varianti di nome unificate in lettura ovunque)
+  const [alias, setAlias] = useState<string[]>([]);
+  const [aliasInput, setAliasInput] = useState("");
+  const [aliasImpact, setAliasImpact] = useState<Record<string, { vendite: number; spese: number }>>({});
 
-  const reset = () => { setEditing(null); setNome(""); setPartitaIva(""); setNote(""); };
+  const reset = () => { setEditing(null); setNome(""); setPartitaIva(""); setNote(""); setAlias([]); setAliasInput(""); setAliasImpact({}); };
   const openNew = () => { reset(); setOpen(true); };
   const openEdit = (rs: UnifiedRagioneSociale) => {
-    setEditing(rs); setNome(rs.nome); setPartitaIva(rs.partitaIva || ""); setNote(rs.note || ""); setOpen(true);
+    setEditing(rs); setNome(rs.nome); setPartitaIva(rs.partitaIva || ""); setNote(rs.note || "");
+    setAlias(rs.alias || []); setAliasInput(""); setAliasImpact({});
+    setOpen(true);
+  };
+
+  const addAlias = async () => {
+    const v = aliasInput.trim().replace(/\s+/g, " ");
+    if (!v) return;
+    if (alias.some(a => a.toUpperCase() === v.toUpperCase())) { setAliasInput(""); return; }
+    setAlias(prev => [...prev, v]);
+    setAliasInput("");
+    // Anteprima impatto: quante vendite/spese verrebbero unificate sotto questa RS
+    try {
+      const impact = await apiJson("GET", `/api/cdg/ragioni-sociali/alias-impact?nome=${encodeURIComponent(v)}`) as { vendite: number; spese: number };
+      setAliasImpact(prev => ({ ...prev, [v]: { vendite: impact.vendite, spese: impact.spese } }));
+    } catch { /* anteprima best-effort */ }
   };
 
   const save = async () => {
     if (!nome.trim()) { toast({ title: "Nome obbligatorio", variant: "destructive" }); return; }
     try {
-      const body = { nome: nome.trim(), partitaIva: partitaIva.trim() || null, note: note.trim() || null };
+      const body = { nome: nome.trim(), partitaIva: partitaIva.trim() || null, note: note.trim() || null, alias };
       if (editing && editing.origine === "pdv") {
+        // La route inherited gestisce anche gli alias (creando l'anchor nel
+        // registro se mancante, anche con P.IVA/note vuote).
         await apiJson("PUT", `/api/cdg/ragioni-sociali/inherited/${encodeURIComponent(editing.nome)}`, body);
       } else if (editing && editing.id) {
         await apiJson("PUT", `/api/cdg/ragioni-sociali/${editing.id}`, body);
@@ -2173,6 +2195,45 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
             <div><Label>Nome *</Label><Input value={nome} onChange={(e) => setNome(e.target.value)} data-testid="input-rs-nome" /></div>
             <div><Label>Partita IVA</Label><Input value={partitaIva} onChange={(e) => setPartitaIva(e.target.value)} data-testid="input-rs-piva" /></div>
             <div><Label>Note</Label><Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} /></div>
+            <div>
+              <Label>Alias (varianti del nome)</Label>
+              <p className="text-xs text-muted-foreground mb-1">
+                Le vendite e le spese registrate con questi nomi vengono mostrate e conteggiate come "{nome.trim() || "questa Ragione Sociale"}" in tutto il software. I dati storici non vengono modificati.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  value={aliasInput}
+                  onChange={(e) => setAliasInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void addAlias(); } }}
+                  placeholder='es. "CMS Evo S.R.L"'
+                  data-testid="input-rs-alias"
+                />
+                <Button type="button" variant="outline" onClick={() => void addAlias()} data-testid="button-add-alias">Aggiungi</Button>
+              </div>
+              {alias.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {alias.map((a) => (
+                    <Badge key={a} variant="secondary" className="gap-1 pr-1" data-testid={`badge-alias-${a}`}>
+                      {a}
+                      {aliasImpact[a] && (
+                        <span className="text-[10px] text-muted-foreground">
+                          ({aliasImpact[a].vendite} vendite, {aliasImpact[a].spese} spese)
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className="ml-0.5 rounded hover:bg-muted p-0.5"
+                        onClick={() => setAlias(prev => prev.filter(x => x !== a))}
+                        data-testid={`button-remove-alias-${a}`}
+                        aria-label={`Rimuovi alias ${a}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Annulla</Button>

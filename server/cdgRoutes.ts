@@ -14,6 +14,7 @@ import {
   insertCdgPdvManualeSchema,
   type Profile,
 } from "@shared/schema";
+import { normalizeRsName } from "@shared/ragioneSociale";
 
 const UPLOAD_DIR = process.env.CDG_UPLOAD_DIR
   || path.join(process.cwd(), "uploads", "cdg");
@@ -350,15 +351,15 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       if (nome) pdvNames.add(nome);
     }
     const manualiByNome = new Map(manuali.map(r => [r.nome, r] as const));
-    const out: Array<{ nome: string; origine: "pdv" | "manuale"; id?: string; partitaIva?: string | null; note?: string | null }> = [];
+    const out: Array<{ nome: string; origine: "pdv" | "manuale"; id?: string; partitaIva?: string | null; note?: string | null; alias?: string[] }> = [];
     for (const r of manuali) {
-      out.push({ nome: r.nome, origine: "manuale", id: r.id, partitaIva: r.partitaIva, note: r.note });
+      out.push({ nome: r.nome, origine: "manuale", id: r.id, partitaIva: r.partitaIva, note: r.note, alias: r.alias ?? [] });
     }
     for (const nome of Array.from(pdvNames).sort((a, b) => a.localeCompare(b, "it"))) {
       if (manualiByNome.has(nome)) continue;
       const anchor = anchorByNome.get(nome);
       out.push(anchor
-        ? { nome, origine: "pdv", id: anchor.id, partitaIva: anchor.partitaIva, note: anchor.note }
+        ? { nome, origine: "pdv", id: anchor.id, partitaIva: anchor.partitaIva, note: anchor.note, alias: anchor.alias ?? [] }
         : { nome, origine: "pdv" });
     }
     out.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
@@ -512,11 +513,95 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     res.json({ success: true });
   });
 
+  // Task #367: sanifica e valida gli alias di una RS. Un alias non può
+  // coincidere (per chiave normalizzata) col nome di un'altra RS del registro
+  // né con un alias di un'altra RS. Ritorna la lista pulita o una stringa
+  // d'errore. `selfId`/`selfNome` escludono la RS stessa dal check.
+  async function sanitizeAlias(
+    orgId: string, raw: unknown, selfId: string | null, selfNome: string,
+  ): Promise<{ alias: string[] } | { error: string }> {
+    if (raw === undefined) return { alias: [] };
+    if (!Array.isArray(raw) || raw.some(a => typeof a !== "string")) {
+      return { error: "alias deve essere una lista di stringhe" };
+    }
+    const seen = new Set<string>();
+    const alias: string[] = [];
+    const selfKey = normalizeRsName(selfNome);
+    for (const a of raw as string[]) {
+      const display = a.trim().replace(/\s+/g, " ");
+      const key = normalizeRsName(display);
+      if (!key || seen.has(key) || key === selfKey) continue;
+      seen.add(key);
+      alias.push(display);
+    }
+    if (alias.length === 0) return { alias };
+    const registro = await cdgStorage.listRagioniSociali(orgId, { includeAuto: true });
+    for (const r of registro) {
+      if (selfId && r.id === selfId) continue;
+      // Collisione con il NOME di un'altra RS manuale (le anchor 'auto' sono
+      // proprio le varianti che si vogliono unificare: consentite).
+      if (r.origine === "manuale" && seen.has(normalizeRsName(r.nome))) {
+        return { error: `"${r.nome}" è già una Ragione Sociale: non può essere usata come alias` };
+      }
+      for (const other of r.alias ?? []) {
+        if (seen.has(normalizeRsName(other))) {
+          return { error: `L'alias "${other}" è già assegnato alla Ragione Sociale "${r.nome}"` };
+        }
+      }
+    }
+    return { alias };
+  }
+
+  // Task #367: un nome (nuovo o rinominato) non può coincidere, per chiave
+  // normalizzata, con un alias già assegnato a un'ALTRA RS: gli alias hanno
+  // la precedenza in risoluzione e il nome verrebbe "rubato". Ritorna il
+  // nome della RS proprietaria dell'alias in conflitto, o null.
+  async function nomeCollidesWithAlias(orgId: string, nome: string, selfId: string | null): Promise<string | null> {
+    const key = normalizeRsName(nome);
+    if (!key) return null;
+    const registro = await cdgStorage.listRagioniSociali(orgId, { includeAuto: true });
+    for (const r of registro) {
+      if (selfId && r.id === selfId) continue;
+      if ((r.alias ?? []).some(a => normalizeRsName(a) === key)) return r.nome;
+    }
+    return null;
+  }
+
+  // Task #367: anteprima impatto di un alias — quante vendite BiSuite e
+  // quante spese CdG hanno quel nome (per chiave normalizzata).
+  app.get("/api/cdg/ragioni-sociali/alias-impact", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const orgId = profile.organizationId!;
+    const nome = String(req.query.nome || "").trim();
+    if (!nome) return res.status(400).json({ error: "nome obbligatorio" });
+    const key = normalizeRsName(nome);
+    // Stessa normalizzazione di shared/ragioneSociale.ts, replicata in SQL.
+    const normSql = (col: string) => sql.raw(
+      `upper(btrim(regexp_replace(replace(${col}, '.', ''), '\\s+', ' ', 'g')))`,
+    );
+    const vendite = await db.execute(sql`
+      SELECT COUNT(*)::int AS cnt FROM bisuite_sales
+       WHERE organization_id = ${orgId} AND ${normSql("ragione_sociale")} = ${key}
+    `);
+    const spese = await db.execute(sql`
+      SELECT COUNT(*)::int AS cnt FROM cdg_spese
+       WHERE organization_id = ${orgId} AND ${normSql("ragione_sociale")} = ${key}
+    `);
+    const cntOf = (r: unknown) => Number(((r as { rows?: Array<{ cnt: number }> }).rows || [])[0]?.cnt || 0);
+    res.json({ nome, vendite: cntOf(vendite), spese: cntOf(spese) });
+  });
+
   app.post("/api/cdg/ragioni-sociali", ...gate, async (req: any, res) => {
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
     const parsed = insertCdgRagioneSocialeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const aliasRes = await sanitizeAlias(profile.organizationId!, req.body?.alias, null, parsed.data.nome);
+    if ("error" in aliasRes) return res.status(400).json({ error: aliasRes.error });
+    parsed.data.alias = aliasRes.alias;
+    const owner = await nomeCollidesWithAlias(profile.organizationId!, parsed.data.nome, null);
+    if (owner) return res.status(409).json({ error: `"${parsed.data.nome}" è già un alias della Ragione Sociale "${owner}"` });
     try {
       const r = await cdgStorage.createRagioneSociale({ ...parsed.data, organizationId: profile.organizationId! });
       res.status(201).json(r);
@@ -535,6 +620,11 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     const orgId = profile.organizationId!;
     const existing = await cdgStorage.getRagioneSociale(req.params.id, orgId);
     if (!existing) return res.status(404).json({ error: "Non trovato" });
+    if (parsed.data.alias !== undefined) {
+      const aliasRes = await sanitizeAlias(orgId, req.body?.alias, existing.id, (parsed.data.nome ?? existing.nome).trim());
+      if ("error" in aliasRes) return res.status(400).json({ error: aliasRes.error });
+      parsed.data.alias = aliasRes.alias;
+    }
     const newName = (parsed.data.nome ?? existing.nome).trim();
     const renamed = parsed.data.nome !== undefined && newName !== existing.nome;
     if (renamed) {
@@ -556,6 +646,11 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       if (clashRow) {
         return res.status(409).json({ error: `Impossibile rinominare: esiste già un PDV con codice "${clashRow.codice}" nella RS "${newName}"` });
       }
+    }
+    // Task #367: il nuovo nome non deve coincidere con l'alias di un'altra RS.
+    if (parsed.data.nome !== undefined && newName !== existing.nome) {
+      const owner = await nomeCollidesWithAlias(orgId, newName, existing.id);
+      if (owner) return res.status(409).json({ error: `"${newName}" è già un alias della Ragione Sociale "${owner}"` });
     }
     // La propagazione della rinomina (categorie/fornitori/spese/PDV manuali)
     // avviene in un'unica transazione dentro cdgStorage.updateRagioneSociale.
@@ -606,6 +701,7 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
       nome: z.string().trim().min(1).optional(),
       partitaIva: z.string().nullable().optional(),
       note: z.string().nullable().optional(),
+      alias: z.array(z.string()).optional(),
     }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
     const newName = (parsed.data.nome || oldName).trim();
@@ -617,9 +713,23 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     if (!exists) return res.status(404).json({ error: "RS ereditata non trovata" });
 
     // Conflitto su rename: il nuovo nome non deve già esistere in altre RS
+    // né coincidere con l'alias di un'altra RS (Task #367).
+    const selfIdPre = await cdgStorage.getRsIdByName(orgId, oldName);
     if (newName !== oldName) {
       const valid = await getValidRsNames(orgId);
       if (valid.has(newName)) return res.status(409).json({ error: `Esiste già una Ragione Sociale "${newName}"` });
+      const owner = await nomeCollidesWithAlias(orgId, newName, selfIdPre ?? null);
+      if (owner) return res.status(409).json({ error: `"${newName}" è già un alias della Ragione Sociale "${owner}"` });
+    }
+
+    // Task #367: valida gli alias PRIMA di qualsiasi scrittura (rename
+    // puntiVendita/registro): un alias invalido non deve lasciare a metà
+    // una richiesta che contiene anche una rinomina.
+    let aliasClean: string[] | undefined;
+    if (parsed.data.alias !== undefined) {
+      const aliasRes = await sanitizeAlias(orgId, parsed.data.alias, selfIdPre ?? null, newName);
+      if ("error" in aliasRes) return res.status(400).json({ error: aliasRes.error });
+      aliasClean = aliasRes.alias;
     }
 
     try {
@@ -635,15 +745,22 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
         await cdgStorage.renameRsByName(orgId, oldName, newName);
       }
 
-      // Upsert override partitaIva/note in cdg_ragioni_sociali sul nome attuale
+      // Upsert override partitaIva/note (+ alias, Task #367) in
+      // cdg_ragioni_sociali sul nome attuale. Se gli alias sono presenti,
+      // l'anchor viene creato anche con P.IVA/note vuote: l'alias DEVE
+      // essere persistito.
       const piva = parsed.data.partitaIva ?? null;
       const note = parsed.data.note ?? null;
       const registro = await cdgStorage.listRagioniSociali(orgId, { includeAuto: true });
       const existingRow = registro.find(r => r.nome === newName);
       if (existingRow) {
-        await cdgStorage.updateRagioneSociale(existingRow.id, orgId, { partitaIva: piva, note });
-      } else if (piva || note) {
-        await cdgStorage.createRagioneSociale({ organizationId: orgId, nome: newName, partitaIva: piva, note });
+        await cdgStorage.updateRagioneSociale(existingRow.id, orgId, {
+          partitaIva: piva, note, ...(aliasClean !== undefined ? { alias: aliasClean } : {}),
+        });
+      } else if (piva || note || (aliasClean && aliasClean.length > 0)) {
+        await cdgStorage.createRagioneSociale({
+          organizationId: orgId, nome: newName, partitaIva: piva, note, alias: aliasClean ?? [],
+        });
       }
       res.json({ success: true, nome: newName });
     } catch (e) {

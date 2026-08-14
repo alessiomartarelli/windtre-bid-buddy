@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { runBisuiteFetchForOrg } from "./bisuiteFetch";
+import { cdgStorage } from "./cdgStorage";
 import { sendTelegramMessage, sendTelegramDocument } from "./telegram";
 import { decryptSecret, isEncrypted } from "./cryptoSecret";
 import {
@@ -287,6 +288,17 @@ export async function sendDailyReportForOrg(params: {
   const monthFromYmd = monthStartYmd(ymd);
   const fromYmd = trendFromYmd < monthFromYmd ? trendFromYmd : monthFromYmd;
   let rows = await storage.getBisuiteSalesByItalianDateRange(params.orgId, fromYmd, ymd, false);
+  // Task #367: canonicalizza le Ragioni Sociali (alias + normalizzazione dal
+  // registro RS) così il report aggrega le varianti come un'unica azienda.
+  try {
+    const resolveRs = await cdgStorage.getRsResolver(params.orgId);
+    rows = rows.map((r) => {
+      const canon = r.ragioneSociale ? resolveRs(r.ragioneSociale) : r.ragioneSociale;
+      return canon !== r.ragioneSociale ? { ...r, ragioneSociale: canon } : r;
+    });
+  } catch (e) {
+    console.warn(`[telegram-report] canonicalizzazione RS fallita org=${params.orgId}:`, e);
+  }
   let trendRows = rows.filter((r) => {
     const d = trendYmdOf(r.dataVendita);
     return d !== null && d >= trendFromYmd;

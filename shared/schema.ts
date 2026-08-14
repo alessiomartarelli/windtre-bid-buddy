@@ -401,6 +401,10 @@ export const cdgRagioniSociali = pgTable("cdg_ragioni_sociali", {
   //               organization_config.puntiVendita (solo portatore di id,
   //               NON mostrato come voce manuale).
   origine: varchar("origine").notNull().default("manuale"),
+  // Task #367: alias della RS (varianti di nome della stessa azienda, es.
+  // "CMS Evo S.R.L" per "CMS Evolution Srl"). Risolti SOLO in lettura tramite
+  // shared/ragioneSociale.ts: i dati storici non vengono mai riscritti.
+  alias: text("alias").array().notNull().default(sql`ARRAY[]::text[]`),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => [
   index("IDX_cdg_rs_org").on(t.organizationId),

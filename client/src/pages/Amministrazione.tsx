@@ -53,6 +53,7 @@ import {
   BILANCIO_IVA_SHEET_NAME,
   type CreditoStatus,
 } from "@shared/bilancioIvaExport";
+import { normalizeRsName } from "@shared/ragioneSociale";
 import ControlloGestione from "@/pages/ControlloGestione";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { FinPlanSetupWizard } from "@/components/FinPlanSetupWizard";
@@ -504,17 +505,23 @@ export default function Amministrazione() {
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [sales]);
 
+  // Task #367: dedupe per chiave normalizzata (varianti tipo "CMS SRL" vs
+  // "CMS S.R.L" diventano un'unica opzione, primo nome visto come display).
   const rsOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const s of sales) if (s.ragioneSociale) set.add(s.ragioneSociale);
-    return Array.from(set).sort();
+    const map = new Map<string, string>();
+    for (const s of sales) {
+      if (!s.ragioneSociale) continue;
+      const k = normalizeRsName(s.ragioneSociale);
+      if (k && !map.has(k)) map.set(k, s.ragioneSociale);
+    }
+    return Array.from(map.values()).sort();
   }, [sales]);
 
   const filteredSales = useMemo(() => {
     const q = deferredSearch ? deferredSearch.toLowerCase() : "";
     return sales.filter((s) => {
       if (filterPdv.length > 0 && !filterPdv.includes(s.codicePos || "N/D")) return false;
-      if (filterRs !== "all" && (s.ragioneSociale || "") !== filterRs) return false;
+      if (filterRs !== "all" && normalizeRsName(s.ragioneSociale || "") !== normalizeRsName(filterRs)) return false;
       if (q) {
         const haystack = [
           s.codicePos, s.nomeNegozio, s.ragioneSociale, s.nomeAddetto, s.nomeCliente,
@@ -644,15 +651,18 @@ export default function Amministrazione() {
   };
 
   const rsGroupsBase = useMemo(() => {
-    const bySales = new Map<string, BisuiteSale[]>();
+    // Task #367: raggruppa per chiave normalizzata (primo nome visto come
+    // display), così le varianti della stessa RS finiscono in un solo gruppo.
+    const bySales = new Map<string, { display: string; rows: BisuiteSale[] }>();
     for (const s of filteredSales) {
-      const k = s.ragioneSociale || "— Senza Ragione Sociale —";
-      const arr = bySales.get(k);
-      if (arr) arr.push(s); else bySales.set(k, [s]);
+      const display = s.ragioneSociale || "— Senza Ragione Sociale —";
+      const k = normalizeRsName(display);
+      const g = bySales.get(k);
+      if (g) g.rows.push(s); else bySales.set(k, { display, rows: [s] });
     }
-    return Array.from(bySales.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([rs, gSales]) => {
+    return Array.from(bySales.values())
+      .sort((a, b) => a.display.localeCompare(b.display))
+      .map(({ display: rs, rows: gSales }) => {
         const gContabileRows = buildContabileRows(gSales);
         const gIvaRowsAll = buildIvaRows(gSales);
         const gRiepilogo = computeIvaRiepilogo(gIvaRowsAll);
@@ -732,7 +742,7 @@ export default function Amministrazione() {
   // solo da un lato compaiono con l'altro valore a 0. Il debito riusa le
   // stesse righe IVA dei totali (natura/da-verificare hanno imposta 0).
   const bilancioIva = useMemo(() => {
-    const norm = (s: string) => s.trim().replace(/\s+/g, " ").toUpperCase();
+    const norm = normalizeRsName;
     const SENZA_RS = "— Senza Ragione Sociale —";
     const map = new Map<string, { rs: string; debito: number; credito: number }>();
     const ensure = (name: string | null | undefined) => {
@@ -767,12 +777,12 @@ export default function Amministrazione() {
   }, [rsGroupsBase, escludiZero, ivaCategoryFilter]);
 
   const displayedRsGroups = useMemo(
-    () => (selectedRs === "all" ? rsGroups : rsGroups.filter((g) => g.rs === selectedRs)),
+    () => (selectedRs === "all" ? rsGroups : rsGroups.filter((g) => normalizeRsName(g.rs) === normalizeRsName(selectedRs))),
     [rsGroups, selectedRs],
   );
 
   useEffect(() => {
-    if (selectedRs !== "all" && !rsGroups.some((g) => g.rs === selectedRs)) {
+    if (selectedRs !== "all" && !rsGroups.some((g) => normalizeRsName(g.rs) === normalizeRsName(selectedRs))) {
       setSelectedRs("all");
     }
   }, [rsGroups, selectedRs]);

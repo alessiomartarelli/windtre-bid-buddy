@@ -3257,10 +3257,18 @@ export async function registerRoutes(
         return sales.filter((s) => operatorAddetti.includes(String(s.nomeAddetto || "").toLowerCase().trim()));
       };
 
+      // Task #367: canonicalizza la Ragione Sociale in lettura (alias +
+      // normalizzazione dal registro RS). I dati storici restano invariati.
+      const resolveRs = await cdgStorage.getRsResolver(orgId);
+      const canonRs = (sales: BisuiteSale[]): BisuiteSale[] => sales.map((s) => {
+        const canon = s.ragioneSociale ? resolveRs(s.ragioneSociale) : s.ragioneSociale;
+        return canon !== s.ragioneSociale ? { ...s, ragioneSociale: canon } : s;
+      });
+
       const yearParam = req.query.year ? parseInt(req.query.year as string, 10) : NaN;
       const monthParam = req.query.month ? parseInt(req.query.month as string, 10) : NaN;
       if (Number.isFinite(yearParam) && Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12) {
-        const sales = applyOperatorFilter(await storage.getBisuiteSalesByItalianMonth(orgId, yearParam, monthParam, includeAnnullate));
+        const sales = canonRs(applyOperatorFilter(await storage.getBisuiteSalesByItalianMonth(orgId, yearParam, monthParam, includeAnnullate)));
         return res.json({ sales, count: sales.length });
       }
 
@@ -3269,7 +3277,7 @@ export async function registerRoutes(
       if (fromYMD === null || toYMD === null) {
         return res.status(400).json({ error: "Parametri from/to non validi (atteso YYYY-MM-DD)" });
       }
-      const sales = applyOperatorFilter(await storage.getBisuiteSalesByItalianDateRange(orgId, fromYMD, toYMD, includeAnnullate));
+      const sales = canonRs(applyOperatorFilter(await storage.getBisuiteSalesByItalianDateRange(orgId, fromYMD, toYMD, includeAnnullate)));
       res.json({ sales, count: sales.length });
     } catch (error: unknown) {
       console.error("BiSuite sales read error:", error);
@@ -3704,7 +3712,13 @@ export async function registerRoutes(
       const inGaraOnly = req.query.inGaraOnly === 'true' || req.query.inGaraOnly === '1';
       const garaConfigId = (req.query.garaConfigId as string) || undefined;
 
-      const allSales = await storage.getBisuiteSalesByItalianMonth(orgId, year, month);
+      // Task #367: canonicalizza le RS (alias + normalizzazione dal registro)
+      // prima di filtri e aggregazione, come in GET /api/bisuite-sales.
+      const resolveRsMapped = await cdgStorage.getRsResolver(orgId);
+      const allSales = (await storage.getBisuiteSalesByItalianMonth(orgId, year, month)).map((s) => {
+        const canon = s.ragioneSociale ? resolveRsMapped(s.ragioneSociale) : s.ragioneSociale;
+        return canon !== s.ragioneSociale ? { ...s, ragioneSociale: canon } : s;
+      });
 
       let garaCfg = undefined as Awaited<ReturnType<typeof storage.getGaraConfigById>> | undefined;
       if (inGaraOnly) {

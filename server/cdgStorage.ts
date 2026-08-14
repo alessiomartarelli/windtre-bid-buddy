@@ -9,6 +9,7 @@ import {
   type CdgSpesa, type InsertCdgSpesa,
   type CdgPdvManuale, type InsertCdgPdvManuale,
 } from "@shared/schema";
+import { buildRsResolver, normalizeRsName } from "@shared/ragioneSociale";
 
 // Task #345: cdg_ragioni_sociali è il registro canonico delle RS. Le tabelle
 // figlie (spese, pdv manuali, categorie, fornitori) referenziano le RS per ID
@@ -57,6 +58,18 @@ async function ensureRsAnchors(dbx: Dbx, orgId: string, nomi: string[]): Promise
     map.set(n, await ensureRsAnchor(dbx, orgId, n));
   }
   return map;
+}
+
+/**
+ * Task #367: resolver nome grezzo → nome canonico per l'org, costruito dal
+ * registro completo (anchor 'auto' inclusi): match per chiave normalizzata
+ * su nomi canonici e alias. Usato SOLO in lettura/aggregazione.
+ */
+async function getRsResolverForOrg(orgId: string): Promise<(raw: string | null | undefined) => string> {
+  const res = await db.execute(sql`
+    SELECT nome, alias FROM cdg_ragioni_sociali WHERE organization_id = ${orgId}
+  `);
+  return buildRsResolver(rowsOf<{ nome: string; alias: string[] | null }>(res));
 }
 
 /** Mappa id → nome corrente dal registro (per risoluzione in lettura). */
@@ -149,6 +162,11 @@ async function syncRsDenorm(dbx: Dbx, orgId: string, rsId: string, oldName: stri
 }
 
 export const cdgStorage = {
+  // Task #367: resolver pubblico nome grezzo → canonico (alias+normalizzazione)
+  // per canonicalizzare le RS anche fuori dal CdG (vendite BiSuite, report).
+  async getRsResolver(orgId: string): Promise<(raw: string | null | undefined) => string> {
+    return getRsResolverForOrg(orgId);
+  },
   // === Registro RS ===
   /** Espone l'upsert dell'anchor (usato dalle route per collegare per id). */
   async ensureRsId(orgId: string, nome: string, origine: "auto" | "manuale" = "auto"): Promise<string> {
@@ -217,13 +235,15 @@ export const cdgStorage = {
     // Se esiste già un anchor "auto" con lo stesso nome lo promuove a manuale
     // (l'utente non vede gli anchor: per lui la RS non esisteva). Se esiste
     // già una RS manuale, propaga l'unique violation (la route risponde 409).
+    const aliasArr = data.alias ?? [];
     const res = await db.execute(sql`
-      INSERT INTO cdg_ragioni_sociali (organization_id, nome, partita_iva, note, origine)
-      VALUES (${data.organizationId}, ${data.nome}, ${data.partitaIva ?? null}, ${data.note ?? null}, 'manuale')
+      INSERT INTO cdg_ragioni_sociali (organization_id, nome, partita_iva, note, origine, alias)
+      VALUES (${data.organizationId}, ${data.nome}, ${data.partitaIva ?? null}, ${data.note ?? null}, 'manuale', ${sql`ARRAY[${aliasArr.length ? sql.join(aliasArr.map(a => sql`${a}`), sql`, `) : sql``}]::text[]`})
       ON CONFLICT (organization_id, nome) DO UPDATE
         SET origine = 'manuale',
             partita_iva = EXCLUDED.partita_iva,
-            note = EXCLUDED.note
+            note = EXCLUDED.note,
+            alias = EXCLUDED.alias
         WHERE cdg_ragioni_sociali.origine = 'auto'
       RETURNING *
     `);
@@ -235,7 +255,8 @@ export const cdgStorage = {
     }
     return {
       id: r.id, organizationId: r.organization_id, nome: r.nome,
-      partitaIva: r.partita_iva, note: r.note, origine: r.origine, createdAt: r.created_at,
+      partitaIva: r.partita_iva, note: r.note, origine: r.origine,
+      alias: (r.alias as string[] | null) ?? [], createdAt: r.created_at,
     } as CdgRagioneSociale;
   },
   async updateRagioneSociale(id: string, orgId: string, updates: Partial<InsertCdgRagioneSociale>): Promise<CdgRagioneSociale | null> {
@@ -431,26 +452,31 @@ export const cdgStorage = {
   // Spese
   async listSpese(orgId: string, opts: { rs?: string; from?: string; to?: string; meseCompetenza?: string } = {}): Promise<CdgSpesa[]> {
     const conds = [eq(cdgSpese.organizationId, orgId)];
-    if (opts.rs) {
-      const rsId = await getRsIdByName(orgId, opts.rs);
-      conds.push(rsId
-        ? or(
-            eq(cdgSpese.ragioneSocialeId, rsId),
-            and(isNull(cdgSpese.ragioneSocialeId), eq(cdgSpese.ragioneSociale, opts.rs)),
-          )!
-        : eq(cdgSpese.ragioneSociale, opts.rs));
-    }
     if (opts.from) conds.push(gte(cdgSpese.dataPagamento, opts.from));
     if (opts.to) conds.push(lte(cdgSpese.dataPagamento, opts.to));
     if (opts.meseCompetenza) conds.push(eq(cdgSpese.meseCompetenza, opts.meseCompetenza));
     const rows = await db.select().from(cdgSpese).where(and(...conds)).orderBy(desc(cdgSpese.dataPagamento));
-    return resolveSingleRs(rows, await getRsNameMap(orgId));
+    // Task #367: dopo la risoluzione per id, i nomi vengono canonicalizzati
+    // via alias/normalizzazione; anche il filtro rs confronta i canonici,
+    // così le spese registrate sotto una variante restano incluse.
+    const resolver = await getRsResolverForOrg(orgId);
+    const resolved = resolveSingleRs(rows, await getRsNameMap(orgId))
+      .map(r => {
+        const canon = resolver(r.ragioneSociale);
+        return canon && canon !== r.ragioneSociale ? { ...r, ragioneSociale: canon } : r;
+      });
+    if (!opts.rs) return resolved;
+    const target = normalizeRsName(resolver(opts.rs));
+    return resolved.filter(r => normalizeRsName(r.ragioneSociale) === target);
   },
   async getSpesa(id: string, orgId: string): Promise<CdgSpesa | undefined> {
     const [r] = await db.select().from(cdgSpese)
       .where(and(eq(cdgSpese.id, id), eq(cdgSpese.organizationId, orgId)));
     if (!r) return undefined;
-    return resolveSingleRs([r], await getRsNameMap(orgId))[0];
+    const resolver = await getRsResolverForOrg(orgId);
+    const out = resolveSingleRs([r], await getRsNameMap(orgId))[0];
+    const canon = resolver(out.ragioneSociale);
+    return canon && canon !== out.ragioneSociale ? { ...out, ragioneSociale: canon } : out;
   },
   async createSpesa(data: InsertCdgSpesa): Promise<CdgSpesa> {
     const rsId = data.ragioneSocialeId

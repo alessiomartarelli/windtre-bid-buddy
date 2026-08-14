@@ -38,4 +38,5 @@
 - [CdG RS registry by id](cdg-rs-registry.md) — RS CdG collegate per id via registro cdg_ragioni_sociali (anchor 'auto' per le ereditate); rinomine SOLO via registro, mai nuovi UPDATE per nome.
 - [Fault injection header](test-fault-injection-header.md) — per testare rollback+cleanup di una route transazionale: hook non-prod via header che forza il fallimento DB reale; mai replicare il cleanup nel test.
 - [RS denorm ids vs nomi](rs-denorm-ids-vs-names.md) — risolvere ragioniSociali da ids in UNIONE coi nomi non coperti, o spariscono associazioni; PG: varchar[] <@ text[] non esiste, cast ::text[].
+- [RS alias resolution](rs-alias-resolution.md) — varianti RS unificate SOLO in lettura via shared normalize + alias registro; resolver: alias prima, canonici set-se-assente (anchor auto omonimi).
 - [BiSuite partnership twins](bisuite-partnership-twins.md) — mergeWithDefaultRules twins ogni regola CB su pista partnership; aggrega/filtra per pista o i veri eventi CB si contano doppi (caring escluso dai twin).

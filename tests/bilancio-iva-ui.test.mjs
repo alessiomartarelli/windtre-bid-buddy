@@ -141,7 +141,9 @@ test('Bilancio IVA: debito vendite vs credito spese CdG per RS, con saldo e tota
 
     // Il nome mostrato per A è quello lato vendite (prima occorrenza),
     // solo trimmato (gli spazi interni restano come nel dato sorgente).
-    const rsADisplay = rsASalesName.trim();
+    // Task #367: il server canonicalizza le RS delle vendite sul registro
+    // (alias + normalizzazione), quindi la riga usa il nome canonico rsA.
+    const rsADisplay = rsA;
 
     // Attende che il credito CdG sia caricato (riga di C presente).
     await page.getByTestId(`row-bilancio-${rsC}`).waitFor({ timeout: 15000 });
