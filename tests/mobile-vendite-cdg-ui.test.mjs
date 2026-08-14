@@ -76,7 +76,28 @@ async function seedBisuiteSales(pool, orgId, { count = 30, addetto = 'Mario Ross
         'FINALIZZATA',
         // codiceEsterno = ID VENDITA usato dal report DTS per il match
         // lead ↔ vendita (dtsSaleCodiceEsterno legge rawData.codiceEsterno).
-        JSON.stringify({ codiceEsterno: 100000 + i, articoli: [] }),
+        // Articoli classificabili (shared/bisuiteClassification.ts,
+        // classifySaleArticles): uno canvass + uno prodotti per vendita,
+        // così report.perCategoriaCanvass e report.perProdotto hanno righe
+        // (task #380) e le tabelle "per categoria canvass" / "per prodotto"
+        // di Gestione DTS non restano in stato vuoto.
+        JSON.stringify({
+          codiceEsterno: 100000 + i,
+          articoli: [
+            {
+              categoria: { nome: ['UNTIED', 'ADSL/FIBRA/FWA CF', 'RIVINCOLO'][i % 3] },
+              tipologia: { nome: 'OFFERTA' },
+              descrizione: `Offerta canvass ${i}`,
+              dettaglio: { prezzo: '10.00' },
+            },
+            {
+              categoria: { nome: ['TELEFONIA', 'ACCESSORI', 'SIM'][i % 3] },
+              tipologia: { nome: 'PRODOTTO' },
+              descrizione: `Prodotto ${i}`,
+              dettaglio: { prezzo: '15.00' },
+            },
+          ],
+        }),
       ],
     );
   }
@@ -296,6 +317,13 @@ test('mobile: tabelle DTS, DRMS e Configurazione Gara popolate su smartphone', a
     await assertNoHorizontalOverflow(page, 'GestioneDts (popolata)');
     await assertTableContainedInWrapper(page, '[data-testid^="row-dts-consulente-"]', 'DTS per consulente');
     await assertTableContainedInWrapper(page, '[data-testid^="row-dts-negozio-"]', 'DTS per negozio');
+
+    // ── Per categoria canvass e per prodotto: popolate con dati reali (task #380) ──
+    await page.locator('[data-testid^="row-dts-cat-"]').first().waitFor({ state: 'visible', timeout: 20000 });
+    await page.locator('[data-testid^="row-dts-prod-"]').first().waitFor({ state: 'visible', timeout: 20000 });
+    await assertNoHorizontalOverflow(page, 'GestioneDts (cat/prod popolate)');
+    await assertTableContainedInWrapper(page, '[data-testid^="row-dts-cat-"]', 'DTS per categoria canvass');
+    await assertTableContainedInWrapper(page, '[data-testid^="row-dts-prod-"]', 'DTS per prodotto');
 
     // ── DRMS Commissioning: carica l'upload salvato, panoramica + matrice ──
     await page.goto(`${BASE}/drms-commissioning`, { waitUntil: 'networkidle' });
