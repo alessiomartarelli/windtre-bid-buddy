@@ -135,7 +135,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
       className="sticky top-0 z-50 glass-panel border-b-0"
       style={{ borderBottom: '1px solid hsl(var(--glass-border))', paddingTop: 'env(safe-area-inset-top)' }}
     >
-      <div className="container mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2">
+      <div className="container mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <div
             className="flex items-center gap-2 cursor-pointer group"
@@ -230,7 +230,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
           </nav>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
           {children}
 
           <ThemeToggle />

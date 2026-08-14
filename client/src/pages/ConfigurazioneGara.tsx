@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ResponsiveDialogContent } from '@/components/ui/responsive-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -2171,7 +2172,7 @@ export default function ConfigurazioneGara() {
                             </div>
                             <div className="mt-2">
                               <Label className="text-[10px] text-muted-foreground mb-1 block">Moltiplicatori canone</Label>
-                              <div className="grid grid-cols-4 gap-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 {(['multiplierSoglia1', 'multiplierSoglia2', 'multiplierSoglia3', 'multiplierSoglia4'] as const).map((f, i) => (
                                   <div key={f} className="space-y-0.5">
                                     <Label className="text-[10px]">x S{i + 1}</Label>
@@ -2203,7 +2204,7 @@ export default function ConfigurazioneGara() {
                             </div>
                             <div className="mt-2">
                               <Label className="text-[10px] text-muted-foreground mb-1 block">Moltiplicatori €/pezzo</Label>
-                              <div className="grid grid-cols-5 gap-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                                 {(['multiplierSoglia1', 'multiplierSoglia2', 'multiplierSoglia3', 'multiplierSoglia4', 'multiplierSoglia5'] as const).map((f, i) => (
                                   <div key={f} className="space-y-0.5">
                                     <Label className="text-[10px]">x S{i + 1}</Label>
@@ -2282,7 +2283,7 @@ export default function ConfigurazioneGara() {
                             </div>
                             <div className="mt-2">
                               <Label className="text-[10px] text-muted-foreground mb-1 block">Moltiplicatori canone</Label>
-                              <div className="grid grid-cols-4 gap-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 {(['multiplierSoglia1', 'multiplierSoglia2', 'multiplierSoglia3', 'multiplierSoglia4'] as const).map((f, i) => (
                                   <div key={f} className="space-y-0.5">
                                     <Label className="text-[10px]">x S{i + 1}</Label>
@@ -2314,7 +2315,7 @@ export default function ConfigurazioneGara() {
                             </div>
                             <div className="mt-2">
                               <Label className="text-[10px] text-muted-foreground mb-1 block">Moltiplicatori €/pezzo</Label>
-                              <div className="grid grid-cols-5 gap-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                                 {(['multiplierSoglia1', 'multiplierSoglia2', 'multiplierSoglia3', 'multiplierSoglia4', 'multiplierSoglia5'] as const).map((f, i) => (
                                   <div key={f} className="space-y-0.5">
                                     <Label className="text-[10px]">x S{i + 1}</Label>
@@ -2672,7 +2673,7 @@ export default function ConfigurazioneGara() {
         )}
 
         <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-          <DialogContent className="max-w-md">
+          <ResponsiveDialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Importa Configurazione</DialogTitle>
               <DialogDescription>
@@ -2714,11 +2715,11 @@ export default function ConfigurazioneGara() {
                 ))
               )}
             </div>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
 
         <Dialog open={pdfImportDialogOpen} onOpenChange={(open) => { setPdfImportDialogOpen(open); if (!open) { setPdfData(null); setPdfError(null); } }}>
-          <DialogContent className="max-w-lg">
+          <ResponsiveDialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>
                 {pdfData?.pdfType === 'partnership_reward' && pdfData.mese
@@ -2875,7 +2876,7 @@ export default function ConfigurazioneGara() {
                 {pdfData.soglieMobile && (
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold">Soglie Pista Mobile</Label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <div className="bg-muted/50 rounded p-2 text-center">
                         <div className="text-[10px] text-muted-foreground">S1</div>
                         <div className="text-sm font-semibold">{pdfData.soglieMobile.s1}</div>
@@ -2899,7 +2900,7 @@ export default function ConfigurazioneGara() {
                 {pdfData.soglieFisso && (
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold">Soglie Pista Fisso</Label>
-                    <div className="grid grid-cols-5 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                       {[pdfData.soglieFisso.s1, pdfData.soglieFisso.s2, pdfData.soglieFisso.s3, pdfData.soglieFisso.s4, pdfData.soglieFisso.s5].map((v, i) => (
                         <div key={i} className="bg-muted/50 rounded p-2 text-center">
                           <div className="text-[10px] text-muted-foreground">S{i + 1}</div>
@@ -2922,7 +2923,7 @@ export default function ConfigurazioneGara() {
                          pdfData.soglieExtraPIva.cluster || '—'}
                       </Badge>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {[pdfData.soglieExtraPIva.s1, pdfData.soglieExtraPIva.s2, pdfData.soglieExtraPIva.s3, pdfData.soglieExtraPIva.s4].map((v, i) => (
                         <div key={i} className="bg-muted/50 rounded p-2 text-center">
                           <div className="text-[10px] text-muted-foreground">S{i + 1}</div>
@@ -3048,11 +3049,11 @@ export default function ConfigurazioneGara() {
                 </>
               )}
             </DialogFooter>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
 
         <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
-          <DialogContent className="max-w-sm">
+          <ResponsiveDialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Storico Configurazioni</DialogTitle>
               <DialogDescription>Seleziona un mese per visualizzare o modificare la configurazione.</DialogDescription>
@@ -3075,11 +3076,11 @@ export default function ConfigurazioneGara() {
                 ))
               )}
             </div>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
 
         <Dialog open={addPdvDialogOpen} onOpenChange={setAddPdvDialogOpen}>
-          <DialogContent className="max-w-sm">
+          <ResponsiveDialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Aggiungi PDV</DialogTitle>
               <DialogDescription>Inserisci i dati del nuovo punto vendita.</DialogDescription>
@@ -3125,11 +3126,11 @@ export default function ConfigurazioneGara() {
                 <Plus className="h-4 w-4 mr-1" />Aggiungi
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
 
         <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
-          <DialogContent className="max-w-sm">
+          <ResponsiveDialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>{saveAsNew || !garaConfigRecord?.id ? 'Salva nuova configurazione' : 'Salva configurazione'}</DialogTitle>
               <DialogDescription>Inserisci un nome per la configurazione.</DialogDescription>
@@ -3154,11 +3155,11 @@ export default function ConfigurazioneGara() {
                 Salva
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
 
         <Dialog open={configListDialogOpen} onOpenChange={setConfigListDialogOpen}>
-          <DialogContent className="max-w-md">
+          <ResponsiveDialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Configurazioni salvate — {MONTHS.find(m => m.value === selectedMonth)?.label} {selectedYear}</DialogTitle>
               <DialogDescription>Seleziona una configurazione da caricare o elimina quelle non necessarie.</DialogDescription>
@@ -3191,13 +3192,13 @@ export default function ConfigurazioneGara() {
                 ))
               )}
             </div>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
 
         {/* Dialog: conferma sync struttura — admin imposta RS per ogni PDV
             mancante e può deselezionare righe prima del bulk-add. */}
         <Dialog open={syncStrutturaOpen} onOpenChange={setSyncStrutturaOpen}>
-          <DialogContent className="max-w-2xl">
+          <ResponsiveDialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Aggiungi PDV alla struttura</DialogTitle>
               <DialogDescription>
@@ -3283,7 +3284,7 @@ export default function ConfigurazioneGara() {
                 Conferma e aggiungi {syncStrutturaRows.filter(r => r.include && r.ragioneSociale.trim()).length}
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
       </div>
     </div>

@@ -17,6 +17,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import {
   Dialog,
   DialogContent,
@@ -1244,7 +1245,7 @@ function DashboardPdfExportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg" data-testid={`dialog-${testIdPrefix}-export`}>
+      <ResponsiveDialogContent className="max-w-lg" data-testid={`dialog-${testIdPrefix}-export`}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
@@ -1346,7 +1347,7 @@ function DashboardPdfExportDialog({
             <Download className="h-3.5 w-3.5 mr-1" />Esporta PDF
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ResponsiveDialogContent>
     </Dialog>
   );
 }

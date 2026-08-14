@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ResponsiveDialogContent } from '@/components/ui/responsive-dialog';
 import {
   Dialog,
   DialogContent,
@@ -418,7 +419,7 @@ export default function MappaturaBiSuite() {
     <div className="min-h-screen bg-background">
       <AppNavbar title="MyStoreDesk">
         {hasChanges && (
-          <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
+          <Badge variant="outline" className="hidden sm:inline-flex text-orange-600 border-orange-300 bg-orange-50">
             Modifiche non salvate
           </Badge>
         )}
@@ -428,8 +429,8 @@ export default function MappaturaBiSuite() {
           onClick={() => setShowResetDialog(true)}
           data-testid="btn-reset-defaults"
         >
-          <RotateCcw className="h-4 w-4 mr-2" />
-          Ripristina Default
+          <RotateCcw className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Ripristina Default</span>
         </Button>
         <Button
           size="sm"
@@ -776,7 +777,7 @@ export default function MappaturaBiSuite() {
       </AlertDialog>
 
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <DialogContent>
+        <ResponsiveDialogContent>
           <DialogHeader>
             <DialogTitle>Ripristinare le regole di default?</DialogTitle>
           </DialogHeader>
@@ -788,7 +789,7 @@ export default function MappaturaBiSuite() {
             <Button variant="outline" onClick={() => setShowResetDialog(false)}>Annulla</Button>
             <Button variant="destructive" onClick={resetToDefaults} data-testid="btn-confirm-reset">Ripristina</Button>
           </DialogFooter>
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
     </div>
   );
@@ -1082,7 +1083,7 @@ function RuleEditDialog({
 
   return (
     <Dialog open onOpenChange={() => onCancel()}>
-      <DialogContent className="max-w-lg">
+      <ResponsiveDialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Modifica Regola — {PISTA_LABELS[draft.pista]}</DialogTitle>
         </DialogHeader>
@@ -1247,7 +1248,7 @@ function RuleEditDialog({
           <Button variant="outline" onClick={onCancel}>Annulla</Button>
           <Button onClick={() => onSave(draft)} data-testid="btn-save-rule">Salva Regola</Button>
         </DialogFooter>
-      </DialogContent>
+      </ResponsiveDialogContent>
     </Dialog>
   );
 }
