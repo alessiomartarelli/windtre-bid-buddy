@@ -318,7 +318,7 @@ export const BiSuiteConnectionForm = ({ organizations, onCredentialsSaved }: BiS
                 </p>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              <div className="flex flex-col sm:flex-row gap-3 pt-4">
                 <Button
                   type="button"
                   variant="outline"

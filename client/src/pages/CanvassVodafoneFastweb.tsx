@@ -746,7 +746,7 @@ export default function CanvassVodafoneFastweb() {
         )}
 
         <Tabs defaultValue="listino">
-          <TabsList data-testid="tabs-canvass">
+          <TabsList className="flex-wrap h-auto" data-testid="tabs-canvass">
             <TabsTrigger value="listino" data-testid="tab-listino">Listino</TabsTrigger>
             <TabsTrigger value="step" data-testid="tab-step">Step di vendita</TabsTrigger>
             <TabsTrigger value="vendite" data-testid="tab-vendite">Vendite categorizzate</TabsTrigger>

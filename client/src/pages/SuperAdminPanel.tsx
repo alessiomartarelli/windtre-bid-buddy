@@ -26,6 +26,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -282,7 +283,7 @@ export default function SuperAdminPanel() {
                 Crea Admin + Organizzazione
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <ResponsiveDialogContent>
               <DialogHeader>
                 <DialogTitle>Crea nuovo Admin</DialogTitle>
                 <DialogDescription>
@@ -343,7 +344,7 @@ export default function SuperAdminPanel() {
                   )}
                 </Button>
               </form>
-            </DialogContent>
+            </ResponsiveDialogContent>
           </Dialog>
         </div>
 

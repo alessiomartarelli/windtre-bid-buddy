@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { Preventivo } from '@/hooks/usePreventivi';
 import { isMobileSimCore } from '@/lib/mobileCategories';
 import {
@@ -352,9 +352,12 @@ export function PdvDataTable({ preventivo }: PdvDataTableProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[600px]">
-            <div className="min-w-[900px]">
-              <Table>
+          <ScrollableTable>
+            {/* Tabella nativa: il wrapper overflow-auto del componente Table
+                spezzerebbe lo sticky top-0 dell'header rispetto a questo
+                contenitore di scroll verticale. */}
+            <div className="max-h-[600px] overflow-y-auto min-w-[900px]">
+              <table className="w-full caption-bottom text-sm">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="sticky top-0 bg-background z-10" rowSpan={2}>Codice</TableHead>
@@ -434,9 +437,9 @@ export function PdvDataTable({ preventivo }: PdvDataTableProps) {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </table>
             </div>
-          </ScrollArea>
+          </ScrollableTable>
         </CardContent>
       </Card>
     </div>

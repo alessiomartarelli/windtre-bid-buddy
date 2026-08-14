@@ -48,6 +48,7 @@ import { formatCurrency } from "@/utils/format";
 import StepExtraGaraIva from "@/components/wizard/StepExtraGaraIva";
 import { AppNavbar } from "@/components/AppNavbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import { Loader2, Save, ChevronLeft, ChevronRight, RefreshCw, Home, FolderOpen, Trash2, Clock, FilePlus, ArrowLeft } from "lucide-react";
 import { WizardHeader } from "@/components/wizard/WizardHeader";
 import { WizardSummaryCard } from "@/components/wizard/WizardSummaryCard";
@@ -2043,6 +2044,22 @@ const Preventivatore = () => {
             </CardFooter>
           </Card>
 
+          {/* Riepilogo mobile: visibile sotto lg, sotto il contenuto del wizard */}
+          <div className="lg:hidden space-y-4" data-testid="wizard-summary-mobile">
+            <WizardSummaryCard
+              premioMobile={effTotMobile}
+              premioFisso={effTotFisso}
+              premioPartnership={effTotPartnership}
+              premioEnergia={effTotEnergia}
+              premioAssicurazioni={effTotAssicurazioni}
+              premioProtecta={effTotProtecta}
+              premioExtraGaraIva={effTotExtraGaraIva}
+              currentStep={step}
+              tipologiaGara={configGara.tipologiaGara}
+              premiPerRS={premiPerRS}
+            />
+          </div>
+
           {/* Sidebar Summary (visible on larger screens) */}
           <div className="hidden lg:block space-y-4">
             <WizardSummaryCard
@@ -2084,7 +2101,7 @@ const Preventivatore = () => {
 
       {/* Dialog per salvare il preventivo */}
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
-        <DialogContent>
+        <ResponsiveDialogContent>
           <DialogHeader>
             <DialogTitle>{currentPreventivoId ? "Aggiorna Preventivo" : "Salva Preventivo"}</DialogTitle>
             <DialogDescription>
@@ -2144,7 +2161,7 @@ const Preventivatore = () => {
               )}
             </Button>
           </div>
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
 
       {/* Save Configuration Dialog */}
@@ -2152,7 +2169,7 @@ const Preventivatore = () => {
         setSaveConfigDialogOpen(open);
         if (!open) setSaveMode(null);
       }}>
-        <DialogContent className="sm:max-w-md">
+        <ResponsiveDialogContent className="sm:max-w-md">
           {activeConfigId && !saveMode ? (
             <>
               <DialogHeader>
@@ -2251,12 +2268,12 @@ const Preventivatore = () => {
               </DialogFooter>
             </>
           )}
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
 
       {/* Load Configuration Dialog */}
       <Dialog open={loadConfigDialogOpen} onOpenChange={setLoadConfigDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <ResponsiveDialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Carica Configurazione</DialogTitle>
             <DialogDescription>
@@ -2334,7 +2351,7 @@ const Preventivatore = () => {
               </>
             )}
           </div>
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
     </div>
   );

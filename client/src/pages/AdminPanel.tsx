@@ -24,6 +24,7 @@ import { z } from 'zod';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -657,7 +658,7 @@ export default function AdminPanel() {
       <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6 p-3 sm:p-4">
 
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent>
+          <ResponsiveDialogContent>
             <DialogHeader>
               <DialogTitle>Modifica Utente</DialogTitle>
               <DialogDescription>Modifica i dati di {editingUser?.email}</DialogDescription>
@@ -743,11 +744,11 @@ export default function AdminPanel() {
                 {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : 'Salva modifiche'}
               </Button>
             </form>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
 
         <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
-          <DialogContent>
+          <ResponsiveDialogContent>
             <DialogHeader>
               <DialogTitle>{isSelfPasswordChange ? 'Cambia la tua Password' : 'Cambia Password'}</DialogTitle>
               <DialogDescription>
@@ -779,11 +780,11 @@ export default function AdminPanel() {
                 {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : 'Imposta nuova password'}
               </Button>
             </form>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
 
         <Dialog open={orgNameDialogOpen} onOpenChange={setOrgNameDialogOpen}>
-          <DialogContent>
+          <ResponsiveDialogContent>
             <DialogHeader>
               <DialogTitle>Rinomina Organizzazione</DialogTitle>
               <DialogDescription>Modifica il nome della tua organizzazione</DialogDescription>
@@ -797,11 +798,11 @@ export default function AdminPanel() {
                 {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : 'Salva'}
               </Button>
             </form>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
 
         <Dialog open={addettiDialogOpen} onOpenChange={setAddettiDialogOpen}>
-          <DialogContent>
+          <ResponsiveDialogContent>
             <DialogHeader>
               <DialogTitle>Addetti BiSuite</DialogTitle>
               <DialogDescription>
@@ -856,7 +857,7 @@ export default function AdminPanel() {
                 {addettiSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : 'Salva Addetti'}
               </Button>
             </div>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
 
         <div className="flex items-center justify-between">
@@ -1042,7 +1043,7 @@ export default function AdminPanel() {
 
             {/* Dialog: Nuovo / Modifica PDV */}
             <Dialog open={pdvDialogOpen} onOpenChange={setPdvDialogOpen}>
-              <DialogContent className="max-w-lg">
+              <ResponsiveDialogContent className="max-w-lg">
                 <DialogHeader>
                   <DialogTitle>{pdvDialogMode === 'create' ? 'Nuovo Punto Vendita' : 'Modifica Punto Vendita'}</DialogTitle>
                   <DialogDescription>
@@ -1126,12 +1127,12 @@ export default function AdminPanel() {
                     {pdvSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : (pdvDialogMode === 'create' ? 'Crea PDV' : 'Salva modifiche')}
                   </Button>
                 </form>
-              </DialogContent>
+              </ResponsiveDialogContent>
             </Dialog>
 
             {/* Dialog: Rinomina RS */}
             <Dialog open={rsRenameDialogOpen} onOpenChange={setRsRenameDialogOpen}>
-              <DialogContent>
+              <ResponsiveDialogContent>
                 <DialogHeader>
                   <DialogTitle>Rinomina Ragione Sociale</DialogTitle>
                   <DialogDescription>
@@ -1151,7 +1152,7 @@ export default function AdminPanel() {
                     {rsRenameSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : 'Salva'}
                   </Button>
                 </form>
-              </DialogContent>
+              </ResponsiveDialogContent>
             </Dialog>
           </TabsContent>
 
@@ -1241,7 +1242,7 @@ export default function AdminPanel() {
                       <span className="sm:hidden">Aggiungi</span>
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <ResponsiveDialogContent>
                     <DialogHeader>
                       <DialogTitle>Nuovo Utente</DialogTitle>
                       <DialogDescription>Aggiungi un nuovo utente al team di {organization?.name}</DialogDescription>
@@ -1278,7 +1279,7 @@ export default function AdminPanel() {
                         {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creazione...</> : 'Crea Utente'}
                       </Button>
                     </form>
-                  </DialogContent>
+                  </ResponsiveDialogContent>
                 </Dialog>
               </CardHeader>
               <CardContent>

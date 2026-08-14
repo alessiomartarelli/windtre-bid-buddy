@@ -368,7 +368,7 @@ export const BiSuiteSalesTest = ({ organizations }: BiSuiteSalesTestProps) => {
           </div>
 
           {/* Action buttons */}
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <Button
               variant="outline"
               onClick={handleTestConnection}

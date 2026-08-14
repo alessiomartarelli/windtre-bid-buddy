@@ -232,7 +232,7 @@ export default function IncentivazioneInterna() {
               Valenze piste + Accessori/Servizi live da BiSuite · proiezione e sblocco gara
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v, 10))}>
               <SelectTrigger className="w-[140px]" data-testid="select-month"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -493,7 +493,7 @@ function SectionView(props: {
       </div>
 
       {/* Search */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Input
           placeholder="Cerca addetto…"
           value={search}

@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -1076,7 +1078,7 @@ export default function CustomerJourneyPage() {
                   data-testid="input-search-journey"
                 />
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <Button
                   variant={typeFilter === "tutti" ? "default" : "outline"}
                   size="sm"
@@ -2010,11 +2012,14 @@ function CustomerJourneyTimeline({
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        <ScrollableTable>
+          {/* Scroll verticale delimitato: l'header sticky resta visibile
+              scorrendo le righe (mobile) */}
+          <div className="max-h-[480px] overflow-y-auto min-w-max">
           <table className="border-collapse w-full">
             <thead>
               <tr>
-                <th className="text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-4 py-2 border-b border-border min-w-[220px]">
+                <th className="sticky top-0 z-20 bg-card text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-4 py-2 border-b border-border min-w-[220px]">
                   Contratto
                 </th>
                 {months.map((mi) => {
@@ -2023,7 +2028,7 @@ function CustomerJourneyTimeline({
                   return (
                     <th
                       key={mi}
-                      className="text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-2 py-2 border-b border-border min-w-[64px]"
+                      className="sticky top-0 z-10 bg-card text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-2 py-2 border-b border-border min-w-[64px]"
                       data-testid={`timeline-col-${mi}`}
                     >
                       <div>{monthIndexLabel(mi)}</div>
@@ -2138,7 +2143,8 @@ function CustomerJourneyTimeline({
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+        </ScrollableTable>
       </CardContent>
     </Card>
   );
@@ -2777,7 +2783,7 @@ function ItemDetailsDialog({
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent data-testid="dialog-edit-details">
+      <ResponsiveDialogContent data-testid="dialog-edit-details">
         <DialogHeader>
           <DialogTitle>Modifica dettagli contratto</DialogTitle>
           <DialogDescription>
@@ -2848,7 +2854,7 @@ function ItemDetailsDialog({
             Salva
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ResponsiveDialogContent>
     </Dialog>
   );
 }
