@@ -344,7 +344,7 @@ export function PdvDataTable({ preventivo }: PdvDataTableProps) {
 
 
       {/* Data Table - tutte le piste */}
-      <Card>
+      <Card data-testid="card-pdv-table">
         <CardHeader>
           <CardTitle>Tabella Dettaglio PDV</CardTitle>
           <CardDescription>

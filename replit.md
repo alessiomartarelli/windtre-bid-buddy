@@ -202,6 +202,7 @@ Riepilogo — suite → script → prerequisiti:
 | Pesi performance UI (2, Playwright) | `run-gara-config-weights-ui-tests.sh` | app + DB + chromium | ~25s |
 | SOS Caring import UI (1, Playwright) | `run-sos-caring-import-ui-tests.sh` | app + DB + chromium | ~25s |
 | Home landing (3, Playwright) | `run-home-landing-ui-tests.sh` | app + DB + chromium | ~25s |
+| Sticky header mobile (1, Playwright) | `run-mobile-sticky-header-ui-tests.sh` | app + DB + chromium | ~10s |
 | Type-check | `run-typecheck.sh` | — (statico) | ~10-20s |
 | Integration orchestrator | `run-deploy-integration-tests.sh` | `DATABASE_URL` | ~70-90s |
 

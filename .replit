@@ -553,3 +553,14 @@ integrations = ["javascript_log_in_with_replit:2.0.0"]
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[[workflows.workflow]]
+name = "mobile-sticky-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-mobile-sticky-header-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true

@@ -117,6 +117,7 @@ SUITES=(
   "run-gara-config-weights-ui-tests.sh"
   "run-sos-caring-import-ui-tests.sh"
   "run-home-landing-ui-tests.sh"
+  "run-mobile-sticky-header-ui-tests.sh"
 )
 
 echo "[integration-tests] eseguo ${#SUITES[@]} suite dev-server/DB-backed ..."
