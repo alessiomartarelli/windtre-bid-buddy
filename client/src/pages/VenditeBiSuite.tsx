@@ -37,6 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import {
   Select,
   SelectContent,
@@ -1883,7 +1884,7 @@ export default function VenditeBiSuite() {
       />
 
       <Dialog open={reconcileOpen} onOpenChange={(o) => !reconcileMutation.isPending && setReconcileOpen(o)}>
-        <DialogContent className="max-w-md" data-testid="dialog-reconcile">
+        <ResponsiveDialogContent className="max-w-md" data-testid="dialog-reconcile">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Route className="h-4 w-4" />
@@ -1974,7 +1975,7 @@ export default function VenditeBiSuite() {
               </div>
             </div>
           </div>
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
     </div>
   );
@@ -2056,7 +2057,7 @@ function SaleDetailDialog({
 
   return (
     <Dialog open={!!sale} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-[95vw] sm:max-w-6xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+      <ResponsiveDialogContent className="sm:max-w-6xl sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5 text-primary" />
@@ -2337,7 +2338,7 @@ function SaleDetailDialog({
             </details>
           )}
         </div>
-      </DialogContent>
+      </ResponsiveDialogContent>
     </Dialog>
   );
 }

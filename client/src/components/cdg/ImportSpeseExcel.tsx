@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -265,7 +266,7 @@ export function ImportSpeseExcel({
       />
 
       <Dialog open={open} onOpenChange={o => { if (!o) { setOpen(false); setPreview(null); setRows([]); } }}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <ResponsiveDialogContent className="max-w-4xl sm:max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Anteprima import spese</DialogTitle>
             <DialogDescription>
@@ -273,6 +274,7 @@ export function ImportSpeseExcel({
             </DialogDescription>
           </DialogHeader>
           {preview && (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -317,6 +319,7 @@ export function ImportSpeseExcel({
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => { setOpen(false); setPreview(null); setRows([]); }}>Annulla</Button>
@@ -329,7 +332,7 @@ export function ImportSpeseExcel({
               Importa {preview?.valide || 0} righe
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
     </>
   );

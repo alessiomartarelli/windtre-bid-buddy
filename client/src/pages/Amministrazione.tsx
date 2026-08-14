@@ -1433,7 +1433,7 @@ export default function Amministrazione() {
 
         {tab === "analisi" ? (
           <Tabs value={tab} onValueChange={(v) => { if (isTabKey(v)) setTab(v); }} className="space-y-4">
-            <TabsList>
+            <TabsList className="h-auto flex-wrap justify-start">
               {amministrazioneEnabled && (
                 <>
                   <TabsTrigger value="contabile" data-testid="tab-contabile-top2"><BookOpen className="h-4 w-4 mr-2" />Prima Nota Contabile</TabsTrigger>
@@ -1451,7 +1451,7 @@ export default function Amministrazione() {
           </Tabs>
         ) : tab === "controllo" && cdgEnabled ? (
           <Tabs value={tab} onValueChange={(v) => { if (isTabKey(v)) setTab(v); }} className="space-y-4">
-            <TabsList>
+            <TabsList className="h-auto flex-wrap justify-start">
               {amministrazioneEnabled && (
                 <>
                   <TabsTrigger value="contabile" data-testid="tab-contabile-top"><BookOpen className="h-4 w-4 mr-2" />Prima Nota Contabile</TabsTrigger>
@@ -1475,7 +1475,7 @@ export default function Amministrazione() {
             className="space-y-4"
           >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <TabsList>
+              <TabsList className="h-auto flex-wrap justify-start">
                 {amministrazioneEnabled && (
                   <>
                     <TabsTrigger value="contabile" data-testid="tab-contabile">
@@ -1723,7 +1723,7 @@ export default function Amministrazione() {
                     value={ivaCategoryFilter}
                     onValueChange={(v) => setIvaCategoryFilter(v as IvaCategoria | "all")}
                   >
-                    <SelectTrigger id="iva-cat-filter" className="h-8 w-[200px]" data-testid="select-iva-category">
+                    <SelectTrigger id="iva-cat-filter" className="h-8 w-full sm:w-[200px]" data-testid="select-iva-category">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

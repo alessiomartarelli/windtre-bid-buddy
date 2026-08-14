@@ -22,6 +22,7 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -33,6 +34,7 @@ import {
 } from "lucide-react";
 import { KpiCardsSkeleton, DataTableSkeleton } from "@/components/skeletons";
 import { ImportSpeseExcel } from "@/components/cdg/ImportSpeseExcel";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   PieChart, Pie, Cell,
@@ -161,12 +163,13 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const orgId = profile?.organizationId || "";
 
   const [tab, setTab] = useState<TabKey>("dashboard");
-  const [filterRs, setFilterRs] = useState<string>("all");
+  // Filtri a selezione multipla: array vuoto = nessun filtro ("tutti").
+  const [filterRs, setFilterRs] = useState<string[]>([]);
   const [filterCompetenza, setFilterCompetenza] = useState<string>("");
   const [filterMesePagamento, setFilterMesePagamento] = useState<string>("");
-  const [filterCategoria, setFilterCategoria] = useState<string>("all");
-  const [filterFornitore, setFilterFornitore] = useState<string>("all");
-  const [filterPdv, setFilterPdv] = useState<string>("all");
+  const [filterCategoria, setFilterCategoria] = useState<string[]>([]);
+  const [filterFornitore, setFilterFornitore] = useState<string[]>([]);
+  const [filterPdv, setFilterPdv] = useState<string[]>([]);
   const [filterImportoMin, setFilterImportoMin] = useState<string>("");
   const [filterImportoMax, setFilterImportoMax] = useState<string>("");
   // Drill-down categoria: cliccando un grafico o una riga del riepilogo si
@@ -221,10 +224,9 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const pdvList = pdvQ.data || [];
 
   const speseQ = useQuery<CdgSpesa[]>({
-    queryKey: ["/api/cdg/spese", filterRs, filterCompetenza],
+    queryKey: ["/api/cdg/spese", filterCompetenza],
     queryFn: async () => {
       const p = new URLSearchParams();
-      if (filterRs !== "all") p.set("rs", filterRs);
       if (filterCompetenza) p.set("competenza", filterCompetenza);
       return apiJson<CdgSpesa[]>("GET", `/api/cdg/spese?${p}`);
     },
@@ -237,11 +239,12 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
     const min = filterImportoMin.trim() ? parseFloat(filterImportoMin.replace(",", ".")) : null;
     const max = filterImportoMax.trim() ? parseFloat(filterImportoMax.replace(",", ".")) : null;
     return speseAll.filter(s => {
-      if (filterCategoria !== "all" && s.categoriaId !== filterCategoria) return false;
-      if (filterFornitore !== "all" && s.fornitoreId !== filterFornitore) return false;
+      if (filterRs.length > 0 && !filterRs.includes(s.ragioneSociale)) return false;
+      if (filterCategoria.length > 0 && !filterCategoria.includes(s.categoriaId || "")) return false;
+      if (filterFornitore.length > 0 && !filterFornitore.includes(s.fornitoreId || "")) return false;
       // Filtro PDV per codice. Tutte le spese referenziano il PDV via
       // pdvCodice (= organization_config.puntiVendita.codicePos).
-      if (filterPdv !== "all" && (s.pdvCodice || "") !== filterPdv) return false;
+      if (filterPdv.length > 0 && !filterPdv.includes(s.pdvCodice || "")) return false;
       if (filterMesePagamento) {
         const mp = (s.dataPagamento || "").slice(0, 7);
         if (mp !== filterMesePagamento) return false;
@@ -251,7 +254,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
       if (max !== null && isFinite(max) && imp > max) return false;
       return true;
     });
-  }, [speseAll, filterCategoria, filterFornitore, filterPdv, filterMesePagamento, filterImportoMin, filterImportoMax]);
+  }, [speseAll, filterRs, filterCategoria, filterFornitore, filterPdv, filterMesePagamento, filterImportoMin, filterImportoMax]);
 
   const catById = useMemo(() => new Map(categorie.map(c => [c.id, c])), [categorie]);
   const fornById = useMemo(() => new Map(fornitori.map(f => [f.id, f])), [fornitori]);
@@ -567,13 +570,15 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               <div>
                 <Label className="text-xs">Ragione Sociale</Label>
-                <Select value={filterRs} onValueChange={setFilterRs}>
-                  <SelectTrigger data-testid="select-filter-rs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tutte</SelectItem>
-                    {ragioniSociali.map(rs => <SelectItem key={`${rs.origine}-${rs.nome}`} value={rs.nome}>{rs.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <MultiSelectFilter
+                  values={filterRs}
+                  onChange={setFilterRs}
+                  options={ragioniSociali.map(rs => ({ value: rs.nome, label: rs.nome }))}
+                  allLabel="Tutte"
+                  countLabel={(n) => `${n} RS selezionate`}
+                  searchPlaceholder="Cerca RS..."
+                  testid="select-filter-rs"
+                />
               </div>
               <div>
                 <Label className="text-xs">Competenza</Label>
@@ -585,33 +590,45 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
               </div>
               <div>
                 <Label className="text-xs">Categoria</Label>
-                <Select value={filterCategoria} onValueChange={setFilterCategoria}>
-                  <SelectTrigger data-testid="select-filter-categoria"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tutte</SelectItem>
-                    {categorie.filter(c => filterRs === "all" || (c.ragioniSociali || []).includes(filterRs)).map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <MultiSelectFilter
+                  values={filterCategoria}
+                  onChange={setFilterCategoria}
+                  options={categorie
+                    .filter(c => filterRs.length === 0 || (c.ragioniSociali || []).some(r => filterRs.includes(r)))
+                    .map(c => ({ value: c.id, label: c.nome }))}
+                  allLabel="Tutte"
+                  countLabel={(n) => `${n} categorie`}
+                  searchPlaceholder="Cerca categoria..."
+                  testid="select-filter-categoria"
+                />
               </div>
               <div>
                 <Label className="text-xs">Fornitore</Label>
-                <Select value={filterFornitore} onValueChange={setFilterFornitore}>
-                  <SelectTrigger data-testid="select-filter-fornitore"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tutti</SelectItem>
-                    {fornitori.filter(f => filterRs === "all" || (f.ragioniSociali || []).includes(filterRs)).map(f => <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <MultiSelectFilter
+                  values={filterFornitore}
+                  onChange={setFilterFornitore}
+                  options={fornitori
+                    .filter(f => filterRs.length === 0 || (f.ragioniSociali || []).some(r => filterRs.includes(r)))
+                    .map(f => ({ value: f.id, label: f.nome }))}
+                  allLabel="Tutti"
+                  countLabel={(n) => `${n} fornitori`}
+                  searchPlaceholder="Cerca fornitore..."
+                  testid="select-filter-fornitore"
+                />
               </div>
               <div>
                 <Label className="text-xs">PDV</Label>
-                <Select value={filterPdv} onValueChange={setFilterPdv}>
-                  <SelectTrigger data-testid="select-filter-pdv"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tutti</SelectItem>
-                    {pdvList.filter(p => filterRs === "all" || p.ragioneSociale === filterRs).map(p => <SelectItem key={p.codice} value={p.codice}>{p.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <MultiSelectFilter
+                  values={filterPdv}
+                  onChange={setFilterPdv}
+                  options={pdvList
+                    .filter(p => filterRs.length === 0 || filterRs.includes(p.ragioneSociale))
+                    .map(p => ({ value: p.codice, label: p.nome }))}
+                  allLabel="Tutti"
+                  countLabel={(n) => `${n} PDV`}
+                  searchPlaceholder="Cerca PDV..."
+                  testid="select-filter-pdv"
+                />
               </div>
               <div>
                 <Label className="text-xs">Importo (min - max)</Label>
@@ -623,8 +640,8 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
             </div>
             <div className="flex items-center justify-end gap-2 mt-3">
               <Button variant="outline" size="sm" onClick={() => {
-                setFilterRs("all"); setFilterCompetenza(""); setFilterMesePagamento("");
-                setFilterCategoria("all"); setFilterFornitore("all"); setFilterPdv("all");
+                setFilterRs([]); setFilterCompetenza(""); setFilterMesePagamento("");
+                setFilterCategoria([]); setFilterFornitore([]); setFilterPdv([]);
                 setFilterImportoMin(""); setFilterImportoMax("");
               }} data-testid="button-reset-filters">Reset</Button>
               <Button variant="outline" size="sm" onClick={exportXlsx} data-testid="button-export-xlsx">
@@ -635,7 +652,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
         </Card>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
-          <TabsList>
+          <TabsList className="h-auto flex-wrap justify-start">
             <TabsTrigger value="dashboard" data-testid="tab-dashboard"><TrendingUp className="h-4 w-4 mr-1" />Dashboard</TabsTrigger>
             <TabsTrigger value="spese" data-testid="tab-spese"><FileText className="h-4 w-4 mr-1" />Spese</TabsTrigger>
             <TabsTrigger value="anagrafiche" data-testid="tab-anagrafiche"><Building2 className="h-4 w-4 mr-1" />Anagrafiche</TabsTrigger>
@@ -1120,6 +1137,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                 {pivotData.summaryRows.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4">Nessun dato.</p>
                 ) : (
+                  <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1152,6 +1170,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                       ))}
                     </TableBody>
                   </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1170,7 +1189,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
               const periodo = catDettaglio.ym ? monthLabel(catDettaglio.ym) : `anno ${catDettaglio.anno}`;
               return (
                 <Dialog open onOpenChange={(o) => { if (!o) setCatDettaglio(null); }}>
-                  <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col" data-testid="dialog-cat-dettaglio">
+                  <ResponsiveDialogContent className="max-w-3xl sm:max-h-[85vh] flex flex-col" data-testid="dialog-cat-dettaglio">
                     <DialogHeader>
                       <DialogTitle>Spese "{catDettaglio.categoria}" — {periodo}</DialogTitle>
                       <DialogDescription>
@@ -1209,7 +1228,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         </div>
                       </div>
                     )}
-                  </DialogContent>
+                  </ResponsiveDialogContent>
                 </Dialog>
               );
             })()}
@@ -1722,7 +1741,7 @@ function SpesaDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <ResponsiveDialogContent className="max-w-2xl sm:max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Modifica spesa" : "Nuova spesa"}</DialogTitle>
             <DialogDescription>Doppia data: pagamento (cassa) + mese di competenza (accrual).</DialogDescription>
@@ -2010,12 +2029,12 @@ function SpesaDialog({
               Salva
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
 
       {quickAdd && (
         <Dialog open onOpenChange={(v) => { if (!v) setQuickAdd(null); }}>
-          <DialogContent className="max-w-sm">
+          <ResponsiveDialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Nuova {quickAdd.kind === "categoria" ? "categoria" : "fornitore"} per {rs}</DialogTitle>
               <DialogDescription>La voce verrà creata associata a "{rs}". Potrai associarla ad altre Ragioni Sociali dalla tab Anagrafiche.</DialogDescription>
@@ -2037,7 +2056,7 @@ function SpesaDialog({
                 Crea
               </Button>
             </DialogFooter>
-          </DialogContent>
+          </ResponsiveDialogContent>
         </Dialog>
       )}
     </>
@@ -2136,6 +2155,7 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
         {ragioniSociali.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">Nessuna Ragione Sociale. Creane una per iniziare.</p>
         ) : (
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>P.IVA</TableHead><TableHead>Note</TableHead><TableHead></TableHead></TableRow></TableHeader>
             <TableBody>
@@ -2185,11 +2205,12 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
               })}
             </TableBody>
           </Table>
+          </div>
         )}
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <ResponsiveDialogContent>
           <DialogHeader><DialogTitle>{editing ? "Modifica RS" : "Nuova Ragione Sociale"}</DialogTitle></DialogHeader>
           <div className="space-y-3 py-2">
             <div><Label>Nome *</Label><Input value={nome} onChange={(e) => setNome(e.target.value)} data-testid="input-rs-nome" /></div>
@@ -2239,7 +2260,7 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
             <Button variant="outline" onClick={() => setOpen(false)}>Annulla</Button>
             <Button onClick={save} data-testid="button-save-rs">Salva</Button>
           </DialogFooter>
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
     </Card>
   );
@@ -2265,7 +2286,7 @@ function AnagraficheRsScopedCard({
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="categorie">
-          <TabsList>
+          <TabsList className="h-auto flex-wrap justify-start">
             <TabsTrigger value="categorie" data-testid="tab-anag-categorie"><Tag className="h-4 w-4 mr-1" />Categorie</TabsTrigger>
             <TabsTrigger value="fornitori" data-testid="tab-anag-fornitori"><Truck className="h-4 w-4 mr-1" />Fornitori</TabsTrigger>
             <TabsTrigger value="pdv" data-testid="tab-anag-pdv"><Store className="h-4 w-4 mr-1" />PDV</TabsTrigger>
@@ -2402,7 +2423,7 @@ function MultiRsAnagraficaCrud<T extends { id: string; nome: string; ragioniSoci
         <div className="flex items-center gap-2">
           <Label className="text-xs">Filtra per RS:</Label>
           <Select value={filterRs} onValueChange={setFilterRs}>
-            <SelectTrigger className="w-[260px]" data-testid={`select-filter-${testidPrefix}-rs`}><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[260px]" data-testid={`select-filter-${testidPrefix}-rs`}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tutte</SelectItem>
               {ragioniSociali.map(rs => <SelectItem key={`${rs.origine}-${rs.nome}`} value={rs.nome}>{rs.nome}</SelectItem>)}
@@ -2418,6 +2439,7 @@ function MultiRsAnagraficaCrud<T extends { id: string; nome: string; ragioniSoci
       ) : filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4 text-center">Nessuna voce.</p>
       ) : (
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader><TableRow>
             {fields.map(f => <TableHead key={f.key}>{f.label}</TableHead>)}
@@ -2477,10 +2499,11 @@ function MultiRsAnagraficaCrud<T extends { id: string; nome: string; ragioniSoci
             ))}
           </TableBody>
         </Table>
+        </div>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
+        <ResponsiveDialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editing ? "Modifica" : "Nuovo"}</DialogTitle>
             <DialogDescription>Seleziona una o più Ragioni Sociali a cui associare la voce.</DialogDescription>
@@ -2536,7 +2559,7 @@ function MultiRsAnagraficaCrud<T extends { id: string; nome: string; ragioniSoci
             <Button variant="outline" onClick={() => setOpen(false)}>Annulla</Button>
             <Button onClick={save} data-testid={`button-save-${testidPrefix}`}>Salva</Button>
           </DialogFooter>
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
     </div>
   );
@@ -2628,6 +2651,7 @@ function PdvCrudView({
                 <Building2 className="h-4 w-4" /> {rs}
                 <Badge variant="outline" className="ml-auto">{items.length}</Badge>
               </div>
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -2664,6 +2688,7 @@ function PdvCrudView({
                   })}
                 </TableBody>
               </Table>
+              </div>
             </div>
           ))}
         </div>
@@ -2776,7 +2801,7 @@ function PdvManualeDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <ResponsiveDialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{isEdit ? (isInherited ? "Modifica PDV ereditato" : "Modifica PDV") : "Nuovo PDV manuale"}</DialogTitle>
           <DialogDescription>
@@ -2827,7 +2852,7 @@ function PdvManualeDialog({
             Salva
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ResponsiveDialogContent>
     </Dialog>
   );
 }

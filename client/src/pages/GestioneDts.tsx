@@ -310,7 +310,7 @@ export default function GestioneDts() {
           <>
             <div className="flex flex-wrap items-center gap-3">
               <Select value={month} onValueChange={(v) => setSelMonth(v)}>
-                <SelectTrigger className="w-[200px]" data-testid="select-dts-month">
+                <SelectTrigger className="w-full sm:w-[200px]" data-testid="select-dts-month">
                   <SelectValue placeholder="Mese" />
                 </SelectTrigger>
                 <SelectContent>
@@ -320,7 +320,7 @@ export default function GestioneDts() {
                 </SelectContent>
               </Select>
               <Select value={selConsulente} onValueChange={setSelConsulente}>
-                <SelectTrigger className="w-[220px]" data-testid="select-dts-consulente">
+                <SelectTrigger className="w-full sm:w-[220px]" data-testid="select-dts-consulente">
                   <SelectValue placeholder="Consulente" />
                 </SelectTrigger>
                 <SelectContent>
@@ -331,7 +331,7 @@ export default function GestioneDts() {
                 </SelectContent>
               </Select>
               <Select value={selNegozio} onValueChange={setSelNegozio}>
-                <SelectTrigger className="w-[220px]" data-testid="select-dts-negozio">
+                <SelectTrigger className="w-full sm:w-[220px]" data-testid="select-dts-negozio">
                   <SelectValue placeholder="Negozio" />
                 </SelectTrigger>
                 <SelectContent>

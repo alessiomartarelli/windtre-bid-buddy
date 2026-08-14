@@ -278,8 +278,10 @@ test('drill-down categoria: legenda, riepilogo e dialog rispettano il filtro PDV
     }
 
     // --- Filtro PDV = PDV1: restano solo le spese con quel pdvCodice ---
+    // Filtro PDV multiselect: il popover resta aperto, chiudi con Escape.
     await page.getByTestId('select-filter-pdv').click();
     await page.getByRole('option', { name: pdv1Nome, exact: true }).click();
+    await page.keyboard.press('Escape');
     await waitForFlatText(page, 'legend-cat-0', '100,00');
     {
       const legendText = flat(await page.getByTestId('legend-cat-0').innerText());
@@ -304,8 +306,12 @@ test('drill-down categoria: legenda, riepilogo e dialog rispettano il filtro PDV
     }
 
     // --- Filtro PDV = PDV2: solo B ---
+    // Multiselect: deseleziona PDV1 e seleziona PDV2 (una selezione in più
+    // si sommerebbe, non sostituirebbe).
     await page.getByTestId('select-filter-pdv').click();
+    await page.getByRole('option', { name: pdv1Nome, exact: true }).click();
     await page.getByRole('option', { name: pdv2Nome, exact: true }).click();
+    await page.keyboard.press('Escape');
     await waitForFlatText(page, 'legend-cat-0', '200,00');
     {
       const { rowIds } = await openAndReadDialog(page, 'legend-cat-0');
@@ -406,6 +412,7 @@ test('drill-down categoria: legenda, riepilogo e dialog rispettano i filtri RS e
     // --- Filtro RS = rs1 (server-side): le spese di rs2 spariscono ovunque ---
     await page.getByTestId('select-filter-rs').click();
     await page.getByRole('option', { name: rs1, exact: true }).click();
+    await page.keyboard.press('Escape');
     await waitForFlatText(page, 'legend-cat-0', '150,00');
     {
       const { text, rowIds } = await openAndReadDialog(page, 'legend-cat-0');
@@ -578,6 +585,7 @@ test('drill-down categoria: legenda, riepilogo e dialog rispettano i filtri tool
     // --- Filtro fornitore = F1: B sparisce ovunque ---
     await page.getByTestId('select-filter-fornitore').click();
     await page.getByRole('option', { name: forn1Nome, exact: true }).click();
+    await page.keyboard.press('Escape');
     await waitForFlatText(page, 'legend-cat-0', '150,00');
     {
       const legendText = flat(await page.getByTestId('legend-cat-0').innerText());
