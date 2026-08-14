@@ -1169,7 +1169,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
               const periodo = catDettaglio.ym ? monthLabel(catDettaglio.ym) : `anno ${catDettaglio.anno}`;
               return (
                 <Dialog open onOpenChange={(o) => { if (!o) setCatDettaglio(null); }}>
-                  <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto" data-testid="dialog-cat-dettaglio">
+                  <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col" data-testid="dialog-cat-dettaglio">
                     <DialogHeader>
                       <DialogTitle>Spese "{catDettaglio.categoria}" — {periodo}</DialogTitle>
                       <DialogDescription>
@@ -1179,32 +1179,34 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                     {rows.length === 0 ? (
                       <p className="text-sm text-muted-foreground py-4">Nessuna spesa per questa combinazione (controlla i filtri attivi in alto).</p>
                     ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Data pag.</TableHead>
-                            <TableHead>Comp.</TableHead>
-                            {!catDettaglio.rs && <TableHead>RS</TableHead>}
-                            <TableHead>Fornitore</TableHead>
-                            <TableHead>PDV</TableHead>
-                            <TableHead>Descrizione</TableHead>
-                            <TableHead className="text-right">Netto IVA</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {rows.map(s => (
-                            <TableRow key={s.id} data-testid={`row-cat-dettaglio-${s.id}`}>
-                              <TableCell className="whitespace-nowrap">{fmtDateIt(s.dataPagamento)}</TableCell>
-                              <TableCell><Badge variant="outline">{monthLabel(s.meseCompetenza)}</Badge></TableCell>
-                              {!catDettaglio.rs && <TableCell className="text-xs">{s.ragioneSociale}</TableCell>}
-                              <TableCell className="text-xs">{(s.fornitoreId && fornById.get(s.fornitoreId)?.nome) || <span className="text-muted-foreground">—</span>}</TableCell>
-                              <TableCell className="text-xs">{s.pdvCodice ? (pdvByCodice.get(s.pdvCodice)?.nome || s.pdvCodice) : <span className="text-muted-foreground">—</span>}</TableCell>
-                              <TableCell className="max-w-[280px] truncate" title={s.descrizione}>{s.descrizione}</TableCell>
-                              <TableCell className="text-right font-mono">{fmtEur(parseNettoIva(s))}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                      <div className="overflow-y-auto -mx-2 px-2 divide-y">
+                        {rows.map(s => {
+                          const forn = s.fornitoreId ? fornById.get(s.fornitoreId)?.nome : null;
+                          const pdvNome = s.pdvCodice ? (pdvByCodice.get(s.pdvCodice)?.nome || s.pdvCodice) : null;
+                          const sotto = [
+                            !catDettaglio.rs ? s.ragioneSociale : null,
+                            forn,
+                            pdvNome,
+                          ].filter(Boolean).join(" · ");
+                          return (
+                            <div key={s.id} className="flex items-start gap-3 py-2.5" data-testid={`row-cat-dettaglio-${s.id}`}>
+                              <div className="w-[92px] shrink-0 pt-0.5">
+                                <div className="text-xs text-muted-foreground whitespace-nowrap">{fmtDateIt(s.dataPagamento)}</div>
+                                <Badge variant="outline" className="mt-1 text-[10px] px-1.5">{monthLabel(s.meseCompetenza)}</Badge>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium break-words">{s.descrizione}</div>
+                                {sotto && <div className="text-xs text-muted-foreground mt-0.5 break-words">{sotto}</div>}
+                              </div>
+                              <div className="shrink-0 text-right font-mono text-sm pt-0.5">{fmtEur(parseNettoIva(s))}</div>
+                            </div>
+                          );
+                        })}
+                        <div className="flex items-center justify-between py-2.5 font-semibold text-sm">
+                          <span>Totale ({rows.length} spese)</span>
+                          <span className="font-mono">{fmtEur(totale)}</span>
+                        </div>
+                      </div>
                     )}
                   </DialogContent>
                 </Dialog>
