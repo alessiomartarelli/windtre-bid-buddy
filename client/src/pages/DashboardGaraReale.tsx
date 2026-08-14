@@ -1585,6 +1585,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'punti' | 'pezzi'>('punti');
   const [hydratedOrgId, setHydratedOrgId] = useState<string | null>(null);
+  const [viewModeHydratedOrg, setViewModeHydratedOrg] = useState<string | null>(null);
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfPrefs, setPdfPrefs] = useState<DashboardPdfPrefs>({ selectedColumns: null, nota: "", logoDataUrl: null });
   const [pdfPrefsHydratedOrg, setPdfPrefsHydratedOrg] = useState<string | null>(null);
@@ -1631,6 +1632,33 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
     setExpanded(next);
     setHydratedOrgId(orgId);
   }, [orgId, hydratedOrgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (viewModeHydratedOrg === orgId) return;
+    try {
+      const raw = localStorage.getItem(`${TABELLA_VIEW_MODE_STORAGE_PREFIX}${orgId}`);
+      setViewMode(raw === 'pezzi' ? 'pezzi' : 'punti');
+    } catch {
+      setViewMode('punti');
+    }
+    setViewModeHydratedOrg(orgId);
+  }, [orgId, viewModeHydratedOrg]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (viewModeHydratedOrg !== orgId) return;
+    try {
+      const key = `${TABELLA_VIEW_MODE_STORAGE_PREFIX}${orgId}`;
+      if (viewMode === 'punti') {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, viewMode);
+      }
+    } catch {
+      // ignore quota / serialization errors
+    }
+  }, [viewMode, orgId, viewModeHydratedOrg]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -2339,6 +2367,8 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
 
 const EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-expanded-rs:";
 const TABELLA_EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-tabella-expanded-rs:";
+// Task #386: persist toggle Punti/Pezzi della Tabella PDV × Pista, per org.
+const TABELLA_VIEW_MODE_STORAGE_PREFIX = "dashboard-gara-tabella-view-mode:";
 
 // Shared (per-org): logo + nota — riutilizzati da tutti gli export PDF della dashboard.
 const PDF_SHARED_PREFS_STORAGE_PREFIX = "dashboard-gara-pdf-shared-prefs:";
