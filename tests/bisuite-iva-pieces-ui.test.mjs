@@ -219,6 +219,29 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     assert.ok(!pdvAFilteredText.includes('Fisso'), `filtro pista=mobile, PDV A: riga Fisso sparita: ${pdvAFilteredText}`);
     assert.ok(!pdvAFilteredText.includes('ADSL'), `filtro pista=mobile, PDV A: categoria fisso sparita: ${pdvAFilteredText}`);
 
+    // ── Task #383: vista per Addetto con filtro Pista = Mobile attivo ──
+    // Addetto B (solo energia) deve sparire dalla lista; Addetto A resta
+    // con i conteggi IVA della sola pista Mobile invariati (1) e senza
+    // righe/categorie Fisso.
+    await page.getByTestId('button-view-addetti').click();
+    await page.locator(`button:has-text("${ADD_A}")`).first().waitFor({ timeout: 15000 });
+    assert.equal(await page.locator(`button:has-text("${ADD_B}")`).count(), 0, 'filtro pista=mobile: Addetto B (solo energia) non listato');
+
+    const addAFiltered = page.getByTestId(`addetto-${ADD_A}-categorie-canvass`);
+    if (!(await addAFiltered.isVisible().catch(() => false))) {
+      await page.locator(`button:has-text("${ADD_A}")`).first().click();
+    }
+    await addAFiltered.waitFor({ timeout: 15000 });
+    const addAFilteredText = flat(await addAFiltered.innerText());
+    assert.ok(addAFilteredText.includes('Mobile·1IVA'), `filtro pista=mobile, Addetto A: Mobile · 1 IVA invariato: ${addAFilteredText}`);
+    assert.ok(addAFilteredText.includes('TIEDIVA1(1IVA)'), `filtro pista=mobile, Addetto A: TIED IVA marcato: ${addAFilteredText}`);
+    assert.ok(addAFilteredText.includes('UNTIED1') && !addAFilteredText.includes('UNTIED1('), `filtro pista=mobile, Addetto A: UNTIED senza marcatore IVA: ${addAFilteredText}`);
+    assert.ok(!addAFilteredText.includes('Fisso'), `filtro pista=mobile, Addetto A: riga Fisso sparita: ${addAFilteredText}`);
+    assert.ok(!addAFilteredText.includes('ADSL'), `filtro pista=mobile, Addetto A: categoria fisso sparita: ${addAFilteredText}`);
+
+    // Torna alla vista PDV prima della sezione successiva.
+    await page.getByTestId('button-view-vendite').click();
+
     // ── Task #381: coerenza pezzi IVA con filtro Tipo = Canvass ──
     // Reset pista a "Tutte" e tipo = Canvass: tutti gli articoli seminati
     // sono canvass, quindi i badge IVA devono restare identici al default.
