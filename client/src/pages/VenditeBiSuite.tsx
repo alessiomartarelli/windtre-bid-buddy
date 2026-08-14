@@ -1247,7 +1247,9 @@ export default function VenditeBiSuite() {
                       {globalCounts.byType.canvass}
                     </Badge>
                   </div>
-                  <p className="text-xs text-green-600 font-medium mb-3">{formatCurrency(globalCounts.amtByType.canvass)}</p>
+                  {(globalCounts.amtByType.canvass || 0) > 0 && (
+                    <p className="text-xs text-green-600 font-medium mb-3">{formatCurrency(globalCounts.amtByType.canvass)}</p>
+                  )}
                   <div className="space-y-1.5">
                     {(Object.entries(globalCounts.byPista) as [PistaCanvass, number][])
                       .sort(([, a], [, b]) => b - a)
@@ -1258,7 +1260,9 @@ export default function VenditeBiSuite() {
                             <span>{pistaLabels[pista]}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-muted-foreground">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span>
+                            {(globalCounts.amtByPista[pista] || 0) > 0 && (
+                              <span className="text-[10px] text-muted-foreground">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span>
+                            )}
                             {(globalCounts.ivaByPista[pista] || 0) > 0 && (
                               <span
                                 className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 whitespace-nowrap"
@@ -1281,7 +1285,9 @@ export default function VenditeBiSuite() {
                           <span className="text-[9px] text-muted-foreground">(esclusi da CB)</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-muted-foreground">{formatCurrency(globalCounts.couponCaring.importo)}</span>
+                          {globalCounts.couponCaring.importo > 0 && (
+                            <span className="text-[10px] text-muted-foreground">{formatCurrency(globalCounts.couponCaring.importo)}</span>
+                          )}
                           <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/20 text-[10px]" data-testid="badge-coupon-caring-pezzi">
                             {globalCounts.couponCaring.pezzi}
                           </Badge>
