@@ -37,6 +37,19 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   PieChart, Pie, Cell,
 } from "recharts";
+
+// Palette grafici dashboard: toni moderni e desaturati (indaco brand +
+// pastelli), niente colori accesi. Competenza = indaco, cassa = azzurro tenue.
+const CHART_COMP = "#6366f1";
+const CHART_CASSA = "#7dd3fc";
+const CHART_SEL = "#312e81";
+const CHART_GRID = "#e2e8f0";
+const CHART_TICK = { fontSize: 11, fill: "#64748b" };
+const CHART_TOOLTIP_STYLE = { borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(15,23,42,.08)", fontSize: 12 } as const;
+const CHART_PIE = [
+  "#818cf8", "#7dd3fc", "#5eead4", "#c4b5fd", "#fcd34d", "#94a3b8",
+  "#f9a8d4", "#86efac", "#67e8f9", "#fdba74", "#d8b4fe", "#cbd5e1",
+];
 import type {
   CdgRagioneSociale, CdgCategoria, CdgFornitore, CdgSpesa, CdgPdvManuale,
 } from "@shared/schema";
@@ -155,6 +168,11 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const [filterPdv, setFilterPdv] = useState<string>("all");
   const [filterImportoMin, setFilterImportoMin] = useState<string>("");
   const [filterImportoMax, setFilterImportoMax] = useState<string>("");
+  // Drill-down categoria: cliccando un grafico o una riga del riepilogo si
+  // apre il dettaglio delle spese di quella categoria. ym=null → intero anno.
+  const [catDettaglio, setCatDettaglio] = useState<{
+    categoria: string; rs: string | null; ym: string | null; anno: number; vista: "competenza" | "cassa";
+  } | null>(null);
   const [dashboardMese, setDashboardMese] = useState<string>(currentMonthYYYYMM());
   const [dashboardAnno, setDashboardAnno] = useState<number>(new Date().getFullYear());
   const [annoMeseSel, setAnnoMeseSel] = useState<number>(new Date().getMonth() + 1);
@@ -678,12 +696,21 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                     <div className="h-72 flex items-center justify-center text-muted-foreground text-sm">Nessuna spesa nel mese</div>
                   ) : (
                     <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={dashboard.categoryBar} layout="vertical" margin={{ left: 24 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
-                        <YAxis type="category" dataKey="categoria" width={140} />
-                        <Tooltip formatter={(v: number) => fmtEur(v)} />
-                        <Bar dataKey="importo" fill="#f97316" name="Importo" />
+                      <BarChart
+                        data={dashboard.categoryBar}
+                        layout="vertical"
+                        margin={{ left: 24 }}
+                        onClick={(e: any) => {
+                          const idx = e?.activeTooltipIndex;
+                          const cat = typeof idx === "number" ? dashboard.categoryBar[idx]?.categoria : null;
+                          if (cat) setCatDettaglio({ categoria: cat, rs: null, ym: dashboardMese, anno: Number(dashboardMese.slice(0, 4)), vista: "competenza" });
+                        }}
+                      >
+                        <CartesianGrid horizontal={false} stroke={CHART_GRID} />
+                        <XAxis type="number" tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                        <YAxis type="category" dataKey="categoria" width={140} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                        <Tooltip formatter={(v: number) => fmtEur(v)} contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: "rgba(99,102,241,.06)" }} />
+                        <Bar dataKey="importo" fill={CHART_COMP} name="Importo" radius={[0, 4, 4, 0]} cursor="pointer" />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -695,13 +722,13 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={dashboard.meseSerie}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="mese" />
-                      <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
-                      <Tooltip formatter={(v: number) => fmtEur(v)} />
-                      <Legend />
-                      <Bar dataKey="cassa" fill="#3b82f6" name="Pagato (cassa)" />
-                      <Bar dataKey="competenza" fill="#f97316" name="Competenza" />
+                      <CartesianGrid vertical={false} stroke={CHART_GRID} />
+                      <XAxis dataKey="mese" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(v: number) => fmtEur(v)} contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: "rgba(99,102,241,.06)" }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="cassa" fill={CHART_CASSA} name="Pagato (cassa)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="competenza" fill={CHART_COMP} name="Competenza" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -772,15 +799,15 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         const idx = e?.activeTooltipIndex;
                         if (typeof idx === "number") setAnnoMeseSel(idx + 1);
                       }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="mese" />
-                        <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
-                        <Tooltip formatter={(v: number) => fmtEur(v)} />
-                        <Legend />
+                        <CartesianGrid vertical={false} stroke={CHART_GRID} />
+                        <XAxis dataKey="mese" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                        <Tooltip formatter={(v: number) => fmtEur(v)} contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: "rgba(99,102,241,.06)" }} />
+                        <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
                         {annoVista === "competenza" ? (
-                          <Bar dataKey="competenza" fill="#f97316" name="Competenza" />
+                          <Bar dataKey="competenza" fill={CHART_COMP} name="Competenza" radius={[4, 4, 0, 0]} cursor="pointer" />
                         ) : (
-                          <Bar dataKey="cassa" fill="#3b82f6" name="Cassa" />
+                          <Bar dataKey="cassa" fill={CHART_CASSA} name="Cassa" radius={[4, 4, 0, 0]} cursor="pointer" />
                         )}
                       </BarChart>
                     </ResponsiveContainer>
@@ -813,12 +840,18 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                                 return pct >= 6 ? `${pct}%` : "";
                               }}
                               labelLine={false}
+                              stroke="#fff"
+                              strokeWidth={2}
+                              onClick={(e: any) => {
+                                const cat = e?.categoria || e?.payload?.categoria;
+                                if (cat) setCatDettaglio({ categoria: cat, rs: null, ym: `${dashboardAnno}-${String(annoMeseSel).padStart(2, "0")}`, anno: dashboardAnno, vista: annoVista });
+                              }}
                             >
                               {dashboardAnnuale.pieData.map((_, i) => (
-                                <Cell key={i} fill={["#f97316", "#3b82f6", "#10b981", "#a855f7", "#ef4444", "#eab308", "#06b6d4", "#ec4899", "#84cc16", "#6366f1", "#14b8a6", "#f59e0b"][i % 12]} />
+                                <Cell key={i} fill={CHART_PIE[i % CHART_PIE.length]} cursor="pointer" />
                               ))}
                             </Pie>
-                            <Tooltip formatter={(v: number) => fmtEur(v)} />
+                            <Tooltip formatter={(v: number) => fmtEur(v)} contentStyle={CHART_TOOLTIP_STYLE} />
                           </PieChart>
                         </ResponsiveContainer>
                         <p className="text-xs text-center text-muted-foreground mt-1">
@@ -832,11 +865,18 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                 {dashboardAnnuale.pieData.length > 0 && (
                   <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs">
                     {dashboardAnnuale.pieData.map((r, i) => (
-                      <div key={r.categoria} className="flex items-center gap-2">
-                        <span className="inline-block h-3 w-3 rounded-sm" style={{ background: ["#f97316", "#3b82f6", "#10b981", "#a855f7", "#ef4444", "#eab308", "#06b6d4", "#ec4899", "#84cc16", "#6366f1", "#14b8a6", "#f59e0b"][i % 12] }} />
-                        <span className="truncate flex-1" title={r.categoria}>{r.categoria}</span>
+                      <button
+                        type="button"
+                        key={r.categoria}
+                        className="flex items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-muted transition-colors"
+                        title={`Vedi il dettaglio delle spese "${r.categoria}"`}
+                        onClick={() => setCatDettaglio({ categoria: r.categoria, rs: null, ym: `${dashboardAnno}-${String(annoMeseSel).padStart(2, "0")}`, anno: dashboardAnno, vista: annoVista })}
+                        data-testid={`legend-cat-${i}`}
+                      >
+                        <span className="inline-block h-3 w-3 rounded-sm shrink-0" style={{ background: CHART_PIE[i % CHART_PIE.length] }} />
+                        <span className="truncate flex-1 underline-offset-2 hover:underline">{r.categoria}</span>
                         <span className="font-mono">{fmtEur(r.importo)}</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -881,13 +921,13 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                         }
                       }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
-                      <YAxis type="category" dataKey="rs" width={180} tick={{ fontSize: 11 }} />
-                      <Tooltip formatter={(v: number) => fmtEur(v)} />
-                      <Bar dataKey="importo" name="Importo">
+                      <CartesianGrid horizontal={false} stroke={CHART_GRID} />
+                      <XAxis type="number" tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                      <YAxis type="category" dataKey="rs" width={180} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(v: number) => fmtEur(v)} contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: "rgba(99,102,241,.06)" }} />
+                      <Bar dataKey="importo" name="Importo" radius={[0, 4, 4, 0]}>
                         {dashboardRs.rsBar.map((r, i) => (
-                          <Cell key={i} fill={r.rs === rsSelezionata ? "#1e40af" : (annoVista === "competenza" ? "#f97316" : "#3b82f6")} cursor="pointer" />
+                          <Cell key={i} fill={r.rs === rsSelezionata ? CHART_SEL : (annoVista === "competenza" ? CHART_COMP : CHART_CASSA)} cursor="pointer" />
                         ))}
                       </Bar>
                     </BarChart>
@@ -909,11 +949,11 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                       <>
                         <ResponsiveContainer width="100%" height={Math.max(180, dashboardRs.pdvBar.length * 34)}>
                           <BarChart data={dashboardRs.pdvBar} layout="vertical" margin={{ left: 24 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis type="number" tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} />
-                            <YAxis type="category" dataKey="nome" width={180} tick={{ fontSize: 11 }} />
-                            <Tooltip formatter={(v: number) => fmtEur(v)} />
-                            <Bar dataKey="importo" fill={annoVista === "competenza" ? "#f97316" : "#3b82f6"} name="Importo" />
+                            <CartesianGrid horizontal={false} stroke={CHART_GRID} />
+                            <XAxis type="number" tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                            <YAxis type="category" dataKey="nome" width={180} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                            <Tooltip formatter={(v: number) => fmtEur(v)} contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: "rgba(99,102,241,.06)" }} />
+                            <Bar dataKey="importo" fill={annoVista === "competenza" ? CHART_COMP : CHART_CASSA} name="Importo" radius={[0, 4, 4, 0]} />
                           </BarChart>
                         </ResponsiveContainer>
 
@@ -1090,8 +1130,20 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                     </TableHeader>
                     <TableBody>
                       {pivotData.summaryRows.map((r, i) => (
-                        <TableRow key={i} data-testid={`row-summary-${i}`}>
-                          <TableCell className="font-medium">{r.categoria}</TableCell>
+                        <TableRow
+                          key={i}
+                          data-testid={`row-summary-${i}`}
+                          className="cursor-pointer hover:bg-muted/60"
+                          title={`Vedi il dettaglio delle spese "${r.categoria}" di ${r.rs}`}
+                          onClick={() => setCatDettaglio({
+                            categoria: r.categoria,
+                            rs: r.rs,
+                            ym: pivotPeriodo === "mese" ? `${dashboardAnno}-${String(pivotMese).padStart(2, "0")}` : null,
+                            anno: dashboardAnno,
+                            vista: annoVista,
+                          })}
+                        >
+                          <TableCell className="font-medium underline-offset-2 hover:underline">{r.categoria}</TableCell>
                           <TableCell className="text-xs">{r.rs}</TableCell>
                           <TableCell className="text-right">{r.conteggio}</TableCell>
                           <TableCell className="text-right font-mono">{fmtEur(r.importo)}</TableCell>
@@ -1102,6 +1154,62 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                 )}
               </CardContent>
             </Card>
+
+            {/* === Drill-down: dettaglio spese di una categoria === */}
+            {catDettaglio && (() => {
+              const rows = spese.filter(s => {
+                const catNome = (s.categoriaId && catById.get(s.categoriaId)?.nome) || "— Senza categoria —";
+                if (catNome !== catDettaglio.categoria) return false;
+                if (catDettaglio.rs && s.ragioneSociale !== catDettaglio.rs) return false;
+                const mPag = (s.dataPagamento || "").slice(0, 7);
+                const ym = catDettaglio.vista === "competenza" ? (s.meseCompetenza || mPag) : mPag;
+                return catDettaglio.ym ? ym === catDettaglio.ym : ym.startsWith(`${catDettaglio.anno}-`);
+              }).sort((a, b) => parseNettoIva(b) - parseNettoIva(a));
+              const totale = rows.reduce((acc, s) => acc + parseNettoIva(s), 0);
+              const periodo = catDettaglio.ym ? monthLabel(catDettaglio.ym) : `anno ${catDettaglio.anno}`;
+              return (
+                <Dialog open onOpenChange={(o) => { if (!o) setCatDettaglio(null); }}>
+                  <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto" data-testid="dialog-cat-dettaglio">
+                    <DialogHeader>
+                      <DialogTitle>Spese "{catDettaglio.categoria}" — {periodo}</DialogTitle>
+                      <DialogDescription>
+                        {catDettaglio.rs ? `${catDettaglio.rs} · ` : ""}{catDettaglio.vista === "competenza" ? "per competenza" : "per cassa"} · {rows.length} spese · totale netto IVA <strong>{fmtEur(totale)}</strong>
+                      </DialogDescription>
+                    </DialogHeader>
+                    {rows.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4">Nessuna spesa per questa combinazione (controlla i filtri attivi in alto).</p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Data pag.</TableHead>
+                            <TableHead>Comp.</TableHead>
+                            {!catDettaglio.rs && <TableHead>RS</TableHead>}
+                            <TableHead>Fornitore</TableHead>
+                            <TableHead>PDV</TableHead>
+                            <TableHead>Descrizione</TableHead>
+                            <TableHead className="text-right">Netto IVA</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {rows.map(s => (
+                            <TableRow key={s.id} data-testid={`row-cat-dettaglio-${s.id}`}>
+                              <TableCell className="whitespace-nowrap">{fmtDateIt(s.dataPagamento)}</TableCell>
+                              <TableCell><Badge variant="outline">{monthLabel(s.meseCompetenza)}</Badge></TableCell>
+                              {!catDettaglio.rs && <TableCell className="text-xs">{s.ragioneSociale}</TableCell>}
+                              <TableCell className="text-xs">{(s.fornitoreId && fornById.get(s.fornitoreId)?.nome) || <span className="text-muted-foreground">—</span>}</TableCell>
+                              <TableCell className="text-xs">{s.pdvCodice ? (pdvByCodice.get(s.pdvCodice)?.nome || s.pdvCodice) : <span className="text-muted-foreground">—</span>}</TableCell>
+                              <TableCell className="max-w-[280px] truncate" title={s.descrizione}>{s.descrizione}</TableCell>
+                              <TableCell className="text-right font-mono">{fmtEur(parseNettoIva(s))}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </DialogContent>
+                </Dialog>
+              );
+            })()}
           </TabsContent>
 
           <TabsContent value="spese" className="space-y-4">
