@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   BASE,
   uniq,
@@ -60,7 +63,7 @@ async function seedBisuiteSales(pool, orgId, { count = 30, addetto = 'Mario Ross
       `INSERT INTO bisuite_sales
          (organization_id, bisuite_id, data_vendita, codice_pos, nome_negozio,
           nome_addetto, nome_cliente, totale, stato, raw_data)
-       VALUES ($1, $2, now() - ($3 || ' hours')::interval, $4, $5, $6, $7, $8, $9, $10::jsonb)`,
+       VALUES ($1, $2, now() - ($3 || ' minutes')::interval, $4, $5, $6, $7, $8, $9, $10::jsonb)`,
       [
         orgId,
         100000 + i,
@@ -71,9 +74,148 @@ async function seedBisuiteSales(pool, orgId, { count = 30, addetto = 'Mario Ross
         `Cliente ${i}`,
         '25.00',
         'FINALIZZATA',
-        JSON.stringify({ articoli: [] }),
+        // codiceEsterno = ID VENDITA usato dal report DTS per il match
+        // lead ↔ vendita (dtsSaleCodiceEsterno legge rawData.codiceEsterno).
+        JSON.stringify({ codiceEsterno: 100000 + i, articoli: [] }),
       ],
     );
+  }
+}
+
+// Lead DTS minimi (mese corrente, Europe/Rome) agganciati alle vendite
+// seminate da seedBisuiteSales via id_vendita = codiceEsterno.
+async function seedDtsLeads(pool, orgId, { count = 8 } = {}) {
+  for (let i = 0; i < count; i++) {
+    await pool.query(
+      `INSERT INTO dts_leads
+         (organization_id, lead_key, consulente, campagna, nominativo, data, id_vendita, file_name)
+       VALUES ($1, $2, $3, 'CAMPAGNA MOBILE 378', $4,
+               (now() at time zone 'Europe/Rome')::date, $5, 'seed-mobile-378.xlsx')`,
+      [orgId, `mob378-${i}`, `Consulente Mobile ${i % 3}`, `Nominativo ${i}`, 100000 + i],
+    );
+  }
+}
+
+// Upload DRMS salvato con righe già normalizzate/classificate (DrmsRow):
+// 3 PDV × 4 capitoli × 2 competenze, così si popolano sia la matrice
+// PV×Capitoli sia la tabella andamento per competenza (>1 competenza).
+async function seedDrmsUpload(pool, orgId) {
+  const capitoli = ['MOBILE', 'FISSO', 'ENERGIA', 'CB'];
+  const rows = [];
+  let seq = 0;
+  for (const pv of ['PV001', 'PV002', 'PV003']) {
+    for (const cap of capitoli) {
+      for (const comp of ['2026-06', '2026-07']) {
+        rows.push({
+          CAPITOLO: cap,
+          SEQ_ID: `mob378-${seq++}`,
+          CODICE_NEGOZIO_COSY: pv,
+          CODICE_CONTRATTO: `C${seq}`,
+          COMPETENZA: comp,
+          TIPO_FONIA: '',
+          TIPO_ATTIVAZIONE: '',
+          REGOLA_DI_CALCOLO: '',
+          DESCRIZIONE_ITEM: `Item ${seq}`,
+          DESCRIZIONE_PIANO_TARIFFARIO: '',
+          DESCRIZIONE_EVENTO: '',
+          NATURA: '',
+          MNP: '',
+          SEGMENTO_CLIENT: '',
+          TIPO_ACCESSO: '',
+          TIPO_LINEA: '',
+          FLAG_CONVERGENZA: '',
+          FLAG_SOGLIA_MOBILE: '',
+          FLAG_SOGLIA_FISSA: '',
+          IMPORTO_NUM: 10 + seq,
+        });
+      }
+    }
+  }
+  const r = await pool.query(
+    `INSERT INTO drms_uploads
+       (organization_id, month, year, file_name, period, totale_importo, righe_count, rows)
+     VALUES ($1, 7, 2026, 'seed-mobile-378.xlsx', 'JUL-26', '100.00', $2, $3::jsonb)
+     RETURNING id`,
+    [orgId, rows.length, JSON.stringify(rows)],
+  );
+  return r.rows[0].id;
+}
+
+// PDF minimale ma valido (testo Helvetica) che parseGaraPdf riconosce come
+// gara fonia: "ALLEGATO" + righe PDV "9xxxxxxxxx 8xxxxxxxxx <clusterM> <clusterF>".
+function buildGaraPdf({ pdvCount = 8 } = {}) {
+  const lines = [
+    'INCENTIVAZIONE LUGLIO 2026',
+    'Spett.le Test RS Mobile Cod. Dealer: 8000000001',
+    'ALLEGATO A ELENCO PUNTI VENDITA',
+  ];
+  for (let i = 0; i < pdvCount; i++) {
+    lines.push(`${9000000001 + i} 8000000001 ${(i % 3) + 1} ${((i + 1) % 3) + 1}`);
+  }
+  let content = 'BT /F1 10 Tf 30 760 Td\n';
+  for (const l of lines) content += `(${l}) Tj 0 -14 Td\n`;
+  content += 'ET';
+  const objs = [
+    '<</Type/Catalog/Pages 2 0 R>>',
+    '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+    '<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>',
+    `<</Length ${content.length}>>\nstream\n${content}\nendstream`,
+    '<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  objs.forEach((o, i) => {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (const off of offsets) pdf += `${String(off).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<</Size ${objs.length + 1}/Root 1 0 R>>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(pdf, 'latin1');
+}
+
+// La tabella ancorata da anchorSelector deve vivere in un wrapper
+// overflow-x-auto contenuto nel viewport: il wrapper non sborda dalla
+// pagina e, se la tabella è più larga, lo scroll orizzontale avviene
+// DENTRO il wrapper (scrollLeft si muove davvero).
+async function assertTableContainedInWrapper(page, anchorSelector, label) {
+  const info = await page.evaluate((sel) => {
+    const anchor = document.querySelector(sel);
+    if (!anchor) return { error: `anchor not found: ${sel}` };
+    let el = anchor.closest('table');
+    const table = el;
+    if (!table) return { error: 'no table ancestor' };
+    let wrapper = table.parentElement;
+    while (wrapper && !['auto', 'scroll'].includes(getComputedStyle(wrapper).overflowX)) {
+      wrapper = wrapper.parentElement;
+    }
+    if (!wrapper) return { error: 'no overflow-x wrapper ancestor' };
+    const rect = wrapper.getBoundingClientRect();
+    const overflowing = table.scrollWidth > wrapper.clientWidth + 4;
+    let scrolled = null;
+    if (overflowing) {
+      wrapper.scrollLeft = 60;
+      scrolled = wrapper.scrollLeft > 0;
+      wrapper.scrollLeft = 0;
+    }
+    return {
+      wrapperRight: rect.right,
+      wrapperLeft: rect.left,
+      innerWidth: window.innerWidth,
+      rows: table.querySelectorAll('tbody tr').length,
+      overflowing,
+      scrolled,
+    };
+  }, anchorSelector);
+  assert.ok(!info.error, `${label}: ${info.error}`);
+  assert.ok(info.rows > 0, `${label}: la tabella deve avere righe con dati reali`);
+  assert.ok(
+    info.wrapperRight <= info.innerWidth + 1 && info.wrapperLeft >= -1,
+    `${label}: il wrapper overflow-x-auto sborda dal viewport (left=${info.wrapperLeft}, right=${info.wrapperRight}, innerWidth=${info.innerWidth})`,
+  );
+  if (info.overflowing) {
+    assert.ok(info.scrolled, `${label}: la tabella più larga del wrapper deve scorrere DENTRO il wrapper`);
   }
 }
 
@@ -121,6 +263,76 @@ test('mobile: Vendite BiSuite e Controllo di Gestione usabili su smartphone', as
     await page.goto(`${BASE}/configurazione-gara`, { waitUntil: 'networkidle' });
     await page.waitForSelector('main, h1, h2', { timeout: 20000 });
     await assertNoHorizontalOverflow(page, 'ConfigurazioneGara');
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// Task #378: le tabelle di Gestione DTS, DRMS Commissioning e Configurazione
+// Gara vengono verificate a 375px CON dati reali (seed DB + import PDF), non
+// più in stato vuoto: niente overflow di pagina e scroll orizzontale
+// contenuto nel wrapper overflow-x-auto di ciascuna tabella.
+test('mobile: tabelle DTS, DRMS e Configurazione Gara popolate su smartphone', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'mob_dg', fullName: 'Mobile DG', organizationName: uniq('MobDG') });
+  const browser = await launchBrowser();
+  try {
+    await seedBisuiteSales(pool, session.orgId, { count: 12 });
+    await seedDtsLeads(pool, session.orgId, { count: 8 });
+    const drmsId = await seedDrmsUpload(pool, session.orgId);
+
+    const context = await newAuthedContext(browser, session, { mobile: true });
+    const page = await context.newPage();
+
+    // ── Gestione DTS: report per consulente e per negozio popolati ──
+    await page.goto(`${BASE}/gestione-dts`, { waitUntil: 'networkidle' });
+    await page.locator('[data-testid^="row-dts-consulente-"]').first().waitFor({ state: 'visible', timeout: 20000 });
+    await page.locator('[data-testid^="row-dts-negozio-"]').first().waitFor({ state: 'visible', timeout: 20000 });
+    await assertNoHorizontalOverflow(page, 'GestioneDts (popolata)');
+    await assertTableContainedInWrapper(page, '[data-testid^="row-dts-consulente-"]', 'DTS per consulente');
+    await assertTableContainedInWrapper(page, '[data-testid^="row-dts-negozio-"]', 'DTS per negozio');
+
+    // ── DRMS Commissioning: carica l'upload salvato, panoramica + matrice ──
+    await page.goto(`${BASE}/drms-commissioning`, { waitUntil: 'networkidle' });
+    const loadBtn = page.getByTestId(`button-load-drms-${drmsId}`);
+    await loadBtn.waitFor({ state: 'visible', timeout: 20000 });
+    await loadBtn.click();
+    // Panoramica: tabella andamento per competenza (2 competenze seminate).
+    await page.locator('[data-testid^="row-competenza-"]').first().waitFor({ state: 'visible', timeout: 20000 });
+    await assertNoHorizontalOverflow(page, 'DRMS panoramica');
+    await assertTableContainedInWrapper(page, '[data-testid^="row-competenza-"]', 'DRMS andamento competenza');
+    // Matrice PV × Capitoli.
+    const matrixTab = page.getByTestId('tab-drms-matrix');
+    await matrixTab.scrollIntoViewIfNeeded();
+    await matrixTab.click();
+    await page.getByTestId('row-matrix-PV001').waitFor({ state: 'visible', timeout: 20000 });
+    await assertNoHorizontalOverflow(page, 'DRMS matrice');
+    await assertTableContainedInWrapper(page, '[data-testid="row-matrix-PV001"]', 'DRMS matrice PV×Capitoli');
+
+    // ── Configurazione Gara: import PDF ⇒ tabella PDV del PDF popolata ──
+    const pdfPath = join(tmpdir(), `gara-mobile-378-${Date.now()}.pdf`);
+    writeFileSync(pdfPath, buildGaraPdf({ pdvCount: 8 }));
+    try {
+      await page.goto(`${BASE}/configurazione-gara`, { waitUntil: 'networkidle' });
+      const importBtn = page.getByTestId('button-import');
+      await importBtn.waitFor({ state: 'visible', timeout: 20000 });
+      await importBtn.click();
+      const pdfBtn = page.getByTestId('button-import-pdf-gara');
+      await pdfBtn.waitFor({ state: 'visible', timeout: 20000 });
+      await pdfBtn.click();
+      await page.setInputFiles('[data-testid="input-pdf-upload"]', pdfPath);
+      // I PDV seminati nel PDF non sono in struttura canonica ⇒ badge "missing".
+      await page.getByTestId('badge-pdv-missing-9000000001').waitFor({ state: 'visible', timeout: 30000 });
+      await assertNoHorizontalOverflow(page, 'ConfigurazioneGara (import PDF)');
+      await assertTableContainedInWrapper(page, '[data-testid="badge-pdv-missing-9000000001"]', 'Gara tabella PDV da PDF');
+    } finally {
+      rmSync(pdfPath, { force: true });
+    }
 
     await page.close();
     await context.close();
