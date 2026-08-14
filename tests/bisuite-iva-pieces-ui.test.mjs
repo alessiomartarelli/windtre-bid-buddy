@@ -60,6 +60,14 @@ const artEnergiaBusiness = {
   descrizione: 'OFFERTA LUCE MICROBUSINESS',
   dettaglio: { prezzo: '0.00' },
 };
+// Articolo NON canvass (tipo "prodotti"): serve a verificare che il filtro
+// Tipo = Canvass lo escluda davvero dagli aggregati globali.
+const artAccessorio = {
+  categoria: { nome: 'ACCESSORI' },
+  tipologia: { nome: 'ACCESSORIO' },
+  descrizione: 'COVER SMARTPHONE',
+  dettaglio: { prezzo: '15.00' },
+};
 const artEnergiaConsumer = {
   categoria: { nome: 'ENERGIA W3' },
   tipologia: { nome: 'ENERGIA' },
@@ -106,7 +114,7 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     //   vendita 2: ADSL/FIBRA/FWA IVA (fisso, IVA)
     await insertSale(pool, session.orgId, {
       codicePos: POS_A, nomeNegozio: 'Negozio Alfa', nomeAddetto: ADD_A,
-      articoli: [artTiedIva, artUntied],
+      articoli: [artTiedIva, artUntied, artAccessorio],
     });
     await insertSale(pool, session.orgId, {
       codicePos: POS_A, nomeNegozio: 'Negozio Alfa', nomeAddetto: ADD_A,
@@ -130,6 +138,10 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     assert.equal(flat(await page.getByTestId('text-iva-mobile').innerText()), 'dicui1IVA', 'mobile: 1 pezzo IVA (TIED IVA), UNTIED escluso');
     assert.equal(flat(await page.getByTestId('text-iva-fisso').innerText()), 'dicui1IVA', 'fisso: 1 pezzo IVA (ADSL/FIBRA/FWA IVA)');
     assert.equal(flat(await page.getByTestId('text-iva-energia').innerText()), 'dicui1IVA', 'energia: 1 pezzo IVA (MICROBUSINESS), consumer escluso');
+
+    // A filtri default l'accessorio (tipo prodotti) è contato nella card
+    // Prodotti: il marcatore "(acc. netto IVA)" appare solo se accLordo > 0.
+    await page.getByText('(acc. netto IVA)').waitFor({ timeout: 15000 });
 
     // ── Dettaglio PDV A (accordion): tabella "Categorie canvass" ──
     await page.locator(`button:has-text("Negozio Alfa")`).first().click();
@@ -173,6 +185,73 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     const addBText = flat(await addB.innerText());
     assert.ok(addBText.includes('Energia·1IVA'), `Addetto B: Energia · 1 IVA: ${addBText}`);
     assert.ok(addBText.includes('ENERGIAW32(1IVA)'), `Addetto B: ENERGIA W3 2 (1 IVA): ${addBText}`);
+
+    // ── Task #381: coerenza pezzi IVA con filtro Pista attivo ──
+    // Torna alla vista PDV e filtra per pista Mobile: il riquadro globale
+    // deve mostrare SOLO la pista Mobile con lo stesso conteggio IVA di
+    // prima (1), le altre piste devono sparire dal riquadro.
+    await page.getByTestId('button-view-vendite').click();
+    await page.getByTestId('select-pista').click();
+    await page.getByRole('option', { name: 'Mobile', exact: true }).click();
+
+    await page.getByTestId('text-iva-mobile').waitFor({ timeout: 15000 });
+    assert.equal(flat(await page.getByTestId('text-iva-mobile').innerText()), 'dicui1IVA', 'filtro pista=mobile: badge IVA mobile invariato (1)');
+    assert.equal(await page.getByTestId('text-iva-fisso').count(), 0, 'filtro pista=mobile: badge IVA fisso sparito');
+    assert.equal(await page.getByTestId('text-iva-energia').count(), 0, 'filtro pista=mobile: badge IVA energia sparito');
+    assert.equal(await page.getByText('(acc. netto IVA)').count(), 0, 'filtro pista=mobile: accessorio (prodotti, senza pista) escluso dalla card Prodotti');
+    // KPI "Articoli Mobile": solo TIED IVA + UNTIED = 2 (accessorio e altre piste esclusi).
+    assert.equal(flat(await page.getByTestId('text-total-sales').innerText()), '2', 'filtro pista=mobile: KPI articoli = 2');
+
+    // PDV B (solo energia) non deve comparire tra i PDV a filtro attivo.
+    assert.equal(await page.locator(`button:has-text("Negozio Beta")`).count(), 0, 'filtro pista=mobile: PDV B (solo energia) non listato');
+
+    // Dettaglio PDV A: la tabella Categorie canvass mostra solo la pista
+    // Mobile (con IVA invariato) e niente riga Fisso.
+    const pdvAFiltered = page.getByTestId(`pdv-${POS_A}-categorie-canvass`);
+    if (!(await pdvAFiltered.isVisible().catch(() => false))) {
+      await page.locator(`button:has-text("Negozio Alfa")`).first().click();
+    }
+    await pdvAFiltered.waitFor({ timeout: 15000 });
+    const pdvAFilteredText = flat(await pdvAFiltered.innerText());
+    assert.ok(pdvAFilteredText.includes('Mobile·1IVA'), `filtro pista=mobile, PDV A: Mobile · 1 IVA invariato: ${pdvAFilteredText}`);
+    assert.ok(pdvAFilteredText.includes('TIEDIVA1(1IVA)'), `filtro pista=mobile, PDV A: TIED IVA marcato: ${pdvAFilteredText}`);
+    assert.ok(pdvAFilteredText.includes('UNTIED1') && !pdvAFilteredText.includes('UNTIED1('), `filtro pista=mobile, PDV A: UNTIED senza marcatore IVA: ${pdvAFilteredText}`);
+    assert.ok(!pdvAFilteredText.includes('Fisso'), `filtro pista=mobile, PDV A: riga Fisso sparita: ${pdvAFilteredText}`);
+    assert.ok(!pdvAFilteredText.includes('ADSL'), `filtro pista=mobile, PDV A: categoria fisso sparita: ${pdvAFilteredText}`);
+
+    // ── Task #381: coerenza pezzi IVA con filtro Tipo = Canvass ──
+    // Reset pista a "Tutte" e tipo = Canvass: tutti gli articoli seminati
+    // sono canvass, quindi i badge IVA devono restare identici al default.
+    await page.getByTestId('select-pista').click();
+    await page.getByRole('option', { name: 'Tutte le piste', exact: true }).click();
+    await page.getByTestId('select-tipo').click();
+    await page.getByRole('option', { name: 'Canvass', exact: true }).click();
+
+    await page.getByTestId('text-iva-mobile').waitFor({ timeout: 15000 });
+    assert.equal(flat(await page.getByTestId('text-iva-mobile').innerText()), 'dicui1IVA', 'filtro tipo=canvass: badge IVA mobile invariato');
+    assert.equal(flat(await page.getByTestId('text-iva-fisso').innerText()), 'dicui1IVA', 'filtro tipo=canvass: badge IVA fisso invariato');
+    assert.equal(flat(await page.getByTestId('text-iva-energia').innerText()), 'dicui1IVA', 'filtro tipo=canvass: badge IVA energia invariato');
+
+    // L'accessorio (tipo prodotti, stessa vendita della SIM TIED IVA) deve
+    // essere ESCLUSO dagli aggregati quando Tipo = Canvass: il marcatore
+    // "(acc. netto IVA)" della card Prodotti sparisce.
+    assert.equal(await page.getByText('(acc. netto IVA)').count(), 0, 'filtro tipo=canvass: accessorio escluso dalla card Prodotti');
+    // KPI "Articoli Canvass": TIED IVA + UNTIED + fisso IVA + 2 energia = 5.
+    // Se l'accessorio (prodotti) fosse erroneamente incluso sarebbe 6.
+    assert.equal(flat(await page.getByTestId('text-total-sales').innerText()), '5', 'filtro tipo=canvass: KPI articoli = 5, accessorio escluso');
+    // Importo filtrato = somma prezzi dei soli articoli canvass (10+5+20+0+0
+    // = 35 €); con l'accessorio incluso sarebbe 50 €.
+    assert.ok(flat(await page.getByTestId('text-total-amount').innerText()).startsWith('35,00'), 'filtro tipo=canvass: importo filtrato 35,00 € senza accessorio');
+
+    // Entrambi i PDV restano visibili e le loro tabelle canvass invariate.
+    const pdvBFiltered = page.getByTestId(`pdv-${POS_B}-categorie-canvass`);
+    if (!(await pdvBFiltered.isVisible().catch(() => false))) {
+      await page.locator(`button:has-text("Negozio Beta")`).first().click();
+    }
+    await pdvBFiltered.waitFor({ timeout: 15000 });
+    const pdvBFilteredText = flat(await pdvBFiltered.innerText());
+    assert.ok(pdvBFilteredText.includes('Energia·1IVA'), `filtro tipo=canvass, PDV B: Energia · 1 IVA invariato: ${pdvBFilteredText}`);
+    assert.ok(pdvBFilteredText.includes('ENERGIAW32(1IVA)'), `filtro tipo=canvass, PDV B: ENERGIA W3 2 (1 IVA): ${pdvBFilteredText}`);
   } finally {
     if (browser) await browser.close().catch(() => {});
     await cleanupOrg(pool, session);
