@@ -164,6 +164,10 @@ args = "sos-caring-tests"
 task = "workflow.run"
 args = "sos-caring-import-ui-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cdg-pivot-export-ui-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -510,6 +514,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-sos-caring-import-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cdg-pivot-export-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-cdg-pivot-export-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
