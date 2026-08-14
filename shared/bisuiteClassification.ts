@@ -230,6 +230,51 @@ export function isCouponCaring(categoriaNome: string, tipologiaNome: string): bo
   return tipologiaNome.toUpperCase().trim().startsWith('COUPON CARING');
 }
 
+/** Forma minima di articolo classificato per il conteggio "pezzi IVA". */
+export interface PezzoIvaInput {
+  pista?: PistaCanvass;
+  categoriaNome: string;
+  descrizione?: string;
+}
+
+/**
+ * Task #377 — "Pezzo IVA" (business) per pista canvass:
+ *  - MOBILE: categoria "TIED IVA";
+ *  - FISSO: categoria/descrizione ADSL/FIBRA/FWA IVA;
+ *  - ENERGIA: offerta business dalla descrizione (regola condivisa
+ *    `energiaClienteFromDescrizione`: descrizione contiene "BUSINESS");
+ *  - PROTETTI (Windtre Protetti/Verisure): descrizione contiene "BUSINESS";
+ *  - ASSICURAZIONI: categoria "ASSICURAZIONI BUSINESS PRO";
+ *  - P.IVA (pista dedicata listino VF): per definizione è tutta business.
+ * CB e piste sconosciute: mai pezzo IVA.
+ */
+export function isPezzoIva(art: PezzoIvaInput): boolean {
+  if (!art.pista) return false;
+  const cat = (art.categoriaNome || '').toUpperCase().trim();
+  const desc = (art.descrizione || '').toUpperCase();
+  switch (art.pista) {
+    case 'mobile':
+      return cat === 'TIED IVA';
+    case 'fisso':
+      return cat === 'ADSL/FIBRA/FWA IVA' ||
+        (cat.includes('ADSL/FIBRA/FWA') && /\bIVA\b/.test(cat)) ||
+        (desc.includes('ADSL/FIBRA/FWA') && /\bIVA\b/.test(desc));
+    case 'energia':
+      // Stessa regola di energiaClienteFromDescrizione (shared/venditeReport.ts),
+      // inlined per evitare un import circolare: business ⇔ la descrizione
+      // dell'offerta contiene "BUSINESS" (copre "MICROBUSINESS").
+      return desc.includes('BUSINESS');
+    case 'protecta':
+      return desc.includes('BUSINESS');
+    case 'assicurazioni':
+      return cat === 'ASSICURAZIONI BUSINESS PRO';
+    case 'iva':
+      return true;
+    default:
+      return false;
+  }
+}
+
 const _warnedCategories = new Set<string>();
 
 export function classifySaleArticles(

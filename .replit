@@ -547,6 +547,17 @@ args = "bash scripts/run-cdg-cat-dettaglio-ui-tests.sh"
 [workflows.workflow.metadata]
 isValidation = true
 
+[[workflows.workflow]]
+name = "bisuite-iva-pieces-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-bisuite-iva-pieces-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
 [agent]
 integrations = ["javascript_log_in_with_replit:2.0.0"]
 

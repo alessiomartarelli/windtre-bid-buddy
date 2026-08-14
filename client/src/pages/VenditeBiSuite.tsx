@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
 import {
   Table,
@@ -91,6 +92,7 @@ import {
   type SaleClassification,
   classifySaleArticles,
   classifyArticle,
+  isPezzoIva,
   PISTA_CANVASS_LABELS,
   getPistaCanvassLabels,
   PISTA_CANVASS_COLORS,
@@ -136,10 +138,16 @@ interface PdvSummary {
   accessoriImporto: number;
   countByPista: Partial<Record<PistaCanvass, number>>;
   amountByPista: Partial<Record<PistaCanvass, number>>;
+  /** Pezzi IVA (business) per pista — vedi isPezzoIva in shared. */
+  ivaByPista: Partial<Record<PistaCanvass, number>>;
+  /** Dettaglio categorie canvass vendute, per pista: nome → pezzi/IVA. */
+  categorieByPista: CategorieByPista;
   vendite: BisuiteSale[];
   articleIncasso: ArticleIncasso;
 }
 
+/** pista → (nome categoria → { pezzi, iva }) */
+type CategorieByPista = Partial<Record<PistaCanvass, Record<string, { pezzi: number; iva: number }>>>;
 const PISTA_ICONS: Record<PistaCanvass, React.ReactNode> = {
   mobile: <Smartphone className="h-3.5 w-3.5" />,
   fisso: <Wifi className="h-3.5 w-3.5" />,
@@ -500,6 +508,7 @@ export default function VenditeBiSuite() {
     const amtByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
     const byPista: Partial<Record<PistaCanvass, number>> = {};
     const amtByPista: Partial<Record<PistaCanvass, number>> = {};
+    const ivaByPista: Partial<Record<PistaCanvass, number>> = {};
     const couponCaring = { pezzi: 0, importo: 0 };
     let totalArticles = 0;
     let filteredArticles = 0;
@@ -537,6 +546,7 @@ export default function VenditeBiSuite() {
         if (art.pista) {
           byPista[art.pista] = (byPista[art.pista] || 0) + 1;
           amtByPista[art.pista] = (amtByPista[art.pista] || 0) + art.prezzo;
+          if (isPezzoIva(art)) ivaByPista[art.pista] = (ivaByPista[art.pista] || 0) + 1;
         }
         // Coupon Caring: esclusi dai pezzi CB, contati in un riquadro dedicato.
         if (art.couponCaring) {
@@ -566,6 +576,7 @@ export default function VenditeBiSuite() {
       amtByType,
       byPista,
       amtByPista,
+      ivaByPista,
       couponCaring,
       totalArticles,
       filteredArticles,
@@ -620,6 +631,8 @@ export default function VenditeBiSuite() {
           accessoriImporto: 0,
           countByPista: {},
           amountByPista: {},
+          ivaByPista: {},
+          categorieByPista: {},
           vendite: [],
           articleIncasso: { scontrinato: 0, fuoriScontrino: 0, finanziato: 0, credito: 0 },
         };
@@ -647,6 +660,7 @@ export default function VenditeBiSuite() {
           if (art.pista) {
             entry.countByPista[art.pista] = (entry.countByPista[art.pista] || 0) + 1;
             entry.amountByPista[art.pista] = (entry.amountByPista[art.pista] || 0) + art.prezzo;
+            accumulaCategoriaCanvass(entry.categorieByPista, entry.ivaByPista, art);
           }
         }
       }
@@ -715,6 +729,8 @@ export default function VenditeBiSuite() {
       accessoriImporto: number;
       countByPista: Partial<Record<PistaCanvass, number>>;
       amountByPista: Partial<Record<PistaCanvass, number>>;
+      ivaByPista: Partial<Record<PistaCanvass, number>>;
+      categorieByPista: CategorieByPista;
       articleIncasso: ArticleIncasso;
     }>();
     for (const sale of aggregateSales) {
@@ -725,6 +741,7 @@ export default function VenditeBiSuite() {
         amountByType: { canvass: 0, prodotti: 0, servizi: 0 },
         accessoriImporto: 0,
         countByPista: {}, amountByPista: {},
+        ivaByPista: {}, categorieByPista: {},
         articleIncasso: { scontrinato: 0, fuoriScontrino: 0, finanziato: 0, credito: 0 },
       });
       const entry = map.get(addetto)!;
@@ -748,6 +765,7 @@ export default function VenditeBiSuite() {
           if (art.pista) {
             entry.countByPista[art.pista] = (entry.countByPista[art.pista] || 0) + 1;
             entry.amountByPista[art.pista] = (entry.amountByPista[art.pista] || 0) + art.prezzo;
+            accumulaCategoriaCanvass(entry.categorieByPista, entry.ivaByPista, art);
           }
         }
       }
@@ -1241,6 +1259,14 @@ export default function VenditeBiSuite() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] text-muted-foreground">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span>
+                            {(globalCounts.ivaByPista[pista] || 0) > 0 && (
+                              <span
+                                className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 whitespace-nowrap"
+                                data-testid={`text-iva-${pista}`}
+                              >
+                                di cui {globalCounts.ivaByPista[pista]} IVA
+                              </span>
+                            )}
                             <Badge variant="outline" className={PISTA_CANVASS_COLORS[pista] + " text-[10px]"}>
                               {count}
                             </Badge>
@@ -1604,6 +1630,12 @@ export default function VenditeBiSuite() {
                                   );
                                 })()}
                               </div>
+                              <CanvassCategorieDettaglio
+                                categorieByPista={addetto.categorieByPista}
+                                ivaByPista={addetto.ivaByPista}
+                                pistaLabels={pistaLabels}
+                                testIdPrefix={`addetto-${addetto.nomeAddetto}`}
+                              />
                               {!componentFilterActive && (() => {
                                 const addettoInc = computeIncassoTotals(addetto.vendite);
                                 const hasIncasso = INCASSO_ITEMS_CONFIG.some(i => addettoInc[i.key] > 0);
@@ -1730,6 +1762,12 @@ export default function VenditeBiSuite() {
                                   );
                                 })()}
                               </div>
+                              <CanvassCategorieDettaglio
+                                categorieByPista={pdv.categorieByPista}
+                                ivaByPista={pdv.ivaByPista}
+                                pistaLabels={pistaLabels}
+                                testIdPrefix={`pdv-${pdv.codicePos}`}
+                              />
                               {!componentFilterActive && (() => {
                                 const pdvInc = incassoByPdv.get(pdv.codicePos);
                                 if (!pdvInc) return null;
@@ -1983,6 +2021,70 @@ export default function VenditeBiSuite() {
   );
 }
 
+/**
+ * Task #377 — dettaglio compatto delle categorie canvass vendute, raggruppate
+ * per pista (usato nel contenuto espanso di PDV e Addetto). Evidenzia i pezzi
+ * IVA per categoria. Layout a chip/righe che regge anche su smartphone.
+ */
+function CanvassCategorieDettaglio({
+  categorieByPista,
+  ivaByPista,
+  pistaLabels,
+  testIdPrefix,
+}: {
+  categorieByPista: CategorieByPista;
+  ivaByPista: Partial<Record<PistaCanvass, number>>;
+  pistaLabels: Record<PistaCanvass, string>;
+  testIdPrefix: string;
+}) {
+  const piste = (Object.entries(categorieByPista) as [PistaCanvass, Record<string, { pezzi: number; iva: number }>][])
+    .filter(([, cats]) => Object.keys(cats).length > 0)
+    .sort(([, a], [, b]) => {
+      const tot = (c: Record<string, { pezzi: number }>) => Object.values(c).reduce((s, x) => s + x.pezzi, 0);
+      return tot(b) - tot(a);
+    });
+  if (piste.length === 0) return null;
+  return (
+    <div className="rounded-lg border bg-muted/20 p-2 sm:p-3" data-testid={`${testIdPrefix}-categorie-canvass`}>
+      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+        Categorie canvass
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2">
+        {piste.map(([pista, cats]) => {
+          const iva = ivaByPista[pista] || 0;
+          return (
+            <div key={pista} className="min-w-0">
+              <div className="flex items-center gap-1.5 text-xs font-medium mb-0.5">
+                {PISTA_ICONS[pista]}
+                <span>{pistaLabels[pista]}</span>
+                {iva > 0 && (
+                  <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400">
+                    · {iva} IVA
+                  </span>
+                )}
+              </div>
+              <div className="space-y-0.5">
+                {Object.entries(cats)
+                  .sort(([, a], [, b]) => b.pezzi - a.pezzi)
+                  .map(([nome, v]) => (
+                    <div key={nome} className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="truncate text-muted-foreground">{nome}</span>
+                      <span className="font-semibold tabular-nums shrink-0">
+                        {v.pezzi}
+                        {v.iva > 0 && (
+                          <span className="ml-1 font-medium text-indigo-600 dark:text-indigo-400">({v.iva} IVA)</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function SalePistaBadges({ classification, pistaLabels = PISTA_CANVASS_LABELS }: { classification?: SaleClassification; pistaLabels?: Record<PistaCanvass, string> }) {
   if (!classification) return <span className="text-xs text-muted-foreground">-</span>;
 
@@ -2374,4 +2476,21 @@ function InfoBlock({
       )}
     </div>
   );
+}
+
+/** Accumula un articolo canvass nel breakdown categorie per pista. */
+function accumulaCategoriaCanvass(
+  target: CategorieByPista,
+  ivaByPista: Partial<Record<PistaCanvass, number>>,
+  art: { pista?: PistaCanvass; categoriaNome: string; tipologiaNome: string; descrizione: string },
+) {
+  if (!art.pista) return;
+  const iva = isPezzoIva(art);
+  if (iva) ivaByPista[art.pista] = (ivaByPista[art.pista] || 0) + 1;
+  const nome = (art.categoriaNome || art.tipologiaNome || art.descrizione || "N/D").toUpperCase().trim() || "N/D";
+  if (!target[art.pista]) target[art.pista] = {};
+  const perPista = target[art.pista]!;
+  if (!perPista[nome]) perPista[nome] = { pezzi: 0, iva: 0 };
+  perPista[nome].pezzi++;
+  if (iva) perPista[nome].iva++;
 }
