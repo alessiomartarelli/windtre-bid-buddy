@@ -100,9 +100,21 @@ export async function launchBrowser() {
   });
 }
 
+// Viewport di riferimento per i test mobile (iPhone-like, 375×812).
+export const MOBILE_VIEWPORT = { width: 375, height: 812 };
+
 // Crea un context Playwright con il cookie di sessione iniettato.
-export async function newAuthedContext(browser, session, { domain = 'localhost', path = '/' } = {}) {
-  const context = await browser.newContext();
+// Opzioni:
+//   - mobile: true  => viewport 375×812 + touch + isMobile (smartphone);
+//   - viewport: {width,height} => viewport custom (senza flag touch).
+export async function newAuthedContext(browser, session, { domain = 'localhost', path = '/', mobile = false, viewport } = {}) {
+  const context = await browser.newContext(
+    mobile
+      ? { viewport: viewport ?? MOBILE_VIEWPORT, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }
+      : viewport
+        ? { viewport }
+        : {},
+  );
   await context.addCookies([
     { name: session.cookie.name, value: session.cookie.value, domain, path },
   ]);

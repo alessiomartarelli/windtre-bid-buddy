@@ -135,6 +135,31 @@ mantenere snello questo file:
   pagina `/configurazione-gara`, selettore in dashboard), calendario
   lavorativo, sblocco gara, isolamento per operatore.
 
+## Convenzioni responsive / mobile
+
+Breakpoint di riferimento: **mobile = `<640px` (sotto `sm`)** per i contenuti
+(tabelle, filtri, dialog); la navigazione desktop compare da `lg` (1024px) in
+su — sotto c'è il menu hamburger. `useIsMobile()` (768px) esiste ma preferire
+le classi Tailwind (CSS-only, nessun flash al primo render). Touch target
+minimi 44px (`h-11 w-11` su mobile, `lg:h-9` su desktop). Safe area: l'header
+usa `env(safe-area-inset-top)`, i dialog full-screen `safe-area-inset-bottom`.
+
+Pattern condivisi (usarli, non reinventarli):
+- **Tabelle larghe** → `ScrollableTable` (`client/src/components/ui/scrollable-table.tsx`):
+  scroll orizzontale intenzionale con frecce; in alternativa vista a card
+  sotto `sm` quando le colonne chiave sono poche.
+- **Barre filtri** → `FilterBar`/`FilterField` (`client/src/components/ui/filter-bar.tsx`):
+  su mobile parte collassata con toggle (`button-toggle-filters`), da `sm` in
+  su sempre espansa.
+- **Dialog con form/contenuti lunghi** → `ResponsiveDialogContent`
+  (`client/src/components/ui/responsive-dialog.tsx`): full-screen scrollabile
+  sotto `sm`, dialog classico da `sm` in su. Drawer dal basso (`ui/drawer.tsx`)
+  per azioni rapide/selezioni.
+
+Test su viewport mobile: `newAuthedContext(browser, session, { mobile: true })`
+(375×812 + touch) in `tests/helpers/uiTest.mjs`; smoke suite
+`tests/mobile-smoke-ui.test.mjs` (workflow `mobile-smoke-ui-tests`).
+
 ## Testing
 
 Il dettaglio completo di ogni suite (scenari, setup, prerequisiti) è in

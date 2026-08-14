@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { SlidersHorizontal, X, type LucideIcon } from "lucide-react";
+import { ChevronDown, SlidersHorizontal, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FilterBarProps {
@@ -26,6 +26,9 @@ export function FilterBar({
   actions,
 }: FilterBarProps) {
   const showHeader = !!title || activeCount !== undefined || !!onReset || !!actions;
+  // Su mobile (<sm) i filtri partono collassati e si aprono con il toggle;
+  // da sm in su sono sempre visibili (il toggle è nascosto via CSS).
+  const [mobileOpen, setMobileOpen] = React.useState(false);
   return (
     <Card
       className={cn(
@@ -50,6 +53,17 @@ export function FilterBar({
             </div>
             <div className="flex items-center gap-2">
               {actions}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="sm:hidden h-11 w-11 -my-1.5 text-muted-foreground"
+                onClick={() => setMobileOpen((v) => !v)}
+                aria-expanded={mobileOpen}
+                aria-label={mobileOpen ? "Nascondi filtri" : "Mostra filtri"}
+                data-testid="button-toggle-filters"
+              >
+                <ChevronDown className={cn("h-4 w-4 transition-transform", mobileOpen && "rotate-180")} />
+              </Button>
               {onReset && activeCount !== undefined && activeCount > 0 && (
                 <Button
                   variant="ghost"
@@ -65,7 +79,14 @@ export function FilterBar({
             </div>
           </div>
         )}
-        <div className={cn("grid gap-2.5", "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5")}>
+        <div
+          className={cn(
+            "grid gap-2.5",
+            "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
+            // Mobile: visibile solo se aperto (o se non c'è header con toggle).
+            showHeader && !mobileOpen && "hidden sm:grid",
+          )}
+        >
           {children}
         </div>
       </CardContent>

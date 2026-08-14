@@ -36,7 +36,7 @@ function ThemeToggle() {
         <Button
           variant="ghost"
           size="icon"
-          className="rounded-lg h-9 w-9"
+          className="rounded-lg h-11 w-11 lg:h-9 lg:w-9"
           data-testid="button-theme-toggle"
           aria-label="Cambia tema"
         >
@@ -131,7 +131,10 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
   ];
 
   return (
-    <header className="sticky top-0 z-50 glass-panel border-b-0" style={{ borderBottom: '1px solid hsl(var(--glass-border))' }}>
+    <header
+      className="sticky top-0 z-50 glass-panel border-b-0"
+      style={{ borderBottom: '1px solid hsl(var(--glass-border))', paddingTop: 'env(safe-area-inset-top)' }}
+    >
       <div className="container mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">
           <div
@@ -250,11 +253,11 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
           <div className="lg:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-lg" data-testid="button-mobile-menu">
+                <Button variant="ghost" size="icon" className="rounded-lg h-11 w-11" data-testid="button-mobile-menu">
                   <Menu className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="w-60 max-h-[75dvh] overflow-y-auto [&_[role=menuitem]]:min-h-11">
                 {adminItems.length > 0 && (
                   <>
                     {adminItems.map((item) => (
@@ -322,7 +325,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-user-menu">
+              <Button variant="ghost" className="relative h-11 w-11 lg:h-9 lg:w-9 rounded-full" data-testid="button-user-menu">
                 <Avatar className="h-9 w-9 ring-2 ring-border/50 ring-offset-1 ring-offset-background">
                   <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white text-xs font-semibold">
                     {getInitials()}
