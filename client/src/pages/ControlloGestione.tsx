@@ -40,6 +40,7 @@ import {
 import type {
   CdgRagioneSociale, CdgCategoria, CdgFornitore, CdgSpesa, CdgPdvManuale,
 } from "@shared/schema";
+import { buildPivotExportSheets } from "@shared/cdgPivotExport";
 
 // PDV unificati: ereditati (origine="config", read-only) + manuali
 // (origine="manuale", CRUD locale al CdG).
@@ -455,82 +456,16 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
 
   const [spesaDialog, setSpesaDialog] = useState<{ open: boolean; editing?: CdgSpesa }>({ open: false });
 
-  // Nomi foglio Excel: max 31 caratteri, senza caratteri vietati, univoci.
-  const sanitizeSheetName = (name: string, used: Set<string>): string => {
-    let base = name.replace(/[\\/?*[\]:]/g, " ").replace(/\s+/g, " ").trim() || "Foglio";
-    base = base.slice(0, 31).trim();
-    let candidate = base;
-    let n = 2;
-    while (used.has(candidate.toLowerCase())) {
-      const suffix = ` (${n})`;
-      candidate = base.slice(0, 31 - suffix.length).trim() + suffix;
-      n += 1;
-    }
-    used.add(candidate.toLowerCase());
-    return candidate;
-  };
-
   // Export pivot: un foglio per Ragione Sociale + foglio "Totale" aggregato.
-  // Usa gli stessi dati della tabella a schermo (netto IVA, periodo/vista attivi).
+  // Usa gli stessi dati della tabella a schermo (netto IVA, periodo/vista
+  // attivi). Lo shaping dei fogli è logica pura in shared/cdgPivotExport.ts
+  // (testata da tests/cdg-pivot-export.test.mjs).
   const exportPivotXlsx = () => {
-    const { colonne, righe, colTot, totaleGenerale } = pivotData;
-    if (righe.length === 0) return;
+    const sheets = buildPivotExportSheets({ ...pivotData, pivotRaggr });
+    if (sheets.length === 0) return;
     const wb = XLSX.utils.book_new();
-    const usedNames = new Set<string>();
-
-    // RS in ordine di totale decrescente (ordine di prima apparizione nelle righe già ordinate).
-    const rsOrder: string[] = [];
-    const byRs = new Map<string, typeof righe>();
-    for (const r of righe) {
-      if (!byRs.has(r.rs)) { byRs.set(r.rs, []); rsOrder.push(r.rs); }
-      byRs.get(r.rs)!.push(r);
-    }
-
-    const rowLabelHeader = pivotRaggr === "rs" ? "Ragione Sociale" : "Punto Vendita";
-
-    // Foglio riepilogativo "Totale": replica la vista aggregata a schermo.
-    {
-      const rows: Record<string, string | number>[] = righe.map(r => {
-        const o: Record<string, string | number> = { [rowLabelHeader]: r.label };
-        for (const c of colonne) o[c] = r.values.get(c) || 0;
-        o["Totale"] = r.totale;
-        return o;
-      });
-      const totRow: Record<string, string | number> = { [rowLabelHeader]: "Totale" };
-      for (const c of colonne) totRow[c] = colTot.get(c) || 0;
-      totRow["Totale"] = totaleGenerale;
-      rows.push(totRow);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sanitizeSheetName("Totale", usedNames));
-    }
-
-    // Un foglio per ogni RS.
-    for (const rs of rsOrder) {
-      const rsRows = byRs.get(rs)!;
-      let rows: Record<string, string | number>[];
-      if (pivotRaggr === "rs") {
-        // Voci di costo come righe con importo + riga Totale RS.
-        const r = rsRows[0];
-        rows = colonne
-          .filter(c => (r.values.get(c) || 0) !== 0)
-          .map(c => ({ "Voce di costo": c, "Importo": r.values.get(c) || 0 }));
-        rows.push({ "Voce di costo": "Totale", "Importo": r.totale });
-      } else {
-        // PDV come righe × categorie in colonna + colonna e riga Totale.
-        const rsCols = colonne.filter(c => rsRows.some(r => (r.values.get(c) || 0) !== 0));
-        rows = rsRows.map(r => {
-          const o: Record<string, string | number> = { "Punto Vendita": r.label };
-          for (const c of rsCols) o[c] = r.values.get(c) || 0;
-          o["Totale"] = r.totale;
-          return o;
-        });
-        const totRow: Record<string, string | number> = { "Punto Vendita": "Totale" };
-        for (const c of rsCols) {
-          totRow[c] = rsRows.reduce((s, r) => s + (r.values.get(c) || 0), 0);
-        }
-        totRow["Totale"] = rsRows.reduce((s, r) => s + r.totale, 0);
-        rows.push(totRow);
-      }
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sanitizeSheetName(rs, usedNames));
+    for (const sheet of sheets) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet.rows), sheet.name);
     }
 
     const mesiAbbr = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
