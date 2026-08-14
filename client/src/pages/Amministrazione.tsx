@@ -48,6 +48,11 @@ import {
 } from "lucide-react";
 import { BASE_PATH } from "@/lib/basePath";
 import * as XLSX from "xlsx";
+import {
+  buildBilancioIvaSheet,
+  BILANCIO_IVA_SHEET_NAME,
+  type CreditoStatus,
+} from "@shared/bilancioIvaExport";
 import ControlloGestione from "@/pages/ControlloGestione";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { FinPlanSetupWizard } from "@/components/FinPlanSetupWizard";
@@ -1030,6 +1035,22 @@ export default function Amministrazione() {
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(riepilogo), "Riepilogo IVA");
 
+    // ── Foglio Bilancio IVA (Task #365): debito/credito per Ragione Sociale,
+    // coerente con la card a video (stessi filtri/periodo, incluso selectedRs).
+    // Il bottone di export resta disabilitato finché la query spese CdG è in
+    // volo, quindi qui lo stato è solo ok / no_access / error. In caso di
+    // no_access/error il foglio esce con credito e saldo vuoti + riga NOTA
+    // esplicita (mai uno zero silenzioso).
+    if (bilancioIva.rows.length > 0) {
+      const creditoStatus: CreditoStatus = cdgSpeseBilancioQ.isError
+        ? "error"
+        : bilancioIva.cdgNonAccessibile
+          ? "no_access"
+          : "ok";
+      const bilancio = buildBilancioIvaSheet(bilancioIva.rows, bilancioIva.tot, creditoStatus);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(bilancio), BILANCIO_IVA_SHEET_NAME);
+    }
+
     XLSX.writeFile(wb, `prima_nota_iva_${periodSuffix}.xlsx`);
   };
 
@@ -1500,7 +1521,9 @@ export default function Amministrazione() {
                 </>
               ) : (
                 <>
-                  <Button onClick={exportIva} disabled={ivaRows.length === 0} data-testid="button-export-iva">
+                  {/* Disabilitato anche finché la query spese CdG (credito Bilancio IVA)
+                      è in volo: altrimenti l'Excel uscirebbe con credito 0 "silenzioso". */}
+                  <Button onClick={exportIva} disabled={ivaRows.length === 0 || cdgSpeseBilancioQ.isLoading} data-testid="button-export-iva">
                     <Download className="h-4 w-4 mr-2" />
                     Esporta IVA
                   </Button>
