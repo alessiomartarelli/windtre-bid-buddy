@@ -991,7 +991,7 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
               </div>
             </div>
           )}
-          <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
+          <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700 overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead>
                 <tr className="border-b-2 border-neutral-900 dark:border-slate-600">

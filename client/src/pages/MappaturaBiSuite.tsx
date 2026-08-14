@@ -1126,7 +1126,7 @@ function RuleEditDialog({
           <Separator />
           <h4 className="text-sm font-medium">Condizioni di Corrispondenza</h4>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Categoria BiSuite</Label>
               <Input
@@ -1147,7 +1147,7 @@ function RuleEditDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Descrizione (contiene)</Label>
               <Input
@@ -1190,7 +1190,7 @@ function RuleEditDialog({
           <Separator />
           <h4 className="text-sm font-medium">Condizione su Domande/Risposte (opzionale)</h4>
 
-          <div className={`grid ${draft.conditions.domandaTesto ? 'grid-cols-3' : 'grid-cols-1'} gap-3`}>
+          <div className={`grid ${draft.conditions.domandaTesto ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1'} gap-3`}>
             <div>
               <Label className="text-xs">Testo Domanda (contiene)</Label>
               <Input

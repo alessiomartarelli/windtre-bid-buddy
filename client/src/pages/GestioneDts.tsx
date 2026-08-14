@@ -400,6 +400,7 @@ export default function GestioneDts() {
                       {report.perConsulente.length === 0 ? (
                         <p className="text-sm text-muted-foreground">Nessun lead nel periodo.</p>
                       ) : (
+                        <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="text-left text-xs uppercase text-muted-foreground border-b">
@@ -420,6 +421,7 @@ export default function GestioneDts() {
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -435,6 +437,7 @@ export default function GestioneDts() {
                       {report.perNegozio.length === 0 ? (
                         <p className="text-sm text-muted-foreground">Nessuna vendita nel periodo.</p>
                       ) : (
+                        <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="text-left text-xs uppercase text-muted-foreground border-b">
@@ -455,6 +458,7 @@ export default function GestioneDts() {
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -470,6 +474,7 @@ export default function GestioneDts() {
                       {report.perCategoriaCanvass.length === 0 ? (
                         <p className="text-sm text-muted-foreground">Nessun pezzo canvass nel periodo.</p>
                       ) : (
+                        <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <tbody>
                             {report.perCategoriaCanvass.map((c) => (
@@ -481,6 +486,7 @@ export default function GestioneDts() {
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -494,6 +500,7 @@ export default function GestioneDts() {
                       {report.perProdotto.length === 0 ? (
                         <p className="text-sm text-muted-foreground">Nessun prodotto nel periodo.</p>
                       ) : (
+                        <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <tbody>
                             {report.perProdotto.map((c) => (
@@ -505,6 +512,7 @@ export default function GestioneDts() {
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       )}
                     </CardContent>
                   </Card>

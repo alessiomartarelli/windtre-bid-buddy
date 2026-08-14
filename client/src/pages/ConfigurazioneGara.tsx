@@ -2839,7 +2839,7 @@ export default function ConfigurazioneGara() {
                         </Button>
                       )}
                     </div>
-                    <div className="border rounded-lg overflow-hidden">
+                    <div className="border rounded-lg overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-muted/50">

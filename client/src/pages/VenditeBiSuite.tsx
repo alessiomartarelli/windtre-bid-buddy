@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollableTable } from "@/components/ui/scrollable-table";
 import {
   Table,
   TableBody,
@@ -989,7 +989,7 @@ export default function VenditeBiSuite() {
           }}
           actions={
             credStatus?.configured ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="outline"
                   size="sm"
@@ -1437,12 +1437,12 @@ export default function VenditeBiSuite() {
             {!selectedPdv && viewMode === "addetti" && (
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center justify-between w-full flex-wrap gap-2">
                     <CardTitle className="flex items-center gap-2 text-base">
                       <User className="h-5 w-5 text-primary" />
                       Riepilogo per Addetto
                     </CardTitle>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <Button variant="outline" size="sm" onClick={exportExcelDettaglio} data-testid="button-export-dettaglio-header">
                         <Download className="h-4 w-4 mr-1" /> Dettaglio
                       </Button>
@@ -1474,26 +1474,27 @@ export default function VenditeBiSuite() {
                           <X className="h-4 w-4 mr-1" /> Torna alla lista
                         </Button>
                       </div>
-                      <div className="overflow-auto max-h-[500px] -mx-2 sm:mx-0 border rounded-md">
-                          <Table>
+                      <ScrollableTable className="-mx-2 sm:mx-0 border rounded-md">
+                        <div className="max-h-[500px] overflow-y-auto min-w-max">
+                          <table className="w-full caption-bottom text-sm">
                             <TableHeader>
                               <TableRow>
-                                <TableHead className="w-[90px] sticky left-0 bg-background z-10">Data</TableHead>
-                                <TableHead>Negozio</TableHead>
-                                <TableHead>Stato</TableHead>
-                                <TableHead>Cat. Canvass</TableHead>
-                                <TableHead>Tip. Canvass</TableHead>
-                                <TableHead>Desc. Canvass</TableHead>
-                                <TableHead>Cat. Prodotto</TableHead>
-                                <TableHead>Tip. Prodotto</TableHead>
-                                <TableHead>Desc. Prodotto</TableHead>
+                                <TableHead className="w-[90px] sticky left-0 top-0 bg-background z-20">Data</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">Negozio</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">Stato</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">Cat. Canvass</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">Tip. Canvass</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">Desc. Canvass</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">Cat. Prodotto</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">Tip. Prodotto</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">Desc. Prodotto</TableHead>
                                 {allDomande.map((d) => (
-                                  <TableHead key={d} className="whitespace-nowrap text-[10px] max-w-[120px]" title={d}>{d.length > 20 ? d.slice(0, 20) + '…' : d}</TableHead>
+                                  <TableHead key={d} className="whitespace-nowrap text-[10px] max-w-[120px] sticky top-0 bg-background z-10" title={d}>{d.length > 20 ? d.slice(0, 20) + '…' : d}</TableHead>
                                 ))}
-                                <TableHead>Cod. Contratto</TableHead>
-                                <TableHead>CF / P.IVA</TableHead>
-                                <TableHead>Cliente</TableHead>
-                                <TableHead className="text-right">Importo</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">Cod. Contratto</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">CF / P.IVA</TableHead>
+                                <TableHead className="sticky top-0 bg-background z-10">Cliente</TableHead>
+                                <TableHead className="text-right sticky top-0 bg-background z-10">Importo</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -1538,8 +1539,9 @@ export default function VenditeBiSuite() {
                                 );
                               })}
                             </TableBody>
-                          </Table>
-                      </div>
+                          </table>
+                        </div>
+                      </ScrollableTable>
                     </div>
                   ) : (
                     <Accordion type="multiple" className="space-y-2">
@@ -1788,20 +1790,20 @@ export default function VenditeBiSuite() {
                     Nessuna vendita trovata per i filtri selezionati
                   </p>
                 ) : (
-                  <div className="overflow-x-auto -mx-2 sm:mx-0">
-                  <ScrollArea className="h-[500px]">
-                    <Table className="min-w-[500px] sm:min-w-[700px]">
+                  <ScrollableTable className="-mx-2 sm:mx-0">
+                  <div className="max-h-[500px] overflow-y-auto min-w-max">
+                    <table className="w-full caption-bottom text-sm min-w-[500px] sm:min-w-[700px]">
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-[80px] sm:w-[100px]">Data</TableHead>
-                          <TableHead className="hidden sm:table-cell w-[80px]">ID BiSuite</TableHead>
-                          <TableHead>Negozio</TableHead>
-                          <TableHead className="hidden md:table-cell">Addetto</TableHead>
-                          <TableHead className="hidden lg:table-cell">Cliente</TableHead>
-                          <TableHead>Pista / Tipo</TableHead>
-                          <TableHead className="hidden sm:table-cell">Stato</TableHead>
-                          <TableHead className="text-right">Importo</TableHead>
-                          <TableHead className="w-[40px] sm:w-[50px]"></TableHead>
+                          <TableHead className="w-[80px] sm:w-[100px] sticky top-0 bg-background z-10">Data</TableHead>
+                          <TableHead className="hidden sm:table-cell w-[80px] sticky top-0 bg-background z-10">ID BiSuite</TableHead>
+                          <TableHead className="sticky top-0 bg-background z-10">Negozio</TableHead>
+                          <TableHead className="hidden md:table-cell sticky top-0 bg-background z-10">Addetto</TableHead>
+                          <TableHead className="hidden lg:table-cell sticky top-0 bg-background z-10">Cliente</TableHead>
+                          <TableHead className="sticky top-0 bg-background z-10">Pista / Tipo</TableHead>
+                          <TableHead className="hidden sm:table-cell sticky top-0 bg-background z-10">Stato</TableHead>
+                          <TableHead className="text-right sticky top-0 bg-background z-10">Importo</TableHead>
+                          <TableHead className="w-[40px] sm:w-[50px] sticky top-0 bg-background z-10"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1864,9 +1866,9 @@ export default function VenditeBiSuite() {
                           );
                         })}
                       </TableBody>
-                    </Table>
-                  </ScrollArea>
+                    </table>
                   </div>
+                  </ScrollableTable>
                 )}
               </CardContent>
             </Card>
@@ -1896,7 +1898,7 @@ export default function VenditeBiSuite() {
               Riscarica le vendite del periodo selezionato e <strong>elimina in locale</strong> le vendite che su BiSuite sono state cancellate o accorpate.
               Le vendite ANNULLATA vengono comunque mantenute.
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="reconcile-from">Da</Label>
                 <Input
@@ -1918,8 +1920,8 @@ export default function VenditeBiSuite() {
                 />
               </div>
             </div>
-            <div className="flex items-center justify-between gap-2 pt-2">
-              <div className="flex gap-1.5">
+            <div className="flex items-center justify-between gap-2 pt-2 flex-wrap">
+              <div className="flex gap-1.5 flex-wrap">
                 <Button
                   variant="ghost"
                   size="sm"

@@ -9,8 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -229,7 +230,7 @@ export function IncentivazioneConfigSection() {
 
       {/* Create / duplicate dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
+        <ResponsiveDialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Nuova gara</DialogTitle>
           </DialogHeader>
@@ -285,12 +286,12 @@ export function IncentivazioneConfigSection() {
               {createMut.isPending ? "Creo…" : "Crea"}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
 
       {/* Rename dialog */}
       <Dialog open={!!renameTarget} onOpenChange={(o) => { if (!o) setRenameTarget(null); }}>
-        <DialogContent className="max-w-md">
+        <ResponsiveDialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Rinomina gara</DialogTitle>
           </DialogHeader>
@@ -304,7 +305,7 @@ export function IncentivazioneConfigSection() {
               {renameMut.isPending ? "Salvo…" : "Rinomina"}
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </ResponsiveDialogContent>
       </Dialog>
 
       {/* Delete confirm */}
@@ -353,7 +354,7 @@ function RulesEditorDialog(props: { configId: string; onClose: () => void; onSav
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <ResponsiveDialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {data ? <>Regole · {data.name} · {MONTHS[data.month - 1]} {data.year}</> : "Regole gara"}
@@ -367,7 +368,7 @@ function RulesEditorDialog(props: { configId: string; onClose: () => void; onSav
         ) : (
           <RulesEditorForm detail={data} onClose={onClose} onSaved={onSaved} toast={toast} />
         )}
-      </DialogContent>
+      </ResponsiveDialogContent>
     </Dialog>
   );
 }

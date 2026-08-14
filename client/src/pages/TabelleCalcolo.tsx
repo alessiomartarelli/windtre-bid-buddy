@@ -1513,6 +1513,7 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
           <p className="text-xs text-muted-foreground">Punti partnership: 2 per tutti i cluster. Gettoni configurabili per livello cluster.</p>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b">
@@ -1544,6 +1545,7 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
               })}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
 
@@ -1553,6 +1555,7 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
           <p className="text-xs text-muted-foreground">Punti partnership: 4 per tutti i cluster. Gettoni configurabili per livello cluster.</p>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b">
@@ -1584,6 +1587,7 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
               })}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
 
@@ -1593,6 +1597,7 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
           <p className="text-xs text-muted-foreground">Sotto-eventi telefono incluso mappati a IMP_AGG_* targetCategory. Configurabili nella tabella eventi sopra.</p>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b">
@@ -1611,6 +1616,7 @@ function PartnershipTab({ config, systemConfig, isOverridden, updateValue, reset
               ))}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
     </>

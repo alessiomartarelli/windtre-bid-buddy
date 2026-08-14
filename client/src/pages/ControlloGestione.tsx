@@ -975,7 +975,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                           </BarChart>
                         </ResponsiveContainer>
 
-                        <div className="rounded-md border overflow-hidden">
+                        <div className="rounded-md border overflow-x-auto">
                           <Table>
                             <TableHeader>
                               <TableRow>
@@ -1853,7 +1853,7 @@ function SpesaDialog({
             </div>
 
             <div className="md:col-span-2">
-              <div className="rounded-md border bg-muted/40 p-3 grid grid-cols-3 gap-3 text-sm">
+              <div className="rounded-md border bg-muted/40 p-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                 <div>
                   <div className="text-xs text-muted-foreground">IVA calcolata</div>
                   <div className="font-mono font-semibold" data-testid="text-spesa-iva-calc">{fmtEur(isFinite(ivaCalc) ? ivaCalc : 0)}</div>
