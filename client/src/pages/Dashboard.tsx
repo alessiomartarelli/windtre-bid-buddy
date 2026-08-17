@@ -73,7 +73,8 @@ interface AggregatedData {
 
 // Palette colori armonizzata con il design system
 const CATEGORY_COLORS = {
-  Mobile: 'hsl(243, 75%, 59%)',      // Primary indigo
+  // Colore brand dai token tema (Task #407/#408): segue la palette scelta.
+  Mobile: 'hsl(var(--primary))',     // Brand primary
   Fisso: 'hsl(280, 85%, 50%)',       // Accent purple
   Partnership: 'hsl(200, 80%, 50%)', // Blue
   Energia: 'hsl(145, 65%, 45%)',     // Success green

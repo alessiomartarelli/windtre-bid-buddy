@@ -340,7 +340,7 @@ function PreviewCard({
 
       <div className="p-5 space-y-5">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <KpiCard label="Periodo" value={preview.period} subvalue={`${MONTH_LABELS[preview.month - 1]} ${preview.year}`} accent="#6366f1" icon={Activity} />
+          <KpiCard label="Periodo" value={preview.period} subvalue={`${MONTH_LABELS[preview.month - 1]} ${preview.year}`} accent="hsl(var(--primary))" icon={Activity} />
           <KpiCard label="Righe totali" value={fmtInt(preview.righeCount)} subvalue={`${fmtInt(totalCapitoli)} classificate`} accent="#3b82f6" />
           <KpiCard label="Totale importi" value={fmtEur(preview.totale)} accent="#10b981" icon={Target} />
           <KpiCard label="Non classificate" value={fmtInt(preview.altroCount)}
@@ -826,7 +826,9 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
   isMulti: boolean;
 }) {
   // Palette stabile per i PERIOD (per la barra impilata in "Andamento per competenza")
-  const PERIOD_PALETTE = ["#6366f1", "#3b82f6", "#10b981", "#8b5cf6", "#eab308", "#ef4444", "#06b6d4", "#a855f7", "#84cc16", "#f43f5e"];
+  // Primo colore = brand primary dai token tema (segue la palette scelta,
+  // Task #408); gli altri restano distinti per differenziare i periodi.
+  const PERIOD_PALETTE = ["hsl(var(--primary))", "#3b82f6", "#10b981", "#8b5cf6", "#eab308", "#ef4444", "#06b6d4", "#a855f7", "#84cc16", "#f43f5e"];
   const periodColor: Record<string, string> = {};
   bySource.forEach((s, i) => { periodColor[s.period] = PERIOD_PALETTE[i % PERIOD_PALETTE.length]; });
   const grandImp = bySource.reduce((s, b) => s + b.importo, 0) || totali.imp || 1;
@@ -841,7 +843,7 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
       <div>
         <SectionHead eyebrow={`Period ${period}`} title="Sintesi esecutiva" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KpiCard label="Totale maturato" value={fmtEur(totali.imp)} subvalue={`${fmtInt(totali.righe)} righe`} accent="#6366f1" icon={TrendingUp} />
+          <KpiCard label="Totale maturato" value={fmtEur(totali.imp)} subvalue={`${fmtInt(totali.righe)} righe`} accent="hsl(var(--primary))" icon={TrendingUp} />
           <KpiCard label="Contratti distinti" value={fmtInt(totali.contratti)} subvalue={`${totali.pv} PV attivi`} accent="#8b5cf6" icon={Store} />
           <KpiCard label="Eventi pagati" value={fmtInt(totali.pagati)} subvalue={`${fmtInt(totali.nonAtt)} non attivati`} accent="#10b981" icon={CheckCircle2} />
           <KpiCard label="Eventi stornati" value={fmtInt(totali.stornati)} subvalue={`${fmtPct(totali.stornati, totali.righe)} righe`} accent="#ef4444" icon={TrendingDown} />
