@@ -20,6 +20,7 @@ const PISTA_IMAGES: Record<string, string> = {
   extra_gara_iva: imgPistaExtraGaraIva,
 };
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 import { isModuleAllowedForBrands } from "@shared/modules";
 import { normalizeRsName } from "@shared/ragioneSociale";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
@@ -78,6 +79,8 @@ import {
   Euro,
   Headphones,
   Wrench,
+  Play,
+  Pause,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -2773,6 +2776,10 @@ export default function DashboardGaraReale() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { profile, organizationBrands, loading: authLoading } = useAuth();
+  // Task #427 — stile vetrina W3: rilevato dal contesto live così cambia
+  // immediatamente alla selezione del preset senza attendere il refresh del profilo.
+  const { accent: liveAccent } = useTheme();
+  const isW3 = liveAccent.type === 'preset' && liveAccent.id === 'w3';
   const orgId = profile?.organizationId ?? null;
   // Stesso gating brand degli altri moduli WindTre: org senza brand = nessun
   // filtro, org con brand = serve WindTre (vedi shared/modules.ts).
@@ -4089,10 +4096,11 @@ export default function DashboardGaraReale() {
     return map;
   }, [mappedData, garaConfigMissing, workdayInfo, puntiVenditaFromGara]);
 
-  // Task #422/#424 — KPI di testata: € Actual = PREMIO DI GARA attuale (somma
-  // dei premi per pista) e proiezione = premio proiettato (soglie incluse, non
-  // lineare); Telefoni, € Accessori e € Servizi (netto IVA ÷1.22) con
-  // proiezione lineare a fine mese sui giorni lavorativi.
+  // Task #422/#424/#426 — KPI di testata: € Actual = PREMIO DI GARA attuale
+  // (somma dei premi per pista, uguale alla card "Premio Totale" sotto), non
+  // il fatturato lordo. I test di regressione Task #426 verificano che
+  // text-kpi-actual == text-premio-totale-attuale; Telefoni, € Accessori e
+  // € Servizi (netto IVA ÷1.22) con proiezione lineare sui giorni lavorativi.
   const headerKpi = useMemo(() => {
     const proj = (v: number) => workdayInfo.elapsedWorkingDays > 0
       ? (v / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays
@@ -4327,7 +4335,29 @@ export default function DashboardGaraReale() {
               </CardContent>
             </Card>
 
-            {/* Task #424 — scorrimento verticale stile vetrina W3 */}
+            {/* Task #426 — riepilogo premio gara totale (sempre visibile quando
+                la gara è configurata), testid text-premio-totale-attuale /
+                text-premio-totale-proiezione verificati dai test di regressione. */}
+            {!garaConfigMissing && (
+              <Card data-testid="card-premio-totale">
+                <CardContent className="px-4 py-3 sm:py-3.5 sm:px-6 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <span className="text-sm font-medium text-gray-600 dark:text-slate-400">Premio di Gara</span>
+                  </div>
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <span className="text-lg font-bold text-green-700 dark:text-green-400 tabular-nums" data-testid="text-premio-totale-attuale">
+                      {formatEuro(headerKpi.actual)}
+                    </span>
+                    <span className="text-sm font-semibold text-blue-600 dark:text-blue-400 tabular-nums" data-testid="text-premio-totale-proiezione">
+                      {formatEuro(headerKpi.actualProj)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Task #424 — ticker verticale stile vetrina W3 */}
             <PistaTicker stats={pistaStats} />
 
             {premioPerRS.length > 0 && (

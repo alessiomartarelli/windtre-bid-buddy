@@ -111,6 +111,26 @@
   background-image: none;
 }
 
+/* Task #424 — ticker verticale stile vetrina W3 (Dashboard Gara Reale):
+   auto-scroll gestito in JS (scrollTop) così lo scorrimento manuale resta
+   sempre possibile. Keyframe CSS conservato per variante loop con animazione. */
+@keyframes w3-ticker {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-50%); }
+}
+.w3-ticker-track {
+  animation: w3-ticker var(--w3-ticker-duration, 32s) linear infinite;
+  will-change: transform;
+}
+.w3-ticker:hover .w3-ticker-track,
+.w3-ticker:focus-within .w3-ticker-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .w3-ticker-track { animation: none; }
+}
+
+
 /* Task #427 — stile "vetrina W3" quando il preset accent è w3
    (html[data-accent="w3"], impostato da appearance.ts e dal pre-paint di
    index.html). Solo rifiniture scoped: angoli più morbidi in tutta l'app e
@@ -139,6 +159,13 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid="card-w
 }
 html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-pista-"] {
   border-color: hsl(var(--primary) / 0.35);
+}
+/* badge icona arancio tondo (usato con preset w3, via isW3 in JSX) */
+.w3-icon-badge {
+  background: hsl(25 100% 52%) !important;
+  color: white !important;
+  border-radius: 50% !important;
+  box-shadow: 0 4px 16px hsl(25 100% 50% / 0.50);
 }
 
 /* Card vetrose stile Vision: gradiente traslucido + bordo luminoso. */
@@ -198,6 +225,59 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   -webkit-backdrop-filter: blur(24px) saturate(200%);
   border: 1px solid hsl(var(--glass-border));
   box-shadow: var(--glass-shadow), 0 0 0 1px hsl(var(--glass-border));
+}
+
+/* Task #427 — W3 vetrina style: card KPI e pista con gradiente viola profondo
+   + blob arancio. Compound selector (.glass-panel.w3-*) per battere la
+   specificity di .glass-panel e .dark .glass-panel. Solo preset "w3". */
+.glass-panel.w3-kpi-card,
+.dark .glass-panel.w3-kpi-card {
+  background: linear-gradient(135deg, hsl(275 78% 22%) 0%, hsl(262 70% 16%) 100%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid hsl(275 55% 42% / 0.3);
+  border-radius: 1.25rem; /* rounded-2xl */
+  box-shadow: 0 8px 24px hsl(262 70% 8% / 0.45);
+  overflow: hidden;
+  position: relative;
+}
+/* blob arancio decorativo in alto a destra */
+.glass-panel.w3-kpi-card::before {
+  content: '';
+  position: absolute;
+  top: -18px; right: -18px;
+  width: 90px; height: 90px;
+  background: radial-gradient(circle, hsl(25 100% 54% / 0.35) 0%, transparent 68%);
+  pointer-events: none;
+}
+/* badge icona arancio tondo */
+.w3-icon-badge {
+  background: hsl(25 100% 52%) !important;
+  color: white !important;
+  border-radius: 50% !important;
+  box-shadow: 0 4px 16px hsl(25 100% 50% / 0.50);
+}
+/* card pista espansa */
+.glass-panel.w3-pista-card,
+.dark .glass-panel.w3-pista-card {
+  background: linear-gradient(148deg, hsl(275 78% 20%) 0%, hsl(262 68% 14%) 100%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid hsl(275 55% 38% / 0.28);
+  border-radius: 1.5rem; /* rounded-3xl */
+  box-shadow: 0 8px 28px hsl(262 68% 6% / 0.5);
+  overflow: hidden;
+  position: relative;
+}
+/* blob arancio in basso a destra */
+.glass-panel.w3-pista-card::after {
+  content: '';
+  position: absolute;
+  bottom: -55px; right: -55px;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, hsl(25 100% 55% / 0.13) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* Subtle page background pattern */
