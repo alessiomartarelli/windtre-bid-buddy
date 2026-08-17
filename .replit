@@ -575,3 +575,14 @@ args = "bash scripts/run-mobile-sticky-header-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "pdv-pezzi-table-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-pdv-pezzi-table-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
