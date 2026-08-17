@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { ChevronDown, ChevronRight, Download, Table as TableIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Shield, Smartphone, Table as TableIcon, Wifi, Zap, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
@@ -17,6 +17,15 @@ import type { PistaCanvass } from "@/lib/bisuiteClassification";
 // Energia: countByPista.energia include già i pezzi CF (consumer) e P.IVA
 // (business), quindi la colonna Energia è già la somma delle due categorie.
 const PEZZI_PISTE: PistaCanvass[] = ["mobile", "fisso", "energia", "assicurazioni"];
+
+// Stesse icone/colori della Tabella PDV × Pista della Dashboard Gara Reale
+// (config piste in DashboardGaraReale.tsx): quadratino colorato + icona bianca.
+const PISTA_HEADER_ICONS: Partial<Record<PistaCanvass, { icon: LucideIcon; color: string }>> = {
+  mobile: { icon: Smartphone, color: "bg-blue-500" },
+  fisso: { icon: Wifi, color: "bg-green-500" },
+  energia: { icon: Zap, color: "bg-amber-500" },
+  assicurazioni: { icon: Shield, color: "bg-purple-500" },
+};
 
 export interface PdvPezziRow {
   codicePos: string;
@@ -206,9 +215,18 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
             <thead>
               <tr className="border-b">
                 <th className="text-left px-3 py-2 font-medium sticky left-0 top-0 bg-muted z-20 min-w-[180px]">RS / PDV</th>
-                {PEZZI_PISTE.map(p => (
-                  <th key={p} className="text-right px-3 py-2 font-medium whitespace-nowrap sticky top-0 bg-muted z-10">{pistaLabels[p]}</th>
-                ))}
+                {PEZZI_PISTE.map(p => {
+                  const conf = PISTA_HEADER_ICONS[p];
+                  const Icon = conf?.icon;
+                  return (
+                    <th key={p} className="text-right px-3 py-2 font-medium whitespace-nowrap sticky top-0 bg-muted z-10" data-testid={`th-pezzi-${p}`}>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {Icon ? <div className={`p-1 rounded ${conf!.color} text-white`}><Icon className="h-3 w-3" /></div> : null}
+                        <span>{pistaLabels[p]}</span>
+                      </div>
+                    </th>
+                  );
+                })}
                 <th className="text-right px-3 py-2 font-semibold whitespace-nowrap sticky top-0 bg-muted z-10">Totale</th>
               </tr>
             </thead>
