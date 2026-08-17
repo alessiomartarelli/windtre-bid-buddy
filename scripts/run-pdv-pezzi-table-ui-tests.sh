@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run the "Tabella PDV × Pista — vista Pezzi" UI test suite (Task #384):
+# Run the "Tabella PDV × Pista" UI test suite (Task #384 vista Pezzi,
+# Task #387 export Pezzi, Task #388 export Punti):
 # tests/pdv-pezzi-table-ui.test.mjs.
 #
 # Test UI Playwright: semina gara_config + vendite BiSuite per il mese
