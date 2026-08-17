@@ -28,6 +28,11 @@ timeout. Do NOT rely on a temporary workflow.
    boot recompresses assets (~15s) instead of loading sidecars (94ms).
 4. Swap + restart: `ssh ... "cd /var/www/incentive-w3 && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart incentive-w3 --update-env"`.
 5. Verify: `curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/mystoredesk/` on the VPS ⇒ 200 (root `/` ⇒ 302; old `/incentivew3/*` ⇒ 301 to `/mystoredesk/*`, both in Express and in Nginx). `pm2 list` must show ONLY incentive-w3 (id 15, era 13) restarted; NEVER touch easycashflows (id 9), protecta (id 12), easystripe (id 14).
+5b. Nginx: le location `/mystoredesk` devono avere `client_max_body_size 50M;`
+   (default 1M ⇒ 413 su salvataggi grandi tipo DRMS ~13MB, la richiesta muore
+   in nginx e nei log app non appare nulla — cerca in
+   /var/log/nginx/error.log "client intended to send too large body").
+   Log app prod: /var/log/incentive-w3/{out,error}.log (non ~/.pm2/logs).
 6. Public base path is `/mystoredesk` since the MyStoreDesk rebrand; the app's nginx `location` blocks live in BOTH `/etc/nginx/sites-enabled/incentive-w3` (IP vhost) and `/etc/nginx/sites-enabled/onetapp.it` — keep them in sync, `nginx -t && systemctl reload nginx`.
 
 To free workflow slots you may `removeWorkflow` finished test workflows; they

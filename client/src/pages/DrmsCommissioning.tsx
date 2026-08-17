@@ -1634,8 +1634,13 @@ export default function DrmsCommissioning() {
         throw new Error(`__CONFLICT__:${body.message || 'conflict'}`);
       }
       if (!res.ok) {
+        // Il 413 arriva tipicamente da nginx (client_max_body_size) con corpo
+        // HTML, non JSON: messaggio esplicito invece del generico.
+        if (res.status === 413) {
+          throw new Error("File troppo grande: il server ha rifiutato il salvataggio (limite dimensione richiesta superato). Contatta l'assistenza se il problema persiste.");
+        }
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || "Errore salvataggio DRMS");
+        throw new Error(body.message || `Errore salvataggio DRMS (HTTP ${res.status})`);
       }
       return res.json();
     },

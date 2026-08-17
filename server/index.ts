@@ -134,6 +134,22 @@ app.use((req, res, next) => {
     app.get("/", (_req, res) => {
       res.redirect(BASE_PATH + "/");
     });
+
+    // I body parser (express.json/urlencoded) sono montati sull'app padre:
+    // un body oltre il limite lancia "entity.too.large" PRIMA che la
+    // richiesta entri nel sub-app, quindi l'error handler del sub-app non
+    // lo vede e Express risponderebbe con l'HTML di default. Mappiamo qui
+    // l'errore in un 413 JSON parlante (il client DRMS mostra un messaggio
+    // dedicato sui 413).
+    app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+      if (res.headersSent) return next(err);
+      const status = err.status || err.statusCode || 500;
+      if (err.type === "entity.too.large" || status === 413) {
+        return res.status(413).json({ message: "Richiesta troppo grande: il file supera il limite accettato dal server." });
+      }
+      console.error("Internal Server Error (parent app):", err);
+      return res.status(status).json({ message: err.message || "Internal Server Error" });
+    });
     startBisuiteDailyScheduler();
     startTelegramReportScheduler();
   } else {
