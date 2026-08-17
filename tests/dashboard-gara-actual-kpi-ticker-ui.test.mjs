@@ -19,20 +19,21 @@ import {
 //       text-kpi-actual e text-kpi-actual-proj DEVONO essere uguali ai
 //       corrispondenti text-premio-totale-attuale / text-premio-totale-proiezione
 //       (che vengono calcolati dallo stesso reduce su pistaStats).
-//   (b) Ticker "Piste in gara" (section-pista-ticker): mostra solo le piste
-//       con totalePezzi > 0 o premioStimato > 0; il pulsante btn-ticker-pause
-//       è visibile SOLO con ≥ 3 piste attive (loop=true) e deve mettere in
-//       pausa l'animazione CSS (animationPlayState: 'paused') via click e
-//       via tastiera (aria-pressed).
+//   (b) Sezione "Piste in gara" (section-pista-ticker): mostra solo le piste
+//       con totalePezzi > 0 o premioStimato > 0. Dal redesign "Shorts" le
+//       piste sono card verticali cliccabili (ticker-pista-{p}, aria-expanded)
+//       che aprono/chiudono un pannello dettaglio (ticker-detail-{p}).
+//       Il vecchio pulsante btn-ticker-pause NON esiste più.
 //
 // Strategia di seed:
 //   - Test 1 (1 pista): gara_config con energiaConfig bassa (targetS1=1),
 //     1 vendita ENERGIA W3 + clienteTipo FISICA → pista energia con premio 200 €.
-//     → Ticker: 1 pista → no btn-ticker-pause.
+//     → Sezione piste: 1 sola card, nessun btn-ticker-pause (rimosso).
 //   - Test 2 (3 piste): stessa org + 2 vendite extra:
 //       · TIED CF + VOCE EASYPAY → mobile (totalePezzi > 0 tramite SIM_CONSUMER_CORE)
 //       · MIA TIED + MIA EASYPAY STANDARD → cb (totalePezzi > 0)
-//     → Ticker: 3 piste → btn-ticker-pause visibile, pausa via tastiera.
+//     → Sezione piste: 3 card → click/tastiera aprono e chiudono il
+//       pannello dettaglio (aria-expanded + ticker-detail-{p}).
 //
 // Entrambi i test richiedono dev server attivo su :5000 e DATABASE_URL.
 
@@ -157,18 +158,15 @@ test('Dashboard Gara: card € Actual = somma premi gara (Premio Totale), ticker
       `text-kpi-actual deve valere ${EXPECTED_PREMIO} € (premio gara), trovato: "${actualText}"`,
     );
 
-    // ── (a-bis) text-premio-totale-attuale == valore di premio atteso ────
-    // La card "Premio Totale" usa la stessa riduzione su pistaStats ma
-    // un formattatore diverso (formatEuro senza decimali per interi).
-    // Asserire entrambe le card contro il valore atteso dimostra che
-    // entrambe mostrano il premio e non il fatturato.
-    const premioTotaleEl = page.getByTestId('text-premio-totale-attuale');
-    await premioTotaleEl.waitFor({ state: 'visible', timeout: 10000 });
-    const premioTotaleText = await premioTotaleEl.innerText();
+    // ── (a-bis) ticker-premio-energia coincide con la KPI € Actual ────────
+    // La card "Premio Totale" separata è stata rimossa dal redesign a card:
+    // il cross-check ora usa il premio mostrato sulla card pista (stessa
+    // riduzione su pistaStats, formattatore formatEuro).
+    const tickerPremioCross = await page.getByTestId('ticker-premio-energia').innerText();
     assert.equal(
-      parseEuroText(premioTotaleText),
+      parseEuroText(tickerPremioCross),
       EXPECTED_PREMIO,
-      `text-premio-totale-attuale deve valere ${EXPECTED_PREMIO} €, trovato: "${premioTotaleText}"`,
+      `ticker-premio-energia deve valere ${EXPECTED_PREMIO} €, trovato: "${tickerPremioCross}"`,
     );
 
     // ── (a-proj) text-kpi-actual-proj ≥ premio atteso (proiezione ≥ attuale) ──
@@ -179,16 +177,6 @@ test('Dashboard Gara: card € Actual = somma premi gara (Premio Totale), ticker
       parseEuroText(actualProjText) >= EXPECTED_PREMIO,
       `text-kpi-actual-proj deve essere ≥ ${EXPECTED_PREMIO} € (proiezione ≥ attuale), trovato: "${actualProjText}"`,
     );
-    // text-premio-totale-proiezione (se visibile) deve coincidere con la KPI.
-    const premioProiezCount = await page.getByTestId('text-premio-totale-proiezione').count();
-    if (premioProiezCount > 0) {
-      const premioProiezText = await page.getByTestId('text-premio-totale-proiezione').innerText();
-      assert.equal(
-        parseEuroText(actualProjText),
-        parseEuroText(premioProiezText),
-        `text-kpi-actual-proj ("${actualProjText}") deve coincidere con text-premio-totale-proiezione ("${premioProiezText}")`,
-      );
-    }
 
     // ── (b) Ticker: sezione visibile, energia UNICA riga, altre piste assenti ──
     const ticker = page.getByTestId('section-pista-ticker');
@@ -246,8 +234,8 @@ test('Dashboard Gara: card € Actual = somma premi gara (Premio Totale), ticker
   }
 });
 
-// ── Test 2: ticker ≥ 3 piste → btn-ticker-pause + pausa via tastiera ──────
-test('Dashboard Gara: ticker ≥3 piste → btn-ticker-pause visibile, pausa via click e tastiera con aria-pressed', async () => {
+// ── Test 2: griglia ≥ 3 piste → card cliccabili con pannello dettaglio ────
+test('Dashboard Gara: griglia ≥3 piste → click e tastiera aprono/chiudono il pannello dettaglio (aria-expanded)', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'gkpi_3p', fullName: 'Gara KPI 3 Piste' });
   let browser;
@@ -295,58 +283,54 @@ test('Dashboard Gara: ticker ≥3 piste → btn-ticker-pause visibile, pausa via
     await page.getByTestId('ticker-pista-mobile').waitFor({ state: 'visible', timeout: 5000 });
     await page.getByTestId('ticker-pista-cb').waitFor({ state: 'visible', timeout: 5000 });
 
-    // Con ≥ 3 piste (loop=true) btn-ticker-pause DEVE essere presente e visibile.
-    const pauseBtn = page.getByTestId('btn-ticker-pause');
-    await pauseBtn.waitFor({ state: 'visible', timeout: 10000 });
-
-    // Stato iniziale: aria-pressed = false, nessuno stile di pausa inline.
-    const initialPressed = await pauseBtn.getAttribute('aria-pressed');
-    assert.equal(initialPressed, 'false', 'btn-ticker-pause deve partire con aria-pressed="false"');
-    const initialPlayState = await page.evaluate(() => {
-      const track = document.querySelector('.w3-ticker-track');
-      return track ? track.style.animationPlayState : null;
-    });
-    assert.ok(
-      initialPlayState !== 'paused',
-      `Animazione non deve essere già in pausa all'avvio (animationPlayState="${initialPlayState}")`,
-    );
-
-    // ── Click → pausa ─────────────────────────────────────────────────────
-    await pauseBtn.click();
-
-    const pressedAfterClick = await pauseBtn.getAttribute('aria-pressed');
-    assert.equal(pressedAfterClick, 'true', 'btn-ticker-pause deve diventare aria-pressed="true" dopo click');
-
-    const playStateAfterClick = await page.evaluate(() => {
-      const track = document.querySelector('.w3-ticker-track');
-      return track ? track.style.animationPlayState : null;
-    });
+    // Il vecchio pulsante pausa NON deve più esistere (redesign card Shorts).
     assert.equal(
-      playStateAfterClick,
-      'paused',
-      `w3-ticker-track deve avere animationPlayState="paused" dopo click, trovato: "${playStateAfterClick}"`,
+      await page.getByTestId('btn-ticker-pause').count(), 0,
+      'btn-ticker-pause non deve più esistere dopo il redesign a card',
     );
 
-    // ── Tastiera (Enter) → riprendi ───────────────────────────────────────
-    // Focus esplicito sul bottone (si trova già in stato "pausa").
-    await pauseBtn.focus();
+    // Stato iniziale: nessun pannello dettaglio aperto, card con aria-expanded=false.
+    const energiaCard = page.getByTestId('ticker-pista-energia');
+    assert.equal(
+      await energiaCard.getAttribute('aria-expanded'), 'false',
+      'La card energia deve partire con aria-expanded="false"',
+    );
+    assert.equal(
+      await page.locator('[data-testid^="ticker-detail-"]').count(), 0,
+      'Nessun pannello dettaglio deve essere aperto all\'avvio',
+    );
+
+    // ── Click → apre il pannello dettaglio della pista ────────────────────
+    await energiaCard.click();
+    assert.equal(
+      await energiaCard.getAttribute('aria-expanded'), 'true',
+      'La card energia deve diventare aria-expanded="true" dopo click',
+    );
+    await page.getByTestId('ticker-detail-energia').waitFor({ state: 'visible', timeout: 5000 });
+
+    // ── Click su un'altra card → il dettaglio passa alla nuova pista ──────
+    const mobileCard = page.getByTestId('ticker-pista-mobile');
+    await mobileCard.click();
+    await page.getByTestId('ticker-detail-mobile').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      await page.getByTestId('ticker-detail-energia').count(), 0,
+      'Aprendo mobile il dettaglio energia deve chiudersi (un solo pannello alla volta)',
+    );
+    assert.equal(
+      await energiaCard.getAttribute('aria-expanded'), 'false',
+      'La card energia deve tornare aria-expanded="false" quando si apre mobile',
+    );
+
+    // ── Tastiera (Enter) sulla card aperta → chiude il pannello ───────────
+    await mobileCard.focus();
     await page.keyboard.press('Enter');
-
-    const pressedAfterEnter = await pauseBtn.getAttribute('aria-pressed');
     assert.equal(
-      pressedAfterEnter,
-      'false',
-      'btn-ticker-pause deve tornare aria-pressed="false" dopo Enter da tastiera',
+      await mobileCard.getAttribute('aria-expanded'), 'false',
+      'La card mobile deve tornare aria-expanded="false" dopo Enter da tastiera',
     );
-
-    // L'animazione deve essere ripresa (inline style rimosso o non = 'paused').
-    const playStateAfterEnter = await page.evaluate(() => {
-      const track = document.querySelector('.w3-ticker-track');
-      return track ? track.style.animationPlayState : null;
-    });
-    assert.ok(
-      playStateAfterEnter !== 'paused',
-      `w3-ticker-track deve riprendere l'animazione dopo Enter (animationPlayState="${playStateAfterEnter}")`,
+    assert.equal(
+      await page.locator('[data-testid^="ticker-detail-"]').count(), 0,
+      'Dopo Enter nessun pannello dettaglio deve restare aperto',
     );
 
     await page.close();

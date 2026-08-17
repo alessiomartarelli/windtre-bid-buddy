@@ -1068,7 +1068,6 @@ type TickerRsDetail = {
   pezziProiezione: number;
 };
 
-// hint: Structural and logic conflict. Both design and behavior differ.
 type TickerPista = {
   pista: string;
   label: string;
@@ -1078,70 +1077,139 @@ type TickerPista = {
   calcProiezione: PistaCalcResult;
   rsCalcBreakdown?: Map<string, TickerRsDetail>;
 };
- (S+F, confidence: low)
 
 const fmtTickerVal = (v: number) => (Number.isInteger(v) ? v.toLocaleString('it-IT') : v.toLocaleString('it-IT', { maximumFractionDigits: 2 }));
 
 function PistaTicker({ stats }: { stats: TickerPista[] }) {
-  const [paused, setPaused] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const items = stats.filter(
     (p) => p.totalePezzi > 0 || p.calc.premioStimato > 0 || p.calcProiezione.premioStimato > 0,
   );
   if (items.length === 0) return null;
-  const loop = items.length >= 3;
-  const rendered = loop ? [...items, ...items] : items;
+  const expandedPista = expanded ? items.find((p) => p.pista === expanded) ?? null : null;
 
-  const renderRow = (p: TickerPista, i: number) => {
+  const renderCard = (p: TickerPista) => {
     const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
     if (!conf) return null;
     const Icon = conf.icon;
-    const isCopy = i >= items.length;
     const usePunti = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
     const att = usePunti ? p.calc.puntiTotali : p.totalePezzi;
     const proi = usePunti ? p.calcProiezione.puntiTotali : p.proiezionePezzi;
-    const fmtVal = (v: number) => (Number.isInteger(v) ? v.toLocaleString('it-IT') : v.toLocaleString('it-IT', { maximumFractionDigits: 2 }));
     const sogliaAtt = p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : null;
-    const sogliaProi = p.calcProiezione.sogliaRaggiunta > 0 ? p.calcProiezione.sogliaLabel : null;
+    const isOpen = expanded === p.pista;
+    const img = PISTA_IMAGES[p.pista];
     return (
-      <div
-        key={`${p.pista}-${i}`}
-        aria-hidden={isCopy || undefined}
-        data-testid={isCopy ? undefined : `ticker-pista-${p.pista}`}
-        className="relative mx-3 my-2 rounded-2xl border bg-gradient-to-r from-primary/10 via-violet-500/[0.07] to-transparent p-3 sm:p-4 overflow-hidden"
+      <button
+        key={p.pista}
+        type="button"
+        onClick={() => setExpanded((v) => (v === p.pista ? null : p.pista))}
+        aria-expanded={isOpen}
+        data-testid={`ticker-pista-${p.pista}`}
+        className={`relative aspect-[9/14] rounded-2xl overflow-hidden text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-shadow ${isOpen ? 'ring-2 ring-primary shadow-lg' : 'hover:shadow-md'}`}
       >
-        <div className="pointer-events-none absolute -right-6 -bottom-8 h-24 w-24 rounded-full bg-violet-500/10" />
-        <div className="absolute inset-y-0 left-0 w-1 bg-primary rounded-l-2xl" />
-        <div className="flex items-center gap-3">
-          <div className={`shrink-0 p-2 rounded-lg ${conf.color} text-white shadow`}>
-            <Icon className="h-4 w-4" />
+        {img ? (
+          <img src={img} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        ) : (
+          <div className={`absolute inset-0 ${conf.color}`} />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/15" />
+        <div className="absolute top-2 left-2 flex items-center gap-1.5">
+          <span className={`p-1.5 rounded-lg ${conf.color} text-white shadow`}>
+            <Icon className="h-3.5 w-3.5" />
+          </span>
+        </div>
+        {sogliaAtt && (
+          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-gray-900 shadow">
+            {sogliaAtt}
+          </span>
+        )}
+        <div className="absolute inset-x-0 bottom-0 p-2.5 text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
+          <div className="text-sm font-bold leading-tight truncate">{conf.label}</div>
+          <div className="mt-0.5 flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-lg font-extrabold tabular-nums" data-testid={`ticker-punti-${p.pista}`}>{fmtTickerVal(att)}</span>
+            <span className="text-[10px] uppercase tracking-wide opacity-80">{usePunti ? 'punti' : 'pezzi'}</span>
+            {proi > att && (
+              <span className="text-xs font-semibold tabular-nums text-sky-300 flex items-center gap-0.5">
+                <TrendingUp className="h-3 w-3" /> {fmtTickerVal(proi)}
+              </span>
+            )}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold truncate">{conf.label}</div>
-            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{usePunti ? 'Punti' : 'Pezzi'}</span>
-              <span className="text-sm font-bold tabular-nums" data-testid={isCopy ? undefined : `ticker-punti-${p.pista}`}>{fmtVal(att)}</span>
-              {sogliaAtt && (
-                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">{sogliaAtt}</span>
-              )}
-              {proi > att && (
-                <span className="text-xs font-medium text-blue-600 dark:text-blue-400 tabular-nums flex items-center gap-0.5">
-                  <TrendingUp className="h-3 w-3" /> {fmtVal(proi)}
-                  {sogliaProi && sogliaProi !== sogliaAtt && <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-blue-400/60 text-blue-600 dark:text-blue-400">{sogliaProi}</span>}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="shrink-0 text-right">
-            <div className="text-base sm:text-lg font-bold tabular-nums text-green-700 dark:text-green-400" data-testid={isCopy ? undefined : `ticker-premio-${p.pista}`}>
-              {formatEuro(p.calc.premioStimato)}
-            </div>
+          <div className="mt-0.5 flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-sm font-bold tabular-nums text-emerald-300" data-testid={`ticker-premio-${p.pista}`}>{formatEuro(p.calc.premioStimato)}</span>
             {p.calcProiezione.premioStimato > 0 && p.calcProiezione.premioStimato !== p.calc.premioStimato && (
-              <div className="text-xs font-semibold tabular-nums text-blue-600 dark:text-blue-400 flex items-center justify-end gap-0.5" data-testid={isCopy ? undefined : `ticker-premio-proj-${p.pista}`}>
+              <span className="text-xs font-semibold tabular-nums text-sky-300 flex items-center gap-0.5" data-testid={`ticker-premio-proj-${p.pista}`}>
                 <TrendingUp className="h-3 w-3" /> {formatEuro(p.calcProiezione.premioStimato)}
-              </div>
+              </span>
             )}
           </div>
         </div>
+      </button>
+    );
+  };
+
+  // Dettaglio espanso: prima una ragione sociale e poi l'altra; senza
+  // breakdown RS mostra un unico blocco "Totale".
+  const renderDetail = (p: TickerPista) => {
+    const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
+    const usePuntiTot = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
+    const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string }[] = [];
+    if (p.rsCalcBreakdown && p.rsCalcBreakdown.size > 0) {
+      p.rsCalcBreakdown.forEach((rs, key) => {
+        const usePunti = rs.puntiAttuali > 0 || rs.puntiProiezione > 0;
+        blocks.push({
+          key, name: rs.displayName,
+          puntiAtt: usePunti ? rs.puntiAttuali : rs.pezziAttuali,
+          puntiProi: usePunti ? rs.puntiProiezione : rs.pezziProiezione,
+          usePunti,
+          premioAtt: rs.premioAttuale, premioProi: rs.premioProiettato,
+          sogliaAtt: rs.sogliaAttuale, sogliaProi: rs.sogliaProiezione,
+        });
+      });
+    } else {
+      blocks.push({
+        key: 'totale', name: 'Totale',
+        puntiAtt: usePuntiTot ? p.calc.puntiTotali : p.totalePezzi,
+        puntiProi: usePuntiTot ? p.calcProiezione.puntiTotali : p.proiezionePezzi,
+        usePunti: usePuntiTot,
+        premioAtt: p.calc.premioStimato, premioProi: p.calcProiezione.premioStimato,
+        sogliaAtt: p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : '—',
+        sogliaProi: p.calcProiezione.sogliaRaggiunta > 0 ? p.calcProiezione.sogliaLabel : '—',
+      });
+    }
+    return (
+      <div className="mx-3 mb-3 rounded-2xl border bg-gradient-to-r from-primary/5 via-transparent to-violet-500/5 p-3 space-y-3" data-testid={`ticker-detail-${p.pista}`}>
+        <div className="text-sm font-semibold">{conf?.label ?? p.pista} — dettaglio</div>
+        {blocks.map((b) => (
+          <div key={b.key} className="rounded-xl border bg-card/60 p-3" data-testid={`ticker-detail-rs-${p.pista}-${b.key}`}>
+            <div className="text-xs font-bold uppercase tracking-wide mb-2 truncate">{b.name}</div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{b.usePunti ? 'Punti' : 'Pezzi'}</div>
+                <div className="text-sm font-bold tabular-nums">{fmtTickerVal(b.puntiAtt)}</div>
+                <div className="text-xs font-medium tabular-nums text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> {fmtTickerVal(b.puntiProi)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Premio</div>
+                <div className="text-sm font-bold tabular-nums text-green-700 dark:text-green-400">{formatEuro(b.premioAtt)}</div>
+                <div className="text-xs font-medium tabular-nums text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> {formatEuro(b.premioProi)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Soglia</div>
+                <div className="text-sm font-bold">
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">{b.sogliaAtt || '—'}</span>
+                </div>
+                <div className="text-xs font-medium text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5 mt-0.5">
+                  <TrendingUp className="h-3 w-3" />
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-blue-400/60">{b.sogliaProi || '—'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     );
   };
@@ -1154,51 +1222,21 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
             <TrendingUp className="h-4 w-4" />
           </div>
           Piste in gara
-          <span className="ml-auto flex items-center gap-2">
-            <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-              live
-            </span>
-            {loop && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={(e) => { e.stopPropagation(); setPaused((v) => !v); }}
-                aria-pressed={paused}
-                aria-label={paused ? 'Riprendi lo scorrimento delle piste' : 'Metti in pausa lo scorrimento delle piste'}
-                title={paused ? 'Riprendi scorrimento' : 'Pausa scorrimento'}
-                data-testid="btn-ticker-pause"
-              >
-                {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-              </Button>
-            )}
+          <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+            live
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <div
-          className={`w3-ticker relative ${loop ? 'h-[280px] overflow-hidden' : ''}`}
-          onPointerDown={() => loop && setPaused((v) => !v)}
-        >
-          {loop && (
-            <>
-              <div className="pointer-events-none absolute top-0 inset-x-0 h-8 z-10 bg-gradient-to-b from-card to-transparent" />
-              <div className="pointer-events-none absolute bottom-0 inset-x-0 h-8 z-10 bg-gradient-to-t from-card to-transparent" />
-            </>
-          )}
-          <div
-            className={loop ? 'w3-ticker-track' : ''}
-            style={loop ? ({ '--w3-ticker-duration': `${items.length * 8}s`, animationPlayState: paused ? 'paused' : undefined } as React.CSSProperties) : undefined}
-          >
-            {rendered.map(renderRow)}
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 p-3">
+          {items.map(renderCard)}
         </div>
+        {expandedPista && renderDetail(expandedPista)}
       </CardContent>
     </Card>
   );
 }
- (S+F, confidence: low)
 
 type CompactRowMetrics = {
   pezziAtt?: number;
@@ -2731,7 +2769,6 @@ function getPistaRsRowKeys(pista: any): string[] {
   return suffixes.map((s) => `${pista.pista}::${s}`);
 }
 
-// hint: Logic changed on both sides. Requires understanding intent of each change.
 export default function DashboardGaraReale() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -5714,7 +5751,6 @@ export default function DashboardGaraReale() {
     </div>
   );
 }
- (F, confidence: medium)
 
 type DettaglioRsAggColKey =
   | "smartphone_mobile"

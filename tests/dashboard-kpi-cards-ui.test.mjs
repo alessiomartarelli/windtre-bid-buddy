@@ -15,7 +15,8 @@ import {
 // Task #423: le 4 card KPI di testata della Dashboard Gara Reale.
 //
 // Copre:
-//   - text-kpi-actual   : € Actual = somma dei totalImporto (totale vendita);
+//   - text-kpi-actual   : € Actual = somma dei premi gara stimati
+//                         (pistaStats[].calc.premioStimato — semantica Task #424/#426);
 //   - text-kpi-telefoni : conteggio articoli categoria TELEFONIA;
 //   - text-kpi-accessori: somma importo ACCESSORI netto IVA (÷1.22);
 //   - text-kpi-servizi  : somma importo SERVIZI netto IVA (÷1.22);
@@ -62,7 +63,7 @@ const artSim = {
   dettaglio: { canone: '10' },
 };
 
-async function insertSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale, articoli, totale = '0.00', stato = 'FINALIZZATA' }) {
+async function insertSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale, articoli, totale = '0.00', stato = 'FINALIZZATA', cliente = { clienteTipo: 'PRIVATO' } }) {
   const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
   await pool.query(
     `INSERT INTO bisuite_sales
@@ -78,7 +79,7 @@ async function insertSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale,
       ragioneSociale,
       stato,
       totale,
-      JSON.stringify({ cliente: { clienteTipo: 'PRIVATO' }, articoli }),
+      JSON.stringify({ cliente, articoli }),
     ],
   );
 }
@@ -104,7 +105,17 @@ test('Dashboard Gara Reale: 4 card KPI di testata (€ Actual, Telefoni, € Acc
       `INSERT INTO gara_config (organization_id, month, year, name, config)
        VALUES ($1, $2, $3, $4, $5::jsonb)`,
       [session.orgId, MONTH, YEAR, 'Gara KPI test', JSON.stringify({
-        pdvList: [{ codicePos: POS_A, nome: 'Negozio KPI', ragioneSociale: RS_A }],
+        pdvList: [{ codicePos: POS_A, nome: 'Negozio KPI', ragioneSociale: RS_A, abilitaEnergia: true }],
+        // energiaConfig con targetS1=1 → 1 pezzo energia = soglia S1 → premio 200 €.
+        // Serve perché € Actual (dal Task #424/#426) = somma premi gara, non fatturato.
+        energiaConfig: {
+          pdvInGara: 1,
+          targetNoMalus: 0,
+          targetS1: 1,
+          targetS2: 5,
+          targetS3: 10,
+          premio: 200,
+        },
       })],
     );
 
@@ -143,8 +154,24 @@ test('Dashboard Gara Reale: 4 card KPI di testata (€ Actual, Telefoni, € Acc
       articoli: [artTelefono, artAccessorio],
     });
 
+    // Vendita 4: 1 pezzo ENERGIA (FISICA) → pista energia a soglia S1 → premio 200 €.
+    //   → € Actual (somma premi gara) = 200.
+    await insertSale(pool, session.orgId, {
+      codicePos: POS_A, nomeNegozio: 'Negozio KPI', ragioneSociale: RS_A,
+      totale: '0.00',
+      articoli: [{
+        categoria: { nome: 'ENERGIA W3' },
+        tipologia: { nome: 'ENERGIA' },
+        descrizione: 'OFFERTA LUCE',
+        dettaglio: { prezzo: '0.00' },
+      }],
+      cliente: { clienteTipo: 'FISICA' },
+    });
+
     // ── Valori attesi ──────────────────────────────────────────────────────
-    const EXPECTED_ACTUAL = 150 + 350 + 100;          // 600.00
+    // € Actual = somma dei premi gara stimati (solo la pista energia ha un
+    // premio configurato nel seed) — NON il fatturato lordo delle vendite.
+    const EXPECTED_ACTUAL = 200;
     const EXPECTED_TELEFONI = 2;
     const EXPECTED_ACC = 244 / IVA_RATE;               // 200.000...
     const EXPECTED_SRV = 122 / IVA_RATE;               // 100.000...
@@ -178,14 +205,11 @@ test('Dashboard Gara Reale: 4 card KPI di testata (€ Actual, Telefoni, € Acc
       `€ Actual attuale = ${EXPECTED_ACTUAL} (trovato ${actualVal})`,
     );
 
+    // La proiezione del premio è a soglie (non lineare): con targetS1=1 già
+    // raggiunto resta ≥ del premio attuale, senza formula lineare da verificare.
     const actualProjTxt = await page.getByTestId('text-kpi-actual-proj').innerText();
     const actualProjVal = parseItNum(actualProjTxt);
-    const expectedActualProj = proj(EXPECTED_ACTUAL);
     assert.ok(actualProjVal >= actualVal, `€ Actual proiezione (${actualProjVal}) ≥ attuale (${actualVal})`);
-    assert.ok(
-      Math.abs(actualProjVal - expectedActualProj) < 1,
-      `€ Actual proiezione ≈ ${expectedActualProj.toFixed(2)} (trovato ${actualProjVal})`,
-    );
 
     // ── Card Telefoni ──────────────────────────────────────────────────────
     const telTxt = await page.getByTestId('text-kpi-telefoni').innerText();
