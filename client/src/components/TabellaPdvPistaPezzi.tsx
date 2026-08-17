@@ -339,10 +339,10 @@ function RsGroup({
         <td className="text-right px-3 py-2 tabular-nums font-bold">{sumRow(rs.perPista)}</td>
       </tr>
       {expanded && rs.pdvList.map(pdv => (
-        <tr key={pdv.codicePos} className="border-b text-muted-foreground" data-testid={`row-pezzi-pdv-${pdv.codicePos}`}>
+        <tr key={pdv.codicePos} className="border-b" data-testid={`row-pezzi-pdv-${pdv.codicePos}`}>
           <td className="px-3 py-1.5 pl-8 sticky left-0 bg-card z-10">
             <div className="truncate max-w-[220px]">{pdv.nomeNegozio}</div>
-            <div className="text-[10px] font-mono">{pdv.codicePos}</div>
+            <div className="text-[10px] font-mono text-muted-foreground">{pdv.codicePos}</div>
           </td>
           {PEZZI_PISTE.map(p => (
             <td key={p} className="text-right px-3 py-1.5 tabular-nums">{pdv.perPista.get(p) || 0}</td>
