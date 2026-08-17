@@ -134,6 +134,10 @@ args = "home-landing-ui-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
+args = "aspetto-ui-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
 args = "canvass-mapping-tests"
 
 [[workflows.workflow.tasks]]
@@ -583,6 +587,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-pdv-pezzi-table-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "aspetto-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-aspetto-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
