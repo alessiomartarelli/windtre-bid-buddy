@@ -19,11 +19,18 @@ timeout. Do NOT rely on a temporary workflow.
 **How to apply (staged, each its own bash call, using $VPS_PASSWORD env):**
 1. Build + it also packs: `npm run build` then `tar czf /tmp/incentivew3-deploy.tgz -C dist public index.cjs` (~30s). dist has `index.cjs` + `public/`.
 2. scp tarball to `root@85.215.124.207:/tmp/incentivew3-deploy.tgz` (~4s).
-3. Schema sync: open SSH tunnel `-N -L 15432:localhost:5432`, read prod
-   DATABASE_URL from `/var/www/incentive-w3/ecosystem.config.cjs` (grep the
-   `DATABASE_URL: '...'` line — there is NO .env, app doesn't use dotenv),
-   rewrite host→`127.0.0.1:15432`, `DATABASE_URL=... npx drizzle-kit push --force`,
-   kill tunnel (~10s). pkill of the tunnel makes bash exit 143 — harmless.
+3. Schema sync — **OBBLIGATORIO, MAI saltarlo**, anche se "questo deploy non
+   tocca il DB": il rischio è proprio dimenticare modifiche a shared/schema.ts
+   merge-ate da altri task (è così che sono "sparite le vendite": colonna
+   alias RS mai applicata a prod). Open SSH tunnel `-N -L 15432:localhost:5432`,
+   read prod DATABASE_URL from `/var/www/incentive-w3/ecosystem.config.cjs`
+   (grep the `DATABASE_URL: '...'` line — there is NO .env, app doesn't use
+   dotenv), rewrite host→`127.0.0.1:15432`,
+   `DATABASE_URL=... npx drizzle-kit push --force`, THEN
+   `DATABASE_URL=... npx tsx scripts/verify-prod-schema.ts` (fails on any
+   table/column the code expects but prod lacks — deploy must stop if it
+   fails), kill tunnel (~10s). pkill of the tunnel makes bash exit 143 —
+   harmless.
 1b. Don't forget `node scripts/precompress-dist.mjs` BEFORE the tar, or prod
    boot recompresses assets (~15s) instead of loading sidecars (94ms).
 4. Swap + restart: `ssh ... "cd /var/www/incentive-w3 && rm -rf dist_old && mv dist dist_old && mkdir dist && tar xzf /tmp/incentivew3-deploy.tgz -C dist && pm2 restart incentive-w3 --update-env"`.

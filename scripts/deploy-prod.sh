@@ -11,10 +11,14 @@ set -euo pipefail
 #   3. Pack dist/public + dist/index.cjs into a tarball
 #   4. scp the tarball to the VPS
 #   5. Sync the production DB schema (drizzle-kit push) via SSH tunnel,
-#      using the prod DATABASE_URL read from /var/www/incentive-w3/.env
-#      BEFORE swapping the new bundle in. This avoids the "column does
-#      not exist" 500s that happen when the new code expects schema
-#      changes that were never applied to prod.
+#      using the prod DATABASE_URL read from
+#      /var/www/incentive-w3/ecosystem.config.cjs (the app does not use
+#      dotenv; .env is only a fallback), BEFORE swapping the new bundle
+#      in. Then verify (scripts/verify-prod-schema.ts) that every
+#      table/column shared/schema.ts expects actually exists in prod —
+#      any drift fails the deploy. This step is MANDATORY and has no
+#      skip flag (Task #404): skipping it is what caused the "vendite
+#      sparite" incident ("column does not exist" 500s in prod).
 #   6. Swap dist on the VPS and restart pm2 process named "incentive-w3"
 #      ONLY (we use the name, not the numeric id, because the id can
 #      change after a `pm2 delete`+`start`).
@@ -108,10 +112,19 @@ echo "==> [4/6] Uploading tarball to VPS..."
 ${SCP} "${LOCAL_TAR}" "${VPS_USER}@${VPS_HOST}:/tmp/incentivew3-deploy.tgz"
 
 echo "==> [5/6] Syncing prod DB schema via SSH tunnel..."
-# Read prod DATABASE_URL from VPS .env, rewrite host:port to localhost:TUNNEL_PORT
-PROD_DB_URL=$(${SSH} "grep -E '^DATABASE_URL=' ${VPS_DIR}/.env | head -1 | sed 's/^DATABASE_URL=//'")
+# Task #404: questo step è OBBLIGATORIO e non saltabile — nessuna env var
+# lo bypassa. Il bug "vendite sparite" è nato proprio da un deploy che ha
+# portato codice nuovo senza sincronizzare lo schema di prod.
+#
+# Read prod DATABASE_URL from the VPS. The app does NOT use dotenv: the
+# canonical source is ecosystem.config.cjs (DATABASE_URL: '...'); we keep a
+# .env fallback only for robustness if the setup ever changes.
+PROD_DB_URL=$(${SSH} "grep -oE \"DATABASE_URL: *'[^']+'\" ${VPS_DIR}/ecosystem.config.cjs | head -1 | sed -E \"s/DATABASE_URL: *'//; s/'\$//\"")
 if [[ -z "${PROD_DB_URL}" ]]; then
-  echo "ERROR: could not read DATABASE_URL from ${VPS_DIR}/.env" >&2
+  PROD_DB_URL=$(${SSH} "grep -E '^DATABASE_URL=' ${VPS_DIR}/.env 2>/dev/null | head -1 | sed 's/^DATABASE_URL=//'")
+fi
+if [[ -z "${PROD_DB_URL}" ]]; then
+  echo "ERROR: could not read DATABASE_URL from ${VPS_DIR}/ecosystem.config.cjs (nor .env)" >&2
   exit 1
 fi
 TUNNELED_DB_URL=$(echo "${PROD_DB_URL}" | sed -E "s#@[^/]+/#@127.0.0.1:${TUNNEL_PORT}/#")
@@ -135,6 +148,14 @@ done
 # Run drizzle-kit push against prod DB (additive changes apply automatically;
 # any destructive prompt aborts so prod data stays safe).
 DATABASE_URL="${TUNNELED_DB_URL}" npx drizzle-kit push
+
+# Task #404: verifica anti-drift POST-sync e PRE-swap. Confronta le
+# tabelle/colonne che shared/schema.ts si aspetta con quelle reali del DB
+# di prod: se manca qualcosa (push saltato, abortito, o incompleto) il
+# deploy FALLISCE qui, prima di pubblicare codice che darebbe 500
+# "column does not exist".
+echo "==> [5b/6] Verifying prod schema matches shared/schema.ts..."
+DATABASE_URL="${TUNNELED_DB_URL}" npx tsx scripts/verify-prod-schema.ts
 
 # Close tunnel
 kill ${TUNNEL_PID} 2>/dev/null || true
