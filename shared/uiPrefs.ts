@@ -12,6 +12,7 @@ export const ACCENT_PRESET_IDS = [
   "rose",
   "amber",
   "slate",
+  "w3",
 ] as const;
 
 export type AccentPresetId = (typeof ACCENT_PRESET_IDS)[number];

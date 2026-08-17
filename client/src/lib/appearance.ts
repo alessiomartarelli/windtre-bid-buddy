@@ -34,6 +34,8 @@ export const ACCENT_PRESETS: AccentPreset[] = [
   { id: "rose",    label: "Rosa",             swatch: "#e11d48", light: { h: 347, s: 77, l: 50 }, dark: { h: 351, s: 89, l: 64 } },
   { id: "amber",   label: "Ambra",            swatch: "#d97706", light: { h: 32, s: 95, l: 44 },  dark: { h: 38, s: 92, l: 50 } },
   { id: "slate",   label: "Grigio ardesia",   swatch: "#475569", light: { h: 215, s: 19, l: 35 }, dark: { h: 215, s: 20, l: 65 } },
+  // Task #424 — tema "W3": arancione brand WindTre stile vetrina digitale.
+  { id: "w3",      label: "W3 (WindTre)",     swatch: "#ff6900", light: { h: 25, s: 100, l: 46 }, dark: { h: 27, s: 98, l: 56 } },
 ];
 
 export const DEFAULT_ACCENT: AccentChoice = { type: "preset", id: "indigo" };
@@ -94,6 +96,8 @@ export function chartStrong(primary: Hsl): Hsl {
  */
 export function applyAccentVars(accent: AccentChoice, isDark: boolean): void {
   const root = document.documentElement;
+  // Task #427 — hook CSS per stili scoped al preset (es. [data-accent="w3"]).
+  root.setAttribute("data-accent", accent.type === "preset" ? accent.id : "custom");
   const isDefault = accent.type === "preset" && accent.id === "indigo";
   if (isDefault) {
     for (const k of OVERRIDE_KEYS) root.style.removeProperty(k);

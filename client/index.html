@@ -42,11 +42,19 @@
             rose: [[347, 77, 50], [351, 89, 64]],
             amber: [[32, 95, 44], [38, 92, 50]],
             slate: [[215, 19, 35], [215, 20, 65]],
+            w3: [[25, 100, 46], [27, 98, 56]],
           };
           var rawAccent = localStorage.getItem("mystoredesk-accent");
           if (rawAccent) {
             var accent = JSON.parse(rawAccent);
             var hsl = null;
+            // Task #427 — hook per stili CSS scoped al preset (parità con
+            // applyAccentVars in appearance.ts, evita flash al primo paint).
+            if (accent && accent.type === "preset" && (accent.id === "indigo" || PRESETS[accent.id])) {
+              document.documentElement.setAttribute("data-accent", accent.id);
+            } else if (accent && accent.type === "custom") {
+              document.documentElement.setAttribute("data-accent", "custom");
+            }
             if (accent && accent.type === "preset" && PRESETS[accent.id]) {
               hsl = PRESETS[accent.id][isDark ? 1 : 0];
             } else if (

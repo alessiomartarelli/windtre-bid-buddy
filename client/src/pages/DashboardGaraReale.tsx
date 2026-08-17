@@ -1,4 +1,24 @@
 import { useState, useMemo, Fragment, useCallback, useEffect } from "react";
+// Sfondi fotografici delle card pista (stile Shorts)
+import imgPistaMobile from "@/assets/piste/mobile.jpg";
+import imgPistaFisso from "@/assets/piste/fisso.jpg";
+import imgPistaEnergia from "@/assets/piste/energia.jpg";
+import imgPistaAssicurazioni from "@/assets/piste/assicurazioni.jpg";
+import imgPistaPartnership from "@/assets/piste/partnership.jpg";
+import imgPistaCb from "@/assets/piste/cb.jpg";
+import imgPistaProtecta from "@/assets/piste/protecta.jpg";
+import imgPistaExtraGaraIva from "@/assets/piste/extra_gara_iva.jpg";
+
+const PISTA_IMAGES: Record<string, string> = {
+  mobile: imgPistaMobile,
+  fisso: imgPistaFisso,
+  energia: imgPistaEnergia,
+  assicurazioni: imgPistaAssicurazioni,
+  partnership: imgPistaPartnership,
+  cb: imgPistaCb,
+  protecta: imgPistaProtecta,
+  extra_gara_iva: imgPistaExtraGaraIva,
+};
 import { useAuth } from "@/hooks/useAuth";
 import { isModuleAllowedForBrands } from "@shared/modules";
 import { normalizeRsName } from "@shared/ragioneSociale";
@@ -1029,6 +1049,192 @@ function ProjectionBadge({ current, projected, label }: { current: number; proje
       <TrendingUp className="h-3.5 w-3.5" />
       Proiezione: {projected}
     </div>
+  );
+}
+
+// Task #424 — "Piste in gara" in stile YouTube Shorts: griglia di card
+// verticali con foto di sfondo per pista; tap/click su una card espande il
+// dettaglio (punti, premio e soglia, attuali e in proiezione, per ragione
+// sociale una dopo l'altra).
+type TickerRsDetail = {
+  displayName: string;
+  premioAttuale: number;
+  premioProiettato: number;
+  sogliaAttuale: string;
+  sogliaProiezione: string;
+  puntiAttuali: number;
+  puntiProiezione: number;
+  pezziAttuali: number;
+  pezziProiezione: number;
+};
+
+type TickerPista = {
+  pista: string;
+  label: string;
+  totalePezzi: number;
+  proiezionePezzi: number;
+  calc: PistaCalcResult;
+  calcProiezione: PistaCalcResult;
+  rsCalcBreakdown?: Map<string, TickerRsDetail>;
+};
+
+const fmtTickerVal = (v: number) => (Number.isInteger(v) ? v.toLocaleString('it-IT') : v.toLocaleString('it-IT', { maximumFractionDigits: 2 }));
+
+function PistaTicker({ stats }: { stats: TickerPista[] }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const items = stats.filter(
+    (p) => p.totalePezzi > 0 || p.calc.premioStimato > 0 || p.calcProiezione.premioStimato > 0,
+  );
+  if (items.length === 0) return null;
+  const expandedPista = expanded ? items.find((p) => p.pista === expanded) ?? null : null;
+
+  const renderCard = (p: TickerPista) => {
+    const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
+    if (!conf) return null;
+    const Icon = conf.icon;
+    const usePunti = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
+    const att = usePunti ? p.calc.puntiTotali : p.totalePezzi;
+    const proi = usePunti ? p.calcProiezione.puntiTotali : p.proiezionePezzi;
+    const sogliaAtt = p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : null;
+    const isOpen = expanded === p.pista;
+    const img = PISTA_IMAGES[p.pista];
+    return (
+      <button
+        key={p.pista}
+        type="button"
+        onClick={() => setExpanded((v) => (v === p.pista ? null : p.pista))}
+        aria-expanded={isOpen}
+        data-testid={`ticker-pista-${p.pista}`}
+        className={`relative aspect-[9/14] rounded-2xl overflow-hidden text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-shadow ${isOpen ? 'ring-2 ring-primary shadow-lg' : 'hover:shadow-md'}`}
+      >
+        {img ? (
+          <img src={img} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        ) : (
+          <div className={`absolute inset-0 ${conf.color}`} />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/15" />
+        <div className="absolute top-2 left-2 flex items-center gap-1.5">
+          <span className={`p-1.5 rounded-lg ${conf.color} text-white shadow`}>
+            <Icon className="h-3.5 w-3.5" />
+          </span>
+        </div>
+        {sogliaAtt && (
+          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-gray-900 shadow">
+            {sogliaAtt}
+          </span>
+        )}
+        <div className="absolute inset-x-0 bottom-0 p-2.5 text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
+          <div className="text-sm font-bold leading-tight truncate">{conf.label}</div>
+          <div className="mt-0.5 flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-lg font-extrabold tabular-nums" data-testid={`ticker-punti-${p.pista}`}>{fmtTickerVal(att)}</span>
+            <span className="text-[10px] uppercase tracking-wide opacity-80">{usePunti ? 'punti' : 'pezzi'}</span>
+            {proi > att && (
+              <span className="text-xs font-semibold tabular-nums text-sky-300 flex items-center gap-0.5">
+                <TrendingUp className="h-3 w-3" /> {fmtTickerVal(proi)}
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 flex items-baseline gap-1.5 flex-wrap">
+            <span className="text-sm font-bold tabular-nums text-emerald-300" data-testid={`ticker-premio-${p.pista}`}>{formatEuro(p.calc.premioStimato)}</span>
+            {p.calcProiezione.premioStimato > 0 && p.calcProiezione.premioStimato !== p.calc.premioStimato && (
+              <span className="text-xs font-semibold tabular-nums text-sky-300 flex items-center gap-0.5" data-testid={`ticker-premio-proj-${p.pista}`}>
+                <TrendingUp className="h-3 w-3" /> {formatEuro(p.calcProiezione.premioStimato)}
+              </span>
+            )}
+          </div>
+        </div>
+      </button>
+    );
+  };
+
+  // Dettaglio espanso: prima una ragione sociale e poi l'altra; senza
+  // breakdown RS mostra un unico blocco "Totale".
+  const renderDetail = (p: TickerPista) => {
+    const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
+    const usePuntiTot = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
+    const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string }[] = [];
+    if (p.rsCalcBreakdown && p.rsCalcBreakdown.size > 0) {
+      p.rsCalcBreakdown.forEach((rs, key) => {
+        const usePunti = rs.puntiAttuali > 0 || rs.puntiProiezione > 0;
+        blocks.push({
+          key, name: rs.displayName,
+          puntiAtt: usePunti ? rs.puntiAttuali : rs.pezziAttuali,
+          puntiProi: usePunti ? rs.puntiProiezione : rs.pezziProiezione,
+          usePunti,
+          premioAtt: rs.premioAttuale, premioProi: rs.premioProiettato,
+          sogliaAtt: rs.sogliaAttuale, sogliaProi: rs.sogliaProiezione,
+        });
+      });
+    } else {
+      blocks.push({
+        key: 'totale', name: 'Totale',
+        puntiAtt: usePuntiTot ? p.calc.puntiTotali : p.totalePezzi,
+        puntiProi: usePuntiTot ? p.calcProiezione.puntiTotali : p.proiezionePezzi,
+        usePunti: usePuntiTot,
+        premioAtt: p.calc.premioStimato, premioProi: p.calcProiezione.premioStimato,
+        sogliaAtt: p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : '—',
+        sogliaProi: p.calcProiezione.sogliaRaggiunta > 0 ? p.calcProiezione.sogliaLabel : '—',
+      });
+    }
+    return (
+      <div className="mx-3 mb-3 rounded-2xl border bg-gradient-to-r from-primary/5 via-transparent to-violet-500/5 p-3 space-y-3" data-testid={`ticker-detail-${p.pista}`}>
+        <div className="text-sm font-semibold">{conf?.label ?? p.pista} — dettaglio</div>
+        {blocks.map((b) => (
+          <div key={b.key} className="rounded-xl border bg-card/60 p-3" data-testid={`ticker-detail-rs-${p.pista}-${b.key}`}>
+            <div className="text-xs font-bold uppercase tracking-wide mb-2 truncate">{b.name}</div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{b.usePunti ? 'Punti' : 'Pezzi'}</div>
+                <div className="text-sm font-bold tabular-nums">{fmtTickerVal(b.puntiAtt)}</div>
+                <div className="text-xs font-medium tabular-nums text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> {fmtTickerVal(b.puntiProi)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Premio</div>
+                <div className="text-sm font-bold tabular-nums text-green-700 dark:text-green-400">{formatEuro(b.premioAtt)}</div>
+                <div className="text-xs font-medium tabular-nums text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> {formatEuro(b.premioProi)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Soglia</div>
+                <div className="text-sm font-bold">
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">{b.sogliaAtt || '—'}</span>
+                </div>
+                <div className="text-xs font-medium text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5 mt-0.5">
+                  <TrendingUp className="h-3 w-3" />
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-blue-400/60">{b.sogliaProi || '—'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <Card className="overflow-hidden" data-testid="section-pista-ticker">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <div className="p-1.5 rounded bg-primary text-primary-foreground">
+            <TrendingUp className="h-4 w-4" />
+          </div>
+          Piste in gara
+          <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+            live
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="w3-ticker grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 p-3">
+          {items.map(renderCard)}
+        </div>
+        {expandedPista && renderDetail(expandedPista)}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -3883,9 +4089,10 @@ export default function DashboardGaraReale() {
     return map;
   }, [mappedData, garaConfigMissing, workdayInfo, puntiVenditaFromGara]);
 
-  // Task #422 — KPI di testata: € Actual (fatturato lordo del periodo),
-  // Telefoni, € Accessori e € Servizi (netto IVA ÷1.22 come nel resto della
-  // dashboard), ognuno con proiezione a fine mese sui giorni lavorativi.
+  // Task #422/#424 — KPI di testata: € Actual = PREMIO DI GARA attuale (somma
+  // dei premi per pista) e proiezione = premio proiettato (soglie incluse, non
+  // lineare); Telefoni, € Accessori e € Servizi (netto IVA ÷1.22) con
+  // proiezione lineare a fine mese sui giorni lavorativi.
   const headerKpi = useMemo(() => {
     const proj = (v: number) => workdayInfo.elapsedWorkingDays > 0
       ? (v / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays
@@ -3898,14 +4105,15 @@ export default function DashboardGaraReale() {
       accessori += pdv.accessori?.importo ?? 0;
       servizi += pdv.servizi?.importo ?? 0;
     }
-    const actual = mappedData?.totalImporto ?? 0;
+    const actual = pistaStats.reduce((s, p) => s + p.calc.premioStimato, 0);
+    const actualProj = pistaStats.reduce((s, p) => s + p.calcProiezione.premioStimato, 0);
     return {
-      actual, actualProj: proj(actual),
+      actual, actualProj,
       telefoni, telefoniProj: Math.round(proj(telefoni)),
       accessori: nettoIva(accessori), accessoriProj: proj(nettoIva(accessori)),
       servizi: nettoIva(servizi), serviziProj: proj(nettoIva(servizi)),
     };
-  }, [mappedData, workdayInfo]);
+  }, [mappedData, workdayInfo, pistaStats]);
 
   const premioPerRS = useMemo(() => {
     if (!pistaStats.length || garaConfigMissing) return [] as Array<{ displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>;
@@ -4119,48 +4327,8 @@ export default function DashboardGaraReale() {
               </CardContent>
             </Card>
 
-            {(() => {
-              const totalPremioAttuale = pistaStats.reduce((s, p) => s + p.calc.premioStimato, 0);
-              const totalPremioProiettato = pistaStats.reduce((s, p) => s + p.calcProiezione.premioStimato, 0);
-              if (totalPremioAttuale <= 0 && totalPremioProiettato <= 0) return null;
-              return (
-                <Card className="border-2 border-green-200 dark:border-green-800 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30" data-testid="card-premio-totale-summary">
-                  <CardContent className="py-5">
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2.5 bg-green-100 dark:bg-green-900 rounded-full">
-                          <Trophy className="h-6 w-6 text-green-600 dark:text-green-400" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Premio Attuale</div>
-                          <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums text-green-700 dark:text-green-400" data-testid="text-premio-totale-attuale">
-                            {formatEuro(totalPremioAttuale)}
-                          </div>
-                        </div>
-                      </div>
-                      {totalPremioProiettato > 0 && (
-                        <>
-                          <div className="hidden sm:flex items-center">
-                            <TrendingUp className="h-5 w-5 text-blue-400 mx-2" />
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-blue-100 dark:bg-blue-900 rounded-full">
-                              <TrendingUp className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div>
-                              <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Premio Proiezione</div>
-                              <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums text-blue-600 dark:text-blue-400" data-testid="text-premio-totale-proiezione">
-                                {formatEuro(totalPremioProiettato)}
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })()}
+            {/* Task #424 — scorrimento verticale stile vetrina W3 */}
+            <PistaTicker stats={pistaStats} />
 
             {premioPerRS.length > 0 && (
               <PremioPerRsPdfExport premioPerRS={premioPerRS} orgId={orgId} mese={selMonth} anno={selYear} />
