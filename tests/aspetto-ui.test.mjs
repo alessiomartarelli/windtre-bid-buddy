@@ -194,6 +194,12 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
     );
     assert.deepEqual(mirroredAccent, { type: 'custom', hex: '#336699' }, 'fresh context must mirror accent into localStorage');
 
+    // --- Stabilità UI con palette non-default (Task #413) ---
+    // Con l'accent custom attivo, la Home deve rendere normalmente e i
+    // selettori data-testid devono restare validi: nessun test deve
+    // dipendere da colori/classi della palette di default.
+    await page2.getByTestId('text-home-title').waitFor({ state: 'visible', timeout: 20000 });
+
     await page2.close();
     await fresh.close();
   } finally {
