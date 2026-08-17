@@ -176,6 +176,22 @@ args = "cdg-pivot-export-ui-tests"
 task = "workflow.run"
 args = "cdg-cat-dettaglio-ui-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "mobile-sticky-ui-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "pdv-pezzi-table-ui-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "dark-mode-print-ui-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "dashboard-gara-actual-kpi-ticker-ui-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -609,6 +625,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-dark-mode-print-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "dashboard-gara-actual-kpi-ticker-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-dashboard-gara-actual-kpi-ticker-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

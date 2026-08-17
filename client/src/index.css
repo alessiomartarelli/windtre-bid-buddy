@@ -112,8 +112,23 @@
 }
 
 /* Task #424 — ticker verticale stile vetrina W3 (Dashboard Gara Reale):
-   auto-scroll gestito in JS (scrollTop) così lo scorrimento manuale resta
-   sempre possibile; qui restano solo eventuali rifiniture visive. */
+   il track scorre in loop (contenuto duplicato → -50%), pausa su hover/focus,
+   fermo del tutto se l'utente preferisce ridurre le animazioni. */
+@keyframes w3-ticker {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-50%); }
+}
+.w3-ticker-track {
+  animation: w3-ticker var(--w3-ticker-duration, 32s) linear infinite;
+  will-change: transform;
+}
+.w3-ticker:hover .w3-ticker-track,
+.w3-ticker:focus-within .w3-ticker-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .w3-ticker-track { animation: none; }
+}
 
 /* Task #427 — stile "vetrina W3" quando il preset accent è w3
    (html[data-accent="w3"], impostato da appearance.ts e dal pre-paint di
