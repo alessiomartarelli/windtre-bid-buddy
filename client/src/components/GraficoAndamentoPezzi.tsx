@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
+  ComposedChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -18,6 +18,9 @@ import type { PistaCanvass } from "@/lib/bisuiteClassification";
 // esclusioni annullate e filtri data/PDV/pista attivi), bucketizzati per data
 // vendita. I colori delle 4 piste sono i colori semantici di categoria della
 // tabella/dashboard (NON brand); il "Totale pezzi" usa il token --primary.
+//
+// Stile Vision UI (Task #418): area sfumata sotto ogni linea attiva (gradiente
+// dal colore della serie a trasparente), griglia più tenue, tooltip glass.
 export interface PezziTrendPoint {
   /** Giorno in formato yyyy-MM-dd (già ordinato, senza buchi nel periodo). */
   day: string;
@@ -51,6 +54,11 @@ const fmtDay = (day: string) => {
   const [, m, d] = day.split("-");
   return `${d}/${m}`;
 };
+
+// Gradient stop opacities: top (5%) e bottom (95%).
+// Leggermente più intensi si leggono bene sia in light che in dark.
+const GRAD_TOP = 0.22;
+const GRAD_BOT = 0;
 
 interface Props {
   data: PezziTrendPoint[];
@@ -116,6 +124,8 @@ export function GraficoAndamentoPezzi({ data, pistaLabels, hasExtra }: Props) {
     );
   };
 
+  const activeSeries = series.filter(s => active.has(s.key));
+
   return (
     <Card data-testid="card-andamento-pezzi">
       <CardHeader className="pb-4 space-y-3">
@@ -141,13 +151,30 @@ export function GraficoAndamentoPezzi({ data, pistaLabels, hasExtra }: Props) {
       <CardContent className="pt-1">
         <div className="h-[320px]" data-testid="chart-andamento-pezzi">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 12, right: 16, bottom: 4, left: -14 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+            <ComposedChart data={chartData} margin={{ top: 12, right: 16, bottom: 4, left: -14 }}>
+              {/* Gradienti Vision UI: dall'accent della serie a trasparente verso il basso */}
+              <defs>
+                {SERIES.map(s => (
+                  <linearGradient key={s.key} id={`grad-ap-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" style={{ stopColor: s.color, stopOpacity: GRAD_TOP }} />
+                    <stop offset="95%" style={{ stopColor: s.color, stopOpacity: GRAD_BOT }} />
+                  </linearGradient>
+                ))}
+              </defs>
+
+              {/* Griglia tenue: strokeOpacity abbassa l'intensità in dark/light */}
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="hsl(var(--border))"
+                strokeOpacity={0.5}
+                vertical={false}
+              />
+
               <XAxis
                 dataKey="label"
                 tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                 tickMargin={8}
-                axisLine={{ stroke: "hsl(var(--border))" }}
+                axisLine={{ stroke: "hsl(var(--border))", strokeOpacity: 0.5 }}
                 tickLine={false}
                 interval="preserveStartEnd"
                 minTickGap={24}
@@ -159,34 +186,43 @@ export function GraficoAndamentoPezzi({ data, pistaLabels, hasExtra }: Props) {
                 tickLine={false}
                 allowDecimals={false}
               />
+
+              {/* Tooltip glass: sfondo traslucido + backdrop blur per look Vision UI.
+                  La proprietà backdropFilter funziona sul div HTML del tooltip
+                  (recharts lo monta come overlay fuori dall'SVG). */}
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "hsl(var(--popover))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: 8,
+                  backgroundColor: "hsl(var(--popover) / 0.85)",
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
+                  border: "1px solid hsl(var(--border) / 0.6)",
+                  borderRadius: 10,
                   fontSize: 12,
                   padding: "8px 12px",
                   color: "hsl(var(--popover-foreground))",
+                  boxShadow: "0 8px 24px hsl(233 60% 3% / 0.25)",
                 }}
                 itemStyle={{ padding: "1px 0" }}
                 labelStyle={{ marginBottom: 6, fontWeight: 600 }}
               />
-              {series
-                .filter(s => active.has(s.key))
-                .map(s => (
-                  <Line
-                    key={s.key}
-                    type="monotone"
-                    dataKey={s.key}
-                    name={labelOf(s)}
-                    stroke={s.color}
-                    strokeWidth={2}
-                    dot={{ r: 2.5 }}
-                    activeDot={{ r: 4.5 }}
-                    isAnimationActive={false}
-                  />
-                ))}
-            </LineChart>
+
+              {/* Area sfumata: linea + riempimento gradiente sotto */}
+              {activeSeries.map(s => (
+                <Area
+                  key={s.key}
+                  type="monotone"
+                  dataKey={s.key}
+                  name={labelOf(s)}
+                  stroke={s.color}
+                  strokeWidth={2}
+                  fill={`url(#grad-ap-${s.key})`}
+                  fillOpacity={1}
+                  dot={{ r: 2.5, fill: s.color }}
+                  activeDot={{ r: 4.5, fill: s.color }}
+                  isAnimationActive={false}
+                />
+              ))}
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </CardContent>

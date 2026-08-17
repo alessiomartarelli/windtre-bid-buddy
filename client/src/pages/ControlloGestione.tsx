@@ -38,6 +38,7 @@ import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   PieChart, Pie, Cell, LineChart, Line,
+  ComposedChart, Area,
 } from "recharts";
 
 // Palette grafici dashboard: toni moderni e desaturati (indaco brand +
@@ -47,9 +48,19 @@ import {
 const CHART_COMP = "hsl(var(--primary))";
 const CHART_CASSA = "hsl(var(--chart-brand-soft))";
 const CHART_SEL = "hsl(var(--chart-brand-strong))";
-const CHART_GRID = "#e2e8f0";
-const CHART_TICK = { fontSize: 11, fill: "#64748b" };
-const CHART_TOOLTIP_STYLE = { borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(15,23,42,.08)", fontSize: 12 } as const;
+const CHART_GRID = "hsl(var(--border))";
+const CHART_TICK = { fontSize: 11, fill: "hsl(var(--muted-foreground))" };
+// Tooltip Vision UI: sfondo traslucido + backdrop blur (stile glass-overlay).
+const CHART_TOOLTIP_STYLE = {
+  borderRadius: 10,
+  border: "1px solid hsl(var(--border) / 0.6)",
+  boxShadow: "0 8px 24px hsl(233 60% 3% / 0.2)",
+  fontSize: 12,
+  backgroundColor: "hsl(var(--popover) / 0.88)",
+  backdropFilter: "blur(10px)",
+  WebkitBackdropFilter: "blur(10px)",
+  color: "hsl(var(--popover-foreground))",
+} as const;
 const CHART_PIE = [
   "#818cf8", "#7dd3fc", "#5eead4", "#c4b5fd", "#fcd34d", "#94a3b8",
   "#f9a8d4", "#86efac", "#67e8f9", "#fdba74", "#d8b4fe", "#cbd5e1",
@@ -784,19 +795,29 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={dashboard.meseSerie}>
-                    <CartesianGrid vertical={false} stroke={CHART_GRID} />
+                  <ComposedChart data={dashboard.meseSerie}>
+                    <defs>
+                      <linearGradient id="grad-cdg-comp" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  style={{ stopColor: CHART_COMP,  stopOpacity: 0.22 }} />
+                        <stop offset="95%" style={{ stopColor: CHART_COMP,  stopOpacity: 0 }} />
+                      </linearGradient>
+                      <linearGradient id="grad-cdg-cassa" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  style={{ stopColor: CHART_CASSA, stopOpacity: 0.22 }} />
+                        <stop offset="95%" style={{ stopColor: CHART_CASSA, stopOpacity: 0 }} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke={CHART_GRID} strokeOpacity={0.5} />
                     <XAxis dataKey="mese" tick={CHART_TICK} axisLine={false} tickLine={false} />
                     <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} tick={CHART_TICK} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v: number) => fmtEur(v)} contentStyle={CHART_TOOLTIP_STYLE} />
                     <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
                     {andamentoVista !== "cassa" && (
-                      <Line type="monotone" dataKey="competenza" name="Competenza" stroke={CHART_COMP} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                      <Area type="monotone" dataKey="competenza" name="Competenza" stroke={CHART_COMP} strokeWidth={2} fill="url(#grad-cdg-comp)" fillOpacity={1} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                     )}
                     {andamentoVista !== "competenza" && (
-                      <Line type="monotone" dataKey="cassa" name="Pagato (cassa)" stroke={CHART_CASSA} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                      <Area type="monotone" dataKey="cassa" name="Pagato (cassa)" stroke={CHART_CASSA} strokeWidth={2} fill="url(#grad-cdg-cassa)" fillOpacity={1} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                     )}
-                  </LineChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend,
-  LineChart as RLineChart, Line, XAxis, YAxis, CartesianGrid,
+  ComposedChart as RComposedChart, Area, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { TrendingUp, TrendingDown, Wallet, BarChart3, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import type { FinplanCompanySnapshot } from "@shared/finplanSchema";
@@ -219,16 +219,30 @@ export function Overview({ company, companyColor }: OverviewProps) {
         <CardContent>
           <div style={{ height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <RLineChart data={lineData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrency(v as number)} width={70} />
-                <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12 }} />
+              <RComposedChart data={lineData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="grad-fp-ov-ricavi" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  style={{ stopColor: companyColor, stopOpacity: 0.22 }} />
+                    <stop offset="95%" style={{ stopColor: companyColor, stopOpacity: 0 }} />
+                  </linearGradient>
+                  <linearGradient id="grad-fp-ov-costi" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  style={{ stopColor: "#F43F5E", stopOpacity: 0.18 }} />
+                    <stop offset="95%" style={{ stopColor: "#F43F5E", stopOpacity: 0 }} />
+                  </linearGradient>
+                  <linearGradient id="grad-fp-ov-cf" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  style={{ stopColor: "#8B5CF6", stopOpacity: 0.18 }} />
+                    <stop offset="95%" style={{ stopColor: "#8B5CF6", stopOpacity: 0 }} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => formatCurrency(v as number)} width={70} />
+                <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, backgroundColor: "hsl(var(--popover) / 0.88)", backdropFilter: "blur(10px)", border: "1px solid hsl(var(--border) / 0.6)", borderRadius: 10, color: "hsl(var(--popover-foreground))" }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="Ricavi"   stroke={companyColor} strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="Costi"    stroke="#F43F5E"      strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="Cashflow" stroke="#8B5CF6"      strokeWidth={2} dot={{ r: 3 }} strokeDasharray="4 4" />
-              </RLineChart>
+                <Area type="monotone" dataKey="Ricavi"   stroke={companyColor} strokeWidth={2} fill="url(#grad-fp-ov-ricavi)"   fillOpacity={1} dot={{ r: 3 }} />
+                <Area type="monotone" dataKey="Costi"    stroke="#F43F5E"      strokeWidth={2} fill="url(#grad-fp-ov-costi)"    fillOpacity={1} dot={{ r: 3 }} />
+                <Area type="monotone" dataKey="Cashflow" stroke="#8B5CF6"      strokeWidth={2} fill="url(#grad-fp-ov-cf)"       fillOpacity={1} dot={{ r: 3 }} strokeDasharray="4 4" />
+              </RComposedChart>
             </ResponsiveContainer>
           </div>
         </CardContent>

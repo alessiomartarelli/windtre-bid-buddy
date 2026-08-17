@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  PieChart, Pie, Cell, LineChart, Line,
+  PieChart, Pie, Cell, LineChart, Line, ComposedChart, Area,
 } from "recharts";
 import { ArrowUpDown, Download, TrendingUp, TrendingDown, Wallet, BarChart3, Star } from "lucide-react";
 import type { FinplanCompanySnapshot, FinplanSnapshot, IvaPeriod } from "@shared/finplanSchema";
@@ -400,15 +400,25 @@ function AnalisiTrasversale({ agg }: { agg: GroupAggregate }) {
         <CardContent>
           <div style={{ height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrency(v as number)} width={80} />
-                <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12 }} />
+              <ComposedChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="grad-cons-eco" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  style={{ stopColor: "#10B981", stopOpacity: 0.22 }} />
+                    <stop offset="95%" style={{ stopColor: "#10B981", stopOpacity: 0 }} />
+                  </linearGradient>
+                  <linearGradient id="grad-cons-fin" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  style={{ stopColor: "#8B5CF6", stopOpacity: 0.18 }} />
+                    <stop offset="95%" style={{ stopColor: "#8B5CF6", stopOpacity: 0 }} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => formatCurrency(v as number)} width={80} />
+                <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, backgroundColor: "hsl(var(--popover) / 0.88)", backdropFilter: "blur(10px)", border: "1px solid hsl(var(--border) / 0.6)", borderRadius: 10, color: "hsl(var(--popover-foreground))" }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="Economico"   stroke="#10B981" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="Finanziario" stroke="#8B5CF6" strokeWidth={2} dot={{ r: 3 }} strokeDasharray="4 4" />
-              </LineChart>
+                <Area type="monotone" dataKey="Economico"   stroke="#10B981" strokeWidth={2} fill="url(#grad-cons-eco)" fillOpacity={1} dot={{ r: 3 }} />
+                <Area type="monotone" dataKey="Finanziario" stroke="#8B5CF6" strokeWidth={2} fill="url(#grad-cons-fin)" fillOpacity={1} dot={{ r: 3 }} strokeDasharray="4 4" />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </CardContent>
@@ -610,21 +620,35 @@ function Scenari({ agg, allRs, defaultNames }: {
         <CardContent>
           <div style={{ height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={sim.monthly.map((m, i) => ({
+              <ComposedChart data={sim.monthly.map((m, i) => ({
                 month: MO_LABELS[i],
                 Ricavi: Math.round(m.e),
                 Costi: Math.round(m.u),
                 Cashflow: Math.round(m.cf),
               }))} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatCurrency(v as number)} width={80} />
-                <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12 }} />
+                <defs>
+                  <linearGradient id="grad-cons-scen-ric" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  style={{ stopColor: "#10B981", stopOpacity: 0.22 }} />
+                    <stop offset="95%" style={{ stopColor: "#10B981", stopOpacity: 0 }} />
+                  </linearGradient>
+                  <linearGradient id="grad-cons-scen-cos" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  style={{ stopColor: "#F43F5E", stopOpacity: 0.18 }} />
+                    <stop offset="95%" style={{ stopColor: "#F43F5E", stopOpacity: 0 }} />
+                  </linearGradient>
+                  <linearGradient id="grad-cons-scen-cf" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  style={{ stopColor: "#8B5CF6", stopOpacity: 0.18 }} />
+                    <stop offset="95%" style={{ stopColor: "#8B5CF6", stopOpacity: 0 }} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v) => formatCurrency(v as number)} width={80} />
+                <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ fontSize: 12, backgroundColor: "hsl(var(--popover) / 0.88)", backdropFilter: "blur(10px)", border: "1px solid hsl(var(--border) / 0.6)", borderRadius: 10, color: "hsl(var(--popover-foreground))" }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="Ricavi"   stroke="#10B981" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="Costi"    stroke="#F43F5E" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="Cashflow" stroke="#8B5CF6" strokeWidth={2} dot={{ r: 3 }} strokeDasharray="4 4" />
-              </LineChart>
+                <Area type="monotone" dataKey="Ricavi"   stroke="#10B981" strokeWidth={2} fill="url(#grad-cons-scen-ric)" fillOpacity={1} dot={{ r: 3 }} />
+                <Area type="monotone" dataKey="Costi"    stroke="#F43F5E" strokeWidth={2} fill="url(#grad-cons-scen-cos)" fillOpacity={1} dot={{ r: 3 }} />
+                <Area type="monotone" dataKey="Cashflow" stroke="#8B5CF6" strokeWidth={2} fill="url(#grad-cons-scen-cf)"  fillOpacity={1} dot={{ r: 3 }} strokeDasharray="4 4" />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </CardContent>

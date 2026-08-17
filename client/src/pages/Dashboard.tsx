@@ -31,6 +31,8 @@ import {
   Cell,
   LineChart,
   Line,
+  ComposedChart,
+  Area,
   Legend,
   RadialBarChart,
   RadialBar,
@@ -732,34 +734,39 @@ export default function Dashboard() {
                   <CardContent>
                     {aggregatedData.preventiviPerMese.length > 0 ? (
                       <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={aggregatedData.preventiviPerMese}>
+                        <ComposedChart data={aggregatedData.preventiviPerMese}>
                           <defs>
                             <linearGradient id="lineGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                              <stop offset="5%"  style={{ stopColor: "hsl(var(--primary))", stopOpacity: 0.25 }} />
+                              <stop offset="95%" style={{ stopColor: "hsl(var(--primary))", stopOpacity: 0 }} />
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
-                          <XAxis dataKey="mese" className="text-xs" axisLine={false} tickLine={false} />
-                          <YAxis className="text-xs" axisLine={false} tickLine={false} tickFormatter={(value) => formatCurrency(value)} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
+                          <XAxis dataKey="mese" tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={(value) => formatCurrency(value)} />
                           <Tooltip
                             contentStyle={{
-                              backgroundColor: 'hsl(var(--card))',
-                              border: '1px solid hsl(var(--border))',
-                              borderRadius: '12px',
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                              backgroundColor: 'hsl(var(--popover) / 0.88)',
+                              backdropFilter: 'blur(10px)',
+                              WebkitBackdropFilter: 'blur(10px)',
+                              border: '1px solid hsl(var(--border) / 0.6)',
+                              borderRadius: '10px',
+                              boxShadow: '0 8px 24px hsl(233 60% 3% / 0.2)',
+                              color: 'hsl(var(--popover-foreground))',
                             }}
                             formatter={(value: number) => [formatCurrency(value), 'Premio']}
                           />
-                          <Line
+                          <Area
                             type="monotone"
                             dataKey="premio"
                             stroke="hsl(var(--primary))"
                             strokeWidth={3}
+                            fill="url(#lineGradient)"
+                            fillOpacity={1}
                             dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 5 }}
                             activeDot={{ r: 8, stroke: 'hsl(var(--primary))', strokeWidth: 2 }}
                           />
-                        </LineChart>
+                        </ComposedChart>
                       </ResponsiveContainer>
                     ) : (
                       <div className="flex items-center justify-center h-[300px] text-muted-foreground">
