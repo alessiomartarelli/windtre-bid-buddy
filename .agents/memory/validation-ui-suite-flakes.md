@@ -8,3 +8,5 @@ description: Full task-completion validation runs all Playwright suites in paral
 **Why:** ~20 Playwright suites all hit the single Vite dev server concurrently; cold module transforms + load make first navigation exceed 30s.
 
 **How to apply:** Re-run each failed suite individually (`bash scripts/run-<suite>.sh`) — if they pass, retry validation once; if the full run keeps flaking, complete with `skip_validation_reason` documenting the individual passes plus typecheck and the suite covering your change.
+
+**Mitigation in place:** `launchBrowser` in tests/helpers/uiTest.mjs uses a cross-process semaphore (mkdir locks in /tmp/ui-browser-slots, default 3 slots, `UI_BROWSER_SLOTS` to tune) plus 5-attempt exponential-backoff retry on launch failure, so "pthread_create"/browser-launch errors should no longer flake validation. Slots auto-release on browser close/disconnect; stale slots (dead pid or >3 min) get reclaimed.

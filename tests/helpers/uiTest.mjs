@@ -90,14 +90,126 @@ export function chromiumPath() {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Semaforo cross-process per i browser Chromium.
+//
+// La validazione di completamento lancia ~36 suite in parallelo: troppe
+// istanze Chromium simultanee esauriscono i thread del container
+// ("pthread_create: Resource temporarily unavailable") e suite a caso
+// falliscono al launch pur passando se rieseguite da sole. Il semaforo
+// limita i browser vivi in contemporanea su TUTTA la macchina usando
+// directory-lock atomiche in /tmp (mkdir è atomico anche fra processi).
+// Ogni slot contiene un file "pid": slot di processi morti o più vecchi
+// di UI_BROWSER_SLOT_STALE_MS vengono reclamati (crash senza cleanup).
+// ---------------------------------------------------------------------------
+const SLOT_ROOT = process.env.UI_BROWSER_SLOT_DIR || '/tmp/ui-browser-slots';
+const MAX_SLOTS = Math.max(1, Number(process.env.UI_BROWSER_SLOTS) || 3);
+const SLOT_STALE_MS = Math.max(30_000, Number(process.env.UI_BROWSER_SLOT_STALE_MS) || 180_000);
+const SLOT_WAIT_TIMEOUT_MS = Math.max(60_000, Number(process.env.UI_BROWSER_SLOT_TIMEOUT_MS) || 600_000);
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM = esiste ma non nostro (in sandbox non capita); trattalo come vivo.
+    return err.code === 'EPERM';
+  }
+}
+
+async function tryClaimSlot(fs, path, i) {
+  const dir = path.join(SLOT_ROOT, `slot-${i}`);
+  try {
+    await fs.mkdir(dir);
+  } catch {
+    // Occupato: reclama solo se il proprietario è morto o lo slot è stantio.
+    try {
+      const pidFile = path.join(dir, 'pid');
+      let stale = false;
+      try {
+        const pid = Number((await fs.readFile(pidFile, 'utf8')).trim());
+        const st = await fs.stat(pidFile);
+        stale = !pidAlive(pid) || Date.now() - st.mtimeMs > SLOT_STALE_MS;
+      } catch {
+        // pid file mancante/illeggibile: slot orfano se la dir è vecchia.
+        const st = await fs.stat(dir).catch(() => null);
+        stale = !st || Date.now() - st.mtimeMs > SLOT_STALE_MS;
+      }
+      if (!stale) return null;
+      await fs.rm(dir, { recursive: true, force: true });
+      await fs.mkdir(dir);
+    } catch {
+      return null; // qualcun altro ha vinto la corsa: riprova più tardi
+    }
+  }
+  await fs.writeFile(path.join(dir, 'pid'), String(process.pid)).catch(() => {});
+  return dir;
+}
+
+async function acquireBrowserSlot() {
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  await fs.mkdir(SLOT_ROOT, { recursive: true }).catch(() => {});
+  const deadline = Date.now() + SLOT_WAIT_TIMEOUT_MS;
+  for (;;) {
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      const dir = await tryClaimSlot(fs, path, i);
+      if (dir) {
+        let released = false;
+        const release = async () => {
+          if (released) return;
+          released = true;
+          await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+        };
+        return release;
+      }
+    }
+    if (Date.now() > deadline) {
+      // Non bloccare per sempre: meglio tentare il launch (con retry) che
+      // far fallire la suite per timeout del semaforo.
+      return async () => {};
+    }
+    await new Promise((r) => setTimeout(r, 250 + Math.floor(Math.random() * 500)));
+  }
+}
+
 // Avvia chromium headless con gli args standard per l'ambiente sandbox.
+// Concorrenza limitata dal semaforo cross-process (vedi sopra) + retry con
+// backoff sugli errori di launch (thread/risorse esaurite): lo slot viene
+// rilasciato automaticamente a browser.close() o alla disconnessione.
 export async function launchBrowser() {
   const { chromium } = await import('playwright-core');
-  return chromium.launch({
-    executablePath: chromiumPath(),
-    headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-  });
+  const release = await acquireBrowserSlot();
+  const attempts = 5;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const browser = await chromium.launch({
+        executablePath: chromiumPath(),
+        headless: true,
+        args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+      });
+      // Rilascio dello slot in ogni percorso di chiusura (close esplicito,
+      // crash del processo browser, kill esterno).
+      browser.on('disconnected', () => { void release(); });
+      const origClose = browser.close.bind(browser);
+      browser.close = async (...args) => {
+        try {
+          return await origClose(...args);
+        } finally {
+          await release();
+        }
+      };
+      return browser;
+    } catch (err) {
+      if (attempt >= attempts) {
+        await release();
+        throw err;
+      }
+      // Tipico: "pthread_create: Resource temporarily unavailable" /
+      // "browserType.launch: Target page, context or browser has been closed".
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1) + Math.floor(Math.random() * 500)));
+    }
+  }
 }
 
 // Viewport di riferimento per i test mobile (iPhone-like, 375×812).
