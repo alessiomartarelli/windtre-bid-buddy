@@ -159,11 +159,11 @@ export default function Home() {
           <Card className="glass-panel border-0 overflow-hidden">
             <CardContent className="relative p-8 sm:p-12 text-center">
               <div
-                className="absolute inset-x-0 -top-24 h-48 bg-gradient-to-br from-indigo-500/20 to-indigo-600/5 blur-3xl pointer-events-none"
+                className="absolute inset-x-0 -top-24 h-48 bg-gradient-to-br from-primary/20 to-primary/5 blur-3xl pointer-events-none"
                 aria-hidden="true"
               />
               <div className="relative space-y-5">
-                <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-lg">
+                <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-2xl bg-primary shadow-lg">
                   <Sparkles className="h-7 w-7 text-white" />
                 </div>
 
@@ -222,7 +222,7 @@ export default function Home() {
                   >
                     <Card className="glass-panel border-0 h-full transition-shadow group-hover:shadow-md">
                       <CardContent className="flex items-start gap-3 p-4">
-                        <div className="flex items-center justify-center h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500/15 to-indigo-600/5 text-primary">
+                        <div className="flex items-center justify-center h-10 w-10 shrink-0 rounded-xl bg-primary/10 text-primary">
                           <s.icon className="h-5 w-5" />
                         </div>
                         <div className="min-w-0">

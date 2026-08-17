@@ -131,7 +131,7 @@ const MetricBox = ({ label, value, tone, highlight }: {
 }) => {
   const toneCls = tone === 'ok' ? 'text-emerald-700 dark:text-emerald-300' : tone === 'ko' ? 'text-red-700 dark:text-red-300' : tone === 'warn' ? 'text-amber-700 dark:text-amber-300' : 'text-neutral-900 dark:text-slate-100';
   return (
-    <div className={`border border-neutral-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 ${highlight ? 'ring-1 ring-indigo-200 dark:ring-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/40' : ''}`}>
+    <div className={`border border-neutral-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 ${highlight ? 'ring-1 ring-primary/30 bg-primary/5' : ''}`}>
       <div className="text-[9px] uppercase tracking-[0.15em] text-neutral-500 dark:text-slate-400 mb-0.5">{label}</div>
       <div className={`font-mono text-sm font-semibold ${toneCls}`}>{value}</div>
     </div>
@@ -181,7 +181,7 @@ function UploadCard({
             const f = e.dataTransfer.files[0]; if (f) onFileChosen(f);
           }}
           className={`relative block bg-white dark:bg-slate-900 border-2 rounded-2xl transition-all duration-300 cursor-pointer overflow-hidden ${
-            dragOver ? 'border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/80 scale-[1.005]' : 'border-neutral-300/60 dark:border-slate-700/60 hover:border-indigo-500/60'
+            dragOver ? 'border-primary bg-primary/10 scale-[1.005]' : 'border-neutral-300/60 dark:border-slate-700/60 hover:border-primary/60'
           }`}
         >
           <input
@@ -195,15 +195,15 @@ function UploadCard({
           />
           <div className="relative p-8 sm:p-12 text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5"
-              style={{ background: loading ? 'linear-gradient(135deg, #c7d2fe, #a5b4fc)' : 'linear-gradient(135deg, #eef2ff, #e0e7ff)', border: '1px solid #c7d2fe' }}>
-              {loading ? <Loader2 size={28} className="animate-spin text-indigo-700 dark:text-indigo-300" /> : <Upload size={28} strokeWidth={1.5} className="text-indigo-700 dark:text-indigo-300" />}
+              style={{ background: loading ? 'hsl(var(--primary) / 0.25)' : 'hsl(var(--primary) / 0.08)', border: '1px solid hsl(var(--primary) / 0.3)' }}>
+              {loading ? <Loader2 size={28} className="animate-spin text-primary" /> : <Upload size={28} strokeWidth={1.5} className="text-primary" />}
             </div>
             <div className="font-serif text-2xl text-neutral-900 dark:text-slate-100 mb-2 tracking-tight">
               {loading ? "Elaborazione del DRMS…" : "Carica il file DRMS"}
             </div>
             <div className="text-sm text-neutral-600 dark:text-slate-300 mb-4">
               {loading ? "Classificazione e salvataggio in corso" : (
-                <>Trascina <span className="font-mono px-1.5 py-0.5 bg-neutral-100 dark:bg-slate-800 rounded text-xs">.xlsx</span> oppure <span className="text-indigo-700 dark:text-indigo-300 font-semibold underline decoration-dotted underline-offset-4">clicca qui</span></>
+                <>Trascina <span className="font-mono px-1.5 py-0.5 bg-neutral-100 dark:bg-slate-800 rounded text-xs">.xlsx</span> oppure <span className="text-primary font-semibold underline decoration-dotted underline-offset-4">clicca qui</span></>
               )}
             </div>
             {!loading && (
@@ -251,7 +251,7 @@ function UploadCard({
                 size="sm"
                 onClick={handleOpenMulti}
                 disabled={selectedIds.size === 0 || loading}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-neutral-300 dark:disabled:bg-slate-700"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground disabled:bg-neutral-300 dark:disabled:bg-slate-700"
                 data-testid="button-open-selected-drms"
               >
                 Apri selezionati ({selectedIds.size})
@@ -264,7 +264,7 @@ function UploadCard({
               return (
                 <div
                   key={s.id}
-                  className={`px-5 py-3 flex items-center justify-between gap-3 ${checked ? 'bg-indigo-50/50 dark:bg-indigo-950/50' : ''}`}
+                  className={`px-5 py-3 flex items-center justify-between gap-3 ${checked ? 'bg-primary/5' : ''}`}
                   data-testid={`row-drms-saved-${s.id}`}
                 >
                   <label className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer">
@@ -272,7 +272,7 @@ function UploadCard({
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleSel(s.id)}
-                      className="w-4 h-4 accent-indigo-600 shrink-0"
+                      className="w-4 h-4 accent-primary shrink-0"
                       data-testid={`checkbox-drms-${s.id}`}
                     />
                     <div className="min-w-0 flex-1">
@@ -387,7 +387,7 @@ function PreviewCard({
           <Button variant="outline" onClick={onCancel} disabled={saving} data-testid="button-preview-cancel">
             <X size={14} className="mr-2" /> Annulla
           </Button>
-          <Button onClick={onConfirm} disabled={saving} data-testid="button-preview-confirm" className="bg-indigo-600 hover:bg-indigo-700 text-white">
+          <Button onClick={onConfirm} disabled={saving} data-testid="button-preview-confirm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
             {saving ? <><Loader2 size={14} className="mr-2 animate-spin" /> Salvataggio…</> : <><Save size={14} className="mr-2" /> {preview.hasConflict ? 'Unisci e apri' : 'Salva e apri'}</>}
           </Button>
         </div>
@@ -614,7 +614,7 @@ function Dashboard({
           <div className="min-w-0">
             <div className="text-[9px] uppercase tracking-[0.3em] text-neutral-500 dark:text-slate-400">DRMS · Commissioning</div>
             <div className="font-serif text-lg text-neutral-900 dark:text-slate-100 leading-tight">
-              Franchising <span className="italic text-indigo-700 dark:text-indigo-300">W3</span>
+              Franchising <span className="italic text-primary">W3</span>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:gap-6">
@@ -680,7 +680,7 @@ function Dashboard({
               onClick={() => setActiveTab(t.k)}
               data-testid={`tab-drms-${t.k}`}
               className={`px-4 sm:px-5 py-3 text-[11px] sm:text-xs uppercase tracking-[0.12em] border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === t.k ? 'border-indigo-700 text-neutral-900 dark:text-slate-100 font-semibold' : 'border-transparent text-neutral-500 dark:text-slate-400 hover:text-neutral-900 dark:hover:text-slate-100'
+                activeTab === t.k ? 'border-primary text-neutral-900 dark:text-slate-100 font-semibold' : 'border-transparent text-neutral-500 dark:text-slate-400 hover:text-neutral-900 dark:hover:text-slate-100'
               }`}
             >{t.l}</button>
           ))}
@@ -934,7 +934,7 @@ function OverviewTab({ totali, perCapitolo, matrix, period, byCompetenza, bySour
                   const tot = Object.values(c.perPeriod).reduce((s, v) => s + v, 0);
                   const absTot = Object.values(c.perPeriod).reduce((s, v) => s + Math.abs(v), 0) || 1;
                   return (
-                    <tr key={c.competenza} className="border-b border-neutral-100 dark:border-slate-800 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/30" data-testid={`row-competenza-${c.competenza}`}>
+                    <tr key={c.competenza} className="border-b border-neutral-100 dark:border-slate-800 hover:bg-primary/[0.04]" data-testid={`row-competenza-${c.competenza}`}>
                       <td className="px-4 py-2 font-mono text-neutral-900 dark:text-slate-100 font-semibold">{c.competenza}</td>
                       <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700 dark:text-slate-200">{fmtInt(c.righe)}</td>
                       <td className="px-4 py-2 text-right font-mono tabular-nums text-neutral-700 dark:text-slate-200">{fmtInt(c.contratti)}</td>
@@ -1154,11 +1154,11 @@ function MatrixTab({ matrix, capitoliOrdinati, onSelectPV, filteredData, include
           </thead>
           <tbody>
             {matrix.map(r => (
-              <tr key={r.neg} className="border-b border-neutral-100 dark:border-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 cursor-pointer group" onClick={() => onSelectPV(r.neg)} data-testid={`row-matrix-${r.neg}`}>
-                <td className="px-3 py-2 sticky left-0 bg-white dark:bg-slate-900 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-950 font-mono text-neutral-900 dark:text-slate-100">
+              <tr key={r.neg} className="border-b border-neutral-100 dark:border-slate-800 hover:bg-primary/[0.06] cursor-pointer group" onClick={() => onSelectPV(r.neg)} data-testid={`row-matrix-${r.neg}`}>
+                <td className="px-3 py-2 sticky left-0 bg-white dark:bg-slate-900 group-hover:bg-primary/[0.06] font-mono text-neutral-900 dark:text-slate-100">
                   <div className="flex items-center justify-between">
                     <span>{r.neg}</span>
-                    <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 text-indigo-700 dark:text-indigo-300" />
+                    <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 text-primary" />
                   </div>
                 </td>
                 {capitoliOrdinati.map(c => {
@@ -1457,7 +1457,7 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
             {listaPV.map(pv => (
               <button key={pv.neg} onClick={() => setSelectedPV(pv.neg)} data-testid={`button-pv-${pv.neg}`}
                 className={`w-full text-left px-3 py-2.5 border-b border-neutral-100 dark:border-slate-800 transition-colors ${
-                  selectedPV === pv.neg ? 'bg-indigo-50 dark:bg-indigo-950 border-l-2 border-l-indigo-700' : 'hover:bg-neutral-50 dark:hover:bg-slate-800'
+                  selectedPV === pv.neg ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-neutral-50 dark:hover:bg-slate-800'
                 }`}>
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-xs text-neutral-900 dark:text-slate-100">{pv.neg}</span>
@@ -1982,10 +1982,10 @@ export default function DrmsCommissioning() {
           <div className="max-w-5xl mx-auto px-4 sm:px-8 py-8">
             <div className="mb-8">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700 rounded-full text-[10px] uppercase tracking-[0.2em] text-neutral-700 dark:text-slate-200 font-medium mb-4">
-                <span className="w-1 h-1 bg-indigo-600 rounded-full" /> Analisi DRMS · W3 Incentivazione
+                <span className="w-1 h-1 bg-primary rounded-full" /> Analisi DRMS · W3 Incentivazione
               </div>
               <h1 className="font-serif text-4xl sm:text-5xl text-neutral-900 dark:text-slate-100 leading-tight tracking-tight">
-                Dashboard <span className="italic" style={{ background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #818cf8 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Commissioning</span>
+                Dashboard <span className="italic" style={{ background: "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.75) 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Commissioning</span>
               </h1>
               <p className="mt-4 text-neutral-700 dark:text-slate-200 max-w-2xl leading-relaxed">
                 Carica un file DRMS Excel per generare il prospetto dettagliato per capitolo, PV, soglie e driver.
