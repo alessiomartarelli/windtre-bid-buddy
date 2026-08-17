@@ -45,10 +45,10 @@ timeout. Do NOT rely on a temporary workflow.
 7. Drift watch: il server prod ricontrolla lo schema al boot e
    ogni giorno alle 07:00 Roma (server/schemaDriftScheduler.ts) e notifica su
    Telegram usando env `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` da
-   ecosystem.config.cjs. Al primo deploy dopo il merge: aggiungere quelle due
-   chiavi nell'env dell'app in ecosystem.config.cjs (valori = secrets Replit
-   omonimi) e `pm2 restart incentive-w3 --update-env`; senza, il drift viene
-   solo loggato (warning una volta nei log pm2).
+   ecosystem.config.cjs. FATTO (ago 2026): le chiavi sono già nell'env
+   dell'app in ecosystem.config.cjs (backup in .bak-tg); dopo un
+   `pm2 restart --update-env` i log mostrano "[schema-drift] OK". Se le
+   chiavi spariscono ricompare il warning "non configurati" nei log pm2.
 
 To free workflow slots you may `removeWorkflow` finished test workflows; they
 are also validation commands, so restore them afterward with
