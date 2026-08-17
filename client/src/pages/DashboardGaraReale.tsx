@@ -2225,7 +2225,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv }: { p
                         <th key={col.key} colSpan={2} className="text-center px-3 py-2 font-semibold border-r border-b min-w-[200px]" data-testid={`th-tabella-pezzi-${col.key}`}>
                           <div className="flex items-center justify-center gap-1.5">
                             {Icon ? <div className={`p-1 rounded ${col.color} text-white`}><Icon className="h-3 w-3" /></div> : null}
-                            <span>{col.label}</span>
+                            <span>{col.label}{col.euro ? <span className="text-[10px] font-normal opacity-60" title="Importo al netto IVA (÷1,22), come nel report Telegram"> (netto IVA)</span> : null}</span>
                           </div>
                         </th>
                       );
