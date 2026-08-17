@@ -33,5 +33,6 @@ done
 
 echo "[pdv-pezzi-table-ui-tests] running suites ..."
 exec node --import tsx --test \
+  tests/pdv-pezzi-extra.test.mjs \
   tests/pdv-pezzi-table-ui.test.mjs \
   tests/pdv-pezzi-vendite-export-ui.test.mjs

@@ -190,6 +190,9 @@ export interface ClassifiedArticle {
   type: ArticleType;
   pista?: PistaCanvass;
   prezzo: number;
+  /** Importo imponibile BiSuite (`dettaglio.importoImponibile`), 0 se assente.
+   * Usato per gli importi Accessori/Servizi (parità con la Dashboard Gara). */
+  importoImponibile: number;
   importoScontrino: number;
   importoFinanziato: number;
   importoCredito: number;
@@ -296,6 +299,7 @@ export function classifySaleArticles(
     const tipNome = (art.tipologia?.nome || '').trim();
     const desc = (art.descrizione || '').trim();
     const prezzo = parseFloat(art.dettaglio?.prezzo || '0') || 0;
+    const importoImponibile = parseFloat(art.dettaglio?.importoImponibile || '0') || 0;
     const importoScontrino = parseFloat(art.dettaglio?.importoScontrino || '0') || 0;
     const importoFinanziato = parseFloat(art.dettaglio?.importoFinanziato || '0') || 0;
     const importoCredito = parseFloat(art.dettaglio?.importoCredito || '0') || 0;
@@ -321,6 +325,7 @@ export function classifySaleArticles(
         pista,
         couponCaring: coupon || undefined,
         prezzo,
+        importoImponibile,
         importoScontrino,
         importoFinanziato,
         importoCredito,
@@ -348,6 +353,7 @@ export function classifySaleArticles(
         descrizione: desc,
         type: 'prodotti',
         prezzo,
+        importoImponibile,
         importoScontrino,
         importoFinanziato,
         importoCredito,

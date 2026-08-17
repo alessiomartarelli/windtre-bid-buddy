@@ -101,6 +101,7 @@ import {
 } from "@/lib/bisuiteClassification";
 import { TabellaPdvPistaPezzi } from "@/components/TabellaPdvPistaPezzi";
 import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
+import { accumulaPezziExtra, emptyPezziExtra, type PezziExtraCounters } from "@shared/pdvPezziExtra";
 import type { CanvassKpiRule } from "@shared/canvassKpiRules";
 
 interface BisuiteSale {
@@ -143,6 +144,9 @@ interface PdvSummary {
   ivaByPista: Partial<Record<PistaCanvass, number>>;
   /** Dettaglio categorie canvass vendute, per pista: nome → pezzi/IVA. */
   categorieByPista: CategorieByPista;
+  /** Task #398 — contatori extra per la Tabella PDV × Pista (Pezzi):
+   * IVA, CB (solo cambi piano), Telefoni, € Accessori/Servizi netto IVA. */
+  pezziExtra: PezziExtraCounters;
   vendite: BisuiteSale[];
   articleIncasso: ArticleIncasso;
 }
@@ -634,6 +638,7 @@ export default function VenditeBiSuite() {
           amountByPista: {},
           ivaByPista: {},
           categorieByPista: {},
+          pezziExtra: emptyPezziExtra(),
           vendite: [],
           articleIncasso: { scontrinato: 0, fuoriScontrino: 0, finanziato: 0, credito: 0 },
         };
@@ -663,6 +668,10 @@ export default function VenditeBiSuite() {
             entry.amountByPista[art.pista] = (entry.amountByPista[art.pista] || 0) + art.prezzo;
             accumulaCategoriaCanvass(entry.categorieByPista, entry.ivaByPista, art);
           }
+          // Task #398 — contatori extra (IVA/CB/Telefoni/€ Accessori/€ Servizi)
+          // per la Tabella PDV × Pista (Pezzi): stessi filtri e stessa
+          // esclusione annullate degli altri aggregati.
+          accumulaPezziExtra(entry.pezziExtra, art);
         }
       }
       if (saleMatchesFilter) {
