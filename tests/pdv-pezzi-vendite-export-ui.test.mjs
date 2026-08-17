@@ -155,6 +155,29 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     const card = page.locator('[data-testid="card-tabella-pdv-pista-pezzi"]');
     await card.waitFor({ state: 'visible', timeout: 20000 });
 
+    // ── Task #396: icone colorate delle piste nelle intestazioni ──
+    // Ogni th-pezzi-{pista} deve contenere il quadratino colorato (classe
+    // bg-* attesa) con dentro l'icona lucide (svg) e testo bianco, allineato
+    // a destra (justify-end). Una regressione (refactor colonne, rimozione
+    // config PISTA_HEADER_ICONS) deve far fallire questa sezione.
+    const EXPECTED_HEADER_ICONS = {
+      mobile: 'bg-blue-500',
+      fisso: 'bg-green-500',
+      energia: 'bg-amber-500',
+      assicurazioni: 'bg-purple-500',
+    };
+    for (const [pista, colorClass] of Object.entries(EXPECTED_HEADER_ICONS)) {
+      const th = page.getByTestId(`th-pezzi-${pista}`);
+      await th.waitFor({ state: 'visible', timeout: 10000 });
+      const wrapClass = await th.locator('div.flex').first().getAttribute('class');
+      assert.ok(wrapClass.includes('justify-end'), `th-pezzi-${pista}: header allineato a destra (justify-end), trovato "${wrapClass}"`);
+      const iconBox = th.locator(`div.${colorClass}`);
+      assert.equal(await iconBox.count(), 1, `th-pezzi-${pista}: quadratino colorato ${colorClass} presente`);
+      const boxClass = await iconBox.getAttribute('class');
+      assert.ok(boxClass.includes('text-white'), `th-pezzi-${pista}: icona bianca (text-white), trovato "${boxClass}"`);
+      assert.equal(await iconBox.locator('svg').count(), 1, `th-pezzi-${pista}: icona svg dentro il quadratino ${colorClass}`);
+    }
+
     // Sanity a schermo: RS Gamma unificata (2 righe RS totali) e totali colonna.
     const rsCount = await page.locator('[data-testid^="row-pezzi-rs-"]').count();
     assert.equal(rsCount, 2, `a schermo: 2 righe RS (Gamma unificata + Delta), trovate ${rsCount}`);
