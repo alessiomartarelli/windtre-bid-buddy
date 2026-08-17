@@ -181,6 +181,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
   const [dashboardAnno, setDashboardAnno] = useState<number>(new Date().getFullYear());
   const [annoMeseSel, setAnnoMeseSel] = useState<number>(new Date().getMonth() + 1);
   const [annoVista, setAnnoVista] = useState<"competenza" | "cassa">("competenza");
+  const [andamentoVista, setAndamentoVista] = useState<"competenza" | "cassa" | "entrambi">("entrambi");
   const [speseSort, setSpeseSort] = useState<{ key: "dataPagamento" | "meseCompetenza" | "importo"; dir: "asc" | "desc" }>({ key: "dataPagamento", dir: "desc" });
   // Gruppi di ricorrenza espansi nel drill-down della lista spese.
   const [gruppiEspansi, setGruppiEspansi] = useState<Set<string>>(new Set());
@@ -754,7 +755,31 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
             </div>
 
             <Card data-testid="card-andamento-costi">
-              <CardHeader><CardTitle className="text-base">Andamento costi (ultimi 12 mesi)</CardTitle></CardHeader>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <CardTitle className="text-base">Andamento costi (ultimi 12 mesi)</CardTitle>
+                  <div className="flex rounded-md border overflow-hidden h-8" data-testid="toggle-andamento-vista">
+                    <button
+                      type="button"
+                      onClick={() => setAndamentoVista("competenza")}
+                      className={`px-3 text-xs font-medium ${andamentoVista === "competenza" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                      data-testid="btn-andamento-competenza"
+                    >Competenza</button>
+                    <button
+                      type="button"
+                      onClick={() => setAndamentoVista("cassa")}
+                      className={`px-3 text-xs font-medium border-l ${andamentoVista === "cassa" ? "bg-blue-500 text-white" : "bg-background hover:bg-muted"}`}
+                      data-testid="btn-andamento-cassa"
+                    >Cassa</button>
+                    <button
+                      type="button"
+                      onClick={() => setAndamentoVista("entrambi")}
+                      className={`px-3 text-xs font-medium border-l ${andamentoVista === "entrambi" ? "bg-indigo-900 text-white" : "bg-background hover:bg-muted"}`}
+                      data-testid="btn-andamento-entrambi"
+                    >Entrambi</button>
+                  </div>
+                </div>
+              </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={dashboard.meseSerie}>
@@ -763,8 +788,12 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                     <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} tick={CHART_TICK} axisLine={false} tickLine={false} />
                     <Tooltip formatter={(v: number) => fmtEur(v)} contentStyle={CHART_TOOLTIP_STYLE} />
                     <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-                    <Line type="monotone" dataKey="competenza" name="Competenza" stroke={CHART_COMP} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                    <Line type="monotone" dataKey="cassa" name="Pagato (cassa)" stroke={CHART_CASSA} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    {andamentoVista !== "cassa" && (
+                      <Line type="monotone" dataKey="competenza" name="Competenza" stroke={CHART_COMP} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    )}
+                    {andamentoVista !== "competenza" && (
+                      <Line type="monotone" dataKey="cassa" name="Pagato (cassa)" stroke={CHART_CASSA} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
