@@ -601,3 +601,14 @@ args = "bash scripts/run-aspetto-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "dark-mode-print-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-dark-mode-print-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
