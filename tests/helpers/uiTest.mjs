@@ -218,16 +218,15 @@ export const MOBILE_VIEWPORT = { width: 375, height: 812 };
 // Crea un context Playwright con il cookie di sessione iniettato.
 // Opzioni:
 //   - mobile: true  => viewport 375×812 + touch + isMobile (smartphone);
-//   - viewport: {width,height} => viewport custom (senza flag touch);
-//   - timezoneId: es. 'America/New_York' per testare che la UI non dipenda
-//     dal fuso del browser (bucketizzazione date lato client).
-export async function newAuthedContext(browser, session, { domain = 'localhost', path = '/', mobile = false, viewport, timezoneId } = {}) {
-  const base = mobile
-    ? { viewport: viewport ?? MOBILE_VIEWPORT, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }
-    : viewport
-      ? { viewport }
-      : {};
-  const context = await browser.newContext(timezoneId ? { ...base, timezoneId } : base);
+//   - viewport: {width,height} => viewport custom (senza flag touch).
+export async function newAuthedContext(browser, session, { domain = 'localhost', path = '/', mobile = false, viewport } = {}) {
+  const context = await browser.newContext(
+    mobile
+      ? { viewport: viewport ?? MOBILE_VIEWPORT, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }
+      : viewport
+        ? { viewport }
+        : {},
+  );
   await context.addCookies([
     { name: session.cookie.name, value: session.cookie.value, domain, path },
   ]);

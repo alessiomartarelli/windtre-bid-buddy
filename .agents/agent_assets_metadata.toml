@@ -39,31 +39,3 @@ uri = "file://screenshots/gara-dashboard-after.png"
 type = "image"
 title = "Dashboard performance — spaziature e gerarchie riviste"
 description = "Numeri principali in evidenza, etichette secondarie più discrete, righe PDV e premi con più respiro e ritmo uniforme tra le sezioni."
-
-[[outputs]]
-id = "gb9mH9flU1kGmOSsc-Xho"
-uri = "file://screenshots/gara-card-punti-landing.png"
-type = "image"
-title = "Card piste — punti e soglie in evidenza"
-description = "All'atterraggio: Punti Attuali e Proiezione con le rispettive soglie come headline; i pezzi diventano una nota secondaria."
-
-[[outputs]]
-id = "jZZgAdcIECTyvkf_G_PS4"
-uri = "file://screenshots/gara-card-tiles.png"
-type = "image"
-title = "Card Mobile espansa — tile in stile portfolio"
-description = "Le righe per negozio/ragione sociale come tessere scure con nome, punti, soglia e freccia colorata verso la proiezione, ispirate alla reference."
-
-[[outputs]]
-id = "cTZ7JjTiLocQDCFeHyHVU"
-uri = "file://screenshots/gara-bento-landing.png"
-type = "image"
-title = "Dashboard performance — mosaico bento"
-description = "All'atterraggio: le piste come tessere di un unico mosaico, dimensionate in base al peso (Mobile domina come BTC nella reference); ogni tessera mostra solo punti attuali, proiezione e soglie."
-
-[[outputs]]
-id = "lXixYQzWR8r53ZOgrF0t6"
-uri = "file://screenshots/gara-bento-matrioska.png"
-type = "image"
-title = "Matrioska — pista espansa in bento annidato"
-description = "Cliccando una tessera si apre a tutta larghezza e rivela il bento interno con negozi/ragioni sociali come tessere; un ulteriore click apre il dettaglio profondo (premi, soglie, breakdown)."

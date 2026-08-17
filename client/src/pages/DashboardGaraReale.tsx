@@ -1039,7 +1039,7 @@ type CompactRowMetrics = {
 };
 
 function PistaCompactRow({
-  testId, expanded, onToggle, name, subtitle, metrics, premioColor, hero, children,
+  testId, expanded, onToggle, name, subtitle, metrics, premioColor, children,
 }: {
   testId: string;
   expanded: boolean;
@@ -1048,78 +1048,71 @@ function PistaCompactRow({
   subtitle?: string;
   metrics: CompactRowMetrics;
   premioColor?: 'green' | 'orange';
-  /** Tile piu grande nella griglia a mosaico (occupa tutta la larghezza). */
-  hero?: boolean;
   children?: React.ReactNode;
 }) {
   const m = metrics;
-  const usesPunti = m.puntiAtt !== undefined || m.puntiProi !== undefined;
-  const att = usesPunti ? (m.puntiAtt ?? 0) : (m.pezziAtt ?? 0);
-  const proi = usesPunti ? (m.puntiProi ?? att) : (m.pezziProi ?? att);
-  const unit = usesPunti ? 'pt' : 'pz';
-  const fmtTileVal = (v: number) => usesPunti ? v.toFixed(2) : String(v);
-  const deltaPct = att > 0 ? ((proi - att) / att) * 100 : (proi > 0 ? 100 : 0);
-  const up = proi > att;
-  const down = proi < att;
-  // Tinta del tile in stile treemap: teal se la proiezione cresce,
-  // ambra/marrone se cala, ardesia neutra se stabile.
-  const tileBg = up
-    ? 'bg-[#0e3532] hover:bg-[#124440] border-teal-900/60'
-    : down
-      ? 'bg-[#3a2320] hover:bg-[#472b27] border-orange-950/60'
-      : 'bg-slate-900 hover:bg-slate-800 border-slate-700/60 dark:bg-slate-950 dark:hover:bg-slate-900';
-  const deltaCls = up ? 'text-teal-300' : down ? 'text-orange-400' : 'text-slate-400';
-  const hasSogliaAtt = !!m.sogliaAtt && m.sogliaAtt !== 'N/A';
-  const hasSogliaProi = !!m.sogliaProi && m.sogliaProi !== 'N/A';
+  const hasSogliaAtt = !!m.sogliaAtt && m.sogliaAtt !== "N/A";
+  const hasSogliaProi = !!m.sogliaProi && m.sogliaProi !== "N/A";
+  const hasPunti = m.puntiAtt !== undefined || m.puntiProi !== undefined;
   const hasPremio = (m.premioAtt ?? 0) > 0 || (m.premioProi ?? 0) > 0;
-  const premioCls = premioColor === 'orange' ? 'text-orange-300' : 'text-emerald-300';
+  const premioCls = premioColor === 'orange' ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400';
+  const premioProiCls = premioColor === 'orange' ? 'text-orange-600 dark:text-orange-300' : 'text-blue-600 dark:text-blue-400';
   return (
-    <div className="contents" data-testid={`row-pista-${testId}`}>
+    <div className="rounded-lg border" data-testid={`row-pista-${testId}`}>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
-        className={`relative overflow-hidden rounded-xl border text-left p-3 min-h-[112px] flex flex-col justify-between transition-colors ${hero ? 'col-span-2' : ''} ${tileBg}`}
+        className="w-full flex flex-col lg:flex-row lg:items-center gap-2.5 px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
         data-testid={`btn-expand-row-${testId}`}
       >
-        <div className="flex items-start justify-between gap-2 w-full min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 lg:w-40 lg:shrink-0">
+          {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" />}
           <div className="min-w-0">
-            <div className={`font-bold text-white uppercase tracking-wide truncate ${hero ? 'text-base' : 'text-sm'}`}>{name}</div>
-            {subtitle && <div className="text-[10px] text-white/50 truncate mt-0.5">{subtitle}</div>}
+            <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{name}</div>
+            {subtitle && <div className="text-[11px] text-gray-500 dark:text-slate-400 truncate">{subtitle}</div>}
           </div>
-          <ChevronDown className={`h-4 w-4 shrink-0 text-white/40 transition-transform ${expanded ? 'rotate-180' : ''}`} />
         </div>
-        <div className="w-full min-w-0 mt-2">
-          <div className="flex items-baseline gap-1.5 flex-wrap">
-            <span className={`font-bold text-white tabular-nums ${hero ? 'text-2xl' : 'text-lg'}`}>{fmtTileVal(att)}</span>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-white/50">{unit}</span>
-            {hasSogliaAtt && (
-              <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-white/10 text-white/80">{m.sogliaAtt}</span>
-            )}
-          </div>
-          <div className={`flex items-center gap-1.5 flex-wrap text-xs font-semibold tabular-nums mt-1 ${deltaCls}`}>
-            <span aria-hidden="true">{up ? '\u25B2' : down ? '\u25BC' : '\u25AC'}</span>
-            <span>{deltaPct >= 0 ? '+' : ''}{deltaPct.toFixed(1)}%</span>
-            <span className="text-white/40 font-normal">&middot;</span>
-            <span>{fmtTileVal(proi)} {unit}</span>
-            {hasSogliaProi && (
-              <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-white/10 text-white/80">{m.sogliaProi}</span>
-            )}
-          </div>
+        <div className="flex flex-wrap items-stretch gap-2 flex-1 pl-5 lg:pl-0">
+          {hasPunti && (
+            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2.5 py-1.5 flex-1 min-w-[160px] space-y-1">
+              <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+                <span className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-slate-400 shrink-0">Att.</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold tabular-nums">{(m.puntiAtt ?? 0).toFixed(2)} pt</span>
+                  {hasSogliaAtt && (
+                    <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaAtt!)}`} variant="outline">{m.sogliaAtt}</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 whitespace-nowrap text-blue-700 dark:text-blue-400 border-t pt-1">
+                <span className="text-[10px] uppercase tracking-wide text-blue-600 flex items-center gap-0.5 shrink-0"><TrendingUp className="h-2.5 w-2.5" />Proi.</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold tabular-nums">{(m.puntiProi ?? m.puntiAtt ?? 0).toFixed(2)} pt</span>
+                  {hasSogliaProi && (
+                    <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaProi!)}`} variant="outline">{m.sogliaProi}</Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           {hasPremio && (
-            <div className="flex items-baseline gap-2 flex-wrap mt-1.5 pt-1.5 border-t border-white/10 text-xs tabular-nums">
-              <span className={`font-bold ${premioCls}`}>{formatEuro(m.premioAtt ?? 0)}</span>
-              {m.premioProi !== undefined && m.premioProi !== (m.premioAtt ?? 0) && (
-                <span className="text-white/60 font-medium flex items-center gap-0.5">
-                  <TrendingUp className="h-3 w-3" />{formatEuro(m.premioProi)}
-                </span>
-              )}
+            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2.5 py-1.5 min-w-[150px]">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Premio</div>
+              <div className="flex items-baseline gap-2 whitespace-nowrap">
+                <span className={`text-sm font-bold tabular-nums ${premioCls}`}>{formatEuro(m.premioAtt ?? 0)}</span>
+                {m.premioProi !== undefined && (
+                  <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${premioProiCls}`}>
+                    <TrendingUp className="h-3 w-3" />{formatEuro(m.premioProi)}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>
       </button>
       {expanded && children && (
-        <div className="col-span-full rounded-lg border px-3.5 pb-3.5 pt-3 space-y-2.5 bg-gray-50/50 dark:bg-gray-900/20">{children}</div>
+        <div className="px-3.5 pb-3.5 pt-3 border-t space-y-2.5 bg-gray-50/50 dark:bg-gray-900/20 rounded-b-lg">{children}</div>
       )}
     </div>
   );
@@ -2580,7 +2573,6 @@ export default function DashboardGaraReale() {
   const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
   const [expandedPistaCategories, setExpandedPistaCategories] = useState<Set<string>>(new Set());
   const [expandedRsRows, setExpandedRsRows] = useState<Set<string>>(new Set());
-  const [openPista, setOpenPista] = useState<string | null>(null);
   const [expandedRsHydratedOrgId, setExpandedRsHydratedOrgId] = useState<string | null>(null);
   useEffect(() => {
     if (authLoading || !orgId) return;
@@ -4222,10 +4214,8 @@ export default function DashboardGaraReale() {
               );
             })()}
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-2.5">
-              {(() => {
-                const totalWeight = pistaStats.reduce((s, p) => s + p.totalePezzi, 0) || 1;
-                return pistaStats.map((pista) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
+              {pistaStats.map((pista) => {
                 const pistaConf = PISTA_CONFIG[pista.pista as keyof typeof PISTA_CONFIG];
                 if (!pistaConf) return null;
                 const Icon = pistaConf.icon;
@@ -4233,127 +4223,52 @@ export default function DashboardGaraReale() {
                 const showPistaToggle = pistaRowKeys.length >= 2;
                 const pistaAllExpanded = showPistaToggle && pistaRowKeys.every((k) => expandedRsRows.has(k));
 
-                // ---- Valori hero: pura aggregazione render-time di valori gia' calcolati ----
-                const heroIsCB = pista.pista === 'cb';
-                const rsEntries = pista.rsCalcBreakdown ? Array.from(pista.rsCalcBreakdown.values()) : [];
-                const heroAtt = heroIsCB
-                  ? pista.totalePezzi
-                  : rsEntries.length > 0
-                    ? rsEntries.reduce((s, r) => s + r.puntiAttuali, 0)
-                    : pista.calc.puntiTotali;
-                const heroProi = heroIsCB
-                  ? pista.proiezionePezzi
-                  : rsEntries.length > 0
-                    ? rsEntries.reduce((s, r) => s + r.puntiProiezione, 0)
-                    : pista.calcProiezione.puntiTotali;
-                const heroSogliaAtt = rsEntries.length === 1 ? rsEntries[0].sogliaAttuale : pista.calc.sogliaLabel;
-                const heroSogliaProi = rsEntries.length === 1 ? rsEntries[0].sogliaProiezione : pista.calcProiezione.sogliaLabel;
-                const showSoglie = !heroIsCB && pista.pista !== 'partnership' && heroSogliaAtt !== 'N/A';
-                const fmtHero = (v: number) => heroIsCB ? String(v) : v.toFixed(2);
-                const heroUnit = heroIsCB ? 'pz' : 'pt';
-                const heroUp = heroProi > heroAtt;
-                const heroDown = heroProi < heroAtt;
-                const heroDeltaPct = heroAtt > 0 ? ((heroProi - heroAtt) / heroAtt) * 100 : (heroProi > 0 ? 100 : 0);
-
-                // ---- Mosaico treemap: la dimensione del tile riflette il peso della pista ----
-                const share = pista.totalePezzi / totalWeight;
-                const isOpen = openPista === pista.pista;
-                const big = share >= 0.3;
-                const medium = !big && share >= 0.12;
-                const spanCls = isOpen
-                  ? 'col-span-2 md:col-span-4'
-                  : big
-                    ? 'col-span-2 row-span-2'
-                    : medium
-                      ? 'col-span-2'
-                      : 'col-span-1';
-                const tileBg = heroUp
-                  ? 'bg-[#0e3532] border-teal-900/60'
-                  : heroDown
-                    ? 'bg-[#3a2320] border-orange-950/60'
-                    : 'bg-slate-900 border-slate-700/60';
-                const deltaCls = heroUp ? 'text-teal-300' : heroDown ? 'text-orange-400' : 'text-slate-400';
-
                 return (
-                  <div
-                    key={pista.pista}
-                    className={`${spanCls} rounded-xl border overflow-hidden transition-all duration-300 ${tileBg}`}
-                    data-testid={`card-pista-${pista.pista}`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setOpenPista(isOpen ? null : pista.pista)}
-                      aria-expanded={isOpen}
-                      className={`w-full text-left p-3.5 flex flex-col justify-between gap-3 hover:bg-white/5 transition-colors ${big && !isOpen ? 'min-h-[220px] h-full' : isOpen ? 'min-h-[104px]' : 'min-h-[104px] h-full'}`}
-                      data-testid={`btn-open-pista-${pista.pista}`}
-                    >
-                      <div className="flex items-start justify-between gap-2 w-full min-w-0">
-                        <div className={`font-bold text-white uppercase tracking-wide flex items-center gap-1.5 min-w-0 ${big ? 'text-base' : 'text-xs'}`}>
-                          <Icon className={`shrink-0 opacity-60 ${big ? 'h-4 w-4' : 'h-3 w-3'}`} />
-                          <span className="truncate">{pistaConf.label}</span>
-                        </div>
-                        <ChevronDown className={`h-4 w-4 shrink-0 text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                      </div>
-                      <div className="w-full min-w-0">
-                        <div className="flex items-baseline gap-1.5 flex-wrap" data-testid={`hero-punti-att-${pista.pista}`}>
-                          <span className={`font-bold text-white tabular-nums tracking-tight ${big ? 'text-4xl' : medium ? 'text-2xl' : 'text-xl'}`}>{fmtHero(heroAtt)}</span>
-                          <span className="text-[10px] font-medium uppercase tracking-wide text-white/50">{heroUnit}</span>
-                          {showSoglie && (
-                            <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-white/10 text-white/80" data-testid={`hero-soglia-att-${pista.pista}`}>{heroSogliaAtt}</span>
+                  <Card key={pista.pista} className="overflow-hidden" data-testid={`card-pista-${pista.pista}`}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <div className={`p-1.5 rounded ${pistaConf.color} text-white`}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          {pistaConf.label}
+                        </CardTitle>
+                        <div className="flex items-center gap-1.5">
+                          {showPistaToggle && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs gap-1"
+                              onClick={() =>
+                                pistaAllExpanded
+                                  ? collapseRsRowKeys(pistaRowKeys)
+                                  : expandRsRowKeys(pistaRowKeys)
+                              }
+                              title={pistaAllExpanded ? 'Collassa tutte le righe' : 'Espandi tutte le righe'}
+                              data-testid={`btn-toggle-all-rs-${pista.pista}`}
+                            >
+                              {pistaAllExpanded ? (
+                                <ChevronsDownUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronsUpDown className="h-3.5 w-3.5" />
+                              )}
+                              {pistaAllExpanded ? 'Collassa' : 'Espandi'}
+                            </Button>
+                          )}
+                          {pista.totalePezzi > 0 && (
+                            <ProjectionBadge current={pista.totalePezzi} projected={pista.proiezionePezzi} label={pista.pista} />
                           )}
                         </div>
-                        <div className={`flex items-center gap-1.5 flex-wrap font-semibold tabular-nums mt-1 ${big ? 'text-sm' : 'text-xs'} ${deltaCls}`} data-testid={`hero-punti-proi-${pista.pista}`}>
-                          <span aria-hidden="true">{heroUp ? '\u25B2' : heroDown ? '\u25BC' : '\u25AC'}</span>
-                          <span>{heroDeltaPct >= 0 ? '+' : ''}{heroDeltaPct.toFixed(1)}%</span>
-                          <span className="text-white/40 font-normal">&middot;</span>
-                          <span>{fmtHero(heroProi)} {heroUnit}</span>
-                          {showSoglie && (
-                            <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-white/10 text-white/80" data-testid={`hero-soglia-proi-${pista.pista}`}>{heroSogliaProi}</span>
-                          )}
-                        </div>
-                        <span className="sr-only">
-                          <span data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
-                          {' '}pezzi attuali
-                          {pista.rsCalcBreakdown && Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
-                            <span key={rsKey} data-testid={`text-pezzi-${pista.pista}-${rsKey}`}>{rsData.pezziAttuali}</span>
-                          ))}
-                        </span>
                       </div>
-                    </button>
-                    {isOpen && (
-                      <div className="mx-2.5 mb-2.5 rounded-xl bg-white dark:bg-slate-950/70 border border-black/5 dark:border-white/10 p-3.5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="text-xs text-gray-500 dark:text-slate-400">
-                            <span className="font-semibold tabular-nums text-gray-700 dark:text-slate-200">{pista.totalePezzi}</span> pezzi attuali
-                            {pista.proiezionePezzi > pista.totalePezzi && <span className="tabular-nums"> {'\u2192'} {pista.proiezionePezzi} in proiezione</span>}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            {showPistaToggle && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs gap-1"
-                                onClick={() =>
-                                  pistaAllExpanded
-                                    ? collapseRsRowKeys(pistaRowKeys)
-                                    : expandRsRowKeys(pistaRowKeys)
-                                }
-                                title={pistaAllExpanded ? 'Collassa tutte le righe' : 'Espandi tutte le righe'}
-                                data-testid={`btn-toggle-all-rs-${pista.pista}`}
-                              >
-                                {pistaAllExpanded ? (
-                                  <ChevronsDownUp className="h-3.5 w-3.5" />
-                                ) : (
-                                  <ChevronsUpDown className="h-3.5 w-3.5" />
-                                )}
-                                {pistaAllExpanded ? 'Collassa' : 'Espandi'}
-                              </Button>
-                            )}
-                            {pista.totalePezzi > 0 && (
-                              <ProjectionBadge current={pista.totalePezzi} projected={pista.proiezionePezzi} label={pista.pista} />
-                            )}
-                          </div>
-                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-4xl font-bold tracking-tight tabular-nums" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
+                        <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">pezzi attuali</span>
+                        {pista.rsCalcBreakdown && Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
+                          <span key={rsKey} className="hidden" data-testid={`text-pezzi-${pista.pista}-${rsKey}`}>{rsData.pezziAttuali}</span>
+                        ))}
+                      </div>
 
                       {(() => {
                         if (pista.totalePezzi === 0) return null;
@@ -4572,15 +4487,9 @@ export default function DashboardGaraReale() {
                           rows.push({ key: 'totale', testIdSuffix: 'totale', name: 'Totale', metrics, detail });
                         }
 
-                        // Mosaico stile treemap: il tile con più punti (o pezzi)
-                        // occupa l'intera larghezza, gli altri metà colonna.
-                        const tileWeight = (r: Row) => r.metrics.puntiAtt ?? r.metrics.pezziAtt ?? 0;
-                        const heroIdx = rows.length > 1
-                          ? rows.reduce((best, r, i) => (tileWeight(r) > tileWeight(rows[best]) ? i : best), 0)
-                          : 0;
                         return (
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                            {rows.map((r, idx) => {
+                          <div className="space-y-2">
+                            {rows.map(r => {
                               const rowKey = `${pista.pista}::${r.testIdSuffix}`;
                               return (
                                 <PistaCompactRow
@@ -4592,14 +4501,13 @@ export default function DashboardGaraReale() {
                                   subtitle={r.subtitle}
                                   metrics={r.metrics}
                                   premioColor={premioColorVal}
-                                  hero={idx === heroIdx}
                                 >
                                   {r.detail}
                                 </PistaCompactRow>
                               );
                             })}
                             {/* Footer aggregate Totale Premio (always visible) */}
-                            <div className={`col-span-full rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3.5 py-2.5 mt-1 flex items-center justify-between flex-wrap gap-2`}>
+                            <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3.5 py-2.5 mt-3 flex items-center justify-between flex-wrap gap-2`}>
                               <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Totale Premio</span>
                               <div className="flex items-center gap-3 flex-wrap">
                                 <span className={`text-base font-bold tabular-nums ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`} data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
@@ -4697,15 +4605,13 @@ export default function DashboardGaraReale() {
                           </div>
                         </>
                       )}
-                      </div>
-                    )}
-                  </div>
+                    </CardContent>
+                  </Card>
                 );
-                });
-              })()}
+              })}
 
               {caringStats.totale > 0 && (
-                <Card className="overflow-hidden col-span-2" data-testid="card-caring-utilizzate">
+                <Card className="overflow-hidden" data-testid="card-caring-utilizzate">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-base flex items-center gap-2">
