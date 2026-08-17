@@ -196,6 +196,10 @@ interface PdvData {
   accessori?: ExtraTally;
   servizi?: ExtraTally;
   devices?: DeviceTally;
+  /** Task #392 — conteggi extra dal server per la Tabella PDV × Pista. */
+  pezziIva?: number;
+  cbCambiPiano?: number;
+  telefoni?: number;
   unmapped: number;
   totalArticoli: number;
 }
@@ -1581,7 +1585,32 @@ const PEZZI_TABLE_PISTE = ['mobile', 'fisso', 'energia', 'assicurazioni'] as con
 
 type PezziCell = { att: number; proi: number };
 
-function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[]; orgId?: string | null; mese?: number; anno?: number }) {
+// Task #392 — colonne extra della vista Pezzi (oltre alle 4 piste):
+// IVA (pezzi P.IVA), CB (solo cambi piano MIA TIED/UNTIED + RIVINCOLI),
+// Telefoni e importi Accessori/Servizi (netto IVA, ÷1.22 come nel resto
+// della dashboard e nel report Telegram). Non entrano nella colonna
+// "Totale" di riga (che resta la somma dei pezzi delle 4 piste).
+const PEZZI_EXTRA_COLS = [
+  { key: 'iva', label: 'IVA', euro: false },
+  { key: 'cb', label: 'CB', euro: false },
+  { key: 'telefoni', label: 'Telefoni', euro: false },
+  { key: 'acc_euro', label: '€ Accessori', euro: true },
+  { key: 'srv_euro', label: '€ Servizi', euro: true },
+] as const;
+type PezziExtraKey = typeof PEZZI_EXTRA_COLS[number]['key'];
+
+export type PezziExtraPdvEntry = {
+  ragioneSociale: string;
+  nomeNegozio: string;
+  cells: Record<PezziExtraKey, PezziCell>;
+};
+
+type PezziColumn = { key: string; label: string; icon?: any; color?: string; euro: boolean; isPista: boolean };
+
+const fmtPezziVal = (v: number, euro: boolean) =>
+  euro ? `${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : String(v);
+
+function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv }: { pistaStats: any[]; orgId?: string | null; mese?: number; anno?: number; pezziExtraByPdv?: Map<string, PezziExtraPdvEntry> }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'punti' | 'pezzi'>('punti');
   const [hydratedOrgId, setHydratedOrgId] = useState<string | null>(null);
@@ -1849,42 +1878,84 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
       }
     }
 
+    // Task #392 — colonne extra (IVA, CB, Telefoni, € Accessori, € Servizi):
+    // fold nelle stesse mappe cella, chiavi PEZZI_EXTRA_COLS. Include anche
+    // PDV con sole vendite "extra" (es. solo accessori) non presenti nei
+    // breakdown delle 4 piste.
+    if (pezziExtraByPdv) {
+      pezziExtraByPdv.forEach((ex, codicePos) => {
+        const rsKey = normalizeRS(ex.ragioneSociale || 'Senza RS');
+        if (!rsMap.has(rsKey)) {
+          rsMap.set(rsKey, { displayName: ex.ragioneSociale || 'Senza RS', pdvs: new Map(), perPista: new Map(), perPdv: new Map() });
+        }
+        const entry = rsMap.get(rsKey)!;
+        if (!entry.pdvs.has(codicePos)) {
+          entry.pdvs.set(codicePos, { codicePos, nomeNegozio: ex.nomeNegozio });
+        }
+        if (!entry.perPdv.has(codicePos)) entry.perPdv.set(codicePos, new Map());
+        const pdvCells = entry.perPdv.get(codicePos)!;
+        for (const col of PEZZI_EXTRA_COLS) {
+          const c = ex.cells[col.key];
+          if (!c) continue;
+          pdvCells.set(col.key, { att: c.att, proi: c.proi });
+          const rsCell = entry.perPista.get(col.key) || { att: 0, proi: 0 };
+          rsCell.att += c.att;
+          rsCell.proi += c.proi;
+          entry.perPista.set(col.key, rsCell);
+        }
+      });
+    }
+
     const rows = Array.from(rsMap.entries())
       .map(([rsKey, data]) => ({ rsKey, ...data, pdvList: Array.from(data.pdvs.values()).sort((a, b) => a.nomeNegozio.localeCompare(b.nomeNegozio)) }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
     return { pezziPiste: piste, pezziRsRows: rows };
-  }, [pistaStats]);
+  }, [pistaStats, pezziExtraByPdv]);
 
   if (pisteAttive.length === 0) return null;
 
   const isPezzi = viewMode === 'pezzi';
   const activeRows: Array<{ rsKey: string }> = isPezzi ? pezziRsRows : rsRows;
 
-  // Somma i pezzi (att/proi) di una mappa cella sulle piste indicate.
-  const sumPezziRow = (cells: Map<string, PezziCell> | undefined, piste: any[]): PezziCell => {
+  // Colonne della vista Pezzi: 4 piste + colonne extra Task #392.
+  const pezziColumns: PezziColumn[] = [
+    ...pezziPiste.map((p: any): PezziColumn => {
+      const conf = (PISTA_CONFIG as any)[p.pista];
+      return { key: p.pista as string, label: (conf?.label ?? p.pista) as string, icon: conf?.icon, color: conf?.color, euro: false, isPista: true };
+    }),
+    ...(pezziExtraByPdv ? PEZZI_EXTRA_COLS.map((c): PezziColumn => ({ key: c.key, label: c.label, euro: c.euro, isPista: false })) : []),
+  ];
+
+  // Somma i pezzi (att/proi) di una mappa cella sulle colonne indicate.
+  // Nel totale di riga contano SOLO le colonne pista (i pezzi IVA sono già
+  // dentro le piste, CB/Telefoni/€ sono grandezze diverse).
+  const sumPezziRow = (cells: Map<string, PezziCell> | undefined, cols: PezziColumn[]): PezziCell => {
     const out: PezziCell = { att: 0, proi: 0 };
     if (!cells) return out;
-    for (const p of piste) {
-      const c = cells.get(p.pista);
+    for (const col of cols) {
+      if (!col.isPista) continue;
+      const c = cells.get(col.key);
       if (c) { out.att += c.att; out.proi += c.proi; }
     }
     return out;
   };
-  // Totali di colonna (per pista) + totale generale, sulle piste indicate.
-  const computePezziTotals = (piste: any[]) => {
+  // Totali di colonna + totale generale (solo colonne pista), sulle colonne indicate.
+  const computePezziTotals = (cols: PezziColumn[]) => {
     const perPista = new Map<string, PezziCell>();
     const grand: PezziCell = { att: 0, proi: 0 };
-    for (const p of piste) perPista.set(p.pista, { att: 0, proi: 0 });
+    for (const col of cols) perPista.set(col.key, { att: 0, proi: 0 });
     for (const rs of pezziRsRows) {
-      for (const p of piste) {
-        const c = rs.perPista.get(p.pista);
+      for (const col of cols) {
+        const c = rs.perPista.get(col.key);
         if (c) {
-          const t = perPista.get(p.pista)!;
+          const t = perPista.get(col.key)!;
           t.att += c.att;
           t.proi += c.proi;
-          grand.att += c.att;
-          grand.proi += c.proi;
+          if (col.isPista) {
+            grand.att += c.att;
+            grand.proi += c.proi;
+          }
         }
       }
     }
@@ -1905,38 +1976,41 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
   const collapseAll = () => setExpanded(new Set());
 
   const buildExportRowsPezzi = (filterPiste?: string[] | null) => {
-    const piste = (filterPiste && filterPiste.length > 0)
-      ? pezziPiste.filter(p => filterPiste.includes(p.pista))
-      : pezziPiste;
+    const cols = (filterPiste && filterPiste.length > 0)
+      ? pezziColumns.filter(c => filterPiste.includes(c.key))
+      : pezziColumns;
     const header: string[] = ["Tipo", "Ragione Sociale", "Codice PDV", "Nome PDV"];
-    for (const p of piste) {
-      const conf = (PISTA_CONFIG as any)[p.pista];
-      const label = conf?.label ?? p.pista;
-      header.push(`${label} - Pezzi Attuali`, `${label} - Pezzi Proiezione`);
+    for (const col of cols) {
+      if (col.euro) {
+        header.push(`${col.label} (netto IVA) - Attuale`, `${col.label} (netto IVA) - Proiezione`);
+      } else {
+        header.push(`${col.label} - Pezzi Attuali`, `${col.label} - Pezzi Proiezione`);
+      }
     }
     header.push("Totale - Pezzi Attuali", "Totale - Pezzi Proiezione");
     const rows: (string | number)[][] = [header];
-    const cellPair = (c?: PezziCell): (string | number)[] => (c ? [c.att, c.proi] : ['', '']);
+    const cellPair = (c: PezziCell | undefined, euro: boolean): (string | number)[] =>
+      (c ? (euro ? [Number(c.att.toFixed(2)), Number(c.proi.toFixed(2))] : [c.att, c.proi]) : ['', '']);
     for (const rs of pezziRsRows) {
       const rsRow: (string | number)[] = ["RS", rs.displayName, '', ''];
-      for (const p of piste) rsRow.push(...cellPair(rs.perPista.get(p.pista)));
-      const rsTot = sumPezziRow(rs.perPista, piste);
+      for (const col of cols) rsRow.push(...cellPair(rs.perPista.get(col.key), col.euro));
+      const rsTot = sumPezziRow(rs.perPista, cols);
       rsRow.push(rsTot.att, rsTot.proi);
       rows.push(rsRow);
       for (const pdv of rs.pdvList) {
         const pdvRow: (string | number)[] = ["PDV", rs.displayName, pdv.codicePos, pdv.nomeNegozio];
         const cells = rs.perPdv.get(pdv.codicePos);
-        for (const p of piste) pdvRow.push(...cellPair(cells?.get(p.pista)));
-        const pdvTot = sumPezziRow(cells, piste);
+        for (const col of cols) pdvRow.push(...cellPair(cells?.get(col.key), col.euro));
+        const pdvTot = sumPezziRow(cells, cols);
         pdvRow.push(pdvTot.att, pdvTot.proi);
         rows.push(pdvRow);
       }
     }
-    const { perPista, grand } = computePezziTotals(piste);
+    const { perPista, grand } = computePezziTotals(cols);
     const totRow: (string | number)[] = ["TOTALE", "Totale complessivo", '', ''];
-    for (const p of piste) {
-      const t = perPista.get(p.pista) || { att: 0, proi: 0 };
-      totRow.push(t.att, t.proi);
+    for (const col of cols) {
+      const t = perPista.get(col.key) || { att: 0, proi: 0 };
+      totRow.push(...(col.euro ? [Number(t.att.toFixed(2)), Number(t.proi.toFixed(2))] : [t.att, t.proi]));
     }
     totRow.push(grand.att, grand.proi);
     rows.push(totRow);
@@ -2114,10 +2188,12 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
         title="Esporta PDF"
         description="Personalizza il PDF della tabella PDV × Pista."
         columnsLabel="Piste da includere"
-        columnOptions={(isPezzi ? pezziPiste : pisteAttive).map(p => ({
-          key: p.pista as string,
-          label: ((PISTA_CONFIG as any)[p.pista]?.label ?? p.pista) as string,
-        }))}
+        columnOptions={isPezzi
+          ? pezziColumns.map(c => ({ key: c.key, label: c.label }))
+          : pisteAttive.map(p => ({
+              key: p.pista as string,
+              label: ((PISTA_CONFIG as any)[p.pista]?.label ?? p.pista) as string,
+            }))}
         prefs={pdfPrefs}
         orgLogoDataUrl={orgLogoDataUrl}
         onPrefsChange={(next) => {
@@ -2136,22 +2212,20 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
       />
       <CardContent className="p-0">
         {isPezzi && (() => {
-          const { perPista: totPerPista, grand } = computePezziTotals(pezziPiste);
+          const { perPista: totPerPista, grand } = computePezziTotals(pezziColumns);
           return (
             <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
               <table className="w-full text-sm border-collapse" data-testid="table-pdv-pista-pezzi">
                 <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900 border-b z-20">
                   <tr>
                     <th rowSpan={2} className="text-left px-3 py-2 font-semibold sticky left-0 bg-gray-50 dark:bg-gray-900 min-w-[240px] border-r border-b z-30 align-middle">Ragione Sociale / PDV</th>
-                    {pezziPiste.map(p => {
-                      const conf = (PISTA_CONFIG as any)[p.pista];
-                      if (!conf) return null;
-                      const Icon = conf.icon;
+                    {pezziColumns.map(col => {
+                      const Icon = col.icon;
                       return (
-                        <th key={p.pista} colSpan={2} className="text-center px-3 py-2 font-semibold border-r border-b min-w-[200px]" data-testid={`th-tabella-pezzi-${p.pista}`}>
+                        <th key={col.key} colSpan={2} className="text-center px-3 py-2 font-semibold border-r border-b min-w-[200px]" data-testid={`th-tabella-pezzi-${col.key}`}>
                           <div className="flex items-center justify-center gap-1.5">
-                            <div className={`p-1 rounded ${conf.color} text-white`}><Icon className="h-3 w-3" /></div>
-                            <span>{conf.label}</span>
+                            {Icon ? <div className={`p-1 rounded ${col.color} text-white`}><Icon className="h-3 w-3" /></div> : null}
+                            <span>{col.label}</span>
                           </div>
                         </th>
                       );
@@ -2159,10 +2233,10 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                     <th colSpan={2} className="text-center px-3 py-2 font-semibold border-b min-w-[200px] bg-blue-50 dark:bg-blue-950/40" data-testid="th-tabella-pezzi-totale">Totale</th>
                   </tr>
                   <tr>
-                    {pezziPiste.map(p => (
-                      <Fragment key={p.pista}>
-                        <th className="text-center px-2 py-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 border-r border-b min-w-[100px]" data-testid={`th-tabella-pezzi-${p.pista}-attuale`}>Attuale</th>
-                        <th className="text-center px-2 py-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 border-r border-b min-w-[100px]" data-testid={`th-tabella-pezzi-${p.pista}-proiezione`}>Proiezione</th>
+                    {pezziColumns.map(col => (
+                      <Fragment key={col.key}>
+                        <th className="text-center px-2 py-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 border-r border-b min-w-[100px]" data-testid={`th-tabella-pezzi-${col.key}-attuale`}>Attuale</th>
+                        <th className="text-center px-2 py-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 border-r border-b min-w-[100px]" data-testid={`th-tabella-pezzi-${col.key}-proiezione`}>Proiezione</th>
                       </Fragment>
                     ))}
                     <th className="text-center px-2 py-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 border-r border-b min-w-[100px] bg-blue-50 dark:bg-blue-950/40">Attuale</th>
@@ -2172,14 +2246,14 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                 <tbody>
                   {pezziRsRows.length === 0 && (
                     <tr data-testid="row-table-pezzi-empty">
-                      <td colSpan={3 + pezziPiste.length * 2} className="px-3 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
+                      <td colSpan={3 + pezziColumns.length * 2} className="px-3 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
                         Nessun dato disponibile per i punti vendita.
                       </td>
                     </tr>
                   )}
                   {pezziRsRows.map(rs => {
                     const isExpanded = expanded.has(rs.rsKey);
-                    const rsTot = sumPezziRow(rs.perPista, pezziPiste);
+                    const rsTot = sumPezziRow(rs.perPista, pezziColumns);
                     return (
                       <Fragment key={rs.rsKey}>
                         <tr
@@ -2194,15 +2268,15 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                               <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">{rs.pdvs.size} PDV</Badge>
                             </div>
                           </td>
-                          {pezziPiste.map(p => {
-                            const c = rs.perPista.get(p.pista);
+                          {pezziColumns.map(col => {
+                            const c = rs.perPista.get(col.key);
                             return (
-                              <Fragment key={p.pista}>
-                                <td className="px-2 py-2 text-center border-r text-xs font-semibold" data-testid={`cell-pezzi-${rs.rsKey}-${p.pista}-attuale`}>
-                                  {c ? c.att : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                              <Fragment key={col.key}>
+                                <td className="px-2 py-2 text-center border-r text-xs font-semibold" data-testid={`cell-pezzi-${rs.rsKey}-${col.key}-attuale`}>
+                                  {c ? fmtPezziVal(c.att, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
                                 </td>
-                                <td className="px-2 py-2 text-center border-r text-xs font-semibold text-blue-600 dark:text-blue-400" data-testid={`cell-pezzi-${rs.rsKey}-${p.pista}-proiezione`}>
-                                  {c ? c.proi : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                                <td className="px-2 py-2 text-center border-r text-xs font-semibold text-blue-600 dark:text-blue-400" data-testid={`cell-pezzi-${rs.rsKey}-${col.key}-proiezione`}>
+                                  {c ? fmtPezziVal(c.proi, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
                                 </td>
                               </Fragment>
                             );
@@ -2212,7 +2286,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                         </tr>
                         {isExpanded && rs.pdvList.map(pdv => {
                           const cells = rs.perPdv.get(pdv.codicePos);
-                          const pdvTot = sumPezziRow(cells, pezziPiste);
+                          const pdvTot = sumPezziRow(cells, pezziColumns);
                           return (
                             <tr key={pdv.codicePos} className="border-b bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800/40" data-testid={`row-table-pezzi-pdv-${pdv.codicePos}`}>
                               <td className="px-3 py-2 sticky left-0 bg-white dark:bg-gray-950 border-r z-[5]">
@@ -2221,15 +2295,15 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                                   <div className="text-gray-500 dark:text-slate-400 text-[10px]">{pdv.codicePos}</div>
                                 </div>
                               </td>
-                              {pezziPiste.map(p => {
-                                const c = cells?.get(p.pista);
+                              {pezziColumns.map(col => {
+                                const c = cells?.get(col.key);
                                 return (
-                                  <Fragment key={p.pista}>
-                                    <td className="px-2 py-2 text-center border-r text-[11px]" data-testid={`cell-pezzi-${pdv.codicePos}-${p.pista}-attuale`}>
-                                      {c ? c.att : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                                  <Fragment key={col.key}>
+                                    <td className="px-2 py-2 text-center border-r text-[11px]" data-testid={`cell-pezzi-${pdv.codicePos}-${col.key}-attuale`}>
+                                      {c ? fmtPezziVal(c.att, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
                                     </td>
-                                    <td className="px-2 py-2 text-center border-r text-[11px] text-blue-600 dark:text-blue-400" data-testid={`cell-pezzi-${pdv.codicePos}-${p.pista}-proiezione`}>
-                                      {c ? c.proi : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                                    <td className="px-2 py-2 text-center border-r text-[11px] text-blue-600 dark:text-blue-400" data-testid={`cell-pezzi-${pdv.codicePos}-${col.key}-proiezione`}>
+                                      {c ? fmtPezziVal(c.proi, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
                                     </td>
                                   </Fragment>
                                 );
@@ -2245,12 +2319,12 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno }: { pistaStats: any[];
                   {pezziRsRows.length > 0 && (
                     <tr className="border-t-2 bg-blue-100/70 dark:bg-blue-900/40 font-bold" data-testid="row-table-pezzi-totale">
                       <td className="px-3 py-2 sticky left-0 bg-blue-100/70 dark:bg-blue-900/40 border-r z-[5] text-xs uppercase tracking-wide">Totale complessivo</td>
-                      {pezziPiste.map(p => {
-                        const t = totPerPista.get(p.pista) || { att: 0, proi: 0 };
+                      {pezziColumns.map(col => {
+                        const t = totPerPista.get(col.key) || { att: 0, proi: 0 };
                         return (
-                          <Fragment key={p.pista}>
-                            <td className="px-2 py-2 text-center border-r text-xs" data-testid={`cell-pezzi-totale-${p.pista}-attuale`}>{t.att}</td>
-                            <td className="px-2 py-2 text-center border-r text-xs text-blue-700 dark:text-blue-300" data-testid={`cell-pezzi-totale-${p.pista}-proiezione`}>{t.proi}</td>
+                          <Fragment key={col.key}>
+                            <td className="px-2 py-2 text-center border-r text-xs" data-testid={`cell-pezzi-totale-${col.key}-attuale`}>{fmtPezziVal(t.att, col.euro)}</td>
+                            <td className="px-2 py-2 text-center border-r text-xs text-blue-700 dark:text-blue-300" data-testid={`cell-pezzi-totale-${col.key}-proiezione`}>{fmtPezziVal(t.proi, col.euro)}</td>
                           </Fragment>
                         );
                       })}
@@ -3767,6 +3841,42 @@ export default function DashboardGaraReale() {
     const perRs = Array.from(rsMap.values()).sort((a, b) => b.pezzi - a.pezzi);
     return { totale, perPdv, perRs };
   }, [mappedData, puntiVenditaFromGara]);
+
+  // Task #392 — colonne extra della Tabella PDV × Pista (vista Pezzi):
+  // IVA (pezzi P.IVA), CB (solo cambi piano), Telefoni, € Accessori/Servizi
+  // (netto IVA ÷1.22, coerente col resto della dashboard e col report
+  // Telegram). Stessa fonte dati (mappedData, quindi stesse esclusioni
+  // annullate/filtri gara) e stessa proiezione a giorni lavorativi.
+  const pezziExtraByPdv = useMemo(() => {
+    const map = new Map<string, PezziExtraPdvEntry>();
+    if (!mappedData || garaConfigMissing) return map;
+    const projInt = (v: number) => workdayInfo.elapsedWorkingDays > 0
+      ? Math.round((v / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+      : v;
+    const projEuro = (v: number) => workdayInfo.elapsedWorkingDays > 0
+      ? (v / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays
+      : v;
+    for (const pdv of mappedData.pdvList) {
+      const pdvConfig = puntiVenditaFromGara.find((p) => p.codicePos === pdv.codicePos);
+      const iva = pdv.pezziIva ?? 0;
+      const cb = pdv.cbCambiPiano ?? 0;
+      const tel = pdv.telefoni ?? 0;
+      const acc = nettoIva(pdv.accessori?.importo ?? 0);
+      const srv = nettoIva(pdv.servizi?.importo ?? 0);
+      map.set(pdv.codicePos, {
+        ragioneSociale: pdvConfig?.ragioneSociale || pdv.ragioneSociale || 'Senza RS',
+        nomeNegozio: pdv.nomeNegozio,
+        cells: {
+          iva: { att: iva, proi: projInt(iva) },
+          cb: { att: cb, proi: projInt(cb) },
+          telefoni: { att: tel, proi: projInt(tel) },
+          acc_euro: { att: acc, proi: projEuro(acc) },
+          srv_euro: { att: srv, proi: projEuro(srv) },
+        },
+      });
+    }
+    return map;
+  }, [mappedData, garaConfigMissing, workdayInfo, puntiVenditaFromGara]);
 
   const premioPerRS = useMemo(() => {
     if (!pistaStats.length || garaConfigMissing) return [] as Array<{ displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>;
@@ -5408,7 +5518,7 @@ export default function DashboardGaraReale() {
               );
             })()}
 
-            <TabellaPdvPista pistaStats={pistaStats} orgId={orgId} mese={selMonth} anno={selYear} />
+            <TabellaPdvPista pistaStats={pistaStats} orgId={orgId} mese={selMonth} anno={selYear} pezziExtraByPdv={pezziExtraByPdv} />
 
             {sosCaringAllowed && garaCalcConfig.sosCaring && garaCalcConfig.sosCaring.rows.length > 0 && (
               <SosCaringSection

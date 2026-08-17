@@ -1,5 +1,6 @@
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { mapBiSuiteArticle } from "../shared/bisuiteMapping";
+import { classifyCategory, isCouponCaring, isPezzoIva } from "../shared/bisuiteClassification";
 
 // Aggregazione lato server delle vendite BiSuite mappate, estratta dalla route
 // GET /api/admin/bisuite-mapped-sales così da essere richiamabile e testabile
@@ -42,6 +43,17 @@ export type PdvAggregate = {
   accessori: { pezzi: number; importo: number };
   servizi: { pezzi: number; importo: number };
   devices: DeviceTally;
+  /** Task #392 — pezzi P.IVA (business) sulle piste canvass, via `isPezzoIva`
+   * sulla classificazione per categoria (TIED IVA, ADSL/FIBRA/FWA IVA,
+   * energia/protetti BUSINESS, ASSICURAZIONI BUSINESS PRO). */
+  pezziIva: number;
+  /** Task #392 — cambi piano CB: SOLO MIA TIED (no Coupon Caring),
+   * MIA UNTIED (no Coupon Caring) e RIVINCOLO. Conteggio per categoria
+   * BiSuite dell'articolo, quindi indipendente dai "twin" partnership
+   * delle regole di mapping (nessun doppio conteggio). */
+  cbCambiPiano: number;
+  /** Task #392 — telefoni venduti (articoli categoria TELEFONIA). */
+  telefoni: number;
   unmapped: number;
   totalArticoli: number;
 };
@@ -105,6 +117,9 @@ export function aggregateMappedSales(
         accessori: { pezzi: 0, importo: 0 },
         servizi: { pezzi: 0, importo: 0 },
         devices: newDeviceTally(),
+        pezziIva: 0,
+        cbCambiPiano: 0,
+        telefoni: 0,
         unmapped: 0,
         totalArticoli: 0,
       };
@@ -159,6 +174,7 @@ export function aggregateMappedSales(
         const desc = ((art.descrizione || '').trim()) || '(senza descrizione)';
         if (catNome === 'TELEFONIA') {
           tallyDevice('smartphone', desc);
+          byPdv[codicePos].telefoni += 1;
         } else if (catNome === 'SMART DEVICE') {
           tallyDevice('smartDevice', desc);
         } else if (catNome === 'INTERNET DEVICE' || catNome === 'MODEM/ROUTER') {
@@ -174,6 +190,20 @@ export function aggregateMappedSales(
         continue;
       }
       canvassCount++;
+      // Task #392 — conteggi extra per la Tabella PDV × Pista (vista Pezzi):
+      // pezzi P.IVA e cambi piano CB, per categoria BiSuite (non per regola
+      // di mapping: così i twin partnership delle regole CB non raddoppiano).
+      {
+        const tipNome = String(art.tipologia?.nome || '').trim();
+        const coupon = isCouponCaring(catNome, tipNome);
+        const clsPista = coupon ? undefined : classifyCategory(catNome)?.pista;
+        if (clsPista && isPezzoIva({ pista: clsPista, categoriaNome: catNome, descrizione: String(art.descrizione || '') })) {
+          byPdv[codicePos].pezziIva += 1;
+        }
+        if (clsPista === 'cb') {
+          byPdv[codicePos].cbCambiPiano += 1;
+        }
+      }
       const mappedResults = mapBiSuiteArticle(art, clienteTipo, rules);
       if (mappedResults.length === 0) continue;
       mappedCount++;
