@@ -13,6 +13,13 @@ and logic in the script aligned with the provider. The toggle lives in `AppNavba
 (desktop icon button + mobile menu items). `next-themes` is a dependency but NOT used
 (custom provider preferred for CSR flash control).
 
+The same provider also carries the per-user brand palette ("accent"): presets/custom hex in
+`client/src/lib/appearance.ts`, localStorage key `mystoredesk-accent`, server persistence in
+`profiles.ui_prefs` via `PATCH /api/auth/ui-prefs` (settings card "Aspetto" in Profile).
+The pre-paint script in `client/index.html` duplicates the preset HSL table — keep it in
+sync with appearance.ts when adding/changing presets. Semantic colors (warning/destructive/
+● live) stay untouched; only --primary/--ring/--brand-indigo/--accent are overridden.
+
 **Why:** the dark palette + dark: variants are only visible because this switch exists;
 don't re-add a toggle/provider. Note the login/`auth` page has no navbar, so no toggle
 there by design (it already renders a fixed dark-ish split layout).

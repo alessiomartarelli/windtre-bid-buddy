@@ -224,6 +224,20 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  // Merge atomico delle preferenze UI (Task #407): usa l'operatore jsonb `||`
+  // direttamente in SQL così due PATCH ravvicinate (es. tema + palette) non si
+  // sovrascrivono a vicenda con un read-merge-write applicativo.
+  async mergeUiPrefs(id: string, patch: Record<string, unknown>): Promise<Profile> {
+    const [result] = await db.update(profiles)
+      .set({
+        uiPrefs: sql`COALESCE(${profiles.uiPrefs}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+        updatedAt: new Date(),
+      } as any)
+      .where(eq(profiles.id, id))
+      .returning();
+    return result;
+  }
+
   async deleteProfile(id: string): Promise<void> {
     await db.delete(profiles).where(eq(profiles.id, id));
   }

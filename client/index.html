@@ -30,6 +30,71 @@
             (theme === "system" &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", isDark);
+          // Palette brand per-utente (Task #407): applica gli override prima
+          // del primo paint per evitare il flash del colore di default.
+          // Mantieni preset/logica allineati a client/src/lib/appearance.ts.
+          var PRESETS = {
+            blue: [[221, 83, 53], [217, 91, 65]],
+            teal: [[175, 84, 32], [172, 66, 50]],
+            emerald: [[161, 94, 30], [158, 64, 52]],
+            violet: [[262, 83, 58], [258, 90, 66]],
+            fuchsia: [[293, 69, 49], [292, 84, 61]],
+            rose: [[347, 77, 50], [351, 89, 64]],
+            amber: [[32, 95, 44], [38, 92, 50]],
+            slate: [[215, 19, 35], [215, 20, 65]],
+          };
+          var rawAccent = localStorage.getItem("mystoredesk-accent");
+          if (rawAccent) {
+            var accent = JSON.parse(rawAccent);
+            var hsl = null;
+            if (accent && accent.type === "preset" && PRESETS[accent.id]) {
+              hsl = PRESETS[accent.id][isDark ? 1 : 0];
+            } else if (
+              accent &&
+              accent.type === "custom" &&
+              /^#[0-9a-fA-F]{6}$/.test(accent.hex || "")
+            ) {
+              var n = parseInt(accent.hex.slice(1), 16);
+              var r = ((n >> 16) & 255) / 255,
+                g = ((n >> 8) & 255) / 255,
+                b = (n & 255) / 255;
+              var mx = Math.max(r, g, b),
+                mn = Math.min(r, g, b),
+                l = (mx + mn) / 2,
+                h = 0,
+                s = 0;
+              if (mx !== mn) {
+                var d = mx - mn;
+                s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+                if (mx === r) h = (g - b) / d + (g < b ? 6 : 0);
+                else if (mx === g) h = (b - r) / d + 2;
+                else h = (r - g) / d + 4;
+                h *= 60;
+              }
+              var L = Math.round(l * 100);
+              if (isDark) L = Math.min(L + 10, 72);
+              hsl = [Math.round(h), Math.round(s * 100), L];
+            }
+            if (hsl) {
+              var v = hsl[0] + " " + hsl[1] + "% " + hsl[2] + "%";
+              var st = document.documentElement.style;
+              st.setProperty("--primary", v);
+              st.setProperty("--ring", v);
+              st.setProperty("--brand-indigo", v);
+              st.setProperty(
+                "--chart-brand-soft",
+                hsl[0] + " " + Math.max(hsl[1] - 25, 30) + "% " + Math.min(hsl[2] + 28, 84) + "%"
+              );
+              st.setProperty(
+                "--chart-brand-strong",
+                hsl[0] + " " + hsl[1] + "% " + Math.max(hsl[2] - 25, 18) + "%"
+              );
+              if (!isDark) {
+                st.setProperty("--accent", hsl[0] + " 100% 97%");
+                st.setProperty("--accent-foreground", hsl[0] + " 58% 38%");
+              }
+            }
+          }
         } catch (e) {}
       })();
     </script>

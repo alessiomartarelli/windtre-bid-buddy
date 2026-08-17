@@ -12,6 +12,7 @@ interface Profile {
   profileImageUrl: string | null;
   emailNotificationsDisabled?: boolean;
   moduliConsentiti?: string[] | null;
+  uiPrefs?: { theme?: string; accent?: { type: 'preset'; id: string } | { type: 'custom'; hex: string } } | null;
 }
 
 interface Organization {
@@ -32,6 +33,19 @@ interface User {
 
 interface AuthError {
   message: string;
+}
+
+// Evento globale emesso quando arriva un profilo autenticato (fetch/login/
+// signup). Serve a componenti singleton (es. UiPrefsSync) che non condividono
+// lo stato di questa istanza di useAuth (ogni chiamata è un fetcher isolato).
+export const AUTH_PROFILE_EVENT = 'mystoredesk:auth-profile';
+
+function emitAuthProfile(data: any) {
+  try {
+    window.dispatchEvent(new CustomEvent(AUTH_PROFILE_EVENT, { detail: data }));
+  } catch {
+    // ambiente senza window/CustomEvent: nessun sync
+  }
 }
 
 export function useAuth() {
@@ -65,6 +79,7 @@ export function useAuth() {
         setOrganization(data.organization);
       }
       setOrganizationBrands(Array.isArray(data.organizationBrands) ? data.organizationBrands : []);
+      emitAuthProfile(data);
     } catch (error) {
       console.error('Error fetching user:', error);
       setUser(null);
@@ -103,6 +118,7 @@ export function useAuth() {
         setOrganization(data.organization);
       }
       setOrganizationBrands(Array.isArray(data.organizationBrands) ? data.organizationBrands : []);
+      emitAuthProfile(data);
       return { error: null };
     } catch (error) {
       return { error: { message: 'Errore di connessione' } };
@@ -133,6 +149,7 @@ export function useAuth() {
       if (data.organization) {
         setOrganization(data.organization);
       }
+      emitAuthProfile(data);
       return { error: null };
     } catch (error) {
       return { error: { message: 'Errore di connessione' } };

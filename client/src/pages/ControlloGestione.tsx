@@ -42,9 +42,11 @@ import {
 
 // Palette grafici dashboard: toni moderni e desaturati (indaco brand +
 // pastelli), niente colori accesi. Competenza = indaco, cassa = azzurro tenue.
-const CHART_COMP = "#6366f1";
-const CHART_CASSA = "#7dd3fc";
-const CHART_SEL = "#312e81";
+// Colore brand derivato dai token tema (Task #407): segue la palette scelta
+// dall'utente. recharts accetta stringhe CSS con var().
+const CHART_COMP = "hsl(var(--primary))";
+const CHART_CASSA = "hsl(var(--chart-brand-soft))";
+const CHART_SEL = "hsl(var(--chart-brand-strong))";
 const CHART_GRID = "#e2e8f0";
 const CHART_TICK = { fontSize: 11, fill: "#64748b" };
 const CHART_TOOLTIP_STYLE = { borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(15,23,42,.08)", fontSize: 12 } as const;

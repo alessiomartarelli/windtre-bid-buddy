@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Building2, User, Lock, Eye, EyeOff, Mail } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
+import { AspettoCard } from '@/components/AspettoCard';
 
 export default function Profile() {
   const [, setLocation] = useLocation();
@@ -264,6 +265,8 @@ export default function Profile() {
             )}
           </CardContent>
         </Card>
+
+        <AspettoCard />
 
         {isAdminLike && (
           <Card>

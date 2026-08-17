@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/hooks/useTheme";
+import { UiPrefsSync } from "@/components/UiPrefsSync";
 import { useAuth } from "@/hooks/useAuth";
 import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { BASE_PATH } from "@/lib/basePath";
@@ -166,6 +167,7 @@ function App() {
         <TooltipProvider>
           <WouterRouter base={BASE_PATH || undefined}>
             <Toaster />
+            <UiPrefsSync />
             <Router />
           </WouterRouter>
         </TooltipProvider>

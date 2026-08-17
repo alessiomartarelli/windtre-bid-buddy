@@ -76,6 +76,9 @@ export const profiles = pgTable("profiles", {
   // La visibilità effettiva è comunque l'intersezione org ∩ brand ∩ utente.
   // `super_admin` bypassa sempre (questo campo è ininfluente sui super_admin).
   moduliConsentiti: text("moduli_consentiti").array(),
+  // Preferenze UI per-utente (Task #407): { theme?: "light"|"dark"|"system",
+  // accent?: {type:"preset",id} | {type:"custom",hex} }. NULL = mai salvate.
+  uiPrefs: jsonb("ui_prefs").$type<{ theme?: string; accent?: { type: "preset"; id: string } | { type: "custom"; hex: string } } | null>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

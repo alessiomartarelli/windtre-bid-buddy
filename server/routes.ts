@@ -10,6 +10,7 @@ import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDef
 import { isModuleEnabled, isModuleAllowedForBrands, isModuleGrantedToUser, sanitizeGrantableModules, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
 import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
+import { ACCENT_PRESET_IDS } from "@shared/uiPrefs";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
 import { dtsSaleCodiceEsterno } from "@shared/dtsReport";
 import { normalizeTimeLabel, parseSendTimes } from "@shared/telegramSendTimes";
@@ -2388,6 +2389,43 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating own profile:", error);
       res.status(500).json({ error: "Errore nell'aggiornamento del profilo" });
+    }
+  });
+
+  // === Profilo: preferenze UI (tema + palette, Task #407) ===
+  // Self-service per QUALSIASI utente autenticato: salva { theme, accent }.
+  app.patch("/api/auth/ui-prefs", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const profile = await storage.getProfile(userId);
+      if (!profile) return res.status(404).json({ error: "Profilo non trovato" });
+      const { theme, accent } = req.body ?? {};
+      // Patch parziale: solo le chiavi inviate; il merge col valore esistente
+      // avviene atomicamente in SQL (jsonb ||) per evitare lost update tra
+      // PATCH ravvicinate.
+      const patch: { theme?: string; accent?: any } = {};
+      if (theme !== undefined) {
+        if (!["light", "dark", "system"].includes(theme)) {
+          return res.status(400).json({ error: "theme non valido" });
+        }
+        patch.theme = theme;
+      }
+      if (accent !== undefined) {
+        const okPreset = accent?.type === "preset" && typeof accent.id === "string" && (ACCENT_PRESET_IDS as readonly string[]).includes(accent.id);
+        const okCustom = accent?.type === "custom" && typeof accent.hex === "string" && /^#?[0-9a-fA-F]{6}$/.test(accent.hex);
+        if (!okPreset && !okCustom) {
+          return res.status(400).json({ error: "accent non valido" });
+        }
+        patch.accent = okCustom ? { type: "custom", hex: accent.hex.startsWith("#") ? accent.hex : `#${accent.hex}` } : { type: "preset", id: accent.id };
+      }
+      if (Object.keys(patch).length === 0) {
+        return res.status(400).json({ error: "Nessuna preferenza da aggiornare" });
+      }
+      const updated = await storage.mergeUiPrefs(userId, patch);
+      res.json({ uiPrefs: updated.uiPrefs });
+    } catch (error) {
+      console.error("Error updating UI prefs:", error);
+      res.status(500).json({ error: "Errore nel salvataggio delle preferenze aspetto" });
     }
   });
 

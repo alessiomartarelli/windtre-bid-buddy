@@ -40,6 +40,12 @@
   --input: 220 15% 90%;
   --ring: 243 75% 59%;
 
+  /* Colori brand derivati per i grafici (Task #407): override runtime dalla
+     palette scelta (client/src/lib/appearance.ts). I default replicano i
+     valori storici della pagina CdG (cassa #7dd3fc, selezione #312e81). */
+  --chart-brand-soft: 199 89% 74%;
+  --chart-brand-strong: 244 47% 34%;
+
   --radius: 0.75rem;
 
   --glass-bg: 0 0% 100% / 0.65;
