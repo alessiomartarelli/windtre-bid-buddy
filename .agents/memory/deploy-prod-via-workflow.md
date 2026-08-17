@@ -42,6 +42,14 @@ timeout. Do NOT rely on a temporary workflow.
    Log app prod: /var/log/incentive-w3/{out,error}.log (non ~/.pm2/logs).
 6. Public base path is `/mystoredesk` since the MyStoreDesk rebrand; the app's nginx `location` blocks live in BOTH `/etc/nginx/sites-enabled/incentive-w3` (IP vhost) and `/etc/nginx/sites-enabled/onetapp.it` — keep them in sync, `nginx -t && systemctl reload nginx`.
 
+7. Drift watch: il server prod ricontrolla lo schema al boot e
+   ogni giorno alle 07:00 Roma (server/schemaDriftScheduler.ts) e notifica su
+   Telegram usando env `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` da
+   ecosystem.config.cjs. Al primo deploy dopo il merge: aggiungere quelle due
+   chiavi nell'env dell'app in ecosystem.config.cjs (valori = secrets Replit
+   omonimi) e `pm2 restart incentive-w3 --update-env`; senza, il drift viene
+   solo loggato (warning una volta nei log pm2).
+
 To free workflow slots you may `removeWorkflow` finished test workflows; they
 are also validation commands, so restore them afterward with
 `setValidationCommand({name, command})` (not subject to the workflow limit).

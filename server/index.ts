@@ -5,6 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startBisuiteDailyScheduler } from "./bisuiteScheduler";
 import { startTelegramReportScheduler } from "./telegramReportScheduler";
+import { startSchemaDriftScheduler } from "./schemaDriftScheduler";
 import { logJsonReplacer } from "./logRedact";
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -152,6 +153,7 @@ app.use((req, res, next) => {
     });
     startBisuiteDailyScheduler();
     startTelegramReportScheduler();
+    startSchemaDriftScheduler();
   } else {
     await registerRoutes(httpServer, app);
 
