@@ -25,3 +25,10 @@ uri = "file://exports/telefoni-luglio-2026.xlsx"
 type = "table"
 title = "Telefoni luglio 2026 — ID vendite BiSuite"
 description = "1005 telefoni (998 su vendite finalizzate + 7 su annullate): una riga per telefono con ID BiSuite, data, stato, negozio, addetto, cliente, modello e prezzo."
+
+[[outputs]]
+id = "It4WHrPl0s4-N002bhGyw"
+uri = "file://screenshots/andamento-kpi-vendite.png"
+type = "image"
+title = "Andamento KPI — pagina Vendite"
+description = "Grafico a linee dell'andamento giornaliero dei KPI della tabella pezzi (Mobile, Fisso, Energia, Assicurazioni), con serie attivabili."

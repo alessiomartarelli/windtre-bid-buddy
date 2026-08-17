@@ -100,6 +100,7 @@ import {
   TYPE_COLORS,
 } from "@/lib/bisuiteClassification";
 import { TabellaPdvPistaPezzi } from "@/components/TabellaPdvPistaPezzi";
+import { GraficoAndamentoPezzi, type PezziTrendPoint } from "@/components/GraficoAndamentoPezzi";
 import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
 import { accumulaPezziExtra, emptyPezziExtra, type PezziExtraCounters } from "@shared/pdvPezziExtra";
 import type { CanvassKpiRule } from "@shared/canvassKpiRules";
@@ -686,6 +687,64 @@ export default function VenditeBiSuite() {
       .filter((p) => p.totaleVendite > 0 || p.vendite.length > 0)
       .sort((a, b) => b.totaleVendite - a.totaleVendite);
   }, [aggregateSales, saleClassifications, articleMatchesFilter, componentFilterActive]);
+
+  // Andamento giornaliero dei KPI della Tabella PDV × Pista (Pezzi): stessi
+  // conteggi classificati e stessi filtri attivi di pdvSummaries, ma
+  // bucketizzati per data vendita. I giorni del periodo filtrato senza
+  // vendite compaiono a 0 (linea continua, niente buchi).
+  const andamentoPezzi = useMemo((): PezziTrendPoint[] => {
+    const emptyPoint = (day: string): PezziTrendPoint => ({
+      day, mobile: 0, fisso: 0, energia: 0, assicurazioni: 0, iva: 0, cb: 0, telefoni: 0,
+    });
+    const byDay = new Map<string, PezziTrendPoint>();
+    for (const sale of aggregateSales) {
+      // data_vendita è salvata come wall-time italiano e serializzata ISO "Z"
+      // con gli stessi campi: il giorno è i primi 10 caratteri della stringa.
+      // NON usare new Date()+format locale: un browser fuori da Europe/Rome
+      // sposterebbe le vendite vicino a mezzanotte sul giorno sbagliato,
+      // rompendo la parità col filtro date della pagina (che è per giorno
+      // di calendario italiano).
+      const day = typeof sale.dataVendita === "string" ? sale.dataVendita.slice(0, 10) : null;
+      if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      const sc = saleClassifications.get(sale.id);
+      if (!sc) continue;
+      let point = byDay.get(day);
+      for (const art of sc.articles) {
+        if (!articleMatchesFilter(art)) continue;
+        if (!point) {
+          point = emptyPoint(day);
+          byDay.set(day, point);
+        }
+        if (art.pista === "mobile" || art.pista === "fisso" || art.pista === "energia" || art.pista === "assicurazioni") {
+          point[art.pista]++;
+        }
+        // Stessi contatori extra della tabella (IVA/CB/Telefoni), riusando la
+        // logica condivisa per non divergere dalle regole di classificazione.
+        const extra = emptyPezziExtra();
+        accumulaPezziExtra(extra, art);
+        point.iva += extra.iva;
+        point.cb += extra.cb;
+        point.telefoni += extra.telefoni;
+      }
+    }
+    if (byDay.size === 0) return [];
+    // Riempi i giorni del periodo filtrato (o, in mancanza, del range dei dati)
+    const days = Array.from(byDay.keys()).sort();
+    const start = fromDate && fromDate <= days[0] ? fromDate : days[0];
+    const end = toDate && toDate >= days[days.length - 1] ? toDate : days[days.length - 1];
+    const out: PezziTrendPoint[] = [];
+    const cursor = new Date(`${start}T00:00:00Z`);
+    const stop = new Date(`${end}T00:00:00Z`);
+    while (cursor <= stop && out.length < 800) {
+      const day = cursor.toISOString().slice(0, 10);
+      out.push(byDay.get(day) ?? emptyPoint(day));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    // Periodi oltre il tetto (improbabile: il default è il mese corrente):
+    // mostra i giorni PIÙ RECENTI, non i primi, così il grafico resta
+    // coerente con "cosa sta succedendo adesso".
+    return out.length >= 800 ? out.slice(-400) : out;
+  }, [aggregateSales, saleClassifications, articleMatchesFilter, fromDate, toDate]);
 
   const incassoByPdv = useMemo(() => {
     const map = new Map<string, IncassoTotals>();
@@ -1687,7 +1746,16 @@ export default function VenditeBiSuite() {
             )}
 
             {!selectedPdv && (
-              <TabellaPdvPistaPezzi rows={pdvSummaries} pistaLabels={pistaLabels} />
+              <>
+                <GraficoAndamentoPezzi
+                  data={andamentoPezzi}
+                  pistaLabels={pistaLabels}
+                  hasExtra={pdvSummaries.some(p =>
+                    p.pezziExtra.iva > 0 || p.pezziExtra.cb > 0 || p.pezziExtra.telefoni > 0,
+                  )}
+                />
+                <TabellaPdvPistaPezzi rows={pdvSummaries} pistaLabels={pistaLabels} />
+              </>
             )}
 
             {!selectedPdv && viewMode === "vendite" && (
