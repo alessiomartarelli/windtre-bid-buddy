@@ -7,7 +7,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
 } from "recharts";
 import { TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,54 +94,83 @@ export function GraficoAndamentoPezzi({ data, pistaLabels, hasExtra }: Props) {
 
   if (data.length === 0) return null;
 
+  const renderChip = (s: (typeof SERIES)[number]) => {
+    const on = active.has(s.key);
+    return (
+      <Button
+        key={s.key}
+        type="button"
+        variant="outline"
+        size="sm"
+        className={`h-7 px-3 text-xs gap-1.5 ${on ? "" : "opacity-40"}`}
+        onClick={() => toggle(s.key)}
+        data-testid={`btn-trend-${s.key}`}
+        aria-pressed={on}
+      >
+        <span
+          className="inline-block w-2.5 h-2.5 rounded-full"
+          style={{ backgroundColor: s.color }}
+        />
+        {labelOf(s)}
+      </Button>
+    );
+  };
+
   return (
     <Card data-testid="card-andamento-pezzi">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <TrendingUp className="h-5 w-5 text-primary" />
-          Andamento KPI nel periodo
-        </CardTitle>
-        <div className="flex flex-wrap gap-1.5 pt-2">
-          {series.map(s => {
-            const on = active.has(s.key);
-            return (
-              <Button
-                key={s.key}
-                type="button"
-                variant="outline"
-                size="sm"
-                className={`h-7 px-2.5 text-xs gap-1.5 ${on ? "" : "opacity-45"}`}
-                onClick={() => toggle(s.key)}
-                data-testid={`btn-trend-${s.key}`}
-                aria-pressed={on}
-              >
-                <span
-                  className="inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: s.color }}
-                />
-                {labelOf(s)}
-              </Button>
-            );
-          })}
+      <CardHeader className="pb-4 space-y-3">
+        <div className="space-y-1">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Andamento KPI nel periodo
+          </CardTitle>
+          <p className="text-xs text-muted-foreground pl-7">
+            Pezzi per giorno, con gli stessi filtri della tabella
+          </p>
+        </div>
+        {/* I chip fanno da legenda interattiva: piste principali prima, KPI
+            extra separati da un divisore verticale per gerarchia visiva. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {series.filter(s => !s.extra).map(s => renderChip(s))}
+          {hasExtra && series.some(s => s.extra) && (
+            <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+          )}
+          {series.filter(s => s.extra).map(s => renderChip(s))}
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="h-[300px]" data-testid="chart-andamento-pezzi">
+      <CardContent className="pt-1">
+        <div className="h-[320px]" data-testid="chart-andamento-pezzi">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={18} />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+            <LineChart data={chartData} margin={{ top: 12, right: 16, bottom: 4, left: -14 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickMargin={8}
+                axisLine={{ stroke: "hsl(var(--border))" }}
+                tickLine={false}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickMargin={6}
+                axisLine={false}
+                tickLine={false}
+                allowDecimals={false}
+              />
               <Tooltip
                 contentStyle={{
                   backgroundColor: "hsl(var(--popover))",
                   border: "1px solid hsl(var(--border))",
                   borderRadius: 8,
                   fontSize: 12,
+                  padding: "8px 12px",
                   color: "hsl(var(--popover-foreground))",
                 }}
+                itemStyle={{ padding: "1px 0" }}
+                labelStyle={{ marginBottom: 6, fontWeight: 600 }}
               />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
               {series
                 .filter(s => active.has(s.key))
                 .map(s => (

@@ -30,5 +30,5 @@ description = "1005 telefoni (998 su vendite finalizzate + 7 su annullate): una 
 id = "It4WHrPl0s4-N002bhGyw"
 uri = "file://screenshots/andamento-kpi-vendite.png"
 type = "image"
-title = "Andamento KPI — pagina Vendite"
-description = "Grafico a linee dell'andamento giornaliero dei KPI della tabella pezzi (Mobile, Fisso, Energia, Assicurazioni), con serie attivabili."
+title = "Andamento KPI — spaziatura e gerarchie riviste"
+description = "Grafico con più respiro: sottotitolo esplicativo, selettori-legenda separati dagli extra, assi alleggeriti e area del grafico più ariosa."
