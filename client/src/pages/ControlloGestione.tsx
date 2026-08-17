@@ -37,7 +37,7 @@ import { ImportSpeseExcel } from "@/components/cdg/ImportSpeseExcel";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, LineChart, Line,
 } from "recharts";
 
 // Palette grafici dashboard: toni moderni e desaturati (indaco brand +
@@ -752,6 +752,23 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                 </CardContent>
               </Card>
             </div>
+
+            <Card data-testid="card-andamento-costi">
+              <CardHeader><CardTitle className="text-base">Andamento costi (ultimi 12 mesi)</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={dashboard.meseSerie}>
+                    <CartesianGrid vertical={false} stroke={CHART_GRID} />
+                    <XAxis dataKey="mese" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={(v) => `€ ${(v / 1000).toFixed(0)}k`} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v: number) => fmtEur(v)} contentStyle={CHART_TOOLTIP_STYLE} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="competenza" name="Competenza" stroke={CHART_COMP} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="cassa" name="Pagato (cassa)" stroke={CHART_CASSA} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
 
             {/* === Dashboard ANNUALE === */}
             <Card className="border-indigo-200 dark:border-indigo-900/40">
