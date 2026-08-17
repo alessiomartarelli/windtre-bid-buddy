@@ -557,7 +557,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
         {!embedded && (
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-sm">
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary/90 to-primary flex items-center justify-center shadow-sm">
                 <Wallet className="h-5 w-5 text-white" />
               </div>
               <div>
@@ -776,7 +776,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                     <button
                       type="button"
                       onClick={() => setAndamentoVista("entrambi")}
-                      className={`px-3 text-xs font-medium border-l ${andamentoVista === "entrambi" ? "bg-indigo-900 text-white" : "bg-background hover:bg-muted"}`}
+                      className={`px-3 text-xs font-medium border-l ${andamentoVista === "entrambi" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
                       data-testid="btn-andamento-entrambi"
                     >Entrambi</button>
                   </div>
@@ -802,7 +802,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
             </Card>
 
             {/* === Dashboard ANNUALE === */}
-            <Card className="border-indigo-200 dark:border-indigo-900/40">
+            <Card className="border-primary/30 dark:border-primary/25">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
