@@ -55,6 +55,9 @@ import {
   ChevronsUpDown,
   Download,
   ShieldAlert,
+  Euro,
+  Headphones,
+  Wrench,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -314,6 +317,8 @@ interface MappedSalesResponse {
   totalArticoli: number;
   totalMapped: number;
   totalUnmapped: number;
+  /** Task #422 — fatturato lordo del periodo (somma dei totali vendita). */
+  totalImporto?: number;
   pdvList: PdvData[];
   totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number }>>;
   totaliAddonsPerPista?: Record<string, Record<string, { targetCategory: string; targetLabel: string; occorrenze: number; canone: number }>>;
@@ -3878,6 +3883,30 @@ export default function DashboardGaraReale() {
     return map;
   }, [mappedData, garaConfigMissing, workdayInfo, puntiVenditaFromGara]);
 
+  // Task #422 — KPI di testata: € Actual (fatturato lordo del periodo),
+  // Telefoni, € Accessori e € Servizi (netto IVA ÷1.22 come nel resto della
+  // dashboard), ognuno con proiezione a fine mese sui giorni lavorativi.
+  const headerKpi = useMemo(() => {
+    const proj = (v: number) => workdayInfo.elapsedWorkingDays > 0
+      ? (v / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays
+      : v;
+    let telefoni = 0;
+    let accessori = 0;
+    let servizi = 0;
+    for (const pdv of mappedData?.pdvList ?? []) {
+      telefoni += pdv.telefoni ?? 0;
+      accessori += pdv.accessori?.importo ?? 0;
+      servizi += pdv.servizi?.importo ?? 0;
+    }
+    const actual = mappedData?.totalImporto ?? 0;
+    return {
+      actual, actualProj: proj(actual),
+      telefoni, telefoniProj: Math.round(proj(telefoni)),
+      accessori: nettoIva(accessori), accessoriProj: proj(nettoIva(accessori)),
+      servizi: nettoIva(servizi), serviziProj: proj(nettoIva(servizi)),
+    };
+  }, [mappedData, workdayInfo]);
+
   const premioPerRS = useMemo(() => {
     if (!pistaStats.length || garaConfigMissing) return [] as Array<{ displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>;
     const isRSPerRS = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
@@ -4032,36 +4061,34 @@ export default function DashboardGaraReale() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
-              <Card data-testid="card-total-sales">
-                <CardContent className="p-4 sm:py-5 sm:px-6 text-center">
-                  <div className="flex items-center justify-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-1.5">
-                    <BarChart3 className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden sm:inline">Vendite Totali</span>
-                    <span className="sm:hidden">Vendite</span>
-                  </div>
-                  <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums" data-testid="text-total-sales">{mappedData.totalSales}</div>
-                </CardContent>
-              </Card>
-              <Card data-testid="card-total-articoli">
-                <CardContent className="p-4 sm:py-5 sm:px-6 text-center">
-                  <div className="flex items-center justify-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-1.5">
-                    <Target className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden sm:inline">Attivazioni Gara</span>
-                    <span className="sm:hidden">Attivaz.</span>
-                  </div>
-                  <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums" data-testid="text-total-articoli">{mappedData.totalMapped}</div>
-                </CardContent>
-              </Card>
-              <Card className="col-span-2 sm:col-span-1" data-testid="card-pdv-active">
-                <CardContent className="p-4 sm:py-5 sm:px-6 text-center">
-                  <div className="flex items-center justify-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-1.5">
-                    <Store className="h-3.5 w-3.5 shrink-0" />
-                    PDV Attivi
-                  </div>
-                  <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums" data-testid="text-pdv-active">{mappedData.pdvList.length}</div>
-                </CardContent>
-              </Card>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-4">
+              {([
+                { key: 'actual', label: '€ Actual', icon: Euro, value: headerKpi.actual, proj: headerKpi.actualProj, euro: true },
+                { key: 'telefoni', label: 'Telefoni', icon: Smartphone, value: headerKpi.telefoni, proj: headerKpi.telefoniProj, euro: false },
+                { key: 'accessori', label: '€ Accessori', icon: Headphones, value: headerKpi.accessori, proj: headerKpi.accessoriProj, euro: true },
+                { key: 'servizi', label: '€ Servizi', icon: Wrench, value: headerKpi.servizi, proj: headerKpi.serviziProj, euro: true },
+              ] as const).map((kpi) => {
+                const Icon = kpi.icon;
+                const fmt = (v: number) => kpi.euro
+                  ? `${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+                  : v.toLocaleString('it-IT');
+                return (
+                  <Card key={kpi.key} data-testid={`card-kpi-${kpi.key}`}>
+                    <CardContent className="p-4 sm:py-5 sm:px-5 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[11px] sm:text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-1 truncate">{kpi.label}</div>
+                        <div className="text-xl sm:text-2xl font-bold tracking-tight tabular-nums truncate" data-testid={`text-kpi-${kpi.key}`}>{fmt(kpi.value)}</div>
+                        <div className="text-xs sm:text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums truncate" data-testid={`text-kpi-${kpi.key}-proj`}>
+                          {fmt(kpi.proj)} <span className="font-normal text-gray-500 dark:text-slate-400">proiez.</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 h-11 w-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
 
             <Card data-testid="card-workday-info">

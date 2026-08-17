@@ -3793,6 +3793,7 @@ export async function registerRoutes(
         totalUnmapped,
         totaliPerPista,
         totaliAddonsPerPista,
+        totalImporto,
         latestSaleDate,
       } = aggregateMappedSales(sales, rules);
 
@@ -3803,6 +3804,7 @@ export async function registerRoutes(
         totalArticoli,
         totalMapped,
         totalUnmapped,
+        totalImporto,
         pdvList,
         totaliPerPista,
         totaliAddonsPerPista,

@@ -67,6 +67,8 @@ export type MappedSalesAggregation = {
   totalMapped: number;
   totalUnmapped: number;
   totalArticoli: number;
+  /** Task #422 — fatturato lordo del periodo (somma di `totale` per vendita). */
+  totalImporto: number;
   latestSaleDate: Date | null;
   totaliPerPista: TotaliPerPista;
   totaliAddonsPerPista: TotaliAddonsPerPista;
@@ -75,6 +77,7 @@ export type MappedSalesAggregation = {
 // Forma minima di una riga bisuite_sales necessaria all'aggregazione.
 export type MappableSale = {
   dataVendita?: Date | string | null;
+  totale?: string | number | null;
   rawData?: unknown;
   codicePos?: string | null;
   nomeNegozio?: string | null;
@@ -96,9 +99,11 @@ export function aggregateMappedSales(
   let totalMapped = 0;
   let totalUnmapped = 0;
   let totalArticoli = 0;
+  let totalImporto = 0;
   let latestSaleDate: Date | null = null;
 
   for (const sale of sales) {
+    totalImporto += parseFloat(String(sale.totale ?? "")) || 0;
     if (sale.dataVendita) {
       const d = new Date(sale.dataVendita);
       if (!latestSaleDate || d > latestSaleDate) latestSaleDate = d;
@@ -310,6 +315,7 @@ export function aggregateMappedSales(
     totalMapped,
     totalUnmapped,
     totalArticoli,
+    totalImporto,
     latestSaleDate,
     totaliPerPista,
     totaliAddonsPerPista,
