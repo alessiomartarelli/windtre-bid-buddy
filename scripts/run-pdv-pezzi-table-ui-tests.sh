@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Run the "Tabella PDV × Pista" UI test suites (Task #384 vista Pezzi,
 # Task #387 export Pezzi, Task #388 export Punti, Task #391 export Vendite
-# BiSuite): tests/pdv-pezzi-table-ui.test.mjs +
-# tests/pdv-pezzi-vendite-export-ui.test.mjs (accorpati in un unico workflow
-# per rispettare il limite di workflow del progetto — Task #393).
+# BiSuite, Task #414 grafico Andamento KPI): tests/pdv-pezzi-table-ui.test.mjs
+# + tests/pdv-pezzi-vendite-export-ui.test.mjs +
+# tests/andamento-pezzi-ui.test.mjs (accorpati in un unico workflow per
+# rispettare il limite di workflow del progetto — Task #393; la suite
+# andamento è lanciabile da sola con scripts/run-andamento-pezzi-ui-tests.sh).
 #
 # Test UI Playwright: semina gara_config + vendite BiSuite per il mese
 # corrente, apre /dashboard-gara-reale, attiva il toggle Pezzi e verifica
@@ -35,4 +37,5 @@ echo "[pdv-pezzi-table-ui-tests] running suites ..."
 exec node --import tsx --test \
   tests/pdv-pezzi-extra.test.mjs \
   tests/pdv-pezzi-table-ui.test.mjs \
-  tests/pdv-pezzi-vendite-export-ui.test.mjs
+  tests/pdv-pezzi-vendite-export-ui.test.mjs \
+  tests/andamento-pezzi-ui.test.mjs
