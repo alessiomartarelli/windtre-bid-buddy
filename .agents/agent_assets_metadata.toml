@@ -32,3 +32,10 @@ uri = "file://screenshots/andamento-kpi-vendite.png"
 type = "image"
 title = "Andamento KPI — spaziatura e gerarchie riviste"
 description = "Grafico con più respiro: sottotitolo esplicativo, selettori-legenda separati dagli extra, assi alleggeriti e area del grafico più ariosa."
+
+[[outputs]]
+id = "zvJt5n-k5lVZf3QAHC2oO"
+uri = "file://screenshots/gara-dashboard-after.png"
+type = "image"
+title = "Dashboard performance — spaziature e gerarchie riviste"
+description = "Numeri principali in evidenza, etichette secondarie più discrete, righe PDV e premi con più respiro e ritmo uniforme tra le sezioni."

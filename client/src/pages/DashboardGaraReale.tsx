@@ -1063,7 +1063,7 @@ function PistaCompactRow({
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
-        className="w-full flex flex-col lg:flex-row lg:items-center gap-2 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
+        className="w-full flex flex-col lg:flex-row lg:items-center gap-2.5 px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
         data-testid={`btn-expand-row-${testId}`}
       >
         <div className="flex items-center gap-1.5 min-w-0 lg:w-40 lg:shrink-0">
@@ -1075,20 +1075,20 @@ function PistaCompactRow({
         </div>
         <div className="flex flex-wrap items-stretch gap-2 flex-1 pl-5 lg:pl-0">
           {hasPunti && (
-            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 flex-1 min-w-[160px] space-y-0.5">
+            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2.5 py-1.5 flex-1 min-w-[160px] space-y-1">
               <div className="flex items-center justify-between gap-2 whitespace-nowrap">
                 <span className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-slate-400 shrink-0">Att.</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-semibold">{(m.puntiAtt ?? 0).toFixed(2)} pt</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold tabular-nums">{(m.puntiAtt ?? 0).toFixed(2)} pt</span>
                   {hasSogliaAtt && (
                     <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaAtt!)}`} variant="outline">{m.sogliaAtt}</Badge>
                   )}
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-2 whitespace-nowrap text-blue-700 dark:text-blue-400 border-t pt-0.5">
+              <div className="flex items-center justify-between gap-2 whitespace-nowrap text-blue-700 dark:text-blue-400 border-t pt-1">
                 <span className="text-[10px] uppercase tracking-wide text-blue-600 flex items-center gap-0.5 shrink-0"><TrendingUp className="h-2.5 w-2.5" />Proi.</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-semibold">{(m.puntiProi ?? m.puntiAtt ?? 0).toFixed(2)} pt</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold tabular-nums">{(m.puntiProi ?? m.puntiAtt ?? 0).toFixed(2)} pt</span>
                   {hasSogliaProi && (
                     <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaProi!)}`} variant="outline">{m.sogliaProi}</Badge>
                   )}
@@ -1097,10 +1097,10 @@ function PistaCompactRow({
             </div>
           )}
           {hasPremio && (
-            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2 py-1 min-w-[150px]">
-              <div className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-slate-400">Premio</div>
+            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2.5 py-1.5 min-w-[150px]">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Premio</div>
               <div className="flex items-baseline gap-2 whitespace-nowrap">
-                <span className={`text-sm font-bold ${premioCls}`}>{formatEuro(m.premioAtt ?? 0)}</span>
+                <span className={`text-sm font-bold tabular-nums ${premioCls}`}>{formatEuro(m.premioAtt ?? 0)}</span>
                 {m.premioProi !== undefined && (
                   <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${premioProiCls}`}>
                     <TrendingUp className="h-3 w-3" />{formatEuro(m.premioProi)}
@@ -1112,7 +1112,7 @@ function PistaCompactRow({
         </div>
       </button>
       {expanded && children && (
-        <div className="px-3 pb-3 pt-2 border-t space-y-1.5">{children}</div>
+        <div className="px-3.5 pb-3.5 pt-3 border-t space-y-2.5 bg-gray-50/50 dark:bg-gray-900/20 rounded-b-lg">{children}</div>
       )}
     </div>
   );
@@ -4034,39 +4034,39 @@ export default function DashboardGaraReale() {
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
               <Card data-testid="card-total-sales">
-                <CardContent className="p-3 sm:py-4 sm:px-6 text-center">
-                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 mb-1">
-                    <BarChart3 className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                <CardContent className="p-4 sm:py-5 sm:px-6 text-center">
+                  <div className="flex items-center justify-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-1.5">
+                    <BarChart3 className="h-3.5 w-3.5 shrink-0" />
                     <span className="hidden sm:inline">Vendite Totali</span>
                     <span className="sm:hidden">Vendite</span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold" data-testid="text-total-sales">{mappedData.totalSales}</div>
+                  <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums" data-testid="text-total-sales">{mappedData.totalSales}</div>
                 </CardContent>
               </Card>
               <Card data-testid="card-total-articoli">
-                <CardContent className="p-3 sm:py-4 sm:px-6 text-center">
-                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 mb-1">
-                    <Target className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                <CardContent className="p-4 sm:py-5 sm:px-6 text-center">
+                  <div className="flex items-center justify-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-1.5">
+                    <Target className="h-3.5 w-3.5 shrink-0" />
                     <span className="hidden sm:inline">Attivazioni Gara</span>
                     <span className="sm:hidden">Attivaz.</span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold" data-testid="text-total-articoli">{mappedData.totalMapped}</div>
+                  <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums" data-testid="text-total-articoli">{mappedData.totalMapped}</div>
                 </CardContent>
               </Card>
               <Card className="col-span-2 sm:col-span-1" data-testid="card-pdv-active">
-                <CardContent className="p-3 sm:py-4 sm:px-6 text-center">
-                  <div className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 mb-1">
-                    <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                <CardContent className="p-4 sm:py-5 sm:px-6 text-center">
+                  <div className="flex items-center justify-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-1.5">
+                    <Store className="h-3.5 w-3.5 shrink-0" />
                     PDV Attivi
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold" data-testid="text-pdv-active">{mappedData.pdvList.length}</div>
+                  <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums" data-testid="text-pdv-active">{mappedData.pdvList.length}</div>
                 </CardContent>
               </Card>
             </div>
 
             <Card data-testid="card-workday-info">
-              <CardContent className="p-3 sm:py-3 sm:px-6">
-                <div className="flex items-center gap-2 sm:gap-6 text-[11px] sm:text-sm flex-wrap">
+              <CardContent className="px-4 py-3 sm:py-3.5 sm:px-6">
+                <div className="flex items-center gap-3 sm:gap-8 text-[11px] sm:text-sm flex-wrap">
                   <span className="flex items-center gap-1 sm:gap-1.5">
                     <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 dark:text-slate-500 shrink-0" />
                     <span className="text-gray-500 dark:text-slate-400 hidden sm:inline">Giorni lavorativi:</span>
@@ -4105,8 +4105,8 @@ export default function DashboardGaraReale() {
                           <Trophy className="h-6 w-6 text-green-600 dark:text-green-400" />
                         </div>
                         <div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">Premio Attuale</div>
-                          <div className="text-2xl font-bold text-green-700 dark:text-green-400" data-testid="text-premio-totale-attuale">
+                          <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Premio Attuale</div>
+                          <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums text-green-700 dark:text-green-400" data-testid="text-premio-totale-attuale">
                             {formatEuro(totalPremioAttuale)}
                           </div>
                         </div>
@@ -4121,8 +4121,8 @@ export default function DashboardGaraReale() {
                               <TrendingUp className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                             </div>
                             <div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400">Premio Proiezione</div>
-                              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-premio-totale-proiezione">
+                              <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Premio Proiezione</div>
+                              <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums text-blue-600 dark:text-blue-400" data-testid="text-premio-totale-proiezione">
                                 {formatEuro(totalPremioProiettato)}
                               </div>
                             </div>
@@ -4214,7 +4214,7 @@ export default function DashboardGaraReale() {
               );
             })()}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
               {pistaStats.map((pista) => {
                 const pistaConf = PISTA_CONFIG[pista.pista as keyof typeof PISTA_CONFIG];
                 if (!pistaConf) return null;
@@ -4225,7 +4225,7 @@ export default function DashboardGaraReale() {
 
                 return (
                   <Card key={pista.pista} className="overflow-hidden" data-testid={`card-pista-${pista.pista}`}>
-                    <CardHeader className="pb-2">
+                    <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-base flex items-center gap-2">
                           <div className={`p-1.5 rounded ${pistaConf.color} text-white`}>
@@ -4261,10 +4261,10 @@ export default function DashboardGaraReale() {
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="space-y-4">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-bold" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
-                        <span className="text-sm text-gray-500 dark:text-slate-400">pezzi attuali</span>
+                        <span className="text-4xl font-bold tracking-tight tabular-nums" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
+                        <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">pezzi attuali</span>
                         {pista.rsCalcBreakdown && Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
                           <span key={rsKey} className="hidden" data-testid={`text-pezzi-${pista.pista}-${rsKey}`}>{rsData.pezziAttuali}</span>
                         ))}
@@ -4291,14 +4291,14 @@ export default function DashboardGaraReale() {
                               ? { puntiAtt: rsData.puntiAttuali, puntiProi: rsData.puntiProiezione, premioAtt: rsData.premioAttuale, premioProi: rsData.premioProiettato }
                               : { puntiAtt: rsData.puntiAttuali, puntiProi: rsData.puntiProiezione, sogliaAtt: rsData.sogliaAttuale, sogliaProi: rsData.sogliaProiezione, premioAtt: rsData.premioAttuale, premioProi: rsData.premioProiettato };
                             const detail = isCB ? (
-                              <div className="grid grid-cols-2 gap-2">
+                              <div className="grid grid-cols-2 gap-3">
                                 <div className="text-center">
-                                  <div className="text-xs text-gray-500 dark:text-slate-400">Pezzi</div>
+                                  <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Pezzi</div>
                                   <span className="text-lg font-bold">{rsData.pezziAttuali}</span>
                                   {rsData.pezziProiezione > rsData.pezziAttuali && <div className="text-xs text-blue-500">→ {rsData.pezziProiezione}</div>}
                                 </div>
                                 <div className="text-center">
-                                  <div className="text-xs text-gray-500 dark:text-slate-400">Gettoni €</div>
+                                  <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Gettoni €</div>
                                   <span className="text-lg font-bold text-orange-700 dark:text-orange-400">{formatEuro(rsData.premioAttuale)}</span>
                                   {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
                                     <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5"><TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}</div>
@@ -4307,14 +4307,14 @@ export default function DashboardGaraReale() {
                               </div>
                             ) : isPartnership ? (
                               <>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 gap-3">
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500 dark:text-slate-400">Punti</div>
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Punti</div>
                                     <span className="text-lg font-bold">{rsData.puntiAttuali.toFixed(2)}</span>
                                     {rsData.puntiProiezione > rsData.puntiAttuali && <div className="text-xs text-blue-500">→ {rsData.puntiProiezione.toFixed(2)}</div>}
                                   </div>
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500 dark:text-slate-400">Premio €</div>
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Premio €</div>
                                     <span className="text-lg font-bold text-green-700 dark:text-green-400">{formatEuro(rsData.premioAttuale)}</span>
                                     {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
                                       <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5"><TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}</div>
@@ -4337,14 +4337,14 @@ export default function DashboardGaraReale() {
                               </>
                             ) : (
                               <>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 gap-3">
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500 dark:text-slate-400">Soglia Att.</div>
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Soglia Att.</div>
                                     <Badge className={`text-sm ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
                                     {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{rsData.puntiAttuali.toFixed(2)} pt</div>}
                                   </div>
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500 dark:text-slate-400">Proiezione</div>
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Proiezione</div>
                                     <Badge className={`text-sm ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
                                     {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{rsData.puntiProiezione.toFixed(2)} pt</div>}
                                   </div>
@@ -4389,14 +4389,14 @@ export default function DashboardGaraReale() {
                             const metrics: CompactRowMetrics = { pezziAtt: p.pezzi, pezziProi: p.proiezione, puntiAtt: p.pdvCalc.puntiTotali, puntiProi, sogliaAtt, sogliaProi, premioAtt: p.pdvCalc.premioStimato, premioProi };
                             const detail = (
                               <>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 gap-3">
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500 dark:text-slate-400">Soglia Att.</div>
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Soglia Att.</div>
                                     <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline">{sogliaAtt}</Badge>
                                     {p.pdvCalc.puntiTotali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{p.pdvCalc.puntiTotali.toFixed(2)} pt</div>}
                                   </div>
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500 dark:text-slate-400">Premio €</div>
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Premio €</div>
                                     <span className="text-base font-bold text-green-700 dark:text-green-400">{formatEuro(p.pdvCalc.premioStimato)}</span>
                                   </div>
                                 </div>
@@ -4429,14 +4429,14 @@ export default function DashboardGaraReale() {
                           const detail = (
                             <>
                               {!isCB && !isPartnership && sogliaAtt !== 'N/A' && (
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 gap-3">
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500 dark:text-slate-400">Soglia Att.</div>
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Soglia Att.</div>
                                     <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>{sogliaAtt}</Badge>
                                     {pista.calc.puntiTotali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{pista.calc.puntiTotali.toFixed(2)} pt</div>}
                                   </div>
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500 dark:text-slate-400">Proiezione</div>
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Proiezione</div>
                                     <Badge className={`text-sm ${getSogliaColor(sogliaProi)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>{sogliaProi}</Badge>
                                     {pista.calcProiezione.puntiTotali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(2)} pt</div>}
                                   </div>
@@ -4488,7 +4488,7 @@ export default function DashboardGaraReale() {
                         }
 
                         return (
-                          <div className="space-y-1.5">
+                          <div className="space-y-2">
                             {rows.map(r => {
                               const rowKey = `${pista.pista}::${r.testIdSuffix}`;
                               return (
@@ -4507,12 +4507,12 @@ export default function DashboardGaraReale() {
                               );
                             })}
                             {/* Footer aggregate Totale Premio (always visible) */}
-                            <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3 py-2 flex items-center justify-between flex-wrap gap-2`}>
-                              <span className="text-sm font-medium text-gray-600 dark:text-slate-300">Totale Premio</span>
+                            <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3.5 py-2.5 mt-3 flex items-center justify-between flex-wrap gap-2`}>
+                              <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Totale Premio</span>
                               <div className="flex items-center gap-3 flex-wrap">
-                                <span className={`font-bold ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`} data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
+                                <span className={`text-base font-bold tabular-nums ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`} data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
                                 {pista.calcProiezione.premioStimato > 0 && (
-                                  <span className="font-bold text-blue-600 flex items-center gap-0.5" data-testid={`text-premio-proiezione-${pista.pista}`}>
+                                  <span className="text-sm font-bold tabular-nums text-blue-600 flex items-center gap-1" data-testid={`text-premio-proiezione-${pista.pista}`}>
                                     <TrendingUp className="h-3 w-3" /> {formatEuro(pista.calcProiezione.premioStimato)}
                                   </span>
                                 )}
@@ -4549,20 +4549,20 @@ export default function DashboardGaraReale() {
                                       {group.groupLabel}
                                     </span>
                                     <div className="flex items-center gap-2">
-                                      <span className="font-bold">{group.totalPezzi}</span>
-                                      <span className="text-gray-400 dark:text-slate-500 text-sm">→ {group.totalProiezione}</span>
+                                      <span className="font-bold tabular-nums">{group.totalPezzi}</span>
+                                      <span className="text-gray-500 dark:text-slate-400 text-xs tabular-nums">→ {group.totalProiezione}</span>
                                     </div>
                                   </button>
                                   {groupExpanded && (
-                                    <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-200 dark:border-gray-700 pl-2">
+                                    <div className="ml-4 mt-1.5 space-y-1.5 border-l-2 border-gray-200 dark:border-gray-700 pl-2.5">
                                       {group.children.map((cat) => (
-                                        <div key={cat.category} className="flex items-center justify-between text-sm">
+                                        <div key={cat.category} className="flex items-center justify-between text-[13px]">
                                           <span className="text-gray-500 dark:text-gray-400 truncate max-w-[55%]">
                                             {cat.label}
                                           </span>
                                           <div className="flex items-center gap-2">
-                                            <span className="font-medium">{cat.pezzi}</span>
-                                            <span className="text-gray-400 dark:text-slate-500">→ {cat.proiezione}</span>
+                                            <span className="font-medium tabular-nums">{cat.pezzi}</span>
+                                            <span className="text-gray-500 dark:text-slate-400 text-xs tabular-nums">→ {cat.proiezione}</span>
                                           </div>
                                         </div>
                                       ))}
@@ -4576,13 +4576,13 @@ export default function DashboardGaraReale() {
                       ) : (
                         <>
                           <Separator />
-                          <div className="space-y-1.5">
+                          <div className="space-y-2">
                             {(expandedPistaCategories.has(pista.pista) ? pista.categories : pista.categories.slice(0, 6)).map((cat) => (
-                              <div key={cat.category} className="flex items-center justify-between text-sm">
+                              <div key={cat.category} className="flex items-center justify-between text-[13px]">
                                 <span className="text-gray-600 dark:text-gray-300 truncate max-w-[60%]">{cat.label}</span>
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium">{cat.pezzi}</span>
-                                  <span className="text-gray-400 dark:text-slate-500">→ {cat.proiezione}</span>
+                                  <span className="font-medium tabular-nums">{cat.pezzi}</span>
+                                  <span className="text-gray-500 dark:text-slate-400 text-xs tabular-nums">→ {cat.proiezione}</span>
                                 </div>
                               </div>
                             ))}
@@ -4624,8 +4624,8 @@ export default function DashboardGaraReale() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold" data-testid="text-pezzi-caring">{caringStats.totale}</span>
-                      <span className="text-sm text-gray-500 dark:text-slate-400">caring utilizzate</span>
+                      <span className="text-4xl font-bold tracking-tight tabular-nums" data-testid="text-pezzi-caring">{caringStats.totale}</span>
+                      <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">caring utilizzate</span>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-slate-400">
                       Escluse dal conteggio, dal premio e dai punti Customer Base.
@@ -5113,12 +5113,12 @@ export default function DashboardGaraReale() {
 
                           return (
                             <AccordionItem key={pdv.codicePos} value={pdv.codicePos} className="border rounded-lg px-2 sm:px-4" data-testid={`pdv-accordion-${pdv.codicePos}`}>
-                              <AccordionTrigger className="hover:no-underline py-3">
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
+                              <AccordionTrigger className="hover:no-underline py-3.5">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1.5 sm:gap-3">
                                   <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: pdvChartColor }} />
                                     <div className="text-left min-w-0">
-                                      <div className="font-medium text-sm truncate">{pdv.nomeNegozio}</div>
+                                      <div className="font-semibold text-sm truncate">{pdv.nomeNegozio}</div>
                                       <div className="text-xs text-gray-500 dark:text-slate-400 truncate">{pdv.codicePos} · {pdv.ragioneSociale}</div>
                                     </div>
                                   </div>
@@ -5132,8 +5132,8 @@ export default function DashboardGaraReale() {
                                       </Badge>
                                     )}
                                     <div className="text-right shrink-0">
-                                      <div className="font-bold">{totalPezzi} pezzi</div>
-                                      <div className="text-sm text-gray-400 dark:text-slate-500">Proiezione: {proiezione}</div>
+                                      <div className="font-bold tabular-nums">{totalPezzi} <span className="text-xs font-medium text-gray-500 dark:text-slate-400">pezzi</span></div>
+                                      <div className="text-xs text-gray-500 dark:text-slate-400 tabular-nums">Proiezione: {proiezione}</div>
                                     </div>
                                   </div>
                                 </div>
