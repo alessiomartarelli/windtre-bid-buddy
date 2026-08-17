@@ -4,8 +4,9 @@ description: Dark mode is user-reachable via a theme toggle; how the theme wirin
 ---
 
 Dark mode IS reachable by users. Wiring: tailwind `darkMode: ["class"]` + a full `.dark`
-palette in `client/src/index.css` (blu notte: bg 227 32% 10%, card 227 28% 14%, primary
-indaco chiaro). A `ThemeProvider`/`useTheme` (`client/src/hooks/useTheme.tsx`) toggles the
+palette in `client/src/index.css` (dal restyle Vision UI: navy profondo bg 233 55% 8%, card 232 45% 12%,
+aurora radial-gradients su `.dark body` che seguono --primary, card vetrose via `.dark .glass-panel`;
+le regole aurora/glass hanno un reset dedicato dentro `@media print` — mantienilo se le tocchi). A `ThemeProvider`/`useTheme` (`client/src/hooks/useTheme.tsx`) toggles the
 `.dark` class on `document.documentElement`; choice (light/dark/system) persists in
 localStorage key `mystoredesk-theme`. An inline pre-paint script in `client/index.html`
 reads the SAME key and applies `.dark` before first paint to avoid a flash — keep the key

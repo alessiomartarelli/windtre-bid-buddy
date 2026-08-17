@@ -54,39 +54,76 @@
   --glass-blur: 20px;
 }
 
+/* Tema scuro "Vision" (Task #416): navy profondo con sfumature blu/viola,
+   card vetrose con bordo luminoso. I token restano HSL senza alpha perché
+   usati come hsl(var(--token)); il look vetroso vive nelle utility sotto. */
 .dark {
-  --background: 227 32% 10%;
-  --foreground: 210 40% 96%;
+  --background: 233 55% 8%;
+  --foreground: 214 60% 96%;
 
-  --card: 227 28% 14%;
-  --card-foreground: 210 40% 96%;
+  --card: 232 45% 12%;
+  --card-foreground: 214 60% 96%;
 
-  --popover: 227 28% 14%;
-  --popover-foreground: 210 40% 96%;
+  --popover: 232 45% 11%;
+  --popover-foreground: 214 60% 96%;
 
   --primary: 239 84% 67%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 227 24% 20%;
-  --secondary-foreground: 210 40% 96%;
+  --secondary: 231 36% 19%;
+  --secondary-foreground: 214 60% 96%;
 
-  --muted: 227 24% 20%;
-  --muted-foreground: 220 14% 64%;
+  --muted: 231 36% 18%;
+  --muted-foreground: 222 26% 70%;
 
-  --accent: 227 24% 20%;
-  --accent-foreground: 210 40% 96%;
+  --accent: 231 36% 19%;
+  --accent-foreground: 214 60% 96%;
 
   --destructive: 0 62% 30%;
   --destructive-foreground: 210 40% 96%;
 
-  --border: 227 24% 20%;
-  --input: 227 24% 20%;
+  --border: 230 30% 22%;
+  --input: 230 30% 22%;
   --ring: 239 84% 67%;
 
-  --glass-bg: 227 32% 12% / 0.75;
-  --glass-border: 0 0% 100% / 0.06;
-  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15);
+  --glass-bg: 232 48% 11% / 0.72;
+  --glass-border: 228 60% 78% / 0.1;
+  --glass-shadow: 0 10px 32px hsl(233 60% 3% / 0.45), inset 0 1px 0 hsl(228 60% 85% / 0.06);
   --glass-blur: 20px;
+}
+
+/* Sfondo "aurora" del tema scuro: gradienti radiali blu/viola ancorati al
+   viewport; il glow principale segue l'accent scelto dall'utente (--primary). */
+.dark body {
+  background-color: hsl(var(--background));
+  background-image:
+    radial-gradient(at 12% -5%, hsl(var(--primary) / 0.16) 0px, transparent 45%),
+    radial-gradient(at 88% 8%, hsl(263 70% 45% / 0.13) 0px, transparent 50%),
+    radial-gradient(at 50% 110%, hsl(220 85% 35% / 0.15) 0px, transparent 55%);
+  background-attachment: fixed;
+}
+
+/* I wrapper full-page opachi coprirebbero l'aurora: in dark diventano
+   trasparenti (solo gli shell di pagina, non input/popover). */
+.dark .min-h-screen.bg-background,
+.dark .min-h-screen.bg-gradient-to-br {
+  background-color: transparent;
+  background-image: none;
+}
+
+/* Card vetrose stile Vision: gradiente traslucido + bordo luminoso. */
+.dark .glass-panel {
+  background: linear-gradient(127deg, hsl(232 48% 13% / 0.92) 15%, hsl(233 52% 9% / 0.6) 85%);
+  border: 1px solid hsl(228 60% 78% / 0.1);
+  box-shadow: 0 10px 32px hsl(233 60% 3% / 0.45), inset 0 1px 0 hsl(228 60% 85% / 0.06);
+}
+
+/* Overlay (dialog/popover/dropdown): più opachi per leggibilità sopra il
+   contenuto, stesso bordo luminoso. */
+.dark .glass-overlay {
+  background: linear-gradient(127deg, hsl(232 46% 13% / 0.97) 15%, hsl(233 50% 10% / 0.92) 85%);
+  border: 1px solid hsl(228 60% 78% / 0.12);
+  box-shadow: 0 16px 48px hsl(233 60% 3% / 0.6), inset 0 1px 0 hsl(228 60% 85% / 0.07);
 }
 
 @layer base {
@@ -152,6 +189,25 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     color-adjust: exact;
+  }
+
+  /* In stampa/PDF il restyle scuro non deve comparire: superfici opache
+     e nessun gradiente aurora/vetro (Task #416). */
+  .dark body {
+    background-image: none;
+    background-attachment: initial;
+  }
+
+  .dark .min-h-screen.bg-background,
+  .dark .min-h-screen.bg-gradient-to-br {
+    background-color: hsl(var(--background));
+  }
+
+  .dark .glass-panel,
+  .dark .glass-overlay {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: none;
   }
 
   [data-radix-accordion-content],

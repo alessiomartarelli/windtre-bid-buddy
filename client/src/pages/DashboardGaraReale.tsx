@@ -3910,7 +3910,7 @@ export default function DashboardGaraReale() {
   const isLoading = loadingMapped || loadingConfig;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900" data-testid="dashboard-gara-reale">
+    <div className="min-h-screen bg-gray-50 dark:bg-transparent" data-testid="dashboard-gara-reale">
       <AppNavbar title="MyStoreDesk">
         <Select value={selectedPeriod} onValueChange={(v) => { setSelectedPeriod(v); setSelectedConfigId(""); }} data-testid="select-period">
           <SelectTrigger className="w-[140px] sm:w-[200px] text-xs sm:text-sm" data-testid="select-period-trigger">
