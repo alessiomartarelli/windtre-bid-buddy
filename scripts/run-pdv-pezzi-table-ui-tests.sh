@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Run the "Tabella PDV × Pista" UI test suite (Task #384 vista Pezzi,
-# Task #387 export Pezzi, Task #388 export Punti):
-# tests/pdv-pezzi-table-ui.test.mjs.
+# Run the "Tabella PDV × Pista" UI test suites (Task #384 vista Pezzi,
+# Task #387 export Pezzi, Task #388 export Punti, Task #391 export Vendite
+# BiSuite): tests/pdv-pezzi-table-ui.test.mjs +
+# tests/pdv-pezzi-vendite-export-ui.test.mjs (accorpati in un unico workflow
+# per rispettare il limite di workflow del progetto — Task #393).
 #
 # Test UI Playwright: semina gara_config + vendite BiSuite per il mese
 # corrente, apre /dashboard-gara-reale, attiva il toggle Pezzi e verifica
@@ -29,5 +31,7 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-echo "[pdv-pezzi-table-ui-tests] running suite ..."
-exec node --import tsx --test tests/pdv-pezzi-table-ui.test.mjs
+echo "[pdv-pezzi-table-ui-tests] running suites ..."
+exec node --import tsx --test \
+  tests/pdv-pezzi-table-ui.test.mjs \
+  tests/pdv-pezzi-vendite-export-ui.test.mjs

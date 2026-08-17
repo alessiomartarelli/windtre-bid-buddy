@@ -12,6 +12,11 @@
 #   - DATABASE_URL (seed + cleanup org di test);
 #   - chromium di sistema (Nix) trovato via `which chromium`.
 # Attende fino a 30s che l'app risponda prima di lanciare i test.
+#
+# NOTA (Task #393): questa suite gira anche automaticamente nel workflow
+# "pdv-pezzi-table-ui-tests" (scripts/run-pdv-pezzi-table-ui-tests.sh),
+# accorpata alla suite tabella per rispettare il limite di workflow.
+# Questo script resta per il lancio manuale della sola suite export.
 
 set -euo pipefail
 
