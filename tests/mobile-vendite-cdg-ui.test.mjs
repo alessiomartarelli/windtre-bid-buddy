@@ -57,19 +57,26 @@ async function assertStickyScrollableTable(page, containerSelector, label) {
   assert.ok(info.headerStays, `${label}: header deve restare visibile durante lo scroll verticale`);
 }
 
-async function seedBisuiteSales(pool, orgId, { count = 30, addetto = 'Mario Rossi' } = {}) {
+async function seedBisuiteSales(pool, orgId, {
+  count = 30,
+  addetto = 'Mario Rossi',
+  startId = 100000,
+  codicePos = 'POS001',
+  nomeNegozio = 'Negozio Mobile 376',
+  ragioneSociale = null,
+} = {}) {
   for (let i = 0; i < count; i++) {
     await pool.query(
       `INSERT INTO bisuite_sales
          (organization_id, bisuite_id, data_vendita, codice_pos, nome_negozio,
-          nome_addetto, nome_cliente, totale, stato, raw_data)
-       VALUES ($1, $2, now() - ($3 || ' minutes')::interval, $4, $5, $6, $7, $8, $9, $10::jsonb)`,
+          nome_addetto, nome_cliente, totale, stato, raw_data, ragione_sociale)
+       VALUES ($1, $2, now() - ($3 || ' minutes')::interval, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)`,
       [
         orgId,
-        100000 + i,
+        startId + i,
         String(i),
-        'POS001',
-        'Negozio Mobile 376',
+        codicePos,
+        nomeNegozio,
         addetto,
         `Cliente ${i}`,
         '25.00',
@@ -98,6 +105,7 @@ async function seedBisuiteSales(pool, orgId, { count = 30, addetto = 'Mario Ross
             },
           ],
         }),
+        ragioneSociale,
       ],
     );
   }
@@ -246,6 +254,17 @@ test('mobile: Vendite BiSuite e Controllo di Gestione usabili su smartphone', as
   const browser = await launchBrowser();
   try {
     await seedBisuiteSales(pool, session.orgId, { count: 30 });
+    // Seed extra per la Tabella PDV × Pista (Pezzi): 2 RS, più PDV, così le
+    // righe espanse rendono il contenitore verticalmente scrollabile.
+    for (let p = 0; p < 6; p++) {
+      await seedBisuiteSales(pool, session.orgId, {
+        count: 3,
+        startId: 200000 + p * 10,
+        codicePos: `POSP${p}`,
+        nomeNegozio: `Negozio Pezzi ${p}`,
+        ragioneSociale: p < 3 ? 'Alfa S.r.l.' : 'Beta S.p.A.',
+      });
+    }
 
     const context = await newAuthedContext(browser, session, { mobile: true });
     const page = await context.newPage();
@@ -255,7 +274,27 @@ test('mobile: Vendite BiSuite e Controllo di Gestione usabili su smartphone', as
     await page.getByTestId('button-view-vendite').waitFor({ state: 'visible', timeout: 20000 });
     await page.waitForSelector('[data-testid="scrollable-table-viewport"] table', { timeout: 20000 });
     await assertNoHorizontalOverflow(page, 'VenditeBiSuite');
-    await assertStickyScrollableTable(page, 'body', 'VenditeBiSuite lista vendite');
+    await assertStickyScrollableTable(page, '[data-testid="card-lista-vendite"]', 'VenditeBiSuite lista vendite');
+
+    // ── Tabella PDV × Pista (Pezzi): aggregazione RS→PDV, totali e sticky ──
+    const pezziCard = page.locator('[data-testid="card-tabella-pdv-pista-pezzi"]');
+    await pezziCard.waitFor({ state: 'visible', timeout: 20000 });
+    // 2 RS con nome + "Senza RS" del seed base
+    await page.locator('[data-testid^="row-pezzi-rs-"]').first().waitFor({ timeout: 20000 });
+    const rsCount = await page.locator('[data-testid^="row-pezzi-rs-"]').count();
+    assert.ok(rsCount >= 3, `attese >=3 righe RS nella tabella pezzi, trovate ${rsCount}`);
+    // Totale mobile: UNTIED ogni i%3==0 → 10 (base) + 6 PDV × 1 = 16
+    const totMobile = await page.getByTestId('cell-pezzi-tot-mobile').innerText();
+    assert.equal(totMobile.trim(), '16', 'totale colonna mobile della tabella pezzi');
+    // Totale fisso: ADSL/FIBRA/FWA CF ogni i%3==1 → 10 + 6 = 16
+    const totFisso = await page.getByTestId('cell-pezzi-tot-fisso').innerText();
+    assert.equal(totFisso.trim(), '16', 'totale colonna fisso della tabella pezzi');
+    // Espandi tutto: le righe PDV compaiono e la tabella scorre con header sticky
+    await page.getByTestId('btn-pezzi-expand-all').click();
+    await page.locator('[data-testid^="row-pezzi-pdv-"]').first().waitFor({ timeout: 20000 });
+    const pdvRows = await page.locator('[data-testid^="row-pezzi-pdv-"]').count();
+    assert.ok(pdvRows >= 7, `attese >=7 righe PDV espanse, trovate ${pdvRows}`);
+    await assertStickyScrollableTable(page, '[data-testid="card-tabella-pdv-pista-pezzi"]', 'Tabella PDV × Pista (Pezzi)');
 
     // ── Vista per addetto: dettaglio vendite addetto sticky + scrollabile ──
     await page.getByTestId('button-view-addetti').click();

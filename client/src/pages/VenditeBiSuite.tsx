@@ -99,6 +99,7 @@ import {
   TYPE_LABELS,
   TYPE_COLORS,
 } from "@/lib/bisuiteClassification";
+import { TabellaPdvPistaPezzi } from "@/components/TabellaPdvPistaPezzi";
 import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
 import type { CanvassKpiRule } from "@shared/canvassKpiRules";
 
@@ -1676,6 +1677,10 @@ export default function VenditeBiSuite() {
               </Card>
             )}
 
+            {!selectedPdv && (
+              <TabellaPdvPistaPezzi rows={pdvSummaries} pistaLabels={pistaLabels} />
+            )}
+
             {!selectedPdv && viewMode === "vendite" && (
               <Card>
                 <CardHeader>
@@ -1805,7 +1810,7 @@ export default function VenditeBiSuite() {
               </Card>
             )}
 
-            <Card>
+            <Card data-testid="card-lista-vendite">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Package className="h-5 w-5 text-primary" />
