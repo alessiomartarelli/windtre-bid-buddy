@@ -39,3 +39,17 @@ uri = "file://screenshots/gara-dashboard-after.png"
 type = "image"
 title = "Dashboard performance — spaziature e gerarchie riviste"
 description = "Numeri principali in evidenza, etichette secondarie più discrete, righe PDV e premi con più respiro e ritmo uniforme tra le sezioni."
+
+[[outputs]]
+id = "gb9mH9flU1kGmOSsc-Xho"
+uri = "file://screenshots/gara-card-punti-landing.png"
+type = "image"
+title = "Card piste — punti e soglie in evidenza"
+description = "All'atterraggio: Punti Attuali e Proiezione con le rispettive soglie come headline; i pezzi diventano una nota secondaria."
+
+[[outputs]]
+id = "jZZgAdcIECTyvkf_G_PS4"
+uri = "file://screenshots/gara-card-tiles.png"
+type = "image"
+title = "Card Mobile espansa — tile in stile portfolio"
+description = "Le righe per negozio/ragione sociale come tessere scure con nome, punti, soglia e freccia colorata verso la proiezione, ispirate alla reference."
