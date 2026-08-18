@@ -15,17 +15,19 @@ import {
 // Task #432 – verifica automatica della sezione "Piste in gara" (PistaTicker)
 // della Dashboard Gara Reale.
 //
-// La sezione (post Task #426) è una lista di righe scorrevoli: ogni pista con
-// attività genera una riga identificata da `ticker-pista-{p}` con il valore
-// punti/pezzi (`ticker-punti-{p}`) e il premio (`ticker-premio-{p}`).
-// Le piste a zero attività NON hanno riga. Con ≥3 piste il ticker è
-// ciclico e mostra il pulsante pausa/riprendi (`btn-ticker-pause`).
+// La sezione (post Task #424, layout "Shorts") è una griglia di card: ogni
+// pista con attività genera una card identificata da `ticker-pista-{p}` con
+// il valore punti/pezzi (`ticker-punti-{p}`) e il premio (`ticker-premio-{p}`).
+// Le piste a zero attività NON hanno card. Il click su una card espande il
+// dettaglio (`ticker-detail-{p}`) con premio e soglia per blocco.
 //
 // Copre:
-//   - la riga ticker-pista-{p} compare per piste con dati e i sub-testids
+//   - la card ticker-pista-{p} compare per piste con dati e i sub-testids
 //     ticker-punti-{p} / ticker-premio-{p} sono presenti;
-//   - piste a zero attività non generano righe;
-//   - il pulsante pausa compare quando ci sono ≥3 piste attive.
+//   - piste a zero attività non generano card;
+//   - espansione/chiusura del dettaglio con ≥3 piste attive;
+//   - (Task #433) premio non-zero, soglia raggiunta e badge proiezione con
+//     soglie note, per intercettare regressioni che azzerano i calcoli.
 
 const now = new Date();
 const pad = (n) => String(n).padStart(2, '0');
@@ -171,9 +173,144 @@ test('scenario 1: righe ticker compaiono per piste con dati e assenti per zero-a
 });
 
 // ===========================================================================
-// SCENARIO 2 – ≥3 piste attive → ticker ciclico con pulsante pausa.
+// SCENARIO 3 (Task #433) – valori premio/soglia dentro la card e nel
+// dettaglio espanso: con soglie note (soglia1 = 3 punti) e 4 SIM TIED
+// (0,75 punti l'una → 3 punti) la pista mobile deve mostrare:
+//   - ticker-premio-mobile con un valore € > 0;
+//   - nel blocco dettaglio una soglia raggiunta (badge "S1", non "—");
+//   - il badge proiezione ticker-premio-proj-mobile quando la proiezione
+//     fine mese supera l'attuale (sempre, tranne l'ultimo giorno del mese).
+// Se una regressione azzera premio/soglia, questi assert falliscono invece
+// di lasciare sparire silenziosamente la card.
 // ===========================================================================
-test('scenario 2: pulsante pausa presente quando ≥3 piste hanno dati', async () => {
+test('scenario 3: premio non-zero, soglia raggiunta e badge proiezione con soglie note', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'ticker_premio', fullName: 'Ticker Premio Test' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+
+    const POS_A = uniq('TKVPOS');
+    const RS_A = uniq('TickerPremioRs Srl');
+
+    // Calendario 7/7: elapsedWorkingDays = giorno del mese,
+    // totalWorkingDays = giorni del mese → ratio proiezione deterministico.
+    const calendar = {
+      weeklySchedule: { workingDays: [0, 1, 2, 3, 4, 5, 6] },
+      specialDays: [],
+    };
+
+    // Gara config con soglie mobile note: soglia1 = 3 punti (raggiunta con
+    // 4 TIED × 0,75 punti), soglie superiori irraggiungibili.
+    await pool.query(
+      `INSERT INTO gara_config (organization_id, month, year, name, config)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [
+        session.orgId, MONTH, YEAR, 'Ticker premio test',
+        JSON.stringify({
+          pdvList: [{ codicePos: POS_A, nome: 'Negozio Premio', ragioneSociale: RS_A, calendar }],
+          pistaMobileConfig: {
+            sogliePerPos: [{
+              posCode: POS_A,
+              soglia1: 3, soglia2: 100, soglia3: 200, soglia4: 300,
+              multiplierSoglia1: 1, multiplierSoglia2: 1.2,
+              multiplierSoglia3: 1.5, multiplierSoglia4: 2,
+              canoneMedio: 10,
+            }],
+          },
+        }),
+      ],
+    );
+
+    // 4 SIM TIED → 3 punti = soglia1; premio > 0 (gettone TIED 5€/pezzo
+    // + moltiplicatore canone alla soglia raggiunta).
+    for (let i = 0; i < 4; i++) {
+      await insertSale(pool, session.orgId, {
+        codicePos: POS_A, nomeNegozio: 'Negozio Premio', ragioneSociale: RS_A,
+        articoli: [artMobileTied],
+      });
+    }
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session);
+    const page = await openDashboard(context);
+
+    await page.getByTestId('section-pista-ticker').waitFor({ state: 'visible', timeout: 15000 });
+    const rowMobile = page.getByTestId('ticker-pista-mobile');
+    await rowMobile.waitFor({ state: 'visible', timeout: 15000 });
+
+    // --- Premio attuale non-zero sulla card ---
+    const premioTxt = (await page.getByTestId('ticker-premio-mobile').innerText()).trim();
+    const premioVal = Number(premioTxt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+    assert.ok(
+      Number.isFinite(premioVal) && premioVal > 0,
+      `ticker-premio-mobile deve mostrare un € > 0 (trovato "${premioTxt}")`,
+    );
+
+    // --- Badge proiezione: presente quando la proiezione supera l'attuale.
+    // Ratio = giorniMese/giornoOdierno (calendario 7/7): > 1 tranne
+    // l'ultimo giorno del mese, dove la proiezione coincide con l'attuale.
+    const today = new Date();
+    const daysInMonth = new Date(YEAR, MONTH, 0).getDate();
+    const isLastDay = today.getDate() >= daysInMonth;
+    if (!isLastDay) {
+      const projLoc = page.getByTestId('ticker-premio-proj-mobile');
+      await projLoc.waitFor({ state: 'visible', timeout: 10000 });
+      const projTxt = (await projLoc.innerText()).trim();
+      const projVal = Number(projTxt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+      assert.ok(
+        Number.isFinite(projVal) && projVal > 0,
+        `ticker-premio-proj-mobile deve mostrare un € > 0 (trovato "${projTxt}")`,
+      );
+      assert.ok(
+        projVal >= premioVal,
+        `proiezione (${projVal}) attesa >= attuale (${premioVal})`,
+      );
+    } else {
+      // Ultimo giorno del mese: proiezione == attuale → il badge può
+      // legittimamente non comparire; niente assert sulla proiezione.
+      console.log('[scenario 3] ultimo giorno del mese: skip assert badge proiezione');
+    }
+
+    // --- Dettaglio espanso: soglia raggiunta (non "—") ---
+    await rowMobile.click();
+    const detail = page.getByTestId('ticker-detail-mobile');
+    await detail.waitFor({ state: 'visible', timeout: 10000 });
+
+    const totBlock = page.getByTestId('ticker-detail-rs-mobile-totale');
+    await totBlock.waitFor({ state: 'visible', timeout: 10000 });
+    const blockTxt = (await totBlock.innerText()).replace(/\s+/g, ' ');
+
+    // La soglia attuale deve essere una soglia reale (S1) e non "—".
+    assert.match(
+      blockTxt,
+      /S1/,
+      `il blocco dettaglio deve mostrare la soglia raggiunta S1 (trovato: "${blockTxt}")`,
+    );
+
+    // Nessun badge soglia deve essere il placeholder "—": con soglia1=3
+    // raggiunta, sia l'attuale sia la proiezione mostrano una soglia reale.
+    assert.ok(
+      !blockTxt.includes('—'),
+      `nessun badge soglia deve essere "—" nel dettaglio (trovato: "${blockTxt}")`,
+    );
+
+    await page.close();
+    await context.close();
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 2 – ≥3 piste attive → una card per pista nella griglia Shorts;
+// click su una card espande il dettaglio, secondo click lo richiude.
+// (La modalità ciclica con btn-ticker-pause è stata rimossa dal layout
+// Shorts di Task #424: le card sono tutte visibili in griglia.)
+// ===========================================================================
+test('scenario 2: card per ogni pista attiva ed espansione/chiusura del dettaglio', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'ticker_pause', fullName: 'Ticker Pause Test' });
   let browser;
@@ -195,8 +332,8 @@ test('scenario 2: pulsante pausa presente quando ≥3 piste hanno dati', async (
       ],
     );
 
-    // Semina dati per 3 piste diverse (mobile, fisso, cb) in modo che
-    // items.length >= 3 e il ticker attivi la modalità ciclica.
+    // Semina dati per 3 piste diverse (mobile, fisso, cb): ogni pista con
+    // attività deve generare la propria card nella griglia.
     for (let i = 0; i < 2; i++) {
       await insertSale(pool, session.orgId, {
         codicePos: POS_A, nomeNegozio: 'Negozio Pause', ragioneSociale: RS_A,
@@ -223,21 +360,35 @@ test('scenario 2: pulsante pausa presente quando ≥3 piste hanno dati', async (
     await page.getByTestId('ticker-pista-fisso').waitFor({ state: 'visible', timeout: 15000 });
     await page.getByTestId('ticker-pista-cb').waitFor({ state: 'visible', timeout: 15000 });
 
-    // Con ≥3 piste il ticker entra in modalità ciclica: il pulsante pausa
-    // deve essere presente e funzionante.
-    const pauseBtn = page.getByTestId('btn-ticker-pause');
-    await pauseBtn.waitFor({ state: 'visible', timeout: 10000 });
-    assert.ok(await pauseBtn.isVisible(), 'btn-ticker-pause deve essere visibile con 3 piste');
+    // Il layout Shorts non ha più il pulsante pausa: non deve esistere.
+    assert.equal(
+      await page.getByTestId('btn-ticker-pause').count(),
+      0,
+      'btn-ticker-pause non deve esistere nel layout Shorts',
+    );
 
-    // Click sul pausa: aria-pressed deve diventare "true".
-    await pauseBtn.click();
-    const pressedAfter = await pauseBtn.getAttribute('aria-pressed');
-    assert.equal(pressedAfter, 'true', 'aria-pressed deve essere "true" dopo il click pausa');
+    // Click su una card: il dettaglio si espande (aria-expanded=true).
+    const cardMobile = page.getByTestId('ticker-pista-mobile');
+    await cardMobile.click();
+    assert.equal(
+      await cardMobile.getAttribute('aria-expanded'),
+      'true',
+      'aria-expanded deve essere "true" dopo il click sulla card',
+    );
+    await page.getByTestId('ticker-detail-mobile').waitFor({ state: 'visible', timeout: 10000 });
 
-    // Secondo click: riprende (aria-pressed torna "false").
-    await pauseBtn.click();
-    const pressedResumed = await pauseBtn.getAttribute('aria-pressed');
-    assert.equal(pressedResumed, 'false', 'aria-pressed deve essere "false" dopo il click riprendi');
+    // Secondo click: il dettaglio si richiude.
+    await cardMobile.click();
+    assert.equal(
+      await cardMobile.getAttribute('aria-expanded'),
+      'false',
+      'aria-expanded deve essere "false" dopo il secondo click',
+    );
+    assert.equal(
+      await page.getByTestId('ticker-detail-mobile').count(),
+      0,
+      'ticker-detail-mobile non deve esistere dopo la chiusura',
+    );
 
     await page.close();
     await context.close();
