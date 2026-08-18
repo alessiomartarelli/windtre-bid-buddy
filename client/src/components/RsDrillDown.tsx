@@ -92,6 +92,7 @@ const ASSICURAZIONI_LABELS: Record<string, string> = {
   casaFamigliaStart: 'Casa Famiglia Start',
   elettrodomestici: 'Elettrodomestici',
   micioFido: 'Micio Fido',
+  pagamentoAnnuale: 'Pagamento Annuale',
   sportFamiglia: 'Sport Famiglia',
   sportIndividuale: 'Sport Individuale',
   viaggiVacanze: 'Viaggi Vacanze',

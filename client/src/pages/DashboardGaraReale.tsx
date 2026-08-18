@@ -910,6 +910,7 @@ function calcAssicurazioniForAllPdv(
   const ASSIC_PRODUCT_KEYS: Set<string> = new Set([
     "protezionePro","casaFamigliaFull","casaFamigliaPlus","casaFamigliaStart",
     "sportFamiglia","sportIndividuale","viaggiVacanze","elettrodomestici","micioFido",
+    "pagamentoAnnuale",
   ]);
 
   const attivatoByPos: Record<string, AssicurazioniAttivatoRiga> = {};
@@ -919,7 +920,7 @@ function calcAssicurazioniForAllPdv(
     const riga: AssicurazioniAttivatoRiga = {
       protezionePro: 0, casaFamigliaFull: 0, casaFamigliaPlus: 0, casaFamigliaStart: 0,
       sportFamiglia: 0, sportIndividuale: 0, viaggiVacanze: 0, elettrodomestici: 0,
-      micioFido: 0, viaggioMondo: 0, viaggioMondoPremio: 0, reloadForever: 0,
+      micioFido: 0, pagamentoAnnuale: 0, viaggioMondo: 0, viaggioMondoPremio: 0, reloadForever: 0,
     };
     for (const item of items) {
       const key = item.targetCategory as keyof AssicurazioniAttivatoRiga;
@@ -3205,7 +3206,7 @@ export default function DashboardGaraReale() {
           const riga: AssicurazioniAttivatoRiga = {
             protezionePro: 0, casaFamigliaFull: 0, casaFamigliaPlus: 0, casaFamigliaStart: 0,
             sportFamiglia: 0, sportIndividuale: 0, viaggiVacanze: 0, elettrodomestici: 0,
-            micioFido: 0, viaggioMondo: 0, viaggioMondoPremio: 0, reloadForever: 0,
+            micioFido: 0, pagamentoAnnuale: 0, viaggioMondo: 0, viaggioMondoPremio: 0, reloadForever: 0,
           };
           for (const it of assicItems) {
             const key = it.targetCategory as keyof AssicurazioniAttivatoRiga;
@@ -4359,28 +4360,6 @@ export default function DashboardGaraReale() {
 
             {/* Task #424 — ticker verticale stile vetrina W3 */}
             <PistaTicker stats={pistaStats} />
-
-            {/* Premio Totale aggregate — testids text-premio-totale-attuale /
-                text-premio-totale-proiezione usati dal suite dashboard-gara-actual-kpi-ticker-ui-tests */}
-            {headerKpi.actual > 0 && (
-              <div className="flex items-center justify-between px-4 py-2.5 rounded-xl border bg-card/60">
-                <div className="flex items-center gap-2">
-                  <Trophy className="h-4 w-4 text-amber-500" />
-                  <span className="text-sm font-semibold">Premio Totale</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-green-700 dark:text-green-400" data-testid="text-premio-totale-attuale">
-                    {formatEuro(headerKpi.actual)}
-                  </span>
-                  {headerKpi.actualProj > headerKpi.actual && (
-                    <span className="text-sm font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-0.5" data-testid="text-premio-totale-proiezione">
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      {formatEuro(headerKpi.actualProj)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
 
             {premioPerRS.length > 0 && (
               <PremioPerRsPdfExport premioPerRS={premioPerRS} orgId={orgId} mese={selMonth} anno={selYear} />

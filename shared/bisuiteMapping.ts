@@ -115,6 +115,7 @@ export const ASSICURAZIONI_TARGETS = [
   { value: 'viaggioMondo', label: 'Viaggio Mondo' },
   { value: 'protezionePro', label: 'Protezione Pro' },
   { value: 'reloadForever', label: 'Reload Forever' },
+  { value: 'pagamentoAnnuale', label: 'Pagamento Annuale' },
 ];
 
 export const PROTECTA_TARGETS = [
@@ -342,6 +343,9 @@ export function getDefaultMappingRules(): BiSuiteMappingRule[] {
 
     // ═══════════════ ASSICURAZIONI — ADDITIONAL ═══════════════
     { id: ruleId(), pista: 'assicurazioni', targetCategory: 'viaggioMondo', targetLabel: 'Viaggio Mondo', conditions: { categoriaBiSuite: 'ASSICURAZIONI', domandaTesto: 'ASSICURAZIONE VIAGGIO MONDO', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    // Pagamento annuale: +0,5 punti extra quando la domanda "PAGAMENTO ANNUALE" è risposta SI.
+    { id: ruleId(), pista: 'assicurazioni', targetCategory: 'pagamentoAnnuale', targetLabel: 'Pagamento Annuale', conditions: { categoriaBiSuite: 'ASSICURAZIONI', domandaTesto: 'PAGAMENTO ANNUALE', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
+    { id: ruleId(), pista: 'assicurazioni', targetCategory: 'pagamentoAnnuale', targetLabel: 'Pagamento Annuale', conditions: { categoriaBiSuite: 'ASSICURAZIONI BUSINESS PRO', domandaTesto: 'PAGAMENTO ANNUALE', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
 
     // ═══════════════ PROTECTA — BASE ═══════════════
     { id: ruleId(), pista: 'protecta', targetCategory: 'casaStart', targetLabel: 'Casa Start', conditions: { categoriaBiSuite: 'ALLARMI', tipologiaBiSuite: 'ALLARMI PROTECTA' }, priority: 10, enabled: true, ruleType: 'base' },

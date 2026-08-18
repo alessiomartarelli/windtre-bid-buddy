@@ -1331,7 +1331,7 @@ const Preventivatore = () => {
       const attivato = attivatoAssicurazioniByRS[rs] ?? createEmptyAssicurazioniAttivato();
       const prodottiStandard: (keyof typeof ASSICURAZIONI_POINTS)[] = [
         'protezionePro', 'casaFamigliaFull', 'casaFamigliaPlus', 'casaFamigliaStart',
-        'sportFamiglia', 'sportIndividuale', 'viaggiVacanze', 'elettrodomestici', 'micioFido',
+        'sportFamiglia', 'sportIndividuale', 'viaggiVacanze', 'elettrodomestici', 'micioFido', 'pagamentoAnnuale',
       ];
       let puntiBase = 0;
       let gettoniRS = 0;
@@ -1431,7 +1431,7 @@ const Preventivatore = () => {
         : ASSICURAZIONI_POINTS;
       const prodottiStd: (keyof typeof ASSICURAZIONI_POINTS)[] = [
         'protezionePro', 'casaFamigliaFull', 'casaFamigliaPlus', 'casaFamigliaStart',
-        'sportFamiglia', 'sportIndividuale', 'viaggiVacanze', 'elettrodomestici', 'micioFido',
+        'sportFamiglia', 'sportIndividuale', 'viaggiVacanze', 'elettrodomestici', 'micioFido', 'pagamentoAnnuale',
       ];
       let assicPunti = 0, assicGettoni = 0;
       for (const p of prodottiStd) {

@@ -43,6 +43,7 @@ export function calcoloAssicurazioniPerPos(
       'viaggiVacanze',
       'elettrodomestici',
       'micioFido',
+      'pagamentoAnnuale',
     ];
 
     const effectivePoints = puntiOverride ? { ...ASSICURAZIONI_POINTS, ...puntiOverride } : ASSICURAZIONI_POINTS;

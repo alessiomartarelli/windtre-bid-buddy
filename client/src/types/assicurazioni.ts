@@ -8,6 +8,7 @@ export type AssicurazioneProduct =
   | 'viaggiVacanze'
   | 'elettrodomestici'
   | 'micioFido'
+  | 'pagamentoAnnuale'
   | 'viaggioMondo'
   | 'reloadForever';
 
@@ -38,6 +39,7 @@ export interface AssicurazioniAttivatoRiga {
   viaggiVacanze: number;
   elettrodomestici: number;
   micioFido: number;
+  pagamentoAnnuale: number; // pezzi con "Pagamento annuale" = SI (+0,5 punti cad.)
   viaggioMondo: number; // numero pezzi
   viaggioMondoPremio: number; // premio assicurativo in €
   reloadForever: number; // numero eventi
@@ -70,6 +72,7 @@ export const ASSICURAZIONI_POINTS: Record<Exclude<AssicurazioneProduct, 'viaggio
   viaggiVacanze: 1.5,
   elettrodomestici: 0.5,
   micioFido: 2,
+  pagamentoAnnuale: 0.5,
 };
 
 export const ASSICURAZIONI_PREMIUMS: Record<Exclude<AssicurazioneProduct, 'viaggioMondo' | 'reloadForever'>, number> = {
@@ -82,6 +85,7 @@ export const ASSICURAZIONI_PREMIUMS: Record<Exclude<AssicurazioneProduct, 'viagg
   viaggiVacanze: 30,
   elettrodomestici: 18,
   micioFido: 45,
+  pagamentoAnnuale: 0,
 };
 
 export const ASSICURAZIONI_LABELS: Record<AssicurazioneProduct, string> = {
@@ -94,6 +98,7 @@ export const ASSICURAZIONI_LABELS: Record<AssicurazioneProduct, string> = {
   viaggiVacanze: 'Viaggi e Vacanze',
   elettrodomestici: 'Elettrodomestici',
   micioFido: 'Micio e Fido',
+  pagamentoAnnuale: 'Pagamento Annuale',
   viaggioMondo: 'Viaggio Mondo',
   reloadForever: 'Reload Forever',
 };
@@ -108,6 +113,7 @@ export const createEmptyAssicurazioniAttivato = (): AssicurazioniAttivatoRiga =>
   viaggiVacanze: 0,
   elettrodomestici: 0,
   micioFido: 0,
+  pagamentoAnnuale: 0,
   viaggioMondo: 0,
   viaggioMondoPremio: 0,
   reloadForever: 0,

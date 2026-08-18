@@ -145,6 +145,7 @@ const GETTONI_LABELS: Record<string, string> = {
 const ASSICURAZIONI_PRODUCT_KEYS = [
   'protezionePro', 'casaFamigliaFull', 'casaFamigliaPlus', 'casaFamigliaStart',
   'sportFamiglia', 'sportIndividuale', 'viaggiVacanze', 'elettrodomestici', 'micioFido',
+  'pagamentoAnnuale',
 ] as const;
 
 const PROTECTA_PRODUCT_KEYS: ProtectaProduct[] = [

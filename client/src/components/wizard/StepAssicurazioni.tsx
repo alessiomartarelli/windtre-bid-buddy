@@ -44,6 +44,7 @@ const PRODOTTI_STANDARD: (keyof Omit<AssicurazioniAttivatoRiga, 'viaggioMondo' |
   'viaggiVacanze',
   'elettrodomestici',
   'micioFido',
+  'pagamentoAnnuale',
 ];
 
 export default function StepAssicurazioni({
