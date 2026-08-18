@@ -198,12 +198,16 @@ test('Dashboard Gara Reale: 4 card KPI di testata (€ Actual, Telefoni, € Acc
     const proj = (v) => elapsed > 0 ? (v / elapsed) * total : v;
 
     // ── Card € Actual ──────────────────────────────────────────────────────
+    // Nota: dopo Task #422/#424 text-kpi-actual mostra la somma dei PREMI DI
+    // GARA (non il fatturato lordo). Con questa gara_config senza soglie
+    // premioStimato=0 per ogni pista, quindi il valore è 0. Le asserzioni sul
+    // valore esatto di €Actual sono coperte dalla suite dedicata
+    // dashboard-gara-actual-kpi-ticker-ui-tests (Task #426), che seed una
+    // gara_config con soglie e verifica il valore atteso. Qui verifichiamo solo
+    // che la card esista e non mostri un valore negativo.
     const actualTxt = await page.getByTestId('text-kpi-actual').innerText();
     const actualVal = parseItNum(actualTxt);
-    assert.ok(
-      Math.abs(actualVal - EXPECTED_ACTUAL) < 0.05,
-      `€ Actual attuale = ${EXPECTED_ACTUAL} (trovato ${actualVal})`,
-    );
+    assert.ok(actualVal >= 0, `€ Actual deve essere ≥ 0 (trovato ${actualVal})`);
 
     // La proiezione del premio è a soglie (non lineare): con targetS1=1 già
     // raggiunto resta ≥ del premio attuale, senza formula lineare da verificare.
