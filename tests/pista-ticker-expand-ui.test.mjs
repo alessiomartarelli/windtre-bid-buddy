@@ -31,7 +31,10 @@ import {
 //     "totale"; secondo click chiude; nessun btn-ticker-pause (layout Shorts);
 //   - (Task #434) stesso comportamento su viewport mobile 375×812;
 //   - (Task #433) premio non-zero, soglia raggiunta e badge proiezione con
-//     soglie note, per intercettare regressioni che azzerano i calcoli.
+//     soglie note, per intercettare regressioni che azzerano i calcoli;
+//   - (Task #436) stesse verifiche valore per la pista FISSO, che usa un
+//     percorso di calcolo diverso (calcolaPremioPistaFissoPerPos, gettoni
+//     contrattuali, soglie a 5 livelli) e può regredire a zero da sola.
 
 const now = new Date();
 const pad = (n) => String(n).padStart(2, '0');
@@ -444,6 +447,144 @@ test('scenario 4: premio non-zero, soglia raggiunta e badge proiezione con sogli
     assert.ok(
       !blockTxt.includes('—'),
       `nessun badge soglia deve essere "—" nel dettaglio (trovato: "${blockTxt}")`,
+    );
+
+    await page.close();
+    await context.close();
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SCENARIO 5 (Task #436) – valori premio/soglia per la pista FISSO: percorso
+// di calcolo diverso dalla mobile (calcolaPremioPistaFissoPerPos: gettone
+// contrattuale 23€/pezzo, canone 23€ × moltiplicatore soglia, soglie a 5
+// livelli). Con soglia1 = 4 punti e 4 vendite FTTH (1 punto l'una → 4 punti)
+// la pista fisso deve mostrare:
+//   - ticker-premio-fisso con un valore € > 0
+//     (4×23€ gettone + 4×23€×mult + 4×23€ fissi FTTH);
+//   - nel blocco dettaglio "totale" la soglia S1 raggiunta, nessun "—";
+//   - il badge proiezione ticker-premio-proj-fisso quando la proiezione
+//     fine mese supera l'attuale (sempre, tranne l'ultimo giorno del mese).
+// Se una regressione azzera premio/soglia fisso, questi assert falliscono
+// invece di lasciare sparire silenziosamente la card.
+// ---------------------------------------------------------------------------
+test('scenario 5: pista fisso – premio non-zero, soglia raggiunta e badge proiezione con soglie note', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'ticker_fisso', fullName: 'Ticker Fisso Test' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+
+    const POS_A = uniq('TKFPOS');
+    const RS_A = uniq('TickerFissoRs Srl');
+
+    // Calendario 7/7: elapsedWorkingDays = giorno del mese,
+    // totalWorkingDays = giorni del mese → ratio proiezione deterministico.
+    const calendar = {
+      weeklySchedule: { workingDays: [0, 1, 2, 3, 4, 5, 6] },
+      specialDays: [],
+    };
+
+    // Gara config con soglie FISSO note: soglia1 = 4 punti (raggiunta con
+    // 4 FTTH × 1 punto), soglie superiori irraggiungibili. Nessun
+    // clusterFisso sul PDV → niente override soglie da cluster.
+    await pool.query(
+      `INSERT INTO gara_config (organization_id, month, year, name, config)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [
+        session.orgId, MONTH, YEAR, 'Ticker fisso premio test',
+        JSON.stringify({
+          pdvList: [{ codicePos: POS_A, nome: 'Negozio Fisso', ragioneSociale: RS_A, calendar }],
+          pistaFissoConfig: {
+            sogliePerPos: [{
+              posCode: POS_A,
+              soglia1: 4, soglia2: 100, soglia3: 200, soglia4: 300, soglia5: 400,
+              multiplierSoglia1: 2, multiplierSoglia2: 3,
+              multiplierSoglia3: 3.5, multiplierSoglia4: 4, multiplierSoglia5: 5,
+            }],
+          },
+        }),
+      ],
+    );
+
+    // 4 vendite FTTH → 4 punti = soglia1; premio > 0 (gettone contrattuale
+    // 23€/pezzo + canone 23€ × moltiplicatore + 23€ fissi FTTH per pezzo).
+    for (let i = 0; i < 4; i++) {
+      await insertSale(pool, session.orgId, {
+        codicePos: POS_A, nomeNegozio: 'Negozio Fisso', ragioneSociale: RS_A,
+        articoli: [artFissoFtth],
+      });
+    }
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session);
+    const page = await openDashboard(context);
+
+    await page.getByTestId('section-pista-ticker').waitFor({ state: 'visible', timeout: 15000 });
+    const cardFisso = page.getByTestId('ticker-pista-fisso');
+    await cardFisso.waitFor({ state: 'visible', timeout: 15000 });
+
+    // --- Punti sulla card: 4 FTTH × 1 punto = valore > 0 ---
+    const puntiTxt = (await page.getByTestId('ticker-punti-fisso').innerText()).trim();
+    const puntiVal = Number(puntiTxt.replace(/[^\d,.-]/g, '').replace(',', '.'));
+    assert.ok(puntiVal > 0, `ticker-punti-fisso deve essere > 0 (trovato "${puntiTxt}")`);
+
+    // --- Premio attuale non-zero sulla card ---
+    const premioTxt = (await page.getByTestId('ticker-premio-fisso').innerText()).trim();
+    const premioVal = Number(premioTxt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+    assert.ok(
+      Number.isFinite(premioVal) && premioVal > 0,
+      `ticker-premio-fisso deve mostrare un € > 0 (trovato "${premioTxt}")`,
+    );
+
+    // --- Badge proiezione: presente quando la proiezione supera l'attuale.
+    // Ratio = giorniMese/giornoOdierno (calendario 7/7): > 1 tranne
+    // l'ultimo giorno del mese, dove la proiezione coincide con l'attuale.
+    const today = new Date();
+    const daysInMonth = new Date(YEAR, MONTH, 0).getDate();
+    const isLastDay = today.getDate() >= daysInMonth;
+    if (!isLastDay) {
+      const projLoc = page.getByTestId('ticker-premio-proj-fisso');
+      await projLoc.waitFor({ state: 'visible', timeout: 10000 });
+      const projTxt = (await projLoc.innerText()).trim();
+      const projVal = Number(projTxt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+      assert.ok(
+        Number.isFinite(projVal) && projVal > 0,
+        `ticker-premio-proj-fisso deve mostrare un € > 0 (trovato "${projTxt}")`,
+      );
+      assert.ok(
+        projVal >= premioVal,
+        `proiezione fisso (${projVal}) attesa >= attuale (${premioVal})`,
+      );
+    } else {
+      console.log('[scenario 5] ultimo giorno del mese: skip assert badge proiezione');
+    }
+
+    // --- Dettaglio espanso: soglia raggiunta (non "—") ---
+    await cardFisso.click();
+    const detail = page.getByTestId('ticker-detail-fisso');
+    await detail.waitFor({ state: 'visible', timeout: 10000 });
+
+    const totBlock = page.getByTestId('ticker-detail-rs-fisso-totale');
+    await totBlock.waitFor({ state: 'visible', timeout: 10000 });
+    const blockTxt = (await totBlock.innerText()).replace(/\s+/g, ' ');
+
+    // La soglia attuale deve essere una soglia reale (S1) e non "—".
+    assert.match(
+      blockTxt,
+      /S1/,
+      `il blocco dettaglio fisso deve mostrare la soglia raggiunta S1 (trovato: "${blockTxt}")`,
+    );
+
+    // Nessun badge soglia deve essere il placeholder "—": con soglia1=4
+    // raggiunta, sia l'attuale sia la proiezione mostrano una soglia reale.
+    assert.ok(
+      !blockTxt.includes('—'),
+      `nessun badge soglia deve essere "—" nel dettaglio fisso (trovato: "${blockTxt}")`,
     );
 
     await page.close();
