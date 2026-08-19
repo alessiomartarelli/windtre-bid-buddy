@@ -377,6 +377,10 @@ function RsGroup({
   pdvSort: PdvSort;
 }) {
   const pdvList = useMemo(() => sortedPdvList(rs.pdvList, pdvSort), [rs.pdvList, pdvSort]);
+  // Id sicuri per aria-controls (niente spazi: lista separata da spazi).
+  const idSafeKey = rs.rsKey.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const pdvRowId = (codicePos: string) => `pezzi-pdv-${idSafeKey}-${codicePos.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+  const controlledIds = pdvList.map(pdv => pdvRowId(pdv.codicePos)).join(" ");
   return (
     <>
       <tr
@@ -385,10 +389,21 @@ function RsGroup({
         data-testid={`row-pezzi-rs-${rs.rsKey}`}
       >
         <td className="px-3 py-2 sticky left-0 bg-card z-10">
-          <span className="inline-flex items-center gap-1">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-left font-semibold"
+            aria-expanded={expanded}
+            aria-controls={controlledIds}
+            aria-label={`${expanded ? "Comprimi" : "Espandi"} ${rs.displayName}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            data-testid={`btn-pezzi-rs-toggle-${rs.rsKey}`}
+          >
             {expanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
             {rs.displayName}
-          </span>
+          </button>
         </td>
         {PEZZI_PISTE.map(p => (
           <td key={p} className="text-right px-3 py-2 tabular-nums">{rs.perPista.get(p) || 0}</td>
@@ -399,7 +414,7 @@ function RsGroup({
         <td className="text-right px-3 py-2 tabular-nums font-bold">{sumRow(rs.perPista)}</td>
       </tr>
       {expanded && pdvList.map(pdv => (
-        <tr key={pdv.codicePos} className="border-b" data-testid={`row-pezzi-pdv-${pdv.codicePos}`}>
+        <tr key={pdv.codicePos} id={pdvRowId(pdv.codicePos)} className="border-b" data-testid={`row-pezzi-pdv-${pdv.codicePos}`}>
           <td className="px-3 py-1.5 pl-8 sticky left-0 bg-card z-10">
             <div className="truncate max-w-[220px]">{pdv.nomeNegozio}</div>
             <div className="text-[10px] font-mono text-muted-foreground">{pdv.codicePos}</div>

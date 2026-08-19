@@ -189,6 +189,46 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     assert.equal((await page.getByTestId('cell-pezzi-tot-mobile').innerText()).trim(), '4');
     assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '13');
 
+    // ── Task #443: righe RS espandibili anche da tastiera ──
+    // Il toggle è un vero <button> con aria-expanded e aria-controls che
+    // punta alle righe PDV controllate; Enter/Spazio funzionano nativamente
+    // e il click sulla riga (fuori dal bottone) resta attivo senza doppio
+    // toggle (stopPropagation sul bottone).
+    const deltaRs = page.locator('[data-testid^="row-pezzi-rs-"]').filter({ hasText: /Delta/i });
+    const deltaKey = (await deltaRs.getAttribute('data-testid')).replace('row-pezzi-rs-', '');
+    const deltaToggle = page.getByTestId(`btn-pezzi-rs-toggle-${deltaKey}`);
+    assert.equal(await deltaToggle.evaluate((el) => el.tagName), 'BUTTON', 'toggle RS: elemento <button> semantico');
+    assert.equal(await deltaToggle.getAttribute('aria-expanded'), 'false', 'toggle RS: chiuso all\'avvio');
+    assert.match(await deltaToggle.getAttribute('aria-label'), /Espandi/i, 'toggle RS chiuso: label "Espandi"');
+    const deltaPdvRow = page.getByTestId('row-pezzi-pdv-POSD1');
+    assert.equal(await deltaPdvRow.count(), 0, 'PDV Delta nascosti da chiuso');
+
+    // Tastiera: Enter espande.
+    await deltaToggle.focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await deltaToggle.getAttribute('aria-expanded'), 'true', 'Enter: aria-expanded=true');
+    assert.match(await deltaToggle.getAttribute('aria-label'), /Comprimi/i, 'toggle RS aperto: label "Comprimi"');
+    await deltaPdvRow.waitFor({ state: 'visible', timeout: 5000 });
+    const deltaControls = (await deltaToggle.getAttribute('aria-controls')).split(/\s+/);
+    const deltaPdvId = await deltaPdvRow.getAttribute('id');
+    assert.ok(deltaPdvId, 'riga PDV Delta ha un id');
+    assert.ok(deltaControls.includes(deltaPdvId), `aria-controls (${deltaControls.join(' ')}) include l'id della riga PDV (${deltaPdvId})`);
+
+    // Tastiera: Spazio richiude.
+    await page.keyboard.press('Space');
+    assert.equal(await deltaToggle.getAttribute('aria-expanded'), 'false', 'Spazio: aria-expanded=false');
+    assert.equal(await deltaPdvRow.count(), 0, 'Spazio: PDV Delta di nuovo nascosti');
+
+    // Mouse: click sulla riga fuori dal bottone espande ancora.
+    await deltaRs.locator('td').last().click();
+    assert.equal(await deltaToggle.getAttribute('aria-expanded'), 'true', 'click riga: espande come prima');
+    await deltaPdvRow.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Mouse: click sul bottone richiude una volta sola (niente doppio toggle da bubbling).
+    await deltaToggle.click();
+    assert.equal(await deltaToggle.getAttribute('aria-expanded'), 'false', 'click bottone: singolo toggle, richiuso');
+    assert.equal(await deltaPdvRow.count(), 0, 'click bottone: PDV nascosti');
+
     // ── Task #442: ordinamento locale dei PDV per pista ──
     // Espandiamo entrambi i gruppi: l'ordinamento opera sui soli PDV, senza
     // spostare la riga RS o alterare i totali. Gamma contiene valori Mobile
