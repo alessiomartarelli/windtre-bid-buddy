@@ -109,6 +109,7 @@ import {
 } from "@/lib/calcoloPartnershipReward";
 import {
   calcoloAssicurazioniPerPos,
+  creaAttivatoAssicurazioniDaMappato,
 } from "@/lib/calcoloAssicurazioni";
 import { useTabelleCalcoloConfig } from "@/hooks/useTabelleCalcoloConfig";
 import {
@@ -907,27 +908,10 @@ function calcAssicurazioniForAllPdv(
   const resultMap = new Map<string, PistaCalcResult>();
   if (!assicConfig || puntiVendita.length === 0) return resultMap;
 
-  const ASSIC_PRODUCT_KEYS: Set<string> = new Set([
-    "protezionePro","casaFamigliaFull","casaFamigliaPlus","casaFamigliaStart",
-    "sportFamiglia","sportIndividuale","viaggiVacanze","elettrodomestici","micioFido",
-    "pagamentoAnnuale",
-  ]);
-
   const attivatoByPos: Record<string, AssicurazioniAttivatoRiga> = {};
   for (const pdv of mappedData.pdvList) {
-    const items = pdv.items.filter((i) => i.pista === "assicurazioni" && ASSIC_PRODUCT_KEYS.has(i.targetCategory));
-    if (items.length === 0) continue;
-    const riga: AssicurazioniAttivatoRiga = {
-      protezionePro: 0, casaFamigliaFull: 0, casaFamigliaPlus: 0, casaFamigliaStart: 0,
-      sportFamiglia: 0, sportIndividuale: 0, viaggiVacanze: 0, elettrodomestici: 0,
-      micioFido: 0, pagamentoAnnuale: 0, viaggioMondo: 0, viaggioMondoPremio: 0, reloadForever: 0,
-    };
-    for (const item of items) {
-      const key = item.targetCategory as keyof AssicurazioniAttivatoRiga;
-      if (key in riga) {
-        riga[key] = item.pezzi;
-      }
-    }
+    const riga = creaAttivatoAssicurazioniDaMappato(pdv.items, pdv.addons || []);
+    if (!riga) continue;
     attivatoByPos[pdv.codicePos] = riga;
   }
 
@@ -3452,7 +3436,8 @@ export default function DashboardGaraReale() {
       }
 
       const pistaData = mappedData.totaliPerPista[pista];
-      if (!pistaData) {
+      const addonPistaData = mappedData.totaliAddonsPerPista?.[pista];
+      if (!pistaData && !addonPistaData) {
         stats.push({
           pista,
           label: PISTA_CONFIG[pista].label,
@@ -3466,7 +3451,7 @@ export default function DashboardGaraReale() {
         continue;
       }
 
-      const baseCategories = Object.values(pistaData)
+      const baseCategories = Object.values(pistaData || {})
         .filter((cat: any) => !isCaringItem(pista, cat.targetCategory))
         .map((cat: any) => {
           const proiezione = workdayInfo.elapsedWorkingDays > 0
@@ -3480,7 +3465,6 @@ export default function DashboardGaraReale() {
             proiezione,
           };
         });
-      const addonPistaData = mappedData.totaliAddonsPerPista?.[pista];
       const addonCategories = addonPistaData ? Object.values(addonPistaData).map((cat: any) => {
         const proiezione = workdayInfo.elapsedWorkingDays > 0
           ? Math.round((cat.occorrenze / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)

@@ -192,6 +192,10 @@ args = "dark-mode-print-ui-tests"
 task = "workflow.run"
 args = "dashboard-gara-actual-kpi-ticker-ui-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "assic-pagamento-annuale"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -636,6 +640,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-dashboard-gara-actual-kpi-ticker-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "assic-pagamento-annuale"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-assicurazioni-pagamento-annuale-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

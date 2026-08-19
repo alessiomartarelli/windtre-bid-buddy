@@ -35,8 +35,9 @@ import { AttivatoCBDettaglio } from "@/types/partnership-cb-events";
 import { calcolaPartnershipRewardPerPos } from "@/lib/calcoloPartnershipReward";
 import { EnergiaConfig, EnergiaAttivatoRiga, EnergiaPdvInGara, calcolaBonusPistaEnergia as calcolaBonusPistaEnergiaFn } from "@/types/energia";
 import { calcoloEnergiaPerPos } from "@/lib/calcoloEnergia";
-import { AssicurazioniConfig, AssicurazioniAttivatoRiga, AssicurazioniPdvInGara, createEmptyAssicurazioniAttivato, ASSICURAZIONI_POINTS, ASSICURAZIONI_PREMIUMS } from "@/types/assicurazioni";
+import { AssicurazioniConfig, AssicurazioniAttivatoRiga, AssicurazioniPdvInGara, createEmptyAssicurazioniAttivato } from "@/types/assicurazioni";
 import { calcoloAssicurazioniPerPos } from "@/lib/calcoloAssicurazioni";
+import { calcolaPremioAssicurazioniPerRS } from "@/lib/calcoloAssicurazioniRS";
 import StepAssicurazioni from "@/components/wizard/StepAssicurazioni";
 import { StepAssicurazioniRS } from "@/components/wizard/StepAssicurazioniRS";
 import { ProtectaAttivatoRiga, createEmptyProtectaAttivato } from "@/types/protecta";
@@ -1314,49 +1315,21 @@ const Preventivatore = () => {
     if (modalitaInserimentoRS !== "per_rs") {
       return assicurazioniResults.reduce((acc: number, r: any) => acc + r.premioTotale, 0);
     }
-    let gettoniGlobale = 0;
-    let bonusSogliaGlobale = 0;
     const rsGroups: Record<string, number> = {};
     puntiVendita.forEach(pdv => {
       const rs = pdv.ragioneSociale || "Senza RS";
       rsGroups[rs] = (rsGroups[rs] || 0) + 1;
     });
-    const effectivePremiums = tabelleCalcoloConfig?.assicurazioni?.premiProdotto
-      ? { ...ASSICURAZIONI_PREMIUMS, ...tabelleCalcoloConfig.assicurazioni.premiProdotto }
-      : ASSICURAZIONI_PREMIUMS;
-    const effectivePoints = tabelleCalcoloConfig?.assicurazioni?.puntiProdotto
-      ? { ...ASSICURAZIONI_POINTS, ...tabelleCalcoloConfig.assicurazioni.puntiProdotto }
-      : ASSICURAZIONI_POINTS;
-    Object.entries(rsGroups).forEach(([rs, numPdv]) => {
+    return Object.entries(rsGroups).reduce((totale, [rs, numPdv]) => {
       const attivato = attivatoAssicurazioniByRS[rs] ?? createEmptyAssicurazioniAttivato();
-      const prodottiStandard: (keyof typeof ASSICURAZIONI_POINTS)[] = [
-        'protezionePro', 'casaFamigliaFull', 'casaFamigliaPlus', 'casaFamigliaStart',
-        'sportFamiglia', 'sportIndividuale', 'viaggiVacanze', 'elettrodomestici', 'micioFido', 'pagamentoAnnuale',
-      ];
-      let puntiBase = 0;
-      let gettoniRS = 0;
-      for (const prodotto of prodottiStandard) {
-        const pezzi = attivato[prodotto] || 0;
-        puntiBase += pezzi * (effectivePoints[prodotto] ?? 0);
-        gettoniRS += pezzi * (effectivePremiums[prodotto] ?? 0);
-      }
-      if (attivato.viaggioMondoPremio > 0) {
-        puntiBase += (attivato.viaggioMondoPremio / 100) * 1.5;
-        gettoniRS += Math.min(attivato.viaggioMondoPremio * 0.125, 201) * (attivato.viaggioMondo || 1);
-      }
-      gettoniGlobale += gettoniRS;
-      const effectiveS1 = (assicurazioniConfig.targetS1 || 0) * numPdv;
-      const effectiveS2 = (assicurazioniConfig.targetS2 || 0) * numPdv;
-      let puntiConReload = puntiBase;
-      if (puntiBase >= effectiveS1 && attivato.reloadForever > 0) {
-        const puntiReloadRaw = Math.floor(attivato.reloadForever / 5);
-        const maxReload = Math.floor(puntiBase * 0.15 / 0.85);
-        puntiConReload = puntiBase + Math.min(puntiReloadRaw, maxReload);
-      }
-      if (puntiBase >= effectiveS1) bonusSogliaGlobale += 500 * numPdv;
-      if (puntiConReload >= effectiveS2) bonusSogliaGlobale += 750 * numPdv;
-    });
-    return gettoniGlobale + bonusSogliaGlobale;
+      return totale + calcolaPremioAssicurazioniPerRS(
+        attivato,
+        assicurazioniConfig,
+        numPdv,
+        tabelleCalcoloConfig?.assicurazioni?.puntiProdotto,
+        tabelleCalcoloConfig?.assicurazioni?.premiProdotto,
+      ).premioTotale;
+    }, 0);
   })();
 
   // Calcolo risultati Protecta
@@ -1423,38 +1396,13 @@ const Preventivatore = () => {
       const energiaRS = energiaBase + energiaSoglia + energiaPista.bonusTotale;
 
       const attAss = attivatoAssicurazioniByRS[rs] ?? createEmptyAssicurazioniAttivato();
-      const effectivePremiums = tabelleCalcoloConfig?.assicurazioni?.premiProdotto
-        ? { ...ASSICURAZIONI_PREMIUMS, ...tabelleCalcoloConfig.assicurazioni.premiProdotto }
-        : ASSICURAZIONI_PREMIUMS;
-      const effectivePoints = tabelleCalcoloConfig?.assicurazioni?.puntiProdotto
-        ? { ...ASSICURAZIONI_POINTS, ...tabelleCalcoloConfig.assicurazioni.puntiProdotto }
-        : ASSICURAZIONI_POINTS;
-      const prodottiStd: (keyof typeof ASSICURAZIONI_POINTS)[] = [
-        'protezionePro', 'casaFamigliaFull', 'casaFamigliaPlus', 'casaFamigliaStart',
-        'sportFamiglia', 'sportIndividuale', 'viaggiVacanze', 'elettrodomestici', 'micioFido', 'pagamentoAnnuale',
-      ];
-      let assicPunti = 0, assicGettoni = 0;
-      for (const p of prodottiStd) {
-        const pz = attAss[p] || 0;
-        assicPunti += pz * (effectivePoints[p] ?? 0);
-        assicGettoni += pz * (effectivePremiums[p] ?? 0);
-      }
-      if (attAss.viaggioMondoPremio > 0) {
-        assicPunti += (attAss.viaggioMondoPremio / 100) * 1.5;
-        assicGettoni += Math.min(attAss.viaggioMondoPremio * 0.125, 201) * (attAss.viaggioMondo || 1);
-      }
-      const aS1 = (assicurazioniConfig.targetS1 || 0) * numPdv;
-      const aS2 = (assicurazioniConfig.targetS2 || 0) * numPdv;
-      let assicBonus = 0;
-      let puntiConReload = assicPunti;
-      if (assicPunti >= aS1 && attAss.reloadForever > 0) {
-        const raw = Math.floor(attAss.reloadForever / 5);
-        const max15 = Math.floor(assicPunti * 0.15 / 0.85);
-        puntiConReload = assicPunti + Math.min(raw, max15);
-      }
-      if (assicPunti >= aS1) assicBonus += 500 * numPdv;
-      if (puntiConReload >= aS2) assicBonus += 750 * numPdv;
-      const assicRS = assicGettoni + assicBonus;
+      const assicRS = calcolaPremioAssicurazioniPerRS(
+        attAss,
+        assicurazioniConfig,
+        numPdv,
+        tabelleCalcoloConfig?.assicurazioni?.puntiProdotto,
+        tabelleCalcoloConfig?.assicurazioni?.premiProdotto,
+      ).premioTotale;
 
       const protectaRS = protectaResults
         .filter((r: any, i: number) => (puntiVendita[i]?.ragioneSociale || "Senza RS") === rs)

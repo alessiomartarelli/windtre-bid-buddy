@@ -7,8 +7,54 @@ import {
   ASSICURAZIONI_PREMIUMS,
   ASSICURAZIONI_LABELS,
   AssicurazioneProduct,
+  createEmptyAssicurazioniAttivato,
 } from '@/types/assicurazioni';
 import { PuntoVendita } from '@/types/preventivatore';
+
+export const ASSICURAZIONI_PRODOTTI_STANDARD: (keyof typeof ASSICURAZIONI_POINTS)[] = [
+  'protezionePro',
+  'casaFamigliaFull',
+  'casaFamigliaPlus',
+  'casaFamigliaStart',
+  'sportFamiglia',
+  'sportIndividuale',
+  'viaggiVacanze',
+  'elettrodomestici',
+  'micioFido',
+  'pagamentoAnnuale',
+];
+
+interface AssicurazioniMappedEntry {
+  pista: string;
+  targetCategory: string;
+  pezzi?: number;
+  occorrenze?: number;
+}
+
+/**
+ * Converte gli item BASE e gli addon ADDITIONAL della Dashboard Gara nella
+ * riga usata dal motore assicurazioni. Pagamento Annuale è una regola
+ * additional, quindi arriva negli addon e non negli item.
+ */
+export function creaAttivatoAssicurazioniDaMappato(
+  items: AssicurazioniMappedEntry[],
+  addons: AssicurazioniMappedEntry[] = [],
+): AssicurazioniAttivatoRiga | undefined {
+  const standardProducts = new Set<string>(ASSICURAZIONI_PRODOTTI_STANDARD);
+  const riga = createEmptyAssicurazioniAttivato();
+  let hasProducts = false;
+
+  for (const entry of [...items, ...addons]) {
+    if (entry.pista !== 'assicurazioni' || !standardProducts.has(entry.targetCategory)) continue;
+    const quantita = entry.pezzi ?? entry.occorrenze ?? 0;
+    if (quantita <= 0) continue;
+    const key = entry.targetCategory as keyof typeof ASSICURAZIONI_POINTS;
+    riga[key] += quantita;
+    hasProducts = true;
+  }
+
+  return hasProducts ? riga : undefined;
+}
 
 export function calcoloAssicurazioniPerPos(
   puntiVendita: PuntoVendita[],
@@ -33,23 +79,10 @@ export function calcoloAssicurazioniPerPos(
     let premioBase = 0;
 
     // Calcolo prodotti standard
-    const prodottiStandard: (keyof typeof ASSICURAZIONI_POINTS)[] = [
-      'protezionePro',
-      'casaFamigliaFull',
-      'casaFamigliaPlus',
-      'casaFamigliaStart',
-      'sportFamiglia',
-      'sportIndividuale',
-      'viaggiVacanze',
-      'elettrodomestici',
-      'micioFido',
-      'pagamentoAnnuale',
-    ];
-
     const effectivePoints = puntiOverride ? { ...ASSICURAZIONI_POINTS, ...puntiOverride } : ASSICURAZIONI_POINTS;
     const effectivePremiums = premiOverride ? { ...ASSICURAZIONI_PREMIUMS, ...premiOverride } : ASSICURAZIONI_PREMIUMS;
 
-    for (const prodotto of prodottiStandard) {
+    for (const prodotto of ASSICURAZIONI_PRODOTTI_STANDARD) {
       const pezzi = attivato[prodotto];
       if (pezzi > 0) {
         const punti = pezzi * (effectivePoints[prodotto] ?? 0);

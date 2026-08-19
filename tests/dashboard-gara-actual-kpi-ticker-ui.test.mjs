@@ -13,7 +13,7 @@ import {
 
 // Task #426 — Suite UI Playwright per la Dashboard Gara Reale.
 //
-// Copre due regressioni introdotte dal Task #424:
+// Copre le regressioni del KPI Actual, del ticker e degli addon assicurativi:
 //   (a) Card "€ Actual": deve mostrare la SOMMA dei premi di gara
 //       (pistaStats[].calc.premioStimato), non il fatturato lordo. I testid
 //       text-kpi-actual e text-kpi-actual-proj DEVONO essere uguali ai
@@ -35,7 +35,7 @@ import {
 //     → Sezione piste: 3 card → click/tastiera aprono e chiudono il
 //       pannello dettaglio (aria-expanded + ticker-detail-{p}).
 //
-// Entrambi i test richiedono dev server attivo su :5000 e DATABASE_URL.
+// I test richiedono dev server attivo su :5000 e DATABASE_URL.
 
 const now = new Date();
 const pad = (n) => String(n).padStart(2, '0');
@@ -78,6 +78,20 @@ const artMia = {
   categoria: { nome: 'MIA TIED' },
   tipologia: { nome: 'MIA EASYPAY STANDARD' },
   dettaglio: { prezzo: '0.00' },
+};
+
+// Categoria assicurativa con tipologia volutamente non mappata come prodotto
+// base: la sola voce prodotta è l'additional "Pagamento Annuale".
+const artPagamentoAnnualeSolo = {
+  categoria: { nome: 'ASSICURAZIONI' },
+  tipologia: { nome: 'TIPOLOGIA NON MAPPATA' },
+  descrizione: 'PRODOTTO NON MAPPATO',
+  dettaglio: {
+    prezzo: '0.00',
+    domandeRisposte: [
+      { domandaTesto: 'PAGAMENTO ANNUALE', risposta: 'SI' },
+    ],
+  },
 };
 
 // ── DB helpers ────────────────────────────────────────────────────────────
@@ -331,6 +345,73 @@ test('Dashboard Gara: griglia ≥3 piste → click e tastiera aprono/chiudono il
     assert.equal(
       await page.locator('[data-testid^="ticker-detail-"]').count(), 0,
       'Dopo Enter nessun pannello dettaglio deve restare aperto',
+    );
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser?.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+test('Dashboard Gara: il solo addon Pagamento Annuale mostra 0,5 punti e raggiunge S1/S2', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gkpi_pa', fullName: 'Gara KPI Pagamento Annuale' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+    const POS = uniq('POS');
+
+    await insertGaraConfig(pool, session.orgId, {
+      pdvList: [{
+        codicePos: POS,
+        nome: 'Negozio',
+        ragioneSociale: 'RS Srl',
+        abilitaAssicurazioni: true,
+      }],
+      assicurazioniConfig: {
+        pdvInGara: 1,
+        targetNoMalus: 0,
+        targetS1: 0.5,
+        targetS2: 0.5,
+        premioS1: 500,
+        premioS2: 750,
+      },
+    });
+    await insertSale(pool, session.orgId, {
+      codicePos: POS,
+      articoli: [artPagamentoAnnualeSolo],
+      cliente: clientePrivato,
+    });
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await openDashboard(page);
+
+    const assicurazioniCard = page.getByTestId('ticker-pista-assicurazioni');
+    await assicurazioniCard.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(
+      await page.locator('[data-testid^="ticker-pista-"]').count(),
+      1,
+      'con il solo Pagamento Annuale deve comparire una sola pista',
+    );
+    assert.equal(
+      flat(await page.getByTestId('ticker-punti-assicurazioni').innerText()),
+      '0,5',
+      'il Pagamento Annuale deve valere 0,5 punti nel ticker',
+    );
+    assert.equal(
+      parseEuroText(await page.getByTestId('ticker-premio-assicurazioni').innerText()),
+      750,
+      'raggiungendo S2 deve essere applicato il premio della soglia più alta',
+    );
+    assert.equal(
+      await assicurazioniCard.getByText('S2', { exact: true }).count(),
+      1,
+      'il mezzo punto deve raggiungere la soglia S2 configurata a 0,5',
     );
 
     await page.close();
