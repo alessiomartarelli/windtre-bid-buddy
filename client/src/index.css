@@ -128,6 +128,11 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .w3-ticker-track { animation: none; }
+  .ticker-pista-card,
+  .ticker-pista-card * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
 
 

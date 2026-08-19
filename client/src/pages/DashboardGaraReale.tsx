@@ -1,24 +1,4 @@
 import { useState, useMemo, Fragment, useCallback, useEffect } from "react";
-// Sfondi fotografici delle card pista (stile Shorts)
-import imgPistaMobile from "@/assets/piste/mobile.jpg";
-import imgPistaFisso from "@/assets/piste/fisso.jpg";
-import imgPistaEnergia from "@/assets/piste/energia.jpg";
-import imgPistaAssicurazioni from "@/assets/piste/assicurazioni.jpg";
-import imgPistaPartnership from "@/assets/piste/partnership.jpg";
-import imgPistaCb from "@/assets/piste/cb.jpg";
-import imgPistaProtecta from "@/assets/piste/protecta.jpg";
-import imgPistaExtraGaraIva from "@/assets/piste/extra_gara_iva.jpg";
-
-const PISTA_IMAGES: Record<string, string> = {
-  mobile: imgPistaMobile,
-  fisso: imgPistaFisso,
-  energia: imgPistaEnergia,
-  assicurazioni: imgPistaAssicurazioni,
-  partnership: imgPistaPartnership,
-  cb: imgPistaCb,
-  protecta: imgPistaProtecta,
-  extra_gara_iva: imgPistaExtraGaraIva,
-};
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { isModuleAllowedForBrands } from "@shared/modules";
@@ -1040,10 +1020,8 @@ function ProjectionBadge({ current, projected, label }: { current: number; proje
   );
 }
 
-// Task #424 — "Piste in gara" in stile YouTube Shorts: griglia di card
-// verticali con foto di sfondo per pista; tap/click su una card espande il
-// dettaglio (punti, premio e soglia, attuali e in proiezione, per ragione
-// sociale una dopo l'altra).
+// Task #424 — ticker compatto delle piste: una lettura dati-first, con click
+// sulla card per il dettaglio (punti, premio e soglia per ragione sociale).
 type TickerRsDetail = {
   displayName: string;
   premioAttuale: number;
@@ -1083,9 +1061,9 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
     const usePunti = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
     const att = usePunti ? p.calc.puntiTotali : p.totalePezzi;
     const proi = usePunti ? p.calcProiezione.puntiTotali : p.proiezionePezzi;
+    const trajectoryRatio = proi > 0 ? Math.min((att / proi) * 100, 100) : att > 0 ? 100 : 0;
     const sogliaAtt = p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : null;
     const isOpen = expanded === p.pista;
-    const img = PISTA_IMAGES[p.pista];
     return (
       <button
         key={p.pista}
@@ -1093,39 +1071,73 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
         onClick={() => setExpanded((v) => (v === p.pista ? null : p.pista))}
         aria-expanded={isOpen}
         data-testid={`ticker-pista-${p.pista}`}
-        className={`relative aspect-[9/14] rounded-2xl overflow-hidden text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-shadow ${isOpen ? 'ring-2 ring-primary shadow-lg' : 'hover:shadow-md'}`}
+        className={`ticker-pista-card relative aspect-[9/14] rounded-2xl overflow-hidden text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary border border-border bg-card transition-[transform,box-shadow,border-color] duration-200 ease-out ${isOpen ? 'ring-2 ring-primary shadow-lg scale-[1.01]' : 'shadow-sm hover:-translate-y-0.5 hover:shadow-md'}`}
       >
-        {img ? (
-          <img src={img} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-        ) : (
-          <div className={`absolute inset-0 ${conf.color}`} />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/15" />
-        <div className="absolute top-2 left-2 flex items-center gap-1.5">
-          <span className={`p-1.5 rounded-lg ${conf.color} text-white shadow`}>
+        {/* Griglia di riferimento molto tenue: comunica misurazione senza
+            competere con i numeri. L'identità cromatica resta quella della pista. */}
+        <div
+          className="absolute inset-0 opacity-[0.045] dark:opacity-[0.07]"
+          style={{ backgroundImage: "linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)", backgroundSize: "18px 18px" }}
+          aria-hidden
+        />
+        <div className={`absolute inset-x-0 top-0 h-1 ${conf.color}`} aria-hidden />
+        <div className="absolute inset-x-0 top-1/2 h-px bg-border/60" aria-hidden />
+        <div className="absolute inset-0 bg-gradient-to-b from-muted/35 via-transparent to-muted/20 dark:from-muted/20 dark:to-background/20" aria-hidden />
+        <div className="absolute top-3 left-3 flex items-center gap-1.5">
+          <span className={`p-1.5 rounded-lg ${conf.color} text-white shadow-sm transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105`}>
             <Icon className="h-3.5 w-3.5" />
           </span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{p.pista === 'cb' ? 'CB' : 'Pista'}</span>
         </div>
         {sogliaAtt && (
-          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-gray-900 shadow">
+          <span className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold border border-border bg-background/80 text-foreground shadow-sm">
             {sogliaAtt}
           </span>
         )}
-        <div className="absolute inset-x-0 bottom-0 p-2.5 text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
+        {/* Traiettoria centrale: il punto pieno è l'avanzamento attuale, il
+            punto vuoto il traguardo proiettato. È intenzionalmente muta:
+            i valori restano leggibili una sola volta nel footer. */}
+        <div className="absolute inset-x-3 top-[39%] bottom-[39%] flex items-center" aria-hidden>
+          <div className="w-full">
+            <div className="mb-1.5 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <span>attuale</span>
+              <span>proiezione</span>
+            </div>
+            <div className="relative h-1.5 rounded-full bg-muted/80">
+              <div
+                className={`absolute inset-y-0 left-0 rounded-full ${conf.color} opacity-75`}
+                style={{ width: `${trajectoryRatio}%` }}
+              />
+              <span
+                className={`absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background ${conf.color} shadow-sm`}
+                style={{ left: `${trajectoryRatio}%` }}
+              />
+              <span className="absolute right-0 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full border-2 border-muted-foreground/50 bg-card" />
+            </div>
+            <div className="mt-1.5 flex items-center justify-center gap-1 text-[9px] text-muted-foreground">
+              <span className={`h-1.5 w-1.5 rounded-full ${conf.color}`} />
+              <span className="tabular-nums">{trajectoryRatio.toFixed(0)}%</span>
+            </div>
+          </div>
+        </div>
+        <div className="absolute inset-x-0 bottom-0 p-3 text-foreground">
           <div className="text-sm font-bold leading-tight truncate">{conf.label}</div>
-          <div className="mt-0.5 flex items-baseline gap-1.5 flex-wrap">
-            <span className="text-lg font-extrabold tabular-nums" data-testid={`ticker-punti-${p.pista}`}>{fmtTickerVal(att)}</span>
-            <span className="text-[10px] uppercase tracking-wide opacity-80">{usePunti ? 'punti' : 'pezzi'}</span>
+          <div className="mt-2 flex items-end justify-between gap-1">
+            <div>
+              <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{usePunti ? 'Punti attuali' : 'Pezzi attuali'}</div>
+              <span className="text-xl font-extrabold leading-none tabular-nums" data-testid={`ticker-punti-${p.pista}`}>{fmtTickerVal(att)}</span>
+            </div>
             {proi > att && (
-              <span className="text-xs font-semibold tabular-nums text-sky-300 flex items-center gap-0.5">
+              <span className="text-[11px] font-semibold tabular-nums text-blue-600 dark:text-blue-400 flex items-center gap-0.5 pb-0.5">
                 <TrendingUp className="h-3 w-3" /> {fmtTickerVal(proi)}
               </span>
             )}
           </div>
-          <div className="mt-0.5 flex items-baseline gap-1.5 flex-wrap">
-            <span className="text-sm font-bold tabular-nums text-emerald-300" data-testid={`ticker-premio-${p.pista}`}>{formatEuro(p.calc.premioStimato)}</span>
+          <div className="mt-2 flex items-center justify-between gap-1 border-t border-border/70 pt-2">
+            <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Premio</span>
+            <span className="text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400" data-testid={`ticker-premio-${p.pista}`}>{formatEuro(p.calc.premioStimato)}</span>
             {p.calcProiezione.premioStimato > 0 && p.calcProiezione.premioStimato !== p.calc.premioStimato && (
-              <span className="text-xs font-semibold tabular-nums text-sky-300 flex items-center gap-0.5" data-testid={`ticker-premio-proj-${p.pista}`}>
+              <span className="text-[11px] font-semibold tabular-nums text-blue-600 dark:text-blue-400 flex items-center gap-0.5" data-testid={`ticker-premio-proj-${p.pista}`}>
                 <TrendingUp className="h-3 w-3" /> {formatEuro(p.calcProiezione.premioStimato)}
               </span>
             )}
