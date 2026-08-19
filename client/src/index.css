@@ -197,6 +197,14 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   }
 }
 
+/* La shell desktop riserva spazio alla navigazione laterale montata da
+   AppNavbar. La classe viene rimossa al logout, quindi Auth resta full-width. */
+@media (min-width: 1024px) {
+  body.desktop-sidebar-layout {
+    padding-left: 16rem;
+  }
+}
+
 @layer utilities {
   .text-gradient {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-500;

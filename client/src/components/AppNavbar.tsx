@@ -1,4 +1,5 @@
 import { useLocation } from 'wouter';
+import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEnabledModules } from '@/hooks/useEnabledModules';
 import { BASE_PATH } from '@/lib/basePath';
@@ -13,9 +14,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
-  LogOut, User, Building2, Settings, Shield, Users,
+  LogOut, User, Building2, Settings, Shield,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
-  ChevronDown, BookOpen, BarChart3, Route, Medal, Sun, Moon, Monitor, CalendarClock,
+  BookOpen, BarChart3, Route, Medal, Sun, Moon, Monitor, CalendarClock,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificationsBell';
@@ -130,13 +131,140 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
     ...(isAdminOrSuper && isEnabled('tabelle_calcolo') ? [{ path: '/tabelle-calcolo', label: 'Tabelle Calcolo', icon: Table2 }] : []),
   ];
 
+  useEffect(() => {
+    document.body.classList.add('desktop-sidebar-layout');
+    return () => document.body.classList.remove('desktop-sidebar-layout');
+  }, []);
+
+  const sidebarItemClass = (active: boolean) =>
+    `w-full justify-start h-9 px-3 text-sm rounded-lg transition-all ${
+      active
+        ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground'
+        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+    }`;
+
   return (
+    <>
+    <aside
+      className="hidden lg:flex fixed inset-y-0 left-0 z-50 w-64 flex-col border-r border-border/70 bg-background/95 backdrop-blur-xl"
+      data-testid="desktop-sidebar"
+      aria-label="Navigazione principale"
+    >
+      <div className="flex h-[61px] shrink-0 items-center border-b border-border/70 px-5">
+        <button
+          type="button"
+          className="flex min-w-0 items-center gap-2 text-left group"
+          onClick={() => setLocation('/')}
+          data-testid="desktop-sidebar-title"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/90 to-primary shadow-sm transition-shadow group-hover:shadow-md">
+            <BrandGlyph className="h-4 w-4 text-white" />
+          </span>
+          <span className="truncate text-base font-bold tracking-tight text-foreground">{title}</span>
+        </button>
+      </div>
+
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+        {adminItems.length > 0 && (
+          <section>
+            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" data-testid="nav-admin-menu">
+              Amministrazione
+            </p>
+            <div className="space-y-1">
+              {adminItems.map((item) => (
+                <Button
+                  key={item.path}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLocation(item.path)}
+                  className={sidebarItemClass(location === item.path)}
+                  data-testid={`nav-${item.path.replace(/\//g, '')}`}
+                >
+                  <item.icon className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </Button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {isAdminOrSuper && (
+          <section>
+            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Organizzazione
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLocation('/admin')}
+              className={sidebarItemClass(location === '/admin')}
+              data-testid="nav-gestione-organizzazione"
+            >
+              <Building2 className="mr-2 h-4 w-4 shrink-0" />
+              <span className="truncate">Gestione organizzazione</span>
+            </Button>
+          </section>
+        )}
+
+        {garaItems.length > 0 && (
+          <section>
+            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" data-testid="nav-gara-menu">
+              Performance
+            </p>
+            <div className="space-y-1">
+              {garaItems.map((item) => (
+                <Button
+                  key={item.path}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLocation(item.path)}
+                  className={sidebarItemClass(location === item.path)}
+                  data-testid={`nav-gara-${item.path.replace(/\//g, '')}`}
+                >
+                  <item.icon className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </Button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {simulatoreItems.length > 0 && (
+          <section>
+            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" data-testid="nav-simulatore-menu">
+              Simulatore
+            </p>
+            <div className="space-y-1">
+              {simulatoreItems.map((item) => (
+                <Button
+                  key={item.path}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLocation(item.path)}
+                  className={sidebarItemClass(location === item.path)}
+                  data-testid={`nav-sim-${item.path.replace(/\//g, '')}`}
+                >
+                  <item.icon className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </Button>
+              ))}
+            </div>
+          </section>
+        )}
+      </nav>
+
+      <div className="flex shrink-0 items-center gap-1 border-t border-border/70 px-4 py-3">
+        <ThemeToggle />
+        {isAdminOrSuper && <BisuiteSyncNotificationsBell />}
+      </div>
+    </aside>
+
     <header
-      className="sticky top-0 z-50 glass-panel border-b-0"
+      className="sticky top-0 z-40 glass-panel border-b-0"
       style={{ borderBottom: '1px solid hsl(var(--glass-border))', paddingTop: 'env(safe-area-inset-top)' }}
     >
       <div className="container mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0 lg:hidden">
           <div
             className="flex items-center gap-2 cursor-pointer group"
             onClick={() => setLocation('/')}
@@ -150,105 +278,10 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
             </h1>
           </div>
 
-          <nav className="hidden lg:flex items-center gap-0.5 ml-1 min-w-0">
-            {adminItems.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant={adminItems.some(i => location === i.path) ? "secondary" : "ghost"}
-                    size="sm"
-                    className={`text-xs h-8 rounded-lg transition-all ${adminItems.some(i => location === i.path) ? 'shadow-sm' : ''}`}
-                    data-testid="nav-admin-menu"
-                  >
-                    <Shield className="h-3.5 w-3.5 mr-1" />
-                    Admin
-                    <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  {adminItems.map((item) => (
-                    <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)} data-testid={`nav-${item.path.replace(/\//g, '')}`}>
-                      <item.icon className="mr-2 h-4 w-4" />
-                      <span>{item.label}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
-            {adminItems.length > 0 && <div className="w-px h-5 bg-border/60 mx-1.5" />}
-
-            {garaItems.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant={garaItems.some(i => location === i.path) ? "secondary" : "ghost"}
-                    size="sm"
-                    className={`text-xs h-8 rounded-lg transition-all ${garaItems.some(i => location === i.path) ? 'shadow-sm' : ''}`}
-                    data-testid="nav-gara-menu"
-                  >
-                    <Trophy className="h-3.5 w-3.5 mr-1" />
-                    Performance
-                    <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  {garaItems.map((item) => (
-                    <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)} data-testid={`nav-gara-${item.path.replace(/\//g, '')}`}>
-                      <item.icon className="mr-2 h-4 w-4" />
-                      <span>{item.label}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
-            {simulatoreItems.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant={(simulatoreItems.some(i => location === i.path) || location === '/preventivatore') ? "secondary" : "ghost"}
-                    size="sm"
-                    className={`text-xs h-8 rounded-lg transition-all ${(simulatoreItems.some(i => location === i.path) || location === '/preventivatore') ? 'shadow-sm' : ''}`}
-                    data-testid="nav-simulatore-menu"
-                  >
-                    <FileText className="h-3.5 w-3.5 mr-1" />
-                    Simulatore
-                    <ChevronDown className="h-3 w-3 ml-0.5 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  {simulatoreItems.map((item) => (
-                    <DropdownMenuItem key={item.path} onClick={() => setLocation(item.path)} data-testid={`nav-sim-${item.path.replace(/\//g, '')}`}>
-                      <item.icon className="mr-2 h-4 w-4" />
-                      <span>{item.label}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </nav>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2 min-w-0">
           {children}
-
-          <ThemeToggle />
-
-          {isAdminOrSuper && <BisuiteSyncNotificationsBell />}
-
-          {isAdminOrSuper && (
-            <Button
-              variant={location === '/admin' ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setLocation('/admin')}
-              className={`hidden lg:inline-flex text-xs h-8 rounded-lg transition-all ${location === '/admin' ? 'shadow-sm' : ''}`}
-              data-testid="nav-gestione-organizzazione"
-            >
-              <Building2 className="h-3.5 w-3.5 mr-1" />
-              Gestione organizzazione
-            </Button>
-          )}
 
           <div className="lg:hidden">
             <DropdownMenu>
@@ -364,5 +397,6 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
         </div>
       </div>
     </header>
+    </>
   );
 }
