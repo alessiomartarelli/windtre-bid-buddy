@@ -310,9 +310,10 @@ test('Dashboard Gara: griglia ≥3 piste → click e tastiera aprono/chiudono il
 
     // Stato iniziale: nessun pannello dettaglio aperto, card con aria-expanded=false.
     const energiaCard = page.getByTestId('ticker-pista-energia');
+    const energiaToggle = page.getByTestId('ticker-toggle-energia');
     assert.equal(
-      await energiaCard.getAttribute('aria-expanded'), 'false',
-      'La card energia deve partire con aria-expanded="false"',
+      await energiaToggle.getAttribute('aria-expanded'), 'false',
+      'Il controllo energia deve partire con aria-expanded="false"',
     );
     assert.equal(
       await page.locator('[data-testid^="ticker-detail-"]').count(), 0,
@@ -322,8 +323,8 @@ test('Dashboard Gara: griglia ≥3 piste → click e tastiera aprono/chiudono il
     // ── Click → apre il pannello dettaglio della pista ────────────────────
     await energiaCard.click();
     assert.equal(
-      await energiaCard.getAttribute('aria-expanded'), 'true',
-      'La card energia deve diventare aria-expanded="true" dopo click',
+      await energiaToggle.getAttribute('aria-expanded'), 'true',
+      'Il controllo energia deve diventare aria-expanded="true" dopo click',
     );
     await page.getByTestId('ticker-detail-energia').waitFor({ state: 'visible', timeout: 5000 });
 
@@ -336,16 +337,17 @@ test('Dashboard Gara: griglia ≥3 piste → click e tastiera aprono/chiudono il
       'Aprendo mobile il dettaglio energia deve chiudersi (un solo pannello alla volta)',
     );
     assert.equal(
-      await energiaCard.getAttribute('aria-expanded'), 'false',
-      'La card energia deve tornare aria-expanded="false" quando si apre mobile',
+      await energiaToggle.getAttribute('aria-expanded'), 'false',
+      'Il controllo energia deve tornare aria-expanded="false" quando si apre mobile',
     );
 
     // ── Tastiera (Enter) sulla card aperta → chiude il pannello ───────────
-    await mobileCard.focus();
+    const mobileToggle = page.getByTestId('ticker-toggle-mobile');
+    await mobileToggle.focus();
     await page.keyboard.press('Enter');
     assert.equal(
-      await mobileCard.getAttribute('aria-expanded'), 'false',
-      'La card mobile deve tornare aria-expanded="false" dopo Enter da tastiera',
+      await mobileToggle.getAttribute('aria-expanded'), 'false',
+      'Il controllo mobile deve tornare aria-expanded="false" dopo Enter da tastiera',
     );
     assert.equal(
       await page.locator('[data-testid^="ticker-detail-"]').count(), 0,

@@ -99,6 +99,14 @@ async function seedMobilePista(pool, session, { posPrefix, rsPrefix, negozio, ga
       session.orgId, MONTH, YEAR, garaName,
       JSON.stringify({
         pdvList: [{ codicePos: POS, nome: negozio, ragioneSociale: RS }],
+        pistaMobileConfig: {
+          sogliePerPos: [{
+            posCode: POS,
+            soglia1: 3, soglia2: 100, soglia3: 200, soglia4: 300,
+            multiplierSoglia1: 1, multiplierSoglia2: 1.2,
+            multiplierSoglia3: 1.5, multiplierSoglia4: 2,
+          }],
+        },
       }),
     ],
   );
@@ -127,12 +135,16 @@ async function openDashboard(context) {
 async function assertDataFirstTickerCard(page, { theme, viewport }) {
   const card = page.getByTestId('ticker-pista-mobile');
   const trajectory = page.getByTestId('ticker-trajectory-mobile');
+  const trajectoryLabels = page.getByTestId('ticker-trajectory-labels-mobile');
   const track = page.getByTestId('ticker-trajectory-track-mobile');
+  const trajectoryReadout = page.getByTestId('ticker-trajectory-readout-mobile');
   const kpis = page.getByTestId('ticker-kpis-mobile');
 
   await card.waitFor({ state: 'visible', timeout: 15000 });
   await trajectory.waitFor({ state: 'visible', timeout: 10000 });
+  await trajectoryLabels.waitFor({ state: 'visible', timeout: 10000 });
   await track.waitFor({ state: 'visible', timeout: 10000 });
+  await trajectoryReadout.waitFor({ state: 'visible', timeout: 10000 });
   await kpis.waitFor({ state: 'visible', timeout: 10000 });
 
   const visual = await card.evaluate((element) => {
@@ -142,22 +154,30 @@ async function assertDataFirstTickerCard(page, { theme, viewport }) {
       urlBackgrounds: allElements
         .map((node) => getComputedStyle(node).backgroundImage)
         .filter((backgroundImage) => backgroundImage.includes('url(')),
+      trajectoryBackground: getComputedStyle(element.querySelector('[data-testid="ticker-trajectory-mobile"]')).backgroundImage,
       track: getComputedStyle(element.querySelector('[data-testid="ticker-trajectory-track-mobile"]')).backgroundColor,
       kpisBackground: getComputedStyle(element.querySelector('[data-testid="ticker-kpis-mobile"]')).backgroundImage,
     };
   });
   assert.equal(visual.imageCount, 0, `${theme}/${viewport}: la card non deve contenere immagini`);
   assert.deepEqual(visual.urlBackgrounds, [], `${theme}/${viewport}: nessuno sfondo della card deve usare url(...)`);
+  assert.notEqual(visual.trajectoryBackground, 'none', `${theme}/${viewport}: la traiettoria deve avere una superficie di contrasto dedicata`);
   assert.notEqual(visual.track, 'rgba(0, 0, 0, 0)', `${theme}/${viewport}: la traccia deve restare visibile`);
   assert.notEqual(visual.kpisBackground, 'none', `${theme}/${viewport}: i KPI devono avere una superficie di contrasto dedicata`);
 
-  const [cardBox, trajectoryBox, trackBox, kpiBox] = await Promise.all([
+  assert.match(await trajectoryLabels.innerText(), /Attuale/i, `${theme}/${viewport}: l'etichetta Attuale deve essere visibile`);
+  assert.match(await trajectoryLabels.innerText(), /Proiezione/i, `${theme}/${viewport}: l'etichetta Proiezione deve essere visibile`);
+  assert.match(await trajectoryReadout.innerText(), /Avanzamento/i, `${theme}/${viewport}: la percentuale deve avere un'etichetta leggibile`);
+
+  const [cardBox, trajectoryBox, labelsBox, trackBox, readoutBox, kpiBox] = await Promise.all([
     card.boundingBox(),
     trajectory.boundingBox(),
+    trajectoryLabels.boundingBox(),
     track.boundingBox(),
+    trajectoryReadout.boundingBox(),
     kpis.boundingBox(),
   ]);
-  assert.ok(cardBox && trajectoryBox && trackBox && kpiBox, `${theme}/${viewport}: i box della card devono esistere`);
+  assert.ok(cardBox && trajectoryBox && labelsBox && trackBox && readoutBox && kpiBox, `${theme}/${viewport}: i box della card devono esistere`);
   assert.ok(trackBox.width > 0 && trackBox.height > 0, `${theme}/${viewport}: la traiettoria deve avere dimensioni visibili`);
   assert.ok(
     trajectoryBox.y >= cardBox.y && trajectoryBox.y + trajectoryBox.height <= cardBox.y + cardBox.height,
@@ -166,6 +186,14 @@ async function assertDataFirstTickerCard(page, { theme, viewport }) {
   assert.ok(
     trajectoryBox.y + trajectoryBox.height <= kpiBox.y,
     `${theme}/${viewport}: la traiettoria non deve sovrapporsi ai KPI`,
+  );
+  assert.ok(
+    labelsBox.y >= trajectoryBox.y && labelsBox.y + labelsBox.height <= trackBox.y,
+    `${theme}/${viewport}: Attuale e Proiezione devono restare sopra la barra senza essere tagliati`,
+  );
+  assert.ok(
+    readoutBox.y >= trackBox.y + trackBox.height && readoutBox.y + readoutBox.height <= trajectoryBox.y + trajectoryBox.height,
+    `${theme}/${viewport}: la percentuale deve restare sotto la barra e dentro la superficie`,
   );
 }
 
@@ -276,6 +304,7 @@ test('scenario 2: card per ogni pista attiva ed espansione/chiusura del dettagli
 
     // Tutte e 3 le piste con dati devono avere una card nella griglia.
     const cardMobile = page.getByTestId('ticker-pista-mobile');
+    const toggleMobile = page.getByTestId('ticker-toggle-mobile');
     await cardMobile.waitFor({ state: 'visible', timeout: 15000 });
     await page.getByTestId('ticker-pista-fisso').waitFor({ state: 'visible', timeout: 15000 });
     await page.getByTestId('ticker-pista-cb').waitFor({ state: 'visible', timeout: 15000 });
@@ -300,18 +329,18 @@ test('scenario 2: card per ogni pista attiva ed espansione/chiusura del dettagli
     await page.getByTestId('ticker-detail-mobile').waitFor({ state: 'visible', timeout: 10000 });
     await page.getByTestId('ticker-detail-rs-mobile-totale').waitFor({ state: 'visible', timeout: 10000 });
     assert.equal(
-      await cardMobile.getAttribute('aria-expanded'),
+      await toggleMobile.getAttribute('aria-expanded'),
       'true',
-      'aria-expanded deve essere "true" a pannello aperto',
+      'il controllo della card deve avere aria-expanded="true" a pannello aperto',
     );
 
     // Secondo click → pannello chiuso.
     await cardMobile.click();
     await page.getByTestId('ticker-detail-mobile').waitFor({ state: 'detached', timeout: 10000 });
     assert.equal(
-      await cardMobile.getAttribute('aria-expanded'),
+      await toggleMobile.getAttribute('aria-expanded'),
       'false',
-      'aria-expanded deve tornare "false" dopo la chiusura',
+      'il controllo della card deve tornare aria-expanded="false" dopo la chiusura',
     );
 
     await page.close();
@@ -348,12 +377,30 @@ test('scenario 3: card e dettaglio funzionano su viewport mobile 375×812', asyn
 
     // La card mobile deve essere visibile anche a 375px di larghezza.
     const cardMobile = page.getByTestId('ticker-pista-mobile');
+    const toggleMobile = page.getByTestId('ticker-toggle-mobile');
     await cardMobile.waitFor({ state: 'visible', timeout: 15000 });
 
     // La card deve stare dentro il viewport in larghezza (grid-cols-2 a 375px).
     const box = await cardMobile.boundingBox();
     assert.ok(box, 'bounding box della card mobile deve esistere');
     assert.ok(box.width > 0 && box.width <= 375, `card larga ${box.width}px, deve stare in 375px`);
+
+    // Tap su una soglia → tooltip leggibile, senza espandere la card.
+    const firstThreshold = page.getByTestId('ticker-threshold-mobile-1');
+    await firstThreshold.click();
+    const thresholdTooltip = page.getByRole('tooltip');
+    await thresholdTooltip.waitFor({ state: 'visible', timeout: 5000 });
+    assert.match(
+      (await thresholdTooltip.innerText()).replace(/\s+/g, ' '),
+      /Soglia S1:.*3 punti/,
+      'su touch il tap deve spiegare la prima soglia',
+    );
+    assert.equal(
+      await toggleMobile.getAttribute('aria-expanded'),
+      'false',
+      'il tap sulla soglia non deve aprire il dettaglio',
+    );
+    await page.keyboard.press('Escape');
 
     // Click sulla card (tap su device mobile) → pannello dettaglio visibile.
     await cardMobile.click();
@@ -477,7 +524,47 @@ test('scenario 4: premio non-zero, soglia raggiunta e badge proiezione con sogli
 
     await page.getByTestId('section-pista-ticker').waitFor({ state: 'visible', timeout: 15000 });
     const rowMobile = page.getByTestId('ticker-pista-mobile');
+    const toggleMobile = page.getByTestId('ticker-toggle-mobile');
     await rowMobile.waitFor({ state: 'visible', timeout: 15000 });
+
+    // --- Marker soglie: tutte le soglie configurate sono visibili e
+    // spiegate via tooltip senza aprire il dettaglio della card. ---
+    const thresholdMarkers = rowMobile.locator('[data-testid^="ticker-threshold-mobile-"]');
+    assert.equal(
+      await thresholdMarkers.count(),
+      4,
+      'la barra mobile deve mostrare una stanghetta per ciascuna delle 4 soglie configurate',
+    );
+    const firstThreshold = thresholdMarkers.first();
+    assert.equal(
+      await firstThreshold.getAttribute('aria-label'),
+      'Soglia S1: 3 punti',
+      'la prima stanghetta deve descrivere nome, valore e unità della soglia',
+    );
+    await firstThreshold.hover();
+    const thresholdTooltip = page.getByRole('tooltip');
+    await thresholdTooltip.waitFor({ state: 'visible', timeout: 5000 });
+    assert.match(
+      (await thresholdTooltip.innerText()).replace(/\s+/g, ' '),
+      /S1.*3 punti/,
+      'hover sulla stanghetta deve mostrare il valore della soglia',
+    );
+    await firstThreshold.click();
+    assert.equal(
+      await toggleMobile.getAttribute('aria-expanded'),
+      'false',
+      'interagire con una soglia non deve aprire il dettaglio della card',
+    );
+    await page.keyboard.press('Escape');
+    await firstThreshold.focus();
+    await thresholdTooltip.waitFor({ state: 'visible', timeout: 5000 });
+    await page.keyboard.press('Enter');
+    assert.equal(
+      await toggleMobile.getAttribute('aria-expanded'),
+      'false',
+      'Enter sulla soglia deve lasciare chiuso il dettaglio della card',
+    );
+    await page.keyboard.press('Escape');
 
     // --- Premio attuale non-zero sulla card ---
     const premioTxt = (await page.getByTestId('ticker-premio-mobile').innerText()).trim();
