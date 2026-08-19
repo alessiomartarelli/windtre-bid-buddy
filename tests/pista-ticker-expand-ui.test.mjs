@@ -35,6 +35,9 @@ import {
 //   - (Task #436) stesse verifiche valore per la pista FISSO, che usa un
 //     percorso di calcolo diverso (calcolaPremioPistaFissoPerPos, gettoni
 //     contrattuali, soglie a 5 livelli) e può regredire a zero da sola.
+//   - (Task #440) le card restano data-first: nessuna immagine o background
+//     URL; traiettoria attuale→proiezione visibile e separata dai KPI in tema
+//     chiaro/scuro, desktop e mobile.
 
 const now = new Date();
 const pad = (n) => String(n).padStart(2, '0');
@@ -119,6 +122,49 @@ async function openDashboard(context) {
     page.getByTestId('text-no-data').waitFor({ state: 'visible', timeout: 30000 }),
   ]);
   return page;
+}
+
+async function assertDataFirstTickerCard(page, { theme, viewport }) {
+  const card = page.getByTestId('ticker-pista-mobile');
+  const trajectory = page.getByTestId('ticker-trajectory-mobile');
+  const track = page.getByTestId('ticker-trajectory-track-mobile');
+  const kpis = page.getByTestId('ticker-kpis-mobile');
+
+  await card.waitFor({ state: 'visible', timeout: 15000 });
+  await trajectory.waitFor({ state: 'visible', timeout: 10000 });
+  await track.waitFor({ state: 'visible', timeout: 10000 });
+  await kpis.waitFor({ state: 'visible', timeout: 10000 });
+
+  const visual = await card.evaluate((element) => {
+    const allElements = [element, ...element.querySelectorAll('*')];
+    return {
+      imageCount: element.querySelectorAll('img').length,
+      urlBackgrounds: allElements
+        .map((node) => getComputedStyle(node).backgroundImage)
+        .filter((backgroundImage) => backgroundImage.includes('url(')),
+      track: getComputedStyle(element.querySelector('[data-testid="ticker-trajectory-track-mobile"]')).backgroundColor,
+    };
+  });
+  assert.equal(visual.imageCount, 0, `${theme}/${viewport}: la card non deve contenere immagini`);
+  assert.deepEqual(visual.urlBackgrounds, [], `${theme}/${viewport}: nessuno sfondo della card deve usare url(...)`);
+  assert.notEqual(visual.track, 'rgba(0, 0, 0, 0)', `${theme}/${viewport}: la traccia deve restare visibile`);
+
+  const [cardBox, trajectoryBox, trackBox, kpiBox] = await Promise.all([
+    card.boundingBox(),
+    trajectory.boundingBox(),
+    track.boundingBox(),
+    kpis.boundingBox(),
+  ]);
+  assert.ok(cardBox && trajectoryBox && trackBox && kpiBox, `${theme}/${viewport}: i box della card devono esistere`);
+  assert.ok(trackBox.width > 0 && trackBox.height > 0, `${theme}/${viewport}: la traiettoria deve avere dimensioni visibili`);
+  assert.ok(
+    trajectoryBox.y >= cardBox.y && trajectoryBox.y + trajectoryBox.height <= cardBox.y + cardBox.height,
+    `${theme}/${viewport}: la traiettoria deve restare dentro la card`,
+  );
+  assert.ok(
+    trajectoryBox.y + trajectoryBox.height <= kpiBox.y,
+    `${theme}/${viewport}: la traiettoria non deve sovrapporsi ai KPI`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +365,44 @@ test('scenario 3: card e dettaglio funzionano su viewport mobile 375×812', asyn
 
     await page.close();
     await context.close();
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SCENARIO 3b (Task #440) – card data-first e traiettoria leggibile.
+// ---------------------------------------------------------------------------
+test('scenario 3b: card ticker senza foto e traiettoria separata dai KPI in chiaro/scuro, desktop/mobile', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'ticker_datafirst', fullName: 'Ticker Data First Test' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+    await seedMobilePista(pool, session, {
+      posPrefix: 'TKDFPOS', rsPrefix: 'TickerDataFirstRs Srl',
+      negozio: 'Negozio Data First', garaName: 'Ticker data-first test',
+    });
+
+    browser = await launchBrowser();
+    const desktopContext = await newAuthedContext(browser, session);
+    const desktopPage = await openDashboard(desktopContext);
+
+    await assertDataFirstTickerCard(desktopPage, { theme: 'chiaro', viewport: 'desktop' });
+    await desktopPage.locator('html').evaluate((html) => html.classList.add('dark'));
+    await assertDataFirstTickerCard(desktopPage, { theme: 'scuro', viewport: 'desktop' });
+    await desktopPage.close();
+    await desktopContext.close();
+
+    const mobileContext = await newAuthedContext(browser, session, { mobile: true });
+    const mobilePage = await openDashboard(mobileContext);
+    await assertDataFirstTickerCard(mobilePage, { theme: 'chiaro', viewport: 'mobile' });
+    await mobilePage.locator('html').evaluate((html) => html.classList.add('dark'));
+    await assertDataFirstTickerCard(mobilePage, { theme: 'scuro', viewport: 'mobile' });
+    await mobilePage.close();
+    await mobileContext.close();
   } finally {
     if (browser) await browser.close().catch(() => {});
     await cleanupOrg(pool, session);

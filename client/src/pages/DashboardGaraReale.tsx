@@ -1097,13 +1097,17 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
         {/* Traiettoria centrale: il punto pieno è l'avanzamento attuale, il
             punto vuoto il traguardo proiettato. È intenzionalmente muta:
             i valori restano leggibili una sola volta nel footer. */}
-        <div className="absolute inset-x-3 top-[39%] bottom-[39%] flex items-center" aria-hidden>
+        <div
+          className="absolute inset-x-3 top-[22%] bottom-[60%] flex items-center"
+          data-testid={`ticker-trajectory-${p.pista}`}
+          aria-hidden
+        >
           <div className="w-full">
             <div className="mb-1.5 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               <span>attuale</span>
               <span>proiezione</span>
             </div>
-            <div className="relative h-1.5 rounded-full bg-muted/80">
+            <div className="relative h-1.5 rounded-full bg-muted/80" data-testid={`ticker-trajectory-track-${p.pista}`}>
               <div
                 className={`absolute inset-y-0 left-0 rounded-full ${conf.color} opacity-75`}
                 style={{ width: `${trajectoryRatio}%` }}
@@ -1120,7 +1124,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
             </div>
           </div>
         </div>
-        <div className="absolute inset-x-0 bottom-0 p-3 text-foreground">
+        <div className="absolute inset-x-0 bottom-0 p-3 text-foreground" data-testid={`ticker-kpis-${p.pista}`}>
           <div className="text-sm font-bold leading-tight truncate">{conf.label}</div>
           <div className="mt-2 flex items-end justify-between gap-1">
             <div>
