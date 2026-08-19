@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { ChevronDown, ChevronRight, Download, Shield, Smartphone, Table as TableIcon, Wifi, Zap, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Download, Shield, Smartphone, Table as TableIcon, Wifi, Zap, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
@@ -59,14 +59,44 @@ interface Props {
 }
 
 type Cell = number;
+type PdvSort = { pista: PistaCanvass; direction: "asc" | "desc" } | null;
+
+type PdvEntry = {
+  codicePos: string;
+  nomeNegozio: string;
+  perPista: Map<PistaCanvass, Cell>;
+  extra: PezziExtraCounters;
+};
+
+type RsEntry = {
+  rsKey: string;
+  displayName: string;
+  perPista: Map<PistaCanvass, Cell>;
+  extra: PezziExtraCounters;
+  pdvList: PdvEntry[];
+};
+
+const comparePdvNameAndCode = (a: PdvEntry, b: PdvEntry) => {
+  const byName = a.nomeNegozio.localeCompare(b.nomeNegozio, "it", { sensitivity: "base", numeric: true });
+  return byName || a.codicePos.localeCompare(b.codicePos, "it", { sensitivity: "base", numeric: true });
+};
+
+const sortedPdvList = (pdvList: PdvEntry[], sort: PdvSort) => {
+  if (!sort) return pdvList;
+  const direction = sort.direction === "asc" ? 1 : -1;
+  return [...pdvList].sort((a, b) => {
+    const byPista = (a.perPista.get(sort.pista) || 0) - (b.perPista.get(sort.pista) || 0);
+    return byPista === 0 ? comparePdvNameAndCode(a, b) : byPista * direction;
+  });
+};
 
 export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [pdvSort, setPdvSort] = useState<PdvSort>(null);
 
   const { rsRows, totals, grandTotal, totalsExtra, hasExtra } = useMemo(() => {
-    type PdvEntry = { codicePos: string; nomeNegozio: string; perPista: Map<PistaCanvass, Cell>; extra: PezziExtraCounters };
-    type RsEntry = { displayName: string; perPista: Map<PistaCanvass, Cell>; extra: PezziExtraCounters; pdvs: Map<string, PdvEntry> };
-    const rsMap = new Map<string, RsEntry>();
+    type RsAggregate = Omit<RsEntry, "rsKey" | "pdvList"> & { pdvs: Map<string, PdvEntry> };
+    const rsMap = new Map<string, RsAggregate>();
     let hasExtra = false;
 
     for (const pdv of rows) {
@@ -99,7 +129,7 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
         displayName: data.displayName,
         perPista: data.perPista,
         extra: data.extra,
-        pdvList: Array.from(data.pdvs.values()).sort((a, b) => a.nomeNegozio.localeCompare(b.nomeNegozio)),
+        pdvList: Array.from(data.pdvs.values()).sort(comparePdvNameAndCode),
       }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
@@ -126,6 +156,13 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
       if (next.has(rsKey)) next.delete(rsKey); else next.add(rsKey);
       return next;
     });
+  };
+  const togglePdvSort = (pista: PistaCanvass) => {
+    setPdvSort(current => (
+      current?.pista === pista
+        ? { pista, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { pista, direction: "asc" }
+    ));
   };
   const allKeys = rsRows.map(r => r.rsKey);
   const allExpanded = allKeys.length > 0 && allKeys.every(k => expanded.has(k));
@@ -257,12 +294,31 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
                 {PEZZI_PISTE.map(p => {
                   const conf = PISTA_HEADER_ICONS[p];
                   const Icon = conf?.icon;
+                  const isActive = pdvSort?.pista === p;
+                  const direction = isActive ? pdvSort.direction : null;
+                  const SortIcon = direction === "asc" ? ArrowUp : direction === "desc" ? ArrowDown : ArrowUpDown;
+                  const sortLabel = direction === "asc" ? "crescente" : direction === "desc" ? "decrescente" : "non applicato";
+                  const nextDirectionLabel = direction === "asc" ? "decrescente" : "crescente";
                   return (
-                    <th key={p} className="text-right px-3 py-2 font-medium whitespace-nowrap sticky top-0 bg-muted z-10" data-testid={`th-pezzi-${p}`}>
-                      <div className="flex items-center justify-end gap-1.5">
+                    <th
+                      key={p}
+                      className="text-right px-3 py-2 font-medium whitespace-nowrap sticky top-0 bg-muted z-10"
+                      data-testid={`th-pezzi-${p}`}
+                      aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}
+                    >
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-end gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        onClick={() => togglePdvSort(p)}
+                        aria-label={`Ordina i PDV per ${pistaLabels[p]} in ordine ${nextDirectionLabel}. Ordinamento attuale: ${sortLabel}.`}
+                        title={`Ordina PDV per ${pistaLabels[p]} (${sortLabel})`}
+                        data-testid={`btn-pezzi-sort-${p}`}
+                      >
                         {Icon ? <div className={`p-1 rounded ${conf!.color} text-white`}><Icon className="h-3 w-3" /></div> : null}
                         <span>{pistaLabels[p]}</span>
-                      </div>
+                        <SortIcon className={`h-3.5 w-3.5 ${isActive ? "text-foreground" : "text-muted-foreground"}`} aria-hidden="true" />
+                        <span className="sr-only">{`Ordinamento ${sortLabel}`}</span>
+                      </button>
                     </th>
                   );
                 })}
@@ -283,6 +339,7 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
                   onToggle={() => toggleRs(rs.rsKey)}
                   sumRow={sumRow}
                   hasExtra={hasExtra}
+                  pdvSort={pdvSort}
                 />
               ))}
               <tr className="border-t-2 font-bold bg-primary/5" data-testid="row-pezzi-totale">
@@ -310,13 +367,16 @@ function RsGroup({
   onToggle,
   sumRow,
   hasExtra,
+  pdvSort,
 }: {
-  rs: { rsKey: string; displayName: string; perPista: Map<PistaCanvass, number>; extra: PezziExtraCounters; pdvList: { codicePos: string; nomeNegozio: string; perPista: Map<PistaCanvass, number>; extra: PezziExtraCounters }[] };
+  rs: RsEntry;
   expanded: boolean;
   onToggle: () => void;
   sumRow: (m: Map<PistaCanvass, number>) => number;
   hasExtra: boolean;
+  pdvSort: PdvSort;
 }) {
+  const pdvList = useMemo(() => sortedPdvList(rs.pdvList, pdvSort), [rs.pdvList, pdvSort]);
   return (
     <>
       <tr
@@ -338,7 +398,7 @@ function RsGroup({
         ))}
         <td className="text-right px-3 py-2 tabular-nums font-bold">{sumRow(rs.perPista)}</td>
       </tr>
-      {expanded && rs.pdvList.map(pdv => (
+      {expanded && pdvList.map(pdv => (
         <tr key={pdv.codicePos} className="border-b" data-testid={`row-pezzi-pdv-${pdv.codicePos}`}>
           <td className="px-3 py-1.5 pl-8 sticky left-0 bg-card z-10">
             <div className="truncate max-w-[220px]">{pdv.nomeNegozio}</div>

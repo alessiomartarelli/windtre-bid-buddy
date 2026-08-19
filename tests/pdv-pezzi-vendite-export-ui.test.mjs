@@ -102,10 +102,11 @@ function assertExportRows(aoa, { gammaDisplay }, label) {
   const expected = [
     ['RS', 'Delta Srl', '', '', 0, 1, 0, 1, 2],
     ['PDV', 'Delta Srl', 'POSD1', 'Negozio Delta', 0, 1, 0, 1, 2],
-    ['RS', gammaDisplay, '', '', 3, 1, 3, 0, 7],
+    ['RS', gammaDisplay, '', '', 4, 3, 4, 0, 11],
     ['PDV', gammaDisplay, 'POSG1', 'Negozio Gamma 1', 2, 1, 0, 0, 3],
     ['PDV', gammaDisplay, 'POSG2', 'Negozio Gamma 2', 1, 0, 3, 0, 4],
-    ['TOTALE', 'Totale complessivo', '', '', 3, 2, 3, 1, 9],
+    ['PDV', gammaDisplay, 'POSG3', 'Negozio Gamma 3', 1, 2, 1, 0, 4],
+    ['TOTALE', 'Totale complessivo', '', '', 4, 4, 4, 1, 13],
   ];
   assert.equal(
     body.length,
@@ -132,12 +133,16 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     // punti rimossi + uppercase) + una RS distinta.
     //   POSG1 (Gamma S.R.L.): 2 mobile + 1 fisso
     //   POSG2 (GAMMA SRL):    1 mobile + 3 energia
+    //   POSG3 (GAMMA SRL):    1 mobile + 2 fisso + 1 energia
     //   POSD1 (Delta Srl):    1 fisso + 1 assicurazioni
     const seeds = [
       ...Array(2).fill({ codicePos: 'POSG1', nomeNegozio: 'Negozio Gamma 1', ragioneSociale: 'Gamma S.R.L.', pista: 'mobile' }),
       { codicePos: 'POSG1', nomeNegozio: 'Negozio Gamma 1', ragioneSociale: 'Gamma S.R.L.', pista: 'fisso' },
       { codicePos: 'POSG2', nomeNegozio: 'Negozio Gamma 2', ragioneSociale: 'GAMMA SRL', pista: 'mobile' },
       ...Array(3).fill({ codicePos: 'POSG2', nomeNegozio: 'Negozio Gamma 2', ragioneSociale: 'GAMMA SRL', pista: 'energia' }),
+      { codicePos: 'POSG3', nomeNegozio: 'Negozio Gamma 3', ragioneSociale: 'GAMMA SRL', pista: 'mobile' },
+      ...Array(2).fill({ codicePos: 'POSG3', nomeNegozio: 'Negozio Gamma 3', ragioneSociale: 'GAMMA SRL', pista: 'fisso' }),
+      { codicePos: 'POSG3', nomeNegozio: 'Negozio Gamma 3', ragioneSociale: 'GAMMA SRL', pista: 'energia' },
       { codicePos: 'POSD1', nomeNegozio: 'Negozio Delta', ragioneSociale: 'Delta Srl', pista: 'fisso' },
       { codicePos: 'POSD1', nomeNegozio: 'Negozio Delta', ragioneSociale: 'Delta Srl', pista: 'assicurazioni' },
     ];
@@ -169,7 +174,7 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     for (const [pista, colorClass] of Object.entries(EXPECTED_HEADER_ICONS)) {
       const th = page.getByTestId(`th-pezzi-${pista}`);
       await th.waitFor({ state: 'visible', timeout: 10000 });
-      const wrapClass = await th.locator('div.flex').first().getAttribute('class');
+      const wrapClass = await th.locator('button.flex').getAttribute('class');
       assert.ok(wrapClass.includes('justify-end'), `th-pezzi-${pista}: header allineato a destra (justify-end), trovato "${wrapClass}"`);
       const iconBox = th.locator(`div.${colorClass}`);
       assert.equal(await iconBox.count(), 1, `th-pezzi-${pista}: quadratino colorato ${colorClass} presente`);
@@ -181,8 +186,41 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     // Sanity a schermo: RS Gamma unificata (2 righe RS totali) e totali colonna.
     const rsCount = await page.locator('[data-testid^="row-pezzi-rs-"]').count();
     assert.equal(rsCount, 2, `a schermo: 2 righe RS (Gamma unificata + Delta), trovate ${rsCount}`);
-    assert.equal((await page.getByTestId('cell-pezzi-tot-mobile').innerText()).trim(), '3');
-    assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '9');
+    assert.equal((await page.getByTestId('cell-pezzi-tot-mobile').innerText()).trim(), '4');
+    assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '13');
+
+    // ── Task #442: ordinamento locale dei PDV per pista ──
+    // Espandiamo entrambi i gruppi: l'ordinamento opera sui soli PDV, senza
+    // spostare la riga RS o alterare i totali. Gamma contiene valori Mobile
+    // diversi e un pareggio (POSG2/POSG3 = 1) risolto dal nome del negozio.
+    await page.getByTestId('btn-pezzi-expand-all').click();
+    const gammaRs = page.locator('[data-testid^="row-pezzi-rs-"]').filter({ hasText: /GAMMA/i });
+    const gammaKey = (await gammaRs.getAttribute('data-testid')).replace('row-pezzi-rs-', '');
+    const visibleGammaPdvCodes = async () => {
+      const rows = page.locator('[data-testid^="row-pezzi-pdv-POSG"]');
+      return rows.evaluateAll((els) => els.map((el) => el.getAttribute('data-testid').replace('row-pezzi-pdv-', '')));
+    };
+
+    const mobileHeader = page.getByTestId('th-pezzi-mobile');
+    const mobileSort = page.getByTestId('btn-pezzi-sort-mobile');
+    assert.equal(await mobileHeader.getAttribute('aria-sort'), 'none', 'Mobile: nessun ordinamento attivo inizialmente');
+    assert.match(await mobileSort.getAttribute('aria-label'), /ordine crescente.*non applicato/i, 'Mobile: controllo annunciabile prima del click');
+    await mobileSort.click();
+    assert.equal(await mobileHeader.getAttribute('aria-sort'), 'ascending', 'Mobile: primo click crescente');
+    assert.deepEqual(await visibleGammaPdvCodes(), ['POSG2', 'POSG3', 'POSG1'], 'Mobile crescente: pareggio risolto per nome, poi valore più alto');
+    assert.equal(await page.locator('[data-testid^="row-pezzi-rs-"]').count(), 2, 'ordinamento: gruppi RS invariati');
+    assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '13', 'ordinamento: totale invariato');
+
+    await mobileSort.click();
+    assert.equal(await mobileHeader.getAttribute('aria-sort'), 'descending', 'Mobile: secondo click decrescente');
+    assert.deepEqual(await visibleGammaPdvCodes(), ['POSG1', 'POSG2', 'POSG3'], 'Mobile decrescente: valore alto prima, pareggio stabile per nome');
+
+    const fissoHeader = page.getByTestId('th-pezzi-fisso');
+    await page.getByTestId('btn-pezzi-sort-fisso').press('Enter');
+    assert.equal(await mobileHeader.getAttribute('aria-sort'), 'none', 'cambio pista: Mobile non più attiva');
+    assert.equal(await fissoHeader.getAttribute('aria-sort'), 'ascending', 'Fisso: nuova pista avvia il crescente anche da tastiera');
+    assert.deepEqual(await visibleGammaPdvCodes(), ['POSG2', 'POSG1', 'POSG3'], 'Fisso crescente: 0, 1, 2');
+    assert.equal(await page.getByTestId(`row-pezzi-rs-${gammaKey}`).count(), 1, 'cambio pista: gruppo Gamma ancora presente ed espanso');
 
     const download = async (testId) => {
       const [dl] = await Promise.all([
