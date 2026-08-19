@@ -164,7 +164,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
         </button>
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+      <nav className="sidebar-nav-scrollbar flex-1 space-y-5 overflow-y-auto px-3 py-4">
         {adminItems.length > 0 && (
           <section>
             <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" data-testid="nav-admin-menu">

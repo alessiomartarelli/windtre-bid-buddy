@@ -205,6 +205,39 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   }
 }
 
+/* La navigazione laterale può essere lunga: la scrollbar resta accessibile,
+   ma discreta finché l'utente non passa sopra il menu. */
+.sidebar-nav-scrollbar {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.sidebar-nav-scrollbar:hover {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.32) transparent;
+}
+
+.sidebar-nav-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.sidebar-nav-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.32);
+}
+
+.sidebar-nav-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
 @layer utilities {
   .text-gradient {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-500;
