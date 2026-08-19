@@ -143,11 +143,13 @@ async function assertDataFirstTickerCard(page, { theme, viewport }) {
         .map((node) => getComputedStyle(node).backgroundImage)
         .filter((backgroundImage) => backgroundImage.includes('url(')),
       track: getComputedStyle(element.querySelector('[data-testid="ticker-trajectory-track-mobile"]')).backgroundColor,
+      kpisBackground: getComputedStyle(element.querySelector('[data-testid="ticker-kpis-mobile"]')).backgroundImage,
     };
   });
   assert.equal(visual.imageCount, 0, `${theme}/${viewport}: la card non deve contenere immagini`);
   assert.deepEqual(visual.urlBackgrounds, [], `${theme}/${viewport}: nessuno sfondo della card deve usare url(...)`);
   assert.notEqual(visual.track, 'rgba(0, 0, 0, 0)', `${theme}/${viewport}: la traccia deve restare visibile`);
+  assert.notEqual(visual.kpisBackground, 'none', `${theme}/${viewport}: i KPI devono avere una superficie di contrasto dedicata`);
 
   const [cardBox, trajectoryBox, trackBox, kpiBox] = await Promise.all([
     card.boundingBox(),

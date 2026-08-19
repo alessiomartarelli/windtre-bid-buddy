@@ -13,12 +13,10 @@ import {
 
 // Task #426 — Suite UI Playwright per la Dashboard Gara Reale.
 //
-// Copre le regressioni del KPI Actual, del ticker e degli addon assicurativi:
-//   (a) Card "€ Actual": deve mostrare la SOMMA dei premi di gara
-//       (pistaStats[].calc.premioStimato), non il fatturato lordo. I testid
-//       text-kpi-actual e text-kpi-actual-proj DEVONO essere uguali ai
-//       corrispondenti text-premio-totale-attuale / text-premio-totale-proiezione
-//       (che vengono calcolati dallo stesso reduce su pistaStats).
+// Copre le regressioni del KPI Incentivi, del ticker e degli addon assicurativi:
+//   (a) Card "€ Incentivi": deve mostrare la SOMMA dei premi di gara
+//       (pistaStats[].calc.premioStimato), non il fatturato lordo. Il riquadro
+//       "Premio di Gara" duplicato non deve essere renderizzato.
 //   (b) Sezione "Piste in gara" (section-pista-ticker): mostra solo le piste
 //       con totalePezzi > 0 o premioStimato > 0. Dal redesign "Shorts" le
 //       piste sono card verticali cliccabili (ticker-pista-{p}, aria-expanded)
@@ -126,8 +124,8 @@ async function openDashboard(page) {
   await page.getByTestId('card-workday-info').waitFor({ state: 'visible', timeout: 15000 });
 }
 
-// ── Test 1: card € Actual = Premio Totale + ticker 1 pista senza pausa ────
-test('Dashboard Gara: card € Actual = somma premi gara (Premio Totale), ticker 1 pista senza btn-pause', async () => {
+// ── Test 1: card € Incentivi + ticker 1 pista senza pausa ─────────────────
+test('Dashboard Gara: card € Incentivi mostra la somma premi senza riquadro duplicato', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'gkpi_1p', fullName: 'Gara KPI 1 Pista' });
   let browser;
@@ -160,22 +158,29 @@ test('Dashboard Gara: card € Actual = somma premi gara (Premio Totale), ticker
     // Con 1 pezzo CONSUMER_NO_SDD → totalPunti (1) ≥ targetS1 (1) → aggPremio = 200 €.
     const EXPECTED_PREMIO = 200;
 
-    // ── (a) text-kpi-actual == valore di premio atteso dal seed ──────────
-    // Verifica INDIPENDENTE: non confronta solo le due card UI (che derivano
-    // entrambe da pistaStats.reduce) ma asserisce il valore numerico atteso.
-    // Una regressione che mostrasse il fatturato lordo o zero farebbe fallire
-    // questo check anche se le due card fossero "coerenti" tra loro.
+    // ── (a) € Incentivi == valore di premio atteso dal seed ───────────────
+    // Verifica indipendente sul valore atteso: una regressione che mostrasse
+    // il fatturato lordo o zero farebbe fallire il check.
+    assert.equal(
+      (await page.getByTestId('label-kpi-actual').innerText()).trim(),
+      '€ INCENTIVI',
+      'la prima KPI deve chiamarsi € Incentivi',
+    );
+    assert.equal(
+      await page.getByTestId('card-premio-totale').count(),
+      0,
+      'il riquadro Premio di Gara duplicato non deve essere presente',
+    );
     const actualText = await page.getByTestId('text-kpi-actual').innerText();
     assert.equal(
       parseEuroText(actualText),
       EXPECTED_PREMIO,
-      `text-kpi-actual deve valere ${EXPECTED_PREMIO} € (premio gara), trovato: "${actualText}"`,
+      `text-kpi-actual deve valere ${EXPECTED_PREMIO} € (incentivi gara), trovato: "${actualText}"`,
     );
 
-    // ── (a-bis) ticker-premio-energia coincide con la KPI € Actual ────────
-    // La card "Premio Totale" separata è stata rimossa dal redesign a card:
-    // il cross-check ora usa il premio mostrato sulla card pista (stessa
-    // riduzione su pistaStats, formattatore formatEuro).
+    // ── (a-bis) ticker-premio-energia coincide con la KPI € Incentivi ─────
+    // Il cross-check usa il premio mostrato sulla card pista (stessa riduzione
+    // su pistaStats, formattatore formatEuro).
     const tickerPremioCross = await page.getByTestId('ticker-premio-energia').innerText();
     assert.equal(
       parseEuroText(tickerPremioCross),

@@ -182,6 +182,50 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   border-color: hsl(var(--pista-ink) / 0.25);
 }
 
+.pista-card-scrim {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    hsl(var(--card) / 0.34) 0%,
+    hsl(var(--card) / 0.08) 38%,
+    hsl(var(--card) / 0.82) 64%,
+    hsl(var(--card) / 0.96) 100%
+  );
+}
+
+.pista-card-header {
+  padding: 0.2rem 0.45rem 0.2rem 0.2rem;
+  border: 1px solid hsl(var(--border) / 0.72);
+  border-radius: 0.75rem;
+  background: hsl(var(--card) / 0.88);
+  box-shadow: 0 3px 12px hsl(var(--foreground) / 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.pista-card-threshold {
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--card) / 0.94);
+  backdrop-filter: blur(8px);
+}
+
+.pista-card-trajectory {
+  text-shadow: 0 1px 2px hsl(var(--card) / 0.95);
+}
+
+.pista-card-kpis {
+  border: 1px solid hsl(var(--border) / 0.72);
+  background: linear-gradient(145deg, hsl(var(--card) / 0.96), hsl(var(--card) / 0.9));
+  box-shadow: 0 6px 16px hsl(var(--foreground) / 0.12);
+  backdrop-filter: blur(10px);
+}
+
+.pista-card-kpis .text-muted-foreground {
+  color: hsl(var(--foreground) / 0.72);
+}
+
 .ticker-pista-card--mobile { --pista-ink: 213 86% 51%; }
 .ticker-pista-card--fisso { --pista-ink: 156 68% 34%; }
 .ticker-pista-card--energia { --pista-ink: 38 92% 45%; }
@@ -248,6 +292,24 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
 .dark .ticker-pista-card {
   background: linear-gradient(145deg, hsl(var(--pista-ink) / 0.23), hsl(var(--card)) 67%);
   border-color: hsl(var(--pista-ink) / 0.38);
+}
+.dark .pista-card-scrim {
+  background: linear-gradient(
+    180deg,
+    hsl(var(--card) / 0.42) 0%,
+    hsl(var(--card) / 0.1) 38%,
+    hsl(var(--card) / 0.78) 64%,
+    hsl(var(--card) / 0.96) 100%
+  );
+}
+.dark .pista-card-header,
+.dark .pista-card-threshold {
+  border-color: hsl(var(--border) / 0.85);
+  background: hsl(var(--card) / 0.92);
+}
+.dark .pista-card-kpis {
+  border-color: hsl(var(--border) / 0.8);
+  background: linear-gradient(145deg, hsl(var(--card) / 0.97), hsl(var(--card) / 0.91));
 }
 .dark .pista-illustration__icon { color: hsl(var(--pista-ink) / 0.78); }
 .dark .pista-illustration__halo { border-color: hsl(var(--pista-ink) / 0.28); }
