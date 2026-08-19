@@ -178,8 +178,32 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
    dominante, su una scena cromatica leggibile sia in light sia in dark mode. */
 .ticker-pista-card {
   isolation: isolate;
-  background: linear-gradient(145deg, hsl(var(--pista-ink) / 0.13), hsl(var(--card)) 60%);
-  border-color: hsl(var(--pista-ink) / 0.25);
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 100% 0%, hsl(var(--pista-glow) / 0.48) 0%, transparent 42%),
+    radial-gradient(circle at 0% 100%, hsl(var(--pista-ink) / 0.3) 0%, transparent 48%),
+    linear-gradient(142deg, hsl(var(--pista-ink) / 0.3) 0%, hsl(var(--pista-glow) / 0.16) 46%, hsl(var(--card) / 0.94) 100%);
+  border-color: hsl(var(--pista-ink) / 0.42);
+  box-shadow:
+    0 5px 16px hsl(var(--foreground) / 0.09),
+    inset 0 1px 0 hsl(var(--pista-glow) / 0.34);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.ticker-pista-card:hover {
+  transform: translateY(-2px);
+  border-color: hsl(var(--pista-ink) / 0.58);
+  box-shadow:
+    0 9px 22px hsl(var(--pista-ink) / 0.16),
+    inset 0 1px 0 hsl(var(--pista-ink) / 0.35);
+}
+
+.ticker-pista-card:focus-within {
+  border-color: hsl(var(--pista-ink) / 0.72);
+  box-shadow:
+    0 0 0 3px hsl(var(--pista-ink) / 0.18),
+    0 9px 22px hsl(var(--pista-ink) / 0.14);
 }
 
 .pista-card-scrim {
@@ -189,10 +213,10 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   pointer-events: none;
   background: linear-gradient(
     180deg,
-    hsl(var(--card) / 0.34) 0%,
-    hsl(var(--card) / 0.08) 38%,
-    hsl(var(--card) / 0.82) 64%,
-    hsl(var(--card) / 0.96) 100%
+    hsl(var(--card) / 0.08) 0%,
+    transparent 38%,
+    hsl(var(--card) / 0.38) 70%,
+    hsl(var(--card) / 0.72) 100%
   );
 }
 
@@ -200,14 +224,14 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   padding: 0.2rem 0.45rem 0.2rem 0.2rem;
   border: 1px solid hsl(var(--border) / 0.72);
   border-radius: 0.75rem;
-  background: hsl(var(--card) / 0.88);
+  background: hsl(var(--card) / 0.82);
   box-shadow: 0 3px 12px hsl(var(--foreground) / 0.08);
   backdrop-filter: blur(8px);
 }
 
 .pista-card-threshold {
   border: 1px solid hsl(var(--border) / 0.8);
-  background: hsl(var(--card) / 0.94);
+  background: hsl(var(--card) / 0.86);
   backdrop-filter: blur(8px);
 }
 
@@ -223,12 +247,12 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
 
 .pista-card-trajectory {
   min-width: 0;
-  border: 1px solid hsl(var(--border) / 0.78);
+  border: 1px solid hsl(var(--pista-ink) / 0.22);
   border-radius: 0.75rem;
   padding: 0.45rem 0.55rem 0.4rem;
-  background: linear-gradient(145deg, hsl(var(--card) / 0.96), hsl(var(--card) / 0.88));
+  background: linear-gradient(145deg, hsl(var(--card) / 0.92), hsl(var(--card) / 0.76));
   box-shadow: 0 4px 14px hsl(var(--foreground) / 0.1);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px) saturate(1.08);
   text-shadow: 0 1px 2px hsl(var(--card) / 0.95);
 }
 
@@ -370,10 +394,10 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   position: relative;
   min-width: 0;
   margin-top: auto;
-  border: 1px solid hsl(var(--border) / 0.72);
-  background: linear-gradient(145deg, hsl(var(--card) / 0.96), hsl(var(--card) / 0.9));
+  border: 1px solid hsl(var(--pista-ink) / 0.2);
+  background: linear-gradient(145deg, hsl(var(--card) / 0.94), hsl(var(--card) / 0.8));
   box-shadow: 0 6px 16px hsl(var(--foreground) / 0.12);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px) saturate(1.08);
 }
 
 .pista-card-kpis .text-muted-foreground {
@@ -394,14 +418,14 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   }
 }
 
-.ticker-pista-card--mobile { --pista-ink: 213 86% 51%; }
-.ticker-pista-card--fisso { --pista-ink: 156 68% 34%; }
-.ticker-pista-card--energia { --pista-ink: 38 92% 45%; }
-.ticker-pista-card--assicurazioni { --pista-ink: 275 62% 50%; }
-.ticker-pista-card--partnership { --pista-ink: 190 76% 39%; }
-.ticker-pista-card--cb { --pista-ink: 24 89% 48%; }
-.ticker-pista-card--protecta { --pista-ink: 348 77% 53%; }
-.ticker-pista-card--extra_gara_iva { --pista-ink: 231 67% 53%; }
+.ticker-pista-card--mobile { --pista-ink: 213 86% 51%; --pista-glow: 190 92% 50%; }
+.ticker-pista-card--fisso { --pista-ink: 156 68% 34%; --pista-glow: 174 72% 42%; }
+.ticker-pista-card--energia { --pista-ink: 38 92% 45%; --pista-glow: 23 96% 53%; }
+.ticker-pista-card--assicurazioni { --pista-ink: 275 62% 50%; --pista-glow: 313 72% 55%; }
+.ticker-pista-card--partnership { --pista-ink: 190 76% 39%; --pista-glow: 211 82% 52%; }
+.ticker-pista-card--cb { --pista-ink: 24 89% 48%; --pista-glow: 5 86% 57%; }
+.ticker-pista-card--protecta { --pista-ink: 348 77% 53%; --pista-glow: 328 76% 57%; }
+.ticker-pista-card--extra_gara_iva { --pista-ink: 231 67% 53%; --pista-glow: 258 74% 59%; }
 
 .pista-illustration {
   position: absolute;
@@ -410,8 +434,10 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   overflow: hidden;
   color: hsl(var(--pista-ink));
   background:
-    radial-gradient(circle at 84% 31%, hsl(var(--pista-ink) / 0.28) 0 16%, transparent 16.5%),
-    linear-gradient(145deg, hsl(var(--pista-ink) / 0.22), transparent 58%);
+    radial-gradient(circle at 86% 24%, hsl(var(--pista-glow) / 0.5) 0 14%, transparent 39%),
+    radial-gradient(circle at 14% 88%, hsl(var(--pista-ink) / 0.34) 0 10%, transparent 42%),
+    linear-gradient(132deg, hsl(var(--pista-ink) / 0.36) 0%, hsl(var(--pista-glow) / 0.2) 50%, transparent 82%);
+  opacity: 0.96;
 }
 
 .pista-illustration__halo {
@@ -420,7 +446,7 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   height: 132px;
   right: -28px;
   top: 18px;
-  border: 18px solid hsl(var(--pista-ink) / 0.18);
+  border: 18px solid hsl(var(--pista-glow) / 0.22);
   border-radius: 42% 58% 51% 49%;
   transform: rotate(-20deg);
 }
@@ -431,56 +457,71 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   height: 112px;
   right: -3px;
   top: 9px;
-  color: hsl(var(--pista-ink) / 0.62);
+  color: hsl(var(--pista-ink) / 0.76);
   transform: rotate(-12deg);
-  filter: drop-shadow(0 8px 0 hsl(var(--pista-ink) / 0.10));
+  filter:
+    drop-shadow(0 8px 0 hsl(var(--pista-glow) / 0.12))
+    drop-shadow(0 12px 22px hsl(var(--pista-ink) / 0.16));
 }
 
 .pista-illustration__orb {
   position: absolute;
   display: block;
-  border: 2px solid hsl(var(--pista-ink) / 0.28);
+  border: 2px solid hsl(var(--pista-glow) / 0.38);
   border-radius: 999px;
 }
 .pista-illustration__orb--one { width: 24px; height: 24px; right: 100px; top: 52px; }
-.pista-illustration__orb--two { width: 12px; height: 12px; right: 26px; top: 130px; background: hsl(var(--pista-ink) / 0.26); border: 0; }
-
-/* Le variazioni compositive rendono riconoscibile la materia di ogni pista,
-   oltre al pittogramma: segnale, rete, fulmine, scudo, relazione, comunità,
-   protezione e business. */
-.ticker-pista-card--mobile .pista-illustration { background: linear-gradient(135deg, hsl(213 86% 51% / 0.22), transparent 61%), repeating-linear-gradient(135deg, transparent 0 13px, hsl(213 86% 51% / 0.10) 14px 16px); }
-.ticker-pista-card--fisso .pista-illustration { background: radial-gradient(circle at 86% 23%, hsl(156 68% 34% / 0.32) 0 5%, transparent 5.5%), radial-gradient(circle at 64% 43%, hsl(156 68% 34% / 0.22) 0 4%, transparent 4.5%), linear-gradient(145deg, hsl(156 68% 34% / 0.20), transparent 68%); }
-.ticker-pista-card--energia .pista-illustration { background: linear-gradient(120deg, hsl(38 92% 45% / 0.25), transparent 54%), repeating-linear-gradient(105deg, transparent 0 18px, hsl(38 92% 45% / 0.12) 19px 22px); }
-.ticker-pista-card--assicurazioni .pista-illustration { background: radial-gradient(ellipse at 86% 33%, hsl(275 62% 50% / 0.27), transparent 43%), linear-gradient(145deg, hsl(275 62% 50% / 0.16), transparent 62%); }
-.ticker-pista-card--partnership .pista-illustration { background: linear-gradient(145deg, hsl(190 76% 39% / 0.25), transparent 62%), linear-gradient(35deg, transparent 46%, hsl(190 76% 39% / 0.16) 46% 49%, transparent 49%); }
-.ticker-pista-card--cb .pista-illustration { background: radial-gradient(circle at 74% 30%, hsl(24 89% 48% / 0.29) 0 8%, transparent 8.5%), radial-gradient(circle at 91% 49%, hsl(24 89% 48% / 0.24) 0 5%, transparent 5.5%), linear-gradient(145deg, hsl(24 89% 48% / 0.19), transparent 62%); }
-.ticker-pista-card--protecta .pista-illustration { background: radial-gradient(ellipse at 84% 31%, hsl(348 77% 53% / 0.29), transparent 46%), linear-gradient(145deg, hsl(348 77% 53% / 0.17), transparent 66%); }
-.ticker-pista-card--extra_gara_iva .pista-illustration { background: linear-gradient(145deg, hsl(231 67% 53% / 0.24), transparent 60%), repeating-linear-gradient(0deg, transparent 0 15px, hsl(231 67% 53% / 0.10) 16px 17px); }
+.pista-illustration__orb--two { width: 12px; height: 12px; right: 26px; top: 130px; background: hsl(var(--pista-glow) / 0.38); border: 0; }
 
 .dark .ticker-pista-card {
-  background: linear-gradient(145deg, hsl(var(--pista-ink) / 0.23), hsl(var(--card)) 67%);
-  border-color: hsl(var(--pista-ink) / 0.38);
+  background:
+    radial-gradient(circle at 100% 0%, hsl(var(--pista-glow) / 0.5) 0%, transparent 43%),
+    radial-gradient(circle at 0% 100%, hsl(var(--pista-ink) / 0.38) 0%, transparent 50%),
+    linear-gradient(142deg, hsl(var(--pista-ink) / 0.38) 0%, hsl(var(--pista-glow) / 0.18) 48%, hsl(var(--card) / 0.96) 100%);
+  border-color: hsl(var(--pista-ink) / 0.5);
+  box-shadow:
+    0 9px 24px hsl(233 60% 3% / 0.34),
+    inset 0 1px 0 hsl(var(--pista-ink) / 0.28);
+}
+.dark .ticker-pista-card:hover {
+  border-color: hsl(var(--pista-ink) / 0.78);
+  box-shadow:
+    0 12px 26px hsl(233 60% 3% / 0.42),
+    0 0 0 1px hsl(var(--pista-ink) / 0.16);
 }
 .dark .pista-card-scrim {
   background: linear-gradient(
     180deg,
-    hsl(var(--card) / 0.42) 0%,
-    hsl(var(--card) / 0.1) 38%,
-    hsl(var(--card) / 0.78) 64%,
-    hsl(var(--card) / 0.96) 100%
+    hsl(var(--card) / 0.12) 0%,
+    transparent 38%,
+    hsl(var(--card) / 0.42) 70%,
+    hsl(var(--card) / 0.76) 100%
   );
 }
 .dark .pista-card-header,
 .dark .pista-card-threshold {
   border-color: hsl(var(--border) / 0.85);
-  background: hsl(var(--card) / 0.92);
+  background: hsl(var(--card) / 0.84);
 }
 .dark .pista-card-kpis {
-  border-color: hsl(var(--border) / 0.8);
-  background: linear-gradient(145deg, hsl(var(--card) / 0.97), hsl(var(--card) / 0.91));
+  border-color: hsl(var(--pista-ink) / 0.28);
+  background: linear-gradient(145deg, hsl(var(--card) / 0.92), hsl(var(--card) / 0.82));
 }
-.dark .pista-illustration__icon { color: hsl(var(--pista-ink) / 0.78); }
-.dark .pista-illustration__halo { border-color: hsl(var(--pista-ink) / 0.28); }
+.dark .pista-card-trajectory {
+  border-color: hsl(var(--pista-ink) / 0.28);
+  background: linear-gradient(145deg, hsl(var(--card) / 0.9), hsl(var(--card) / 0.78));
+}
+.dark .pista-illustration__icon { color: hsl(var(--pista-glow) / 0.82); }
+.dark .pista-illustration__halo { border-color: hsl(var(--pista-glow) / 0.3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-pista-card {
+    transition-duration: 0.01ms;
+  }
+  .ticker-pista-card:hover {
+    transform: none;
+  }
+}
 
 @media (max-width: 639px) {
   .ticker-pista-card { min-height: 180px; }
@@ -647,6 +688,25 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   background-image:
     radial-gradient(at 20% 0%, hsl(243 75% 59% / 0.04) 0px, transparent 50%),
     radial-gradient(at 80% 100%, hsl(220 60% 50% / 0.03) 0px, transparent 50%);
+}
+
+/* The W3 preset has stronger legacy selectors below; keep the pista colour
+   story visible there too instead of letting the preset flatten every card
+   into one purple/orange treatment. */
+html[data-accent="w3"] [data-testid="dashboard-gara-reale"] .ticker-pista-card,
+html[data-accent="w3"] [data-testid="dashboard-gara-reale"] .glass-panel.w3-pista-card {
+  background:
+    radial-gradient(circle at 100% 0%, hsl(var(--pista-glow) / 0.5) 0%, transparent 42%),
+    radial-gradient(circle at 0% 100%, hsl(var(--pista-ink) / 0.32) 0%, transparent 48%),
+    linear-gradient(142deg, hsl(var(--pista-ink) / 0.32) 0%, hsl(var(--pista-glow) / 0.17) 48%, hsl(var(--card) / 0.94) 100%);
+}
+
+html.dark[data-accent="w3"] [data-testid="dashboard-gara-reale"] .ticker-pista-card,
+html.dark[data-accent="w3"] [data-testid="dashboard-gara-reale"] .glass-panel.w3-pista-card {
+  background:
+    radial-gradient(circle at 100% 0%, hsl(var(--pista-glow) / 0.54) 0%, transparent 43%),
+    radial-gradient(circle at 0% 100%, hsl(var(--pista-ink) / 0.4) 0%, transparent 50%),
+    linear-gradient(142deg, hsl(var(--pista-ink) / 0.4) 0%, hsl(var(--pista-glow) / 0.2) 48%, hsl(var(--card) / 0.96) 100%);
 }
 
 /* ── Print / PDF export ─────────────────────────────────────── */

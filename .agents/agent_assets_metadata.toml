@@ -6,18 +6,21 @@ id = "B2gWKPvS8PB-OVmNeM6Kt"
 uri = "file://exports/report-vendite-esempio.png"
 type = "image"
 title = "Anteprima visiva del report"
+logical_id = "68d8cc77-9b04-47c3-a132-af825f39dade"
 
 [[outputs]]
 id = "I4GmuT1xqkWHE-95i7YNL"
 uri = "file://exports/report-vendite-esempio.tar.gz"
 type = "unspecified"
 title = "File HTML di esempio (estrai e apri nel browser)"
+logical_id = "ab62eeea-a309-4701-b9fa-53d33aa959c6"
 
 [[outputs]]
 id = "jJOw5w9xfhdIgTMe2HzwF"
 uri = "file://screenshots/home-preview.jpg"
 type = "image"
 title = "Anteprima Home — Benvenuto essenziale"
+logical_id = "560e508b-2eb9-4662-a331-bc61f10488b0"
 
 [[outputs]]
 id = "fVvZISlyCOdbABw1XaiyE"
@@ -25,6 +28,7 @@ uri = "file://exports/telefoni-luglio-2026.xlsx"
 type = "table"
 title = "Telefoni luglio 2026 — ID vendite BiSuite"
 description = "1005 telefoni (998 su vendite finalizzate + 7 su annullate): una riga per telefono con ID BiSuite, data, stato, negozio, addetto, cliente, modello e prezzo."
+logical_id = "abc78853-5b56-45b6-9c9d-188d72b81cad"
 
 [[outputs]]
 id = "It4WHrPl0s4-N002bhGyw"
@@ -32,6 +36,7 @@ uri = "file://screenshots/andamento-kpi-vendite.png"
 type = "image"
 title = "Andamento KPI — spaziatura e gerarchie riviste"
 description = "Grafico con più respiro: sottotitolo esplicativo, selettori-legenda separati dagli extra, assi alleggeriti e area del grafico più ariosa."
+logical_id = "02a16852-8d9b-4b2d-a48b-04025b8f2c10"
 
 [[outputs]]
 id = "zvJt5n-k5lVZf3QAHC2oO"
@@ -39,3 +44,4 @@ uri = "file://screenshots/gara-dashboard-after.png"
 type = "image"
 title = "Dashboard performance — spaziature e gerarchie riviste"
 description = "Numeri principali in evidenza, etichette secondarie più discrete, righe PDV e premi con più respiro e ritmo uniforme tra le sezioni."
+logical_id = "c03df9b1-8c57-47f9-9b9b-c8c5285d2a0a"

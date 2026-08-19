@@ -151,16 +151,30 @@ async function assertDataFirstTickerCard(page, { theme, viewport }) {
     const allElements = [element, ...element.querySelectorAll('*')];
     return {
       imageCount: element.querySelectorAll('img').length,
+      illustrationIconCount: element.querySelectorAll('.pista-illustration__icon').length,
       urlBackgrounds: allElements
         .map((node) => getComputedStyle(node).backgroundImage)
         .filter((backgroundImage) => backgroundImage.includes('url(')),
+      cardBackground: getComputedStyle(element).backgroundImage,
+      illustrationBackground: getComputedStyle(element.querySelector('.pista-illustration')).backgroundImage,
+      pistaGlow: getComputedStyle(element).getPropertyValue('--pista-glow').trim(),
       trajectoryBackground: getComputedStyle(element.querySelector('[data-testid="ticker-trajectory-mobile"]')).backgroundImage,
       track: getComputedStyle(element.querySelector('[data-testid="ticker-trajectory-track-mobile"]')).backgroundColor,
       kpisBackground: getComputedStyle(element.querySelector('[data-testid="ticker-kpis-mobile"]')).backgroundImage,
     };
   });
   assert.equal(visual.imageCount, 0, `${theme}/${viewport}: la card non deve contenere immagini`);
+  assert.equal(visual.illustrationIconCount, 1, `${theme}/${viewport}: la card deve mantenere una sola icona vettoriale di pista`);
   assert.deepEqual(visual.urlBackgrounds, [], `${theme}/${viewport}: nessuno sfondo della card deve usare url(...)`);
+  assert.ok(
+    (visual.cardBackground.match(/gradient/gi) ?? []).length >= 3,
+    `${theme}/${viewport}: il fondale deve usare un gradiente moderno multilivello`,
+  );
+  assert.ok(
+    (visual.illustrationBackground.match(/gradient/gi) ?? []).length >= 3,
+    `${theme}/${viewport}: l'illustrazione deve mantenere profondità cromatica multilivello`,
+  );
+  assert.notEqual(visual.pistaGlow, '', `${theme}/${viewport}: la pista deve avere un secondo tono cromatico dedicato`);
   assert.notEqual(visual.trajectoryBackground, 'none', `${theme}/${viewport}: la traiettoria deve avere una superficie di contrasto dedicata`);
   assert.notEqual(visual.track, 'rgba(0, 0, 0, 0)', `${theme}/${viewport}: la traccia deve restare visibile`);
   assert.notEqual(visual.kpisBackground, 'none', `${theme}/${viewport}: i KPI devono avere una superficie di contrasto dedicata`);
@@ -308,6 +322,18 @@ test('scenario 2: card per ogni pista attiva ed espansione/chiusura del dettagli
     await cardMobile.waitFor({ state: 'visible', timeout: 15000 });
     await page.getByTestId('ticker-pista-fisso').waitFor({ state: 'visible', timeout: 15000 });
     await page.getByTestId('ticker-pista-cb').waitFor({ state: 'visible', timeout: 15000 });
+
+    const visualIdentities = await Promise.all(
+      ['mobile', 'fisso', 'cb'].map((pista) => page.getByTestId(`ticker-pista-${pista}`).evaluate((element) => ({
+        ink: getComputedStyle(element).getPropertyValue('--pista-ink').trim(),
+        glow: getComputedStyle(element).getPropertyValue('--pista-glow').trim(),
+      }))),
+    );
+    assert.equal(
+      new Set(visualIdentities.map(({ ink, glow }) => `${ink}|${glow}`)).size,
+      3,
+      'mobile, fisso e customer base devono mantenere identità sfumate cromaticamente distinte',
+    );
 
     // Il layout Shorts non ha più il pulsante pausa: non deve esistere.
     assert.equal(
