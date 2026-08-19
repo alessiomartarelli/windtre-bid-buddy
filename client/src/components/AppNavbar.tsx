@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
@@ -359,8 +359,11 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-11 w-11 lg:h-9 lg:w-9 rounded-full" data-testid="button-user-menu">
-                <Avatar className="h-9 w-9 ring-2 ring-border/50 ring-offset-1 ring-offset-background">
-                  <AvatarFallback className="bg-gradient-to-br from-primary/90 to-primary text-white text-xs font-semibold">
+                <Avatar key={profile?.profileImageUrl ? 'avatar-image' : 'avatar-fallback'} className="h-9 w-9 ring-2 ring-border/50 ring-offset-1 ring-offset-background">
+                  {profile?.profileImageUrl && (
+                    <AvatarImage src={profile.profileImageUrl} alt="" data-testid="avatar-user-image" />
+                  )}
+                  <AvatarFallback className="bg-gradient-to-br from-primary/90 to-primary text-white text-xs font-semibold" data-testid="avatar-user-fallback">
                     {getInitials()}
                   </AvatarFallback>
                 </Avatar>

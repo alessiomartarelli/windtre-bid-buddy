@@ -55,6 +55,17 @@ export function useAuth() {
   const [organizationBrands, setOrganizationBrands] = useState<OrganizationBrand[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const applyAuthProfile = useCallback((data: any) => {
+    setUser({ id: data.id, email: data.email });
+    setProfile({
+      ...data,
+      full_name: data.fullName,
+      organization_id: data.organizationId,
+    });
+    setOrganization(data.organization ?? null);
+    setOrganizationBrands(Array.isArray(data.organizationBrands) ? data.organizationBrands : []);
+  }, []);
+
   const fetchUser = useCallback(async () => {
     try {
       const response = await fetch(apiUrl('/api/user'), { credentials: 'include' });
@@ -69,16 +80,7 @@ export function useAuth() {
       if (!response.ok) throw new Error('Failed to fetch user');
       
       const data = await response.json();
-      setUser({ id: data.id, email: data.email });
-      setProfile({
-        ...data,
-        full_name: data.fullName,
-        organization_id: data.organizationId,
-      });
-      if (data.organization) {
-        setOrganization(data.organization);
-      }
-      setOrganizationBrands(Array.isArray(data.organizationBrands) ? data.organizationBrands : []);
+      applyAuthProfile(data);
       emitAuthProfile(data);
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -87,11 +89,17 @@ export function useAuth() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyAuthProfile]);
 
   useEffect(() => {
     fetchUser();
-  }, [fetchUser]);
+    const handleAuthProfile = (event: Event) => {
+      const data = (event as CustomEvent).detail;
+      if (data?.id) applyAuthProfile(data);
+    };
+    window.addEventListener(AUTH_PROFILE_EVENT, handleAuthProfile);
+    return () => window.removeEventListener(AUTH_PROFILE_EVENT, handleAuthProfile);
+  }, [applyAuthProfile, fetchUser]);
 
   const signIn = async (email: string, password: string): Promise<{ error: AuthError | null }> => {
     try {
@@ -108,16 +116,7 @@ export function useAuth() {
       }
 
       const data = await response.json();
-      setUser({ id: data.id, email: data.email });
-      setProfile({
-        ...data,
-        full_name: data.fullName,
-        organization_id: data.organizationId,
-      });
-      if (data.organization) {
-        setOrganization(data.organization);
-      }
-      setOrganizationBrands(Array.isArray(data.organizationBrands) ? data.organizationBrands : []);
+      applyAuthProfile(data);
       emitAuthProfile(data);
       return { error: null };
     } catch (error) {
@@ -140,15 +139,7 @@ export function useAuth() {
       }
 
       const data = await response.json();
-      setUser({ id: data.id, email: data.email });
-      setProfile({
-        ...data,
-        full_name: data.fullName,
-        organization_id: data.organizationId,
-      });
-      if (data.organization) {
-        setOrganization(data.organization);
-      }
+      applyAuthProfile(data);
       emitAuthProfile(data);
       return { error: null };
     } catch (error) {

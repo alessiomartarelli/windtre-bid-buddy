@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
 import { apiUrl } from "@/lib/basePath";
 import { apiRequest } from '@/lib/queryClient';
-import { Pencil } from 'lucide-react';
+import { Pencil, Camera, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Building2, User, Lock, Eye, EyeOff, Mail } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
 import { AspettoCard } from '@/components/AspettoCard';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AVATAR_MAX_BYTES, isAllowedAvatarMimeType } from '@shared/avatar';
 
 export default function Profile() {
   const [, setLocation] = useLocation();
@@ -33,12 +35,97 @@ export default function Profile() {
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [savingInfo, setSavingInfo] = useState(false);
+  const [pendingAvatarDataUrl, setPendingAvatarDataUrl] = useState<string | undefined>(undefined);
+  const [savingAvatar, setSavingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const isAdminLike = profile?.role === 'admin' || profile?.role === 'super_admin';
 
   useEffect(() => {
     setEmailDisabled(!!profile?.emailNotificationsDisabled);
   }, [profile]);
+
+  const getInitials = () => {
+    if (profile?.full_name) {
+      return profile.full_name.split(' ').map((part) => part[0]).join('').toUpperCase().slice(0, 2);
+    }
+    return user?.email?.[0]?.toUpperCase() || 'U';
+  };
+
+  const avatarPreview = pendingAvatarDataUrl ?? profile?.profileImageUrl ?? null;
+
+  const resetAvatarPicker = () => {
+    if (avatarInputRef.current) avatarInputRef.current.value = '';
+  };
+
+  const handleAvatarSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!isAllowedAvatarMimeType(file.type)) {
+      setPendingAvatarDataUrl(undefined);
+      toast({ title: 'Formato non supportato', description: 'Scegli un file PNG o JPEG.', variant: 'destructive' });
+      resetAvatarPicker();
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      setPendingAvatarDataUrl(undefined);
+      toast({ title: 'Immagine troppo grande', description: 'La foto deve pesare al massimo 1 MB.', variant: 'destructive' });
+      resetAvatarPicker();
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => {
+      setPendingAvatarDataUrl(undefined);
+      toast({ title: 'Errore', description: 'Non è stato possibile leggere la foto selezionata.', variant: 'destructive' });
+      resetAvatarPicker();
+    };
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setPendingAvatarDataUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveAvatar = async (profileImageUrl: string | null) => {
+    setSavingAvatar(true);
+    try {
+      const res = await fetch(apiUrl('/api/auth/profile'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ profileImageUrl }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) {
+        toast({ title: 'Errore', description: data?.error || "Impossibile salvare la foto profilo.", variant: 'destructive' });
+        return false;
+      }
+      setPendingAvatarDataUrl(undefined);
+      resetAvatarPicker();
+      await refreshUser();
+      return true;
+    } catch {
+      toast({ title: 'Errore', description: 'Errore di connessione durante il salvataggio della foto.', variant: 'destructive' });
+      return false;
+    } finally {
+      setSavingAvatar(false);
+    }
+  };
+
+  const handleSaveAvatar = async () => {
+    if (!pendingAvatarDataUrl) return;
+    if (await saveAvatar(pendingAvatarDataUrl)) {
+      toast({ title: 'Foto profilo aggiornata', description: 'La nuova foto è ora visibile nel tuo account.' });
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (await saveAvatar(null)) {
+      toast({ title: 'Foto profilo rimossa', description: 'Ora viene mostrato il tuo monogramma.' });
+    }
+  };
 
   const startEditInfo = () => {
     setEditName(profile?.full_name || '');
@@ -168,6 +255,69 @@ export default function Profile() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex flex-col items-start gap-3 rounded-lg border border-border/70 bg-muted/20 p-4 sm:flex-row sm:items-center">
+              <Avatar key={avatarPreview ? 'avatar-image' : 'avatar-fallback'} className="h-20 w-20" data-testid="avatar-profile">
+                {avatarPreview && (
+                  <AvatarImage src={avatarPreview} alt="Foto profilo" data-testid="avatar-profile-image" />
+                )}
+                <AvatarFallback className="bg-gradient-to-br from-primary/90 to-primary text-xl font-semibold text-white" data-testid="avatar-profile-fallback">
+                  {getInitials()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 space-y-2">
+                <div>
+                  <p className="font-medium">Foto profilo</p>
+                  <p className="text-sm text-muted-foreground">PNG o JPEG, fino a 1 MB.</p>
+                </div>
+                <input
+                  ref={avatarInputRef}
+                  id="profile-avatar-file"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="sr-only"
+                  onChange={handleAvatarSelection}
+                  disabled={savingAvatar}
+                  data-testid="input-avatar-file"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={savingAvatar}
+                    data-testid="button-select-avatar"
+                  >
+                    <Camera className="mr-2 h-4 w-4" />
+                    {avatarPreview ? 'Sostituisci foto' : 'Scegli foto'}
+                  </Button>
+                  {pendingAvatarDataUrl && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleSaveAvatar}
+                      disabled={savingAvatar}
+                      data-testid="button-save-avatar"
+                    >
+                      {savingAvatar ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : 'Salva foto'}
+                    </Button>
+                  )}
+                  {profile?.profileImageUrl && !pendingAvatarDataUrl && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRemoveAvatar}
+                      disabled={savingAvatar}
+                      data-testid="button-remove-avatar"
+                    >
+                      {savingAvatar ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                      Rimuovi
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
             {editingInfo ? (
               <form onSubmit={handleSaveInfo} className="space-y-4">
                 <div className="space-y-2">

@@ -11,6 +11,7 @@ import { isModuleEnabled, isModuleAllowedForBrands, isModuleGrantedToUser, sanit
 import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
 import { ACCENT_PRESET_IDS } from "@shared/uiPrefs";
+import { AVATAR_MAX_BYTES } from "@shared/avatar";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
 import { dtsSaleCodiceEsterno } from "@shared/dtsReport";
 import { normalizeTimeLabel, parseSendTimes } from "@shared/telegramSendTimes";
@@ -55,6 +56,46 @@ const signupSchema = z.object({
   fullName: z.string().min(2),
   organizationName: z.string().min(2),
 });
+
+type AvatarDataUrlValidation =
+  | { ok: true; value: string }
+  | { ok: false; status: 400 | 413; error: string };
+
+/**
+ * Gli avatar vengono salvati nel campo profilo già esistente come data URL.
+ * Oltre al MIME dichiarato verifichiamo la firma binaria: il solo prefisso
+ * `data:image/...` sarebbe falsificabile e finirebbe poi in ogni risposta
+ * autenticata che contiene il profilo.
+ */
+function validateAvatarDataUrl(value: unknown): AvatarDataUrlValidation {
+  if (typeof value !== "string") {
+    return { ok: false, status: 400, error: "Avatar non valido" };
+  }
+
+  const match = value.match(/^data:(image\/png|image\/jpeg);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match || match[2].length % 4 !== 0) {
+    return { ok: false, status: 400, error: "Formato avatar non valido: usa un file PNG o JPEG" };
+  }
+
+  const image = Buffer.from(match[2], "base64");
+  // Buffer.from è tollerante con base64 malformato: il round-trip assicura
+  // che non abbia scartato caratteri o padding nascosti.
+  if (image.length === 0 || image.toString("base64") !== match[2]) {
+    return { ok: false, status: 400, error: "Dati avatar non validi" };
+  }
+  if (image.length > AVATAR_MAX_BYTES) {
+    return { ok: false, status: 413, error: "Immagine troppo grande: il limite è 1 MB" };
+  }
+
+  const isPng = image.length >= 8
+    && image.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isJpeg = image.length >= 3 && image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff;
+  if ((match[1] === "image/png" && !isPng) || (match[1] === "image/jpeg" && !isJpeg)) {
+    return { ok: false, status: 400, error: "Il contenuto dell'avatar non corrisponde a un PNG o JPEG valido" };
+  }
+
+  return { ok: true, value };
+}
 
 function setupSession(app: Express) {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000;
@@ -2358,9 +2399,9 @@ export async function registerRoutes(
       if (!profile) {
         return res.status(404).json({ error: "Profilo non trovato" });
       }
-      const { fullName, full_name, email } = req.body ?? {};
+      const { fullName, full_name, email, profileImageUrl } = req.body ?? {};
       const resolvedFullName = fullName ?? full_name;
-      const updateData: { fullName?: string; email?: string } = {};
+      const updateData: { fullName?: string; email?: string; profileImageUrl?: string | null } = {};
 
       if (typeof resolvedFullName === "string" && resolvedFullName.trim()) {
         updateData.fullName = resolvedFullName.trim();
@@ -2377,6 +2418,20 @@ export async function registerRoutes(
             return res.status(400).json({ error: "Esiste già un utente con questa email" });
           }
           updateData.email = newEmail;
+        }
+      }
+
+      // Solo l'utente della sessione può aggiornare il suo avatar: l'id
+      // destinazione non arriva mai dal client e updateProfile usa userId.
+      if (profileImageUrl !== undefined) {
+        if (profileImageUrl === null || profileImageUrl === "") {
+          updateData.profileImageUrl = null;
+        } else {
+          const avatar = validateAvatarDataUrl(profileImageUrl);
+          if (!avatar.ok) {
+            return res.status(avatar.status).json({ error: avatar.error });
+          }
+          updateData.profileImageUrl = avatar.value;
         }
       }
 
