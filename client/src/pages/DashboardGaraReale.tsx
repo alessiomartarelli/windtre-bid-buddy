@@ -1071,23 +1071,26 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
         onClick={() => setExpanded((v) => (v === p.pista ? null : p.pista))}
         aria-expanded={isOpen}
         data-testid={`ticker-pista-${p.pista}`}
-        className={`ticker-pista-card relative aspect-[9/14] rounded-2xl overflow-hidden text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary border border-border bg-card transition-[transform,box-shadow,border-color] duration-200 ease-out ${isOpen ? 'ring-2 ring-primary shadow-lg scale-[1.01]' : 'shadow-sm hover:-translate-y-0.5 hover:shadow-md'}`}
+        data-pista={p.pista}
+        className={`ticker-pista-card ticker-pista-card--${p.pista} relative min-h-[188px] rounded-2xl overflow-hidden text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary border transition-[transform,box-shadow,border-color] duration-200 ease-out ${isOpen ? 'ring-2 ring-primary shadow-lg scale-[1.01]' : 'shadow-sm hover:-translate-y-0.5 hover:shadow-md'}`}
       >
-        {/* Griglia di riferimento molto tenue: comunica misurazione senza
-            competere con i numeri. L'identità cromatica resta quella della pista. */}
-        <div
-          className="absolute inset-0 opacity-[0.045] dark:opacity-[0.07]"
-          style={{ backgroundImage: "linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)", backgroundSize: "18px 18px" }}
-          aria-hidden
-        />
+        {/* Illustrazione vettoriale dedicata alla pista: il pittogramma Lucide
+            e le forme CSS sostituiscono la precedente griglia neutra. */}
+        <div className="pista-illustration" aria-hidden>
+          <span className="pista-illustration__halo" />
+          <span className="pista-illustration__orb pista-illustration__orb--one" />
+          <span className="pista-illustration__orb pista-illustration__orb--two" />
+          <Icon className="pista-illustration__icon" strokeWidth={1.15} />
+        </div>
         <div className={`absolute inset-x-0 top-0 h-1 ${conf.color}`} aria-hidden />
-        <div className="absolute inset-x-0 top-1/2 h-px bg-border/60" aria-hidden />
-        <div className="absolute inset-0 bg-gradient-to-b from-muted/35 via-transparent to-muted/20 dark:from-muted/20 dark:to-background/20" aria-hidden />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background/70 dark:to-background/50" aria-hidden />
         <div className="absolute top-3 left-3 flex items-center gap-1.5">
           <span className={`p-1.5 rounded-lg ${conf.color} text-white shadow-sm transition-transform duration-200 group-hover:scale-105 group-focus-visible:scale-105`}>
             <Icon className="h-3.5 w-3.5" />
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{p.pista === 'cb' ? 'CB' : 'Pista'}</span>
+          <span className="max-w-[7.5rem] truncate text-[10px] font-bold uppercase tracking-[0.1em] text-foreground/75 dark:text-foreground/80">
+            {conf.label}
+          </span>
         </div>
         {sogliaAtt && (
           <span className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold border border-border bg-background/80 text-foreground shadow-sm">
@@ -1098,12 +1101,12 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
             punto vuoto il traguardo proiettato. È intenzionalmente muta:
             i valori restano leggibili una sola volta nel footer. */}
         <div
-          className="absolute inset-x-3 top-[22%] bottom-[60%] flex items-center"
+          className="absolute inset-x-3 top-[27%] bottom-[65%] flex items-center sm:top-[25%] sm:bottom-[55%]"
           data-testid={`ticker-trajectory-${p.pista}`}
           aria-hidden
         >
           <div className="w-full">
-            <div className="mb-1.5 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="mb-1.5 hidden items-center justify-between text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:flex">
               <span>attuale</span>
               <span>proiezione</span>
             </div>
@@ -1118,15 +1121,14 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
               />
               <span className="absolute right-0 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full border-2 border-muted-foreground/50 bg-card" />
             </div>
-            <div className="mt-1.5 flex items-center justify-center gap-1 text-[9px] text-muted-foreground">
+            <div className="mt-1.5 hidden items-center justify-center gap-1 text-[9px] text-muted-foreground sm:flex">
               <span className={`h-1.5 w-1.5 rounded-full ${conf.color}`} />
               <span className="tabular-nums">{trajectoryRatio.toFixed(0)}%</span>
             </div>
           </div>
         </div>
         <div className="absolute inset-x-0 bottom-0 p-3 text-foreground" data-testid={`ticker-kpis-${p.pista}`}>
-          <div className="text-sm font-bold leading-tight truncate">{conf.label}</div>
-          <div className="mt-2 flex items-end justify-between gap-1">
+          <div className="flex items-end justify-between gap-1">
             <div>
               <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{usePunti ? 'Punti attuali' : 'Pezzi attuali'}</div>
               <span className="text-xl font-extrabold leading-none tabular-nums" data-testid={`ticker-punti-${p.pista}`}>{fmtTickerVal(att)}</span>
@@ -1233,7 +1235,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 p-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 p-3">
           {items.map(renderCard)}
         </div>
         {expandedPista && renderDetail(expandedPista)}
