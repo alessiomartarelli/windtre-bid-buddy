@@ -53,6 +53,7 @@ import {
   Search,
   Filter,
   Package,
+  Headphones,
   User,
   Calendar,
   ChevronRight,
@@ -105,7 +106,6 @@ import { GraficoAndamentoPezzi, type PezziTrendPoint } from "@/components/Grafic
 import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
 import { accumulaPezziExtra, emptyPezziExtra, type PezziExtraCounters } from "@shared/pdvPezziExtra";
 import type { CanvassKpiRule } from "@shared/canvassKpiRules";
-import "@/vendite-midnight.css";
 
 interface BisuiteSale {
   id: string;
@@ -156,6 +156,7 @@ interface PdvSummary {
 
 /** pista → (nome categoria → { pezzi, iva }) */
 type CategorieByPista = Partial<Record<PistaCanvass, Record<string, { pezzi: number; iva: number }>>>;
+type SalesSummaryCategory = "canvass" | "servizi" | "accessori" | "prodotti";
 const PISTA_ICONS: Record<PistaCanvass, React.ReactNode> = {
   mobile: <Smartphone className="h-3.5 w-3.5" />,
   fisso: <Wifi className="h-3.5 w-3.5" />,
@@ -263,8 +264,8 @@ function getDefaultDates() {
 
 export default function VenditeBiSuite() {
   const { profile } = useAuth();
-  const { salesStyle } = useTheme();
-  const isMidnightViolet = salesStyle === "midnight-violet";
+  const { scheme } = useTheme();
+  const isMidnightViolet = scheme === "midnight-violet";
   const [, setLocation] = useLocation();
   const defaults = getDefaultDates();
   const [fromDate, setFromDate] = useState(defaults.from);
@@ -273,6 +274,7 @@ export default function VenditeBiSuite() {
   const [selectedPdv, setSelectedPdv] = useState<string | null>(null);
   const [selectedSale, setSelectedSale] = useState<BisuiteSale | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
+  const [summaryCategory, setSummaryCategory] = useState<SalesSummaryCategory>("canvass");
   const [filterPista, setFilterPista] = useState<string>("all");
   const [filterStato, setFilterStato] = useState<string>("finalizzate");
   const [filterPagamento, setFilterPagamento] = useState<keyof IncassoTotals | null>(null);
@@ -526,11 +528,22 @@ export default function VenditeBiSuite() {
     const prodottiByCategory: Record<string, { pezzi: number; importo: number }> = {};
     const serviziByLabel: Record<string, { pezzi: number; importo: number }> = {};
     const emptyIncasso = () => ({ scontrinato: 0, fuoriScontrino: 0, finanziato: 0, credito: 0 });
+    const addIncasso = (
+      target: { scontrinato: number; fuoriScontrino: number; finanziato: number; credito: number },
+      art: SaleClassification["articles"][number],
+    ) => {
+      if (art.scontrinato) target.scontrinato += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
+      else target.fuoriScontrino += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
+      target.finanziato += art.importoFinanziato;
+      target.credito += art.importoCredito;
+    };
     const incassoByType: Record<ArticleType, { scontrinato: number; fuoriScontrino: number; finanziato: number; credito: number }> = {
       canvass: emptyIncasso(),
       prodotti: emptyIncasso(),
       servizi: emptyIncasso(),
     };
+    const incassoAccessori = emptyIncasso();
+    const incassoProdotti = emptyIncasso();
 
     for (const sale of aggregateSales) {
       const sc = saleClassifications.get(sale.id);
@@ -548,11 +561,7 @@ export default function VenditeBiSuite() {
         if (!matches) continue;
         byType[art.type]++;
         amtByType[art.type] += art.prezzo;
-        const inc = incassoByType[art.type];
-        if (art.scontrinato) inc.scontrinato += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
-        else inc.fuoriScontrino += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
-        inc.finanziato += art.importoFinanziato;
-        inc.credito += art.importoCredito;
+        addIncasso(incassoByType[art.type], art);
         if (art.pista) {
           byPista[art.pista] = (byPista[art.pista] || 0) + 1;
           amtByPista[art.pista] = (amtByPista[art.pista] || 0) + art.prezzo;
@@ -563,11 +572,12 @@ export default function VenditeBiSuite() {
           couponCaring.pezzi++;
           couponCaring.importo += art.prezzo;
         }
-        if (art.type === 'prodotti' && art.categoriaNome) {
-          const key = art.categoriaNome.toUpperCase();
+        if (art.type === 'prodotti') {
+          const key = (art.categoriaNome || 'SENZA CATEGORIA').toUpperCase();
           if (!prodottiByCategory[key]) prodottiByCategory[key] = { pezzi: 0, importo: 0 };
           prodottiByCategory[key].pezzi++;
           prodottiByCategory[key].importo += art.prezzo;
+          addIncasso(key === 'ACCESSORI' ? incassoAccessori : incassoProdotti, art);
         }
         if (art.type === 'servizi' && art.descrizione) {
           if (!serviziByLabel[art.descrizione]) serviziByLabel[art.descrizione] = { pezzi: 0, importo: 0 };
@@ -594,6 +604,8 @@ export default function VenditeBiSuite() {
       prodottiByCategory,
       serviziByLabel,
       incassoByType,
+      incassoAccessori,
+      incassoProdotti,
       /** Fatturato lordo Accessori (categoria ACCESSORI), usato per calcolare IVA a display. */
       accessoriLordo,
       /** Fatturato lordo Servizi, usato per calcolare IVA a display. */
@@ -1005,11 +1017,41 @@ export default function VenditeBiSuite() {
     }
   };
 
+  // Le vecchie tre card affiancate diventano un solo pannello navigabile:
+  // desktop = elenco verticale + contenuto; mobile = quattro pulsanti a icona
+  // sopra il contenuto (reference Task #461). Accessori è scorporato da
+  // Prodotti senza cambiare la classificazione/filtro dati sottostante.
+  const accessoriSummary = globalCounts.prodottiByCategory.ACCESSORI ?? { pezzi: 0, importo: 0 };
+  const prodottiSummaryEntries = Object.entries(globalCounts.prodottiByCategory)
+    .filter(([categoria]) => categoria !== "ACCESSORI")
+    .sort(([, a], [, b]) => b.pezzi - a.pezzi);
+  const prodottiSummaryCount = prodottiSummaryEntries.reduce((sum, [, row]) => sum + row.pezzi, 0);
+  const prodottiSummaryAmount = prodottiSummaryEntries.reduce((sum, [, row]) => sum + row.importo, 0);
+  const summaryTabs: Array<{
+    value: SalesSummaryCategory;
+    label: string;
+    count: number;
+    icon: typeof Tag;
+  }> = [
+    { value: "canvass", label: "Canvass", count: globalCounts.byType.canvass, icon: Tag },
+    { value: "servizi", label: "Servizi", count: globalCounts.byType.servizi, icon: Wrench },
+    { value: "accessori", label: "Accessori", count: accessoriSummary.pezzi, icon: Headphones },
+    { value: "prodotti", label: "Prodotti", count: prodottiSummaryCount, icon: Package },
+  ];
+  const visibleSummaryTabs = summaryTabs.filter((tab) => (
+    filterType === "all"
+    || filterType === tab.value
+    || (filterType === "prodotti" && (tab.value === "accessori" || tab.value === "prodotti"))
+  ));
+  const activeSummaryCategory = visibleSummaryTabs.some((tab) => tab.value === summaryCategory)
+    ? summaryCategory
+    : visibleSummaryTabs[0]?.value ?? "canvass";
+
   return (
     <div
       className={`min-h-screen bg-background ${isMidnightViolet ? "vendite-midnight" : ""}`}
       data-testid="vendite-bisuite-page"
-      data-sales-style={salesStyle}
+      data-sales-style={isMidnightViolet ? "midnight-violet" : "standard"}
     >
       <AppNavbar title="MyStoreDesk" />
 
@@ -1156,7 +1198,16 @@ export default function VenditeBiSuite() {
             </div>
           </FilterField>
           <FilterField label="Tipo" icon={Layers}>
-            <Select value={filterType} onValueChange={(v) => { setFilterType(v); if (v !== 'canvass') setFilterPista('all'); }}>
+            <Select
+              value={filterType}
+              onValueChange={(v) => {
+                setFilterType(v);
+                if (v !== "canvass") setFilterPista("all");
+                if (v === "canvass" || v === "servizi" || v === "prodotti") {
+                  setSummaryCategory(v);
+                }
+              }}
+            >
               <SelectTrigger data-testid="select-tipo">
                 <SelectValue placeholder="Tutti" />
               </SelectTrigger>
@@ -1182,7 +1233,13 @@ export default function VenditeBiSuite() {
           </FilterField>
           {(filterType === "canvass" || filterType === "all") && (
             <FilterField label="Pista" icon={Route}>
-              <Select value={filterPista} onValueChange={setFilterPista}>
+              <Select
+                value={filterPista}
+                onValueChange={(v) => {
+                  setFilterPista(v);
+                  setSummaryCategory("canvass");
+                }}
+              >
                 <SelectTrigger data-testid="select-pista">
                   <SelectValue placeholder="Tutte" />
                 </SelectTrigger>
@@ -1311,14 +1368,89 @@ export default function VenditeBiSuite() {
               </Card>
             )}
 
-            <div className={`grid grid-cols-1 ${filterType === "all" ? "sm:grid-cols-3" : ""} gap-2 sm:gap-4`}>
-              {(filterType === "all" || filterType === "canvass") && (
-              <Card className="border-l-4 border-l-orange-500">
-                <CardContent className="p-3 sm:p-4">
+            <section
+              className="grid gap-3 md:grid-cols-[minmax(180px,230px)_minmax(0,1fr)] md:items-stretch"
+              aria-labelledby="sales-summary-heading"
+              data-testid="sales-category-summary"
+            >
+              <h2 id="sales-summary-heading" className="sr-only">Riepilogo vendite per categoria</h2>
+
+              <nav
+                className="hidden md:flex md:flex-col gap-3"
+                aria-label="Categorie riepilogo vendite"
+                data-testid="sales-category-nav-desktop"
+              >
+                {visibleSummaryTabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const selected = activeSummaryCategory === tab.value;
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      onClick={() => setSummaryCategory(tab.value)}
+                      aria-pressed={selected}
+                      className={`group flex min-h-16 w-full items-center gap-3 rounded-2xl border px-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                        selected
+                          ? "border-foreground/55 bg-foreground/10 text-foreground shadow-sm"
+                          : "border-border/80 bg-card/75 text-muted-foreground hover:border-primary/40 hover:bg-accent hover:text-accent-foreground"
+                      }`}
+                      data-testid={`sales-category-desktop-${tab.value}`}
+                    >
+                      <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{tab.label}</span>
+                      <span
+                        className={`rounded-md border px-2 py-0.5 text-xs font-bold ${
+                          selected ? "border-foreground/30 bg-background/10" : "border-border bg-background/50"
+                        }`}
+                        aria-label={`${tab.count} elementi`}
+                      >
+                        {tab.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <div className="min-w-0">
+                <nav
+                  className={`mb-2 grid gap-1 md:hidden ${
+                    visibleSummaryTabs.length >= 4 ? "grid-cols-4" : visibleSummaryTabs.length === 2 ? "grid-cols-2" : "grid-cols-1"
+                  }`}
+                  aria-label="Categorie riepilogo vendite"
+                  data-testid="sales-category-nav-mobile"
+                >
+                  {visibleSummaryTabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const selected = activeSummaryCategory === tab.value;
+                    return (
+                      <button
+                        key={tab.value}
+                        type="button"
+                        onClick={() => setSummaryCategory(tab.value)}
+                        aria-pressed={selected}
+                        className={`flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                          selected
+                            ? "border-foreground/55 bg-foreground/10 text-foreground shadow-sm"
+                            : "border-border/80 bg-card/75 text-muted-foreground"
+                        }`}
+                        data-testid={`sales-category-mobile-${tab.value}`}
+                      >
+                        <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                        <span className="w-full truncate text-center text-[10px] font-semibold leading-none">
+                          {tab.label}
+                        </span>
+                        <span className="sr-only">{tab.count} elementi</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              {activeSummaryCategory === "canvass" && (
+              <Card className="min-h-[320px] md:min-h-full" data-testid="sales-category-panel-canvass">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
-                      <Tag className="h-4 w-4 text-orange-600" />
-                      <span className="font-semibold text-sm">Canvass</span>
+                      <Tag className="h-5 w-5 text-primary" />
+                      <span className="text-xl font-bold tracking-tight">Canvass</span>
                     </div>
                     <Badge className={TYPE_COLORS.canvass + " text-sm font-bold"}>
                       {globalCounts.byType.canvass}
@@ -1376,66 +1508,93 @@ export default function VenditeBiSuite() {
                 </CardContent>
               </Card>
               )}
-              {(filterType === "all" || filterType === "prodotti") && (() => {
-                // Prodotti lordo ma con ACCESSORI scorporati (÷1.22): il totale card
-                // mostra il mix (telefonia lorda + accessori netti), ogni riga mostra
-                // netto IVA per ACCESSORI e importo IVA separato.
-                const accLordo = globalCounts.accessoriLordo;
-                const accNetto = nettoIva(accLordo);
-                const prodTotNetto = globalCounts.amtByType.prodotti - accLordo + accNetto;
+              {activeSummaryCategory === "accessori" && (() => {
+                const accessoriNetto = nettoIva(accessoriSummary.importo);
+                const accessoriIva = ivaOf(accessoriSummary.importo);
                 return (
-                <Card className="border-l-4 border-l-slate-400">
-                  <CardContent className="p-3 sm:p-4">
+                  <Card className="min-h-[320px] md:min-h-full" data-testid="sales-category-panel-accessori">
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <Headphones className="h-5 w-5 text-primary" />
+                          <span className="text-xl font-bold tracking-tight">Accessori</span>
+                          {accessoriSummary.importo > 0 && (
+                            <span className="text-[9px] text-muted-foreground">(acc. netto IVA)</span>
+                          )}
+                        </div>
+                        <Badge className={TYPE_COLORS.prodotti + " text-sm font-bold"}>
+                          {accessoriSummary.pezzi}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-3 mb-3">
+                        <p className="text-xs text-green-600 font-medium">{formatCurrency(accessoriNetto)}</p>
+                        {accessoriIva > 0 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            IVA {formatCurrency(accessoriIva)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">ACCESSORI</span>
+                        <div className="flex items-center gap-2">
+                          {accessoriNetto > 0 && (
+                            <span className="text-[10px] text-green-600">
+                              {formatCurrency(accessoriNetto)}
+                              <span className="text-muted-foreground ml-0.5">(n.IVA)</span>
+                            </span>
+                          )}
+                          <Badge variant="outline" className="text-[10px]">{accessoriSummary.pezzi}</Badge>
+                        </div>
+                      </div>
+                      <ArticleIncassoRecap incasso={globalCounts.incassoAccessori} formatCurrency={formatCurrency} />
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+              {activeSummaryCategory === "prodotti" && (() => {
+                return (
+                <Card className="min-h-[320px] md:min-h-full" data-testid="sales-category-panel-prodotti">
+                  <CardContent className="p-4 sm:p-6">
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <Package className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-                        <span className="font-semibold text-sm">Prodotti</span>
-                        {accLordo > 0 && <span className="text-[9px] text-muted-foreground">(acc. netto IVA)</span>}
+                        <Package className="h-5 w-5 text-primary" />
+                        <span className="text-xl font-bold tracking-tight">Prodotti</span>
                       </div>
                       <Badge className={TYPE_COLORS.prodotti + " text-sm font-bold"}>
-                        {globalCounts.byType.prodotti}
+                        {prodottiSummaryCount}
                       </Badge>
                     </div>
-                    <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(prodTotNetto)}</p>
+                    <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(prodottiSummaryAmount)}</p>
                     <div className="space-y-1">
-                      {Object.entries(globalCounts.prodottiByCategory)
-                        .sort(([, a], [, b]) => b.pezzi - a.pezzi)
-                        .map(([cat, { pezzi, importo }]) => {
-                          const isAcc = cat === 'ACCESSORI';
-                          const dispImporto = isAcc ? nettoIva(importo) : importo;
-                          const iva = isAcc ? ivaOf(importo) : 0;
-                          return (
+                      {prodottiSummaryEntries.map(([cat, { pezzi, importo }]) => (
                             <div key={cat} className="flex items-center justify-between text-xs">
                               <span className="truncate mr-2 text-muted-foreground">{cat}</span>
                               <div className="flex items-center gap-2 shrink-0">
-                                {dispImporto > 0 && (
+                                {importo > 0 && (
                                   <span className="text-[10px] text-green-600">
-                                    {formatCurrency(dispImporto)}
-                                    {isAcc && <span className="text-muted-foreground ml-0.5">(n.IVA)</span>}
+                                    {formatCurrency(importo)}
                                   </span>
                                 )}
-                                {iva > 0 && <span className="text-[10px] text-muted-foreground">IVA {formatCurrency(iva)}</span>}
                                 <Badge variant="outline" className="text-[10px]">{pezzi}</Badge>
                               </div>
                             </div>
-                          );
-                        })}
+                      ))}
                     </div>
-                    <ArticleIncassoRecap incasso={globalCounts.incassoByType.prodotti} formatCurrency={formatCurrency} />
+                    <ArticleIncassoRecap incasso={globalCounts.incassoProdotti} formatCurrency={formatCurrency} />
                   </CardContent>
                 </Card>
                 );
               })()}
-              {(filterType === "all" || filterType === "servizi") && (() => {
+              {activeSummaryCategory === "servizi" && (() => {
                 const serviziNetto = nettoIva(globalCounts.serviziLordo);
                 const serviziIva = ivaOf(globalCounts.serviziLordo);
                 return (
-                <Card className="border-l-4 border-l-cyan-500">
-                  <CardContent className="p-3 sm:p-4">
+                <Card className="min-h-[320px] md:min-h-full" data-testid="sales-category-panel-servizi">
+                  <CardContent className="p-4 sm:p-6">
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <Wrench className="h-4 w-4 text-cyan-600" />
-                        <span className="font-semibold text-sm">Servizi</span>
+                        <Wrench className="h-5 w-5 text-primary" />
+                        <span className="text-xl font-bold tracking-tight">Servizi</span>
                         {globalCounts.serviziLordo > 0 && <span className="text-[9px] text-muted-foreground">(netto IVA)</span>}
                       </div>
                       <Badge className={TYPE_COLORS.servizi + " text-sm font-bold"}>
@@ -1469,7 +1628,8 @@ export default function VenditeBiSuite() {
                 </Card>
                 );
               })()}
-            </div>
+              </div>
+            </section>
 
             {!selectedPdv && rsSummaries.length > 1 && (
               <Card>

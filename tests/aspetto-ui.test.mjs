@@ -30,11 +30,14 @@ import { ACCENT_PRESETS } from '../client/src/lib/appearance.ts';
 //      cookie => tema+palette arrivano dal server;
 //   6. race tema+palette ravvicinati: entrambe le chiavi sopravvivono nel
 //      jsonb (merge atomico, niente lost update);
-//   7. Prisma Light: preferenza separata dal tema, server sync, skin limitata
-//      alla Dashboard Gara Reale e bottom bar mobile fissa;
-//   8. Midnight Violet: preferenza separata dal tema, skin limitata a Vendite;
+//   7. Prisma Light: schema GLOBALE (Task #461) separato dal tema base,
+//      server sync, skin attiva su tutte le route e bottom bar mobile fissa
+//      sulla Dashboard;
+//   8. Midnight Violet: schema GLOBALE che forza dark ovunque;
 //   9. parità statica: la tabella PRESETS nel pre-paint script di
 //      client/index.html combacia con ACCENT_PRESETS di appearance.ts.
+//  10. sessione scaduta/cambio account: la pagina auth non riceve mai il
+//      pre-paint dello schema appartenente all'utente precedente.
 
 const TEAL = ACCENT_PRESETS.find((p) => p.id === 'teal');
 const ROSE = ACCENT_PRESETS.find((p) => p.id === 'rose');
@@ -90,8 +93,8 @@ async function waitInitialPrefsSync(page, pool, profileId) {
   );
   await waitFor(
     () => readUiPrefs(pool, profileId),
-    (p) => p?.theme != null && p?.accent != null && p?.dashboardStyle != null && p?.salesStyle != null,
-    'initial default prefs persisted to server (theme+accent+page styles)',
+    (p) => p?.theme != null && p?.accent != null && p?.scheme != null,
+    'initial default prefs persisted to server (theme+accent+scheme)',
   );
 }
 
@@ -175,31 +178,32 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
       'server ui_prefs {theme: light, accent: custom} after switch back',
     );
 
-    // --- Prisma Light: composizione dashboard separata dal tema globale ---
-    // Parti da dark: selezionare Prisma NON deve sovrascrivere il tema base.
+    // --- Prisma Light: schema GLOBALE separato dal tema base ---
+    // Parti da dark: selezionare Prisma NON deve sovrascrivere il tema base
+    // salvato, ma applica subito la pelle chiara su TUTTE le pagine.
     await page.getByTestId('btn-theme-dark').click();
     await waitFor(
       () => readUiPrefs(pool, session.profileId),
-      (p) => p?.theme === 'dark' && p?.dashboardStyle === 'standard',
+      (p) => p?.theme === 'dark' && p?.scheme === 'standard',
       'server base theme dark before Prisma selection',
     );
     await page.getByTestId('btn-theme-prisma-light').click();
     await waitFor(
       () => readUiPrefs(pool, session.profileId),
-      (p) => p?.theme === 'dark' && p?.dashboardStyle === 'prisma-light',
-      'server ui_prefs preserves theme dark with dashboardStyle prisma-light',
+      (p) => p?.theme === 'dark' && p?.scheme === 'prisma-light',
+      'server ui_prefs preserves theme dark with scheme prisma-light',
     );
-    assert.equal(await isDarkClass(page), true,
-      'selezionare Prisma non deve schiarire la pagina Profilo');
+    await waitFor(() => isDarkClass(page), (v) => v === false,
+      'Prisma Light forza il chiaro anche sulla pagina Profilo (schema globale)');
     assert.equal(
-      await page.evaluate(() => document.documentElement.hasAttribute('data-skin')),
-      false,
-      'Prisma Light non deve applicare la skin globale sulla pagina Profilo',
-    );
-    assert.equal(
-      await page.evaluate(() => localStorage.getItem('mystoredesk-dashboard-style')),
+      await page.evaluate(() => document.documentElement.getAttribute('data-skin')),
       'prisma-light',
-      'la composizione dashboard deve essere specchiata in localStorage',
+      'la skin Prisma deve essere attiva anche sulla pagina Profilo',
+    );
+    assert.equal(
+      await page.evaluate(() => localStorage.getItem('mystoredesk-scheme')),
+      'prisma-light',
+      'lo schema globale deve essere specchiato in localStorage',
     );
 
     await page.close();
@@ -212,7 +216,7 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
     await page2.goto(`${BASE}/dashboard-gara-reale`, { waitUntil: 'networkidle' });
     await page2.getByTestId('dashboard-gara-reale').waitFor({ state: 'visible', timeout: 20000 });
     assert.equal(await isDarkClass(page2), false,
-      'Prisma deve forzare light solo mentre è aperta la Dashboard Gara Reale');
+      'Prisma forza il chiaro (schema globale) anche col tema base dark');
     // Il sync deve anche specchiare in localStorage (mirror per il pre-paint).
     const mirroredTheme = await page2.evaluate(() => localStorage.getItem('mystoredesk-theme'));
     assert.equal(mirroredTheme, 'dark', 'fresh context must mirror the preserved base theme into localStorage');
@@ -221,9 +225,9 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
     );
     assert.deepEqual(mirroredAccent, { type: 'custom', hex: '#336699' }, 'fresh context must mirror accent into localStorage');
     assert.equal(
-      await page2.evaluate(() => localStorage.getItem('mystoredesk-dashboard-style')),
+      await page2.evaluate(() => localStorage.getItem('mystoredesk-scheme')),
       'prisma-light',
-      'fresh context must mirror dashboardStyle into localStorage',
+      'fresh context must mirror the global scheme into localStorage',
     );
     await page2.getByTestId('prisma-mobile-bottom-bar').waitFor({ state: 'visible', timeout: 20000 });
     const bottomBar = await page2.getByTestId('prisma-mobile-bottom-bar').evaluate((el) => {
@@ -243,59 +247,74 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
       'la voce Dashboard della bottom bar deve indicare la route attiva',
     );
 
-    // --- Stabilità UI con palette non-default (Task #413) ---
-    // Uscendo dalla dashboard, la skin scompare e il tema dark base ritorna.
+    // --- Schema globale: navigando fuori dalla Dashboard la skin RESTA ---
     await page2.goto(`${BASE}/profile`, { waitUntil: 'networkidle' });
     await page2.getByTestId('card-aspetto').waitFor({ state: 'visible', timeout: 20000 });
     assert.equal(
-      await page2.evaluate(() => document.documentElement.hasAttribute('data-skin')),
-      false,
-      'la skin Prisma deve essere rimossa fuori dalla Dashboard Gara Reale',
+      await page2.evaluate(() => document.documentElement.getAttribute('data-skin')),
+      'prisma-light',
+      'la skin Prisma (globale) deve restare attiva anche fuori dalla Dashboard',
     );
-    assert.equal(await isDarkClass(page2), true,
-      'il tema dark base deve tornare attivo uscendo dalla dashboard Prisma');
+    assert.equal(await isDarkClass(page2), false,
+      'Prisma resta chiaro su ogni pagina, anche col tema base dark salvato');
     await waitFor(
       () => getPrimaryVar(page2),
-      (v) => v === '210 50% 50%',
-      'fresh context: custom accent dark restored outside Prisma',
+      (v) => v === '210 50% 40%',
+      'fresh context: custom accent LIGHT variant while Prisma is active',
       20000,
     );
 
-    // --- Midnight Violet: forza dark solo su Vendite con tema base chiaro ---
+    // --- Torna al tema base: la skin sparisce e il dark salvato riemerge ---
+    await page2.getByTestId('btn-theme-dark').click();
+    await waitFor(
+      () => page2.evaluate(() => document.documentElement.hasAttribute('data-skin')),
+      (v) => v === false,
+      'selezionare Scuro rimuove la skin globale',
+    );
+    await waitFor(() => isDarkClass(page2), (v) => v === true, 'dark base theme active again');
+
+    // --- Midnight Violet: schema globale che forza dark ovunque ---
     await page2.getByTestId('btn-theme-light').click();
     await waitFor(
       () => readUiPrefs(pool, session.profileId),
-      (p) => p?.theme === 'light' && p?.dashboardStyle === 'standard' && p?.salesStyle === 'standard',
+      (p) => p?.theme === 'light' && p?.scheme === 'standard',
       'server stores light base theme before Midnight Violet',
     );
-    assert.equal(await isDarkClass(page2), false, 'the light base theme must be active before entering Vendite');
+    assert.equal(await isDarkClass(page2), false, 'the light base theme must be active before Midnight');
     await page2.getByTestId('btn-theme-midnight-violet').click();
     await waitFor(
       () => readUiPrefs(pool, session.profileId),
-      (p) => p?.theme === 'light' && p?.dashboardStyle === 'standard' && p?.salesStyle === 'midnight-violet',
-      'server preserves base light theme with salesStyle midnight-violet',
+      (p) => p?.theme === 'light' && p?.scheme === 'midnight-violet',
+      'server preserves base light theme with scheme midnight-violet',
+    );
+    await waitFor(() => isDarkClass(page2), (v) => v === true,
+      'Midnight Violet forza il dark anche sulla pagina Profilo');
+    assert.equal(
+      await page2.evaluate(() => document.documentElement.getAttribute('data-skin')),
+      'midnight-violet',
+      'la skin Midnight deve essere attiva anche fuori da Vendite (globale)',
     );
     await page2.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'networkidle' });
     await page2.getByTestId('vendite-bisuite-page').waitFor({ state: 'visible', timeout: 20000 });
     assert.equal(
       await page2.getByTestId('vendite-bisuite-page').getAttribute('data-sales-style'),
       'midnight-violet',
-      'Vendite BiSuite must render the selected Midnight Violet composition',
+      'Vendite BiSuite must render the Midnight Violet composition',
     );
     assert.equal(
       await page2.evaluate(() => document.documentElement.getAttribute('data-skin')),
       'midnight-violet',
-      'Midnight Violet data-skin must be scoped to Vendite BiSuite',
+      'Midnight Violet data-skin must be active on Vendite BiSuite',
     );
     assert.equal(await isDarkClass(page2), true, 'Midnight Violet must force dark rendering on Vendite BiSuite');
     await page2.goto(`${BASE}/profile`, { waitUntil: 'networkidle' });
     await page2.getByTestId('card-aspetto').waitFor({ state: 'visible', timeout: 20000 });
     assert.equal(
-      await page2.evaluate(() => document.documentElement.hasAttribute('data-skin')),
-      false,
-      'Midnight Violet skin must disappear outside Vendite BiSuite',
+      await page2.evaluate(() => document.documentElement.getAttribute('data-skin')),
+      'midnight-violet',
+      'Midnight Violet (globale) deve restare attivo anche fuori da Vendite',
     );
-    assert.equal(await isDarkClass(page2), false, 'the saved base light theme must be restored outside Vendite');
+    assert.equal(await isDarkClass(page2), true, 'Midnight keeps forcing dark outside Vendite too');
 
     // Il logout deve cancellare il mirror locale per evitare che un altro
     // account nello stesso browser riceva il pre-paint dell'utente uscente.
@@ -305,6 +324,7 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
     const localPrefsAfterLogout = await page2.evaluate(() => ({
       theme: localStorage.getItem('mystoredesk-theme'),
       accent: localStorage.getItem('mystoredesk-accent'),
+      scheme: localStorage.getItem('mystoredesk-scheme'),
       dashboardStyle: localStorage.getItem('mystoredesk-dashboard-style'),
       salesStyle: localStorage.getItem('mystoredesk-sales-style'),
       user: localStorage.getItem('mystoredesk-prefs-user'),
@@ -312,6 +332,7 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
     assert.deepEqual(localPrefsAfterLogout, {
       theme: null,
       accent: null,
+      scheme: null,
       dashboardStyle: null,
       salesStyle: null,
       user: null,
@@ -319,6 +340,87 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
 
     await page2.close();
     await fresh.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+test('scenario 1b: session expiry bypassing UI logout never paints the previous user scheme on auth', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'aspetto_expired', fullName: 'Appearance Expired Session' });
+  const browser = await launchBrowser();
+  try {
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await openProfile(page);
+    await waitInitialPrefsSync(page, pool, session.profileId);
+    await page.getByTestId('btn-theme-midnight-violet').click();
+    await waitFor(
+      () => page.evaluate(() => document.documentElement.getAttribute('data-skin')),
+      (v) => v === 'midnight-violet',
+      'Midnight active before direct session expiry',
+    );
+
+    const beforeExpiry = await page.evaluate(() => ({
+      owner: localStorage.getItem('mystoredesk-prefs-user'),
+      active: sessionStorage.getItem('mystoredesk-auth-session-user'),
+      scheme: localStorage.getItem('mystoredesk-scheme'),
+    }));
+    assert.deepEqual(beforeExpiry, {
+      owner: session.profileId,
+      active: session.profileId,
+      scheme: 'midnight-violet',
+    }, 'precondition: mirror and active session belong to the first user');
+
+    // Invalida la sessione direttamente, senza passare da AppNavbar/signOut:
+    // simula cookie scaduto o account switch avviato da una nuova schermata.
+    await page.evaluate(async () => {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(`logout failed: ${response.status}`);
+    });
+    await page.addInitScript(() => {
+      window.__sawPreviousSchemeOnAuth = false;
+      const root = document.documentElement;
+      const record = () => {
+        if (root.getAttribute('data-skin') === 'midnight-violet') {
+          window.__sawPreviousSchemeOnAuth = true;
+        }
+      };
+      record();
+      new MutationObserver(record).observe(root, {
+        attributes: true,
+        attributeFilter: ['data-skin', 'class'],
+      });
+    });
+    await page.goto(`${BASE}/auth`, { waitUntil: 'networkidle' });
+
+    assert.equal(
+      await page.evaluate(() => window.__sawPreviousSchemeOnAuth),
+      false,
+      'auth bootstrap must never apply the expired user Midnight scheme',
+    );
+    assert.equal(
+      await page.evaluate(() => document.documentElement.getAttribute('data-skin')),
+      null,
+      'auth page must stay on the neutral standard scheme',
+    );
+    await waitFor(
+      () => page.evaluate(() => ({
+        owner: localStorage.getItem('mystoredesk-prefs-user'),
+        active: sessionStorage.getItem('mystoredesk-auth-session-user'),
+        scheme: localStorage.getItem('mystoredesk-scheme'),
+      })),
+      (v) => v.owner === null && v.active === null && v.scheme === null,
+      '401 bootstrap clears appearance mirrors and active identity',
+    );
+
+    await page.close();
+    await context.close();
   } finally {
     await browser.close().catch(() => {});
     await cleanupOrg(pool, session);

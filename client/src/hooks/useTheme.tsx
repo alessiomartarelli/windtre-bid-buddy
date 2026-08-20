@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { useLocation } from "wouter";
 import { type AccentChoice, DEFAULT_ACCENT, applyAccentVars, accentEquals, ACCENT_PRESETS, hexToHsl } from "@/lib/appearance";
 import { apiUrl } from "@/lib/basePath";
+import { prefsMirrorBelongsToActiveSession } from "@/lib/uiPrefsStorage";
 
 // Persistenza server fire-and-forget: ogni cambio tema/palette viene
 // specchiato su /api/auth/ui-prefs. Se l'utente non è autenticato (401) o la
@@ -20,13 +20,18 @@ function persistUiPrefs(patch: Record<string, unknown>): void {
 }
 
 export type Theme = "light" | "dark" | "system";
-export type DashboardStyle = "standard" | "prisma-light";
-export type SalesStyle = "standard" | "midnight-violet";
+// Task #461 — schema visivo GLOBALE (skin) dell'intera app. "standard"
+// segue il tema base; "prisma-light" forza la pelle chiara editoriale;
+// "midnight-violet" forza la pelle scura viola. Vale su tutte le pagine,
+// menu laterale e overlay inclusi.
+export type Scheme = "standard" | "prisma-light" | "midnight-violet";
 
 const STORAGE_KEY = "mystoredesk-theme";
 const ACCENT_STORAGE_KEY = "mystoredesk-accent";
-const DASHBOARD_STYLE_STORAGE_KEY = "mystoredesk-dashboard-style";
-const SALES_STYLE_STORAGE_KEY = "mystoredesk-sales-style";
+const SCHEME_STORAGE_KEY = "mystoredesk-scheme";
+// Chiavi legacy (Task #453/#458) da cui migrare la scelta esistente.
+const LEGACY_DASHBOARD_STYLE_KEY = "mystoredesk-dashboard-style";
+const LEGACY_SALES_STYLE_KEY = "mystoredesk-sales-style";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -34,23 +39,22 @@ interface ThemeContextValue {
   setTheme: (theme: Theme) => void;
   accent: AccentChoice;
   setAccent: (accent: AccentChoice) => void;
-  dashboardStyle: DashboardStyle;
-  setDashboardStyle: (style: DashboardStyle) => void;
-  salesStyle: SalesStyle;
-  setSalesStyle: (style: SalesStyle) => void;
+  scheme: Scheme;
+  setScheme: (scheme: Scheme) => void;
+  resetAppearance: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-function getStoredTheme(): Theme {
-  if (typeof window === "undefined") return "system";
+export function getStoredTheme(): Theme {
+  if (typeof window === "undefined" || !prefsMirrorBelongsToActiveSession()) return "system";
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark" || stored === "system") {
       return stored;
     }
     // Compatibilità con la preview iniziale di Task #453: la vecchia chiave
-    // non deve rendere "prisma-light" un tema globale.
+    // non deve alterare il tema base.
     if (stored === "prisma-light") return "light";
   } catch {
     // localStorage non disponibile (SSR / privacy): default a "system".
@@ -64,7 +68,7 @@ function systemPrefersDark(): boolean {
 }
 
 export function getStoredAccent(): AccentChoice {
-  if (typeof window === "undefined") return DEFAULT_ACCENT;
+  if (typeof window === "undefined" || !prefsMirrorBelongsToActiveSession()) return DEFAULT_ACCENT;
   try {
     const raw = localStorage.getItem(ACCENT_STORAGE_KEY);
     if (raw) {
@@ -79,94 +83,69 @@ export function getStoredAccent(): AccentChoice {
 }
 
 export function hasStoredAccent(): boolean {
+  if (!prefsMirrorBelongsToActiveSession()) return false;
   try { return localStorage.getItem(ACCENT_STORAGE_KEY) != null; } catch { return false; }
 }
 
-export function getStoredDashboardStyle(): DashboardStyle {
-  if (typeof window === "undefined") return "standard";
+export function getStoredScheme(): Scheme {
+  if (typeof window === "undefined" || !prefsMirrorBelongsToActiveSession()) return "standard";
   try {
-    const stored = localStorage.getItem(DASHBOARD_STYLE_STORAGE_KEY);
-    if (stored === "prisma-light" || stored === "standard") return stored;
-    // Migrazione locale dalla preview iniziale.
+    const stored = localStorage.getItem(SCHEME_STORAGE_KEY);
+    if (stored === "prisma-light" || stored === "midnight-violet" || stored === "standard") {
+      return stored;
+    }
+    // Migrazione dalle chiavi legacy per-pagina (Task #453/#458): la scelta
+    // esistente diventa lo schema globale.
+    if (localStorage.getItem(LEGACY_DASHBOARD_STYLE_KEY) === "prisma-light") return "prisma-light";
+    if (localStorage.getItem(LEGACY_SALES_STYLE_KEY) === "midnight-violet") return "midnight-violet";
     if (localStorage.getItem(STORAGE_KEY) === "prisma-light") return "prisma-light";
   } catch {
-    // storage non disponibile: layout standard
+    // storage non disponibile: schema standard
   }
   return "standard";
 }
 
-export function hasStoredDashboardStyle(): boolean {
+export function hasStoredScheme(): boolean {
+  if (!prefsMirrorBelongsToActiveSession()) return false;
   try {
-    return localStorage.getItem(DASHBOARD_STYLE_STORAGE_KEY) != null
+    return localStorage.getItem(SCHEME_STORAGE_KEY) != null
+      || localStorage.getItem(LEGACY_DASHBOARD_STYLE_KEY) != null
+      || localStorage.getItem(LEGACY_SALES_STYLE_KEY) != null
       || localStorage.getItem(STORAGE_KEY) === "prisma-light";
   } catch {
     return false;
   }
 }
 
-export function getStoredSalesStyle(): SalesStyle {
-  if (typeof window === "undefined") return "standard";
-  try {
-    const stored = localStorage.getItem(SALES_STYLE_STORAGE_KEY);
-    if (stored === "midnight-violet" || stored === "standard") return stored;
-  } catch {
-    // storage non disponibile: composizione standard
-  }
-  return "standard";
-}
-
-export function hasStoredSalesStyle(): boolean {
-  try { return localStorage.getItem(SALES_STYLE_STORAGE_KEY) != null; } catch { return false; }
-}
-
-function applyEffectiveTheme(
-  theme: Theme,
-  dashboardStyle: DashboardStyle,
-  salesStyle: SalesStyle,
-  location: string,
-): "light" | "dark" {
-  const isPrismaDashboard =
-    dashboardStyle === "prisma-light" && location === "/dashboard-gara-reale";
-  const isMidnightSales =
-    salesStyle === "midnight-violet" && location === "/vendite-bisuite";
-  const isDark = isMidnightSales
-    || (!isPrismaDashboard && (
+// Unica fonte di verità del tema effettivo (deve restare allineata al
+// pre-paint di client/index.html). Gli schemi hanno precedenza deterministica
+// sul tema base: Prisma Light è sempre chiaro, Midnight Violet sempre scuro,
+// "standard" segue chiaro/scuro/sistema.
+function applyEffectiveTheme(theme: Theme, scheme: Scheme): "light" | "dark" {
+  const isDark = scheme === "midnight-violet"
+    || (scheme !== "prisma-light" && (
       theme === "dark" || (theme === "system" && systemPrefersDark())
     ));
 
-  if (isPrismaDashboard) {
-    document.documentElement.setAttribute("data-skin", "prisma-light");
-  } else if (isMidnightSales) {
-    document.documentElement.setAttribute("data-skin", "midnight-violet");
-  } else {
+  if (scheme === "standard") {
     document.documentElement.removeAttribute("data-skin");
+  } else {
+    document.documentElement.setAttribute("data-skin", scheme);
   }
   document.documentElement.classList.toggle("dark", isDark);
   return isDark ? "dark" : "light";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
-  const initialDashboardStyle = getStoredDashboardStyle();
-  const initialSalesStyle = getStoredSalesStyle();
+  const initialScheme = getStoredScheme();
   const [theme, setThemeState] = useState<Theme>(() => getStoredTheme());
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">(() =>
     typeof window === "undefined"
       ? "light"
-      : applyEffectiveTheme(
-        getStoredTheme(),
-        initialDashboardStyle,
-        initialSalesStyle,
-        location,
-      ),
+      : applyEffectiveTheme(getStoredTheme(), initialScheme),
   );
   const [accent, setAccentState] = useState<AccentChoice>(() => getStoredAccent());
-  const [dashboardStyle, setDashboardStyleState] = useState<DashboardStyle>(
-    () => initialDashboardStyle,
-  );
-  const [salesStyle, setSalesStyleState] = useState<SalesStyle>(
-    () => initialSalesStyle,
-  );
+  const [scheme, setSchemeState] = useState<Scheme>(() => initialScheme);
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
@@ -188,28 +167,26 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     persistUiPrefs({ accent: next });
   }, []);
 
-  const setDashboardStyle = useCallback((next: DashboardStyle) => {
-    setDashboardStyleState(next);
+  const setScheme = useCallback((next: Scheme) => {
+    setSchemeState(next);
     try {
-      localStorage.setItem(DASHBOARD_STYLE_STORAGE_KEY, next);
-      // Completa la migrazione dalla preview iniziale.
+      localStorage.setItem(SCHEME_STORAGE_KEY, next);
+      // Completa la migrazione dalle chiavi legacy per-pagina.
+      localStorage.removeItem(LEGACY_DASHBOARD_STYLE_KEY);
+      localStorage.removeItem(LEGACY_SALES_STYLE_KEY);
       if (localStorage.getItem(STORAGE_KEY) === "prisma-light") {
         localStorage.setItem(STORAGE_KEY, "light");
       }
     } catch {
       // La scelta resta applicata per la sessione.
     }
-    persistUiPrefs({ dashboardStyle: next });
+    persistUiPrefs({ scheme: next });
   }, []);
 
-  const setSalesStyle = useCallback((next: SalesStyle) => {
-    setSalesStyleState(next);
-    try {
-      localStorage.setItem(SALES_STYLE_STORAGE_KEY, next);
-    } catch {
-      // La scelta resta applicata per la sessione.
-    }
-    persistUiPrefs({ salesStyle: next });
+  const resetAppearance = useCallback(() => {
+    setThemeState("system");
+    setAccentState(DEFAULT_ACCENT);
+    setSchemeState("standard");
   }, []);
 
   // Applica/riapplica la palette quando cambia accent o light/dark (i valori
@@ -218,40 +195,32 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyAccentVars(accent, resolvedTheme === "dark");
   }, [accent, resolvedTheme]);
 
-  // Applica il tema effettivo da una sola fonte di verità. Le composizioni
-  // pagina-specifiche hanno precedenza sul tema base senza sovrascriverlo.
+  // Applica il tema effettivo da una sola fonte di verità: schema globale
+  // indipendente dalla route.
   useEffect(() => {
-    setResolvedTheme(applyEffectiveTheme(
-      theme,
-      dashboardStyle,
-      salesStyle,
-      location,
-    ));
-  }, [theme, dashboardStyle, salesStyle, location]);
+    setResolvedTheme(applyEffectiveTheme(theme, scheme));
+  }, [theme, scheme]);
 
   // In modalità "system" segui le variazioni della preferenza OS in tempo reale.
   useEffect(() => {
     if (theme !== "system") return;
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => setResolvedTheme(applyEffectiveTheme(
-      "system",
-      dashboardStyle,
-      salesStyle,
-      location,
-    ));
+    const onChange = () => setResolvedTheme(applyEffectiveTheme("system", scheme));
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
-  }, [theme, dashboardStyle, salesStyle, location]);
+  }, [theme, scheme]);
 
   // Sincronizza la scelta tra più schede aperte.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) {
         setThemeState(getStoredTheme());
-      } else if (e.key === DASHBOARD_STYLE_STORAGE_KEY) {
-        setDashboardStyleState(getStoredDashboardStyle());
-      } else if (e.key === SALES_STYLE_STORAGE_KEY) {
-        setSalesStyleState(getStoredSalesStyle());
+      } else if (
+        e.key === SCHEME_STORAGE_KEY
+        || e.key === LEGACY_DASHBOARD_STYLE_KEY
+        || e.key === LEGACY_SALES_STYLE_KEY
+      ) {
+        setSchemeState(getStoredScheme());
       }
     };
     window.addEventListener("storage", onStorage);
@@ -265,10 +234,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setTheme,
       accent,
       setAccent,
-      dashboardStyle,
-      setDashboardStyle,
-      salesStyle,
-      setSalesStyle,
+      scheme,
+      setScheme,
+      resetAppearance,
     }}>
       {children}
     </ThemeContext.Provider>

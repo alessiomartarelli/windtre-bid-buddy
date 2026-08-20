@@ -20,7 +20,14 @@
       // e la logica devono restare allineate a ThemeProvider.
       (function () {
         try {
-          var stored = localStorage.getItem("mystoredesk-theme");
+          // Il mirror pre-paint è valido solo per l'identità autenticata in
+          // questa scheda. Sulla pagina auth non applicare mai l'aspetto
+          // dell'account precedente.
+          var prefsOwner = localStorage.getItem("mystoredesk-prefs-user");
+          var sessionOwner = sessionStorage.getItem("mystoredesk-auth-session-user");
+          var onAuthPage = /\/auth\/?$/.test(window.location.pathname);
+          var usePrefsMirror = !onAuthPage && !!prefsOwner && prefsOwner === sessionOwner;
+          var stored = usePrefsMirror ? localStorage.getItem("mystoredesk-theme") : null;
           var legacyPrisma = stored === "prisma-light";
           var theme =
             stored === "light" || stored === "dark" || stored === "system"
@@ -30,28 +37,28 @@
             theme === "dark" ||
             (theme === "system" &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
-          document.documentElement.classList.toggle("dark", isDark);
-          // Skin della sola Dashboard Gara Reale (Task #453). Il controllo
-          // del path evita che Prisma diventi un tema globale sulle altre
-          // pagine; legacyPrisma migra la preview iniziale.
-          var dashboardStyle =
-            localStorage.getItem("mystoredesk-dashboard-style")
-            || (legacyPrisma ? "prisma-light" : "standard");
-          var salesStyle =
-            localStorage.getItem("mystoredesk-sales-style") || "standard";
-          if (
-            dashboardStyle === "prisma-light"
-            && /\/dashboard-gara-reale\/?$/.test(window.location.pathname)
-          ) {
-            document.documentElement.setAttribute("data-skin", "prisma-light");
-            document.documentElement.classList.remove("dark");
-          } else if (
-            salesStyle === "midnight-violet"
-            && /\/vendite-bisuite\/?$/.test(window.location.pathname)
-          ) {
-            document.documentElement.setAttribute("data-skin", "midnight-violet");
-            document.documentElement.classList.add("dark");
+          // Schema visivo GLOBALE (Task #461): vale su tutte le pagine.
+          // Migra le chiavi legacy per-pagina (Task #453/#458). Logica da
+          // tenere allineata a getStoredScheme/applyEffectiveTheme in
+          // client/src/hooks/useTheme.tsx.
+          var scheme = usePrefsMirror ? localStorage.getItem("mystoredesk-scheme") : "standard";
+          if (scheme !== "prisma-light" && scheme !== "midnight-violet" && scheme !== "standard") {
+            if (usePrefsMirror && localStorage.getItem("mystoredesk-dashboard-style") === "prisma-light") {
+              scheme = "prisma-light";
+            } else if (usePrefsMirror && localStorage.getItem("mystoredesk-sales-style") === "midnight-violet") {
+              scheme = "midnight-violet";
+            } else {
+              scheme = legacyPrisma ? "prisma-light" : "standard";
+            }
           }
+          if (scheme === "prisma-light") {
+            document.documentElement.setAttribute("data-skin", "prisma-light");
+            isDark = false;
+          } else if (scheme === "midnight-violet") {
+            document.documentElement.setAttribute("data-skin", "midnight-violet");
+            isDark = true;
+          }
+          document.documentElement.classList.toggle("dark", isDark);
           // Palette brand per-utente (Task #407): applica gli override prima
           // del primo paint per evitare il flash del colore di default.
           // Mantieni preset/logica allineati a client/src/lib/appearance.ts.
@@ -66,7 +73,7 @@
             slate: [[215, 19, 35], [215, 20, 65]],
             w3: [[25, 100, 46], [27, 98, 56]],
           };
-          var rawAccent = localStorage.getItem("mystoredesk-accent");
+          var rawAccent = usePrefsMirror ? localStorage.getItem("mystoredesk-accent") : null;
           if (rawAccent) {
             var accent = JSON.parse(rawAccent);
             var hsl = null;

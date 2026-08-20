@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiUrl } from "@/lib/basePath";
+import {
+  authSessionVersion,
+  clearAppearanceAuthSession,
+  markAuthenticatedSessionUser,
+} from "@/lib/uiPrefsStorage";
 
 interface Profile {
   id: string;
@@ -12,7 +17,13 @@ interface Profile {
   profileImageUrl: string | null;
   emailNotificationsDisabled?: boolean;
   moduliConsentiti?: string[] | null;
-  uiPrefs?: { theme?: string; accent?: { type: 'preset'; id: string } | { type: 'custom'; hex: string } } | null;
+  uiPrefs?: {
+    theme?: string;
+    accent?: { type: 'preset'; id: string } | { type: 'custom'; hex: string };
+    scheme?: string;
+    dashboardStyle?: string;
+    salesStyle?: string;
+  } | null;
 }
 
 interface Organization {
@@ -39,12 +50,21 @@ interface AuthError {
 // signup). Serve a componenti singleton (es. UiPrefsSync) che non condividono
 // lo stato di questa istanza di useAuth (ogni chiamata è un fetcher isolato).
 export const AUTH_PROFILE_EVENT = 'mystoredesk:auth-profile';
+export const AUTH_CLEARED_EVENT = 'mystoredesk:auth-cleared';
 
 function emitAuthProfile(data: any) {
   try {
     window.dispatchEvent(new CustomEvent(AUTH_PROFILE_EVENT, { detail: data }));
   } catch {
     // ambiente senza window/CustomEvent: nessun sync
+  }
+}
+
+function emitAuthCleared() {
+  try {
+    window.dispatchEvent(new CustomEvent(AUTH_CLEARED_EVENT));
+  } catch {
+    // ambiente senza window/CustomEvent
   }
 }
 
@@ -67,9 +87,11 @@ export function useAuth() {
   }, []);
 
   const fetchUser = useCallback(async () => {
+    const requestSessionVersion = authSessionVersion();
     try {
       const response = await fetch(apiUrl('/api/user'), { credentials: 'include' });
       if (response.status === 401) {
+        if (clearAppearanceAuthSession(requestSessionVersion)) emitAuthCleared();
         setUser(null);
         setProfile(null);
         setOrganization(null);
@@ -80,6 +102,7 @@ export function useAuth() {
       if (!response.ok) throw new Error('Failed to fetch user');
       
       const data = await response.json();
+      markAuthenticatedSessionUser(data.id);
       applyAuthProfile(data);
       emitAuthProfile(data);
     } catch (error) {
@@ -116,6 +139,7 @@ export function useAuth() {
       }
 
       const data = await response.json();
+      markAuthenticatedSessionUser(data.id, true);
       applyAuthProfile(data);
       emitAuthProfile(data);
       return { error: null };
@@ -139,6 +163,7 @@ export function useAuth() {
       }
 
       const data = await response.json();
+      markAuthenticatedSessionUser(data.id, true);
       applyAuthProfile(data);
       emitAuthProfile(data);
       return { error: null };
@@ -157,6 +182,8 @@ export function useAuth() {
       setProfile(null);
       setOrganization(null);
       setOrganizationBrands([]);
+      clearAppearanceAuthSession();
+      emitAuthCleared();
       return { error: null };
     } catch (error) {
       return { error: { message: 'Errore durante il logout' } };

@@ -25,28 +25,20 @@ export function AspettoCard() {
     setTheme,
     accent,
     setAccent,
-    dashboardStyle,
-    setDashboardStyle,
-    salesStyle,
-    setSalesStyle,
+    scheme,
+    setScheme,
   } = useTheme();
   const [customHex, setCustomHex] = useState(accent.type === "custom" ? accent.hex : "#6366f1");
 
   // La persistenza server è gestita dal ThemeProvider (fire-and-forget su
-  // ogni setTheme/setAccent), quindi qui basta applicare la scelta.
+  // ogni setTheme/setAccent/setScheme), quindi qui basta applicare la scelta.
+  // Prisma Light e Midnight Violet sono schemi GLOBALI (Task #461).
   const chooseTheme = (mode: AppearanceMode) => {
-    if (mode === "prisma-light") {
-      setDashboardStyle("prisma-light");
-      setSalesStyle("standard");
+    if (mode === "prisma-light" || mode === "midnight-violet") {
+      setScheme(mode);
       return;
     }
-    if (mode === "midnight-violet") {
-      setDashboardStyle("standard");
-      setSalesStyle("midnight-violet");
-      return;
-    }
-    setDashboardStyle("standard");
-    setSalesStyle("standard");
+    setScheme("standard");
     setTheme(mode);
   };
   const chooseAccent = (a: AccentChoice) => setAccent(a);
@@ -72,11 +64,9 @@ export function AspettoCard() {
                 type="button"
                 onClick={() => chooseTheme(value)}
                 className={`h-10 flex-1 sm:flex-none px-3 sm:px-4 text-sm font-medium flex items-center justify-center gap-2 border-b sm:border-b-0 ${i > 0 ? "border-l" : ""} ${
-                  (value === "prisma-light"
-                    ? dashboardStyle === "prisma-light"
-                    : value === "midnight-violet"
-                      ? salesStyle === "midnight-violet"
-                      : dashboardStyle === "standard" && salesStyle === "standard" && theme === value)
+                  (value === "prisma-light" || value === "midnight-violet"
+                    ? scheme === value
+                    : scheme === "standard" && theme === value)
                     ? "bg-primary text-primary-foreground"
                     : "bg-background hover:bg-muted"
                 }`}

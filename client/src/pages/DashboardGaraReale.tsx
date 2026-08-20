@@ -2980,11 +2980,11 @@ export default function DashboardGaraReale() {
   const { profile, organizationBrands, loading: authLoading } = useAuth();
   // Task #427 — stile vetrina W3: rilevato dal contesto live così cambia
   // immediatamente alla selezione del preset senza attendere il refresh del profilo.
-  const { accent: liveAccent, dashboardStyle } = useTheme();
+  const { accent: liveAccent, scheme } = useTheme();
   const isW3 = liveAccent.type === 'preset' && liveAccent.id === 'w3';
   // Task #453 — tema "Prisma Light": composizione editoriale dedicata della
   // dashboard (hero + griglia asimmetrica) al posto della testata standard.
-  const isPrisma = dashboardStyle === 'prisma-light';
+  const isPrisma = scheme === 'prisma-light';
   const orgId = profile?.organizationId ?? null;
   // Stesso gating brand degli altri moduli WindTre: org senza brand = nessun
   // filtro, org con brand = serve WindTre (vedi shared/modules.ts).

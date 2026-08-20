@@ -550,18 +550,19 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   .pista-illustration__halo { width: 112px; height: 112px; right: -33px; top: 23px; border-width: 15px; }
 }
 
-/* Card vetrose stile Vision: gradiente traslucido + bordo luminoso. */
+/* Card dark: superficie solida e ben separata dallo sfondo. I colori restano
+   nei contenuti semantici (stati/KPI), non in gradienti concorrenti. */
 .dark .glass-panel {
-  background: linear-gradient(127deg, hsl(232 48% 13% / 0.92) 15%, hsl(233 52% 9% / 0.6) 85%);
-  border: 1px solid hsl(228 60% 78% / 0.1);
-  box-shadow: 0 10px 32px hsl(233 60% 3% / 0.45), inset 0 1px 0 hsl(228 60% 85% / 0.06);
+  background: hsl(var(--card) / 0.94);
+  border: 1px solid hsl(var(--border) / 0.72);
+  box-shadow: 0 10px 28px hsl(233 60% 3% / 0.38), inset 0 1px 0 hsl(228 60% 85% / 0.05);
 }
 
 /* Overlay (dialog/popover/dropdown): più opachi per leggibilità sopra il
    contenuto, stesso bordo luminoso. */
 .dark .glass-overlay {
-  background: linear-gradient(127deg, hsl(232 46% 13% / 0.97) 15%, hsl(233 50% 10% / 0.92) 85%);
-  border: 1px solid hsl(228 60% 78% / 0.12);
+  background: hsl(var(--popover) / 0.98);
+  border: 1px solid hsl(var(--border) / 0.82);
   box-shadow: 0 16px 48px hsl(233 60% 3% / 0.6), inset 0 1px 0 hsl(228 60% 85% / 0.07);
 }
 

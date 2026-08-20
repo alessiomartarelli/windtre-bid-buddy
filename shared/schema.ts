@@ -79,6 +79,9 @@ export const profiles = pgTable("profiles", {
   // Preferenze UI per-utente. Le varianti pagina restano separate dal tema base.
   uiPrefs: jsonb("ui_prefs").$type<{
     theme?: string;
+    /** Schema visivo globale (Task #461): standard | prisma-light | midnight-violet. */
+    scheme?: string;
+    /** Legacy (Task #453/#458): mantenuti per compatibilità/migrazione. */
     dashboardStyle?: string;
     salesStyle?: string;
     accent?: { type: "preset"; id: string } | { type: "custom"; hex: string };

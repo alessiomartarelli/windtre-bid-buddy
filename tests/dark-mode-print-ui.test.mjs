@@ -80,16 +80,27 @@ test('dark mode @media print: body/shell/glass-panel hanno superfici opache senz
       `baseline: body deve avere l'aurora in dark mode (trovato: ${bodyBgImageDark})`,
     );
 
-    // .glass-panel deve avere il gradiente lineare.
-    const glassBgImageDark = await page.evaluate(() => {
+    // Task #461: le card dark usano una superficie solida per aumentare il
+    // contrasto e ridurre i gradienti decorativi concorrenti.
+    const glassDark = await page.evaluate(() => {
       const el = document.querySelector('.glass-panel');
-      return el ? getComputedStyle(el).backgroundImage : null;
+      if (!el) return null;
+      const style = getComputedStyle(el);
+      return {
+        backgroundImage: style.backgroundImage,
+        backgroundColor: style.backgroundColor,
+      };
     });
-    assert.ok(glassBgImageDark !== null, 'baseline: .glass-panel non trovato');
-    assert.notEqual(
-      glassBgImageDark,
+    assert.ok(glassDark !== null, 'baseline: .glass-panel non trovato');
+    assert.equal(
+      glassDark.backgroundImage,
       'none',
-      `baseline: .glass-panel deve avere il gradiente in dark mode (trovato: ${glassBgImageDark})`,
+      `baseline: .glass-panel dark non deve avere gradienti (trovato: ${glassDark.backgroundImage})`,
+    );
+    assert.notEqual(
+      glassDark.backgroundColor,
+      'rgba(0, 0, 0, 0)',
+      'baseline: .glass-panel dark deve mantenere una superficie opaca',
     );
 
     // ── Attiva print media ─────────────────────────────────────────────────

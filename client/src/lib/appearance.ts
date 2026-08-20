@@ -10,6 +10,9 @@ export type AccentChoice =
 
 export interface UiPrefs {
   theme?: "light" | "dark" | "system";
+  /** Schema visivo globale (Task #461). */
+  scheme?: "standard" | "prisma-light" | "midnight-violet";
+  /** Legacy per-pagina (Task #453/#458), solo migrazione. */
   dashboardStyle?: "standard" | "prisma-light";
   salesStyle?: "standard" | "midnight-violet";
   accent?: AccentChoice;

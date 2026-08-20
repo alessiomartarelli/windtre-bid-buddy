@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificationsBell';
 import { BrandGlyph } from '@/components/BrandLogo';
 import { useTheme, type Theme } from '@/hooks/useTheme';
+import { clearAppearanceAuthSession } from '@/lib/uiPrefsStorage';
 
 type AppearanceMode = Theme | 'prisma-light' | 'midnight-violet';
 
@@ -39,21 +40,15 @@ function ThemeToggle() {
     theme,
     resolvedTheme,
     setTheme,
-    dashboardStyle,
-    setDashboardStyle,
-    salesStyle,
-    setSalesStyle,
+    scheme,
+    setScheme,
   } = useTheme();
+  // Prisma Light e Midnight Violet sono schemi GLOBALI (Task #461).
   const chooseAppearance = (mode: AppearanceMode) => {
-    if (mode === 'prisma-light') {
-      setDashboardStyle('prisma-light');
-      setSalesStyle('standard');
-    } else if (mode === 'midnight-violet') {
-      setDashboardStyle('standard');
-      setSalesStyle('midnight-violet');
+    if (mode === 'prisma-light' || mode === 'midnight-violet') {
+      setScheme(mode);
     } else {
-      setDashboardStyle('standard');
-      setSalesStyle('standard');
+      setScheme('standard');
       setTheme(mode);
     }
   };
@@ -67,9 +62,9 @@ function ThemeToggle() {
           data-testid="button-theme-toggle"
           aria-label="Cambia tema"
         >
-          {dashboardStyle === 'prisma-light' ? (
+          {scheme === 'prisma-light' ? (
             <Sparkles className="h-4 w-4" />
-          ) : salesStyle === 'midnight-violet' ? (
+          ) : scheme === 'midnight-violet' ? (
             <Waves className="h-4 w-4" />
           ) : resolvedTheme === 'dark' ? (
             <Moon className="h-4 w-4" />
@@ -87,11 +82,9 @@ function ThemeToggle() {
             key={opt.value}
             onClick={() => chooseAppearance(opt.value)}
             className={
-              (opt.value === 'prisma-light'
-                ? dashboardStyle === 'prisma-light'
-                : opt.value === 'midnight-violet'
-                  ? salesStyle === 'midnight-violet'
-                  : dashboardStyle === 'standard' && salesStyle === 'standard' && theme === opt.value)
+              (opt.value === 'prisma-light' || opt.value === 'midnight-violet'
+                ? scheme === opt.value
+                : scheme === 'standard' && theme === opt.value)
                 ? 'bg-accent'
                 : ''
             }
@@ -117,12 +110,9 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
   const { toast } = useToast();
   const {
     theme,
-    resolvedTheme,
     setTheme,
-    dashboardStyle,
-    setDashboardStyle,
-    salesStyle,
-    setSalesStyle,
+    scheme,
+    setScheme,
   } = useTheme();
 
   const handleSignOut = async () => {
@@ -133,15 +123,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
       // Le preferenze sono per-utente: prima di passare alla schermata auth
       // rimuovi il mirror locale, così l'account successivo non riceve il
       // pre-paint (anche solo per un frame) dell'utente uscente.
-      try {
-        localStorage.removeItem('mystoredesk-theme');
-        localStorage.removeItem('mystoredesk-accent');
-        localStorage.removeItem('mystoredesk-dashboard-style');
-        localStorage.removeItem('mystoredesk-sales-style');
-        localStorage.removeItem('mystoredesk-prefs-user');
-      } catch {
-        // Storage non disponibile: il logout server resta comunque valido.
-      }
+      clearAppearanceAuthSession();
       window.location.href = `${BASE_PATH}/auth`;
     }
   };
@@ -190,21 +172,18 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
   ];
 
   const chooseAppearance = (mode: AppearanceMode) => {
-    if (mode === 'prisma-light') {
-      setDashboardStyle('prisma-light');
-      setSalesStyle('standard');
-    } else if (mode === 'midnight-violet') {
-      setDashboardStyle('standard');
-      setSalesStyle('midnight-violet');
+    if (mode === 'prisma-light' || mode === 'midnight-violet') {
+      setScheme(mode);
     } else {
-      setDashboardStyle('standard');
-      setSalesStyle('standard');
+      setScheme('standard');
       setTheme(mode);
     }
   };
 
+  // La bottom-bar è una composizione della pagina Dashboard (resta legata
+  // alla route), ma lo schema Prisma in sé è globale.
   const isPrismaDashboard =
-    dashboardStyle === 'prisma-light' && location === '/dashboard-gara-reale';
+    scheme === 'prisma-light' && location === '/dashboard-gara-reale';
   const prismaMobileItems = garaItems
     .filter((item) => [
       '/dashboard-gara-reale',
@@ -428,11 +407,9 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
                     key={opt.value}
                     onClick={() => chooseAppearance(opt.value)}
                     className={
-                      (opt.value === 'prisma-light'
-                        ? dashboardStyle === 'prisma-light'
-                        : opt.value === 'midnight-violet'
-                          ? salesStyle === 'midnight-violet'
-                          : dashboardStyle === 'standard' && salesStyle === 'standard' && theme === opt.value)
+                      (opt.value === 'prisma-light' || opt.value === 'midnight-violet'
+                        ? scheme === opt.value
+                        : scheme === 'standard' && theme === opt.value)
                         ? 'bg-accent'
                         : ''
                     }

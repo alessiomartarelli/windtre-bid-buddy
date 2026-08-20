@@ -63,10 +63,11 @@ const artEnergiaBusiness = {
 // Articolo NON canvass (tipo "prodotti"): serve a verificare che il filtro
 // Tipo = Canvass lo escluda davvero dagli aggregati globali.
 const artAccessorio = {
+  tipo: 'P',
   categoria: { nome: 'ACCESSORI' },
   tipologia: { nome: 'ACCESSORIO' },
   descrizione: 'COVER SMARTPHONE',
-  dettaglio: { prezzo: '15.00' },
+  dettaglio: { prezzo: '15.00', scontrino: 1, importoScontrino: '15.00' },
 };
 const artEnergiaConsumer = {
   categoria: { nome: 'ENERGIA W3' },
@@ -138,10 +139,28 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     assert.equal(flat(await page.getByTestId('text-iva-mobile').innerText()), 'dicui1IVA', 'mobile: 1 pezzo IVA (TIED IVA), UNTIED escluso');
     assert.equal(flat(await page.getByTestId('text-iva-fisso').innerText()), 'dicui1IVA', 'fisso: 1 pezzo IVA (ADSL/FIBRA/FWA IVA)');
     assert.equal(flat(await page.getByTestId('text-iva-energia').innerText()), 'dicui1IVA', 'energia: 1 pezzo IVA (MICROBUSINESS), consumer escluso');
+    assert.ok(
+      flat(await page.getByTestId('sales-category-panel-canvass').innerText()).includes('35,00€'),
+      'pannello Canvass: totale articoli 35,00 €',
+    );
 
-    // A filtri default l'accessorio (tipo prodotti) è contato nella card
-    // Prodotti: il marcatore "(acc. netto IVA)" appare solo se accLordo > 0.
+    // Task #461: le vecchie tre card sono un pannello navigabile. Su desktop
+    // ci sono quattro pulsanti verticali e Accessori è scorporato da Prodotti.
+    const desktopCategoryNav = page.getByTestId('sales-category-nav-desktop');
+    await desktopCategoryNav.waitFor({ state: 'visible', timeout: 15000 });
+    assert.equal(
+      await desktopCategoryNav.locator('button').count(),
+      4,
+      'desktop: quattro categorie (Canvass, Servizi, Accessori, Prodotti)',
+    );
+    await page.getByTestId('sales-category-desktop-accessori').click();
+    await page.getByTestId('sales-category-panel-accessori').waitFor({ state: 'visible', timeout: 15000 });
+    // Il marcatore compare solo se il lordo Accessori è > 0.
     await page.getByText('(acc. netto IVA)').waitFor({ timeout: 15000 });
+    const accessoriText = flat(await page.getByTestId('sales-category-panel-accessori').innerText());
+    assert.ok(accessoriText.includes('12,30€'), `Accessori: imponibile netto IVA 12,30 € (${accessoriText})`);
+    assert.ok(accessoriText.includes('IVA2,70€'), `Accessori: IVA separata 2,70 € (${accessoriText})`);
+    assert.ok(accessoriText.includes('Scontrinato15,00€'), `Accessori: riepilogo incasso scontrinato 15,00 € (${accessoriText})`);
 
     // ── Dettaglio PDV A (accordion): tabella "Categorie canvass" ──
     await page.locator(`button:has-text("Negozio Alfa")`).first().click();
@@ -275,6 +294,22 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     const pdvBFilteredText = flat(await pdvBFiltered.innerText());
     assert.ok(pdvBFilteredText.includes('Energia·1IVA'), `filtro tipo=canvass, PDV B: Energia · 1 IVA invariato: ${pdvBFilteredText}`);
     assert.ok(pdvBFilteredText.includes('ENERGIAW32(1IVA)'), `filtro tipo=canvass, PDV B: ENERGIA W3 2 (1 IVA): ${pdvBFilteredText}`);
+
+    // Task #461: su mobile lo stesso selettore diventa una barra a quattro
+    // icone, mantiene lo stato ARIA e cambia davvero il pannello visibile.
+    await page.getByTestId('select-tipo').click();
+    await page.getByRole('option', { name: 'Tutti i tipi', exact: true }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileCategoryNav = page.getByTestId('sales-category-nav-mobile');
+    await mobileCategoryNav.waitFor({ state: 'visible', timeout: 15000 });
+    assert.equal(await mobileCategoryNav.locator('button').count(), 4, 'mobile: quattro categorie a icona');
+    await page.getByTestId('sales-category-mobile-servizi').click();
+    await page.getByTestId('sales-category-panel-servizi').waitFor({ state: 'visible', timeout: 15000 });
+    assert.equal(
+      await page.getByTestId('sales-category-mobile-servizi').getAttribute('aria-pressed'),
+      'true',
+      'mobile: la categoria selezionata espone aria-pressed=true',
+    );
   } finally {
     if (browser) await browser.close().catch(() => {});
     await cleanupOrg(pool, session);
