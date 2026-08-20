@@ -1,5 +1,5 @@
 kind = "design"
-previewPath = "/"
+previewPath = "/prisma-light/"
 title = "Prisma Light — Dashboard Gara Reale"
 description = "Preview visuale autonoma del tema Prisma Light per la Dashboard Gara Reale di MyStoreDesk: layout editoriale, pannelli traslucidi e adattamento desktop/mobile, senza modificare l'app in produzione."
 version = "1.0.0"
@@ -8,7 +8,7 @@ router = "path"
 
 [[services]]
 name = "Component Preview Server"
-paths = [ "/" ]
+paths = [ "/prisma-light/" ]
 localPort = 22085
 
 [services.development]
@@ -16,4 +16,4 @@ run = "npm run dev"
 
 [services.env]
 PORT = "22085"
-BASE_PATH = "/"
+BASE_PATH = "/prisma-light/"
