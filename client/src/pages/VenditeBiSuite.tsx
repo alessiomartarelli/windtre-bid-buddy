@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 import { apiUrl } from "@/lib/basePath";
 import { useLocation } from "wouter";
 import * as XLSX from "xlsx";
@@ -104,6 +105,7 @@ import { GraficoAndamentoPezzi, type PezziTrendPoint } from "@/components/Grafic
 import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
 import { accumulaPezziExtra, emptyPezziExtra, type PezziExtraCounters } from "@shared/pdvPezziExtra";
 import type { CanvassKpiRule } from "@shared/canvassKpiRules";
+import "@/vendite-midnight.css";
 
 interface BisuiteSale {
   id: string;
@@ -261,6 +263,8 @@ function getDefaultDates() {
 
 export default function VenditeBiSuite() {
   const { profile } = useAuth();
+  const { salesStyle } = useTheme();
+  const isMidnightViolet = salesStyle === "midnight-violet";
   const [, setLocation] = useLocation();
   const defaults = getDefaultDates();
   const [fromDate, setFromDate] = useState(defaults.from);
@@ -1002,10 +1006,14 @@ export default function VenditeBiSuite() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className={`min-h-screen bg-background ${isMidnightViolet ? "vendite-midnight" : ""}`}
+      data-testid="vendite-bisuite-page"
+      data-sales-style={salesStyle}
+    >
       <AppNavbar title="MyStoreDesk" />
 
-      <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
+      <main className="vendite-main container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {fetchResult && (
           <div
             className={`flex items-start gap-2 px-4 py-3 rounded-lg text-sm ${

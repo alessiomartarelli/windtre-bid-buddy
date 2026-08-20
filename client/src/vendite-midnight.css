@@ -1,0 +1,218 @@
+/* Midnight Violet — variante approvata della pagina Vendite BiSuite.
+   Tutto è scoped al wrapper della pagina: nessuna regola modifica le altre
+   aree dell'app quando la variante non è selezionata. */
+.vendite-midnight {
+  --background: 261 65% 12%;
+  --foreground: 255 100% 97%;
+  --card: 259 55% 29%;
+  --card-foreground: 255 100% 97%;
+  --popover: 259 55% 24%;
+  --popover-foreground: 255 100% 97%;
+  --primary: 35 91% 60%;
+  --primary-foreground: 260 62% 17%;
+  --secondary: 259 52% 23%;
+  --secondary-foreground: 255 70% 92%;
+  --muted: 259 43% 21%;
+  --muted-foreground: 253 38% 71%;
+  --accent: 259 48% 28%;
+  --accent-foreground: 255 100% 97%;
+  --border: 257 42% 42%;
+  --input: 258 52% 22%;
+  --ring: 35 91% 60%;
+  min-height: 100dvh;
+  color: #f4f0ff;
+  font-family: Manrope, "DM Sans", system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse at 15% -5%, rgb(109 66 210 / 35%), transparent 45%),
+    radial-gradient(ellipse at 90% 5%, rgb(246 168 60 / 8%), transparent 40%),
+    radial-gradient(ellipse at 55% 110%, rgb(78 41 158 / 40%), transparent 55%),
+    linear-gradient(170deg, #150a30, #0e0622);
+  background-attachment: fixed;
+}
+
+.vendite-midnight > aside,
+.vendite-midnight > header {
+  color: #f4f0ff;
+  background: rgb(21 10 48 / 88%) !important;
+  border-color: rgb(196 172 255 / 16%) !important;
+  backdrop-filter: blur(16px);
+}
+
+.vendite-midnight > aside [class*="border-"],
+.vendite-midnight > header [class*="border-"] {
+  border-color: rgb(196 172 255 / 16%);
+}
+
+.vendite-midnight .vendite-main {
+  max-width: 1240px;
+  padding-top: 20px;
+  padding-bottom: 48px;
+}
+
+.vendite-midnight .shadcn-card {
+  color: #f4f0ff;
+  background:
+    linear-gradient(165deg, #3f2884, #372173 45%, #301c68) !important;
+  border: 1px solid rgb(196 172 255 / 16%) !important;
+  border-radius: 16px;
+  box-shadow:
+    0 18px 42px rgb(8 3 24 / 50%),
+    inset 0 1px 0 rgb(226 210 255 / 8%) !important;
+}
+
+.vendite-midnight .shadcn-card:hover {
+  border-color: rgb(196 172 255 / 28%) !important;
+}
+
+.vendite-midnight [data-testid="filter-bar"] {
+  background:
+    linear-gradient(165deg, #3f2884, #372173 52%, #301c68) !important;
+}
+
+.vendite-midnight [data-testid="filter-bar"] label {
+  color: #9c8dd0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+}
+
+.vendite-midnight input,
+.vendite-midnight button[role="combobox"] {
+  color-scheme: dark;
+  color: #f4f0ff;
+  background: #241250 !important;
+  border-color: rgb(196 172 255 / 16%) !important;
+  border-radius: 9px;
+}
+
+.vendite-midnight input::placeholder {
+  color: #9c8dd0;
+}
+
+.vendite-midnight input:focus-visible,
+.vendite-midnight button:focus-visible {
+  outline: none;
+  border-color: #f6a83c !important;
+  box-shadow: 0 0 0 2px rgb(246 168 60 / 35%);
+}
+
+.vendite-midnight button:not([role="combobox"]):not([data-sidebar]) {
+  border-radius: 9px;
+}
+
+.vendite-midnight main button[class*="bg-primary"] {
+  color: #2a1608 !important;
+  background: linear-gradient(120deg, #ffc873, #f6a83c) !important;
+  border-color: transparent !important;
+}
+
+.vendite-midnight main button[class*="border-input"],
+.vendite-midnight main button[class*="variant-outline"] {
+  color: #c3b6ee;
+  background: #241250;
+  border-color: rgb(196 172 255 / 16%);
+}
+
+.vendite-midnight .text-primary {
+  color: #f6a83c !important;
+}
+
+.vendite-midnight .text-muted-foreground {
+  color: #9c8dd0 !important;
+}
+
+.vendite-midnight .text-green-600,
+.vendite-midnight .text-green-500 {
+  color: #4ade80 !important;
+}
+
+.vendite-midnight .text-orange-500,
+.vendite-midnight .text-orange-600,
+.vendite-midnight .text-amber-600,
+.vendite-midnight .text-amber-700 {
+  color: #ffc873 !important;
+}
+
+.vendite-midnight .border-l-orange-500 {
+  border-left-color: #f6a83c !important;
+}
+
+.vendite-midnight .border-l-slate-400 {
+  border-left-color: #b4a6e8 !important;
+}
+
+.vendite-midnight .border-l-cyan-500 {
+  border-left-color: #67e8f9 !important;
+}
+
+.vendite-midnight [data-testid="text-total-sales"],
+.vendite-midnight [data-testid="text-total-pdv"],
+.vendite-midnight [data-testid="text-avg-sale"] {
+  color: #ffc873;
+  letter-spacing: -.02em;
+}
+
+.vendite-midnight [data-testid="text-total-amount"] {
+  color: #4ade80 !important;
+}
+
+.vendite-midnight [data-testid="card-lista-vendite"] {
+  overflow: hidden;
+}
+
+.vendite-midnight table {
+  color: #f4f0ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.vendite-midnight thead,
+.vendite-midnight th {
+  color: #c3b6ee !important;
+  background: #2b1a5c !important;
+  border-color: rgb(196 172 255 / 30%) !important;
+}
+
+.vendite-midnight td {
+  border-color: rgb(196 172 255 / 16%) !important;
+}
+
+.vendite-midnight tbody tr:hover td {
+  background: rgb(196 172 255 / 6%);
+}
+
+.vendite-midnight code,
+.vendite-midnight .font-mono {
+  font-family: "DM Mono", "Fira Code", monospace;
+}
+
+.vendite-midnight [data-radix-collection-item],
+.vendite-midnight [data-state="open"] {
+  border-color: rgb(196 172 255 / 22%);
+}
+
+html[data-skin="midnight-violet"] [role="dialog"],
+html[data-skin="midnight-violet"] [role="listbox"],
+html[data-skin="midnight-violet"] [data-radix-popper-content-wrapper] > div {
+  --background: 261 65% 12%;
+  --foreground: 255 100% 97%;
+  --popover: 259 55% 24%;
+  --popover-foreground: 255 100% 97%;
+  --muted: 259 43% 21%;
+  --muted-foreground: 253 38% 71%;
+  --accent: 259 48% 28%;
+  --accent-foreground: 255 100% 97%;
+  --border: 257 42% 42%;
+  color: #f4f0ff;
+  background-color: #241250;
+  border-color: rgb(196 172 255 / 24%);
+}
+
+@media (max-width: 640px) {
+  .vendite-midnight .vendite-main {
+    padding: 14px 10px 40px;
+  }
+
+  .vendite-midnight .shadcn-card {
+    border-radius: 13px;
+  }
+}

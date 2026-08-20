@@ -16,14 +16,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
-  BookOpen, BarChart3, Route, Medal, Sun, Moon, Monitor, CalendarClock, Sparkles,
+  BookOpen, BarChart3, Route, Medal, Sun, Moon, Monitor, CalendarClock, Sparkles, Waves,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificationsBell';
 import { BrandGlyph } from '@/components/BrandLogo';
 import { useTheme, type Theme } from '@/hooks/useTheme';
 
-type AppearanceMode = Theme | 'prisma-light';
+type AppearanceMode = Theme | 'prisma-light' | 'midnight-violet';
 
 const themeOptions: Array<{ value: AppearanceMode; label: string; icon: typeof Sun }> = [
   { value: 'light', label: 'Chiaro', icon: Sun },
@@ -31,6 +31,7 @@ const themeOptions: Array<{ value: AppearanceMode; label: string; icon: typeof S
   { value: 'system', label: 'Sistema', icon: Monitor },
   // Task #453 — variante editoriale "Prisma Light" della Dashboard Gara Reale.
   { value: 'prisma-light', label: 'Prisma Light', icon: Sparkles },
+  { value: 'midnight-violet', label: 'Midnight Violet', icon: Waves },
 ];
 
 function ThemeToggle() {
@@ -40,12 +41,19 @@ function ThemeToggle() {
     setTheme,
     dashboardStyle,
     setDashboardStyle,
+    salesStyle,
+    setSalesStyle,
   } = useTheme();
   const chooseAppearance = (mode: AppearanceMode) => {
     if (mode === 'prisma-light') {
       setDashboardStyle('prisma-light');
+      setSalesStyle('standard');
+    } else if (mode === 'midnight-violet') {
+      setDashboardStyle('standard');
+      setSalesStyle('midnight-violet');
     } else {
       setDashboardStyle('standard');
+      setSalesStyle('standard');
       setTheme(mode);
     }
   };
@@ -61,6 +69,8 @@ function ThemeToggle() {
         >
           {dashboardStyle === 'prisma-light' ? (
             <Sparkles className="h-4 w-4" />
+          ) : salesStyle === 'midnight-violet' ? (
+            <Waves className="h-4 w-4" />
           ) : resolvedTheme === 'dark' ? (
             <Moon className="h-4 w-4" />
           ) : (
@@ -79,7 +89,9 @@ function ThemeToggle() {
             className={
               (opt.value === 'prisma-light'
                 ? dashboardStyle === 'prisma-light'
-                : dashboardStyle === 'standard' && theme === opt.value)
+                : opt.value === 'midnight-violet'
+                  ? salesStyle === 'midnight-violet'
+                  : dashboardStyle === 'standard' && salesStyle === 'standard' && theme === opt.value)
                 ? 'bg-accent'
                 : ''
             }
@@ -109,6 +121,8 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
     setTheme,
     dashboardStyle,
     setDashboardStyle,
+    salesStyle,
+    setSalesStyle,
   } = useTheme();
 
   const handleSignOut = async () => {
@@ -123,6 +137,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
         localStorage.removeItem('mystoredesk-theme');
         localStorage.removeItem('mystoredesk-accent');
         localStorage.removeItem('mystoredesk-dashboard-style');
+        localStorage.removeItem('mystoredesk-sales-style');
         localStorage.removeItem('mystoredesk-prefs-user');
       } catch {
         // Storage non disponibile: il logout server resta comunque valido.
@@ -177,8 +192,13 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
   const chooseAppearance = (mode: AppearanceMode) => {
     if (mode === 'prisma-light') {
       setDashboardStyle('prisma-light');
+      setSalesStyle('standard');
+    } else if (mode === 'midnight-violet') {
+      setDashboardStyle('standard');
+      setSalesStyle('midnight-violet');
     } else {
       setDashboardStyle('standard');
+      setSalesStyle('standard');
       setTheme(mode);
     }
   };
@@ -192,22 +212,6 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
       '/vendite-bisuite',
     ].includes(item.path))
     .slice(0, 3);
-
-  useEffect(() => {
-    if (isPrismaDashboard) {
-      document.documentElement.setAttribute('data-skin', 'prisma-light');
-      // Prisma è sempre light soltanto su questa route; non modifica né
-      // persiste il tema base scelto dall'utente.
-      document.documentElement.classList.remove('dark');
-    } else {
-      document.documentElement.removeAttribute('data-skin');
-      document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
-    }
-    return () => {
-      document.documentElement.removeAttribute('data-skin');
-      document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
-    };
-  }, [isPrismaDashboard, resolvedTheme]);
 
   useEffect(() => {
     document.body.classList.add('desktop-sidebar-layout');
@@ -426,7 +430,9 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
                     className={
                       (opt.value === 'prisma-light'
                         ? dashboardStyle === 'prisma-light'
-                        : dashboardStyle === 'standard' && theme === opt.value)
+                        : opt.value === 'midnight-violet'
+                          ? salesStyle === 'midnight-violet'
+                          : dashboardStyle === 'standard' && salesStyle === 'standard' && theme === opt.value)
                         ? 'bg-accent'
                         : ''
                     }

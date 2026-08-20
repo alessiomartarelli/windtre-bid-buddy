@@ -25,3 +25,8 @@ export type ThemeId = (typeof THEME_IDS)[number];
 // base, così le altre pagine continuano a rispettare chiaro/scuro/sistema.
 export const DASHBOARD_STYLE_IDS = ["standard", "prisma-light"] as const;
 export type DashboardStyleId = (typeof DASHBOARD_STYLE_IDS)[number];
+
+// Variante editoriale della sola pagina Vendite BiSuite. Come Prisma Light,
+// resta separata dal tema base per non alterare il resto della piattaforma.
+export const SALES_STYLE_IDS = ["standard", "midnight-violet"] as const;
+export type SalesStyleId = (typeof SALES_STYLE_IDS)[number];

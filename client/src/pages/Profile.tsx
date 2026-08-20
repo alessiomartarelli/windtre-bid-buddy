@@ -368,7 +368,7 @@ export default function Profile() {
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-sm">Email</Label>
-                  <p className="font-medium" data-testid="text-profile-email">{user?.email}</p>
+                  <p className="font-medium break-all" data-testid="text-profile-email">{user?.email}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground text-sm">Ruolo</Label>
@@ -431,11 +431,11 @@ export default function Profile() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between gap-4">
-                <div className="space-y-1">
+                <div className="min-w-0 flex-1 space-y-1">
                   <Label htmlFor="toggle-email-notifications" className="text-base">
                     Email per sync BiSuite fallite
                   </Label>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground break-words">
                     {emailDisabled
                       ? 'Riceverai solo la notifica in-app (campanellino).'
                       : 'Riceverai una email a ' + (user?.email || 'il tuo indirizzo') + ' oltre alla notifica in-app.'}

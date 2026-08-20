@@ -11,6 +11,7 @@ export type AccentChoice =
 export interface UiPrefs {
   theme?: "light" | "dark" | "system";
   dashboardStyle?: "standard" | "prisma-light";
+  salesStyle?: "standard" | "midnight-violet";
   accent?: AccentChoice;
 }
 

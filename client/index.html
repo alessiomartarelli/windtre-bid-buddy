@@ -37,12 +37,20 @@
           var dashboardStyle =
             localStorage.getItem("mystoredesk-dashboard-style")
             || (legacyPrisma ? "prisma-light" : "standard");
+          var salesStyle =
+            localStorage.getItem("mystoredesk-sales-style") || "standard";
           if (
             dashboardStyle === "prisma-light"
             && /\/dashboard-gara-reale\/?$/.test(window.location.pathname)
           ) {
             document.documentElement.setAttribute("data-skin", "prisma-light");
             document.documentElement.classList.remove("dark");
+          } else if (
+            salesStyle === "midnight-violet"
+            && /\/vendite-bisuite\/?$/.test(window.location.pathname)
+          ) {
+            document.documentElement.setAttribute("data-skin", "midnight-violet");
+            document.documentElement.classList.add("dark");
           }
           // Palette brand per-utente (Task #407): applica gli override prima
           // del primo paint per evitare il flash del colore di default.

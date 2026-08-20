@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { useLocation } from "wouter";
 import { type AccentChoice, DEFAULT_ACCENT, applyAccentVars, accentEquals, ACCENT_PRESETS, hexToHsl } from "@/lib/appearance";
 import { apiUrl } from "@/lib/basePath";
 
@@ -20,10 +21,12 @@ function persistUiPrefs(patch: Record<string, unknown>): void {
 
 export type Theme = "light" | "dark" | "system";
 export type DashboardStyle = "standard" | "prisma-light";
+export type SalesStyle = "standard" | "midnight-violet";
 
 const STORAGE_KEY = "mystoredesk-theme";
 const ACCENT_STORAGE_KEY = "mystoredesk-accent";
 const DASHBOARD_STYLE_STORAGE_KEY = "mystoredesk-dashboard-style";
+const SALES_STYLE_STORAGE_KEY = "mystoredesk-sales-style";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -33,6 +36,8 @@ interface ThemeContextValue {
   setAccent: (accent: AccentChoice) => void;
   dashboardStyle: DashboardStyle;
   setDashboardStyle: (style: DashboardStyle) => void;
+  salesStyle: SalesStyle;
+  setSalesStyle: (style: SalesStyle) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
@@ -99,20 +104,68 @@ export function hasStoredDashboardStyle(): boolean {
   }
 }
 
-function applyTheme(theme: Theme): "light" | "dark" {
-  const isDark = theme === "dark" || (theme === "system" && systemPrefersDark());
+export function getStoredSalesStyle(): SalesStyle {
+  if (typeof window === "undefined") return "standard";
+  try {
+    const stored = localStorage.getItem(SALES_STYLE_STORAGE_KEY);
+    if (stored === "midnight-violet" || stored === "standard") return stored;
+  } catch {
+    // storage non disponibile: composizione standard
+  }
+  return "standard";
+}
+
+export function hasStoredSalesStyle(): boolean {
+  try { return localStorage.getItem(SALES_STYLE_STORAGE_KEY) != null; } catch { return false; }
+}
+
+function applyEffectiveTheme(
+  theme: Theme,
+  dashboardStyle: DashboardStyle,
+  salesStyle: SalesStyle,
+  location: string,
+): "light" | "dark" {
+  const isPrismaDashboard =
+    dashboardStyle === "prisma-light" && location === "/dashboard-gara-reale";
+  const isMidnightSales =
+    salesStyle === "midnight-violet" && location === "/vendite-bisuite";
+  const isDark = isMidnightSales
+    || (!isPrismaDashboard && (
+      theme === "dark" || (theme === "system" && systemPrefersDark())
+    ));
+
+  if (isPrismaDashboard) {
+    document.documentElement.setAttribute("data-skin", "prisma-light");
+  } else if (isMidnightSales) {
+    document.documentElement.setAttribute("data-skin", "midnight-violet");
+  } else {
+    document.documentElement.removeAttribute("data-skin");
+  }
   document.documentElement.classList.toggle("dark", isDark);
   return isDark ? "dark" : "light";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [location] = useLocation();
+  const initialDashboardStyle = getStoredDashboardStyle();
+  const initialSalesStyle = getStoredSalesStyle();
   const [theme, setThemeState] = useState<Theme>(() => getStoredTheme());
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">(() =>
-    typeof window === "undefined" ? "light" : applyTheme(getStoredTheme()),
+    typeof window === "undefined"
+      ? "light"
+      : applyEffectiveTheme(
+        getStoredTheme(),
+        initialDashboardStyle,
+        initialSalesStyle,
+        location,
+      ),
   );
   const [accent, setAccentState] = useState<AccentChoice>(() => getStoredAccent());
   const [dashboardStyle, setDashboardStyleState] = useState<DashboardStyle>(
-    () => getStoredDashboardStyle(),
+    () => initialDashboardStyle,
+  );
+  const [salesStyle, setSalesStyleState] = useState<SalesStyle>(
+    () => initialSalesStyle,
   );
 
   const setTheme = useCallback((next: Theme) => {
@@ -122,7 +175,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignora: se non possiamo persistere, il tema resta comunque applicato.
     }
-    setResolvedTheme(applyTheme(next));
     persistUiPrefs({ theme: next });
   }, []);
 
@@ -150,25 +202,46 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     persistUiPrefs({ dashboardStyle: next });
   }, []);
 
+  const setSalesStyle = useCallback((next: SalesStyle) => {
+    setSalesStyleState(next);
+    try {
+      localStorage.setItem(SALES_STYLE_STORAGE_KEY, next);
+    } catch {
+      // La scelta resta applicata per la sessione.
+    }
+    persistUiPrefs({ salesStyle: next });
+  }, []);
+
   // Applica/riapplica la palette quando cambia accent o light/dark (i valori
   // del primario differiscono tra i due temi).
   useEffect(() => {
     applyAccentVars(accent, resolvedTheme === "dark");
   }, [accent, resolvedTheme]);
 
-  // Riapplica quando cambia il tema scelto (es. sync da altra tab).
+  // Applica il tema effettivo da una sola fonte di verità. Le composizioni
+  // pagina-specifiche hanno precedenza sul tema base senza sovrascriverlo.
   useEffect(() => {
-    setResolvedTheme(applyTheme(theme));
-  }, [theme]);
+    setResolvedTheme(applyEffectiveTheme(
+      theme,
+      dashboardStyle,
+      salesStyle,
+      location,
+    ));
+  }, [theme, dashboardStyle, salesStyle, location]);
 
   // In modalità "system" segui le variazioni della preferenza OS in tempo reale.
   useEffect(() => {
     if (theme !== "system") return;
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => setResolvedTheme(applyTheme("system"));
+    const onChange = () => setResolvedTheme(applyEffectiveTheme(
+      "system",
+      dashboardStyle,
+      salesStyle,
+      location,
+    ));
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
-  }, [theme]);
+  }, [theme, dashboardStyle, salesStyle, location]);
 
   // Sincronizza la scelta tra più schede aperte.
   useEffect(() => {
@@ -177,6 +250,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setThemeState(getStoredTheme());
       } else if (e.key === DASHBOARD_STYLE_STORAGE_KEY) {
         setDashboardStyleState(getStoredDashboardStyle());
+      } else if (e.key === SALES_STYLE_STORAGE_KEY) {
+        setSalesStyleState(getStoredSalesStyle());
       }
     };
     window.addEventListener("storage", onStorage);
@@ -192,6 +267,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setAccent,
       dashboardStyle,
       setDashboardStyle,
+      salesStyle,
+      setSalesStyle,
     }}>
       {children}
     </ThemeContext.Provider>

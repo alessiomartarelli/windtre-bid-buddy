@@ -16,7 +16,9 @@ import {
   useTheme,
   hasStoredAccent,
   hasStoredDashboardStyle,
+  hasStoredSalesStyle,
   type DashboardStyle,
+  type SalesStyle,
   type Theme,
 } from "@/hooks/useTheme";
 import { ACCENT_PRESETS, DEFAULT_ACCENT, hexToHsl, type AccentChoice } from "@/lib/appearance";
@@ -42,13 +44,13 @@ function validAccent(a: any): AccentChoice | null {
 }
 
 export function UiPrefsSync() {
-  const { setTheme, setAccent, setDashboardStyle } = useTheme();
+  const { setTheme, setAccent, setDashboardStyle, setSalesStyle } = useTheme();
   const appliedFor = useRef<string | null>(null);
 
   useEffect(() => {
     const onProfile = (e: Event) => {
       const data = (e as CustomEvent).detail as
-        | { id?: string; uiPrefs?: { theme?: string; accent?: any; dashboardStyle?: string } | null }
+        | { id?: string; uiPrefs?: { theme?: string; accent?: any; dashboardStyle?: string; salesStyle?: string } | null }
         | undefined;
       if (!data?.id || appliedFor.current === data.id) return;
       appliedFor.current = data.id;
@@ -64,6 +66,10 @@ export function UiPrefsSync() {
         : prefs.theme === "prisma-light"
           ? "prisma-light"
           : null;
+      const salesStyle = prefs.salesStyle
+        && ["standard", "midnight-violet"].includes(prefs.salesStyle)
+        ? (prefs.salesStyle as SalesStyle)
+        : null;
 
       if (sameUser) {
         // Stesso utente del mirror locale: la cache è già sua (e può essere
@@ -74,6 +80,7 @@ export function UiPrefsSync() {
         if (dashboardStyle && !hasStoredDashboardStyle()) {
           setDashboardStyle(dashboardStyle);
         }
+        if (salesStyle && !hasStoredSalesStyle()) setSalesStyle(salesStyle);
       } else {
         // Utente diverso (o primo utilizzo): le sue preferenze server vincono
         // sempre; in assenza si torna ai default, senza ereditare l'aspetto
@@ -81,12 +88,13 @@ export function UiPrefsSync() {
         setTheme(theme ?? "system");
         setAccent(accent ?? DEFAULT_ACCENT);
         setDashboardStyle(dashboardStyle ?? "standard");
+        setSalesStyle(salesStyle ?? "standard");
       }
       rememberPrefsUser(data.id);
     };
     window.addEventListener(AUTH_PROFILE_EVENT, onProfile);
     return () => window.removeEventListener(AUTH_PROFILE_EVENT, onProfile);
-  }, [setTheme, setAccent, setDashboardStyle]);
+  }, [setTheme, setAccent, setDashboardStyle, setSalesStyle]);
 
   return null;
 }

@@ -10,7 +10,7 @@ import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDef
 import { isModuleEnabled, isModuleAllowedForBrands, isModuleGrantedToUser, sanitizeGrantableModules, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
 import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
-import { ACCENT_PRESET_IDS, DASHBOARD_STYLE_IDS, THEME_IDS } from "@shared/uiPrefs";
+import { ACCENT_PRESET_IDS, DASHBOARD_STYLE_IDS, SALES_STYLE_IDS, THEME_IDS } from "@shared/uiPrefs";
 import { AVATAR_MAX_BYTES } from "@shared/avatar";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
 import { dtsSaleCodiceEsterno } from "@shared/dtsReport";
@@ -2447,17 +2447,17 @@ export async function registerRoutes(
     }
   });
 
-  // === Profilo: preferenze UI (tema + palette + dashboard, Task #407/#453) ===
+  // === Profilo: preferenze UI (tema + palette + varianti pagina) ===
   app.patch("/api/auth/ui-prefs", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);
       if (!profile) return res.status(404).json({ error: "Profilo non trovato" });
-      const { theme, accent, dashboardStyle } = req.body ?? {};
+      const { theme, accent, dashboardStyle, salesStyle } = req.body ?? {};
       // Patch parziale: solo le chiavi inviate; il merge col valore esistente
       // avviene atomicamente in SQL (jsonb ||) per evitare lost update tra
       // PATCH ravvicinate.
-      const patch: { theme?: string; accent?: any; dashboardStyle?: string } = {};
+      const patch: { theme?: string; accent?: any; dashboardStyle?: string; salesStyle?: string } = {};
       if (theme !== undefined) {
         if (!(THEME_IDS as readonly string[]).includes(theme)) {
           return res.status(400).json({ error: "theme non valido" });
@@ -2477,6 +2477,12 @@ export async function registerRoutes(
           return res.status(400).json({ error: "dashboardStyle non valido" });
         }
         patch.dashboardStyle = dashboardStyle;
+      }
+      if (salesStyle !== undefined) {
+        if (!(SALES_STYLE_IDS as readonly string[]).includes(salesStyle)) {
+          return res.status(400).json({ error: "salesStyle non valido" });
+        }
+        patch.salesStyle = salesStyle;
       }
       if (Object.keys(patch).length === 0) {
         return res.status(400).json({ error: "Nessuna preferenza da aggiornare" });

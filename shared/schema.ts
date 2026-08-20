@@ -76,11 +76,11 @@ export const profiles = pgTable("profiles", {
   // La visibilità effettiva è comunque l'intersezione org ∩ brand ∩ utente.
   // `super_admin` bypassa sempre (questo campo è ininfluente sui super_admin).
   moduliConsentiti: text("moduli_consentiti").array(),
-  // Preferenze UI per-utente (Task #407/#453). dashboardStyle controlla la
-  // composizione della sola Dashboard Gara Reale; non sostituisce theme.
+  // Preferenze UI per-utente. Le varianti pagina restano separate dal tema base.
   uiPrefs: jsonb("ui_prefs").$type<{
     theme?: string;
     dashboardStyle?: string;
+    salesStyle?: string;
     accent?: { type: "preset"; id: string } | { type: "custom"; hex: string };
   } | null>(),
   createdAt: timestamp("created_at").defaultNow(),

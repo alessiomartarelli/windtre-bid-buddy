@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { useTheme, type Theme } from "@/hooks/useTheme";
 import { ACCENT_PRESETS, type AccentChoice, accentEquals, hexToHsl } from "@/lib/appearance";
-import { Palette, Sun, Moon, Monitor, Check, Sparkles } from "lucide-react";
+import { Palette, Sun, Moon, Monitor, Check, Sparkles, Waves } from "lucide-react";
 
-type AppearanceMode = Theme | "prisma-light";
+type AppearanceMode = Theme | "prisma-light" | "midnight-violet";
 
 const THEME_OPTIONS: { value: AppearanceMode; label: string; Icon: typeof Sun }[] = [
   { value: "light", label: "Chiaro", Icon: Sun },
@@ -16,6 +16,7 @@ const THEME_OPTIONS: { value: AppearanceMode; label: string; Icon: typeof Sun }[
   { value: "system", label: "Sistema", Icon: Monitor },
   // Task #453 — variante editoriale "Prisma Light" della Dashboard Gara Reale.
   { value: "prisma-light", label: "Prisma Light", Icon: Sparkles },
+  { value: "midnight-violet", label: "Midnight Violet", Icon: Waves },
 ];
 
 export function AspettoCard() {
@@ -26,6 +27,8 @@ export function AspettoCard() {
     setAccent,
     dashboardStyle,
     setDashboardStyle,
+    salesStyle,
+    setSalesStyle,
   } = useTheme();
   const [customHex, setCustomHex] = useState(accent.type === "custom" ? accent.hex : "#6366f1");
 
@@ -34,9 +37,16 @@ export function AspettoCard() {
   const chooseTheme = (mode: AppearanceMode) => {
     if (mode === "prisma-light") {
       setDashboardStyle("prisma-light");
+      setSalesStyle("standard");
+      return;
+    }
+    if (mode === "midnight-violet") {
+      setDashboardStyle("standard");
+      setSalesStyle("midnight-violet");
       return;
     }
     setDashboardStyle("standard");
+    setSalesStyle("standard");
     setTheme(mode);
   };
   const chooseAccent = (a: AccentChoice) => setAccent(a);
@@ -55,16 +65,18 @@ export function AspettoCard() {
       <CardContent className="space-y-6">
         <div>
           <Label className="text-sm">Tema</Label>
-          <div className="flex rounded-md border overflow-hidden h-10 mt-1.5 w-fit" data-testid="toggle-theme">
+          <div className="flex flex-wrap rounded-md border overflow-hidden mt-1.5 w-full sm:w-fit" data-testid="toggle-theme">
             {THEME_OPTIONS.map(({ value, label, Icon }, i) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => chooseTheme(value)}
-                className={`px-4 text-sm font-medium flex items-center gap-2 ${i > 0 ? "border-l" : ""} ${
+                className={`h-10 flex-1 sm:flex-none px-3 sm:px-4 text-sm font-medium flex items-center justify-center gap-2 border-b sm:border-b-0 ${i > 0 ? "border-l" : ""} ${
                   (value === "prisma-light"
                     ? dashboardStyle === "prisma-light"
-                    : dashboardStyle === "standard" && theme === value)
+                    : value === "midnight-violet"
+                      ? salesStyle === "midnight-violet"
+                      : dashboardStyle === "standard" && salesStyle === "standard" && theme === value)
                     ? "bg-primary text-primary-foreground"
                     : "bg-background hover:bg-muted"
                 }`}

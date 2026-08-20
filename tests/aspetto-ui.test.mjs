@@ -32,7 +32,8 @@ import { ACCENT_PRESETS } from '../client/src/lib/appearance.ts';
 //      jsonb (merge atomico, niente lost update);
 //   7. Prisma Light: preferenza separata dal tema, server sync, skin limitata
 //      alla Dashboard Gara Reale e bottom bar mobile fissa;
-//   8. parità statica: la tabella PRESETS nel pre-paint script di
+//   8. Midnight Violet: preferenza separata dal tema, skin limitata a Vendite;
+//   9. parità statica: la tabella PRESETS nel pre-paint script di
 //      client/index.html combacia con ACCENT_PRESETS di appearance.ts.
 
 const TEAL = ACCENT_PRESETS.find((p) => p.id === 'teal');
@@ -80,7 +81,7 @@ async function openProfile(page) {
 // click del test partono mentre quelle PATCH sono ancora in volo, possono
 // arrivare al server DOPO e sovrascrivere la scelta del test (es. theme
 // "system" che batte "dark"). Aspettiamo quindi il marker locale + la
-// comparsa di theme+accent+dashboardStyle di default in profiles.ui_prefs.
+// comparsa delle preferenze di default in profiles.ui_prefs.
 async function waitInitialPrefsSync(page, pool, profileId) {
   await waitFor(
     () => page.evaluate(() => localStorage.getItem('mystoredesk-prefs-user')),
@@ -89,8 +90,8 @@ async function waitInitialPrefsSync(page, pool, profileId) {
   );
   await waitFor(
     () => readUiPrefs(pool, profileId),
-    (p) => p?.theme != null && p?.accent != null && p?.dashboardStyle != null,
-    'initial default prefs persisted to server (theme+accent+dashboardStyle)',
+    (p) => p?.theme != null && p?.accent != null && p?.dashboardStyle != null && p?.salesStyle != null,
+    'initial default prefs persisted to server (theme+accent+page styles)',
   );
 }
 
@@ -260,6 +261,42 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
       20000,
     );
 
+    // --- Midnight Violet: forza dark solo su Vendite con tema base chiaro ---
+    await page2.getByTestId('btn-theme-light').click();
+    await waitFor(
+      () => readUiPrefs(pool, session.profileId),
+      (p) => p?.theme === 'light' && p?.dashboardStyle === 'standard' && p?.salesStyle === 'standard',
+      'server stores light base theme before Midnight Violet',
+    );
+    assert.equal(await isDarkClass(page2), false, 'the light base theme must be active before entering Vendite');
+    await page2.getByTestId('btn-theme-midnight-violet').click();
+    await waitFor(
+      () => readUiPrefs(pool, session.profileId),
+      (p) => p?.theme === 'light' && p?.dashboardStyle === 'standard' && p?.salesStyle === 'midnight-violet',
+      'server preserves base light theme with salesStyle midnight-violet',
+    );
+    await page2.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'networkidle' });
+    await page2.getByTestId('vendite-bisuite-page').waitFor({ state: 'visible', timeout: 20000 });
+    assert.equal(
+      await page2.getByTestId('vendite-bisuite-page').getAttribute('data-sales-style'),
+      'midnight-violet',
+      'Vendite BiSuite must render the selected Midnight Violet composition',
+    );
+    assert.equal(
+      await page2.evaluate(() => document.documentElement.getAttribute('data-skin')),
+      'midnight-violet',
+      'Midnight Violet data-skin must be scoped to Vendite BiSuite',
+    );
+    assert.equal(await isDarkClass(page2), true, 'Midnight Violet must force dark rendering on Vendite BiSuite');
+    await page2.goto(`${BASE}/profile`, { waitUntil: 'networkidle' });
+    await page2.getByTestId('card-aspetto').waitFor({ state: 'visible', timeout: 20000 });
+    assert.equal(
+      await page2.evaluate(() => document.documentElement.hasAttribute('data-skin')),
+      false,
+      'Midnight Violet skin must disappear outside Vendite BiSuite',
+    );
+    assert.equal(await isDarkClass(page2), false, 'the saved base light theme must be restored outside Vendite');
+
     // Il logout deve cancellare il mirror locale per evitare che un altro
     // account nello stesso browser riceva il pre-paint dell'utente uscente.
     await page2.getByTestId('button-user-menu').click();
@@ -269,12 +306,14 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
       theme: localStorage.getItem('mystoredesk-theme'),
       accent: localStorage.getItem('mystoredesk-accent'),
       dashboardStyle: localStorage.getItem('mystoredesk-dashboard-style'),
+      salesStyle: localStorage.getItem('mystoredesk-sales-style'),
       user: localStorage.getItem('mystoredesk-prefs-user'),
     }));
     assert.deepEqual(localPrefsAfterLogout, {
       theme: null,
       accent: null,
       dashboardStyle: null,
+      salesStyle: null,
       user: null,
     }, 'logout must clear every per-user appearance mirror');
 

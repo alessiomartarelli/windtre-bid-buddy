@@ -163,15 +163,15 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <TooltipProvider>
-          <WouterRouter base={BASE_PATH || undefined}>
+      <TooltipProvider>
+        <WouterRouter base={BASE_PATH || undefined}>
+          <ThemeProvider>
             <Toaster />
             <UiPrefsSync />
             <Router />
-          </WouterRouter>
-        </TooltipProvider>
-      </ThemeProvider>
+          </ThemeProvider>
+        </WouterRouter>
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }
