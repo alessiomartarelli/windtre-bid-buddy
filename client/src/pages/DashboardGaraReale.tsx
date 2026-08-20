@@ -4726,6 +4726,11 @@ export default function DashboardGaraReale() {
               </section>
             )}
 
+            {/* Prisma Light resta intenzionalmente limitato alla composizione del
+                mockup. I dettagli operativi della dashboard standard verranno
+                ripensati in pannelli Prisma dedicati, non mostrati in coda. */}
+            {!isPrisma && (
+              <>
             {!isPrisma && mappedData.latestSaleDate && (
               <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5" data-testid="text-latest-sale-info">
                 <BarChart3 className="h-4 w-4" />
@@ -6234,6 +6239,8 @@ export default function DashboardGaraReale() {
                 <RsBreakdown pdvList={mappedData.pdvList} workdayInfo={workdayInfo} pistaStats={pistaStats} />
               </CardContent>
             </Card>
+              </>
+            )}
           </>
         )}
       </div>

@@ -74,3 +74,10 @@ uri = "file://screenshots/prisma-light-desktop.png"
 type = "image"
 title = "Prisma Light — Desktop"
 description = "Dashboard Gara Reale con tema Prisma Light attivo: hero editoriale, pannello incentivi, mini KPI, avanzamento mese, PDV in evidenza e focus piste su dati live."
+
+[[outputs]]
+id = "t7jUZp3yniHbP8KNN_hkD"
+uri = "file://screenshots/prisma-light-mobile-full.png"
+type = "image"
+title = "Prisma Light — contenuto corretto"
+description = "La vista Prisma termina dopo i pannelli del mockup; la sezione standard Piste in gara e gli altri dettagli operativi non vengono più mostrati."
