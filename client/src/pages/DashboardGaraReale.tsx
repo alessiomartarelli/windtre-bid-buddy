@@ -63,6 +63,7 @@ import {
   Wrench,
   Play,
   Pause,
+  Database,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -4724,6 +4725,32 @@ export default function DashboardGaraReale() {
                   )}
                 </aside>
               </section>
+            )}
+            {/* Task #454 — pannello verde "Provenienza verificabile" del mockup:
+                provenienza sempre visibile (niente toggle/toast), collegata alla
+                configurazione gara e ai dati vendite live correnti. */}
+            {isPrisma && (
+              <div className="pl-bottom" data-testid="prisma-bottom">
+                <article className="pl-pane pl-award" data-testid="prisma-award">
+                  <div className="pl-tiny">Provenienza verificabile</div>
+                  <h2>Stessa base dati della Gara Reale.</h2>
+                  <p>
+                    Questa vista usa esclusivamente le vendite live importate da BiSuite
+                    (non annullate)
+                    {mappedData.inGaraOnly && mappedData.calendarsAvailable
+                      ? ': i PDV con calendario di gara configurato contano solo le vendite nei giorni di gara, gli altri tutte le vendite del mese'
+                      : ': senza calendari di gara configurati vengono considerate tutte le vendite del mese'}
+                    . Nessuno snapshot: cambiando periodo o configurazione i
+                    numeri si aggiornano con la dashboard standard.
+                  </p>
+                  <div className="pl-db-note" data-testid="prisma-award-source">
+                    <Database className="h-3.5 w-3.5" />
+                    <span>
+                      {garaConfig?.name?.trim() || 'Configurazione gara'} · {getMonthOptions().find((o) => o.value === selectedPeriod)?.label ?? ''} · dati vendite live
+                    </span>
+                  </div>
+                </article>
+              </div>
             )}
 
             {/* Prisma Light resta intenzionalmente limitato alla composizione del

@@ -357,6 +357,52 @@
     background: linear-gradient(90deg, hsl(var(--pista-ink, var(--pl-cobalt)) / 0.85), hsl(var(--pista-glow, var(--pl-cobalt)) / 0.85));
   }
 
+  /* Task #454 — pannello verde "Provenienza verificabile" del mockup:
+     gradiente green-lime → lilla, allineato a destra sotto la griglia su
+     desktop, a piena larghezza in colonna su mobile. */
+  .pl-bottom {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.9rem;
+  }
+  .pl-award {
+    padding: 1.15rem;
+    max-width: 30rem;
+    background: linear-gradient(135deg, hsl(69 69% 59% / 0.23), hsl(0 0% 100% / 0.54) 55%, hsl(254 100% 82% / 0.2));
+  }
+  .pl-award h2 {
+    font-family: 'Newsreader', Georgia, serif;
+    font-weight: 500;
+    font-size: 1.55rem;
+    line-height: 1.1;
+    letter-spacing: -0.045rem;
+    margin: 0.3rem 0;
+    color: hsl(var(--pl-ink));
+  }
+  .pl-award p {
+    font-size: 0.7rem;
+    line-height: 1.55;
+    color: hsl(218 18% 40%);
+    margin: 0 0 0.7rem;
+  }
+  .pl-db-note {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: hsl(var(--pl-soft));
+  }
+  @media (max-width: 767px) {
+    .pl-bottom {
+      justify-content: stretch;
+    }
+    .pl-award {
+      max-width: none;
+      width: 100%;
+    }
+  }
+
   /* Bottom bar mobile richiesta dopo la preview: usa le vere route abilitate
      all'utente e resta fissa sopra la safe area iOS. Header/menu mobile
      originali rimangono disponibili. */

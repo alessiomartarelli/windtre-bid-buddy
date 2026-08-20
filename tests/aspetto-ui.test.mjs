@@ -358,6 +358,100 @@ test('scenario 2: near-simultaneous theme+accent changes both persist (atomic js
 });
 
 // ===========================================================================
+// SCENARIO 4 (Task #454): il pannello verde "Provenienza verificabile" di
+// Prisma Light deve dire la verità sui calendari di gara:
+//   a) config con calendari MISTI (un PDV con calendario, uno senza) =>
+//      il testo deve chiarire che il filtro vale solo per i PDV con
+//      calendario configurato;
+//   b) config SENZA calendari => il testo deve dire che vengono considerate
+//      tutte le vendite del mese.
+// In entrambi i casi il ticker "Piste in gara" e i dettagli standard devono
+// restare assenti in Prisma.
+// ===========================================================================
+test('scenario 4: Prisma provenance panel text is truthful for mixed and absent gara calendars', async () => {
+  const pool = await newPool();
+  const browser = await launchBrowser();
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const dataVendita = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-10T10:00:00.000Z`;
+  const insertSale = async (orgId, codicePos, nomeNegozio) => {
+    await pool.query(
+      `INSERT INTO bisuite_sales (organization_id, bisuite_id, data_vendita, codice_pos, nome_negozio, ragione_sociale, stato, raw_data)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
+      [orgId, Math.floor(Math.random() * 2_000_000_000), dataVendita, codicePos, nomeNegozio, 'Prisma Prov Srl', 'ATTIVO',
+        JSON.stringify({ cliente: { clienteTipo: 'PRIVATO' }, articoli: [{ categoria: { nome: 'TIED CF' }, tipologia: { nome: 'VOCE EASYPAY' }, dettaglio: { canone: '10' } }] })],
+    );
+  };
+  const fullCalendar = { specialDays: [], weeklySchedule: { workingDays: [0, 1, 2, 3, 4, 5, 6] } };
+
+  const runCase = async ({ prefix, pdvList, expectSubstring, notExpectSubstring }) => {
+    const session = await signup({ prefix, fullName: 'Prisma Prov Test', organizationName: uniq('PrismaProv') });
+    try {
+      await pool.query(
+        `UPDATE profiles SET ui_prefs = coalesce(ui_prefs,'{}'::jsonb)
+           || '{"theme":"light","dashboardStyle":"prisma-light"}'::jsonb WHERE id = $1`,
+        [session.profileId],
+      );
+      await pool.query(
+        `INSERT INTO gara_config (organization_id, month, year, name, config) VALUES ($1,$2,$3,$4,$5::jsonb)`,
+        [session.orgId, now.getMonth() + 1, now.getFullYear(), 'Prov Test', JSON.stringify({ pdvList })],
+      );
+      for (const pdv of pdvList) await insertSale(session.orgId, pdv.codicePos, pdv.nome);
+
+      const context = await newAuthedContext(browser, session);
+      const page = await context.newPage();
+      await page.addInitScript(() => {
+        localStorage.setItem('mystoredesk-theme', 'light');
+        localStorage.setItem('mystoredesk-dashboard-style', 'prisma-light');
+      });
+      await page.goto(`${BASE}/dashboard-gara-reale`, { waitUntil: 'networkidle' });
+      await page.getByTestId('prisma-award').waitFor({ state: 'visible', timeout: 30000 });
+      // NB: .pl-tiny è uppercase via CSS text-transform: confronto case-insensitive.
+      const text = await page.getByTestId('prisma-award').innerText();
+      assert.ok(text.toLowerCase().includes('provenienza verificabile'), `panel label present (${prefix})`);
+      assert.ok(text.includes('Stessa base dati della Gara Reale.'), `panel title present (${prefix})`);
+      assert.ok(text.includes(expectSubstring),
+        `provenance text must be truthful for ${prefix}; got: ${text}`);
+      assert.ok(!text.includes(notExpectSubstring),
+        `provenance text must NOT claim "${notExpectSubstring}" for ${prefix}; got: ${text}`);
+      // I contenuti standard restano assenti in Prisma.
+      assert.equal(await page.getByTestId('section-pista-ticker').count(), 0,
+        `ticker "Piste in gara" must stay hidden in Prisma (${prefix})`);
+      await page.close();
+      await context.close();
+    } finally {
+      await cleanupOrg(pool, session);
+    }
+  };
+
+  try {
+    // a) calendari misti: un PDV con calendario, uno senza.
+    await runCase({
+      prefix: 'prisma_prov_mix',
+      pdvList: [
+        { codicePos: uniq('POS'), nome: 'Con Calendario', ragioneSociale: 'Prisma Prov Srl', calendar: fullCalendar },
+        { codicePos: uniq('POS'), nome: 'Senza Calendario', ragioneSociale: 'Prisma Prov Srl' },
+      ],
+      expectSubstring: 'i PDV con calendario di gara configurato contano solo le vendite nei giorni di gara, gli altri tutte le vendite del mese',
+      notExpectSubstring: 'senza calendari di gara configurati',
+    });
+    // b) nessun calendario: fallback esplicito "tutte le vendite del mese".
+    await runCase({
+      prefix: 'prisma_prov_none',
+      pdvList: [
+        { codicePos: uniq('POS'), nome: 'PDV Uno', ragioneSociale: 'Prisma Prov Srl' },
+        { codicePos: uniq('POS'), nome: 'PDV Due', ragioneSociale: 'Prisma Prov Srl' },
+      ],
+      expectSubstring: 'senza calendari di gara configurati vengono considerate tutte le vendite del mese',
+      notExpectSubstring: 'i PDV con calendario di gara configurato',
+    });
+  } finally {
+    await browser.close().catch(() => {});
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
 // SCENARIO 3 (statico): la tabella PRESETS nel pre-paint script di
 // client/index.html deve combaciare con ACCENT_PRESETS di appearance.ts
 // (stesse hsl light/dark per ogni id, indigo escluso: è il default senza
