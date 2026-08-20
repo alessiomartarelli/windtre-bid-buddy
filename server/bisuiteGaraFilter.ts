@@ -12,10 +12,16 @@ export type CalendarShape = {
   specialDays?: { date: string; isOpen: boolean }[];
 };
 
-// Forma minima di una vendita per il filtro: data e PDV.
+import { resolveSalePdvForView, type PdvView } from "../shared/pdvView";
+
+// Forma minima di una vendita per il filtro: data e PDV. `rawData` e
+// `nomeNegozio` servono solo alla vista Destinazione (Task #462) per
+// risolvere il PDV effettivo con cui cercare il calendario.
 export type FilterableSale = {
   dataVendita?: Date | string | null;
   codicePos?: string | null;
+  nomeNegozio?: string | null;
+  rawData?: unknown;
 };
 
 // Forma minima della gara config usata per costruire i calendari per PDV.
@@ -69,9 +75,16 @@ export function romeDateInfo(d: Date): { iso: string; weekday: number } {
 export function isSaleInGara(
   sale: FilterableSale,
   calendarByPos: Map<string, CalendarShape>,
+  pdvView: PdvView = "origine",
 ): boolean {
   if (!sale.dataVendita) return true;
-  const cal = sale.codicePos ? calendarByPos.get(sale.codicePos) : undefined;
+  // Task #462 — in vista Destinazione il calendario da applicare è quello del
+  // PDV di destinazione; le vendite senza destinazione (bucket esplicito)
+  // non hanno calendario → fallback "in gara", come i PDV non configurati.
+  const effectivePos = pdvView === "destinazione"
+    ? resolveSalePdvForView(sale, "destinazione").codicePos
+    : sale.codicePos;
+  const cal = effectivePos ? calendarByPos.get(effectivePos) : undefined;
   if (!cal) return true; // Fallback: PDV senza calendario configurato
   const { iso, weekday } = romeDateInfo(new Date(sale.dataVendita));
   const special = cal.specialDays?.find((s) => s.date === iso);
@@ -86,6 +99,7 @@ export function selectInGaraSales<T extends FilterableSale>(
   allSales: T[],
   inGaraOnly: boolean,
   garaCfg: GaraConfigForFilter,
+  pdvView: PdvView = "origine",
 ): {
   sales: T[];
   calendarsAvailable: boolean;
@@ -97,7 +111,7 @@ export function selectInGaraSales<T extends FilterableSale>(
     : { calendarByPos: new Map<string, CalendarShape>(), calendarsAvailable: false };
 
   const sales = inGaraOnly && calendarsAvailable
-    ? allSales.filter((s) => isSaleInGara(s, calendarByPos))
+    ? allSales.filter((s) => isSaleInGara(s, calendarByPos, pdvView))
     : allSales;
   const totalSalesUnfiltered = allSales.length;
   const salesExcludedOutOfGara = inGaraOnly ? totalSalesUnfiltered - sales.length : 0;

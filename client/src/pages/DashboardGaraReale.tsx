@@ -337,6 +337,10 @@ interface MappedSalesResponse {
   /** Task #457 — serie giornaliera (YYYY-MM-DD, ordine crescente, solo giorni
    *  con vendite): conteggio vendite e fatturato lordo del giorno. */
   daily?: Array<{ day: string; vendite: number; importo: number }>;
+  /** Task #462 — vista PDV usata dal server per l'attribuzione. */
+  pdvView?: "origine" | "destinazione";
+  /** Task #462 — n. vendite senza PDV destinazione (solo vista destinazione). */
+  salesSenzaDestinazione?: number;
 }
 
 interface OrgConfigPdv {
@@ -3055,6 +3059,11 @@ export default function DashboardGaraReale() {
   const [expandedMobileGroups, setExpandedMobileGroups] = useState<Set<string>>(new Set());
   const [expandedFissoGroups, setExpandedFissoGroups] = useState<Set<string>>(new Set());
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
+  // Task #462 — vista PDV: 'origine' (default, comportamento invariato) o
+  // 'destinazione' (il server riattribuisce vendite, calendari, soglie e
+  // premi al PDV di destinazione; le vendite senza destinazione finiscono
+  // in un bucket esplicito, mai su un negozio errato).
+  const [pdvView, setPdvView] = useState<"origine" | "destinazione">("origine");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pdvSortKey, setPdvSortKey] = useState<PdvSortKey>('pezzi_default');
   const [expandedDeviceDrills, setExpandedDeviceDrills] = useState<Set<string>>(new Set());
@@ -3113,7 +3122,7 @@ export default function DashboardGaraReale() {
   const rulesUpdatedAt = mappingVersion?.rulesUpdatedAt ?? null;
 
   const { data: mappedData, isLoading: loadingMapped } = useQuery<MappedSalesResponse>({
-    queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear, effectiveConfigId, "inGara", rulesUpdatedAt],
+    queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear, effectiveConfigId, "inGara", rulesUpdatedAt, pdvView],
     queryFn: async () => {
       const params = new URLSearchParams({
         month: String(selMonth),
@@ -3121,6 +3130,7 @@ export default function DashboardGaraReale() {
         inGaraOnly: "true",
       });
       if (effectiveConfigId) params.set("garaConfigId", effectiveConfigId);
+      if (pdvView !== "origine") params.set("pdvView", pdvView);
       const res = await fetch(apiUrl(`/api/admin/bisuite-mapped-sales?${params.toString()}`), { credentials: "include" });
       if (!res.ok) throw new Error("Errore nel caricamento dati");
       return res.json();
@@ -4553,6 +4563,16 @@ export default function DashboardGaraReale() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={pdvView} onValueChange={(v) => setPdvView(v as "origine" | "destinazione")} data-testid="select-pdv-view">
+          <SelectTrigger className="w-[140px] sm:w-[180px] text-xs sm:text-sm" data-testid="select-pdv-view-trigger">
+            <Store className="h-4 w-4 mr-1 sm:mr-2 shrink-0" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="origine" data-testid="select-pdv-view-origine">PDV Origine</SelectItem>
+            <SelectItem value="destinazione" data-testid="select-pdv-view-destinazione">PDV Destinazione</SelectItem>
+          </SelectContent>
+        </Select>
         {configList && configList.length > 0 && (
           <Select value={effectiveConfigId} onValueChange={setSelectedConfigId} data-testid="select-config">
             <SelectTrigger className="w-[140px] sm:w-[220px] text-xs sm:text-sm" data-testid="select-config-trigger">
@@ -4666,6 +4686,17 @@ export default function DashboardGaraReale() {
                     <div className="text-xs text-amber-600 flex items-center gap-1.5" data-testid="text-no-calendar-info">
                       <AlertTriangle className="h-3 w-3" />
                       <span>Nessun calendario PDV configurato in gara — vengono mostrate tutte le vendite del mese.</span>
+                    </div>
+                  )}
+                  {pdvView === "destinazione" && (
+                    <div className="text-xs text-amber-600 flex items-center gap-1.5" data-testid="text-pdv-view-info">
+                      <Store className="h-3 w-3" />
+                      <span>
+                        Vista PDV Destinazione: vendite, soglie e premi attribuiti al negozio di destinazione.
+                        {(mappedData.salesSenzaDestinazione ?? 0) > 0 && (
+                          <> <span className="font-semibold">{mappedData.salesSenzaDestinazione!.toLocaleString('it-IT')}</span> vendite senza destinazione raggruppate in «Senza PDV destinazione».</>
+                        )}
+                      </span>
                     </div>
                   )}
                 </div>

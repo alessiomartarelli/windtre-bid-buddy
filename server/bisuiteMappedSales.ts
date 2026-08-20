@@ -2,6 +2,7 @@ import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { mapBiSuiteArticle } from "../shared/bisuiteMapping";
 import { classifyCategory, isCouponCaring, isPezzoIva } from "../shared/bisuiteClassification";
 import { trendYmdOf } from "../shared/venditeReport";
+import { resolveSalePdvForView, type PdvView } from "../shared/pdvView";
 
 // Aggregazione lato server delle vendite BiSuite mappate, estratta dalla route
 // GET /api/admin/bisuite-mapped-sales così da essere richiamabile e testabile
@@ -76,6 +77,11 @@ export type MappedSalesAggregation = {
   /** Task #457 — serie giornaliera (YYYY-MM-DD italiano, ordine crescente,
    *  solo i giorni con vendite): conteggio vendite e fatturato lordo. */
   daily: Array<{ day: string; vendite: number; importo: number }>;
+  /** Task #462 — vista PDV usata per l'attribuzione (default 'origine'). */
+  pdvView: PdvView;
+  /** Task #462 — n. vendite senza PDV destinazione (solo vista destinazione;
+   *  finiscono nel bucket esplicito SENZA_DESTINAZIONE, mai su altri PDV). */
+  salesSenzaDestinazione: number;
 };
 
 // Forma minima di una riga bisuite_sales necessaria all'aggregazione.
@@ -97,7 +103,14 @@ const newDeviceTally = (): DeviceTally => ({
 export function aggregateMappedSales(
   sales: MappableSale[],
   rules: BiSuiteMappingRule[],
+  opts?: { pdvView?: PdvView },
 ): MappedSalesAggregation {
+  // Task #462 — vista PDV: 'origine' (default, comportamento invariato:
+  // campi legacy della vendita) oppure 'destinazione' (attribuzione al PDV
+  // di destinazione da rawData.attivitaDestinazione, con bucket esplicito
+  // per le vendite senza destinazione).
+  const pdvView: PdvView = opts?.pdvView === "destinazione" ? "destinazione" : "origine";
+  let salesSenzaDestinazione = 0;
   const byPdv: Record<string, PdvAggregate> = {};
 
   let totalMapped = 0;
@@ -126,11 +139,21 @@ export function aggregateMappedSales(
     const raw = sale.rawData as any;
     if (!raw) continue;
 
-    const codicePos = sale.codicePos || "UNKNOWN";
+    // In vista Origine i campi legacy sono usati AS-IS (comportamento
+    // invariato al byte); solo la vista Destinazione passa dal resolver.
+    let effettivoPos = sale.codicePos;
+    let effettivoNome = sale.nomeNegozio;
+    if (pdvView === "destinazione") {
+      const resolvedPdv = resolveSalePdvForView(sale, "destinazione");
+      if (resolvedPdv.senzaDestinazione) salesSenzaDestinazione++;
+      effettivoPos = resolvedPdv.codicePos;
+      effettivoNome = resolvedPdv.nomeNegozio;
+    }
+    const codicePos = effettivoPos || "UNKNOWN";
     if (!byPdv[codicePos]) {
       byPdv[codicePos] = {
         codicePos,
-        nomeNegozio: sale.nomeNegozio || codicePos,
+        nomeNegozio: effettivoNome || codicePos,
         ragioneSociale: sale.ragioneSociale || "",
         items: [],
         addons: [],
@@ -335,5 +358,7 @@ export function aggregateMappedSales(
     totaliPerPista,
     totaliAddonsPerPista,
     daily: Array.from(byDay.values()).sort((a, b) => a.day.localeCompare(b.day)),
+    pdvView,
+    salesSenzaDestinazione,
   };
 }

@@ -105,6 +105,13 @@ import { TabellaPdvPistaPezzi } from "@/components/TabellaPdvPistaPezzi";
 import { GraficoAndamentoPezzi, type PezziTrendPoint } from "@/components/GraficoAndamentoPezzi";
 import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
 import { accumulaPezziExtra, emptyPezziExtra, type PezziExtraCounters } from "@shared/pdvPezziExtra";
+import {
+  resolveSalePdvForView,
+  extractPdvOrigine,
+  extractPdvDestinazione,
+  SENZA_DESTINAZIONE_POS,
+  type PdvView,
+} from "@shared/pdvView";
 import type { CanvassKpiRule } from "@shared/canvassKpiRules";
 
 interface BisuiteSale {
@@ -280,6 +287,10 @@ export default function VenditeBiSuite() {
   const [filterPagamento, setFilterPagamento] = useState<keyof IncassoTotals | null>(null);
   const [viewMode, setViewMode] = useState<"vendite" | "addetti">("vendite");
   const [selectedAddetto, setSelectedAddetto] = useState<string | null>(null);
+  // Task #462 — vista PDV: 'origine' (default, campi legacy della vendita)
+  // oppure 'destinazione' (attribuzione al PDV di destinazione dal raw,
+  // con bucket esplicito per le vendite che non ne hanno uno).
+  const [pdvView, setPdvView] = useState<PdvView>("origine");
 
   const orgId = profile?.organizationId || "";
   const isAdmin = profile?.role === "admin" || profile?.role === "super_admin";
@@ -416,10 +427,28 @@ export default function VenditeBiSuite() {
 
   // rawSales include anche le ANNULLATA (visibili nella tabella grezza con badge),
   // mentre `sales` viene usato per tutti i conteggi/aggregati e le esclude.
-  const rawSales = data?.sales || [];
+  const fetchedSales = data?.sales || [];
+  // Task #462 — in vista Destinazione riscriviamo (solo in memoria) i campi
+  // PDV della vendita con il PDV di destinazione risolto dal raw: tutti i
+  // filtri/riepiloghi/export a valle riflettono così la vista scelta senza
+  // toccare i dati memorizzati. In vista Origine l'array resta invariato.
+  const rawSales = useMemo(() => {
+    if (pdvView === "origine") return fetchedSales;
+    return fetchedSales.map((s) => {
+      const r = resolveSalePdvForView(s, "destinazione");
+      return { ...s, codicePos: r.codicePos, nomeNegozio: r.nomeNegozio };
+    });
+  }, [fetchedSales, pdvView]);
   const sales = useMemo(
     () => rawSales.filter(s => (s.stato || "").trim().toUpperCase() !== "ANNULLATA"),
     [rawSales],
+  );
+  // N. vendite (non annullate) senza PDV destinazione nella vista corrente.
+  const senzaDestinazioneCount = useMemo(
+    () => (pdvView === "destinazione"
+      ? sales.filter((s) => s.codicePos === SENZA_DESTINAZIONE_POS).length
+      : 0),
+    [sales, pdvView],
   );
 
   const saleClassifications = useMemo(() => {
@@ -1114,7 +1143,8 @@ export default function VenditeBiSuite() {
             (filterPista !== "all" ? 1 : 0) +
             (filterStato !== "finalizzate" ? 1 : 0) +
             (filterPagamento ? 1 : 0) +
-            (selectedPdv ? 1 : 0)
+            (selectedPdv ? 1 : 0) +
+            (pdvView !== "origine" ? 1 : 0)
           }
           onReset={() => {
             setSearchTerm("");
@@ -1123,6 +1153,7 @@ export default function VenditeBiSuite() {
             setFilterStato("finalizzate");
             setFilterPagamento(null);
             setSelectedPdv(null);
+            setPdvView("origine");
           }}
           actions={
             credStatus?.configured ? (
@@ -1219,6 +1250,25 @@ export default function VenditeBiSuite() {
               </SelectContent>
             </Select>
           </FilterField>
+          <FilterField label="Vista PDV" icon={Store}>
+            <Select
+              value={pdvView}
+              onValueChange={(v) => {
+                setPdvView(v as PdvView);
+                // I codici PDV cambiano tra le due viste: un PDV selezionato
+                // nell'altra vista non esiste più → azzera il drill-down.
+                setSelectedPdv(null);
+              }}
+            >
+              <SelectTrigger data-testid="select-pdv-view">
+                <SelectValue placeholder="Origine" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="origine">PDV Origine</SelectItem>
+                <SelectItem value="destinazione">PDV Destinazione</SelectItem>
+              </SelectContent>
+            </Select>
+          </FilterField>
           <FilterField label="Stato" icon={FilterIcon}>
             <Select value={filterStato} onValueChange={setFilterStato}>
               <SelectTrigger data-testid="select-stato">
@@ -1269,6 +1319,19 @@ export default function VenditeBiSuite() {
             </FilterField>
           )}
         </FilterBar>
+
+        {pdvView === "destinazione" && senzaDestinazioneCount > 0 && (
+          <div
+            className="flex items-center gap-1.5 text-xs text-amber-600"
+            data-testid="banner-senza-destinazione"
+          >
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              {senzaDestinazioneCount} vendite senza PDV destinazione: raggruppate in
+              «Senza PDV destinazione», non attribuite ad altri negozi.
+            </span>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="space-y-4 py-4">
@@ -2392,6 +2455,10 @@ function SaleDetailDialog({
   if (!sale) return null;
 
   const raw = sale.rawData || {};
+  // Task #462 — mostra sempre ENTRAMBE le attribuzioni quando disponibili,
+  // così l'utente può verificare origine e destinazione della vendita.
+  const pdvOrigine = extractPdvOrigine(raw);
+  const pdvDestinazione = extractPdvDestinazione(raw);
   const articoli = raw.articoli || [];
   const pagamento = raw.pagamento || {};
   const cliente = raw.cliente || {};
@@ -2437,10 +2504,18 @@ function SaleDetailDialog({
             />
             <InfoBlock
               icon={<Store className="h-4 w-4" />}
-              label="Negozio"
-              value={sale.nomeNegozio || "-"}
-              sub={sale.codicePos || undefined}
+              label="Negozio (origine)"
+              value={pdvOrigine?.nomeNegozio || pdvOrigine?.codicePos || sale.nomeNegozio || "-"}
+              sub={pdvOrigine?.codicePos || undefined}
             />
+            {pdvDestinazione && (
+              <InfoBlock
+                icon={<Store className="h-4 w-4" />}
+                label="PDV Destinazione"
+                value={pdvDestinazione.nomeNegozio || pdvDestinazione.codicePos || "-"}
+                sub={pdvDestinazione.codicePos || undefined}
+              />
+            )}
             <InfoBlock
               icon={<User className="h-4 w-4" />}
               label="Addetto"

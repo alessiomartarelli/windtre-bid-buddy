@@ -3821,6 +3821,12 @@ export async function registerRoutes(
       const year = parseInt(req.query.year as string) || new Date().getFullYear();
       const inGaraOnly = req.query.inGaraOnly === 'true' || req.query.inGaraOnly === '1';
       const garaConfigId = (req.query.garaConfigId as string) || undefined;
+      // Task #462 — vista PDV origine/destinazione: ricalcola l'intero
+      // prospetto attribuendo le vendite al PDV scelto. Default 'origine'
+      // (comportamento invariato). Solo questa route la supporta: tutti gli
+      // altri consumer restano ancorati al PDV di origine.
+      const { normalizePdvView } = await import("../shared/pdvView");
+      const pdvView = normalizePdvView(req.query.pdvView);
 
       // Task #367: canonicalizza le RS (alias + normalizzazione dal registro)
       // prima di filtri e aggregazione, come in GET /api/bisuite-sales.
@@ -3845,7 +3851,7 @@ export async function registerRoutes(
 
       const { selectInGaraSales } = await import("./bisuiteGaraFilter");
       const { sales, calendarsAvailable, totalSalesUnfiltered, salesExcludedOutOfGara } =
-        selectInGaraSales(allSales, inGaraOnly, garaCfg);
+        selectInGaraSales(allSales, inGaraOnly, garaCfg, pdvView);
 
       const sysMapping = await storage.getSystemConfig("bisuite_mapping");
       const mappingConfig = sysMapping?.config as { rules?: BiSuiteMappingRule[] } | null;
@@ -3868,7 +3874,8 @@ export async function registerRoutes(
         totalImporto,
         latestSaleDate,
         daily,
-      } = aggregateMappedSales(sales, rules);
+        salesSenzaDestinazione,
+      } = aggregateMappedSales(sales, rules, { pdvView });
 
       res.json({
         month,
@@ -3888,6 +3895,8 @@ export async function registerRoutes(
         calendarsAvailable,
         rulesUpdatedAt,
         daily,
+        pdvView,
+        salesSenzaDestinazione,
       });
     } catch (error: unknown) {
       console.error("BiSuite mapped sales error:", error);

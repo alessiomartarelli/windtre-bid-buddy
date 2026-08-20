@@ -45,4 +45,5 @@
 - [BiSuite partnership twins](bisuite-partnership-twins.md) — mergeWithDefaultRules twins ogni regola CB su pista partnership; aggrega/filtra per pista o i veri eventi CB si contano doppi (caring escluso dai twin).
 - [Task merge regressions](task-merge-regressions.md) — le merge automatiche possono ripristinare componenti vecchi, iniettare righe-hint e portare suite con semantiche stantie; backup in gitsafe-backup/main.
 - [Accent preset triad](accent-preset-triad.md) — nuovo preset = appearance.ts + index.html + shared/uiPrefs.ts (whitelist server, rifiuto silenzioso) + restart workflow.
+- [Vista PDV origine/destinazione](pdv-view-origine-destinazione.md) — destinazione solo da rawData.attivitaDestinazione, mai cross-fallback; bucket esplicito SENZA_DESTINAZIONE; solo mapped-sales accetta pdvView.
 - [Ticker piste: soglie affidabili](ticker-piste-soglie.md) — mostra marker solo da soglie reali e uniformi; mai inferire dal primo PDV, e ometti piste senza modello soglia.
