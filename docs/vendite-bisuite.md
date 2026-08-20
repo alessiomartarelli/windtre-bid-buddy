@@ -97,6 +97,22 @@ Le query `getBisuiteSales*` in `server/storage.ts` aggiungono per default la
 condizione `upper(stato) <> 'ANNULLATA'`. Il chiamante può passare
 `includeAnnullate=true` per disattivare il filtro.
 
+## Filtro PDV multiselezione (Task #463)
+Il filtro "Punti vendita" della pagina `/vendite-bisuite` è un selettore
+ricercabile a scelta multipla (`MultiSelectFilter` condiviso): selezione
+vuota = tutti i PDV; con una o più selezioni si includono le vendite di
+uno QUALSIASI dei codici scelti (le vendite senza `codicePos` sono
+raggruppate sotto "N/D"). Il trigger mostra il nome del PDV con una sola
+selezione, il conteggio (`N punti vendita`) con più selezioni, e la voce
+"Tutti i punti vendita" in cima alla lista azzera la selezione. Le opzioni
+sono derivate dalla finestra vendite caricata nella vista PDV corrente;
+cambiare Vista PDV (origine/destinazione) azzera la selezione perché i
+codici non coincidono. Il pulsante "Vedi tutte le vendite" nel Riepilogo
+per PDV AGGIUNGE il PDV alla selezione (senza doppioni); il reset filtri
+pulisce tutte le selezioni. KPI, riquadri categoria, riepiloghi
+PDV/RS/addetto, tabella e export derivano tutti dalla stessa lista
+filtrata, quindi restano coerenti con la selezione multipla.
+
 In tutta l'app (Dashboard Gara, calcolo punti/soglie/proiezioni, Prima Nota
 IVA, premi, ecc.) sono escluse. **Eccezione**: la pagina `/vendite-bisuite`
 chiama `/api/bisuite-sales?includeAnnullate=true` per mostrarle nella

@@ -85,6 +85,7 @@ import {
   Route,
 } from "lucide-react";
 import { FilterBar, FilterField } from "@/components/ui/filter-bar";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { AppNavbar } from "@/components/AppNavbar";
@@ -278,7 +279,10 @@ export default function VenditeBiSuite() {
   const [fromDate, setFromDate] = useState(defaults.from);
   const [toDate, setToDate] = useState(defaults.to);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedPdv, setSelectedPdv] = useState<string | null>(null);
+  // Task #463 — filtro PDV multiselezione: selezione vuota = tutti i PDV;
+  // con una o più selezioni si includono le vendite di uno QUALSIASI dei
+  // codici scelti. Le vendite senza codice sono raggruppate sotto "N/D".
+  const [selectedPdvs, setSelectedPdvs] = useState<string[]>([]);
   const [selectedSale, setSelectedSale] = useState<BisuiteSale | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
   const [summaryCategory, setSummaryCategory] = useState<SalesSummaryCategory>("canvass");
@@ -481,8 +485,8 @@ export default function VenditeBiSuite() {
     // Tabella vendite grezze: parte da rawSales per mantenere visibili anche
     // le righe ANNULLATA (con il loro badge), che invece sono escluse dagli
     // aggregati calcolati su `sales`.
-    let filtered = selectedPdv
-      ? rawSales.filter((s) => (s.codicePos || "N/D") === selectedPdv)
+    let filtered = selectedPdvs.length > 0
+      ? rawSales.filter((s) => selectedPdvs.includes(s.codicePos || "N/D"))
       : rawSales;
 
     if (filterStato !== "all") {
@@ -522,7 +526,25 @@ export default function VenditeBiSuite() {
     }
 
     return filtered;
-  }, [rawSales, selectedPdv, filterStato, filterType, filterPista, searchTerm, saleClassifications]);
+  }, [rawSales, selectedPdvs, filterStato, filterType, filterPista, searchTerm, saleClassifications]);
+
+  // Task #463 — opzioni del filtro PDV: elenco stabile (codice + nome) dei
+  // punti vendita presenti nella finestra caricata, nella vista corrente.
+  // Le vendite senza codice finiscono sotto "N/D".
+  const pdvOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of rawSales) {
+      const code = s.codicePos || "N/D";
+      if (!map.has(code)) map.set(code, s.nomeNegozio || code);
+    }
+    return Array.from(map, ([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "it"));
+  }, [rawSales]);
+
+  const pdvLabelFor = useCallback(
+    (code: string) => pdvOptions.find((o) => o.value === code)?.label || code,
+    [pdvOptions],
+  );
 
   // Vendite finali mostrate in tabella/aggregati: applica anche il filtro per
   // metodo di pagamento (cliccando un badge "Modalità di Incasso").
@@ -1143,7 +1165,7 @@ export default function VenditeBiSuite() {
             (filterPista !== "all" ? 1 : 0) +
             (filterStato !== "finalizzate" ? 1 : 0) +
             (filterPagamento ? 1 : 0) +
-            (selectedPdv ? 1 : 0) +
+            (selectedPdvs.length > 0 ? 1 : 0) +
             (pdvView !== "origine" ? 1 : 0)
           }
           onReset={() => {
@@ -1152,7 +1174,7 @@ export default function VenditeBiSuite() {
             setFilterPista("all");
             setFilterStato("finalizzate");
             setFilterPagamento(null);
-            setSelectedPdv(null);
+            setSelectedPdvs([]);
             setPdvView("origine");
           }}
           actions={
@@ -1255,9 +1277,9 @@ export default function VenditeBiSuite() {
               value={pdvView}
               onValueChange={(v) => {
                 setPdvView(v as PdvView);
-                // I codici PDV cambiano tra le due viste: un PDV selezionato
-                // nell'altra vista non esiste più → azzera il drill-down.
-                setSelectedPdv(null);
+                // I codici PDV cambiano tra le due viste: i PDV selezionati
+                // nell'altra vista non esistono più → azzera il filtro.
+                setSelectedPdvs([]);
               }}
             >
               <SelectTrigger data-testid="select-pdv-view">
@@ -1304,20 +1326,18 @@ export default function VenditeBiSuite() {
               </Select>
             </FilterField>
           )}
-          {selectedPdv && (
-            <FilterField label="PDV selezionato" icon={FilterIcon}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full h-9 justify-start"
-                onClick={() => setSelectedPdv(null)}
-                data-testid="button-clear-pdv"
-              >
-                <X className="h-3.5 w-3.5 mr-1" />
-                Rimuovi filtro
-              </Button>
-            </FilterField>
-          )}
+          <FilterField label="Punti vendita" icon={Store}>
+            <MultiSelectFilter
+              values={selectedPdvs}
+              onChange={setSelectedPdvs}
+              options={pdvOptions}
+              allLabel="Tutti i punti vendita"
+              countLabel={(n) => `${n} punti vendita`}
+              searchPlaceholder="Cerca punto vendita..."
+              emptyText="Nessun punto vendita."
+              testid="select-pdv-filter"
+            />
+          </FilterField>
         </FilterBar>
 
         {pdvView === "destinazione" && senzaDestinazioneCount > 0 && (
@@ -1399,7 +1419,7 @@ export default function VenditeBiSuite() {
                 <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center gap-2 mb-3 flex-wrap">
                     <Wallet className="h-4 w-4 text-primary" />
-                    <span className="font-semibold text-sm">Modalità di Incasso{selectedPdv ? ` - ${pdvSummaries.find(p => p.codicePos === selectedPdv)?.nomeNegozio || selectedPdv}` : ""}</span>
+                    <span className="font-semibold text-sm">Modalità di Incasso{selectedPdvs.length === 1 ? ` - ${pdvLabelFor(selectedPdvs[0])}` : selectedPdvs.length > 1 ? ` - ${selectedPdvs.length} punti vendita` : ""}</span>
                     {filterPagamento && (
                       <Button
                         variant="ghost"
@@ -1694,7 +1714,7 @@ export default function VenditeBiSuite() {
               </div>
             </section>
 
-            {!selectedPdv && rsSummaries.length > 1 && (
+            {rsSummaries.length > 1 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -1741,8 +1761,7 @@ export default function VenditeBiSuite() {
               </Card>
             )}
 
-            {!selectedPdv && (
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
                 <Button
                   variant={viewMode === "vendite" ? "default" : "outline"}
                   size="sm"
@@ -1757,16 +1776,15 @@ export default function VenditeBiSuite() {
                   variant={viewMode === "addetti" ? "default" : "outline"}
                   size="sm"
                   className="h-8 text-xs"
-                  onClick={() => { setViewMode("addetti"); setSelectedPdv(null); }}
+                  onClick={() => setViewMode("addetti")}
                   data-testid="button-view-addetti"
                 >
                   <User className="h-3.5 w-3.5 mr-1" />
                   Per Addetto ({addettoSummaries.length})
                 </Button>
               </div>
-            )}
 
-            {!selectedPdv && viewMode === "addetti" && (
+            {viewMode === "addetti" && (
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between w-full flex-wrap gap-2">
@@ -1976,20 +1994,16 @@ export default function VenditeBiSuite() {
               </Card>
             )}
 
-            {!selectedPdv && (
-              <>
-                <GraficoAndamentoPezzi
-                  data={andamentoPezzi}
-                  pistaLabels={pistaLabels}
-                  hasExtra={pdvSummaries.some(p =>
-                    p.pezziExtra.iva > 0 || p.pezziExtra.cb > 0 || p.pezziExtra.telefoni > 0,
-                  )}
-                />
-                <TabellaPdvPistaPezzi rows={pdvSummaries} pistaLabels={pistaLabels} />
-              </>
-            )}
+            <GraficoAndamentoPezzi
+              data={andamentoPezzi}
+              pistaLabels={pistaLabels}
+              hasExtra={pdvSummaries.some(p =>
+                p.pezziExtra.iva > 0 || p.pezziExtra.cb > 0 || p.pezziExtra.telefoni > 0,
+              )}
+            />
+            <TabellaPdvPistaPezzi rows={pdvSummaries} pistaLabels={pistaLabels} />
 
-            {!selectedPdv && viewMode === "vendite" && (
+            {viewMode === "vendite" && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -2102,7 +2116,11 @@ export default function VenditeBiSuite() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setSelectedPdv(pdv.codicePos)}
+                                onClick={() =>
+                                  setSelectedPdvs((prev) =>
+                                    prev.includes(pdv.codicePos) ? prev : [...prev, pdv.codicePos],
+                                  )
+                                }
                                 data-testid={`button-view-pdv-${pdv.codicePos}`}
                               >
                                 Vedi tutte le vendite
@@ -2122,18 +2140,20 @@ export default function VenditeBiSuite() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Package className="h-5 w-5 text-primary" />
-                  {selectedPdv
-                    ? `Vendite - ${pdvSummaries.find((p) => p.codicePos === selectedPdv)?.nomeNegozio || selectedPdv}`
+                  {selectedPdvs.length === 1
+                    ? `Vendite - ${pdvLabelFor(selectedPdvs[0])}`
+                    : selectedPdvs.length > 1
+                    ? `Vendite - ${selectedPdvs.length} punti vendita`
                     : "Tutte le Vendite"}
                   <Badge variant="outline" className="ml-2 text-xs">
                     {filteredSales.length} record
                   </Badge>
-                  {selectedPdv && (
+                  {selectedPdvs.length > 0 && (
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 ml-auto"
-                      onClick={() => setSelectedPdv(null)}
+                      onClick={() => setSelectedPdvs([])}
                       data-testid="button-close-pdv-filter"
                     >
                       <X className="h-4 w-4" />

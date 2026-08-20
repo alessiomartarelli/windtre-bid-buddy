@@ -316,3 +316,120 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     await pool.end().catch(() => {});
   }
 });
+
+// Task #463: filtro PDV multiselezione nella pagina Vendite BiSuite.
+// Copre: selezione di due PDV (semantica OR), deselezione di uno,
+// ripristino "Tutti i punti vendita", drill-down dal riepilogo PDV che
+// AGGIUNGE al filtro senza doppioni, e reset filtri che azzera tutto.
+test('Vendite BiSuite UI: filtro PDV multiselezione (selezione, deselezione, tutti, drill-down)', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'pdv_ms', fullName: 'PDV MultiSelect UI Test' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+
+    const POS_A = uniq('MSA');
+    const POS_B = uniq('MSB');
+    const POS_C = uniq('MSC');
+
+    // A: 2 vendite, B: 1 vendita, C: 1 vendita (tutte FINALIZZATA).
+    await insertSale(pool, session.orgId, {
+      codicePos: POS_A, nomeNegozio: 'Negozio MS Alfa', nomeAddetto: 'ADD MS A',
+      articoli: [artUntied],
+    });
+    await insertSale(pool, session.orgId, {
+      codicePos: POS_A, nomeNegozio: 'Negozio MS Alfa', nomeAddetto: 'ADD MS A',
+      articoli: [artTiedIva],
+    });
+    await insertSale(pool, session.orgId, {
+      codicePos: POS_B, nomeNegozio: 'Negozio MS Beta', nomeAddetto: 'ADD MS B',
+      articoli: [artFissoIva],
+    });
+    await insertSale(pool, session.orgId, {
+      codicePos: POS_C, nomeNegozio: 'Negozio MS Gamma', nomeAddetto: 'ADD MS C',
+      articoli: [artEnergiaConsumer],
+    });
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'networkidle' });
+    await page.getByTestId('button-view-vendite').waitFor({ timeout: 20000 });
+
+    const trigger = page.getByTestId('select-pdv-filter');
+    await trigger.waitFor({ timeout: 20000 });
+    assert.equal((await trigger.innerText()).trim(), 'Tutti i punti vendita', 'default: nessuna selezione = tutti i PDV');
+    assert.equal(flat(await page.getByTestId('text-total-sales').innerText()), '4', 'default: 4 vendite totali');
+
+    // ── Seleziona due PDV (A + B): semantica "uno qualsiasi dei scelti" ──
+    await trigger.click();
+    await page.getByTestId(`option-select-pdv-filter-${POS_A}`).click();
+    await page.getByTestId(`option-select-pdv-filter-${POS_B}`).click();
+    await page.keyboard.press('Escape');
+    assert.equal((await trigger.innerText()).trim(), '2 punti vendita', 'trigger mostra il conteggio con 2 selezioni');
+
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="text-total-sales"]')?.textContent?.trim() === '3',
+      null, { timeout: 15000 },
+    );
+    // Riepilogo per PDV: solo A e B, niente C, nessun doppione.
+    assert.equal(await page.locator('button:has-text("Negozio MS Alfa")').count(), 1, 'PDV A listato una sola volta');
+    assert.equal(await page.locator('button:has-text("Negozio MS Beta")').count(), 1, 'PDV B listato una sola volta');
+    assert.equal(await page.locator('button:has-text("Negozio MS Gamma")').count(), 0, 'PDV C (non selezionato) escluso');
+    assert.ok(
+      flat(await page.getByTestId('card-lista-vendite').innerText()).includes('3record'),
+      'tabella vendite: 3 record (2 di A + 1 di B)',
+    );
+    assert.ok(
+      (await page.getByTestId('card-lista-vendite').innerText()).includes('2 punti vendita'),
+      'header tabella vendite riflette le 2 selezioni',
+    );
+
+    // ── Deseleziona B: resta solo A, il trigger mostra il nome del PDV ──
+    await trigger.click();
+    await page.getByTestId(`option-select-pdv-filter-${POS_B}`).click();
+    await page.keyboard.press('Escape');
+    assert.equal((await trigger.innerText()).trim(), 'Negozio MS Alfa', 'trigger mostra il nome con 1 selezione');
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="text-total-sales"]')?.textContent?.trim() === '2',
+      null, { timeout: 15000 },
+    );
+    assert.equal(await page.locator('button:has-text("Negozio MS Beta")').count(), 0, 'PDV B deselezionato escluso');
+
+    // ── "Tutti i punti vendita" azzera la selezione ──
+    await trigger.click();
+    await page.getByTestId('option-select-pdv-filter-all').click();
+    await page.keyboard.press('Escape');
+    assert.equal((await trigger.innerText()).trim(), 'Tutti i punti vendita', 'voce "tutti" azzera la selezione');
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="text-total-sales"]')?.textContent?.trim() === '4',
+      null, { timeout: 15000 },
+    );
+    assert.equal(await page.locator('button:has-text("Negozio MS Gamma")').count(), 1, 'tutti i PDV di nuovo visibili');
+
+    // ── Drill-down dal riepilogo: aggiunge al filtro senza doppioni ──
+    await page.locator('button:has-text("Negozio MS Gamma")').first().click();
+    await page.getByTestId(`button-view-pdv-${POS_C}`).click();
+    assert.equal((await trigger.innerText()).trim(), 'Negozio MS Gamma', 'drill-down imposta il PDV nel filtro');
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="text-total-sales"]')?.textContent?.trim() === '1',
+      null, { timeout: 15000 },
+    );
+    // Ripetere il drill-down sullo stesso PDV non crea doppioni.
+    await page.locator('button:has-text("Negozio MS Gamma")').first().click();
+    await page.getByTestId(`button-view-pdv-${POS_C}`).click();
+    assert.equal((await trigger.innerText()).trim(), 'Negozio MS Gamma', 'drill-down ripetuto: nessun doppione (resta 1 selezione)');
+
+    // ── Reset filtri: pulisce tutte le selezioni ──
+    await page.getByTestId('button-reset-filters').click();
+    assert.equal((await trigger.innerText()).trim(), 'Tutti i punti vendita', 'reset filtri torna a tutti i PDV');
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="text-total-sales"]')?.textContent?.trim() === '4',
+      null, { timeout: 15000 },
+    );
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
