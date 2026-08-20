@@ -1368,7 +1368,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 p-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 p-3">
             {items.map(renderCard)}
           </div>
           {expandedPista && renderDetail(expandedPista)}

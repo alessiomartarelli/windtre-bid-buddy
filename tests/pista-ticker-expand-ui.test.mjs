@@ -15,7 +15,7 @@ import {
 // Task #432/#433/#434 – verifica automatica della sezione "Piste in gara"
 // (PistaTicker) della Dashboard Gara Reale.
 //
-// La sezione è una griglia di card "Shorts" (grid-cols-2 sm:grid-cols-3
+// La sezione è una griglia di card "Shorts" (grid-cols-1 sm:grid-cols-3
 // xl:grid-cols-4, card aspect-[9/14]): ogni pista con attività genera una
 // card `ticker-pista-{p}` con il valore punti/pezzi (`ticker-punti-{p}`) e
 // il premio (`ticker-premio-{p}`). Le piste a zero attività NON hanno card.
@@ -29,7 +29,8 @@ import {
 //   - piste a zero attività non generano card;
 //   - card per ogni pista attiva; click apre ticker-detail-{p} con blocco
 //     "totale"; secondo click chiude; nessun btn-ticker-pause (layout Shorts);
-//   - (Task #434) stesso comportamento su viewport mobile 375×812;
+//   - (Task #434/#447) stesso comportamento su viewport mobile 375×812,
+//     con card a tutta larghezza in una sola colonna anche con più piste;
 //   - (Task #433) premio non-zero, soglia raggiunta e badge proiezione con
 //     soglie note, per intercettare regressioni che azzerano i calcoli;
 //   - (Task #436) stesse verifiche valore per la pista FISSO, che usa un
@@ -379,20 +380,51 @@ test('scenario 2: card per ogni pista attiva ed espansione/chiusura del dettagli
 });
 
 // ---------------------------------------------------------------------------
-// SCENARIO 3 (Task #434) – layout Shorts su viewport mobile (375×812):
-//              la card è visibile e cliccabile, il pannello dettaglio
-//              compare sotto la griglia e non è clippato/invisibile.
+// SCENARIO 3 (Task #434/#447) – layout Shorts su viewport mobile (375×812):
+//              tre piste attive sono impilate in una colonna a tutta
+//              larghezza; card, tooltip e pannello dettaglio restano
+//              visibili e cliccabili.
 // ---------------------------------------------------------------------------
-test('scenario 3: card e dettaglio funzionano su viewport mobile 375×812', async () => {
+test('scenario 3: piste impilate e dettaglio funzionante su viewport mobile 375×812', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'ticker_mobilevp', fullName: 'Ticker MobileVP Test' });
   let browser;
   try {
     await setRole(pool, session.profileId, 'admin');
-    await seedMobilePista(pool, session, {
-      posPrefix: 'TKMPOS', rsPrefix: 'TickerMobRs Srl',
-      negozio: 'Negozio MobileVP', garaName: 'Ticker mobile viewport test',
-    });
+    const POS = uniq('TKMPOS');
+    const RS = uniq('TickerMobRs Srl');
+    await pool.query(
+      `INSERT INTO gara_config (organization_id, month, year, name, config)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [
+        session.orgId, MONTH, YEAR, 'Ticker mobile viewport test',
+        JSON.stringify({
+          pdvList: [{ codicePos: POS, nome: 'Negozio MobileVP', ragioneSociale: RS }],
+          pistaMobileConfig: {
+            sogliePerPos: [{
+              posCode: POS,
+              soglia1: 3, soglia2: 100, soglia3: 200, soglia4: 300,
+              multiplierSoglia1: 1, multiplierSoglia2: 1.2,
+              multiplierSoglia3: 1.5, multiplierSoglia4: 2,
+            }],
+          },
+        }),
+      ],
+    );
+    for (let i = 0; i < 3; i++) {
+      await insertSale(pool, session.orgId, {
+        codicePos: POS, nomeNegozio: 'Negozio MobileVP', ragioneSociale: RS,
+        articoli: [artMobileTied],
+      });
+      await insertSale(pool, session.orgId, {
+        codicePos: POS, nomeNegozio: 'Negozio MobileVP', ragioneSociale: RS,
+        articoli: [artFissoFtth],
+      });
+      await insertSale(pool, session.orgId, {
+        codicePos: POS, nomeNegozio: 'Negozio MobileVP', ragioneSociale: RS,
+        articoli: [artCbMiaTied],
+      });
+    }
 
     browser = await launchBrowser();
     // Context mobile: viewport 375×812 + touch + isMobile.
@@ -405,11 +437,38 @@ test('scenario 3: card e dettaglio funzionano su viewport mobile 375×812', asyn
     const cardMobile = page.getByTestId('ticker-pista-mobile');
     const toggleMobile = page.getByTestId('ticker-toggle-mobile');
     await cardMobile.waitFor({ state: 'visible', timeout: 15000 });
+    await page.getByTestId('ticker-pista-fisso').waitFor({ state: 'visible', timeout: 15000 });
+    await page.getByTestId('ticker-pista-cb').waitFor({ state: 'visible', timeout: 15000 });
 
-    // La card deve stare dentro il viewport in larghezza (grid-cols-2 a 375px).
-    const box = await cardMobile.boundingBox();
-    assert.ok(box, 'bounding box della card mobile deve esistere');
-    assert.ok(box.width > 0 && box.width <= 375, `card larga ${box.width}px, deve stare in 375px`);
+    // Sotto sm la griglia deve avere UNA SOLA colonna: le tre card hanno la
+    // stessa x, quasi tutta la larghezza disponibile e occupano righe diverse.
+    const cardBoxes = await Promise.all(
+      ['mobile', 'fisso', 'cb'].map((pista) => page.getByTestId(`ticker-pista-${pista}`).boundingBox()),
+    );
+    assert.ok(cardBoxes.every(Boolean), 'tutte le card mobile devono avere un bounding box');
+    const boxes = cardBoxes;
+    const [mobileBox] = boxes;
+    assert.ok(
+      mobileBox.width > 300 && mobileBox.width <= 375,
+      `la card mobile deve usare tutta la riga disponibile, trovati ${mobileBox.width}px`,
+    );
+    assert.ok(
+      boxes.every((box) => Math.abs(box.x - mobileBox.x) < 1 && Math.abs(box.width - mobileBox.width) < 1),
+      'le card devono condividere la stessa colonna a tutta larghezza sul viewport mobile',
+    );
+    const stackedBoxes = [...boxes].sort((a, b) => a.y - b.y);
+    assert.ok(
+      stackedBoxes.every((box, index) => index === 0 || box.y >= stackedBoxes[index - 1].y + stackedBoxes[index - 1].height),
+      'le card devono essere impilate verticalmente senza affiancamenti o sovrapposizioni',
+    );
+    const mobileGridTemplate = await cardMobile.evaluate(
+      (element) => getComputedStyle(element.parentElement).gridTemplateColumns,
+    );
+    assert.equal(
+      mobileGridTemplate.trim().split(/\s+/).length,
+      1,
+      `la griglia mobile deve dichiarare una sola colonna, trovate "${mobileGridTemplate}"`,
+    );
 
     // Tap su una soglia → tooltip leggibile, senza espandere la card.
     const firstThreshold = page.getByTestId('ticker-threshold-mobile-1');
