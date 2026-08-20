@@ -22,7 +22,7 @@
         try {
           var stored = localStorage.getItem("mystoredesk-theme");
           var theme =
-            stored === "light" || stored === "dark" || stored === "system"
+            stored === "light" || stored === "dark" || stored === "system" || stored === "prisma-light"
               ? stored
               : "system";
           var isDark =
@@ -30,6 +30,11 @@
             (theme === "system" &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", isDark);
+          // Skin Prisma Light (Task #453): attributo prima del primo paint
+          // per evitare flash della composizione standard.
+          if (theme === "prisma-light") {
+            document.documentElement.setAttribute("data-skin", "prisma-light");
+          }
           // Palette brand per-utente (Task #407): applica gli override prima
           // del primo paint per evitare il flash del colore di default.
           // Mantieni preset/logica allineati a client/src/lib/appearance.ts.

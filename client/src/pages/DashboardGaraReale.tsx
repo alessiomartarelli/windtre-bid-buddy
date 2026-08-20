@@ -2976,8 +2976,11 @@ export default function DashboardGaraReale() {
   const { profile, organizationBrands, loading: authLoading } = useAuth();
   // Task #427 — stile vetrina W3: rilevato dal contesto live così cambia
   // immediatamente alla selezione del preset senza attendere il refresh del profilo.
-  const { accent: liveAccent } = useTheme();
+  const { accent: liveAccent, theme: liveTheme } = useTheme();
   const isW3 = liveAccent.type === 'preset' && liveAccent.id === 'w3';
+  // Task #453 — tema "Prisma Light": composizione editoriale dedicata della
+  // dashboard (hero + griglia asimmetrica) al posto della testata standard.
+  const isPrisma = liveTheme === 'prisma-light';
   const orgId = profile?.organizationId ?? null;
   // Stesso gating brand degli altri moduli WindTre: org senza brand = nessun
   // filtro, org con brand = serve WindTre (vedi shared/modules.ts).
@@ -4437,6 +4440,41 @@ export default function DashboardGaraReale() {
     };
   }, [mappedData, workdayInfo, pistaStats]);
 
+  // Task #453 — aggregati presentazionali per i pannelli Prisma Light
+  // (focus piste e miglior PDV). Solo lettura di pistaStats: nessun calcolo
+  // nuovo, nessuna fonte dati alternativa.
+  const prismaPanels = useMemo(() => {
+    if (!isPrisma || pistaStats.length === 0) return null;
+    const piste = pistaStats
+      .filter((p) => p.totalePezzi > 0 || p.calc.premioStimato > 0)
+      .map((p) => ({
+        pista: p.pista,
+        label: p.label,
+        pezzi: p.totalePezzi,
+        premio: p.calc.premioStimato,
+        premioProj: p.calcProiezione.premioStimato,
+      }))
+      .sort((a, b) => b.premio - a.premio || b.pezzi - a.pezzi);
+    const maxPezzi = Math.max(1, ...piste.map((p) => p.pezzi));
+    const pdvMap = new Map<string, { codicePos: string; nome: string; ragioneSociale: string; pezzi: number; premio: number }>();
+    for (const p of pistaStats) {
+      for (const b of p.pdvBreakdown ?? []) {
+        const cur = pdvMap.get(b.codicePos) ?? {
+          codicePos: b.codicePos,
+          nome: b.nomeNegozio,
+          ragioneSociale: b.ragioneSociale,
+          pezzi: 0,
+          premio: 0,
+        };
+        cur.pezzi += b.pezzi;
+        cur.premio += b.pdvCalc?.premioStimato ?? 0;
+        pdvMap.set(b.codicePos, cur);
+      }
+    }
+    const topPdv = Array.from(pdvMap.values()).sort((a, b) => b.pezzi - a.pezzi).slice(0, 3);
+    return { piste, maxPezzi, topPdv };
+  }, [isPrisma, pistaStats]);
+
   const premioPerRS = useMemo(() => {
     if (!pistaStats.length || garaConfigMissing) return [] as Array<{ displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>;
     const isRSPerRS = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
@@ -4564,13 +4602,137 @@ export default function DashboardGaraReale() {
           </Card>
         ) : (
           <>
-            {mappedData.latestSaleDate && (
+            {/* Task #453 — hero editoriale Prisma Light: sostituisce la testata
+                standard mantenendo dati live, testid e messaggi informativi. */}
+            {isPrisma && (
+              <header className="pl-hero" data-testid="prisma-hero">
+                <div className="min-w-0">
+                  <div className="pl-eyebrow">Dashboard Gara Reale · {getMonthOptions().find((o) => o.value === selectedPeriod)?.label ?? ''}</div>
+                  <h1>Gara Reale, <em>in sintesi.</em></h1>
+                </div>
+                <div className="pl-hero-side">
+                  {mappedData.latestSaleDate && (
+                    <div className="pl-muted flex items-center gap-1.5" data-testid="text-latest-sale-info">
+                      <BarChart3 className="h-3.5 w-3.5" />
+                      Dati aggiornati al: <span className="font-semibold">{new Date(mappedData.latestSaleDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                    </div>
+                  )}
+                  {mappedData.inGaraOnly && mappedData.calendarsAvailable && (
+                    <div className="pl-muted flex items-center gap-1.5" data-testid="text-in-gara-info">
+                      <Calendar className="h-3 w-3" />
+                      <span>
+                        Solo vendite in giorni di gara: <span className="font-semibold">{mappedData.totalSales.toLocaleString('it-IT')}</span>
+                        {typeof mappedData.totalSalesUnfiltered === 'number' && (
+                          <> / {mappedData.totalSalesUnfiltered.toLocaleString('it-IT')}</>
+                        )}
+                        {(mappedData.salesExcludedOutOfGara ?? 0) > 0 && (
+                          <> — escluse <span className="font-semibold">{mappedData.salesExcludedOutOfGara!.toLocaleString('it-IT')}</span> fuori giornata gara</>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {mappedData.inGaraOnly && !mappedData.calendarsAvailable && (
+                    <div className="text-xs text-amber-600 flex items-center gap-1.5" data-testid="text-no-calendar-info">
+                      <AlertTriangle className="h-3 w-3" />
+                      <span>Nessun calendario PDV configurato in gara — vengono mostrate tutte le vendite del mese.</span>
+                    </div>
+                  )}
+                </div>
+              </header>
+            )}
+            {isPrisma && (
+              <section className="pl-grid-top" data-testid="prisma-grid-top">
+                <article className="pl-pane pl-balance" data-testid="card-kpi-actual">
+                  <div className="pl-tiny" data-testid="label-kpi-actual">€ Incentivi</div>
+                  <div className="pl-amount tabular-nums" data-testid="text-kpi-actual">
+                    {headerKpi.actual.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                  </div>
+                  <div className="pl-muted tabular-nums" data-testid="text-kpi-actual-proj">
+                    {headerKpi.actualProj.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € <span>proiez.</span>
+                  </div>
+                  <span className="pl-tag">
+                    <Trophy className="h-3 w-3" />
+                    {(prismaPanels?.piste.length ?? 0)} piste attive · {mappedData.totalSales.toLocaleString('it-IT')} vendite
+                  </span>
+                </article>
+                <div className="pl-minis">
+                  {([
+                    { key: 'telefoni', label: 'Telefoni', value: headerKpi.telefoni, proj: headerKpi.telefoniProj, euro: false },
+                    { key: 'accessori', label: '€ Accessori', value: headerKpi.accessori, proj: headerKpi.accessoriProj, euro: true },
+                    { key: 'servizi', label: '€ Servizi', value: headerKpi.servizi, proj: headerKpi.serviziProj, euro: true },
+                  ] as const).map((kpi) => {
+                    const fmt = (v: number) => kpi.euro
+                      ? `${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+                      : v.toLocaleString('it-IT');
+                    return (
+                      <article key={kpi.key} className="pl-pane pl-mini" data-testid={`card-kpi-${kpi.key}`}>
+                        <div className="pl-tiny" data-testid={`label-kpi-${kpi.key}`}>{kpi.label}</div>
+                        <strong className="tabular-nums" data-testid={`text-kpi-${kpi.key}`}>{fmt(kpi.value)}</strong>
+                        <span className="pl-proj tabular-nums" data-testid={`text-kpi-${kpi.key}-proj`}>{fmt(kpi.proj)} proiez.</span>
+                      </article>
+                    );
+                  })}
+                </div>
+                <article className="pl-pane pl-activity" data-testid="card-workday-info">
+                  <div className="pl-head">
+                    <h2>Avanzamento mese</h2>
+                    <span className="pl-select">giorni lavorativi</span>
+                  </div>
+                  <div className="pl-big tabular-nums">
+                    <span data-testid="text-elapsed-days">{workdayInfo.elapsedWorkingDays}</span>
+                    <span className="pl-muted text-base"> / {workdayInfo.totalWorkingDays}</span>
+                  </div>
+                  <div className="pl-progress" role="presentation">
+                    <i style={{ width: `${workdayInfo.totalWorkingDays > 0 ? Math.min(100, (workdayInfo.elapsedWorkingDays / workdayInfo.totalWorkingDays) * 100) : 0}%` }} />
+                  </div>
+                  <div className="pl-meta">
+                    <span>Rimanenti: <span data-testid="text-remaining-days">{workdayInfo.remainingWorkingDays}</span></span>
+                    <span data-testid="text-progress-pct">
+                      {workdayInfo.totalWorkingDays > 0 ? Math.round((workdayInfo.elapsedWorkingDays / workdayInfo.totalWorkingDays) * 100) : 0}%
+                    </span>
+                  </div>
+                </article>
+                <aside className="pl-right">
+                  {prismaPanels && prismaPanels.topPdv.length > 0 && (
+                    <article className="pl-pane pl-store" data-testid="prisma-top-pdv">
+                      <div className="pl-tiny">PDV in evidenza</div>
+                      <h2 title={prismaPanels.topPdv[0].nome}>{prismaPanels.topPdv[0].nome}</h2>
+                      <div className="pl-muted">{prismaPanels.topPdv[0].codicePos} · {prismaPanels.topPdv[0].pezzi.toLocaleString('it-IT')} pezzi{prismaPanels.topPdv[0].premio > 0 ? ` · ${formatEuro(prismaPanels.topPdv[0].premio)}` : ''}</div>
+                      {prismaPanels.topPdv.length > 1 && <div className="pl-rule" />}
+                      {prismaPanels.topPdv.slice(1).map((pdv) => (
+                        <div key={pdv.codicePos} className="pl-priority-item" style={{ borderTop: 'none', padding: '0.25rem 0' }}>
+                          <span className="pl-p-name" title={pdv.nome}>{pdv.nome}</span>
+                          <em>{pdv.pezzi.toLocaleString('it-IT')} pz</em>
+                        </div>
+                      ))}
+                    </article>
+                  )}
+                  {prismaPanels && prismaPanels.piste.length > 0 && (
+                    <article className="pl-pane pl-priority" data-testid="prisma-piste-focus">
+                      <h2>Focus piste</h2>
+                      {prismaPanels.piste.slice(0, 5).map((p) => (
+                        <div key={p.pista} className="pl-priority-item">
+                          <div className="min-w-0 flex-1">
+                            <span className="pl-p-name">{p.label}</span>
+                            <span className="pl-p-sub">{p.pezzi.toLocaleString('it-IT')} pezzi</span>
+                            <div className="pl-pmeter"><i style={{ width: `${Math.min(100, (p.pezzi / prismaPanels.maxPezzi) * 100)}%` }} /></div>
+                          </div>
+                          <em>{formatEuro(p.premio)}</em>
+                        </div>
+                      ))}
+                    </article>
+                  )}
+                </aside>
+              </section>
+            )}
+
+            {!isPrisma && mappedData.latestSaleDate && (
               <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5" data-testid="text-latest-sale-info">
                 <BarChart3 className="h-4 w-4" />
                 Dati aggiornati al: <span className="font-semibold text-gray-700 dark:text-gray-200">{new Date(mappedData.latestSaleDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
               </div>
             )}
-            {mappedData.inGaraOnly && mappedData.calendarsAvailable && (
+            {!isPrisma && mappedData.inGaraOnly && mappedData.calendarsAvailable && (
               <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 -mt-1" data-testid="text-in-gara-info">
                 <Calendar className="h-3.5 w-3.5" />
                 <span>
@@ -4584,13 +4746,14 @@ export default function DashboardGaraReale() {
                 </span>
               </div>
             )}
-            {mappedData.inGaraOnly && !mappedData.calendarsAvailable && (
+            {!isPrisma && mappedData.inGaraOnly && !mappedData.calendarsAvailable && (
               <div className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 -mt-1" data-testid="text-no-calendar-info">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 <span>Nessun calendario PDV configurato in gara — vengono mostrate tutte le vendite del mese.</span>
               </div>
             )}
 
+            {!isPrisma && (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-4">
               {([
                 { key: 'actual', label: '€ Incentivi', icon: Euro, value: headerKpi.actual, proj: headerKpi.actualProj, euro: true },
@@ -4620,7 +4783,9 @@ export default function DashboardGaraReale() {
                 );
               })}
             </div>
+            )}
 
+            {!isPrisma && (
             <Card data-testid="card-workday-info">
               <CardContent className="px-4 py-3 sm:py-3.5 sm:px-6">
                 <div className="flex items-center gap-3 sm:gap-8 text-[11px] sm:text-sm flex-wrap">
@@ -4648,6 +4813,7 @@ export default function DashboardGaraReale() {
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {/* Task #424 — ticker verticale stile vetrina W3 */}
             <PistaTicker stats={pistaStats} />

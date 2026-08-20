@@ -1,0 +1,382 @@
+/* ── Prisma Light (Task #453) ────────────────────────────────────────────
+   Variante editoriale "paper & glass" attivata da html[data-skin="prisma-light"].
+   Due livelli:
+   1. Pelle globale scoped (token, sfondo aurora, sidebar, card) — screen-only,
+      la stampa mantiene le regole neutre di index.css.
+   2. Classi pl-* per la composizione dedicata della Dashboard Gara Reale
+      (hero editoriale, griglia asimmetrica): il markup le usa solo quando il
+      tema Prisma Light è attivo. */
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=DM+Mono:wght@400;500&display=swap');
+
+@media screen {
+  html[data-skin="prisma-light"],
+  html[data-skin="prisma-light"].dark {
+    --pl-ink: 224 40% 15%;
+    --pl-soft: 221 15% 47%;
+    --pl-line: 222 37% 23% / 0.11;
+    --pl-cobalt: 224 70% 49%;
+    --pl-serif: 'Newsreader', Georgia, serif;
+    --pl-mono: 'DM Mono', ui-monospace, monospace;
+
+    --background: 198 22% 96%;
+    --foreground: 224 38% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 38% 15%;
+    --popover: 205 28% 99%;
+    --popover-foreground: 224 38% 15%;
+    --primary: 224 70% 49%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 202 24% 92%;
+    --secondary-foreground: 224 31% 20%;
+    --muted: 204 20% 92%;
+    --muted-foreground: 220 16% 40%;
+    --accent: 196 42% 92%;
+    --accent-foreground: 224 53% 35%;
+    --border: 219 24% 76% / 0.48;
+    --input: 215 23% 79%;
+    --ring: 224 70% 49%;
+    --radius: 1rem;
+    --glass-bg: 0 0% 100% / 0.58;
+    --glass-border: 0 0% 100% / 0.78;
+    --glass-shadow: 0 16px 36px hsl(218 32% 29% / 0.08), inset 0 1px 0 hsl(0 0% 100% / 0.86);
+    --glass-blur: 18px;
+  }
+
+  html[data-skin="prisma-light"] body {
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(circle at 7% 5%, hsl(176 61% 63% / 0.30) 0, transparent 27%),
+      radial-gradient(circle at 87% 4%, hsl(258 85% 79% / 0.27) 0, transparent 28%),
+      radial-gradient(circle at 60% 100%, hsl(25 96% 73% / 0.20) 0, transparent 33%),
+      linear-gradient(115deg, hsl(150 18% 98%), hsl(221 35% 95%));
+    background-attachment: fixed;
+  }
+
+  html[data-skin="prisma-light"] .min-h-screen.bg-background,
+  html[data-skin="prisma-light"] .min-h-screen.bg-gray-50,
+  html[data-skin="prisma-light"] .min-h-screen.bg-gradient-to-br {
+    background-color: transparent;
+    background-image: none;
+  }
+
+  /* Sidebar reale preservata, resa pannello quieto in vetro. */
+  html[data-skin="prisma-light"] [data-testid="desktop-sidebar"] {
+    background: linear-gradient(160deg, hsl(0 0% 100% / 0.76), hsl(199 32% 97% / 0.54));
+    border-color: hsl(0 0% 100% / 0.86);
+    box-shadow: 10px 0 34px hsl(218 31% 35% / 0.06);
+    backdrop-filter: blur(22px) saturate(145%);
+  }
+  html[data-skin="prisma-light"] header.sticky {
+    background: hsl(0 0% 100% / 0.64);
+    border-color: hsl(0 0% 100% / 0.86);
+    box-shadow: 0 7px 20px hsl(218 32% 29% / 0.06);
+    backdrop-filter: blur(20px) saturate(150%);
+  }
+
+  html[data-skin="prisma-light"] .glass-panel,
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] [data-testid^="card-pista-"],
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] [data-testid^="card-premio-rs-"],
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] [data-testid^="card-pdv-"],
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] [data-testid="card-caring-utilizzate"],
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] [data-testid="card-device-per-modello"],
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] [data-testid="section-pista-ticker"] {
+    background-color: hsl(0 0% 100% / 0.58);
+    background-image: linear-gradient(135deg, hsl(0 0% 100% / 0.56), hsl(194 42% 96% / 0.22));
+    border-color: hsl(0 0% 100% / 0.84);
+    border-radius: 1.3rem;
+    box-shadow: var(--glass-shadow);
+  }
+
+  html[data-skin="prisma-light"] [role="dialog"],
+  html[data-skin="prisma-light"] [role="menu"],
+  html[data-skin="prisma-light"] [role="listbox"] {
+    background: linear-gradient(145deg, hsl(0 0% 100% / 0.95), hsl(199 31% 98% / 0.90));
+    border-color: hsl(0 0% 100% / 0.90);
+  }
+
+  /* ── Composizione Dashboard (classi pl-*, montate solo col tema attivo) ── */
+  .pl-hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin: 0.25rem 0.1rem 0.35rem;
+  }
+  .pl-eyebrow,
+  .pl-tiny {
+    text-transform: uppercase;
+    letter-spacing: 0.11em;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: hsl(var(--pl-soft));
+  }
+  .pl-hero h1 {
+    font-family: var(--pl-serif);
+    font-weight: 500;
+    font-size: clamp(2rem, 4.4vw, 2.9rem);
+    line-height: 0.96;
+    letter-spacing: -0.055em;
+    margin: 0.45rem 0 0;
+    color: hsl(var(--pl-ink));
+  }
+  .pl-hero h1 em {
+    font-style: italic;
+    color: hsl(var(--pl-cobalt));
+  }
+  .pl-hero-side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    align-items: flex-end;
+    max-width: 24rem;
+  }
+
+  .pl-pane {
+    border: 1px solid hsl(0 0% 100% / 0.75);
+    border-radius: 1.3rem;
+    background: hsl(0 0% 100% / 0.57);
+    box-shadow: var(--glass-shadow);
+    backdrop-filter: blur(16px);
+  }
+
+  .pl-grid-top {
+    display: grid;
+    grid-template-columns: 1.15fr 1.25fr 0.95fr;
+    grid-auto-rows: auto;
+    gap: 0.9rem;
+  }
+  .pl-balance {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    position: relative;
+    overflow: hidden;
+    padding: 1.15rem 1.15rem 1.25rem;
+    min-height: 12rem;
+  }
+  .pl-balance::after {
+    content: "";
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    right: -52px;
+    top: -76px;
+    background: radial-gradient(circle, hsl(176 61% 52% / 0.34), transparent 67%);
+    pointer-events: none;
+  }
+  .pl-amount {
+    font-family: var(--pl-serif);
+    font-weight: 500;
+    font-size: clamp(2.1rem, 3.6vw, 2.9rem);
+    letter-spacing: -0.05em;
+    margin: 1.1rem 0 0.1rem;
+    color: hsl(var(--pl-ink));
+  }
+  .pl-muted {
+    font-size: 0.7rem;
+    color: hsl(var(--pl-soft));
+  }
+  .pl-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: hsl(70 63% 71% / 0.34);
+    border: 1px solid hsl(70 78% 36% / 0.15);
+    padding: 0.3rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    margin-top: 1rem;
+    color: hsl(var(--pl-ink));
+  }
+
+  .pl-minis {
+    grid-column: 2;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.9rem;
+  }
+  .pl-mini {
+    padding: 1rem;
+    min-height: 5.6rem;
+  }
+  .pl-mini strong {
+    display: block;
+    font-family: var(--pl-serif);
+    font-weight: 500;
+    font-size: 1.45rem;
+    letter-spacing: -0.04em;
+    margin-top: 0.7rem;
+    color: hsl(var(--pl-ink));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pl-mini .pl-proj {
+    font-family: var(--pl-mono);
+    font-size: 0.62rem;
+    color: hsl(160 70% 28%);
+    margin-top: 0.2rem;
+    display: block;
+  }
+
+  .pl-activity {
+    grid-column: 2;
+    grid-row: 2;
+    padding: 1rem 1.1rem;
+  }
+  .pl-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .pl-head h2 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin: 0;
+    color: hsl(var(--pl-ink));
+  }
+  .pl-select {
+    font-size: 0.62rem;
+    color: hsl(var(--pl-soft));
+  }
+  .pl-big {
+    font-family: var(--pl-serif);
+    font-weight: 500;
+    font-size: 1.9rem;
+    letter-spacing: -0.05em;
+    margin: 0.9rem 0 0.1rem;
+    color: hsl(var(--pl-ink));
+  }
+  .pl-progress {
+    height: 6px;
+    background: hsl(200 15% 88%);
+    border-radius: 999px;
+    margin-top: 0.6rem;
+    overflow: hidden;
+  }
+  .pl-progress i {
+    height: 100%;
+    display: block;
+    border-radius: inherit;
+    background: linear-gradient(90deg, hsl(176 61% 48%), hsl(var(--pl-cobalt)));
+  }
+  .pl-meta {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--pl-mono);
+    font-size: 0.62rem;
+    color: hsl(220 20% 39%);
+    margin-top: 0.5rem;
+  }
+
+  .pl-right {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    min-width: 0;
+  }
+  .pl-store {
+    padding: 1.1rem;
+    background: linear-gradient(155deg, hsl(0 0% 100% / 0.62), hsl(196 39% 93% / 0.5));
+  }
+  .pl-store h2 {
+    font-family: var(--pl-serif);
+    font-weight: 500;
+    font-size: 1.35rem;
+    letter-spacing: -0.03em;
+    margin: 0.35rem 0;
+    color: hsl(var(--pl-ink));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pl-rule {
+    border-top: 1px solid hsl(var(--pl-line));
+    margin: 0.9rem 0 0.75rem;
+  }
+  .pl-priority {
+    padding: 1.1rem;
+    flex: 1;
+  }
+  .pl-priority h2 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin: 0;
+    color: hsl(var(--pl-ink));
+  }
+  .pl-priority-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    border-top: 1px solid hsl(var(--pl-line));
+    padding: 0.7rem 0;
+  }
+  .pl-priority-item:first-of-type {
+    margin-top: 0.6rem;
+  }
+  .pl-priority-item .pl-p-name {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: hsl(var(--pl-ink));
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pl-priority-item .pl-p-sub {
+    display: block;
+    font-size: 0.62rem;
+    color: hsl(var(--pl-soft));
+    margin-top: 0.1rem;
+  }
+  .pl-priority-item em {
+    font-family: var(--pl-mono);
+    font-style: normal;
+    font-size: 0.66rem;
+    margin-left: auto;
+    color: hsl(222 58% 49%);
+    white-space: nowrap;
+  }
+  .pl-pmeter {
+    height: 4px;
+    border-radius: 999px;
+    background: hsl(200 15% 88%);
+    overflow: hidden;
+    margin-top: 0.3rem;
+  }
+  .pl-pmeter i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, hsl(var(--pista-ink, var(--pl-cobalt)) / 0.85), hsl(var(--pista-glow, var(--pl-cobalt)) / 0.85));
+  }
+
+  @media (max-width: 1279px) {
+    .pl-grid-top {
+      grid-template-columns: 1fr 1fr;
+    }
+    .pl-balance { grid-column: 1; grid-row: 1; }
+    .pl-minis { grid-column: 2; grid-row: 1; grid-template-columns: 1fr; }
+    .pl-activity { grid-column: 1; grid-row: 2; }
+    .pl-right { grid-column: 2; grid-row: 2; }
+  }
+  @media (max-width: 767px) {
+    .pl-grid-top {
+      grid-template-columns: 1fr;
+    }
+    .pl-balance, .pl-minis, .pl-activity, .pl-right {
+      grid-column: 1;
+      grid-row: auto;
+    }
+    .pl-minis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pl-mini { padding: 0.7rem; min-height: 4.6rem; }
+    .pl-mini strong { font-size: 1.05rem; }
+    .pl-hero h1 { font-size: 1.9rem; }
+    .pl-hero-side { align-items: flex-start; }
+  }
+}

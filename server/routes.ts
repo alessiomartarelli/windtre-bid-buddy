@@ -10,7 +10,7 @@ import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDef
 import { isModuleEnabled, isModuleAllowedForBrands, isModuleGrantedToUser, sanitizeGrantableModules, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
 import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
-import { ACCENT_PRESET_IDS } from "@shared/uiPrefs";
+import { ACCENT_PRESET_IDS, THEME_IDS } from "@shared/uiPrefs";
 import { AVATAR_MAX_BYTES } from "@shared/avatar";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
 import { dtsSaleCodiceEsterno } from "@shared/dtsReport";
@@ -2460,7 +2460,7 @@ export async function registerRoutes(
       // PATCH ravvicinate.
       const patch: { theme?: string; accent?: any } = {};
       if (theme !== undefined) {
-        if (!["light", "dark", "system"].includes(theme)) {
+        if (!(THEME_IDS as readonly string[]).includes(theme)) {
           return res.status(400).json({ error: "theme non valido" });
         }
         patch.theme = theme;

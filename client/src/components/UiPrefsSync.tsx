@@ -49,7 +49,7 @@ export function UiPrefsSync() {
 
       const prefs = data.uiPrefs ?? {};
       const sameUser = storedPrefsUser() === data.id;
-      const theme = prefs.theme && ["light", "dark", "system"].includes(prefs.theme)
+      const theme = prefs.theme && ["light", "dark", "system", "prisma-light"].includes(prefs.theme)
         ? (prefs.theme as Theme) : null;
       const accent = validAccent(prefs.accent);
 

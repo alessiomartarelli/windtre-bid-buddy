@@ -18,7 +18,10 @@ function persistUiPrefs(patch: Record<string, unknown>): void {
   }
 }
 
-export type Theme = "light" | "dark" | "system";
+// "prisma-light" (Task #453): variante editoriale chiara. Si risolve come
+// tema chiaro ma imposta html[data-skin="prisma-light"], che attiva la
+// composizione Prisma Light della Dashboard Gara Reale e la pelle carta/vetro.
+export type Theme = "light" | "dark" | "system" | "prisma-light";
 
 const STORAGE_KEY = "mystoredesk-theme";
 const ACCENT_STORAGE_KEY = "mystoredesk-accent";
@@ -37,7 +40,7 @@ function getStoredTheme(): Theme {
   if (typeof window === "undefined") return "system";
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark" || stored === "system") {
+    if (stored === "light" || stored === "dark" || stored === "system" || stored === "prisma-light") {
       return stored;
     }
   } catch {
@@ -73,6 +76,13 @@ export function hasStoredAccent(): boolean {
 function applyTheme(theme: Theme): "light" | "dark" {
   const isDark = theme === "dark" || (theme === "system" && systemPrefersDark());
   document.documentElement.classList.toggle("dark", isDark);
+  // Skin Prisma Light: attributo hook per il CSS scoped e per la
+  // composizione dedicata della Dashboard Gara Reale (Task #453).
+  if (theme === "prisma-light") {
+    document.documentElement.setAttribute("data-skin", "prisma-light");
+  } else {
+    document.documentElement.removeAttribute("data-skin");
+  }
   return isDark ? "dark" : "light";
 }
 

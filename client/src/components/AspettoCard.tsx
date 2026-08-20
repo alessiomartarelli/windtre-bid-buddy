@@ -6,12 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { useTheme, type Theme } from "@/hooks/useTheme";
 import { ACCENT_PRESETS, type AccentChoice, accentEquals, hexToHsl } from "@/lib/appearance";
-import { Palette, Sun, Moon, Monitor, Check } from "lucide-react";
+import { Palette, Sun, Moon, Monitor, Check, Sparkles } from "lucide-react";
 
 const THEME_OPTIONS: { value: Theme; label: string; Icon: typeof Sun }[] = [
   { value: "light", label: "Chiaro", Icon: Sun },
   { value: "dark", label: "Scuro", Icon: Moon },
   { value: "system", label: "Sistema", Icon: Monitor },
+  // Task #453 — variante editoriale "Prisma Light" della Dashboard Gara Reale.
+  { value: "prisma-light", label: "Prisma Light", Icon: Sparkles },
 ];
 
 export function AspettoCard() {

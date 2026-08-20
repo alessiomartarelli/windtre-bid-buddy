@@ -16,7 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   LogOut, User, Building2, Settings, Shield,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
-  BookOpen, BarChart3, Route, Medal, Sun, Moon, Monitor, CalendarClock,
+  BookOpen, BarChart3, Route, Medal, Sun, Moon, Monitor, CalendarClock, Sparkles,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificationsBell';
@@ -27,6 +27,8 @@ const themeOptions: Array<{ value: Theme; label: string; icon: typeof Sun }> = [
   { value: 'light', label: 'Chiaro', icon: Sun },
   { value: 'dark', label: 'Scuro', icon: Moon },
   { value: 'system', label: 'Sistema', icon: Monitor },
+  // Task #453 — variante editoriale "Prisma Light" della Dashboard Gara Reale.
+  { value: 'prisma-light', label: 'Prisma Light', icon: Sparkles },
 ];
 
 function ThemeToggle() {
