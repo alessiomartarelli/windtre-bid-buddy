@@ -562,6 +562,10 @@ type TickerThresholdMarker = {
   value: number;
 };
 
+type TickerThresholdContext = {
+  scale: "shared" | "mixed" | "none";
+  scope: "totale" | "pdv" | "rs";
+};
 function getUniformPistaSoglieRef(refs: Array<PistaSoglieRef | undefined>): PistaSoglieRef | undefined {
   if (refs.length === 0 || refs.some((ref) => !ref)) return undefined;
   const [first, ...rest] = refs as PistaSoglieRef[];
@@ -609,6 +613,13 @@ function thresholdMarkersFromSoglie(ref: PistaSoglieRef | undefined): TickerThre
   return markers.length > 0 ? markers : undefined;
 }
 
+function getThresholdScale(
+  markerSets: Array<TickerThresholdMarker[] | undefined>,
+  sharedMarkers: TickerThresholdMarker[] | undefined,
+): TickerThresholdContext["scale"] {
+  if (sharedMarkers && sharedMarkers.length > 0) return "shared";
+  return markerSets.some((markers) => markers && markers.length > 0) ? "mixed" : "none";
+}
 const EMPTY_CALC: PistaCalcResult = {
   premioStimato: 0, puntiTotali: 0, sogliaRaggiunta: 0, sogliaLabel: "Nessuna",
 };
@@ -1090,10 +1101,16 @@ type TickerRsDetail = {
   premioProiettato: number;
   sogliaAttuale: string;
   sogliaProiezione: string;
+  sogliaLivelloAttuale?: number;
+  sogliaLivelloProiezione?: number;
   puntiAttuali: number;
   puntiProiezione: number;
   pezziAttuali: number;
   pezziProiezione: number;
+  forecastTarget?: number;
+  forecastGap?: number;
+  soglieRef?: PistaSoglieRef;
+  thresholdMarkers?: TickerThresholdMarker[];
 };
 
 type TickerPista = {
@@ -1105,10 +1122,23 @@ type TickerPista = {
   calcProiezione: PistaCalcResult;
   rsCalcBreakdown?: Map<string, TickerRsDetail>;
   thresholdMarkers?: TickerThresholdMarker[];
+  thresholdContext?: TickerThresholdContext;
+  thresholdProgressAttuale?: number;
+  thresholdProgressProiezione?: number;
 };
 
 const fmtTickerVal = (v: number) => (Number.isInteger(v) ? v.toLocaleString('it-IT') : v.toLocaleString('it-IT', { maximumFractionDigits: 2 }));
 
+function getScopedThresholdProgress(
+  items: Array<{ level: number; points: number }>,
+): number | undefined {
+  if (items.length === 0) return undefined;
+  return items.reduce((best, item) => {
+    if (item.level > best.level) return item;
+    if (item.level === best.level && item.points > best.points) return item;
+    return best;
+  }).points;
+}
 function PistaTicker({ stats }: { stats: TickerPista[] }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [activeThreshold, setActiveThreshold] = useState<string | null>(null);
@@ -1123,14 +1153,30 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
     if (!conf) return null;
     const Icon = conf.icon;
     const usePunti = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
-    const att = usePunti ? p.calc.puntiTotali : p.totalePezzi;
-    const proi = usePunti ? p.calcProiezione.puntiTotali : p.proiezionePezzi;
+    const att = usePunti ? p.thresholdProgressAttuale ?? p.calc.puntiTotali : p.totalePezzi;
+    const proi = usePunti ? p.thresholdProgressProiezione ?? p.calcProiezione.puntiTotali : p.proiezionePezzi;
     const trajectoryRatio = proi > 0 ? Math.min((att / proi) * 100, 100) : att > 0 ? 100 : 0;
     const thresholdMarkers = p.thresholdMarkers ?? [];
     const trajectoryMax = Math.max(att, proi, ...thresholdMarkers.map((marker) => marker.value), 1);
     const actualPosition = Math.min((att / trajectoryMax) * 100, 100);
     const projectedPosition = Math.min((proi / trajectoryMax) * 100, 100);
-    const sogliaAtt = p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : null;
+    const thresholdContext = p.thresholdContext ?? {
+      scale: thresholdMarkers.length > 0 ? "shared" : "none",
+      scope: "totale",
+    };
+    const thresholdStatus = (calc: PistaCalcResult) => {
+      if (thresholdContext.scale === "none") return "Non prevista";
+      return calc.sogliaRaggiunta > 0 ? calc.sogliaLabel : "Non raggiunta";
+    };
+    const thresholdQualifier = thresholdContext.scale === "none"
+      ? null
+      : thresholdContext.scope === "rs"
+        ? "migliore RS"
+        : thresholdContext.scope === "pdv"
+          ? "miglior PDV"
+          : null;
+    const sogliaAttuale = thresholdStatus(p.calc);
+    const sogliaProiezione = thresholdStatus(p.calcProiezione);
     const isOpen = expanded === p.pista;
     const toggleCard = () => {
       setActiveThreshold(null);
@@ -1142,6 +1188,8 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
         onClick={toggleCard}
         data-testid={`ticker-pista-${p.pista}`}
         data-pista={p.pista}
+        data-threshold-scale={thresholdContext.scale}
+        data-threshold-scope={thresholdContext.scope}
         className={`ticker-pista-card ticker-pista-card--${p.pista} relative min-h-[206px] rounded-2xl overflow-hidden text-left group cursor-pointer focus-within:ring-2 focus-within:ring-primary border transition-[transform,box-shadow,border-color] duration-200 ease-out ${isOpen ? 'ring-2 ring-primary shadow-lg scale-[1.01]' : 'shadow-sm hover:-translate-y-0.5 hover:shadow-md'}`}
       >
         {/* Illustrazione vettoriale dedicata alla pista: il pittogramma Lucide
@@ -1154,7 +1202,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
         </div>
         <div className={`absolute inset-x-0 top-0 z-10 h-1 ${conf.color}`} aria-hidden />
         <div className="pista-card-scrim" aria-hidden />
-        <div className="pista-card-heading absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-1.5">
+        <div className="pista-card-heading absolute inset-x-3 top-3 z-20 flex items-start gap-1.5">
           <button
             type="button"
             className="pista-card-header flex min-w-0 items-center gap-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -1174,26 +1222,23 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
               {conf.label}
             </span>
           </button>
-          {sogliaAtt && (
-            <span className="pista-card-threshold shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold text-foreground shadow-sm">
-              {sogliaAtt}
-            </span>
-          )}
         </div>
         <div className="pista-card-content">
           <div
             className="pista-card-trajectory"
             data-testid={`ticker-trajectory-${p.pista}`}
-            aria-label={`Traiettoria: attuale ${fmtTickerVal(att)}, proiezione ${fmtTickerVal(proi)}, avanzamento ${trajectoryRatio.toFixed(0)}%`}
+            aria-label={`Soglie: attuale ${sogliaAttuale}${thresholdQualifier ? `, ${thresholdQualifier}` : ""}; proiezione ${sogliaProiezione}${thresholdQualifier ? `, ${thresholdQualifier}` : ""}; avanzamento ${trajectoryRatio.toFixed(0)}%`}
           >
             <div className="pista-trajectory-labels" data-testid={`ticker-trajectory-labels-${p.pista}`}>
               <span>
-                <span className="pista-trajectory-label">Attuale</span>
-                <strong className="tabular-nums">{fmtTickerVal(att)}</strong>
+                <span className="pista-trajectory-label">Soglia attuale</span>
+                <strong data-testid={`ticker-soglia-attuale-${p.pista}`}>{sogliaAttuale}</strong>
+                {thresholdQualifier && <small>{thresholdQualifier}</small>}
               </span>
               <span className="text-right">
-                <span className="pista-trajectory-label">Proiezione</span>
-                <strong className="tabular-nums">{fmtTickerVal(proi)}</strong>
+                <span className="pista-trajectory-label">Soglia proiezione</span>
+                <strong data-testid={`ticker-soglia-proiezione-${p.pista}`}>{sogliaProiezione}</strong>
+                {thresholdQualifier && <small>{thresholdQualifier}</small>}
               </span>
             </div>
             <div className="pista-trajectory-track" data-testid={`ticker-trajectory-track-${p.pista}`}>
@@ -1224,6 +1269,8 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
                         className="pista-threshold-tick"
                         style={{ left: `${position}%` }}
                         aria-label={description}
+                        data-threshold-label={marker.label}
+                        data-threshold-value={marker.value}
                         data-testid={`ticker-threshold-${p.pista}-${index + 1}`}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -1290,7 +1337,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
   const renderDetail = (p: TickerPista) => {
     const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
     const usePuntiTot = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
-    const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string }[] = [];
+    const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string; thresholdMarkers?: TickerThresholdMarker[] }[] = [];
     if (p.rsCalcBreakdown && p.rsCalcBreakdown.size > 0) {
       p.rsCalcBreakdown.forEach((rs, key) => {
         const usePunti = rs.puntiAttuali > 0 || rs.puntiProiezione > 0;
@@ -1301,6 +1348,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
           usePunti,
           premioAtt: rs.premioAttuale, premioProi: rs.premioProiettato,
           sogliaAtt: rs.sogliaAttuale, sogliaProi: rs.sogliaProiezione,
+          thresholdMarkers: rs.thresholdMarkers,
         });
       });
     } else {
@@ -1312,6 +1360,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
         premioAtt: p.calc.premioStimato, premioProi: p.calcProiezione.premioStimato,
         sogliaAtt: p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : '—',
         sogliaProi: p.calcProiezione.sogliaRaggiunta > 0 ? p.calcProiezione.sogliaLabel : '—',
+        thresholdMarkers: p.thresholdMarkers,
       });
     }
     return (
@@ -1346,6 +1395,18 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
                 </div>
               </div>
             </div>
+            {b.thresholdMarkers && b.thresholdMarkers.length > 0 && (
+              <div
+                className="mt-2 flex flex-wrap justify-center gap-1 border-t border-border/70 pt-2"
+                data-testid={`ticker-detail-thresholds-${p.pista}-${b.key}`}
+              >
+                {b.thresholdMarkers.map((marker) => (
+                  <span key={`${marker.label}-${marker.value}`} className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {marker.label}: {fmtTickerVal(marker.value)}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -3246,6 +3307,71 @@ export default function DashboardGaraReale() {
       if (!vals || vals.length < 5) return undefined;
       return { soglia1: vals[0], soglia2: vals[1], soglia3: vals[2], soglia4: vals[3], soglia5: vals[4] };
     };
+    const getThresholdDataForPdv = (
+      pista: keyof typeof PISTA_CONFIG,
+      codicePos: string,
+      ragioneSociale: string,
+    ): { soglieRef?: PistaSoglieRef; thresholdMarkers?: TickerThresholdMarker[] } => {
+      let soglieRef: PistaSoglieRef | undefined;
+
+      if (pista === "mobile") {
+        const config = getMobileConfigForPdv(codicePos, ragioneSociale);
+        if (config) {
+          const pdvConfig = puntiVendita.find((item) => item.codicePos === codicePos);
+          const override = isRSPerRS ? undefined : getMobileSoglieForCluster(pdvConfig?.clusterMobile);
+          soglieRef = {
+            s1: override?.soglia1 ?? config.soglia1,
+            s2: override?.soglia2 ?? config.soglia2,
+            s3: override?.soglia3 ?? config.soglia3,
+            s4: override?.soglia4 ?? config.soglia4,
+          };
+        }
+      } else if (pista === "fisso") {
+        const config = getFissoConfigForPdv(codicePos, ragioneSociale);
+        if (config) {
+          const pdvConfig = puntiVendita.find((item) => item.codicePos === codicePos);
+          const override = isRSPerRS ? undefined : getFissoSoglieForCluster(pdvConfig?.clusterFisso);
+          soglieRef = {
+            s1: override?.soglia1 ?? config.soglia1,
+            s2: override?.soglia2 ?? config.soglia2,
+            s3: override?.soglia3 ?? config.soglia3,
+            s4: override?.soglia4 ?? config.soglia4,
+            s5: override?.soglia5 ?? config.soglia5,
+          };
+        }
+      } else if (pista === "energia") {
+        const rsConfig = isRSPerRS
+          ? energiaRSConfigs.find((config) => normalizeRS(config.ragioneSociale) === normalizeRS(ragioneSociale))
+          : undefined;
+        const config = rsConfig ?? energiaConfig;
+        if (config) {
+          soglieRef = { s1: config.targetS1, s2: config.targetS2, s3: config.targetS3 };
+        }
+      } else if (pista === "assicurazioni") {
+        const rsConfig = isRSPerRS
+          ? assicurazioniRSConfigs.find((config) => normalizeRS(config.ragioneSociale) === normalizeRS(ragioneSociale))
+          : undefined;
+        const config = rsConfig ?? assicConfig;
+        if (config) {
+          soglieRef = { s1: config.targetS1, s2: config.targetS2, s3: 0 };
+        }
+      }
+
+      if (pista === "partnership") {
+        const config = getPartnershipConfigForPdv(codicePos, ragioneSociale);
+        const thresholdMarkers = config
+          ? mergeThresholdMarkers([
+              { label: "80%", value: config.config.target80 },
+              { label: "100%", value: config.config.target100 },
+            ])
+          : undefined;
+        return {
+          thresholdMarkers: thresholdMarkers && thresholdMarkers.length > 0 ? thresholdMarkers : undefined,
+        };
+      }
+
+      return { soglieRef, thresholdMarkers: thresholdMarkersFromSoglie(soglieRef) };
+    };
     const effectiveMobileCategories = (() => {
       const base = [...mobileCategories];
       if (tcMobile?.puntiAttivazione) {
@@ -3409,11 +3535,16 @@ export default function DashboardGaraReale() {
         proiezione: number;
         pdvCalc: PistaCalcResult;
         categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
+        soglieRef?: PistaSoglieRef;
+        thresholdMarkers?: TickerThresholdMarker[];
       }>;
-      rsCalcBreakdown?: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: PistaSoglieRef }>;
+      rsCalcBreakdown?: Map<string, TickerRsDetail>;
       pdvProjCalcMap?: Map<string, PistaCalcResult>;
       soglieRef?: PistaSoglieRef;
       thresholdMarkers?: TickerThresholdMarker[];
+      thresholdContext?: TickerThresholdContext;
+      thresholdProgressAttuale?: number;
+      thresholdProgressProiezione?: number;
     }> = [];
 
     const pisteOrder: (keyof typeof PISTA_CONFIG)[] = ["mobile", "fisso", "energia", "assicurazioni", "partnership", "cb", "protecta", "extra_gara_iva"];
@@ -3424,10 +3555,13 @@ export default function DashboardGaraReale() {
         const totalPezzi = extraGaraResults.reduce((s, r) => s + r.pezziTotaliRS, 0);
         const totalPunti = extraGaraResults.reduce((s, r) => s + r.puntiTotaliRS, 0);
         const bestSoglia = extraGaraResults.reduce((s, r) => Math.max(s, r.sogliaRaggiunta), 0);
-        const egUniformSoglieRef = (!isRSPerRS || extraGaraResults.length <= 1)
-          ? getUniformPistaSoglieRef(extraGaraResults.map((result) => result.soglie))
-          : undefined;
+        const egMarkerSets = extraGaraResults.map((result) => thresholdMarkersFromSoglie(result.soglie));
+        const egUniformSoglieRef = getUniformPistaSoglieRef(extraGaraResults.map((result) => result.soglie));
         const egThresholdMarkers = thresholdMarkersFromSoglie(egUniformSoglieRef);
+        const egThresholdContext: TickerThresholdContext = {
+          scale: getThresholdScale(egMarkerSets, egThresholdMarkers),
+          scope: extraGaraResults.length > 1 ? "rs" : "totale",
+        };
         const proiezionePezziEG = workdayInfo.elapsedWorkingDays > 0
           ? Math.round((totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
           : totalPezzi;
@@ -3494,7 +3628,7 @@ export default function DashboardGaraReale() {
         ).sort((a, b) => b.pezzi - a.pezzi);
 
         let egRsCalcBreakdown: typeof stats[0]["rsCalcBreakdown"] | undefined;
-        if (isRSPerRS && extraGaraResults.length > 0) {
+        if ((isRSPerRS || extraGaraResults.length > 1) && extraGaraResults.length > 0) {
           egRsCalcBreakdown = new Map();
           let egTotalPremioProj = 0;
           for (const rsResult of extraGaraResults) {
@@ -3530,9 +3664,12 @@ export default function DashboardGaraReale() {
               pezziProiezione: projPezzi,
               sogliaAttuale: sogliaToLabel(rsResult.sogliaRaggiunta, 4),
               sogliaProiezione: sogliaToLabel(projSoglia, 4),
+              sogliaLivelloAttuale: rsResult.sogliaRaggiunta,
+              sogliaLivelloProiezione: projSoglia,
               puntiAttuali: rsResult.puntiTotaliRS,
               puntiProiezione: projPunti,
               soglieRef: rsResult.soglie,
+              thresholdMarkers: thresholdMarkersFromSoglie(rsResult.soglie),
             });
           }
 
@@ -3546,6 +3683,18 @@ export default function DashboardGaraReale() {
             else if (pp >= r.soglie.s1) ps = 1;
             return Math.max(s, ps);
           }, 0);
+          const egThresholdProgressAttuale = getScopedThresholdProgress(
+            [...egRsCalcBreakdown.values()].map((detail) => ({
+              level: detail.sogliaLivelloAttuale ?? 0,
+              points: detail.puntiAttuali,
+            })),
+          );
+          const egThresholdProgressProiezione = getScopedThresholdProgress(
+            [...egRsCalcBreakdown.values()].map((detail) => ({
+              level: detail.sogliaLivelloProiezione ?? 0,
+              points: detail.puntiProiezione,
+            })),
+          );
 
           stats.push({
             pista, label: PISTA_CONFIG[pista].label,
@@ -3555,6 +3704,9 @@ export default function DashboardGaraReale() {
             categories: egCategories, pdvBreakdown: egPdvBreakdown, rsCalcBreakdown: egRsCalcBreakdown,
             soglieRef: egUniformSoglieRef,
             thresholdMarkers: egThresholdMarkers,
+            thresholdContext: egThresholdContext,
+            thresholdProgressAttuale: egThresholdProgressAttuale,
+            thresholdProgressProiezione: egThresholdProgressProiezione,
           });
         } else {
           let projPremioNonRS = 0;
@@ -3589,6 +3741,9 @@ export default function DashboardGaraReale() {
             categories: egCategories, pdvBreakdown: egPdvBreakdown,
             soglieRef: egUniformSoglieRef,
             thresholdMarkers: egThresholdMarkers,
+            thresholdContext: egThresholdContext,
+            thresholdProgressAttuale: totalPunti,
+            thresholdProgressProiezione: proiezionePuntiEG,
           });
         }
         continue;
@@ -3695,6 +3850,7 @@ export default function DashboardGaraReale() {
 
           const configuredRS = pdvConfig?.ragioneSociale || pdv.ragioneSociale;
           const normalizedConfiguredRS = normalizeRS(configuredRS);
+          const thresholdData = getThresholdDataForPdv(pista, pdv.codicePos, configuredRS);
 
           const pdvAddons = (pdv.addons || []).filter(a => a.pista === pista);
           const addonAsCats = pdvAddons.map(a => ({ category: a.targetCategory, label: a.targetLabel, pezzi: a.occorrenze, canone: a.canone || 0 }));
@@ -3711,12 +3867,14 @@ export default function DashboardGaraReale() {
               ...addonAsCats,
             ],
             addons: pdvAddons,
+            soglieRef: thresholdData.soglieRef,
+            thresholdMarkers: thresholdData.thresholdMarkers,
           };
         })
         .filter((p) => p.pezzi > 0 || (p.addons && p.addons.length > 0))
         .sort((a, b) => b.pezzi - a.pezzi);
 
-      let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }> | undefined;
+      let rsCalcBreakdownMap: Map<string, TickerRsDetail> | undefined;
 
       if (pdvBreakdown.length > 0) {
         const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership" || pista === "cb" || pista === "energia" || pista === "assicurazioni");
@@ -3735,7 +3893,7 @@ export default function DashboardGaraReale() {
           let totalPremioProj = 0;
           let totalPuntiProj = 0;
           let bestSogliaProj = 0;
-          rsCalcBreakdownMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }>();
+          rsCalcBreakdownMap = new Map<string, TickerRsDetail>();
 
           rsGroupMap.forEach((rsPdvs, rs) => {
             const rsItems: AggregatedItem[] = [];
@@ -3957,20 +4115,7 @@ export default function DashboardGaraReale() {
             totalPuntiProj += rsProjCalc.puntiTotali;
             if (rsProjCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = rsProjCalc.sogliaRaggiunta;
 
-            let rsSoglieRef: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
-            if (pista === "mobile") {
-              const mSoglie = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
-              if (mSoglie) rsSoglieRef = { s1: mSoglie.soglia1, s2: mSoglie.soglia2, s3: mSoglie.soglia3, s4: mSoglie.soglia4 };
-            } else if (pista === "fisso") {
-              const fSoglie = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
-              if (fSoglie) rsSoglieRef = { s1: fSoglie.soglia1, s2: fSoglie.soglia2, s3: fSoglie.soglia3, s4: fSoglie.soglia4, s5: fSoglie.soglia5 };
-            } else if (pista === "energia") {
-              const eConf = energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
-              if (eConf) rsSoglieRef = { s1: eConf.targetS1, s2: eConf.targetS2, s3: eConf.targetS3 };
-            } else if (pista === "assicurazioni") {
-              const aConf = assicurazioniRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
-              if (aConf) rsSoglieRef = { s1: aConf.targetS1, s2: aConf.targetS2, s3: 0 };
-            }
+            const rsThresholdData = getThresholdDataForPdv(pista, rsPdvs[0].codicePos, rs);
 
             rsCalcBreakdownMap!.set(rs, {
               displayName: rsPdvs[0].ragioneSociale || rs,
@@ -3980,11 +4125,14 @@ export default function DashboardGaraReale() {
               pezziProiezione: rsPezziProiezione,
               sogliaAttuale: rsCalc.sogliaLabel,
               sogliaProiezione: rsProjCalc.sogliaLabel,
+              sogliaLivelloAttuale: rsCalc.sogliaRaggiunta,
+              sogliaLivelloProiezione: rsProjCalc.sogliaRaggiunta,
               puntiAttuali: rsCalc.puntiTotali,
               puntiProiezione: rsProjCalc.puntiTotali,
               forecastTarget: rsCalc.forecastTarget,
               forecastGap: rsCalc.forecastGap,
-              soglieRef: rsSoglieRef,
+              soglieRef: rsThresholdData.soglieRef,
+              thresholdMarkers: rsThresholdData.thresholdMarkers,
             });
           });
 
@@ -4130,65 +4278,52 @@ export default function DashboardGaraReale() {
       }
 
       const rsCalcBreakdown = (rsCalcBreakdownMap && rsCalcBreakdownMap.size > 0) ? rsCalcBreakdownMap : undefined;
-
-      const hasMultipleRsBreakdown = (rsCalcBreakdown?.size ?? 0) > 1;
-      let pistaSoglieRef: PistaSoglieRef | undefined;
-      if (!hasMultipleRsBreakdown) {
-        const singleRsSoglieRef = rsCalcBreakdown?.size === 1
-          ? [...rsCalcBreakdown.values()][0]?.soglieRef
-          : undefined;
-
-        if (singleRsSoglieRef) {
-          pistaSoglieRef = singleRsSoglieRef;
-        } else if (pista === "mobile") {
-          const refs = pdvBreakdown.map((pdv) => {
-            const config = getMobileConfigForPdv(pdv.codicePos, pdv.ragioneSociale);
-            if (!config) return undefined;
-            const pdvConfig = puntiVendita.find((item) => item.codicePos === pdv.codicePos);
-            const override = getMobileSoglieForCluster(pdvConfig?.clusterMobile);
-            return {
-              s1: override?.soglia1 ?? config.soglia1,
-              s2: override?.soglia2 ?? config.soglia2,
-              s3: override?.soglia3 ?? config.soglia3,
-              s4: override?.soglia4 ?? config.soglia4,
-            };
-          });
-          pistaSoglieRef = getUniformPistaSoglieRef(refs);
-        } else if (pista === "fisso") {
-          const refs = pdvBreakdown.map((pdv) => {
-            const config = getFissoConfigForPdv(pdv.codicePos, pdv.ragioneSociale);
-            if (!config) return undefined;
-            const pdvConfig = puntiVendita.find((item) => item.codicePos === pdv.codicePos);
-            const override = getFissoSoglieForCluster(pdvConfig?.clusterFisso);
-            return {
-              s1: override?.soglia1 ?? config.soglia1,
-              s2: override?.soglia2 ?? config.soglia2,
-              s3: override?.soglia3 ?? config.soglia3,
-              s4: override?.soglia4 ?? config.soglia4,
-              s5: override?.soglia5 ?? config.soglia5,
-            };
-          });
-          pistaSoglieRef = getUniformPistaSoglieRef(refs);
-        } else if (pista === "energia" && energiaConfig) {
-          pistaSoglieRef = { s1: energiaConfig.targetS1, s2: energiaConfig.targetS2, s3: energiaConfig.targetS3 };
-        } else if (pista === "assicurazioni" && assicConfig) {
-          pistaSoglieRef = { s1: assicConfig.targetS1, s2: assicConfig.targetS2, s3: 0 };
-        }
-      }
-
-      let pistaThresholdMarkers = thresholdMarkersFromSoglie(pistaSoglieRef);
-      if (!hasMultipleRsBreakdown && pista === "partnership") {
-        pistaThresholdMarkers = getUniformThresholdMarkers(
-          pdvBreakdown.map((pdv) => {
-            const config = getPartnershipConfigForPdv(pdv.codicePos, pdv.ragioneSociale);
-            if (!config) return undefined;
-            return [
-              { label: "80%", value: config.config.target80 },
-              { label: "100%", value: config.config.target100 },
-            ];
-          }),
-        );
-      }
+      const rsThresholdDetails = rsCalcBreakdown ? [...rsCalcBreakdown.values()] : [];
+      const thresholdMarkerSets = rsCalcBreakdown
+        ? rsThresholdDetails.map((detail) => detail.thresholdMarkers)
+        : pdvBreakdown.map((pdv) => pdv.thresholdMarkers);
+      const pistaThresholdMarkers = getUniformThresholdMarkers(thresholdMarkerSets);
+      const pistaSoglieRef = getUniformPistaSoglieRef(
+        rsCalcBreakdown
+          ? rsThresholdDetails.map((detail) => detail.soglieRef)
+          : pdvBreakdown.map((pdv) => pdv.soglieRef),
+      );
+      const thresholdContext: TickerThresholdContext = {
+        scale: getThresholdScale(thresholdMarkerSets, pistaThresholdMarkers),
+        scope: (rsCalcBreakdown?.size ?? 0) > 1
+          ? "rs"
+          : !rsCalcBreakdown
+              && pdvBreakdown.length > 1
+              && pista !== "energia"
+              && pista !== "assicurazioni"
+            ? "pdv"
+            : "totale",
+      };
+      const thresholdProgressAttuale = thresholdContext.scope === "rs" && rsCalcBreakdown
+        ? getScopedThresholdProgress([...rsCalcBreakdown.values()].map((detail) => ({
+            level: detail.sogliaLivelloAttuale ?? 0,
+            points: detail.puntiAttuali,
+          })))
+        : thresholdContext.scope === "pdv"
+          ? getScopedThresholdProgress(pdvBreakdown.map((pdv) => ({
+              level: pdv.pdvCalc.sogliaRaggiunta,
+              points: pdv.pdvCalc.puntiTotali,
+            })))
+          : aggregateCalc.puntiTotali;
+      const thresholdProgressProiezione = thresholdContext.scope === "rs" && rsCalcBreakdown
+        ? getScopedThresholdProgress([...rsCalcBreakdown.values()].map((detail) => ({
+            level: detail.sogliaLivelloProiezione ?? 0,
+            points: detail.puntiProiezione,
+          })))
+        : thresholdContext.scope === "pdv"
+          ? getScopedThresholdProgress(pdvBreakdown.map((pdv) => {
+              const projected = pdvProjCalcMap?.get(pdv.codicePos) ?? pdv.pdvCalc;
+              return {
+                level: projected.sogliaRaggiunta,
+                points: projected.puntiTotali,
+              };
+            }))
+          : aggregateCalcProiezione.puntiTotali;
 
       stats.push({
         pista,
@@ -4203,6 +4338,9 @@ export default function DashboardGaraReale() {
         pdvProjCalcMap,
         soglieRef: pistaSoglieRef,
         thresholdMarkers: pistaThresholdMarkers,
+        thresholdContext,
+        thresholdProgressAttuale,
+        thresholdProgressProiezione,
       });
     }
 
@@ -4728,16 +4866,12 @@ export default function DashboardGaraReale() {
                                     {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{rsData.puntiProiezione.toFixed(2)} pt</div>}
                                   </div>
                                 </div>
-                                {rsData.soglieRef && (
-                                  <div className="flex flex-wrap gap-1 justify-center mt-1">
-                                    {[
-                                      { label: "S1", value: rsData.soglieRef.s1 },
-                                      { label: "S2", value: rsData.soglieRef.s2 },
-                                      { label: "S3", value: rsData.soglieRef.s3 },
-                                      ...(rsData.soglieRef.s4 != null && rsData.soglieRef.s4 > 0 ? [{ label: "S4", value: rsData.soglieRef.s4 }] : []),
-                                      ...(rsData.soglieRef.s5 != null && rsData.soglieRef.s5 > 0 ? [{ label: "S5", value: rsData.soglieRef.s5 }] : []),
-                                    ].map((s) => (
-                                      <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">{s.label}:{s.value}</span>
+                                {rsData.thresholdMarkers && rsData.thresholdMarkers.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 justify-center mt-1" data-testid={`threshold-refs-${pista.pista}-${rsKey}`}>
+                                    {rsData.thresholdMarkers.map((marker) => (
+                                      <span key={`${marker.label}-${marker.value}`} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">
+                                        {marker.label}:{fmtTickerVal(marker.value)}
+                                      </span>
                                     ))}
                                   </div>
                                 )}
@@ -4779,6 +4913,15 @@ export default function DashboardGaraReale() {
                                     <span className="text-base font-bold text-green-700 dark:text-green-400">{formatEuro(p.pdvCalc.premioStimato)}</span>
                                   </div>
                                 </div>
+                                 {p.thresholdMarkers && p.thresholdMarkers.length > 0 && (
+                                   <div className="flex flex-wrap gap-1 justify-center mt-1" data-testid={`threshold-refs-${pista.pista}-${p.codicePos}`}>
+                                     {p.thresholdMarkers.map((marker) => (
+                                       <span key={`${marker.label}-${marker.value}`} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">
+                                         {marker.label}:{fmtTickerVal(marker.value)}
+                                       </span>
+                                     ))}
+                                   </div>
+                                 )}
                                 {p.pdvCalc.forecastTarget != null && p.pdvCalc.forecastTarget > 0 && (
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between text-xs">
@@ -4821,16 +4964,12 @@ export default function DashboardGaraReale() {
                                   </div>
                                 </div>
                               )}
-                              {pista.soglieRef && !isCB && !isPartnership && (
-                                <div className="flex flex-wrap gap-1.5 justify-center">
-                                  {[
-                                    { label: "S1", value: pista.soglieRef.s1 },
-                                    { label: "S2", value: pista.soglieRef.s2 },
-                                    { label: "S3", value: pista.soglieRef.s3 },
-                                    ...(pista.soglieRef.s4 != null && pista.soglieRef.s4 > 0 ? [{ label: "S4", value: pista.soglieRef.s4 }] : []),
-                                    ...(pista.soglieRef.s5 != null && pista.soglieRef.s5 > 0 ? [{ label: "S5", value: pista.soglieRef.s5 }] : []),
-                                  ].map((s) => (
-                                    <span key={s.label} className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 font-medium">{s.label}:{s.value}</span>
+                              {pista.thresholdMarkers && pista.thresholdMarkers.length > 0 && !isCB && (
+                                <div className="flex flex-wrap gap-1.5 justify-center" data-testid={`threshold-refs-${pista.pista}-totale`}>
+                                  {pista.thresholdMarkers.map((marker) => (
+                                    <span key={`${marker.label}-${marker.value}`} className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 font-medium">
+                                      {marker.label}:{fmtTickerVal(marker.value)}
+                                    </span>
                                   ))}
                                 </div>
                               )}

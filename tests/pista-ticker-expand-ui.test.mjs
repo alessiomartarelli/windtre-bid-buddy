@@ -67,6 +67,13 @@ const artCbMiaTied = {
   dettaglio: { canone: '12' },
 };
 
+const artExtraGaraWorld = {
+  categoria: { nome: 'TIED IVA' },
+  tipologia: { nome: 'VOCE IVA' },
+  descrizione: 'PROFESSIONAL WORLD',
+  dettaglio: { canone: '15' },
+};
+
 async function insertSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale, articoli, stato = 'FINALIZZATA' }) {
   const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
   await pool.query(
@@ -150,6 +157,7 @@ async function assertDataFirstTickerCard(page, { theme, viewport }) {
 
   const visual = await card.evaluate((element) => {
     const allElements = [element, ...element.querySelectorAll('*')];
+    const thresholdTick = element.querySelector('.pista-threshold-tick > span');
     return {
       imageCount: element.querySelectorAll('img').length,
       illustrationIconCount: element.querySelectorAll('.pista-illustration__icon').length,
@@ -162,6 +170,9 @@ async function assertDataFirstTickerCard(page, { theme, viewport }) {
       trajectoryBackground: getComputedStyle(element.querySelector('[data-testid="ticker-trajectory-mobile"]')).backgroundImage,
       track: getComputedStyle(element.querySelector('[data-testid="ticker-trajectory-track-mobile"]')).backgroundColor,
       kpisBackground: getComputedStyle(element.querySelector('[data-testid="ticker-kpis-mobile"]')).backgroundImage,
+      thresholdTickBackground: thresholdTick ? getComputedStyle(thresholdTick).backgroundColor : '',
+      thresholdTickBorder: thresholdTick ? getComputedStyle(thresholdTick).borderColor : '',
+      thresholdTickHeight: thresholdTick ? thresholdTick.getBoundingClientRect().height : 0,
     };
   });
   assert.equal(visual.imageCount, 0, `${theme}/${viewport}: la card non deve contenere immagini`);
@@ -179,9 +190,23 @@ async function assertDataFirstTickerCard(page, { theme, viewport }) {
   assert.notEqual(visual.trajectoryBackground, 'none', `${theme}/${viewport}: la traiettoria deve avere una superficie di contrasto dedicata`);
   assert.notEqual(visual.track, 'rgba(0, 0, 0, 0)', `${theme}/${viewport}: la traccia deve restare visibile`);
   assert.notEqual(visual.kpisBackground, 'none', `${theme}/${viewport}: i KPI devono avere una superficie di contrasto dedicata`);
+  assert.notEqual(visual.thresholdTickBackground, 'rgba(0, 0, 0, 0)', `${theme}/${viewport}: le stanghette soglia devono avere un riempimento visibile`);
+  assert.notEqual(visual.thresholdTickBorder, visual.thresholdTickBackground, `${theme}/${viewport}: le stanghette soglia devono avere un bordo di contrasto`);
+  assert.ok(visual.thresholdTickHeight >= 12, `${theme}/${viewport}: le stanghette soglia devono essere chiaramente visibili`);
 
-  assert.match(await trajectoryLabels.innerText(), /Attuale/i, `${theme}/${viewport}: l'etichetta Attuale deve essere visibile`);
-  assert.match(await trajectoryLabels.innerText(), /Proiezione/i, `${theme}/${viewport}: l'etichetta Proiezione deve essere visibile`);
+  assert.match(await trajectoryLabels.innerText(), /Soglia attuale/i, `${theme}/${viewport}: l'etichetta Soglia attuale deve essere visibile`);
+  assert.match(await trajectoryLabels.innerText(), /Soglia proiezione/i, `${theme}/${viewport}: l'etichetta Soglia proiezione deve essere visibile`);
+  assert.match(
+    await page.getByTestId('ticker-soglia-attuale-mobile').innerText(),
+    /^(Non raggiunta|S[1-4])$/,
+    `${theme}/${viewport}: lo stato attuale deve essere una soglia o un fallback esplicito`,
+  );
+  assert.match(
+    await page.getByTestId('ticker-soglia-proiezione-mobile').innerText(),
+    /^(Non raggiunta|S[1-4])$/,
+    `${theme}/${viewport}: lo stato proiettato deve essere una soglia o un fallback esplicito`,
+  );
+  assert.equal(await card.locator('.pista-card-threshold').count(), 0, `${theme}/${viewport}: il vecchio badge soglia in intestazione deve essere rimosso`);
   assert.match(await trajectoryReadout.innerText(), /Avanzamento/i, `${theme}/${viewport}: la percentuale deve avere un'etichetta leggibile`);
 
   const [cardBox, trajectoryBox, labelsBox, trackBox, readoutBox, kpiBox] = await Promise.all([
@@ -323,6 +348,21 @@ test('scenario 2: card per ogni pista attiva ed espansione/chiusura del dettagli
     await cardMobile.waitFor({ state: 'visible', timeout: 15000 });
     await page.getByTestId('ticker-pista-fisso').waitFor({ state: 'visible', timeout: 15000 });
     await page.getByTestId('ticker-pista-cb').waitFor({ state: 'visible', timeout: 15000 });
+    assert.equal(
+      (await page.getByTestId('ticker-soglia-attuale-cb').innerText()).trim(),
+      'Non prevista',
+      'Customer Base non deve inventare una soglia attuale',
+    );
+    assert.equal(
+      (await page.getByTestId('ticker-soglia-proiezione-cb').innerText()).trim(),
+      'Non prevista',
+      'Customer Base non deve inventare una soglia proiettata',
+    );
+    assert.equal(
+      await page.locator('[data-testid^="ticker-threshold-cb-"]').count(),
+      0,
+      'Customer Base non deve mostrare marker senza un modello soglia condiviso',
+    );
 
     const visualIdentities = await Promise.all(
       ['mobile', 'fisso', 'cb'].map((pista) => page.getByTestId(`ticker-pista-${pista}`).evaluate((element) => ({
@@ -651,6 +691,23 @@ test('scenario 4: premio non-zero, soglia raggiunta e badge proiezione con sogli
     );
     await page.keyboard.press('Escape');
 
+    // --- La fascia sopra la barra confronta le soglie, senza ripetere i KPI. ---
+    assert.equal(
+      (await page.getByTestId('ticker-soglia-attuale-mobile').innerText()).trim(),
+      'S1',
+      'la soglia attuale deve essere mostrata nella fascia sopra la barra',
+    );
+    assert.match(
+      (await page.getByTestId('ticker-soglia-proiezione-mobile').innerText()).trim(),
+      /^S[1-4]$/,
+      'la soglia proiettata deve essere mostrata senza inventare S0',
+    );
+    assert.equal(
+      await rowMobile.locator('.pista-card-threshold').count(),
+      0,
+      'il vecchio badge soglia nell’intestazione non deve più duplicare lo stato',
+    );
+
     // --- Premio attuale non-zero sulla card ---
     const premioTxt = (await page.getByTestId('ticker-premio-mobile').innerText()).trim();
     const premioVal = Number(premioTxt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
@@ -785,6 +842,11 @@ test('scenario 5: pista fisso – premio non-zero, soglia raggiunta e badge proi
     await page.getByTestId('section-pista-ticker').waitFor({ state: 'visible', timeout: 15000 });
     const cardFisso = page.getByTestId('ticker-pista-fisso');
     await cardFisso.waitFor({ state: 'visible', timeout: 15000 });
+    assert.equal(
+      (await page.getByTestId('ticker-soglia-attuale-fisso').innerText()).trim(),
+      'S1',
+      'la card fisso deve mostrare S1 come soglia attuale',
+    );
 
     // --- Punti sulla card: 4 FTTH × 1 punto = valore > 0 ---
     const puntiTxt = (await page.getByTestId('ticker-punti-fisso').innerText()).trim();
@@ -843,6 +905,218 @@ test('scenario 5: pista fisso – premio non-zero, soglia raggiunta e badge proi
     assert.ok(
       !blockTxt.includes('—'),
       `nessun badge soglia deve essere "—" nel dettaglio fisso (trovato: "${blockTxt}")`,
+    );
+
+    await page.close();
+    await context.close();
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+test('scenario 6: scale uniformi tra RS mostrano i marker, scale diverse restano nel dettaglio', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'ticker_rs_thresholds', fullName: 'Ticker RS Threshold Test' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+
+    const POS_A = uniq('TKRSPOSA');
+    const POS_B = uniq('TKRSPOSB');
+    const RS_A = uniq('TickerRsAlfa Srl');
+    const RS_B = uniq('TickerRsBeta Srl');
+    const config = {
+      tipologiaGara: 'gara_operatore_rs',
+      modalitaInserimentoRS: 'per_rs',
+      pdvList: [
+        { codicePos: POS_A, nome: 'Negozio RS Alfa', ragioneSociale: RS_A },
+        { codicePos: POS_B, nome: 'Negozio RS Beta', ragioneSociale: RS_B },
+      ],
+      pistaMobileRSConfig: {
+        applicaDecurtazione30SeNoFissoO8Piva: false,
+        sogliePerRS: [
+          {
+            ragioneSociale: RS_A,
+            soglia1: 3, soglia2: 6, soglia3: 9, soglia4: 12,
+            multiplierSoglia1: 1, multiplierSoglia2: 1.2,
+            multiplierSoglia3: 1.5, multiplierSoglia4: 2,
+          },
+          {
+            ragioneSociale: RS_B,
+            soglia1: 3, soglia2: 6, soglia3: 9, soglia4: 12,
+            multiplierSoglia1: 1, multiplierSoglia2: 1.2,
+            multiplierSoglia3: 1.5, multiplierSoglia4: 2,
+          },
+        ],
+      },
+    };
+
+    await pool.query(
+      `INSERT INTO gara_config (organization_id, month, year, name, config)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [session.orgId, MONTH, YEAR, 'Ticker soglie RS test', JSON.stringify(config)],
+    );
+    for (const [codicePos, nomeNegozio, ragioneSociale] of [
+      [POS_A, 'Negozio RS Alfa', RS_A],
+      [POS_B, 'Negozio RS Beta', RS_B],
+    ]) {
+      for (let i = 0; i < 2; i++) {
+        await insertSale(pool, session.orgId, {
+          codicePos, nomeNegozio, ragioneSociale, articoli: [artMobileTied],
+        });
+      }
+    }
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session);
+    const page = await openDashboard(context);
+    const card = page.getByTestId('ticker-pista-mobile');
+    await card.waitFor({ state: 'visible', timeout: 15000 });
+
+    assert.equal(await card.getAttribute('data-threshold-scale'), 'shared');
+    assert.equal(await card.getAttribute('data-threshold-scope'), 'rs');
+    assert.equal(
+      await card.locator('[data-testid^="ticker-threshold-mobile-"]').count(),
+      4,
+      'due RS con la stessa scala devono condividere le quattro stanghette',
+    );
+    assert.match(
+      (await page.getByTestId('ticker-trajectory-labels-mobile').innerText()).replace(/\s+/g, ' '),
+      /Soglia attuale Non raggiunta migliore RS/i,
+      'lo stato aggregato deve essere qualificato come migliore RS',
+    );
+    const actualFillWidth = Number.parseFloat(
+      (await page.getByTestId('ticker-trajectory-track-mobile').locator('.pista-trajectory-fill').getAttribute('style'))?.match(/width:\s*([\d.]+)%/)?.[1] ?? 'NaN',
+    );
+    const s1MarkerLeft = Number.parseFloat(
+      (await page.getByTestId('ticker-threshold-mobile-1').getAttribute('style'))?.match(/left:\s*([\d.]+)%/)?.[1] ?? 'NaN',
+    );
+    assert.ok(
+      Number.isFinite(actualFillWidth) && Number.isFinite(s1MarkerLeft) && actualFillWidth < s1MarkerLeft,
+      'due RS entrambe sotto S1 non devono far avanzare la barra fino a S1 sommando i loro punti',
+    );
+
+    config.pistaMobileRSConfig.sogliePerRS[1] = {
+      ...config.pistaMobileRSConfig.sogliePerRS[1],
+      soglia1: 10,
+      soglia2: 20,
+      soglia3: 30,
+      soglia4: 40,
+    };
+    await pool.query(
+      `UPDATE gara_config
+       SET config = $2::jsonb
+       WHERE organization_id = $1 AND month = $3 AND year = $4`,
+      [session.orgId, JSON.stringify(config), MONTH, YEAR],
+    );
+    await page.reload({ waitUntil: 'networkidle', timeout: 45000 });
+    await card.waitFor({ state: 'visible', timeout: 15000 });
+
+    assert.equal(await card.getAttribute('data-threshold-scale'), 'mixed');
+    assert.equal(
+      await card.locator('[data-testid^="ticker-threshold-mobile-"]').count(),
+      0,
+      'scale RS diverse non devono essere presentate come una falsa scala comune',
+    );
+    assert.match(
+      (await page.getByTestId('ticker-trajectory-labels-mobile').innerText()).replace(/\s+/g, ' '),
+      /migliore RS/i,
+      'anche senza scala comune lo stato deve dichiarare l’ambito RS',
+    );
+
+    await card.click();
+    await page.getByTestId('ticker-detail-mobile').waitFor({ state: 'visible', timeout: 10000 });
+    const detailThresholds = page.locator('[data-testid^="ticker-detail-thresholds-mobile-"]');
+    assert.equal(
+      await detailThresholds.count(),
+      2,
+      'i riferimenti specifici delle due RS devono restare disponibili nel dettaglio',
+    );
+    const detailTexts = await detailThresholds.allInnerTexts();
+    assert.ok(detailTexts.some((text) => /S1:\s*3/.test(text)), 'il dettaglio deve conservare la scala della prima RS');
+    assert.ok(detailTexts.some((text) => /S1:\s*10/.test(text)), 'il dettaglio deve conservare la scala diversa della seconda RS');
+
+    await page.close();
+    await context.close();
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+test('scenario 7: Extra Gara P.IVA mantiene marker e tooltip della scala effettiva', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'ticker_extra_iva', fullName: 'Ticker Extra IVA Test' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+
+    const POS = uniq('TKEGPOS');
+    const RS = uniq('TickerExtraIva Srl');
+    await pool.query(
+      `INSERT INTO gara_config (organization_id, month, year, name, config)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [
+        session.orgId, MONTH, YEAR, 'Ticker Extra Gara IVA test',
+        JSON.stringify({
+          pdvList: [{
+            codicePos: POS,
+            nome: 'Negozio Extra IVA',
+            ragioneSociale: RS,
+            clusterPIva: 'business_promoter',
+          }],
+          extraGaraIvaSogliePerRS: {
+            [RS]: {
+              s1: 1,
+              s2: 2,
+              s3: 3,
+              s4: 4,
+              pdvCount: 1,
+              clusterPIva: 'business_promoter',
+            },
+          },
+        }),
+      ],
+    );
+    await insertSale(pool, session.orgId, {
+      codicePos: POS,
+      nomeNegozio: 'Negozio Extra IVA',
+      ragioneSociale: RS,
+      articoli: [artExtraGaraWorld],
+    });
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session, { mobile: true });
+    const page = await openDashboard(context);
+    const card = page.getByTestId('ticker-pista-extra_gara_iva');
+    const toggle = page.getByTestId('ticker-toggle-extra_gara_iva');
+    await card.waitFor({ state: 'visible', timeout: 15000 });
+
+    assert.equal(await card.getAttribute('data-threshold-scale'), 'shared');
+    assert.equal(
+      await card.locator('[data-testid^="ticker-threshold-extra_gara_iva-"]').count(),
+      4,
+      'Extra Gara P.IVA deve mostrare tutte le quattro soglie configurate',
+    );
+    assert.equal(
+      (await page.getByTestId('ticker-soglia-attuale-extra_gara_iva').innerText()).trim(),
+      'S1',
+      '1,5 punti devono raggiungere la soglia S1 configurata a 1',
+    );
+
+    const s4Marker = page.getByTestId('ticker-threshold-extra_gara_iva-4');
+    assert.equal(await s4Marker.getAttribute('aria-label'), 'Soglia S4: 4 punti');
+    await s4Marker.click();
+    const tooltip = page.getByRole('tooltip');
+    await tooltip.waitFor({ state: 'visible', timeout: 5000 });
+    assert.match((await tooltip.innerText()).replace(/\s+/g, ' '), /Soglia S4: 4 punti/);
+    assert.equal(
+      await toggle.getAttribute('aria-expanded'),
+      'false',
+      'il tap su una soglia Extra Gara non deve aprire il dettaglio',
     );
 
     await page.close();

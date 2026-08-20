@@ -229,12 +229,6 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   backdrop-filter: blur(8px);
 }
 
-.pista-card-threshold {
-  border: 1px solid hsl(var(--border) / 0.8);
-  background: hsl(var(--card) / 0.86);
-  backdrop-filter: blur(8px);
-}
-
 .pista-card-content {
   position: relative;
   z-index: 20;
@@ -270,17 +264,36 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   color: hsl(var(--foreground));
   font-size: 0.7rem;
   font-weight: 800;
+  line-height: 1.05;
+}
+
+.pista-trajectory-labels strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pista-trajectory-labels small {
+  display: block;
+  margin-top: 0.12rem;
+  color: hsl(var(--foreground) / 0.68);
+  font-size: 0.47rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   line-height: 1;
+  text-transform: uppercase;
 }
 
 .pista-trajectory-label {
   display: block;
+  min-height: 2em;
   margin-bottom: 0.12rem;
   color: hsl(var(--foreground) / 0.7);
-  font-size: 0.48rem;
+  font-size: 0.46rem;
   font-weight: 700;
-  letter-spacing: 0.11em;
-  line-height: 1;
+  letter-spacing: 0.07em;
+  line-height: 1.08;
   text-transform: uppercase;
 }
 
@@ -354,18 +367,22 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
 
 .pista-threshold-tick > span {
   display: block;
-  width: 0.18rem;
-  height: 0.78rem;
-  border: 1px solid hsl(var(--card));
+  width: 0.22rem;
+  height: 0.9rem;
+  border: 2px solid hsl(var(--card));
   border-radius: 999px;
-  background: hsl(var(--foreground) / 0.64);
-  box-shadow: 0 1px 3px hsl(var(--foreground) / 0.2);
+  background: hsl(var(--pista-ink));
+  box-shadow:
+    0 0 0 1px hsl(var(--foreground) / 0.72),
+    0 2px 5px hsl(var(--foreground) / 0.32);
   transition: height 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
 }
 
 .pista-threshold-tick:hover > span,
-.pista-threshold-tick:focus-visible > span {
-  height: 0.96rem;
+.pista-threshold-tick:focus-visible > span,
+.pista-threshold-tick[data-state="instant-open"] > span,
+.pista-threshold-tick[data-state="delayed-open"] > span {
+  height: 1.08rem;
   background: hsl(var(--foreground));
   box-shadow: 0 0 0 2px hsl(var(--card)), 0 0 0 3px hsl(var(--pista-ink) / 0.72);
 }
@@ -415,6 +432,11 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
 
   .pista-trajectory-labels > span {
     font-size: 0.66rem;
+  }
+
+  .pista-trajectory-label {
+    font-size: 0.42rem;
+    letter-spacing: 0.045em;
   }
 }
 
@@ -498,8 +520,7 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
     hsl(var(--card) / 0.76) 100%
   );
 }
-.dark .pista-card-header,
-.dark .pista-card-threshold {
+.dark .pista-card-header {
   border-color: hsl(var(--border) / 0.85);
   background: hsl(var(--card) / 0.84);
 }

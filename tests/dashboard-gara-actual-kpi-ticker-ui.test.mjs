@@ -416,9 +416,14 @@ test('Dashboard Gara: il solo addon Pagamento Annuale mostra 0,5 punti e raggiun
       'raggiungendo S2 deve essere applicato il premio della soglia più alta',
     );
     assert.equal(
-      await assicurazioniCard.getByText('S2', { exact: true }).count(),
-      1,
-      'il mezzo punto deve raggiungere la soglia S2 configurata a 0,5',
+      (await page.getByTestId('ticker-soglia-attuale-assicurazioni').innerText()).trim(),
+      'S2',
+      'il mezzo punto deve raggiungere la soglia attuale S2 configurata a 0,5',
+    );
+    assert.equal(
+      (await page.getByTestId('ticker-soglia-proiezione-assicurazioni').innerText()).trim(),
+      'S2',
+      'la proiezione deve mantenere la soglia S2 senza duplicare il vecchio badge',
     );
 
     await page.close();
