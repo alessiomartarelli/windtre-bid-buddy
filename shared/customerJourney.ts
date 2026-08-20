@@ -101,8 +101,8 @@ export interface CjJourneyFacets {
 export interface CjListFilters {
   // "tutti" | "privato" | "azienda"
   typeFilter: string;
-  // "tutti" | <pdv>
-  pdvFilter: string;
+  // Multi-selezione PDV (Task #466): vuoto = tutti, selezioni = OR.
+  pdvFilter: string[];
   // "tutti" | <addetto>
   addettoFilter: string;
   // "tutti" | <stato item>
@@ -130,13 +130,14 @@ export interface CjFilterable {
 
 /**
  * true se l'entità (journey o riga report) supera tutti i filtri attivi. Un
- * filtro impostato a "tutti" è ignorato. Negozio/addetto/stato usano
+ * filtro impostato a "tutti" (o, per il negozio, un array vuoto) è ignorato;
+ * più PDV selezionati sono in OR. Negozio/addetto/stato usano
  * `includes` sull'array di facet (una journey può avere più PDV/addetti/stati;
  * una riga report ne ha uno solo).
  */
 export function matchesCjFilters(v: CjFilterable, f: CjListFilters): boolean {
   if (f.typeFilter !== "tutti" && v.customerType !== f.typeFilter) return false;
-  if (f.pdvFilter !== "tutti" && !v.pdvs.includes(f.pdvFilter)) return false;
+  if (f.pdvFilter.length > 0 && !f.pdvFilter.some((p) => v.pdvs.includes(p))) return false;
   if (f.addettoFilter !== "tutti" && !v.addetti.includes(f.addettoFilter)) return false;
   if (f.stateFilter !== "tutti" && !v.states.includes(f.stateFilter)) return false;
   return cjSearchMatches(v.searchHay, f.search);

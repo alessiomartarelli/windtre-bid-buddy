@@ -20,6 +20,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { useToast } from "@/hooks/use-toast";
 import {
   Route as RouteIcon, RefreshCw, ArrowLeft, ArrowRight, CheckCircle2, Circle, CircleDot,
@@ -475,7 +476,8 @@ export default function CustomerJourneyPage() {
   const [view, setView] = useState<CjView>("schede");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"tutti" | "privato" | "azienda">("tutti");
-  const [pdvFilter, setPdvFilter] = useState<string>("tutti");
+  // Multi-selezione negozi (Task #466): vuoto = tutti, selezioni = OR.
+  const [pdvFilter, setPdvFilter] = useState<string[]>([]);
   const [addettoFilter, setAddettoFilter] = useState<string>("tutti");
   const [stateFilter, setStateFilter] = useState<string>("tutti");
   const [reportDim, setReportDim] = useState<ReportDim>("negozio");
@@ -667,6 +669,10 @@ export default function CustomerJourneyPage() {
     for (const r of reportRows) if (r.pdv) s.add(r.pdv);
     return Array.from(s).sort((a, b) => a.localeCompare(b, "it"));
   }, [journeys, reportRows]);
+  const pdvFilterOptions = useMemo(
+    () => pdvOptions.map((p) => ({ value: p, label: p })),
+    [pdvOptions],
+  );
   const addettoOptions = useMemo(() => {
     const s = new Set<string>();
     for (const j of journeys) for (const a of j.addetti ?? []) if (a) s.add(a);
@@ -816,13 +822,13 @@ export default function CustomerJourneyPage() {
   );
 
   const hasActiveFilters =
-    typeFilter !== "tutti" || pdvFilter !== "tutti" ||
+    typeFilter !== "tutti" || pdvFilter.length > 0 ||
     addettoFilter !== "tutti" || stateFilter !== "tutti" || !!search.trim() ||
     !!dateFrom || !!dateTo;
 
   const resetFilters = useCallback(() => {
     setTypeFilter("tutti");
-    setPdvFilter("tutti");
+    setPdvFilter([]);
     setAddettoFilter("tutti");
     setStateFilter("tutti");
     setSearch("");
@@ -1109,18 +1115,18 @@ export default function CustomerJourneyPage() {
                   <Badge variant="secondary" className="ml-2">{countAzienda}</Badge>
                 </Button>
               </div>
-              <Select value={pdvFilter} onValueChange={setPdvFilter}>
-                <SelectTrigger className="w-full sm:w-[180px] h-9" data-testid="select-filter-negozio">
-                  <Store className="h-4 w-4 mr-1.5 text-muted-foreground shrink-0" />
-                  <SelectValue placeholder="Negozio" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tutti" data-testid="option-negozio-tutti">Tutti i negozi</SelectItem>
-                  {pdvOptions.map((p) => (
-                    <SelectItem key={p} value={p} data-testid={`option-negozio-${p}`}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="w-full sm:w-[220px]">
+                <MultiSelectFilter
+                  values={pdvFilter}
+                  onChange={setPdvFilter}
+                  options={pdvFilterOptions}
+                  allLabel="Tutti i negozi"
+                  countLabel={(n) => `${n} negozi`}
+                  searchPlaceholder="Cerca negozio..."
+                  emptyText="Nessun negozio."
+                  testid="select-filter-negozio"
+                />
+              </div>
               <Select value={addettoFilter} onValueChange={setAddettoFilter}>
                 <SelectTrigger className="w-full sm:w-[180px] h-9" data-testid="select-filter-operatore">
                   <Users className="h-4 w-4 mr-1.5 text-muted-foreground shrink-0" />

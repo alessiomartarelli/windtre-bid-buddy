@@ -438,7 +438,8 @@ test('scenario 4: the shared store (PDV) filter narrows both the Dettaglio and g
 
     // Applica il filtro Negozio = PDV di Mario tramite il controllo <Select>.
     await page.getByTestId('select-filter-negozio').click();
-    await page.getByTestId(`option-negozio-${MARIO_PDV}`).click();
+    await page.getByTestId(`option-select-filter-negozio-${MARIO_PDV}`).click();
+    await page.keyboard.press('Escape');
 
     // La tabella Dettaglio si restringe alla sola riga di Mario.
     await page.getByTestId(`row-report-${MARIO_PDV}`).waitFor({ state: 'visible', timeout: 10000 });
@@ -456,6 +457,28 @@ test('scenario 4: the shared store (PDV) filter narrows both the Dettaglio and g
       await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).count(),
       0, 'Luigi gettone row must disappear under the active store filter',
     );
+
+    // Multi-selezione (Task #466): aggiungendo anche il PDV di Luigi entrambe
+    // le righe tornano visibili (semantica OR fra i negozi selezionati).
+    await page.getByTestId('select-filter-negozio').click();
+    await page.getByTestId(`option-select-filter-negozio-${LUIGI_PDV}`).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+
+    // "Tutti i negozi" azzera la selezione multipla: tutto resta visibile e il
+    // filtro non è più attivo.
+    await page.getByTestId('select-filter-negozio').click();
+    await page.getByTestId('option-select-filter-negozio-all').click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId(`row-gettone-${MARIO_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).waitFor({ state: 'visible', timeout: 10000 });
+
+    // Riapplica il filtro sul solo PDV di Mario e azzera con il reset globale.
+    await page.getByTestId('select-filter-negozio').click();
+    await page.getByTestId(`option-select-filter-negozio-${MARIO_PDV}`).click();
+    await page.keyboard.press('Escape');
+    await page.getByTestId(`row-gettone-${LUIGI_ADDETTO}`).waitFor({ state: 'detached', timeout: 10000 });
 
     // Azzerando il filtro torna anche Luigi.
     await page.getByTestId('button-reset-filters').click();

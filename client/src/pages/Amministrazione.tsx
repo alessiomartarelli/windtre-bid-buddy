@@ -36,14 +36,10 @@ import {
 } from "@/components/ui/table";
 import { FilterBar, FilterField } from "@/components/ui/filter-bar";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-} from "@/components/ui/command";
-import { Checkbox } from "@/components/ui/checkbox";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   BookOpen, Receipt, Loader2, Download, Search, AlertTriangle, HelpCircle, FileText,
-  Calendar, CalendarDays, Store, Building2, RefreshCw, Wallet, ChevronDown, X,
+  Calendar, CalendarDays, Store, Building2, RefreshCw, Wallet,
   LineChart,
 } from "lucide-react";
 import { BASE_PATH } from "@/lib/basePath";
@@ -504,6 +500,12 @@ export default function Amministrazione() {
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [sales]);
+
+  // Opzioni per il selettore multi-PDV condiviso (Task #466).
+  const pdvMultiOptions = useMemo(
+    () => pdvOptions.map(([code, name]) => ({ value: code, label: `${name} (${code})` })),
+    [pdvOptions],
+  );
 
   // Task #367: dedupe per chiave normalizzata (varianti tipo "CMS SRL" vs
   // "CMS S.R.L" diventano un'unica opzione, primo nome visto come display).
@@ -1320,89 +1322,16 @@ export default function Amministrazione() {
             />
           </FilterField>
           <FilterField label="Punto Vendita" icon={Store}>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  className="w-full justify-between font-normal"
-                  data-testid="select-pdv"
-                >
-                  <span className="truncate text-left">
-                    {filterPdv.length === 0
-                      ? "Tutti i PDV"
-                      : filterPdv.length === 1
-                      ? (() => {
-                          const p = pdvOptions.find(([c]) => c === filterPdv[0]);
-                          return p ? `${p[1]} (${p[0]})` : filterPdv[0];
-                        })()
-                      : `${filterPdv.length} PDV selezionati`}
-                  </span>
-                  <div className="flex items-center gap-1 ml-2 shrink-0">
-                    {filterPdv.length > 0 && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className="inline-flex items-center justify-center h-4 w-4 rounded hover:bg-muted-foreground/20"
-                        onClick={(e) => { e.stopPropagation(); setFilterPdv([]); }}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); setFilterPdv([]); } }}
-                        data-testid="button-clear-pdv"
-                        aria-label="Azzera selezione PDV"
-                      >
-                        <X className="h-3 w-3" />
-                      </span>
-                    )}
-                    <ChevronDown className="h-4 w-4 opacity-50" />
-                  </div>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] min-w-[260px]" align="start">
-                <Command>
-                  <CommandInput placeholder="Cerca PDV..." />
-                  <CommandList>
-                    <CommandEmpty>Nessun PDV trovato.</CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        value="__all__"
-                        onSelect={() => setFilterPdv([])}
-                        data-testid="option-pdv-all"
-                      >
-                        <Checkbox
-                          checked={filterPdv.length === 0}
-                          className="mr-2"
-                          tabIndex={-1}
-                        />
-                        <span className="font-medium">Tutti i PDV</span>
-                      </CommandItem>
-                      {pdvOptions.map(([code, name]) => {
-                        const checked = filterPdv.includes(code);
-                        return (
-                          <CommandItem
-                            key={code}
-                            value={`${name} ${code}`}
-                            onSelect={() => {
-                              setFilterPdv((prev) =>
-                                prev.includes(code)
-                                  ? prev.filter((c) => c !== code)
-                                  : [...prev, code],
-                              );
-                            }}
-                            data-testid={`option-pdv-${code}`}
-                          >
-                            <Checkbox
-                              checked={checked}
-                              className="mr-2"
-                              tabIndex={-1}
-                            />
-                            <span className="truncate">{name} ({code})</span>
-                          </CommandItem>
-                        );
-                      })}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+            <MultiSelectFilter
+              values={filterPdv}
+              onChange={setFilterPdv}
+              options={pdvMultiOptions}
+              allLabel="Tutti i PDV"
+              countLabel={(n) => `${n} PDV selezionati`}
+              searchPlaceholder="Cerca PDV..."
+              emptyText="Nessun PDV trovato."
+              testid="select-pdv"
+            />
           </FilterField>
           <FilterField label="Ragione Sociale" icon={Building2}>
             <Select value={filterRs} onValueChange={setFilterRs}>

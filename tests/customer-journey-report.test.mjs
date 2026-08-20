@@ -173,7 +173,7 @@ test('cjSearchMatches: case-insensitive, vuoto/whitespace = match', () => {
 // matchesCjFilters — "tutti" = nessun vincolo, tutto passa.
 // ===========================================================================
 test('matchesCjFilters: filtri "tutti" lasciano passare tutto', () => {
-  const all = { typeFilter: 'tutti', pdvFilter: 'tutti', addettoFilter: 'tutti', stateFilter: 'tutti', search: '' };
+  const all = { typeFilter: 'tutti', pdvFilter: [], addettoFilter: 'tutti', stateFilter: 'tutti', search: '' };
   const v = { customerType: 'privato', pdvs: ['PDV Roma'], addetti: ['Anna'], states: ['attivato'], searchHay: 'Mario' };
   assert.equal(matchesCjFilters(v, all), true);
 });
@@ -182,14 +182,14 @@ test('matchesCjFilters: filtri "tutti" lasciano passare tutto', () => {
 // matchesCjFilters — ogni faccetta filtra in modo indipendente.
 // ===========================================================================
 test('matchesCjFilters: tipo / negozio / addetto / stato filtrano', () => {
-  const base = { typeFilter: 'tutti', pdvFilter: 'tutti', addettoFilter: 'tutti', stateFilter: 'tutti', search: '' };
+  const base = { typeFilter: 'tutti', pdvFilter: [], addettoFilter: 'tutti', stateFilter: 'tutti', search: '' };
   const v = { customerType: 'privato', pdvs: ['PDV Roma'], addetti: ['Anna'], states: ['attivato'], searchHay: 'Mario' };
 
   assert.equal(matchesCjFilters(v, { ...base, typeFilter: 'azienda' }), false);
   assert.equal(matchesCjFilters(v, { ...base, typeFilter: 'privato' }), true);
 
-  assert.equal(matchesCjFilters(v, { ...base, pdvFilter: 'PDV Milano' }), false);
-  assert.equal(matchesCjFilters(v, { ...base, pdvFilter: 'PDV Roma' }), true);
+  assert.equal(matchesCjFilters(v, { ...base, pdvFilter: ['PDV Milano'] }), false);
+  assert.equal(matchesCjFilters(v, { ...base, pdvFilter: ['PDV Roma'] }), true);
 
   assert.equal(matchesCjFilters(v, { ...base, addettoFilter: 'Bruno' }), false);
   assert.equal(matchesCjFilters(v, { ...base, addettoFilter: 'Anna' }), true);
@@ -203,7 +203,7 @@ test('matchesCjFilters: tipo / negozio / addetto / stato filtrano', () => {
 // ===========================================================================
 test('matchesCjFilters: i filtri si combinano in AND', () => {
   const v = { customerType: 'azienda', pdvs: ['PDV Roma'], addetti: ['Anna'], states: ['pagato'], searchHay: 'Acme SRL' };
-  const f = { typeFilter: 'azienda', pdvFilter: 'PDV Roma', addettoFilter: 'Anna', stateFilter: 'pagato', search: 'acme' };
+  const f = { typeFilter: 'azienda', pdvFilter: ['PDV Roma'], addettoFilter: 'Anna', stateFilter: 'pagato', search: 'acme' };
   assert.equal(matchesCjFilters(v, f), true);
   // un solo mismatch (stato) => escluso
   assert.equal(matchesCjFilters(v, { ...f, stateFilter: 'attivato' }), false);
@@ -216,7 +216,7 @@ test('matchesCjFilters: i filtri si combinano in AND', () => {
 // matcha se uno qualunque dei suoi valori coincide (includes sull'array).
 // ===========================================================================
 test('matchesCjFilters: journey multi-facet matcha per includes', () => {
-  const base = { typeFilter: 'tutti', pdvFilter: 'tutti', addettoFilter: 'tutti', stateFilter: 'tutti', search: '' };
+  const base = { typeFilter: 'tutti', pdvFilter: [], addettoFilter: 'tutti', stateFilter: 'tutti', search: '' };
   const j = {
     customerType: 'privato',
     pdvs: ['PDV Roma', 'PDV Milano'],
@@ -224,10 +224,33 @@ test('matchesCjFilters: journey multi-facet matcha per includes', () => {
     states: ['attivato', 'ko'],
     searchHay: 'Mario Rossi',
   };
-  assert.equal(matchesCjFilters(j, { ...base, pdvFilter: 'PDV Milano' }), true);
+  assert.equal(matchesCjFilters(j, { ...base, pdvFilter: ['PDV Milano'] }), true);
   assert.equal(matchesCjFilters(j, { ...base, addettoFilter: 'Bruno' }), true);
   assert.equal(matchesCjFilters(j, { ...base, stateFilter: 'ko' }), true);
-  assert.equal(matchesCjFilters(j, { ...base, pdvFilter: 'PDV Napoli' }), false);
+  assert.equal(matchesCjFilters(j, { ...base, pdvFilter: ['PDV Napoli'] }), false);
+});
+
+// ===========================================================================
+// matchesCjFilters — multi-selezione PDV (Task #466): più negozi selezionati
+// sono in OR ("uno qualsiasi dei scelti"), azzerare la selezione ([]) torna a
+// "tutti".
+// ===========================================================================
+test('matchesCjFilters: multi-PDV in OR e ritorno a "tutti" con []', () => {
+  const base = { typeFilter: 'tutti', pdvFilter: [], addettoFilter: 'tutti', stateFilter: 'tutti', search: '' };
+  const roma = { customerType: 'privato', pdvs: ['PDV Roma'], addetti: ['Anna'], states: ['attivato'], searchHay: 'Mario' };
+  const milano = { customerType: 'privato', pdvs: ['PDV Milano'], addetti: ['Bruno'], states: ['ko'], searchHay: 'Luigi' };
+  const napoli = { customerType: 'privato', pdvs: ['PDV Napoli'], addetti: ['Carla'], states: ['inserito'], searchHay: 'Anna' };
+
+  // due PDV selezionati: passano entrambi (OR), il terzo no
+  const due = { ...base, pdvFilter: ['PDV Roma', 'PDV Milano'] };
+  assert.equal(matchesCjFilters(roma, due), true);
+  assert.equal(matchesCjFilters(milano, due), true);
+  assert.equal(matchesCjFilters(napoli, due), false);
+
+  // ritorno a "tutti": selezione vuota lascia passare tutto
+  assert.equal(matchesCjFilters(roma, base), true);
+  assert.equal(matchesCjFilters(milano, base), true);
+  assert.equal(matchesCjFilters(napoli, base), true);
 });
 
 // ===========================================================================
@@ -236,8 +259,8 @@ test('matchesCjFilters: journey multi-facet matcha per includes', () => {
 // ===========================================================================
 test('matchesCjFilters: facet vuoti esclusi da filtro specifico', () => {
   const empty = { customerType: 'privato', pdvs: [], addetti: [], states: [], searchHay: '' };
-  assert.equal(matchesCjFilters(empty, { typeFilter: 'tutti', pdvFilter: 'PDV Roma', addettoFilter: 'tutti', stateFilter: 'tutti', search: '' }), false);
-  assert.equal(matchesCjFilters(empty, { typeFilter: 'tutti', pdvFilter: 'tutti', addettoFilter: 'tutti', stateFilter: 'tutti', search: '' }), true);
+  assert.equal(matchesCjFilters(empty, { typeFilter: 'tutti', pdvFilter: ['PDV Roma'], addettoFilter: 'tutti', stateFilter: 'tutti', search: '' }), false);
+  assert.equal(matchesCjFilters(empty, { typeFilter: 'tutti', pdvFilter: [], addettoFilter: 'tutti', stateFilter: 'tutti', search: '' }), true);
 });
 
 // ===========================================================================
@@ -248,7 +271,7 @@ test('matchesCjFilters: facet vuoti esclusi da filtro specifico', () => {
 // filtraggio condiviso: stessa logica, granularità diversa.
 // ===========================================================================
 test('coerenza schede/report: stesso predicato, granularità journey vs item', () => {
-  const filter = { typeFilter: 'tutti', pdvFilter: 'PDV Milano', addettoFilter: 'tutti', stateFilter: 'tutti', search: '' };
+  const filter = { typeFilter: 'tutti', pdvFilter: ['PDV Milano'], addettoFilter: 'tutti', stateFilter: 'tutti', search: '' };
 
   // vista schede: la journey aggrega entrambi i PDV
   const journeyView = {
