@@ -1,0 +1,260 @@
+/* Preview dark "Midnight Violet" della pagina Vendite BiSuite.
+   Scoped su .vd-root: non tocca la preview Prisma Light. Palette dal
+   riferimento Power UI: fondo midnight, superfici viola stratificate,
+   testo bianco/lavanda, accento arancio/oro. */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+
+.vd-root {
+  --vd-bg: #150a30;
+  --vd-bg-deep: #0e0622;
+  --vd-panel: #372173;
+  --vd-panel-2: #3f2884;
+  --vd-panel-soft: #2b1a5c;
+  --vd-inset: #241250;
+  --vd-line: rgba(196, 172, 255, 0.16);
+  --vd-line-strong: rgba(196, 172, 255, 0.3);
+  --vd-text: #f4f0ff;
+  --vd-lav: #c3b6ee;
+  --vd-lav-dim: #9c8dd0;
+  --vd-gold: #f6a83c;
+  --vd-gold-soft: #ffc873;
+  --vd-green: #4ade80;
+  --vd-red: #fb7185;
+  min-height: 100dvh;
+  color: var(--vd-text);
+  font-family: Manrope, system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse at 15% -5%, rgba(109, 66, 210, 0.35), transparent 45%),
+    radial-gradient(ellipse at 90% 5%, rgba(246, 168, 60, 0.08), transparent 40%),
+    radial-gradient(ellipse at 55% 110%, rgba(78, 41, 158, 0.4), transparent 55%),
+    linear-gradient(170deg, var(--vd-bg), var(--vd-bg-deep));
+  background-attachment: fixed;
+  padding-bottom: 48px;
+}
+.vd-root * { box-sizing: border-box; }
+.vd-root button { font-family: inherit; }
+
+/* ---------- Header ---------- */
+.vd-topbar {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 22px;
+  background: rgba(21, 10, 48, 0.82);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--vd-line);
+}
+.vd-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 16px; letter-spacing: 0.2px; }
+.vd-brand-mark {
+  width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--vd-gold), #e2711d); color: #241250;
+}
+.vd-brand-mark svg { width: 16px; height: 16px; }
+.vd-crumb { font-size: 12px; color: var(--vd-lav); }
+.vd-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.vd-chip-preview {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 999px;
+  color: #2a1608; background: linear-gradient(120deg, var(--vd-gold-soft), var(--vd-gold));
+}
+.vd-avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--vd-panel-2); border: 1px solid var(--vd-line-strong); color: var(--vd-lav); }
+
+.vd-main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 0; display: flex; flex-direction: column; gap: 18px; }
+
+.vd-backlink { color: var(--vd-lav); font-size: 12px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.vd-backlink:hover { color: var(--vd-gold-soft); }
+
+/* ---------- Pannelli ---------- */
+.vd-panel {
+  background: linear-gradient(165deg, var(--vd-panel-2), var(--vd-panel) 45%, #301c68);
+  border: 1px solid var(--vd-line);
+  border-radius: 16px;
+  box-shadow: 0 18px 42px rgba(8, 3, 24, 0.5), inset 0 1px 0 rgba(226, 210, 255, 0.08);
+}
+.vd-panel-pad { padding: 16px 18px; }
+.vd-panel-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+.vd-panel-title svg { width: 17px; height: 17px; color: var(--vd-gold); }
+.vd-subnote { font-size: 11px; color: var(--vd-lav-dim); margin-top: 2px; }
+
+/* ---------- Filtri ---------- */
+.vd-filters { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.vd-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.vd-field.span2 { grid-column: span 2; }
+.vd-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--vd-lav-dim); display: flex; align-items: center; gap: 4px; }
+.vd-label svg { width: 11px; height: 11px; }
+.vd-input, .vd-select {
+  height: 34px; width: 100%; border-radius: 9px; padding: 0 10px;
+  background: var(--vd-inset); border: 1px solid var(--vd-line);
+  color: var(--vd-text); font-size: 12.5px; outline: none;
+  color-scheme: dark;
+}
+.vd-input::placeholder { color: var(--vd-lav-dim); }
+.vd-input:hover, .vd-select:hover { border-color: var(--vd-line-strong); }
+.vd-input:focus-visible, .vd-select:focus-visible, .vd-btn:focus-visible, .vd-chipbtn:focus-visible {
+  border-color: var(--vd-gold);
+  box-shadow: 0 0 0 2px rgba(246, 168, 60, 0.35);
+}
+.vd-filterhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.vd-filtercount {
+  font-size: 10px; font-weight: 700; border-radius: 999px; padding: 3px 9px;
+  background: rgba(246, 168, 60, 0.18); color: var(--vd-gold-soft); border: 1px solid rgba(246, 168, 60, 0.35);
+}
+
+/* ---------- Bottoni ---------- */
+.vd-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 13px; border-radius: 9px; cursor: pointer;
+  background: var(--vd-inset); border: 1px solid var(--vd-line);
+  color: var(--vd-lav); font-size: 12px; font-weight: 600;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.vd-btn svg { width: 13px; height: 13px; }
+.vd-btn:hover { background: var(--vd-panel-soft); color: var(--vd-text); border-color: var(--vd-line-strong); }
+.vd-btn.primary {
+  background: linear-gradient(120deg, var(--vd-gold-soft), var(--vd-gold));
+  color: #2a1608; border-color: transparent;
+}
+.vd-btn.primary:hover { filter: brightness(1.07); }
+.vd-btn.ghost { background: transparent; border-color: transparent; }
+.vd-btn.ghost:hover { background: var(--vd-inset); }
+.vd-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* ---------- KPI ---------- */
+.vd-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.vd-kpi { text-align: center; padding: 16px 12px; transition: transform 0.15s, box-shadow 0.15s; }
+.vd-kpi:hover { transform: translateY(-2px); box-shadow: 0 22px 48px rgba(8, 3, 24, 0.6), inset 0 1px 0 rgba(226, 210, 255, 0.1); }
+.vd-kpi svg { width: 18px; height: 18px; margin-bottom: 6px; }
+.vd-kpi-value { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.vd-kpi-label { font-size: 11px; color: var(--vd-lav-dim); margin-top: 2px; }
+.vd-gold-text { color: var(--vd-gold-soft); }
+.vd-green-text { color: var(--vd-green); }
+
+/* ---------- Badge / chip ---------- */
+.vd-chipbtn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border-radius: 11px; cursor: pointer;
+  background: var(--vd-inset); border: 1px solid var(--vd-line);
+  color: var(--vd-text); font-size: 12px; font-weight: 600;
+  transition: border-color 0.15s, background 0.15s;
+}
+.vd-chipbtn:hover { border-color: var(--vd-line-strong); background: var(--vd-panel-soft); }
+.vd-chipbtn.active { border-color: var(--vd-gold); background: rgba(246, 168, 60, 0.14); }
+.vd-chipbtn small { color: var(--vd-lav-dim); font-weight: 500; }
+.vd-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--vd-line); background: var(--vd-inset); color: var(--vd-lav);
+  white-space: nowrap;
+}
+.vd-badge.gold { background: rgba(246, 168, 60, 0.16); border-color: rgba(246, 168, 60, 0.4); color: var(--vd-gold-soft); }
+.vd-badge.green { background: rgba(74, 222, 128, 0.12); border-color: rgba(74, 222, 128, 0.3); color: var(--vd-green); }
+.vd-badge.mobile { background: rgba(59, 130, 246, 0.16); border-color: rgba(59, 130, 246, 0.4); color: #93c5fd; }
+.vd-badge.fisso { background: rgba(34, 197, 94, 0.14); border-color: rgba(34, 197, 94, 0.35); color: #86efac; }
+.vd-badge.energia { background: rgba(245, 158, 11, 0.16); border-color: rgba(245, 158, 11, 0.4); color: #fcd34d; }
+.vd-badge.assicurazioni { background: rgba(168, 85, 247, 0.18); border-color: rgba(168, 85, 247, 0.45); color: #d8b4fe; }
+.vd-badge.red { background: rgba(251, 113, 133, 0.14); border-color: rgba(251, 113, 133, 0.35); color: var(--vd-red); }
+
+/* ---------- Card tipologie ---------- */
+.vd-types { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.vd-type-card { position: relative; overflow: hidden; }
+.vd-type-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.vd-type-card.canvass::before { background: linear-gradient(180deg, var(--vd-gold-soft), var(--vd-gold)); }
+.vd-type-card.prodotti::before { background: linear-gradient(180deg, #b4a6e8, #8677c9); }
+.vd-type-card.servizi::before { background: linear-gradient(180deg, #67e8f9, #22d3ee); }
+.vd-type-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.vd-type-head > div { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13px; }
+.vd-type-head svg { width: 15px; height: 15px; color: var(--vd-gold); }
+.vd-type-card.prodotti .vd-type-head svg { color: #b4a6e8; }
+.vd-type-card.servizi .vd-type-head svg { color: #67e8f9; }
+.vd-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; padding: 3px 0; }
+.vd-row .name { display: flex; align-items: center; gap: 6px; color: var(--vd-lav); min-width: 0; }
+.vd-row .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vd-row .vals { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.vd-row .money { font-size: 10.5px; color: var(--vd-lav-dim); }
+.vd-row .money.green { color: var(--vd-green); }
+.vd-divider-dashed { border-top: 1px dashed var(--vd-line-strong); margin: 8px 0 4px; }
+
+/* ---------- Accordion ---------- */
+.vd-acc { border: 1px solid var(--vd-line); border-radius: 12px; background: rgba(20, 10, 46, 0.35); overflow: hidden; }
+.vd-acc + .vd-acc { margin-top: 8px; }
+.vd-acc-head {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+  background: transparent; border: 0; color: inherit; cursor: pointer; text-align: left;
+}
+.vd-acc-head:hover { background: rgba(196, 172, 255, 0.06); }
+.vd-acc-ico { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; background: rgba(246, 168, 60, 0.15); color: var(--vd-gold-soft); }
+.vd-acc-ico svg { width: 15px; height: 15px; }
+.vd-acc-title { font-weight: 700; font-size: 13px; }
+.vd-acc-sub { font-size: 11px; color: var(--vd-lav-dim); }
+.vd-acc-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.vd-acc-chevron { color: var(--vd-lav-dim); transition: transform 0.2s; flex-shrink: 0; }
+.vd-acc-chevron.open { transform: rotate(180deg); }
+.vd-acc-body { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--vd-line); padding-top: 12px; }
+.vd-chiprow { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---------- Toggle vista ---------- */
+.vd-viewtoggle { display: inline-flex; gap: 6px; padding: 4px; border-radius: 11px; background: var(--vd-inset); border: 1px solid var(--vd-line); width: fit-content; }
+.vd-viewtoggle .vd-btn { border: 0; background: transparent; height: 30px; }
+.vd-viewtoggle .vd-btn.on {
+  background: linear-gradient(120deg, var(--vd-gold-soft), var(--vd-gold));
+  color: #2a1608;
+}
+
+/* ---------- Tabelle ---------- */
+.vd-tablewrap { overflow: auto; max-height: 480px; border-radius: 0 0 15px 15px; }
+.vd-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 760px; }
+.vd-table th {
+  position: sticky; top: 0; z-index: 10;
+  background: #2b1a5c; color: var(--vd-lav);
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  text-align: right; padding: 9px 12px; white-space: nowrap;
+  border-bottom: 1px solid var(--vd-line-strong);
+}
+.vd-table th:first-child, .vd-table td:first-child { text-align: left; position: sticky; left: 0; z-index: 11; background: #2b1a5c; }
+.vd-table td:first-child { background: #2a195a; }
+.vd-table td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--vd-line); font-variant-numeric: tabular-nums; }
+.vd-table tr:hover td { background: rgba(196, 172, 255, 0.06); }
+.vd-table tr:hover td:first-child { background: #322064; }
+.vd-table .rs-row td { background: rgba(246, 168, 60, 0.07); font-weight: 700; cursor: pointer; }
+.vd-table .rs-row td:first-child { background: #33205f; }
+.vd-table .rs-row:hover td { background: rgba(246, 168, 60, 0.12); }
+.vd-table .pdv-name { font-weight: 600; color: var(--vd-text); }
+.vd-table .pdv-code { font-family: "DM Mono", monospace; font-size: 10px; color: var(--vd-lav-dim); }
+.vd-table .tot-row td { background: rgba(246, 168, 60, 0.12); font-weight: 800; border-top: 2px solid rgba(246, 168, 60, 0.45); color: var(--vd-gold-soft); }
+.vd-table .tot-row td:first-child { background: #3a2664; color: var(--vd-gold-soft); }
+.vd-sortbtn { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; padding: 0; }
+.vd-sortbtn:hover { color: var(--vd-gold-soft); }
+.vd-sortbtn svg { width: 12px; height: 12px; }
+.vd-expander { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; color: inherit; font: inherit; font-weight: 700; cursor: pointer; padding: 0; }
+.vd-expander svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* ---------- Grafico (invariato: card scura ma serie identiche) ---------- */
+.vd-chart-note { font-size: 10.5px; color: var(--vd-lav-dim); }
+.vd-trend-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.vd-trend-divider { width: 1px; height: 20px; background: var(--vd-line-strong); margin: 0 4px; }
+.vd-trend-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 12px; border-radius: 9px; cursor: pointer;
+  background: var(--vd-inset); border: 1px solid var(--vd-line);
+  color: var(--vd-text); font-size: 11.5px; font-weight: 600;
+}
+.vd-trend-chip:hover { border-color: var(--vd-line-strong); }
+.vd-trend-chip.off { opacity: 0.4; }
+.vd-trend-chip i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* ---------- Lista vendite ---------- */
+.vd-mono { font-family: "DM Mono", monospace; font-size: 11px; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1024px) {
+  .vd-filters { grid-template-columns: repeat(3, 1fr); }
+  .vd-kpis { grid-template-columns: repeat(2, 1fr); }
+  .vd-types { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .vd-main { padding: 14px 10px 0; }
+  .vd-filters { grid-template-columns: repeat(2, 1fr); }
+  .vd-field.span2 { grid-column: span 2; }
+  .vd-crumb { display: none; }
+  .vd-kpi-value { font-size: 19px; }
+  .vd-hide-sm { display: none !important; }
+}

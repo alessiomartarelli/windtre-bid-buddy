@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentType } from 'react';
 
 import { modules as discoveredModules } from './.generated/mockup-components';
 import { PrismaLightDashboard } from './components/mockups/prisma-light/PrismaLightDashboard';
+import { VenditeBiSuiteDark } from './components/mockups/vendite-dark/VenditeBiSuiteDark';
 
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 
@@ -129,6 +130,41 @@ function getPreviewPath(): string | null {
   return match ? match[1] : null;
 }
 
+/** Link flottante per passare tra le due preview senza toccare i mockup. */
+function PreviewSwitch({ to, label }: { to: string; label: string }) {
+  const basePath = getBasePath();
+  return (
+    <a
+      href={`${basePath}${to}` || '/'}
+      style={{
+        position: 'fixed',
+        right: 16,
+        bottom: 16,
+        zIndex: 90,
+        padding: '9px 15px',
+        borderRadius: 999,
+        fontFamily: 'Manrope, system-ui, sans-serif',
+        fontSize: 12,
+        fontWeight: 700,
+        textDecoration: 'none',
+        color: '#2a1608',
+        background: 'linear-gradient(120deg,#ffc873,#f6a83c)',
+        boxShadow: '0 10px 26px rgba(20,10,40,.35)',
+      }}
+    >
+      {label}
+    </a>
+  );
+}
+
+function getLocalPath(): string {
+  const basePath = getBasePath();
+  const { pathname } = window.location;
+  return basePath && pathname.startsWith(basePath)
+    ? pathname.slice(basePath.length) || '/'
+    : pathname;
+}
+
 function App() {
   const previewPath = getPreviewPath();
 
@@ -141,7 +177,16 @@ function App() {
     );
   }
 
-  return <PrismaLightDashboard />;
+  if (getLocalPath().replace(/\/$/, '') === '/vendite-dark') {
+    return <VenditeBiSuiteDark />;
+  }
+
+  return (
+    <>
+      <PrismaLightDashboard />
+      <PreviewSwitch to="/vendite-dark" label="Vendite BiSuite · Preview dark →" />
+    </>
+  );
 }
 
 export default App;
