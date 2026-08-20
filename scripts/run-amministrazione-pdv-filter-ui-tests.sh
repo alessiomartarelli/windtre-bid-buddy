@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Run the "Amministrazione filtro multi-PDV" UI test suite (Task #467):
-# tests/amministrazione-pdv-filter-ui.test.mjs
+# Run the "Amministrazione filtri" UI test suites:
+#   - tests/amministrazione-pdv-filter-ui.test.mjs (Task #467, filtro multi-PDV)
+#   - tests/amministrazione-rs-filter-ui.test.mjs  (Task #468, filtro Ragione Sociale)
 #
 # Test UI Playwright: semina vendite BiSuite su 3 PDV nel mese corrente,
 # apre /amministrazione, seleziona 2 PDV col MultiSelectFilter condiviso
@@ -29,4 +30,6 @@ for i in $(seq 1 30); do
 done
 
 echo "[amministrazione-pdv-filter-ui-tests] running suite ..."
-exec node --import tsx --test tests/amministrazione-pdv-filter-ui.test.mjs
+exec node --import tsx --test \
+  tests/amministrazione-pdv-filter-ui.test.mjs \
+  tests/amministrazione-rs-filter-ui.test.mjs
