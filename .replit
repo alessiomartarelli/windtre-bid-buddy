@@ -658,3 +658,14 @@ args = "bash scripts/run-assicurazioni-pagamento-annuale-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "amm-pdv-filter-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-amministrazione-pdv-filter-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
