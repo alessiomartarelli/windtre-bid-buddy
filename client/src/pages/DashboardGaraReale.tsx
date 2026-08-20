@@ -334,6 +334,9 @@ interface MappedSalesResponse {
   totalSalesUnfiltered?: number;
   salesExcludedOutOfGara?: number;
   calendarsAvailable?: boolean;
+  /** Task #457 — serie giornaliera (YYYY-MM-DD, ordine crescente, solo giorni
+   *  con vendite): conteggio vendite e fatturato lordo del giorno. */
+  daily?: Array<{ day: string; vendite: number; importo: number }>;
 }
 
 interface OrgConfigPdv {
@@ -4476,6 +4479,33 @@ export default function DashboardGaraReale() {
     return { piste, maxPezzi, topPdv };
   }, [isPrisma, pistaStats]);
 
+  // Task #457 — pannello "Andamento giornaliero" del mockup: barre verticali
+  // degli ultimi 7 giorni con vendite, alimentate dalla serie `daily` già
+  // aggregata dal server (stesse esclusioni annullate/filtri gara di
+  // mappedData). Scala sicura: max con floor a 1 (giorni a zero, mese appena
+  // iniziato) e finestra troncata all'inizio del mese.
+  const prismaDaily = useMemo(() => {
+    const serie = mappedData?.daily ?? [];
+    if (!isPrisma || serie.length === 0) return null;
+    const addYmd = (ymd: string, n: number) => {
+      const [y, m, d] = ymd.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+    };
+    const byDay = new Map(serie.map((d) => [d.day, d]));
+    const last = serie[serie.length - 1].day;
+    const monthStart = `${last.slice(0, 8)}01`;
+    let start = addYmd(last, -6);
+    if (start < monthStart) start = monthStart;
+    const days: Array<{ day: string; vendite: number; importo: number }> = [];
+    for (let d = start; d <= last; d = addYmd(d, 1)) {
+      const e = byDay.get(d);
+      days.push({ day: d, vendite: e?.vendite ?? 0, importo: e?.importo ?? 0 });
+    }
+    const max = Math.max(1, ...days.map((d) => d.importo));
+    const totale = days.reduce((s, d) => s + d.importo, 0);
+    return { days, max, totale };
+  }, [isPrisma, mappedData]);
+
   const premioPerRS = useMemo(() => {
     if (!pistaStats.length || garaConfigMissing) return [] as Array<{ displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>;
     const isRSPerRS = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
@@ -4751,6 +4781,37 @@ export default function DashboardGaraReale() {
                             {p.pezzi.toLocaleString('it-IT')} eventi
                           </span>
                         </div>
+                      ))}
+                    </div>
+                  </article>
+                )}
+                {/* Task #457 — pannello "Andamento giornaliero" del mockup:
+                    barre verticali proporzionali al venduto lordo dei giorni
+                    recenti, dalla serie `daily` del server (nessun calcolo
+                    nuovo). */}
+                {prismaDaily && (
+                  <article className="pl-pane pl-daily" data-testid="prisma-daily">
+                    <div className="pl-head">
+                      <h2>Andamento giornaliero</h2>
+                      <span className="pl-select">vendite lorde · ultimi {prismaDaily.days.length} giorni</span>
+                    </div>
+                    <div className="pl-big tabular-nums" data-testid="prisma-daily-total">
+                      {formatEuro(prismaDaily.totale)}
+                    </div>
+                    <div className="pl-chart" role="img" aria-label="Barre del venduto lordo per giorno">
+                      {prismaDaily.days.map((d) => (
+                        <i
+                          key={d.day}
+                          className={`pl-bar ${d.importo > 0 && d.importo === prismaDaily.max ? 'active' : ''}`}
+                          data-testid={`prisma-daily-bar-${d.day}`}
+                          style={{ height: `${d.importo > 0 ? Math.max(18, Math.min(100, (d.importo / prismaDaily.max) * 100)) : 6}%` }}
+                          title={`${d.day.split('-').reverse().join('/')}: ${formatEuro(d.importo)} · ${d.vendite.toLocaleString('it-IT')} vendite`}
+                        />
+                      ))}
+                    </div>
+                    <div className="pl-days">
+                      {prismaDaily.days.map((d) => (
+                        <span key={d.day} data-testid={`prisma-daily-day-${d.day}`}>{d.day.slice(-2)}</span>
                       ))}
                     </div>
                   </article>

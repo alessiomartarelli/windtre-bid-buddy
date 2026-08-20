@@ -93,16 +93,16 @@ const artPagamentoAnnualeSolo = {
 };
 
 // ── DB helpers ────────────────────────────────────────────────────────────
-async function insertSale(pool, orgId, { codicePos, nomeNegozio = 'Negozio', ragioneSociale = 'RS Srl', articoli, cliente }) {
+async function insertSale(pool, orgId, { codicePos, nomeNegozio = 'Negozio', ragioneSociale = 'RS Srl', articoli, cliente, totale = null, dataVendita = DATA_VENDITA }) {
   const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
   await pool.query(
     `INSERT INTO bisuite_sales
        (organization_id, bisuite_id, data_vendita, codice_pos, nome_negozio,
-        ragione_sociale, stato, raw_data)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+        ragione_sociale, stato, totale, raw_data)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
     [
-      orgId, bisuiteId, DATA_VENDITA, codicePos, nomeNegozio, ragioneSociale,
-      'ATTIVO', JSON.stringify({ cliente, articoli }),
+      orgId, bisuiteId, dataVendita, codicePos, nomeNegozio, ragioneSociale,
+      'ATTIVO', totale, JSON.stringify({ cliente, articoli }),
     ],
   );
 }
@@ -537,6 +537,111 @@ test('Dashboard Gara (Prisma Light): card Eventi rilevati con righe pista e barr
     const wEnergia = await widthOf('energia');
     assert.equal(wMobile, 100, `la pista con più eventi deve avere barra al 100%, trovato: ${wMobile}%`);
     assert.equal(wEnergia, 50, `energia (1/2 eventi) deve avere barra al 50%, trovato: ${wEnergia}%`);
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser?.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ── Test 5 (Task #457): preset Prisma Light → pannello Andamento giornaliero ─
+// Con dashboardStyle=prisma-light la composizione mockup deve includere il
+// pannello con le barre verticali del venduto lordo per giorno (prisma-daily),
+// alimentato dalla serie `daily` del server: finestra ultimi 7 giorni troncata
+// all'inizio del mese, barre proporzionali (max = 100%, floor 18%, giorni a
+// zero al 6%) e totale della finestra.
+test('Dashboard Gara (Prisma Light): pannello Andamento giornaliero con barre proporzionali', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gkpi_pd', fullName: 'Gara Prisma Daily' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+    await pool.query(
+      `UPDATE profiles SET ui_prefs = coalesce(ui_prefs,'{}'::jsonb)
+         || '{"theme":"light","dashboardStyle":"prisma-light"}'::jsonb WHERE id = $1`,
+      [session.profileId],
+    );
+    const POS = uniq('POS');
+
+    await insertGaraConfig(pool, session.orgId, {
+      pdvList: [{ codicePos: POS, nome: 'Negozio', ragioneSociale: 'RS Srl', abilitaEnergia: true }],
+      energiaConfig: {
+        pdvInGara: 1,
+        targetNoMalus: 0,
+        targetS1: 1,
+        targetS2: 5,
+        targetS3: 10,
+        premio: 200,
+      },
+    });
+
+    // Giorno 9: 100 € lordi; giorno 10: 300 € lordi (max della finestra).
+    const DAY9 = `${CUR_YEAR}-${pad(CUR_MONTH)}-09`;
+    const DAY10 = `${CUR_YEAR}-${pad(CUR_MONTH)}-10`;
+    await insertSale(pool, session.orgId, {
+      codicePos: POS, articoli: [artEnergia], cliente: clienteFisica,
+      totale: '100.00', dataVendita: `${DAY9}T10:00:00.000Z`,
+    });
+    await insertSale(pool, session.orgId, {
+      codicePos: POS, articoli: [artEnergia], cliente: clienteFisica,
+      totale: '300.00', dataVendita: `${DAY10}T10:00:00.000Z`,
+    });
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      localStorage.setItem('mystoredesk-theme', 'light');
+      localStorage.setItem('mystoredesk-dashboard-style', 'prisma-light');
+    });
+    await openDashboard(page);
+
+    await page.getByTestId('prisma-hero').waitFor({ state: 'visible', timeout: 15000 });
+    const panel = page.getByTestId('prisma-daily');
+    await panel.waitFor({ state: 'visible', timeout: 15000 });
+    const panelText = await panel.innerText();
+    assert.ok(
+      /andamento giornaliero/i.test(panelText),
+      `il pannello deve avere il titolo "Andamento giornaliero", trovato: "${panelText}"`,
+    );
+
+    // Totale finestra = 100 + 300 = 400 €.
+    const totale = parseEuroText(await page.getByTestId('prisma-daily-total').innerText());
+    assert.equal(totale, 400, `il totale della finestra deve essere 400 €, trovato: ${totale}`);
+
+    // Finestra: ultimi 7 giorni fino al giorno 10, troncata al giorno 1 del
+    // mese → dal 04 al 10 = 7 barre (il 9 e il 10 con vendite, il resto a 0).
+    const bars = await panel.locator('[data-testid^="prisma-daily-bar-"]').count();
+    assert.equal(bars, 7, `attese 7 barre giornaliere, trovate: ${bars}`);
+
+    const heightOf = async (ymd) => {
+      const style = await page.getByTestId(`prisma-daily-bar-${ymd}`).getAttribute('style');
+      const m = /height:\s*([\d.]+)%/.exec(style ?? '');
+      assert.ok(m, `la barra ${ymd} deve avere un'altezza percentuale, trovato: "${style}"`);
+      return parseFloat(m[1]);
+    };
+    const h10 = await heightOf(DAY10);
+    const h9 = await heightOf(DAY9);
+    const h8 = await heightOf(`${CUR_YEAR}-${pad(CUR_MONTH)}-08`);
+    assert.equal(h10, 100, `il giorno con più venduto deve avere barra al 100%, trovato: ${h10}%`);
+    assert.ok(Math.abs(h9 - (100 / 300) * 100) < 0.5, `il giorno 9 (100/300) deve avere barra ≈33.3%, trovato: ${h9}%`);
+    assert.equal(h8, 6, `un giorno senza vendite deve avere la barra minima al 6%, trovato: ${h8}%`);
+
+    // Il giorno max è evidenziato (classe active), gli altri no.
+    const cls10 = await page.getByTestId(`prisma-daily-bar-${DAY10}`).getAttribute('class');
+    const cls9 = await page.getByTestId(`prisma-daily-bar-${DAY9}`).getAttribute('class');
+    assert.ok(/\bactive\b/.test(cls10 ?? ''), `la barra del giorno max deve essere "active", trovato: "${cls10}"`);
+    assert.ok(!/\bactive\b/.test(cls9 ?? ''), `le barre non-max non devono essere "active", trovato: "${cls9}"`);
+
+    // Etichette giorno sotto le barre.
+    assert.equal(
+      flat(await page.getByTestId(`prisma-daily-day-${DAY10}`).innerText()),
+      '10',
+      'l\'etichetta della barra del giorno 10 deve mostrare "10"',
+    );
 
     await page.close();
     await context.close();

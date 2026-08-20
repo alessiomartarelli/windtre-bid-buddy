@@ -364,6 +364,44 @@
     grid-row: 3;
     padding: 1.1rem;
   }
+
+  /* Task #457 — pannello "Andamento giornaliero" del mockup: barre verticali
+     proporzionali al venduto lordo dei giorni recenti. */
+  .pl-daily {
+    grid-column: 1 / 3;
+    grid-row: 4;
+    padding: 1rem 1.1rem 1.15rem;
+  }
+  .pl-chart {
+    height: 61px;
+    display: flex;
+    align-items: flex-end;
+    gap: 0.45rem;
+    margin: 0.8rem 0.15rem 0.35rem;
+  }
+  .pl-bar {
+    flex: 0 1 14px;
+    min-width: 8px;
+    border-radius: 9px 9px 3px 3px;
+    background: hsl(var(--pl-cobalt) / 0.14);
+  }
+  .pl-bar.active {
+    background: hsl(var(--pl-cobalt));
+    box-shadow: 0 3px 8px hsl(var(--pl-cobalt) / 0.25);
+  }
+  .pl-days {
+    display: flex;
+    gap: 0.45rem;
+    margin-left: 0.15rem;
+    color: hsl(215 15% 60%);
+    font-family: var(--pl-mono);
+    font-size: 0.56rem;
+  }
+  .pl-days span {
+    flex: 0 1 14px;
+    min-width: 8px;
+    text-align: center;
+  }
   .pl-comp-top {
     display: flex;
     justify-content: space-between;
@@ -564,12 +602,13 @@
     .pl-activity { grid-column: 1; grid-row: 2; }
     .pl-right { grid-column: 2; grid-row: 2; }
     .pl-comp { grid-column: 1 / -1; grid-row: 3; }
+    .pl-daily { grid-column: 1 / -1; grid-row: 4; }
   }
   @media (max-width: 767px) {
     .pl-grid-top {
       grid-template-columns: 1fr;
     }
-    .pl-balance, .pl-minis, .pl-activity, .pl-right, .pl-comp {
+    .pl-balance, .pl-minis, .pl-activity, .pl-right, .pl-comp, .pl-daily {
       grid-column: 1;
       grid-row: auto;
     }

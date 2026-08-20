@@ -3855,6 +3855,7 @@ export async function registerRoutes(
         totaliAddonsPerPista,
         totalImporto,
         latestSaleDate,
+        daily,
       } = aggregateMappedSales(sales, rules);
 
       res.json({
@@ -3874,6 +3875,7 @@ export async function registerRoutes(
         salesExcludedOutOfGara,
         calendarsAvailable,
         rulesUpdatedAt,
+        daily,
       });
     } catch (error: unknown) {
       console.error("BiSuite mapped sales error:", error);

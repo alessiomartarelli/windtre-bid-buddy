@@ -1,6 +1,7 @@
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { mapBiSuiteArticle } from "../shared/bisuiteMapping";
 import { classifyCategory, isCouponCaring, isPezzoIva } from "../shared/bisuiteClassification";
+import { trendYmdOf } from "../shared/venditeReport";
 
 // Aggregazione lato server delle vendite BiSuite mappate, estratta dalla route
 // GET /api/admin/bisuite-mapped-sales così da essere richiamabile e testabile
@@ -72,6 +73,9 @@ export type MappedSalesAggregation = {
   latestSaleDate: Date | null;
   totaliPerPista: TotaliPerPista;
   totaliAddonsPerPista: TotaliAddonsPerPista;
+  /** Task #457 — serie giornaliera (YYYY-MM-DD italiano, ordine crescente,
+   *  solo i giorni con vendite): conteggio vendite e fatturato lordo. */
+  daily: Array<{ day: string; vendite: number; importo: number }>;
 };
 
 // Forma minima di una riga bisuite_sales necessaria all'aggregazione.
@@ -101,12 +105,23 @@ export function aggregateMappedSales(
   let totalArticoli = 0;
   let totalImporto = 0;
   let latestSaleDate: Date | null = null;
+  // Task #457 — bucket per giorno italiano (stessa semantica di trendYmdOf
+  // usata dal report Telegram): conteggio vendite + fatturato lordo.
+  const byDay = new Map<string, { day: string; vendite: number; importo: number }>();
 
   for (const sale of sales) {
-    totalImporto += parseFloat(String(sale.totale ?? "")) || 0;
+    const importoSale = parseFloat(String(sale.totale ?? "")) || 0;
+    totalImporto += importoSale;
     if (sale.dataVendita) {
       const d = new Date(sale.dataVendita);
       if (!latestSaleDate || d > latestSaleDate) latestSaleDate = d;
+    }
+    const ymd = trendYmdOf(sale.dataVendita);
+    if (ymd) {
+      const bucket = byDay.get(ymd) ?? { day: ymd, vendite: 0, importo: 0 };
+      bucket.vendite += 1;
+      bucket.importo += importoSale;
+      byDay.set(ymd, bucket);
     }
     const raw = sale.rawData as any;
     if (!raw) continue;
@@ -319,5 +334,6 @@ export function aggregateMappedSales(
     latestSaleDate,
     totaliPerPista,
     totaliAddonsPerPista,
+    daily: Array.from(byDay.values()).sort((a, b) => a.day.localeCompare(b.day)),
   };
 }
