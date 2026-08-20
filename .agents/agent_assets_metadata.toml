@@ -45,3 +45,31 @@ type = "image"
 title = "Dashboard performance — spaziature e gerarchie riviste"
 description = "Numeri principali in evidenza, etichette secondarie più discrete, righe PDV e premi con più respiro e ritmo uniforme tra le sezioni."
 logical_id = "c03df9b1-8c57-47f9-9b9b-c8c5285d2a0a"
+
+[[outputs]]
+id = "aJdYr2zsChrrUGhE9LFPG"
+uri = "file://screenshots/prisma-light-desktop.jpg"
+type = "image"
+title = "Prisma Light — Desktop"
+description = "Viewport desktop finale con KPI, PDV e piste derivati dai dati di sviluppo."
+logical_id = "f173b9f4-e03f-4c1d-9bcd-14a8cb3391af"
+content_hash = "sha256:d06be6d51e1352b4aeda3012f82cf3010b279b45f5baf0ef04e8c2375b1998c9"
+size = 79715
+mtime_ms = 1787157751101
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:6f306082-0aa4-49d0-a793-ddca694e781e/f173b9f4-e03f-4c1d-9bcd-14a8cb3391af/2c36aa0a-d6ef-4c64-85b8-93164863797c"
+storage_version_token = "1787157919244259"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "lPaRRIUw2L3GE5qr4Fx0Q"
+uri = "file://screenshots/prisma-light-mobile.png"
+type = "image"
+title = "Prisma Light — Mobile"
+description = "Viewport mobile finale della preview responsive."
+logical_id = "404107aa-c5e0-4202-8e0a-266c69766c9f"
+content_hash = "sha256:25241bf27d03c3a1041ae0bc5e24a50bbd2e788143a13e34d4d7463a665ccd05"
+size = 88016
+mtime_ms = 1787157751101
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:6f306082-0aa4-49d0-a793-ddca694e781e/404107aa-c5e0-4202-8e0a-266c69766c9f/0ecbc9c3-7cdb-4de4-972d-cf78655a1c04"
+storage_version_token = "1787157920038507"
+content_type = "image/png"

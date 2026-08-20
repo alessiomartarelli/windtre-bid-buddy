@@ -1,0 +1,6539 @@
+import { useState, useMemo, Fragment, useCallback, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
+import { isModuleAllowedForBrands } from "@shared/modules";
+import { normalizeRsName } from "@shared/ragioneSociale";
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { ResponsiveDialogContent } from "@/components/ui/responsive-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  TrendingUp,
+  Target,
+  Award,
+  AlertTriangle,
+  Smartphone,
+  Wifi,
+  Zap,
+  Shield,
+  Handshake,
+  BarChart3,
+  Calendar,
+  Store,
+  Loader2,
+  Trophy,
+  Settings,
+  RefreshCw,
+  Briefcase,
+  Users,
+  Ticket,
+  ChevronDown,
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Download,
+  ShieldAlert,
+  Euro,
+  Headphones,
+  Wrench,
+  Play,
+  Pause,
+} from "lucide-react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { apiUrl } from "@/lib/basePath";
+import { KpiCardsSkeleton, ChartSkeleton, DataTableSkeleton } from "@/components/skeletons";
+import { SIM_CONSUMER_CORE, SIM_PIVA_CORE } from "@/lib/mobileCategories";
+import { AppNavbar } from "@/components/AppNavbar";
+import { type GaraConfigRecord, type GaraConfigPdv, type GaraConfigListItem } from "@/hooks/useGaraConfig";
+import {
+  getWorkdayInfoForMonth,
+  calcolaPremioPistaFissoPerPos,
+  type WorkdayInfo,
+  type FissoCategoriaType,
+  type PistaFissoPosConfig,
+  type AttivatoFissoRiga,
+} from "@/lib/calcoloPistaFisso";
+import {
+  calcolaPremioPistaMobilePerPos,
+} from "@/utils/calcoli-mobile";
+import {
+  calcoloEnergiaPerPos,
+} from "@/lib/calcoloEnergia";
+import {
+  calcolaPartnershipRewardPerPos,
+} from "@/lib/calcoloPartnershipReward";
+import {
+  calcoloAssicurazioniPerPos,
+  creaAttivatoAssicurazioniDaMappato,
+} from "@/lib/calcoloAssicurazioni";
+import { useTabelleCalcoloConfig } from "@/hooks/useTabelleCalcoloConfig";
+import {
+  calcolaProtecta,
+} from "@/lib/calcoloProtecta";
+import {
+  calcolaExtraGaraIva,
+  PREMI_EXTRA_GARA,
+  type ExtraGaraConfigOverrides,
+  type ExtraGaraSogliePerRS,
+} from "@/lib/calcoloExtraGaraIva";
+import { type ExtraGaraIvaRsResult } from "@/types/extra-gara-iva";
+import {
+  type StoreCalendar,
+  type Weekday,
+  MOBILE_CATEGORIES_CONFIG_DEFAULT,
+  type MobileCategoryConfig,
+  type PistaMobilePosConfig,
+  type AttivatoMobileDettaglio,
+  MobileActivationType,
+  type PuntoVendita,
+} from "@/types/preventivatore";
+import {
+  type EnergiaCategory,
+  type EnergiaConfig,
+  type EnergiaAttivatoRiga,
+  type EnergiaPdvInGara,
+  ENERGIA_BASE_PAY,
+} from "@/types/energia";
+import {
+  type CBEventType,
+  type AttivatoCBDettaglio,
+  CB_EVENTS_CONFIG,
+  PARTNERSHIP_DEFAULTS,
+} from "@/types/partnership-cb-events";
+import { calcoloCBPerPdv, clusterCBToLevel, getCBGettoniForCategory, type CBCalcItem } from "@/lib/calcoloCB";
+import {
+  aggregateSosCaring, computeSosCaringPremio, formatAnnoMese, normalizeSosPosCode,
+  type SosCaringData, type SosCaringRsAggregate, type SosCaringTotals,
+} from "@shared/sosCaring";
+import {
+  type PartnershipRewardPosConfig,
+} from "@/types/partnership-reward";
+import {
+  type AssicurazioniAttivatoRiga,
+  type AssicurazioniConfig,
+  type AssicurazioniPdvInGara,
+} from "@/types/assicurazioni";
+import {
+  type ProtectaAttivatoRiga,
+  type ProtectaProduct,
+  createEmptyProtectaAttivato,
+} from "@/types/protecta";
+
+interface AggregatedItem {
+  pista: string;
+  targetCategory: string;
+  targetLabel: string;
+  pezzi: number;
+  canone: number;
+  ruleType?: 'base' | 'additional';
+  descriptions?: Record<string, number>;
+}
+
+interface AddonItem {
+  pista: string;
+  targetCategory: string;
+  targetLabel: string;
+  occorrenze: number;
+  canone: number;
+}
+
+interface ExtraTally {
+  pezzi: number;
+  importo: number;
+}
+
+interface DeviceModalitaTally {
+  pezzi: number;
+  descriptions: Record<string, number>;
+}
+interface DeviceKindTally {
+  finanziato: DeviceModalitaTally;
+  rate: DeviceModalitaTally;
+  altro: DeviceModalitaTally;
+}
+interface DeviceTally {
+  smartphone: DeviceKindTally;
+  smartDevice: DeviceKindTally;
+  internetDevice: DeviceKindTally;
+}
+
+/** Aliquota IVA ordinaria: Accessori e Servizi mostrati al netto per
+ *  coerenza con il report Telegram (÷1.22). */
+const IVA_RATE = 1.22;
+const nettoIva = (v: number) => v / IVA_RATE;
+const ivaOf = (lordo: number) => lordo - nettoIva(lordo);
+
+const EMPTY_DEVICE_KIND: DeviceKindTally = {
+  finanziato: { pezzi: 0, descriptions: {} },
+  rate: { pezzi: 0, descriptions: {} },
+  altro: { pezzi: 0, descriptions: {} },
+};
+
+interface PdvData {
+  codicePos: string;
+  nomeNegozio: string;
+  ragioneSociale: string;
+  items: AggregatedItem[];
+  addons?: AddonItem[];
+  accessori?: ExtraTally;
+  servizi?: ExtraTally;
+  devices?: DeviceTally;
+  /** Task #392 — conteggi extra dal server per la Tabella PDV × Pista. */
+  pezziIva?: number;
+  cbCambiPiano?: number;
+  telefoni?: number;
+  unmapped: number;
+  totalArticoli: number;
+}
+
+const SMARTPHONE_MOBILE_CATEGORIES = new Set<string>([
+  'DEVICE_VAR_SP_LT_200',
+  'DEVICE_VAR_SP_GTE_200',
+  'DEVICE_1_FIN_SP_LT_200',
+  'DEVICE_1_FIN_SP_200_600',
+  'DEVICE_1_FIN_SP_GTE_600',
+]);
+
+const SMARTPHONE_CB_CATEGORIES = new Set<string>([
+  'IMP_AGG_0_VAR_FINANZ',
+  'IMP_AGG_GT0_FINANZ',
+  'IMP_AGG_GT0_VAR',
+  'multi_device_finanziamento',
+]);
+
+const SMARTPHONE_MOBILE_FIN = new Set<string>([
+  'DEVICE_1_FIN_SP_LT_200',
+  'DEVICE_1_FIN_SP_200_600',
+  'DEVICE_1_FIN_SP_GTE_600',
+  'DEVICE_2_FINANZIATO',
+]);
+const SMARTPHONE_MOBILE_RATE = new Set<string>([
+  'DEVICE_VAR_SP_LT_200',
+  'DEVICE_VAR_SP_GTE_200',
+]);
+const SMARTPHONE_CB_FIN = new Set<string>([
+  'IMP_AGG_GT0_FINANZ',
+  'multi_device_finanziamento',
+]);
+const SMARTPHONE_CB_RATE = new Set<string>([
+  'IMP_AGG_GT0_VAR',
+]);
+// IMP_AGG_0_VAR_FINANZ è ambigua (= 0) → conta nel totale ma non nel breakdown
+
+function countByCats(pdv: PdvData, pista: string, cats: Set<string>): number {
+  let n = 0;
+  for (const it of pdv.items) if (it.pista === pista && cats.has(it.targetCategory)) n += it.pezzi;
+  for (const a of pdv.addons || []) if (a.pista === pista && cats.has(a.targetCategory)) n += a.occorrenze;
+  return n;
+}
+function pdvSmartphoneMobileCount(pdv: PdvData): number {
+  return countByCats(pdv, 'mobile', SMARTPHONE_MOBILE_CATEGORIES);
+}
+function pdvSmartphoneCBCount(pdv: PdvData): number {
+  return countByCats(pdv, 'cb', SMARTPHONE_CB_CATEGORIES);
+}
+function pdvSmartphoneSplit(pdv: PdvData, pista: 'mobile' | 'cb'): { fin: number; rate: number; total: number } {
+  if (pista === 'mobile') {
+    const fin = countByCats(pdv, 'mobile', SMARTPHONE_MOBILE_FIN);
+    const rate = countByCats(pdv, 'mobile', SMARTPHONE_MOBILE_RATE);
+    return { fin, rate, total: pdvSmartphoneMobileCount(pdv) };
+  }
+  const fin = countByCats(pdv, 'cb', SMARTPHONE_CB_FIN);
+  const rate = countByCats(pdv, 'cb', SMARTPHONE_CB_RATE);
+  return { fin, rate, total: pdvSmartphoneCBCount(pdv) };
+}
+
+function deviceKindTotal(k?: DeviceKindTally): number {
+  if (!k) return 0;
+  return k.finanziato.pezzi + k.rate.pezzi + k.altro.pezzi;
+}
+function mergedDescriptions(k?: DeviceKindTally): { fin: Record<string, number>; rate: Record<string, number>; altro: Record<string, number>; all: Record<string, number> } {
+  const fin = k?.finanziato.descriptions || {};
+  const rate = k?.rate.descriptions || {};
+  const altro = k?.altro.descriptions || {};
+  const all: Record<string, number> = {};
+  for (const [d, n] of Object.entries(fin)) all[d] = (all[d] || 0) + n;
+  for (const [d, n] of Object.entries(rate)) all[d] = (all[d] || 0) + n;
+  for (const [d, n] of Object.entries(altro)) all[d] = (all[d] || 0) + n;
+  return { fin, rate, altro, all };
+}
+
+type PdvSortKey =
+  | 'pezzi_default'
+  | 'premio'
+  | 'smartphone'
+  | 'accessori_pezzi'
+  | 'accessori_fatturato'
+  | 'servizi_fatturato'
+  | 'nome_az'
+  | 'punti_mobile'
+  | 'punti_fisso'
+  | 'punti_cb'
+  | 'punti_energia'
+  | 'punti_assicurazioni'
+  | 'punti_protecta';
+
+const PDV_SORT_OPTIONS: { value: PdvSortKey; label: string }[] = [
+  { value: 'pezzi_default', label: 'Pezzi totali (RS)' },
+  { value: 'premio', label: 'Premio €' },
+  { value: 'smartphone', label: 'Pezzi smartphone' },
+  { value: 'accessori_pezzi', label: 'Pezzi accessori' },
+  { value: 'accessori_fatturato', label: 'Fatturato accessori €' },
+  { value: 'servizi_fatturato', label: 'Fatturato servizi €' },
+  { value: 'nome_az', label: 'Nome PDV (A-Z)' },
+  { value: 'punti_mobile', label: 'Punti Mobile' },
+  { value: 'punti_fisso', label: 'Punti Fisso' },
+  { value: 'punti_cb', label: 'Punti CB' },
+  { value: 'punti_energia', label: 'Punti Energia' },
+  { value: 'punti_assicurazioni', label: 'Punti Assicurazioni' },
+  { value: 'punti_protecta', label: 'Punti Windtre Protetti' },
+];
+
+interface MappedSalesResponse {
+  month: number;
+  year: number;
+  totalSales: number;
+  totalArticoli: number;
+  totalMapped: number;
+  totalUnmapped: number;
+  /** Task #422 — fatturato lordo del periodo (somma dei totali vendita). */
+  totalImporto?: number;
+  pdvList: PdvData[];
+  totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number }>>;
+  totaliAddonsPerPista?: Record<string, Record<string, { targetCategory: string; targetLabel: string; occorrenze: number; canone: number }>>;
+  latestSaleDate: string | null;
+  inGaraOnly?: boolean;
+  totalSalesUnfiltered?: number;
+  salesExcludedOutOfGara?: number;
+  calendarsAvailable?: boolean;
+}
+
+interface OrgConfigPdv {
+  id: string;
+  codicePos: string;
+  nome: string;
+  ragioneSociale: string;
+  calendar: StoreCalendar;
+  clusterMobile?: string;
+  clusterFisso?: string;
+  clusterCB?: string;
+  abilitaEnergia?: boolean;
+  abilitaAssicurazioni?: boolean;
+}
+
+interface OrgConfigResponse {
+  config: {
+    puntiVendita?: OrgConfigPdv[];
+    pistaFissoConfig?: {
+      sogliePerPos: PistaFissoPosConfig[];
+    };
+    pistaMobileConfig?: {
+      sogliePerPos: PistaMobilePosConfig[];
+    };
+    energiaConfig?: EnergiaConfig;
+    energiaPdvInGara?: Array<{ pdvId: string; isInGara: boolean; codicePos: string }>;
+    mobileCategories?: MobileCategoryConfig[];
+    configGara?: { annoGara: number; meseGara: number };
+    partnershipRewardConfig?: {
+      configPerPos: Array<{ posCode: string; config: { target80: number; target100: number; premio80: number; premio100: number } }>;
+    };
+    assicurazioniConfig?: AssicurazioniConfig;
+    assicurazioniPdvInGara?: AssicurazioniPdvInGara[];
+  };
+  configVersion: number;
+}
+
+const PISTA_ORDER: string[] = ['mobile', 'fisso', 'cb', 'partnership', 'extra_gara_iva', 'energia', 'assicurazioni', 'protecta'];
+const pistaOrderRank = (key: string): number => {
+  const i = PISTA_ORDER.indexOf(key);
+  return i === -1 ? 999 : i;
+};
+
+const PISTA_CONFIG = {
+  mobile: { label: "Mobile", icon: Smartphone, color: "bg-blue-500", lightColor: "bg-blue-50 text-blue-700 border-blue-200" },
+  fisso: { label: "Fisso", icon: Wifi, color: "bg-green-500", lightColor: "bg-green-50 text-green-700 border-green-200" },
+  energia: { label: "Energia", icon: Zap, color: "bg-amber-500", lightColor: "bg-amber-50 text-amber-700 border-amber-200" },
+  assicurazioni: { label: "Assicurazioni", icon: Shield, color: "bg-purple-500", lightColor: "bg-purple-50 text-purple-700 border-purple-200" },
+  partnership: { label: "Partnership", icon: Handshake, color: "bg-cyan-500", lightColor: "bg-cyan-50 text-cyan-700 border-cyan-200" },
+  cb: { label: "Customer Base", icon: Users, color: "bg-orange-500", lightColor: "bg-orange-50 text-orange-700 border-orange-200" },
+  protecta: { label: "Windtre Protetti", icon: Shield, color: "bg-rose-500", lightColor: "bg-rose-50 text-rose-700 border-rose-200" },
+  extra_gara_iva: { label: "Extra Gara P.IVA", icon: Briefcase, color: "bg-indigo-500", lightColor: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+} as const;
+
+const DEFAULT_CALENDAR: StoreCalendar = {
+  weeklySchedule: { workingDays: [1, 2, 3, 4, 5, 6] as Weekday[] },
+  specialDays: [],
+};
+
+const FISSO_CONSUMER_CORE = new Set<string>([
+  "FISSO_FTTC", "FISSO_FTTH", "FISSO_FWA_OUT", "FISSO_FWA_IND_2P", "FISSO_VOCE",
+]);
+
+const FISSO_BUSINESS_CORE = new Set<string>([
+  "FISSO_PIVA_1A_LINEA", "FISSO_PIVA_2A_LINEA",
+]);
+
+const FISSO_BUSINESS_CATEGORIES = new Set<string>([
+  "FISSO_PIVA_1A_LINEA", "FISSO_PIVA_2A_LINEA", "CHIAMATE_ILLIMITATE",
+]);
+
+// Task #289: "coupon caring" offers are excluded from CB totals/premio/points.
+const COUPON_CARING_CATEGORY = "coupon_caring";
+function isCaringItem(pista: string, targetCategory: string): boolean {
+  return pista === "cb" && targetCategory === COUPON_CARING_CATEGORY;
+}
+
+function isCorePezziItem(pista: string, targetCategory: string): boolean {
+  if (isCaringItem(pista, targetCategory)) return false;
+  if (pista === "mobile") return SIM_CONSUMER_CORE.has(targetCategory) || SIM_PIVA_CORE.has(targetCategory);
+  if (pista === "fisso") return FISSO_CONSUMER_CORE.has(targetCategory) || FISSO_BUSINESS_CORE.has(targetCategory);
+  return true;
+}
+
+interface MobileGroupedCategory {
+  groupLabel: string;
+  groupKey: string;
+  totalPezzi: number;
+  totalProiezione: number;
+  children: { category: string; label: string; pezzi: number; proiezione: number }[];
+}
+
+function groupMobileCategories(
+  categories: { category: string; label: string; pezzi: number; proiezione: number }[]
+): MobileGroupedCategory[] {
+  const consumerChildren: typeof categories = [];
+  const ivaChildren: typeof categories = [];
+
+  for (const cat of categories) {
+    if (SIM_PIVA_CORE.has(cat.category)) {
+      ivaChildren.push(cat);
+    } else {
+      consumerChildren.push(cat);
+    }
+  }
+
+  const groups: MobileGroupedCategory[] = [];
+
+  if (consumerChildren.length > 0) {
+    const corePezzi = consumerChildren.filter(c => SIM_CONSUMER_CORE.has(c.category)).reduce((s, c) => s + c.pezzi, 0);
+    const coreProiezione = consumerChildren.filter(c => SIM_CONSUMER_CORE.has(c.category)).reduce((s, c) => s + c.proiezione, 0);
+    groups.push({
+      groupLabel: "SIM Consumer",
+      groupKey: "sim_consumer",
+      totalPezzi: corePezzi,
+      totalProiezione: coreProiezione,
+      children: consumerChildren.sort((a, b) => {
+        const rank = (cat: string) => {
+          if (SIM_CONSUMER_CORE.has(cat)) return 0;
+          if (cat.startsWith("PIU_SICURI_")) return 2;
+          if (cat.startsWith("DEVICE_")) return 3;
+          return 1;
+        };
+        const aR = rank(a.category);
+        const bR = rank(b.category);
+        if (aR !== bR) return aR - bR;
+        return b.pezzi - a.pezzi;
+      }),
+    });
+  }
+
+  if (ivaChildren.length > 0) {
+    const corePezzi = ivaChildren.filter(c => SIM_PIVA_CORE.has(c.category)).reduce((s, c) => s + c.pezzi, 0);
+    const coreProiezione = ivaChildren.filter(c => SIM_PIVA_CORE.has(c.category)).reduce((s, c) => s + c.proiezione, 0);
+    groups.push({
+      groupLabel: "SIM Business",
+      groupKey: "sim_iva",
+      totalPezzi: corePezzi,
+      totalProiezione: coreProiezione,
+      children: ivaChildren.sort((a, b) => b.pezzi - a.pezzi),
+    });
+  }
+
+  return groups;
+}
+
+function groupFissoCategories(
+  categories: { category: string; label: string; pezzi: number; proiezione: number }[]
+): MobileGroupedCategory[] {
+  const consumerChildren: typeof categories = [];
+  const businessChildren: typeof categories = [];
+  const otherChildren: typeof categories = [];
+
+  for (const cat of categories) {
+    if (FISSO_BUSINESS_CATEGORIES.has(cat.category)) {
+      businessChildren.push(cat);
+    } else if (FISSO_CONSUMER_CORE.has(cat.category) || ["FRITZ_BOX", "NETFLIX_CON_ADV", "NETFLIX_SENZA_ADV", "CONVERGENZA", "LINEA_ATTIVA", "BOLLETTINO_POSTALE", "PIU_SICURI_CASA_UFFICIO", "ASSICURAZIONI_PLUS_FULL", "MIGRAZIONI_FTTH_FWA"].includes(cat.category)) {
+      consumerChildren.push(cat);
+    } else {
+      otherChildren.push(cat);
+    }
+  }
+
+  const groups: MobileGroupedCategory[] = [];
+
+  if (consumerChildren.length > 0) {
+    const corePezzi = consumerChildren.filter(c => FISSO_CONSUMER_CORE.has(c.category)).reduce((s, c) => s + c.pezzi, 0);
+    const coreProiezione = consumerChildren.filter(c => FISSO_CONSUMER_CORE.has(c.category)).reduce((s, c) => s + c.proiezione, 0);
+    groups.push({
+      groupLabel: "Fisso Consumer",
+      groupKey: "fisso_consumer",
+      totalPezzi: corePezzi,
+      totalProiezione: coreProiezione,
+      children: consumerChildren.sort((a, b) => {
+        const aCore = FISSO_CONSUMER_CORE.has(a.category) ? 0 : 1;
+        const bCore = FISSO_CONSUMER_CORE.has(b.category) ? 0 : 1;
+        if (aCore !== bCore) return aCore - bCore;
+        return b.pezzi - a.pezzi;
+      }),
+    });
+  }
+
+  if (businessChildren.length > 0) {
+    const corePezzi = businessChildren.filter(c => FISSO_BUSINESS_CORE.has(c.category)).reduce((s, c) => s + c.pezzi, 0);
+    const coreProiezione = businessChildren.filter(c => FISSO_BUSINESS_CORE.has(c.category)).reduce((s, c) => s + c.proiezione, 0);
+    groups.push({
+      groupLabel: "Fisso Business",
+      groupKey: "fisso_business",
+      totalPezzi: corePezzi,
+      totalProiezione: coreProiezione,
+      children: businessChildren.sort((a, b) => b.pezzi - a.pezzi),
+    });
+  }
+
+  if (otherChildren.length > 0) {
+    groups.push({
+      groupLabel: "Altre Info / Add-on",
+      groupKey: "fisso_altro",
+      totalPezzi: otherChildren.reduce((s, c) => s + c.pezzi, 0),
+      totalProiezione: otherChildren.reduce((s, c) => s + c.proiezione, 0),
+      children: otherChildren.sort((a, b) => b.pezzi - a.pezzi),
+    });
+  }
+
+  return groups;
+}
+
+interface PistaCalcResult {
+  premioStimato: number;
+  puntiTotali: number;
+  sogliaRaggiunta: number;
+  sogliaLabel: string;
+  forecastTarget?: number;
+  forecastGap?: number;
+}
+
+type PistaSoglieRef = {
+  s1: number;
+  s2: number;
+  s3: number;
+  s4?: number;
+  s5?: number;
+};
+
+type TickerThresholdMarker = {
+  label: string;
+  value: number;
+};
+
+function getUniformPistaSoglieRef(refs: Array<PistaSoglieRef | undefined>): PistaSoglieRef | undefined {
+  if (refs.length === 0 || refs.some((ref) => !ref)) return undefined;
+  const [first, ...rest] = refs as PistaSoglieRef[];
+  const keys: Array<keyof PistaSoglieRef> = ["s1", "s2", "s3", "s4", "s5"];
+  const isUniform = rest.every((ref) =>
+    keys.every((key) => (ref[key] ?? null) === (first[key] ?? null)),
+  );
+  return isUniform ? { ...first } : undefined;
+}
+
+function mergeThresholdMarkers(markers: TickerThresholdMarker[]): TickerThresholdMarker[] {
+  const grouped = new Map<number, string[]>();
+  for (const marker of markers) {
+    if (!Number.isFinite(marker.value) || marker.value <= 0) continue;
+    const labels = grouped.get(marker.value) ?? [];
+    labels.push(marker.label);
+    grouped.set(marker.value, labels);
+  }
+  return [...grouped.entries()]
+    .map(([value, labels]) => ({ value, label: labels.join(" · ") }))
+    .sort((a, b) => a.value - b.value);
+}
+
+function getUniformThresholdMarkers(
+  markerSets: Array<TickerThresholdMarker[] | undefined>,
+): TickerThresholdMarker[] | undefined {
+  if (markerSets.length === 0 || markerSets.some((markers) => !markers)) return undefined;
+  const normalized = (markerSets as TickerThresholdMarker[][]).map(mergeThresholdMarkers);
+  const [first, ...rest] = normalized;
+  const serializedFirst = JSON.stringify(first);
+  return rest.every((markers) => JSON.stringify(markers) === serializedFirst)
+    ? first
+    : undefined;
+}
+
+function thresholdMarkersFromSoglie(ref: PistaSoglieRef | undefined): TickerThresholdMarker[] | undefined {
+  if (!ref) return undefined;
+  const markers = mergeThresholdMarkers([
+    { label: "S1", value: ref.s1 },
+    { label: "S2", value: ref.s2 },
+    { label: "S3", value: ref.s3 },
+    ...(ref.s4 != null ? [{ label: "S4", value: ref.s4 }] : []),
+    ...(ref.s5 != null ? [{ label: "S5", value: ref.s5 }] : []),
+  ]);
+  return markers.length > 0 ? markers : undefined;
+}
+
+const EMPTY_CALC: PistaCalcResult = {
+  premioStimato: 0, puntiTotali: 0, sogliaRaggiunta: 0, sogliaLabel: "Nessuna",
+};
+
+function sogliaToLabel(soglia: number, maxSoglia: number = 5): string {
+  if (soglia <= 0) return "Nessuna";
+  return `S${soglia}`;
+}
+
+// Task #367: normalizzazione condivisa client+server (shared/ragioneSociale).
+const normalizeRS = normalizeRsName;
+
+function clusterToNumber(cluster?: string): 1 | 2 | 3 {
+  if (!cluster) return 1;
+  if (cluster.includes("3") || cluster === "CC3") return 3;
+  if (cluster.includes("2") || cluster === "CC2") return 2;
+  return 1;
+}
+
+function calcMobilePerPdv(
+  pdvItems: AggregatedItem[],
+  mobileConfig: PistaMobilePosConfig | undefined,
+  calendar: StoreCalendar,
+  year: number,
+  month: number,
+  mobileCategories: MobileCategoryConfig[],
+  workdayInfo: WorkdayInfo,
+  soglieOverride?: { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number },
+  moltiplicatoriPerGruppo?: Record<string, number[]>,
+): PistaCalcResult {
+  if (!mobileConfig || pdvItems.length === 0) return EMPTY_CALC;
+
+  const mobileEnumValues = new Set(Object.values(MobileActivationType) as string[]);
+  const validItems = pdvItems.filter((item) => mobileEnumValues.has(item.targetCategory));
+  const dettaglio: AttivatoMobileDettaglio[] = validItems.map((item, idx) => ({
+    id: `bisuite-${idx}`,
+    type: item.targetCategory as MobileActivationType,
+    pezzi: item.pezzi,
+  }));
+
+  const totalCanone = validItems.reduce((sum, item) => sum + (item.canone || 0), 0);
+
+  const canonePerType: Record<string, number> = {};
+  for (const item of validItems) {
+    canonePerType[item.targetCategory] = (canonePerType[item.targetCategory] || 0) + (item.canone || 0);
+  }
+
+  const result = calcolaPremioPistaMobilePerPos({
+    configPos: mobileConfig,
+    dettaglio,
+    calendar,
+    year,
+    month: month - 1,
+    mobileCategories,
+    workdayInfoOverride: workdayInfo,
+    valoreCanoniOverride: totalCanone,
+    soglieOverride,
+    moltiplicatoriPerGruppo,
+    canonePerType,
+  });
+
+  return {
+    premioStimato: result.premio,
+    puntiTotali: result.punti,
+    sogliaRaggiunta: result.soglia,
+    sogliaLabel: sogliaToLabel(result.soglia, 4),
+    forecastTarget: result.forecastTargetPunti,
+    forecastGap: result.forecastGapPunti,
+  };
+}
+
+function mergeItemsWithAddons(items: AggregatedItem[], addons?: AddonItem[]): AggregatedItem[] {
+  if (!addons || addons.length === 0) return items;
+  const merged = [...items];
+  for (const addon of addons) {
+    merged.push({
+      pista: addon.pista,
+      targetCategory: addon.targetCategory,
+      targetLabel: addon.targetLabel,
+      pezzi: addon.occorrenze,
+      canone: addon.canone,
+      ruleType: 'additional',
+    });
+  }
+  return merged;
+}
+
+function calcFissoPerPdv(
+  pdvItems: AggregatedItem[],
+  fissoConfig: PistaFissoPosConfig | undefined,
+  calendar: StoreCalendar,
+  clusterFisso: 1 | 2 | 3,
+  posCode: string,
+  year: number,
+  month: number,
+  workdayInfo: WorkdayInfo,
+  gettoniContrattualiOverride?: Record<string, number>,
+  soglieOverride?: { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number; soglia5?: number },
+  euroPerPezzoOverride?: Record<string, number>,
+  addons?: AddonItem[],
+): PistaCalcResult {
+  const allItems = mergeItemsWithAddons(pdvItems, addons?.filter(a => a.pista === 'fisso'));
+  if (!fissoConfig || allItems.length === 0) return EMPTY_CALC;
+
+  const VALID_FISSO_TYPES: Set<string> = new Set([
+    "FISSO_FTTC","FISSO_FTTH","FISSO_FWA_OUT","FISSO_FWA_IND_2P","FRITZ_BOX",
+    "NETFLIX_CON_ADV","NETFLIX_SENZA_ADV","CONVERGENZA","LINEA_ATTIVA",
+    "FISSO_PIVA_1A_LINEA","FISSO_PIVA_2A_LINEA","CHIAMATE_ILLIMITATE",
+    "BOLLETTINO_POSTALE","PIU_SICURI_CASA_UFFICIO","ASSICURAZIONI_PLUS_FULL","MIGRAZIONI_FTTH_FWA",
+    "FISSO_VOCE",
+    "FIBRA_FTTH_ADDON","VOCE_UNLIMITED","CONVERGENZA_LUCE_GAS","CONVERGENTE_ASSICUR",
+  ]);
+  const validFissoItems = allItems.filter((item) => VALID_FISSO_TYPES.has(item.targetCategory));
+  const attivato: AttivatoFissoRiga[] = validFissoItems.map((item) => ({
+    categoria: item.targetCategory as FissoCategoriaType,
+    pezzi: item.pezzi,
+  }));
+
+  const result = calcolaPremioPistaFissoPerPos({
+    annoGara: year,
+    meseGara: month,
+    calendar,
+    clusterFisso,
+    posCode,
+    pistaConfig: fissoConfig,
+    attivato,
+    workdayInfoOverride: workdayInfo,
+    gettoniContrattualiOverride,
+    soglieOverride,
+    euroPerPezzoOverride,
+  });
+
+  const fissoAddons = addons?.filter(a => a.pista === 'fisso') || [];
+  let premioAdjusted = result.premio;
+
+  for (const addon of fissoAddons) {
+    if (addon.occorrenze <= 0) continue;
+    const canone = addon.canone || 0;
+
+    switch (addon.targetCategory) {
+      case "CONVERGENZA":
+        premioAdjusted -= addon.occorrenze * 46;
+        premioAdjusted += canone * 2;
+        break;
+      case "LINEA_ATTIVA":
+        premioAdjusted -= addon.occorrenze * 23;
+        premioAdjusted += canone * 1;
+        break;
+      case "FIBRA_FTTH_ADDON":
+        premioAdjusted += canone * 1;
+        break;
+      case "VOCE_UNLIMITED": {
+        let multVoce = 0;
+        if (result.soglia === 1) multVoce = 0.25;
+        else if (result.soglia === 2) multVoce = 0.5;
+        else if (result.soglia === 3) multVoce = 0.5;
+        else if (result.soglia === 4) multVoce = 1;
+        else if (result.soglia >= 5) multVoce = 1.5;
+        premioAdjusted += canone * multVoce;
+        break;
+      }
+      case "CONVERGENZA_LUCE_GAS":
+        premioAdjusted += canone * 2;
+        break;
+      case "CONVERGENTE_ASSICUR":
+        premioAdjusted += canone * 2;
+        break;
+    }
+  }
+
+  return {
+    premioStimato: premioAdjusted,
+    puntiTotali: result.punti,
+    sogliaRaggiunta: result.soglia,
+    sogliaLabel: sogliaToLabel(result.soglia, 5),
+  };
+}
+
+function calcEnergiaPerPdv(
+  pdvItems: AggregatedItem[],
+  energiaConfig: EnergiaConfig | undefined,
+  posCode: string,
+  isInGara: boolean,
+  numPdv: number,
+  compensiBaseOverride?: Record<string, number>,
+  bonusPerContrattoOverride?: number,
+  pistaBonusPerContrattoOverride?: Record<string, number>,
+  pistaBaseOverride?: Record<string, number>,
+  pistaDa4Override?: Record<string, number>,
+): PistaCalcResult {
+  if (!energiaConfig || pdvItems.length === 0) return EMPTY_CALC;
+
+  const VALID_ENERGIA_TYPES = new Set(Object.keys(ENERGIA_BASE_PAY));
+  const validEnergiaItems = pdvItems.filter((item) => VALID_ENERGIA_TYPES.has(item.targetCategory));
+  const attivato: EnergiaAttivatoRiga[] = validEnergiaItems.map((item, idx) => ({
+    id: `bisuite-${idx}`,
+    category: item.targetCategory as EnergiaCategory,
+    pezzi: item.pezzi,
+  }));
+
+  const pdvInGaraList: EnergiaPdvInGara[] = [{ pdvId: posCode, codicePos: posCode, nome: posCode, isInGara }];
+
+  const result = calcoloEnergiaPerPos({
+    posCode,
+    attivato,
+    config: energiaConfig,
+    pdvInGaraList,
+    isNegozioInGara: isInGara,
+    numPdv,
+    compensiBaseOverride,
+    bonusPerContrattoOverride,
+    pistaBonusPerContrattoOverride,
+    pistaBaseOverride,
+    pistaDa4Override,
+  });
+
+  return {
+    premioStimato: result.premioTotale,
+    puntiTotali: result.totalePezzi,
+    sogliaRaggiunta: result.sogliaRaggiunta,
+    sogliaLabel: sogliaToLabel(result.sogliaRaggiunta, 3),
+  };
+}
+
+const VALID_CB_TYPES = new Set(CB_EVENTS_CONFIG.map((c) => c.type as string));
+
+function resolveClusterGettoniFromConfig(
+  eventType: string,
+  clusterCB: string | undefined,
+  tcPartnership?: { clusterGettoniUntied?: Record<string, number>; clusterGettoniRivincoli?: Record<string, number> },
+): number | undefined {
+  const clusterLevel = clusterCBToLevel(clusterCB);
+  const clusterKeys = ['C0U', 'C1U', 'C2U', 'C3U'];
+  const clusterKeysT = ['C0T', 'C1T', 'C2T', 'C3T'];
+
+  if (eventType === 'cambio_offerta_untied') {
+    const key = clusterKeys[clusterLevel] || 'C0U';
+    return tcPartnership?.clusterGettoniUntied?.[key]
+      ?? getCBGettoniForCategory(eventType, clusterLevel);
+  }
+  if (eventType === 'cambio_offerta_rivincoli') {
+    const key = clusterKeysT[clusterLevel] || 'C0T';
+    return tcPartnership?.clusterGettoniRivincoli?.[key]
+      ?? getCBGettoniForCategory(eventType, clusterLevel);
+  }
+  return undefined;
+}
+
+function calcPartnershipPerPdv(
+  pdvItems: AggregatedItem[],
+  partnershipConfig: PartnershipRewardPosConfig | undefined,
+  giorniLavorativi: number,
+  posCode: string,
+  tcPartnership?: { puntiPartnership?: Record<string, number>; gettoniEvento?: Record<string, number>; clusterGettoniUntied?: Record<string, number>; clusterGettoniRivincoli?: Record<string, number> },
+  clusterCB?: string,
+): PistaCalcResult {
+  if (pdvItems.length === 0) return EMPTY_CALC;
+
+  const validItems = pdvItems.filter((item) => VALID_CB_TYPES.has(item.targetCategory));
+  const attivato: AttivatoCBDettaglio[] = validItems.map((item) => {
+    const defaults = PARTNERSHIP_DEFAULTS[item.targetCategory];
+    const punti = tcPartnership?.puntiPartnership?.[item.targetCategory]
+      ?? defaults?.puntiPartnership
+      ?? 1;
+
+    const clusterGettoni = resolveClusterGettoniFromConfig(item.targetCategory, clusterCB, tcPartnership);
+    const gettoni = clusterGettoni
+      ?? tcPartnership?.gettoniEvento?.[item.targetCategory]
+      ?? defaults?.gettoni
+      ?? 0;
+    return {
+      eventType: item.targetCategory as CBEventType,
+      pezzi: item.pezzi,
+      gettoni,
+      puntiPartnership: punti,
+      clusterCard: clusterCB,
+    };
+  });
+
+  if (!partnershipConfig) {
+    // Senza config soglie partnership non c'e' premio sbloccabile.
+    // I gettoni NON sono conteggiati nella pista Partnership (sono CB).
+    let puntiTotali = 0;
+    for (const a of attivato) puntiTotali += a.pezzi * a.puntiPartnership;
+    return {
+      premioStimato: 0,
+      puntiTotali,
+      sogliaRaggiunta: 0,
+      sogliaLabel: "N/A",
+    };
+  }
+
+  const result = calcolaPartnershipRewardPerPos({
+    posCode,
+    config: partnershipConfig,
+    attivato,
+    giorniLavorativi,
+  });
+
+  const targetNum = result.targetRaggiunto === "100%" ? 2 : result.targetRaggiunto === "80%" ? 1 : 0;
+  return {
+    premioStimato: result.premioMaturato,
+    puntiTotali: result.punti,
+    sogliaRaggiunta: targetNum,
+    sogliaLabel: result.targetRaggiunto === "nessuno" ? "Nessuna" : result.targetRaggiunto,
+    forecastTarget: partnershipConfig.config.target100,
+    forecastGap: result.punti - partnershipConfig.config.target100,
+  };
+}
+
+function calcCBFromItems(
+  items: { targetCategory: string; pezzi: number }[],
+  clusterCB?: string,
+): PistaCalcResult {
+  const cbItems: CBCalcItem[] = items.map(i => ({ targetCategory: i.targetCategory, count: i.pezzi }));
+  return calcoloCBPerPdv(cbItems, clusterCB);
+}
+
+function calcCBFromItemsAndAddons(
+  pdvItems: AggregatedItem[],
+  pdvAddons: AddonItem[],
+  clusterCB?: string,
+): PistaCalcResult {
+  const cbItems: CBCalcItem[] = [
+    ...pdvItems.map(i => ({ targetCategory: i.targetCategory, count: i.pezzi })),
+    ...pdvAddons.map(a => ({ targetCategory: a.targetCategory, count: a.occorrenze })),
+  ];
+  return calcoloCBPerPdv(cbItems, clusterCB);
+}
+
+function calcAssicurazioniForAllPdv(
+  mappedData: MappedSalesResponse,
+  puntiVendita: OrgConfigPdv[],
+  assicConfig: AssicurazioniConfig | undefined,
+  pdvInGara: AssicurazioniPdvInGara[],
+  puntiOverride?: Record<string, number>,
+  premiOverride?: Record<string, number>,
+): Map<string, PistaCalcResult> {
+  const resultMap = new Map<string, PistaCalcResult>();
+  if (!assicConfig || puntiVendita.length === 0) return resultMap;
+
+  const attivatoByPos: Record<string, AssicurazioniAttivatoRiga> = {};
+  for (const pdv of mappedData.pdvList) {
+    const riga = creaAttivatoAssicurazioniDaMappato(pdv.items, pdv.addons || []);
+    if (!riga) continue;
+    attivatoByPos[pdv.codicePos] = riga;
+  }
+
+  const pdvs = puntiVendita.map((p) => ({
+    id: p.id,
+    codicePos: p.codicePos,
+    nome: p.nome,
+    ragioneSociale: p.ragioneSociale,
+    calendar: p.calendar,
+    tipoPosizione: "strada" as PuntoVendita["tipoPosizione"],
+    canale: "franchising" as PuntoVendita["canale"],
+    clusterMobile: (p.clusterMobile || "") as PuntoVendita["clusterMobile"],
+    clusterFisso: (p.clusterFisso || "") as PuntoVendita["clusterFisso"],
+    clusterCB: (p.clusterCB || "") as PuntoVendita["clusterCB"],
+    clusterPIva: "" as PuntoVendita["clusterPIva"],
+    ruoloBusiness: "none" as PuntoVendita["ruoloBusiness"],
+    abilitaEnergia: p.abilitaEnergia ?? false,
+    abilitaAssicurazioni: p.abilitaAssicurazioni ?? false,
+  })) as PuntoVendita[];
+
+  const results = calcoloAssicurazioniPerPos(pdvs, assicConfig, pdvInGara, attivatoByPos, puntiOverride, premiOverride);
+  for (const r of results) {
+    const sogliaNum = r.bonusSoglia2 > 0 ? 2 : r.bonusSoglia1 > 0 ? 1 : 0;
+    resultMap.set(r.pdvId, {
+      premioStimato: r.premioTotale,
+      puntiTotali: r.puntiTotali,
+      sogliaRaggiunta: sogliaNum,
+      sogliaLabel: sogliaNum === 0 ? "Nessuna" : `S${sogliaNum}`,
+    });
+  }
+  return resultMap;
+}
+
+function calcProtectaForAllPdv(
+  mappedData: MappedSalesResponse,
+  puntiVendita: OrgConfigPdv[],
+  gettoniOverride?: Record<string, number>,
+): Map<string, PistaCalcResult> {
+  const resultMap = new Map<string, PistaCalcResult>();
+  if (puntiVendita.length === 0) return resultMap;
+
+  const PROTECTA_KEYS: Set<string> = new Set([
+    "casaStart","casaStartFinanziato","casaPlus","casaPlusFinanziato","negozioProtetti","negozioProtettiFinanziato",
+  ]);
+
+  const attivatoByPos: Record<string, ProtectaAttivatoRiga> = {};
+  for (const pdv of mappedData.pdvList) {
+    const items = pdv.items.filter((i) => i.pista === "protecta" && PROTECTA_KEYS.has(i.targetCategory));
+    if (items.length === 0) continue;
+    const riga = createEmptyProtectaAttivato();
+    for (const item of items) {
+      const key = item.targetCategory as keyof ProtectaAttivatoRiga;
+      if (key in riga) {
+        riga[key] = item.pezzi;
+      }
+    }
+    attivatoByPos[pdv.codicePos] = riga;
+  }
+
+  const pdvs = puntiVendita.map((p) => ({
+    id: p.id,
+    codicePos: p.codicePos,
+    nome: p.nome,
+    ragioneSociale: p.ragioneSociale,
+    calendar: p.calendar,
+    tipoPosizione: "strada" as PuntoVendita["tipoPosizione"],
+    canale: "franchising" as PuntoVendita["canale"],
+    clusterMobile: (p.clusterMobile || "") as PuntoVendita["clusterMobile"],
+    clusterFisso: (p.clusterFisso || "") as PuntoVendita["clusterFisso"],
+    clusterCB: (p.clusterCB || "") as PuntoVendita["clusterCB"],
+    clusterPIva: "" as PuntoVendita["clusterPIva"],
+    ruoloBusiness: "none" as PuntoVendita["ruoloBusiness"],
+    abilitaEnergia: p.abilitaEnergia ?? false,
+    abilitaAssicurazioni: p.abilitaAssicurazioni ?? false,
+  })) as PuntoVendita[];
+
+  const results = calcolaProtecta(attivatoByPos, pdvs, gettoniOverride);
+  for (const r of results) {
+    resultMap.set(r.pdvId, {
+      premioStimato: r.premioTotale,
+      puntiTotali: r.pezziTotali,
+      sogliaRaggiunta: 0,
+      sogliaLabel: "N/A",
+    });
+  }
+  return resultMap;
+}
+
+function getSogliaColor(soglia: string): string {
+  if (soglia === "Nessuna" || soglia === "N/A") return "text-red-600 bg-red-50 border-red-200";
+  if (soglia === "S1") return "text-amber-600 bg-amber-50 border-amber-200";
+  if (soglia === "S2") return "text-yellow-600 bg-yellow-50 border-yellow-200";
+  if (soglia === "S3") return "text-lime-600 bg-lime-50 border-lime-200";
+  return "text-green-600 bg-green-50 border-green-200";
+}
+
+function getMonthOptions() {
+  const now = new Date();
+  const options = [];
+  for (let i = -2; i <= 1; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+    options.push({
+      value: `${d.getFullYear()}-${d.getMonth() + 1}`,
+      label: `${monthNames[d.getMonth()]} ${d.getFullYear()}`,
+      month: d.getMonth() + 1,
+      year: d.getFullYear(),
+    });
+  }
+  return options;
+}
+
+function formatEuro(value: number): string {
+  return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
+}
+
+function ProjectionBadge({ current, projected, label }: { current: number; projected: number; label: string }) {
+  const ratio = projected > 0 ? current / projected : 0;
+  const color = ratio >= 1 ? "bg-green-100 text-green-800" : ratio >= 0.7 ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800";
+
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${color}`} data-testid={`projection-badge-${label}`}>
+      <TrendingUp className="h-3.5 w-3.5" />
+      Proiezione: {projected}
+    </div>
+  );
+}
+
+// Task #424 — ticker compatto delle piste: una lettura dati-first, con click
+// sulla card per il dettaglio (punti, premio e soglia per ragione sociale).
+type TickerRsDetail = {
+  displayName: string;
+  premioAttuale: number;
+  premioProiettato: number;
+  sogliaAttuale: string;
+  sogliaProiezione: string;
+  puntiAttuali: number;
+  puntiProiezione: number;
+  pezziAttuali: number;
+  pezziProiezione: number;
+};
+
+type TickerPista = {
+  pista: string;
+  label: string;
+  totalePezzi: number;
+  proiezionePezzi: number;
+  calc: PistaCalcResult;
+  calcProiezione: PistaCalcResult;
+  rsCalcBreakdown?: Map<string, TickerRsDetail>;
+  thresholdMarkers?: TickerThresholdMarker[];
+};
+
+const fmtTickerVal = (v: number) => (Number.isInteger(v) ? v.toLocaleString('it-IT') : v.toLocaleString('it-IT', { maximumFractionDigits: 2 }));
+
+function PistaTicker({ stats }: { stats: TickerPista[] }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [activeThreshold, setActiveThreshold] = useState<string | null>(null);
+  const items = stats.filter(
+    (p) => p.totalePezzi > 0 || p.calc.premioStimato > 0 || p.calcProiezione.premioStimato > 0,
+  );
+  if (items.length === 0) return null;
+  const expandedPista = expanded ? items.find((p) => p.pista === expanded) ?? null : null;
+
+  const renderCard = (p: TickerPista) => {
+    const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
+    if (!conf) return null;
+    const Icon = conf.icon;
+    const usePunti = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
+    const att = usePunti ? p.calc.puntiTotali : p.totalePezzi;
+    const proi = usePunti ? p.calcProiezione.puntiTotali : p.proiezionePezzi;
+    const trajectoryRatio = proi > 0 ? Math.min((att / proi) * 100, 100) : att > 0 ? 100 : 0;
+    const thresholdMarkers = p.thresholdMarkers ?? [];
+    const trajectoryMax = Math.max(att, proi, ...thresholdMarkers.map((marker) => marker.value), 1);
+    const actualPosition = Math.min((att / trajectoryMax) * 100, 100);
+    const projectedPosition = Math.min((proi / trajectoryMax) * 100, 100);
+    const sogliaAtt = p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : null;
+    const isOpen = expanded === p.pista;
+    const toggleCard = () => {
+      setActiveThreshold(null);
+      setExpanded((value) => (value === p.pista ? null : p.pista));
+    };
+    return (
+      <article
+        key={p.pista}
+        onClick={toggleCard}
+        data-testid={`ticker-pista-${p.pista}`}
+        data-pista={p.pista}
+        className={`ticker-pista-card ticker-pista-card--${p.pista} relative min-h-[206px] rounded-2xl overflow-hidden text-left group cursor-pointer focus-within:ring-2 focus-within:ring-primary border transition-[transform,box-shadow,border-color] duration-200 ease-out ${isOpen ? 'ring-2 ring-primary shadow-lg scale-[1.01]' : 'shadow-sm hover:-translate-y-0.5 hover:shadow-md'}`}
+      >
+        {/* Illustrazione vettoriale dedicata alla pista: il pittogramma Lucide
+            e le forme CSS sostituiscono la precedente griglia neutra. */}
+        <div className="pista-illustration" aria-hidden>
+          <span className="pista-illustration__halo" />
+          <span className="pista-illustration__orb pista-illustration__orb--one" />
+          <span className="pista-illustration__orb pista-illustration__orb--two" />
+          <Icon className="pista-illustration__icon" strokeWidth={1.15} />
+        </div>
+        <div className={`absolute inset-x-0 top-0 z-10 h-1 ${conf.color}`} aria-hidden />
+        <div className="pista-card-scrim" aria-hidden />
+        <div className="pista-card-heading absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-1.5">
+          <button
+            type="button"
+            className="pista-card-header flex min-w-0 items-center gap-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-expanded={isOpen}
+            aria-controls={`ticker-detail-${p.pista}`}
+            aria-label={`${isOpen ? "Nascondi" : "Mostra"} dettaglio ${conf.label}`}
+            data-testid={`ticker-toggle-${p.pista}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleCard();
+            }}
+          >
+            <span className={`shrink-0 p-1.5 rounded-lg ${conf.color} text-white shadow-sm transition-transform duration-200 group-hover:scale-105 group-focus-within:scale-105`}>
+              <Icon className="h-3.5 w-3.5" />
+            </span>
+            <span className="min-w-0 truncate text-[10px] font-bold uppercase tracking-[0.1em] text-foreground">
+              {conf.label}
+            </span>
+          </button>
+          {sogliaAtt && (
+            <span className="pista-card-threshold shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold text-foreground shadow-sm">
+              {sogliaAtt}
+            </span>
+          )}
+        </div>
+        <div className="pista-card-content">
+          <div
+            className="pista-card-trajectory"
+            data-testid={`ticker-trajectory-${p.pista}`}
+            aria-label={`Traiettoria: attuale ${fmtTickerVal(att)}, proiezione ${fmtTickerVal(proi)}, avanzamento ${trajectoryRatio.toFixed(0)}%`}
+          >
+            <div className="pista-trajectory-labels" data-testid={`ticker-trajectory-labels-${p.pista}`}>
+              <span>
+                <span className="pista-trajectory-label">Attuale</span>
+                <strong className="tabular-nums">{fmtTickerVal(att)}</strong>
+              </span>
+              <span className="text-right">
+                <span className="pista-trajectory-label">Proiezione</span>
+                <strong className="tabular-nums">{fmtTickerVal(proi)}</strong>
+              </span>
+            </div>
+            <div className="pista-trajectory-track" data-testid={`ticker-trajectory-track-${p.pista}`}>
+              <span
+                className="pista-trajectory-projection"
+                style={{ width: `${projectedPosition}%` }}
+                aria-hidden
+              />
+              <span
+                className="pista-trajectory-fill"
+                style={{ width: `${actualPosition}%` }}
+                aria-hidden
+              />
+              {thresholdMarkers.map((marker, index) => {
+                const markerId = `${p.pista}-${index}-${marker.value}`;
+                const position = Math.min((marker.value / trajectoryMax) * 100, 100);
+                const unit = usePunti ? "punti" : "pezzi";
+                const description = `Soglia ${marker.label}: ${fmtTickerVal(marker.value)} ${unit}`;
+                return (
+                  <Tooltip
+                    key={markerId}
+                    open={activeThreshold === markerId}
+                    onOpenChange={(open) => setActiveThreshold(open ? markerId : null)}
+                  >
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="pista-threshold-tick"
+                        style={{ left: `${position}%` }}
+                        aria-label={description}
+                        data-testid={`ticker-threshold-${p.pista}-${index + 1}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setActiveThreshold(markerId);
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        <span aria-hidden />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipPrimitive.Portal>
+                      <TooltipContent side="bottom" sideOffset={8} collisionPadding={12} className="whitespace-nowrap">
+                        <span className="font-semibold">{description}</span>
+                      </TooltipContent>
+                    </TooltipPrimitive.Portal>
+                  </Tooltip>
+                );
+              })}
+              <span
+                className="pista-current-marker"
+                style={{ left: `${actualPosition}%` }}
+                aria-hidden
+              />
+              <span
+                className="pista-projection-marker"
+                style={{ left: `${projectedPosition}%` }}
+                aria-hidden
+              />
+            </div>
+            <div className="pista-trajectory-readout" data-testid={`ticker-trajectory-readout-${p.pista}`}>
+              <span>Avanzamento</span>
+              <strong className="tabular-nums">{trajectoryRatio.toFixed(0)}%</strong>
+            </div>
+          </div>
+          <div className="pista-card-kpis rounded-xl p-2.5 text-foreground" data-testid={`ticker-kpis-${p.pista}`}>
+            <div className="flex items-end justify-between gap-1">
+              <div>
+                <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{usePunti ? 'Punti attuali' : 'Pezzi attuali'}</div>
+                <span className="text-xl font-extrabold leading-none tabular-nums" data-testid={`ticker-punti-${p.pista}`}>{fmtTickerVal(att)}</span>
+              </div>
+              {proi > att && (
+                <span className="text-[11px] font-semibold tabular-nums text-blue-600 dark:text-blue-400 flex items-center gap-0.5 pb-0.5">
+                  <TrendingUp className="h-3 w-3" /> {fmtTickerVal(proi)}
+                </span>
+              )}
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-1 border-t border-border/80 pt-2">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Premio</span>
+              <span className="text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400" data-testid={`ticker-premio-${p.pista}`}>{formatEuro(p.calc.premioStimato)}</span>
+              {p.calcProiezione.premioStimato > 0 && p.calcProiezione.premioStimato !== p.calc.premioStimato && (
+                <span className="text-[11px] font-semibold tabular-nums text-blue-600 dark:text-blue-400 flex items-center gap-0.5" data-testid={`ticker-premio-proj-${p.pista}`}>
+                  <TrendingUp className="h-3 w-3" /> {formatEuro(p.calcProiezione.premioStimato)}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
+  // Dettaglio espanso: prima una ragione sociale e poi l'altra; senza
+  // breakdown RS mostra un unico blocco "Totale".
+  const renderDetail = (p: TickerPista) => {
+    const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
+    const usePuntiTot = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
+    const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string }[] = [];
+    if (p.rsCalcBreakdown && p.rsCalcBreakdown.size > 0) {
+      p.rsCalcBreakdown.forEach((rs, key) => {
+        const usePunti = rs.puntiAttuali > 0 || rs.puntiProiezione > 0;
+        blocks.push({
+          key, name: rs.displayName,
+          puntiAtt: usePunti ? rs.puntiAttuali : rs.pezziAttuali,
+          puntiProi: usePunti ? rs.puntiProiezione : rs.pezziProiezione,
+          usePunti,
+          premioAtt: rs.premioAttuale, premioProi: rs.premioProiettato,
+          sogliaAtt: rs.sogliaAttuale, sogliaProi: rs.sogliaProiezione,
+        });
+      });
+    } else {
+      blocks.push({
+        key: 'totale', name: 'Totale',
+        puntiAtt: usePuntiTot ? p.calc.puntiTotali : p.totalePezzi,
+        puntiProi: usePuntiTot ? p.calcProiezione.puntiTotali : p.proiezionePezzi,
+        usePunti: usePuntiTot,
+        premioAtt: p.calc.premioStimato, premioProi: p.calcProiezione.premioStimato,
+        sogliaAtt: p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : '—',
+        sogliaProi: p.calcProiezione.sogliaRaggiunta > 0 ? p.calcProiezione.sogliaLabel : '—',
+      });
+    }
+    return (
+      <div id={`ticker-detail-${p.pista}`} className="mx-3 mb-3 rounded-2xl border bg-gradient-to-r from-primary/5 via-transparent to-violet-500/5 p-3 space-y-3" data-testid={`ticker-detail-${p.pista}`}>
+        <div className="text-sm font-semibold">{conf?.label ?? p.pista} — dettaglio</div>
+        {blocks.map((b) => (
+          <div key={b.key} className="rounded-xl border bg-card/60 p-3" data-testid={`ticker-detail-rs-${p.pista}-${b.key}`}>
+            <div className="text-xs font-bold uppercase tracking-wide mb-2 truncate">{b.name}</div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{b.usePunti ? 'Punti' : 'Pezzi'}</div>
+                <div className="text-sm font-bold tabular-nums">{fmtTickerVal(b.puntiAtt)}</div>
+                <div className="text-xs font-medium tabular-nums text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> {fmtTickerVal(b.puntiProi)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Premio</div>
+                <div className="text-sm font-bold tabular-nums text-green-700 dark:text-green-400">{formatEuro(b.premioAtt)}</div>
+                <div className="text-xs font-medium tabular-nums text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> {formatEuro(b.premioProi)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Soglia</div>
+                <div className="text-sm font-bold">
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">{b.sogliaAtt || '—'}</span>
+                </div>
+                <div className="text-xs font-medium text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5 mt-0.5">
+                  <TrendingUp className="h-3 w-3" />
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-blue-400/60">{b.sogliaProi || '—'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <TooltipProvider delayDuration={120}>
+      <Card className="overflow-hidden" data-testid="section-pista-ticker">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <div className="p-1.5 rounded bg-primary text-primary-foreground">
+              <TrendingUp className="h-4 w-4" />
+            </div>
+            Piste in gara
+            <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+              live
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 p-3">
+            {items.map(renderCard)}
+          </div>
+          {expandedPista && renderDetail(expandedPista)}
+        </CardContent>
+      </Card>
+    </TooltipProvider>
+  );
+}
+
+type CompactRowMetrics = {
+  pezziAtt?: number;
+  pezziProi?: number;
+  puntiAtt?: number;
+  puntiProi?: number;
+  sogliaAtt?: string;
+  sogliaProi?: string;
+  premioAtt?: number;
+  premioProi?: number;
+};
+
+function PistaCompactRow({
+  testId, expanded, onToggle, name, subtitle, metrics, premioColor, children,
+}: {
+  testId: string;
+  expanded: boolean;
+  onToggle: () => void;
+  name: string;
+  subtitle?: string;
+  metrics: CompactRowMetrics;
+  premioColor?: 'green' | 'orange';
+  children?: React.ReactNode;
+}) {
+  const m = metrics;
+  const hasSogliaAtt = !!m.sogliaAtt && m.sogliaAtt !== "N/A";
+  const hasSogliaProi = !!m.sogliaProi && m.sogliaProi !== "N/A";
+  const hasPunti = m.puntiAtt !== undefined || m.puntiProi !== undefined;
+  const hasPremio = (m.premioAtt ?? 0) > 0 || (m.premioProi ?? 0) > 0;
+  const premioCls = premioColor === 'orange' ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400';
+  const premioProiCls = premioColor === 'orange' ? 'text-orange-600 dark:text-orange-300' : 'text-blue-600 dark:text-blue-400';
+  return (
+    <div className="rounded-lg border" data-testid={`row-pista-${testId}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="w-full flex flex-col lg:flex-row lg:items-center gap-2.5 px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg text-left"
+        data-testid={`btn-expand-row-${testId}`}
+      >
+        <div className="flex items-center gap-1.5 min-w-0 lg:w-40 lg:shrink-0">
+          {expanded ? <ChevronDown className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" /> : <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 dark:text-slate-500" />}
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-gray-700 dark:text-gray-200 truncate">{name}</div>
+            {subtitle && <div className="text-[11px] text-gray-500 dark:text-slate-400 truncate">{subtitle}</div>}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-stretch gap-2 flex-1 pl-5 lg:pl-0">
+          {hasPunti && (
+            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2.5 py-1.5 flex-1 min-w-[160px] space-y-1">
+              <div className="flex items-center justify-between gap-2 whitespace-nowrap">
+                <span className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-slate-400 shrink-0">Att.</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold tabular-nums">{(m.puntiAtt ?? 0).toFixed(2)} pt</span>
+                  {hasSogliaAtt && (
+                    <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaAtt!)}`} variant="outline">{m.sogliaAtt}</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 whitespace-nowrap text-blue-700 dark:text-blue-400 border-t pt-1">
+                <span className="text-[10px] uppercase tracking-wide text-blue-600 flex items-center gap-0.5 shrink-0"><TrendingUp className="h-2.5 w-2.5" />Proi.</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold tabular-nums">{(m.puntiProi ?? m.puntiAtt ?? 0).toFixed(2)} pt</span>
+                  {hasSogliaProi && (
+                    <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getSogliaColor(m.sogliaProi!)}`} variant="outline">{m.sogliaProi}</Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          {hasPremio && (
+            <div className="rounded-md bg-gray-50 dark:bg-gray-800/40 border px-2.5 py-1.5 min-w-[150px]">
+              <div className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Premio</div>
+              <div className="flex items-baseline gap-2 whitespace-nowrap">
+                <span className={`text-sm font-bold tabular-nums ${premioCls}`}>{formatEuro(m.premioAtt ?? 0)}</span>
+                {m.premioProi !== undefined && (
+                  <span className={`text-[11px] font-semibold flex items-center gap-0.5 ${premioProiCls}`}>
+                    <TrendingUp className="h-3 w-3" />{formatEuro(m.premioProi)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </button>
+      {expanded && children && (
+        <div className="px-3.5 pb-3.5 pt-3 border-t space-y-2.5 bg-gray-50/50 dark:bg-gray-900/20 rounded-b-lg">{children}</div>
+      )}
+    </div>
+  );
+}
+
+type TabellaCellMetrics = {
+  valoreAtt: number;
+  valoreProi?: number;
+  // Versione del valore già pre-arrotondata alla precisione di display (1 dec)
+  // della UI, usata per la cella in tabella. Quando presente, garantisce che
+  // la somma dei valori display dei PDV combaci esattamente col valore RS
+  // mostrato (allocazione pro-rata con residuo sull'ultimo PDV). I campi
+  // `valoreAtt`/`valoreProi` restano allineati alla precisione export (2 dec)
+  // così che anche export Excel/CSV/PDF abbiano somma esatta. In assenza dei
+  // campi *Ui la cella usa direttamente `valoreAtt`/`valoreProi`.
+  valoreAttUi?: number;
+  valoreProiUi?: number;
+  sogliaAtt?: string;
+  sogliaProi?: string;
+  proiStimata?: boolean;
+  quotaRs?: boolean;
+  quotaRsTotalAtt?: number;
+  quotaRsTotalProi?: number;
+};
+
+// Helper centralizzato: ripartizione pro-rata di `total` sui pesi `weights`
+// arrotondata a `decimals` cifre, con residuo assegnato all'ultimo elemento
+// così che la somma dei valori restituiti sia esattamente uguale al totale
+// arrotondato alla stessa precisione (no drift di arrotondamento).
+function proRataConResiduo(total: number, weights: number[], decimals: number): number[] {
+  const n = weights.length;
+  if (n === 0) return [];
+  const factor = Math.pow(10, decimals);
+  const totalScaled = Math.round(total * factor);
+  const sumW = weights.reduce((a, b) => a + b, 0);
+  if (!Number.isFinite(sumW) || sumW <= 0) {
+    // Se non c'è denominatore (es. pezziTotaliRS = 0) la quota di ogni PDV
+    // è 0: non assegnamo il residuo per evitare di concentrare l'intero
+    // totale RS su un singolo PDV in modo fuorviante.
+    return new Array(n).fill(0);
+  }
+  const out: number[] = new Array(n);
+  let allocated = 0;
+  for (let i = 0; i < n - 1; i++) {
+    const v = Math.round((totalScaled * weights[i]) / sumW);
+    out[i] = v / factor;
+    allocated += v;
+  }
+  out[n - 1] = (totalScaled - allocated) / factor;
+  return out;
+}
+
+function TabellaCellSingolo({ valore, soglia, variant, stimata, dim, quotaRs, quotaRsTotal }: { valore?: number; soglia?: string; variant: 'attuale' | 'proiezione'; stimata?: boolean; dim?: boolean; quotaRs?: boolean; quotaRsTotal?: number }) {
+  if (valore === undefined || valore === null) {
+    return <span className="text-gray-300 dark:text-gray-700">—</span>;
+  }
+  const showSoglia = soglia && soglia !== 'N/A' && soglia !== 'Nessuna';
+  const sizeCls = dim ? 'text-[11px]' : 'text-xs';
+  const colorCls = variant === 'proiezione' ? 'text-blue-600 dark:text-blue-400' : '';
+  const italicCls = quotaRs ? 'italic' : '';
+  const tooltip = quotaRs
+    ? `Quota proporzionale ai pezzi del PDV sul totale RS${typeof quotaRsTotal === 'number' ? ` (totale RS: ${quotaRsTotal.toFixed(1)})` : ''}`
+    : stimata
+      ? 'Proiezione stimata in proporzione ai pezzi (calcolo punti per PDV non disponibile in modalità gara per RS)'
+      : undefined;
+  return (
+    <div className={`flex items-center justify-center gap-1 whitespace-nowrap ${sizeCls} ${colorCls} ${italicCls}`} title={tooltip}>
+      {variant === 'proiezione' && <TrendingUp className="h-2.5 w-2.5" />}
+      <span className="font-semibold">{valore.toFixed(1)}</span>
+      {(stimata || quotaRs) && <span className="text-[9px] text-gray-400 dark:text-slate-500">~</span>}
+      {showSoglia && (
+        <Badge variant="outline" className={`text-[9px] h-4 px-1 ${getSogliaColor(soglia!)}`}>{soglia}</Badge>
+      )}
+    </div>
+  );
+}
+
+type DashboardPdfColumnOption = { key: string; label: string };
+
+function DashboardPdfExportDialog({
+  open,
+  onOpenChange,
+  title = "Esporta PDF",
+  description,
+  columnsLabel = "Colonne da includere",
+  columnOptions,
+  prefs,
+  onPrefsChange,
+  onConfirm,
+  testIdPrefix = "pdf",
+  orgLogoDataUrl = null,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title?: string;
+  description?: string;
+  columnsLabel?: string;
+  columnOptions: DashboardPdfColumnOption[];
+  prefs: DashboardPdfPrefs;
+  onPrefsChange: (next: DashboardPdfPrefs) => void;
+  onConfirm: (prefs: DashboardPdfPrefs) => void;
+  testIdPrefix?: string;
+  orgLogoDataUrl?: string | null;
+}) {
+  const availableKeys = columnOptions.map(c => c.key);
+  const selectedSet = new Set(
+    prefs.selectedColumns === null ? availableKeys : prefs.selectedColumns.filter(k => availableKeys.includes(k)),
+  );
+
+  const toggleColumn = (key: string, checked: boolean) => {
+    const next = new Set(selectedSet);
+    if (checked) next.add(key); else next.delete(key);
+    onPrefsChange({ ...prefs, selectedColumns: Array.from(next) });
+  };
+
+  const selectAll = () => onPrefsChange({ ...prefs, selectedColumns: [...availableKeys] });
+  const selectNone = () => onPrefsChange({ ...prefs, selectedColumns: [] });
+
+  const handleLogoFile = (file: File | null) => {
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      alert("Logo troppo grande (max 1 MB).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : null;
+      if (dataUrl) onPrefsChange({ ...prefs, logoDataUrl: dataUrl });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const canExport = selectedSet.size > 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent className="max-w-lg" data-testid={`dialog-${testIdPrefix}-export`}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          {description && <DialogDescription>{description}</DialogDescription>}
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-sm font-medium">{columnsLabel}</Label>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={selectAll} data-testid={`btn-${testIdPrefix}-cols-all`}>Tutte</Button>
+                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={selectNone} data-testid={`btn-${testIdPrefix}-cols-none`}>Nessuna</Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 rounded border p-3">
+              {columnOptions.map(opt => {
+                const id = `${testIdPrefix}-col-${opt.key}`;
+                return (
+                  <div key={opt.key} className="flex items-center gap-2">
+                    <Checkbox
+                      id={id}
+                      checked={selectedSet.has(opt.key)}
+                      onCheckedChange={(c) => toggleColumn(opt.key, c === true)}
+                      data-testid={`checkbox-${testIdPrefix}-col-${opt.key}`}
+                    />
+                    <Label htmlFor={id} className="text-sm font-normal cursor-pointer">{opt.label}</Label>
+                  </div>
+                );
+              })}
+            </div>
+            {!canExport && (
+              <p className="text-xs text-red-600 mt-1">Seleziona almeno una voce.</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor={`${testIdPrefix}-nota`} className="text-sm font-medium">Nota / intestazione (opzionale)</Label>
+            <Textarea
+              id={`${testIdPrefix}-nota`}
+              value={prefs.nota}
+              onChange={(e) => onPrefsChange({ ...prefs, nota: e.target.value })}
+              placeholder="Es. Documento per riunione mensile rete vendita"
+              className="mt-1 min-h-[60px]"
+              data-testid={`textarea-${testIdPrefix}-nota`}
+            />
+            <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-1">Condivisa tra i diversi export PDF della dashboard.</p>
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium">Logo (opzionale)</Label>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={(e) => handleLogoFile(e.target.files?.[0] ?? null)}
+                className="text-sm flex-1"
+                data-testid={`input-${testIdPrefix}-logo`}
+              />
+              {(prefs.logoDataUrl || orgLogoDataUrl) && (
+                <>
+                  <img
+                    src={prefs.logoDataUrl || orgLogoDataUrl || ''}
+                    alt="Logo preview"
+                    className="h-10 w-auto max-w-[80px] border rounded bg-white dark:bg-slate-900 object-contain"
+                    data-testid={`img-${testIdPrefix}-logo-preview`}
+                  />
+                  {prefs.logoDataUrl && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7"
+                      onClick={() => onPrefsChange({ ...prefs, logoDataUrl: null })}
+                      data-testid={`btn-${testIdPrefix}-logo-remove`}
+                    >{orgLogoDataUrl ? 'Usa logo org' : 'Rimuovi logo locale'}</Button>
+                  )}
+                </>
+              )}
+            </div>
+            <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-1">
+              {prefs.logoDataUrl
+                ? 'Logo locale caricato solo per questo PDF. Rimuovi per tornare al logo dell\'organizzazione. Condiviso tra i diversi export PDF della dashboard.'
+                : orgLogoDataUrl
+                  ? 'Verrà usato il logo dell\'organizzazione. Carica un file per sovrascriverlo (PNG/JPEG, max 1 MB). Condiviso tra i diversi export PDF della dashboard.'
+                  : 'Nessun logo configurato. Imposta il logo organizzazione da Admin → Branding, oppure carica un file qui (PNG/JPEG, max 1 MB). Condiviso tra i diversi export PDF della dashboard.'}
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} data-testid={`btn-${testIdPrefix}-cancel`}>Annulla</Button>
+          <Button
+            type="button"
+            onClick={() => onConfirm({
+              ...prefs,
+              selectedColumns: Array.from(selectedSet),
+            })}
+            disabled={!canExport}
+            data-testid={`btn-${testIdPrefix}-confirm`}
+          >
+            <Download className="h-3.5 w-3.5 mr-1" />Esporta PDF
+          </Button>
+        </DialogFooter>
+      </ResponsiveDialogContent>
+    </Dialog>
+  );
+}
+
+function drawPdfHeader(
+  doc: jsPDF,
+  opts: { title: string; subtitle?: string; nota?: string; logoDataUrl?: string | null },
+): number {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let logoBottomY = 0;
+  if (opts.logoDataUrl) {
+    try {
+      const fmt = opts.logoDataUrl.startsWith('data:image/jpeg') || opts.logoDataUrl.startsWith('data:image/jpg')
+        ? 'JPEG'
+        : 'PNG';
+      const logoW = 28;
+      const logoH = 16;
+      doc.addImage(opts.logoDataUrl, fmt, pageWidth - 14 - logoW, 8, logoW, logoH);
+      logoBottomY = 8 + logoH;
+    } catch {
+      // ignore broken image
+    }
+  }
+  doc.setFontSize(14);
+  doc.setTextColor(40, 40, 40);
+  doc.text(opts.title, 14, 14);
+  if (opts.subtitle) {
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(opts.subtitle, 14, 20);
+  }
+  let startY = opts.subtitle ? 25 : 20;
+  const nota = (opts.nota ?? "").trim();
+  if (nota) {
+    doc.setFontSize(9);
+    doc.setTextColor(60, 60, 60);
+    const maxWidth = pageWidth - 28;
+    const lines = doc.splitTextToSize(nota, maxWidth) as string[];
+    doc.text(lines, 14, startY);
+    startY += lines.length * 4 + 2;
+  }
+  if (logoBottomY > 0 && startY < logoBottomY + 2) {
+    startY = logoBottomY + 2;
+  }
+  return startY;
+}
+
+function drawPdfFooterPagination(doc: jsPDF, currentPage: number) {
+  const pageCount = doc.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  doc.setFontSize(8);
+  doc.setTextColor(120, 120, 120);
+  doc.text(
+    `Pagina ${currentPage} / ${pageCount}`,
+    pageWidth - 14,
+    doc.internal.pageSize.getHeight() - 6,
+    { align: 'right' },
+  );
+}
+
+const TABELLA_PDV_PISTA_PDF_EXPORT_KEY = "tabella-pdv-pista";
+const PREMIO_PER_RS_PDF_EXPORT_KEY = "premio-per-rs";
+const DETTAGLIO_RS_PDF_EXPORT_KEY = "dettaglio-rs";
+
+type PremioRsRow = {
+  displayName: string;
+  premioAttuale: number;
+  premioProiettato: number;
+  dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }>;
+};
+
+function PremioPerRsPdfExport({ premioPerRS, orgId, mese, anno }: { premioPerRS: PremioRsRow[]; orgId?: string | null; mese?: number; anno?: number }) {
+  const [open, setOpen] = useState(false);
+  const [prefs, setPrefs] = useState<DashboardPdfPrefs>({ selectedColumns: null, nota: "", logoDataUrl: null });
+  const [hydratedOrg, setHydratedOrg] = useState<string | null>(null);
+
+  const { data: orgBranding } = useQuery<{ logoDataUrl: string | null }>({
+    queryKey: ['/api/organization-branding/logo'],
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const orgLogoDataUrl = orgBranding?.logoDataUrl ?? null;
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (hydratedOrg === orgId) return;
+    setPrefs(loadDashboardPdfPrefs(orgId, PREMIO_PER_RS_PDF_EXPORT_KEY));
+    setHydratedOrg(orgId);
+  }, [orgId, hydratedOrg]);
+
+  useEffect(() => {
+    if (!open || !orgId) return;
+    const shared = loadSharedPdfPrefs(orgId);
+    setPrefs(prev => ({
+      selectedColumns: prev.selectedColumns,
+      nota: shared.nota,
+      logoDataUrl: shared.logoDataUrl,
+    }));
+  }, [open, orgId]);
+
+  const pisteAttive = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const rs of premioPerRS) {
+      for (const d of rs.dettaglio) {
+        if (d.premioAttuale > 0 || d.premioProiettato > 0) {
+          if (!seen.has(d.pista)) seen.set(d.pista, d.label);
+        }
+      }
+    }
+    return Array.from(seen.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => pistaOrderRank(a.key) - pistaOrderRank(b.key));
+  }, [premioPerRS]);
+
+  const baseFilename = () => {
+    const orgPart = orgId || 'org';
+    const mm = mese ? String(mese).padStart(2, '0') : '00';
+    const yy = anno ? String(anno) : '0000';
+    return `riepilogo-premi-rs_${orgPart}_${yy}-${mm}`;
+  };
+
+  const exportPdf = (final: DashboardPdfPrefs) => {
+    const selected = final.selectedColumns ?? pisteAttive.map(p => p.key);
+    const piste = pisteAttive.filter(p => selected.includes(p.key));
+    if (piste.length === 0 || premioPerRS.length === 0) return;
+
+    const fmtEuro = (n: number) => Number.isFinite(n) ? `€ ${n.toFixed(2).replace('.', ',')}` : '';
+
+    const header: string[] = ["Ragione Sociale", "Premio Attuale", "Premio Proiezione"];
+    for (const p of piste) {
+      header.push(`${p.label} - Attuale`, `${p.label} - Proiezione`);
+    }
+    const body: string[][] = [];
+    for (const rs of premioPerRS) {
+      const row: string[] = [rs.displayName, fmtEuro(rs.premioAttuale), fmtEuro(rs.premioProiettato)];
+      for (const p of piste) {
+        const d = rs.dettaglio.find(x => x.pista === p.key);
+        row.push(d ? fmtEuro(d.premioAttuale) : '', d && d.premioProiettato > 0 ? fmtEuro(d.premioProiettato) : '');
+      }
+      body.push(row);
+    }
+    // Totals row
+    const totAtt = premioPerRS.reduce((s, r) => s + r.premioAttuale, 0);
+    const totProi = premioPerRS.reduce((s, r) => s + r.premioProiettato, 0);
+    const totalsRow: string[] = ["TOTALE", fmtEuro(totAtt), fmtEuro(totProi)];
+    for (const p of piste) {
+      const att = premioPerRS.reduce((s, r) => s + (r.dettaglio.find(x => x.pista === p.key)?.premioAttuale ?? 0), 0);
+      const proi = premioPerRS.reduce((s, r) => s + (r.dettaglio.find(x => x.pista === p.key)?.premioProiettato ?? 0), 0);
+      totalsRow.push(fmtEuro(att), proi > 0 ? fmtEuro(proi) : '');
+    }
+    body.push(totalsRow);
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const mm = mese ? String(mese).padStart(2, '0') : '--';
+    const yy = anno ? String(anno) : '----';
+    const startY = drawPdfHeader(doc, {
+      title: 'Riepilogo Premi per Ragione Sociale',
+      subtitle: `Org: ${orgId || '-'}    Periodo: ${mm}/${yy}`,
+      nota: final.nota,
+      logoDataUrl: final.logoDataUrl ?? orgLogoDataUrl,
+    });
+
+    autoTable(doc, {
+      startY,
+      head: [header],
+      body,
+      theme: 'striped',
+      headStyles: { fillColor: [34, 197, 94], fontSize: 8, halign: 'center' },
+      bodyStyles: { fontSize: 8 },
+      styles: { cellPadding: 1.5, overflow: 'linebreak' },
+      columnStyles: { 0: { cellWidth: 50 } },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index >= 1) {
+          data.cell.styles.halign = 'right';
+        }
+        if (data.section === 'body' && body[data.row.index]?.[0] === 'TOTALE') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [220, 252, 231];
+        }
+      },
+      margin: { left: 8, right: 8, top: startY },
+      didDrawPage: (data) => {
+        drawPdfFooterPagination(doc, data.pageNumber);
+      },
+    });
+
+    doc.save(`${baseFilename()}.pdf`);
+  };
+
+  if (premioPerRS.length === 0 || pisteAttive.length === 0) return null;
+
+  return (
+    <>
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8"
+          onClick={() => setOpen(true)}
+          data-testid="btn-premio-rs-export-pdf"
+        >
+          <Download className="h-3.5 w-3.5 mr-1" />Esporta PDF Riepilogo Premi
+        </Button>
+      </div>
+      <DashboardPdfExportDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Esporta PDF — Riepilogo Premi per RS"
+        description="Personalizza il PDF del riepilogo premi per Ragione Sociale."
+        columnsLabel="Piste da includere"
+        columnOptions={pisteAttive}
+        prefs={prefs}
+        onPrefsChange={(next) => {
+          setPrefs(next);
+          saveDashboardPdfPrefs(orgId, PREMIO_PER_RS_PDF_EXPORT_KEY, next);
+        }}
+        onConfirm={(final) => {
+          exportPdf(final);
+          setOpen(false);
+        }}
+        testIdPrefix="premio-rs-pdf"
+        orgLogoDataUrl={orgLogoDataUrl}
+      />
+    </>
+  );
+}
+
+// Piste mostrate nella vista "Pezzi" della Tabella PDV × Pista.
+// Energia aggrega già CF (consumer) + P.IVA (business) nel totale pezzi del PDV.
+const PEZZI_TABLE_PISTE = ['mobile', 'fisso', 'energia', 'assicurazioni'] as const;
+
+type PezziCell = { att: number; proi: number };
+
+// Task #392 — colonne extra della vista Pezzi (oltre alle 4 piste):
+// IVA (pezzi P.IVA), CB (solo cambi piano MIA TIED/UNTIED + RIVINCOLI),
+// Telefoni e importi Accessori/Servizi (netto IVA, ÷1.22 come nel resto
+// della dashboard e nel report Telegram). Non entrano nella colonna
+// "Totale" di riga (che resta la somma dei pezzi delle 4 piste).
+const PEZZI_EXTRA_COLS = [
+  { key: 'iva', label: 'IVA', euro: false },
+  { key: 'cb', label: 'CB', euro: false },
+  { key: 'telefoni', label: 'Telefoni', euro: false },
+  { key: 'acc_euro', label: '€ Accessori', euro: true },
+  { key: 'srv_euro', label: '€ Servizi', euro: true },
+] as const;
+type PezziExtraKey = typeof PEZZI_EXTRA_COLS[number]['key'];
+
+export type PezziExtraPdvEntry = {
+  ragioneSociale: string;
+  nomeNegozio: string;
+  cells: Record<PezziExtraKey, PezziCell>;
+};
+
+type PezziColumn = { key: string; label: string; icon?: any; color?: string; euro: boolean; isPista: boolean };
+
+const fmtPezziVal = (v: number, euro: boolean) =>
+  euro ? `${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : String(v);
+
+function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv }: { pistaStats: any[]; orgId?: string | null; mese?: number; anno?: number; pezziExtraByPdv?: Map<string, PezziExtraPdvEntry> }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'punti' | 'pezzi'>('punti');
+  const [hydratedOrgId, setHydratedOrgId] = useState<string | null>(null);
+  const [viewModeHydratedOrg, setViewModeHydratedOrg] = useState<string | null>(null);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [pdfPrefs, setPdfPrefs] = useState<DashboardPdfPrefs>({ selectedColumns: null, nota: "", logoDataUrl: null });
+  const [pdfPrefsHydratedOrg, setPdfPrefsHydratedOrg] = useState<string | null>(null);
+
+  const { data: orgBranding } = useQuery<{ logoDataUrl: string | null }>({
+    queryKey: ['/api/organization-branding/logo'],
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const orgLogoDataUrl = orgBranding?.logoDataUrl ?? null;
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (pdfPrefsHydratedOrg === orgId) return;
+    setPdfPrefs(loadDashboardPdfPrefs(orgId, TABELLA_PDV_PISTA_PDF_EXPORT_KEY));
+    setPdfPrefsHydratedOrg(orgId);
+  }, [orgId, pdfPrefsHydratedOrg]);
+
+  useEffect(() => {
+    if (!pdfDialogOpen || !orgId) return;
+    const shared = loadSharedPdfPrefs(orgId);
+    setPdfPrefs(prev => ({
+      selectedColumns: prev.selectedColumns,
+      nota: shared.nota,
+      logoDataUrl: shared.logoDataUrl,
+    }));
+  }, [pdfDialogOpen, orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (hydratedOrgId === orgId) return;
+    let next: Set<string> = new Set();
+    try {
+      const raw = localStorage.getItem(`${TABELLA_EXPANDED_RS_STORAGE_PREFIX}${orgId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          next = new Set(parsed.filter((k): k is string => typeof k === "string"));
+        }
+      }
+    } catch {
+      next = new Set();
+    }
+    setExpanded(next);
+    setHydratedOrgId(orgId);
+  }, [orgId, hydratedOrgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (viewModeHydratedOrg === orgId) return;
+    try {
+      const raw = localStorage.getItem(`${TABELLA_VIEW_MODE_STORAGE_PREFIX}${orgId}`);
+      setViewMode(raw === 'pezzi' ? 'pezzi' : 'punti');
+    } catch {
+      setViewMode('punti');
+    }
+    setViewModeHydratedOrg(orgId);
+  }, [orgId, viewModeHydratedOrg]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (viewModeHydratedOrg !== orgId) return;
+    try {
+      const key = `${TABELLA_VIEW_MODE_STORAGE_PREFIX}${orgId}`;
+      if (viewMode === 'punti') {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, viewMode);
+      }
+    } catch {
+      // ignore quota / serialization errors
+    }
+  }, [viewMode, orgId, viewModeHydratedOrg]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (hydratedOrgId !== orgId) return;
+    try {
+      const key = `${TABELLA_EXPANDED_RS_STORAGE_PREFIX}${orgId}`;
+      if (expanded.size === 0) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, JSON.stringify(Array.from(expanded)));
+      }
+    } catch {
+      // ignore quota / serialization errors
+    }
+  }, [expanded, orgId, hydratedOrgId]);
+
+  const { pisteAttive, rsRows } = useMemo(() => {
+    const piste = (pistaStats || []).filter(p => !!(PISTA_CONFIG as any)[p.pista]);
+
+    type PdvRow = { codicePos: string; nomeNegozio: string };
+    type RsEntry = {
+      displayName: string;
+      pdvs: Map<string, PdvRow>;
+      perPista: Map<string, TabellaCellMetrics>;
+      perPdv: Map<string, Map<string, TabellaCellMetrics>>;
+    };
+    const rsMap = new Map<string, RsEntry>();
+
+    const ensureRs = (rsKey: string, displayName: string): RsEntry => {
+      if (!rsMap.has(rsKey)) {
+        rsMap.set(rsKey, {
+          displayName,
+          pdvs: new Map(),
+          perPista: new Map(),
+          perPdv: new Map(),
+        });
+      }
+      return rsMap.get(rsKey)!;
+    };
+
+    for (const pista of piste) {
+      const pistaKey = pista.pista;
+      const hasRsMode = !!(pista.rsCalcBreakdown && pista.rsCalcBreakdown.size > 0);
+
+      // RS-level cells (sempre in punti) — calcolate per prime, così possiamo
+      // distribuire il loro totale ai PDV in modalità per_rs.
+      if (hasRsMode) {
+        pista.rsCalcBreakdown!.forEach((rsData: any, rsKey: string) => {
+          const rsEntry = ensureRs(rsKey, rsData.displayName || rsKey);
+          rsEntry.perPista.set(pistaKey, {
+            valoreAtt: rsData.puntiAttuali ?? 0,
+            valoreProi: rsData.puntiProiezione ?? rsData.puntiAttuali ?? 0,
+            sogliaAtt: rsData.sogliaAttuale,
+            sogliaProi: rsData.sogliaProiezione,
+          });
+        });
+      }
+
+      // PDV-level cells.
+      // - In `per_rs`: sostituiamo il punteggio "isolato" del PDV con la quota
+      //   proporzionale del totale RS, calcolata sui pezzi core del PDV / pezzi
+      //   core totali della RS. Stessa logica per la proiezione. L'ultimo PDV
+      //   del gruppo riceve il residuo per evitare drift di arrotondamento e
+      //   garantire che la somma combaci col totale RS.
+      // - In `per_pdv`: comportamento invariato (punti calcolati per il PDV,
+      //   con le sue soglie).
+      if (hasRsMode) {
+        const pdvsByRs = new Map<string, any[]>();
+        for (const pdv of (pista.pdvBreakdown || [])) {
+          const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+          if (!pdvsByRs.has(rsKey)) pdvsByRs.set(rsKey, []);
+          pdvsByRs.get(rsKey)!.push(pdv);
+        }
+        pdvsByRs.forEach((pdvs, rsKey) => {
+          const rsData = pista.rsCalcBreakdown!.get(rsKey);
+          const rsEntry = ensureRs(rsKey, rsData?.displayName || pdvs[0].ragioneSociale || rsKey);
+          const puntiTotaliRs = rsData?.puntiAttuali ?? 0;
+          const puntiProiRs = rsData?.puntiProiezione ?? puntiTotaliRs;
+          const pesiAtt = pdvs.map(p => p.pezzi ?? 0);
+          const pesiProi = pdvs.map(p => p.proiezione ?? p.pezzi ?? 0);
+          // Doppia allocazione: precisione UI (1 dec) e precisione export (2 dec).
+          // In entrambi i casi la somma combacia esattamente col totale RS
+          // arrotondato alla stessa precisione, grazie al residuo sull'ultimo PDV.
+          const quoteAttUi = proRataConResiduo(puntiTotaliRs, pesiAtt, 1);
+          const quoteAttExport = proRataConResiduo(puntiTotaliRs, pesiAtt, 2);
+          const quoteProiUi = proRataConResiduo(puntiProiRs, pesiProi, 1);
+          const quoteProiExport = proRataConResiduo(puntiProiRs, pesiProi, 2);
+          pdvs.forEach((pdv, idx) => {
+            if (!rsEntry.pdvs.has(pdv.codicePos)) {
+              rsEntry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio });
+            }
+            if (!rsEntry.perPdv.has(pdv.codicePos)) rsEntry.perPdv.set(pdv.codicePos, new Map());
+            rsEntry.perPdv.get(pdv.codicePos)!.set(pistaKey, {
+              valoreAtt: quoteAttExport[idx],
+              valoreProi: quoteProiExport[idx],
+              valoreAttUi: quoteAttUi[idx],
+              valoreProiUi: quoteProiUi[idx],
+              sogliaAtt: undefined,
+              sogliaProi: undefined,
+              quotaRs: true,
+              quotaRsTotalAtt: puntiTotaliRs,
+              quotaRsTotalProi: puntiProiRs,
+            });
+          });
+        });
+      } else {
+        for (const pdv of (pista.pdvBreakdown || [])) {
+          const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+          const rsEntry = ensureRs(rsKey, pdv.ragioneSociale || 'Senza RS');
+          if (!rsEntry.pdvs.has(pdv.codicePos)) {
+            rsEntry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio });
+          }
+          if (!rsEntry.perPdv.has(pdv.codicePos)) rsEntry.perPdv.set(pdv.codicePos, new Map());
+          const puntiAtt = pdv.pdvCalc?.puntiTotali ?? 0;
+          const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
+          rsEntry.perPdv.get(pdv.codicePos)!.set(pistaKey, {
+            valoreAtt: puntiAtt,
+            valoreProi: proj ? (proj.puntiTotali ?? 0) : undefined,
+            sogliaAtt: pdv.pdvCalc?.sogliaLabel,
+            sogliaProi: proj?.sogliaLabel,
+          });
+        }
+      }
+
+      if (!hasRsMode) {
+        // sum per RS without soglia
+        const sums = new Map<string, { valoreAtt: number; valoreProi: number; hasProj: boolean }>();
+        for (const pdv of (pista.pdvBreakdown || [])) {
+          const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+          if (!sums.has(rsKey)) sums.set(rsKey, { valoreAtt: 0, valoreProi: 0, hasProj: false });
+          const proj = pista.pdvProjCalcMap?.get(pdv.codicePos);
+          const s = sums.get(rsKey)!;
+          const pAtt = pdv.pdvCalc?.puntiTotali ?? 0;
+          s.valoreAtt += pAtt;
+          if (proj) {
+            s.valoreProi += proj.puntiTotali ?? 0;
+            s.hasProj = true;
+          }
+        }
+        sums.forEach((v, rsKey) => {
+          const entry = rsMap.get(rsKey);
+          if (entry) entry.perPista.set(pistaKey, { valoreAtt: v.valoreAtt, valoreProi: v.hasProj ? v.valoreProi : undefined });
+        });
+      }
+    }
+
+    const rsRows = Array.from(rsMap.entries())
+      .map(([rsKey, data]) => ({ rsKey, ...data, pdvList: Array.from(data.pdvs.values()).sort((a, b) => a.nomeNegozio.localeCompare(b.nomeNegozio)) }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+    return { pisteAttive: piste, rsRows };
+  }, [pistaStats]);
+
+  // Vista "Pezzi": aggregazione dei pezzi per PDV e per pista dai dati mappati
+  // già caricati (stessa fonte del breakdown per PDV: pdvBreakdown.pezzi e
+  // .proiezione, quindi stesse esclusioni annullate/filtri gara). Per Energia
+  // il totale pezzi del PDV somma già le categorie CF e P.IVA.
+  const { pezziPiste, pezziRsRows } = useMemo(() => {
+    const piste = (pistaStats || []).filter(p => (PEZZI_TABLE_PISTE as readonly string[]).includes(p.pista) && !!(PISTA_CONFIG as any)[p.pista]);
+
+    type PdvRow = { codicePos: string; nomeNegozio: string };
+    type RsEntry = {
+      displayName: string;
+      pdvs: Map<string, PdvRow>;
+      perPista: Map<string, PezziCell>;
+      perPdv: Map<string, Map<string, PezziCell>>;
+    };
+    const rsMap = new Map<string, RsEntry>();
+
+    for (const pista of piste) {
+      for (const pdv of (pista.pdvBreakdown || [])) {
+        const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+        if (!rsMap.has(rsKey)) {
+          rsMap.set(rsKey, { displayName: pdv.ragioneSociale || 'Senza RS', pdvs: new Map(), perPista: new Map(), perPdv: new Map() });
+        }
+        const entry = rsMap.get(rsKey)!;
+        if (!entry.pdvs.has(pdv.codicePos)) {
+          entry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio });
+        }
+        const att = pdv.pezzi ?? 0;
+        const proi = pdv.proiezione ?? att;
+        if (!entry.perPdv.has(pdv.codicePos)) entry.perPdv.set(pdv.codicePos, new Map());
+        entry.perPdv.get(pdv.codicePos)!.set(pista.pista, { att, proi });
+        const rsCell = entry.perPista.get(pista.pista) || { att: 0, proi: 0 };
+        rsCell.att += att;
+        rsCell.proi += proi;
+        entry.perPista.set(pista.pista, rsCell);
+      }
+    }
+
+    // Task #392 — colonne extra (IVA, CB, Telefoni, € Accessori, € Servizi):
+    // fold nelle stesse mappe cella, chiavi PEZZI_EXTRA_COLS. Include anche
+    // PDV con sole vendite "extra" (es. solo accessori) non presenti nei
+    // breakdown delle 4 piste.
+    if (pezziExtraByPdv) {
+      pezziExtraByPdv.forEach((ex, codicePos) => {
+        const rsKey = normalizeRS(ex.ragioneSociale || 'Senza RS');
+        if (!rsMap.has(rsKey)) {
+          rsMap.set(rsKey, { displayName: ex.ragioneSociale || 'Senza RS', pdvs: new Map(), perPista: new Map(), perPdv: new Map() });
+        }
+        const entry = rsMap.get(rsKey)!;
+        if (!entry.pdvs.has(codicePos)) {
+          entry.pdvs.set(codicePos, { codicePos, nomeNegozio: ex.nomeNegozio });
+        }
+        if (!entry.perPdv.has(codicePos)) entry.perPdv.set(codicePos, new Map());
+        const pdvCells = entry.perPdv.get(codicePos)!;
+        for (const col of PEZZI_EXTRA_COLS) {
+          const c = ex.cells[col.key];
+          if (!c) continue;
+          pdvCells.set(col.key, { att: c.att, proi: c.proi });
+          const rsCell = entry.perPista.get(col.key) || { att: 0, proi: 0 };
+          rsCell.att += c.att;
+          rsCell.proi += c.proi;
+          entry.perPista.set(col.key, rsCell);
+        }
+      });
+    }
+
+    const rows = Array.from(rsMap.entries())
+      .map(([rsKey, data]) => ({ rsKey, ...data, pdvList: Array.from(data.pdvs.values()).sort((a, b) => a.nomeNegozio.localeCompare(b.nomeNegozio)) }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+    return { pezziPiste: piste, pezziRsRows: rows };
+  }, [pistaStats, pezziExtraByPdv]);
+
+  if (pisteAttive.length === 0) return null;
+
+  const isPezzi = viewMode === 'pezzi';
+  const activeRows: Array<{ rsKey: string }> = isPezzi ? pezziRsRows : rsRows;
+
+  // Colonne della vista Pezzi: 4 piste + colonne extra Task #392.
+  const pezziColumns: PezziColumn[] = [
+    ...pezziPiste.map((p: any): PezziColumn => {
+      const conf = (PISTA_CONFIG as any)[p.pista];
+      return { key: p.pista as string, label: (conf?.label ?? p.pista) as string, icon: conf?.icon, color: conf?.color, euro: false, isPista: true };
+    }),
+    ...(pezziExtraByPdv ? PEZZI_EXTRA_COLS.map((c): PezziColumn => ({ key: c.key, label: c.label, euro: c.euro, isPista: false })) : []),
+  ];
+
+  // Somma i pezzi (att/proi) di una mappa cella sulle colonne indicate.
+  // Nel totale di riga contano SOLO le colonne pista (i pezzi IVA sono già
+  // dentro le piste, CB/Telefoni/€ sono grandezze diverse).
+  const sumPezziRow = (cells: Map<string, PezziCell> | undefined, cols: PezziColumn[]): PezziCell => {
+    const out: PezziCell = { att: 0, proi: 0 };
+    if (!cells) return out;
+    for (const col of cols) {
+      if (!col.isPista) continue;
+      const c = cells.get(col.key);
+      if (c) { out.att += c.att; out.proi += c.proi; }
+    }
+    return out;
+  };
+  // Totali di colonna + totale generale (solo colonne pista), sulle colonne indicate.
+  const computePezziTotals = (cols: PezziColumn[]) => {
+    const perPista = new Map<string, PezziCell>();
+    const grand: PezziCell = { att: 0, proi: 0 };
+    for (const col of cols) perPista.set(col.key, { att: 0, proi: 0 });
+    for (const rs of pezziRsRows) {
+      for (const col of cols) {
+        const c = rs.perPista.get(col.key);
+        if (c) {
+          const t = perPista.get(col.key)!;
+          t.att += c.att;
+          t.proi += c.proi;
+          if (col.isPista) {
+            grand.att += c.att;
+            grand.proi += c.proi;
+          }
+        }
+      }
+    }
+    return { perPista, grand };
+  };
+
+  const toggleRs = (rsKey: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(rsKey)) next.delete(rsKey); else next.add(rsKey);
+      return next;
+    });
+  };
+  const allKeys = activeRows.map(r => r.rsKey);
+  const allExpanded = allKeys.every(k => expanded.has(k));
+  const noneExpanded = expanded.size === 0;
+  const expandAll = () => setExpanded(new Set(allKeys));
+  const collapseAll = () => setExpanded(new Set());
+
+  const buildExportRowsPezzi = (filterPiste?: string[] | null) => {
+    const cols = (filterPiste && filterPiste.length > 0)
+      ? pezziColumns.filter(c => filterPiste.includes(c.key))
+      : pezziColumns;
+    const header: string[] = ["Tipo", "Ragione Sociale", "Codice PDV", "Nome PDV"];
+    for (const col of cols) {
+      if (col.euro) {
+        header.push(`${col.label} (netto IVA) - Attuale`, `${col.label} (netto IVA) - Proiezione`);
+      } else {
+        header.push(`${col.label} - Pezzi Attuali`, `${col.label} - Pezzi Proiezione`);
+      }
+    }
+    header.push("Totale - Pezzi Attuali", "Totale - Pezzi Proiezione");
+    const rows: (string | number)[][] = [header];
+    const cellPair = (c: PezziCell | undefined, euro: boolean): (string | number)[] =>
+      (c ? (euro ? [Number(c.att.toFixed(2)), Number(c.proi.toFixed(2))] : [c.att, c.proi]) : ['', '']);
+    for (const rs of pezziRsRows) {
+      const rsRow: (string | number)[] = ["RS", rs.displayName, '', ''];
+      for (const col of cols) rsRow.push(...cellPair(rs.perPista.get(col.key), col.euro));
+      const rsTot = sumPezziRow(rs.perPista, cols);
+      rsRow.push(rsTot.att, rsTot.proi);
+      rows.push(rsRow);
+      for (const pdv of rs.pdvList) {
+        const pdvRow: (string | number)[] = ["PDV", rs.displayName, pdv.codicePos, pdv.nomeNegozio];
+        const cells = rs.perPdv.get(pdv.codicePos);
+        for (const col of cols) pdvRow.push(...cellPair(cells?.get(col.key), col.euro));
+        const pdvTot = sumPezziRow(cells, cols);
+        pdvRow.push(pdvTot.att, pdvTot.proi);
+        rows.push(pdvRow);
+      }
+    }
+    const { perPista, grand } = computePezziTotals(cols);
+    const totRow: (string | number)[] = ["TOTALE", "Totale complessivo", '', ''];
+    for (const col of cols) {
+      const t = perPista.get(col.key) || { att: 0, proi: 0 };
+      totRow.push(...(col.euro ? [Number(t.att.toFixed(2)), Number(t.proi.toFixed(2))] : [t.att, t.proi]));
+    }
+    totRow.push(grand.att, grand.proi);
+    rows.push(totRow);
+    return rows;
+  };
+
+  const buildExportRows = (filterPiste?: string[] | null) => {
+    if (isPezzi) return buildExportRowsPezzi(filterPiste);
+    const piste = (filterPiste && filterPiste.length > 0)
+      ? pisteAttive.filter(p => filterPiste.includes(p.pista))
+      : pisteAttive;
+    const header: string[] = ["Tipo", "Ragione Sociale", "Codice PDV", "Nome PDV"];
+    for (const p of piste) {
+      const conf = (PISTA_CONFIG as any)[p.pista];
+      const label = conf?.label ?? p.pista;
+      header.push(`${label} - Punti Attuali`, `${label} - Proiezione`, `${label} - Soglia Attuale`, `${label} - Soglia Proiezione`);
+    }
+    const rows: (string | number)[][] = [header];
+    const fmtNum = (n: number | undefined) => (typeof n === 'number' ? Number(n.toFixed(2)) : '');
+    const fmtSoglia = (s?: string) => (s && s !== 'N/A' && s !== 'Nessuna' ? s : '');
+    const cellFromMetrics = (m?: TabellaCellMetrics): (string | number)[] => {
+      if (!m) return ['', '', '', ''];
+      const fmtVal = (v: number | undefined) => {
+        if (typeof v !== 'number') return '';
+        return Number(v.toFixed(2));
+      };
+      const hasAtt = typeof m.valoreAtt === 'number';
+      const hasProi = typeof m.valoreProi === 'number';
+      if (!hasAtt && !hasProi) return ['', '', '', ''];
+      return [
+        hasAtt ? fmtVal(m.valoreAtt) : '',
+        hasProi ? fmtVal(m.valoreProi) : '',
+        fmtSoglia(m.sogliaAtt),
+        fmtSoglia(m.sogliaProi),
+      ];
+    };
+    for (const rs of rsRows) {
+      const rsRow: (string | number)[] = ["RS", rs.displayName, '', ''];
+      for (const p of piste) rsRow.push(...cellFromMetrics(rs.perPista.get(p.pista)));
+      rows.push(rsRow);
+      for (const pdv of rs.pdvList) {
+        const pdvRow: (string | number)[] = ["PDV", rs.displayName, pdv.codicePos, pdv.nomeNegozio];
+        for (const p of piste) pdvRow.push(...cellFromMetrics(rs.perPdv.get(pdv.codicePos)?.get(p.pista)));
+        rows.push(pdvRow);
+      }
+    }
+    return rows;
+  };
+
+  const baseFilename = () => {
+    const orgPart = orgId || 'org';
+    const mm = mese ? String(mese).padStart(2, '0') : '00';
+    const yy = anno ? String(anno) : '0000';
+    return `tabella-pdv-pista${isPezzi ? '-pezzi' : ''}_${orgPart}_${yy}-${mm}`;
+  };
+
+  const exportExcel = () => {
+    const rows = buildExportRows();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, isPezzi ? "PDV x Pista (Pezzi)" : "PDV x Pista");
+    XLSX.writeFile(wb, `${baseFilename()}.xlsx`);
+  };
+
+  const exportPdf = (opts?: { selectedPiste?: string[] | null; nota?: string; logoDataUrl?: string | null }) => {
+    const selectedPiste = opts?.selectedPiste ?? null;
+    const nota = opts?.nota ?? "";
+    const logoDataUrl = opts?.logoDataUrl ?? null;
+    const rows = buildExportRows(selectedPiste);
+    if (rows.length <= 1) return;
+    const header = rows[0] as string[];
+    const body = rows.slice(1).map(r => r.map(v => (typeof v === 'number' ? String(v) : v as string)));
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    const mm = mese ? String(mese).padStart(2, '0') : '--';
+    const yy = anno ? String(anno) : '----';
+    const startY = drawPdfHeader(doc, {
+      title: isPezzi ? 'Tabella PDV × Pista (Pezzi)' : 'Tabella PDV × Pista',
+      subtitle: `Org: ${orgId || '-'}    Periodo: ${mm}/${yy}`,
+      nota,
+      logoDataUrl,
+    });
+
+    autoTable(doc, {
+      startY,
+      head: [header],
+      body,
+      theme: 'striped',
+      headStyles: { fillColor: [59, 130, 246], fontSize: 7, halign: 'center' },
+      bodyStyles: { fontSize: 7 },
+      styles: { cellPadding: 1.2, overflow: 'linebreak' },
+      columnStyles: {
+        0: { cellWidth: 12 },
+        1: { cellWidth: 38 },
+        2: { cellWidth: 18 },
+        3: { cellWidth: 30 },
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index >= 4) {
+          data.cell.styles.halign = 'right';
+        }
+        if (data.section === 'body' && (body[data.row.index]?.[0] === 'RS')) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [240, 244, 250];
+        }
+        if (data.section === 'body' && (body[data.row.index]?.[0] === 'TOTALE')) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [219, 234, 254];
+        }
+      },
+      margin: { left: 8, right: 8, top: startY },
+      didDrawPage: (data) => {
+        drawPdfFooterPagination(doc, data.pageNumber);
+      },
+    });
+
+    doc.save(`${baseFilename()}.pdf`);
+  };
+
+  const exportCsv = () => {
+    const rows = buildExportRows();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const csv = XLSX.utils.sheet_to_csv(ws, { FS: ';' });
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${baseFilename()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Card data-testid="card-tabella-pdv-pista">
+      <CardHeader>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-lg">Tabella PDV × Pista</CardTitle>
+          <div className="flex gap-2 flex-wrap items-center">
+            <div className="flex rounded-md border overflow-hidden" role="group" aria-label="Modalità tabella">
+              <Button
+                size="sm"
+                variant={isPezzi ? 'ghost' : 'default'}
+                className="h-8 rounded-none"
+                onClick={() => setViewMode('punti')}
+                data-testid="btn-tabella-mode-punti"
+              >Punti</Button>
+              <Button
+                size="sm"
+                variant={isPezzi ? 'default' : 'ghost'}
+                className="h-8 rounded-none"
+                onClick={() => setViewMode('pezzi')}
+                data-testid="btn-tabella-mode-pezzi"
+              >Pezzi</Button>
+            </div>
+            <Button size="sm" variant="outline" className="h-8" onClick={expandAll} disabled={allExpanded} data-testid="btn-tabella-expand-all">Espandi tutto</Button>
+            <Button size="sm" variant="outline" className="h-8" onClick={collapseAll} disabled={noneExpanded} data-testid="btn-tabella-collapse-all">Collassa tutto</Button>
+            <Button size="sm" variant="outline" className="h-8" onClick={exportExcel} disabled={activeRows.length === 0} data-testid="btn-tabella-export-excel">
+              <Download className="h-3.5 w-3.5 mr-1" />Excel
+            </Button>
+            <Button size="sm" variant="outline" className="h-8" onClick={exportCsv} disabled={activeRows.length === 0} data-testid="btn-tabella-export-csv">
+              <Download className="h-3.5 w-3.5 mr-1" />CSV
+            </Button>
+            <Button size="sm" variant="outline" className="h-8" onClick={() => setPdfDialogOpen(true)} disabled={activeRows.length === 0} data-testid="btn-tabella-export-pdf">
+              <Download className="h-3.5 w-3.5 mr-1" />PDF
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <DashboardPdfExportDialog
+        open={pdfDialogOpen}
+        onOpenChange={setPdfDialogOpen}
+        title="Esporta PDF"
+        description="Personalizza il PDF della tabella PDV × Pista."
+        columnsLabel="Piste da includere"
+        columnOptions={isPezzi
+          ? pezziColumns.map(c => ({ key: c.key, label: c.label }))
+          : pisteAttive.map(p => ({
+              key: p.pista as string,
+              label: ((PISTA_CONFIG as any)[p.pista]?.label ?? p.pista) as string,
+            }))}
+        prefs={pdfPrefs}
+        orgLogoDataUrl={orgLogoDataUrl}
+        onPrefsChange={(next) => {
+          setPdfPrefs(next);
+          saveDashboardPdfPrefs(orgId, TABELLA_PDV_PISTA_PDF_EXPORT_KEY, next);
+        }}
+        onConfirm={(prefs) => {
+          exportPdf({
+            selectedPiste: prefs.selectedColumns,
+            nota: prefs.nota,
+            logoDataUrl: prefs.logoDataUrl ?? orgLogoDataUrl,
+          });
+          setPdfDialogOpen(false);
+        }}
+        testIdPrefix="tabella-pdf"
+      />
+      <CardContent className="p-0">
+        {isPezzi && (() => {
+          const { perPista: totPerPista, grand } = computePezziTotals(pezziColumns);
+          return (
+            <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+              <table className="w-full text-sm border-collapse" data-testid="table-pdv-pista-pezzi">
+                <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900 border-b z-20">
+                  <tr>
+                    <th rowSpan={2} className="text-left px-3 py-2 font-semibold sticky left-0 bg-gray-50 dark:bg-gray-900 min-w-[240px] border-r border-b z-30 align-middle">Ragione Sociale / PDV</th>
+                    {pezziColumns.map(col => {
+                      const Icon = col.icon;
+                      return (
+                        <th key={col.key} colSpan={2} className="text-center px-3 py-2 font-semibold border-r border-b min-w-[200px]" data-testid={`th-tabella-pezzi-${col.key}`}>
+                          <div className="flex items-center justify-center gap-1.5">
+                            {Icon ? <div className={`p-1 rounded ${col.color} text-white`}><Icon className="h-3 w-3" /></div> : null}
+                            <span>{col.label}{col.euro ? <span className="text-[10px] font-normal opacity-60" title="Importo al netto IVA (÷1,22), come nel report Telegram"> (netto IVA)</span> : null}</span>
+                          </div>
+                        </th>
+                      );
+                    })}
+                    <th colSpan={2} className="text-center px-3 py-2 font-semibold border-b min-w-[200px] bg-blue-50 dark:bg-blue-950/40" data-testid="th-tabella-pezzi-totale">Totale</th>
+                  </tr>
+                  <tr>
+                    {pezziColumns.map(col => (
+                      <Fragment key={col.key}>
+                        <th className="text-center px-2 py-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 border-r border-b min-w-[100px]" data-testid={`th-tabella-pezzi-${col.key}-attuale`}>Attuale</th>
+                        <th className="text-center px-2 py-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 border-r border-b min-w-[100px]" data-testid={`th-tabella-pezzi-${col.key}-proiezione`}>Proiezione</th>
+                      </Fragment>
+                    ))}
+                    <th className="text-center px-2 py-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 border-r border-b min-w-[100px] bg-blue-50 dark:bg-blue-950/40">Attuale</th>
+                    <th className="text-center px-2 py-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 border-b min-w-[100px] bg-blue-50 dark:bg-blue-950/40">Proiezione</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pezziRsRows.length === 0 && (
+                    <tr data-testid="row-table-pezzi-empty">
+                      <td colSpan={3 + pezziColumns.length * 2} className="px-3 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
+                        Nessun dato disponibile per i punti vendita.
+                      </td>
+                    </tr>
+                  )}
+                  {pezziRsRows.map(rs => {
+                    const isExpanded = expanded.has(rs.rsKey);
+                    const rsTot = sumPezziRow(rs.perPista, pezziColumns);
+                    return (
+                      <Fragment key={rs.rsKey}>
+                        <tr
+                          className="border-b bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 cursor-pointer"
+                          onClick={() => toggleRs(rs.rsKey)}
+                          data-testid={`row-table-pezzi-rs-${rs.rsKey}`}
+                        >
+                          <td className="px-3 py-2 font-semibold sticky left-0 bg-blue-50 dark:bg-blue-950/40 border-r z-[5]">
+                            <div className="flex items-center gap-1.5">
+                              {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-500 dark:text-slate-400" /> : <ChevronRight className="h-4 w-4 text-gray-500 dark:text-slate-400" />}
+                              <span className="truncate" title={rs.displayName}>{rs.displayName}</span>
+                              <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">{rs.pdvs.size} PDV</Badge>
+                            </div>
+                          </td>
+                          {pezziColumns.map(col => {
+                            const c = rs.perPista.get(col.key);
+                            return (
+                              <Fragment key={col.key}>
+                                <td className="px-2 py-2 text-center border-r text-xs font-semibold" data-testid={`cell-pezzi-${rs.rsKey}-${col.key}-attuale`}>
+                                  {c ? fmtPezziVal(c.att, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                                </td>
+                                <td className="px-2 py-2 text-center border-r text-xs font-semibold text-blue-600 dark:text-blue-400" data-testid={`cell-pezzi-${rs.rsKey}-${col.key}-proiezione`}>
+                                  {c ? fmtPezziVal(c.proi, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                                </td>
+                              </Fragment>
+                            );
+                          })}
+                          <td className="px-2 py-2 text-center border-r text-xs font-bold bg-blue-100/60 dark:bg-blue-900/40" data-testid={`cell-pezzi-${rs.rsKey}-totale-attuale`}>{rsTot.att}</td>
+                          <td className="px-2 py-2 text-center text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-100/60 dark:bg-blue-900/40" data-testid={`cell-pezzi-${rs.rsKey}-totale-proiezione`}>{rsTot.proi}</td>
+                        </tr>
+                        {isExpanded && rs.pdvList.map(pdv => {
+                          const cells = rs.perPdv.get(pdv.codicePos);
+                          const pdvTot = sumPezziRow(cells, pezziColumns);
+                          return (
+                            <tr key={pdv.codicePos} className="border-b bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800/40" data-testid={`row-table-pezzi-pdv-${pdv.codicePos}`}>
+                              <td className="px-3 py-2 sticky left-0 bg-white dark:bg-gray-950 border-r z-[5]">
+                                <div className="pl-6">
+                                  <div className="font-medium text-gray-700 dark:text-gray-200 truncate text-xs" title={pdv.nomeNegozio}>{pdv.nomeNegozio}</div>
+                                  <div className="text-gray-500 dark:text-slate-400 text-[10px]">{pdv.codicePos}</div>
+                                </div>
+                              </td>
+                              {pezziColumns.map(col => {
+                                const c = cells?.get(col.key);
+                                return (
+                                  <Fragment key={col.key}>
+                                    <td className="px-2 py-2 text-center border-r text-[11px]" data-testid={`cell-pezzi-${pdv.codicePos}-${col.key}-attuale`}>
+                                      {c ? fmtPezziVal(c.att, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                                    </td>
+                                    <td className="px-2 py-2 text-center border-r text-[11px] text-blue-600 dark:text-blue-400" data-testid={`cell-pezzi-${pdv.codicePos}-${col.key}-proiezione`}>
+                                      {c ? fmtPezziVal(c.proi, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                                    </td>
+                                  </Fragment>
+                                );
+                              })}
+                              <td className="px-2 py-2 text-center border-r text-[11px] font-semibold bg-gray-50 dark:bg-gray-900/40" data-testid={`cell-pezzi-${pdv.codicePos}-totale-attuale`}>{pdvTot.att}</td>
+                              <td className="px-2 py-2 text-center text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-gray-50 dark:bg-gray-900/40" data-testid={`cell-pezzi-${pdv.codicePos}-totale-proiezione`}>{pdvTot.proi}</td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    );
+                  })}
+                  {pezziRsRows.length > 0 && (
+                    <tr className="border-t-2 bg-blue-100/70 dark:bg-blue-900/40 font-bold" data-testid="row-table-pezzi-totale">
+                      <td className="px-3 py-2 sticky left-0 bg-blue-100/70 dark:bg-blue-900/40 border-r z-[5] text-xs uppercase tracking-wide">Totale complessivo</td>
+                      {pezziColumns.map(col => {
+                        const t = totPerPista.get(col.key) || { att: 0, proi: 0 };
+                        return (
+                          <Fragment key={col.key}>
+                            <td className="px-2 py-2 text-center border-r text-xs" data-testid={`cell-pezzi-totale-${col.key}-attuale`}>{fmtPezziVal(t.att, col.euro)}</td>
+                            <td className="px-2 py-2 text-center border-r text-xs text-blue-700 dark:text-blue-300" data-testid={`cell-pezzi-totale-${col.key}-proiezione`}>{fmtPezziVal(t.proi, col.euro)}</td>
+                          </Fragment>
+                        );
+                      })}
+                      <td className="px-2 py-2 text-center border-r text-xs" data-testid="cell-pezzi-totale-generale-attuale">{grand.att}</td>
+                      <td className="px-2 py-2 text-center text-xs text-blue-700 dark:text-blue-300" data-testid="cell-pezzi-totale-generale-proiezione">{grand.proi}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
+        {!isPezzi && (
+        <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+          <table className="w-full text-sm border-collapse" data-testid="table-pdv-pista">
+            <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900 border-b z-20">
+              <tr>
+                <th rowSpan={2} className="text-left px-3 py-2 font-semibold sticky left-0 bg-gray-50 dark:bg-gray-900 min-w-[240px] border-r border-b z-30 align-middle">Ragione Sociale / PDV</th>
+                {pisteAttive.map(p => {
+                  const conf = (PISTA_CONFIG as any)[p.pista];
+                  if (!conf) return null;
+                  const Icon = conf.icon;
+                  return (
+                    <th key={p.pista} colSpan={2} className="text-center px-3 py-2 font-semibold border-r border-b last:border-r-0 min-w-[260px]" data-testid={`th-tabella-${p.pista}`}>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <div className={`p-1 rounded ${conf.color} text-white`}><Icon className="h-3 w-3" /></div>
+                        <span>{conf.label}</span>
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+              <tr>
+                {pisteAttive.map(p => (
+                  <Fragment key={p.pista}>
+                    <th className="text-center px-2 py-1 text-[10px] font-medium text-gray-500 dark:text-gray-400 border-r border-b min-w-[130px]" data-testid={`th-tabella-${p.pista}-attuale`}>Attuale</th>
+                    <th className="text-center px-2 py-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 border-r border-b last:border-r-0 min-w-[130px]" data-testid={`th-tabella-${p.pista}-proiezione`}>Proiezione</th>
+                  </Fragment>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rsRows.length === 0 && (
+                <tr data-testid="row-table-empty">
+                  <td colSpan={1 + pisteAttive.length * 2} className="px-3 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
+                    Nessun dato disponibile per i punti vendita.
+                  </td>
+                </tr>
+              )}
+              {rsRows.map(rs => {
+                const isExpanded = expanded.has(rs.rsKey);
+                return (
+                  <Fragment key={rs.rsKey}>
+                    <tr
+                      className="border-b bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 cursor-pointer"
+                      onClick={() => toggleRs(rs.rsKey)}
+                      data-testid={`row-table-rs-${rs.rsKey}`}
+                    >
+                      <td className="px-3 py-2 font-semibold sticky left-0 bg-blue-50 dark:bg-blue-950/40 border-r z-[5]">
+                        <div className="flex items-center gap-1.5">
+                          {isExpanded ? <ChevronDown className="h-4 w-4 text-gray-500 dark:text-slate-400" /> : <ChevronRight className="h-4 w-4 text-gray-500 dark:text-slate-400" />}
+                          <span className="truncate" title={rs.displayName}>{rs.displayName}</span>
+                          <Badge variant="secondary" className="text-[10px] h-4 px-1.5 shrink-0">{rs.pdvs.size} PDV</Badge>
+                        </div>
+                      </td>
+                      {pisteAttive.map(p => {
+                        const m = rs.perPista.get(p.pista);
+                        return (
+                          <Fragment key={p.pista}>
+                            <td className="px-2 py-2 text-center border-r" data-testid={`cell-table-${rs.rsKey}-${p.pista}-attuale`}>
+                              <TabellaCellSingolo valore={m?.valoreAtt} soglia={m?.sogliaAtt} variant="attuale" />
+                            </td>
+                            <td className="px-2 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${rs.rsKey}-${p.pista}-proiezione`}>
+                              <TabellaCellSingolo valore={m?.valoreProi} soglia={m?.sogliaProi} variant="proiezione" />
+                            </td>
+                          </Fragment>
+                        );
+                      })}
+                    </tr>
+                    {isExpanded && rs.pdvList.map(pdv => (
+                      <tr key={pdv.codicePos} className="border-b bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800/40" data-testid={`row-table-pdv-${pdv.codicePos}`}>
+                        <td className="px-3 py-2 sticky left-0 bg-white dark:bg-gray-950 border-r z-[5]">
+                          <div className="pl-6">
+                            <div className="font-medium text-gray-700 dark:text-gray-200 truncate text-xs" title={pdv.nomeNegozio}>{pdv.nomeNegozio}</div>
+                            <div className="text-gray-500 dark:text-slate-400 text-[10px]">{pdv.codicePos}</div>
+                          </div>
+                        </td>
+                        {pisteAttive.map(p => {
+                          const m = rs.perPdv.get(pdv.codicePos)?.get(p.pista);
+                          return (
+                            <Fragment key={p.pista}>
+                              <td className="px-2 py-2 text-center border-r" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-attuale`}>
+                                <TabellaCellSingolo valore={m?.valoreAttUi ?? m?.valoreAtt} soglia={m?.sogliaAtt} variant="attuale" dim quotaRs={m?.quotaRs} quotaRsTotal={m?.quotaRsTotalAtt} />
+                              </td>
+                              <td className="px-2 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-proiezione`}>
+                                <TabellaCellSingolo valore={m?.valoreProiUi ?? m?.valoreProi} soglia={m?.sogliaProi} variant="proiezione" stimata={m?.proiStimata} dim quotaRs={m?.quotaRs} quotaRsTotal={m?.quotaRsTotalProi} />
+                              </td>
+                            </Fragment>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+const EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-expanded-rs:";
+const TABELLA_EXPANDED_RS_STORAGE_PREFIX = "dashboard-gara-tabella-expanded-rs:";
+// Task #386: persist toggle Punti/Pezzi della Tabella PDV × Pista, per org.
+const TABELLA_VIEW_MODE_STORAGE_PREFIX = "dashboard-gara-tabella-view-mode:";
+
+// Shared (per-org): logo + nota — riutilizzati da tutti gli export PDF della dashboard.
+const PDF_SHARED_PREFS_STORAGE_PREFIX = "dashboard-gara-pdf-shared-prefs:";
+// Per-export (per-org + exportKey): selezione colonne dell'export.
+const PDF_COLS_STORAGE_PREFIX = "dashboard-gara-pdf-cols:";
+// Legacy: vecchia chiave dedicata alla TabellaPdvPista (selectedPiste + nota + logo).
+const LEGACY_TABELLA_PDF_PREFS_STORAGE_PREFIX = "dashboard-gara-tabella-pdf-prefs:";
+
+type DashboardPdfPrefs = {
+  selectedColumns: string[] | null; // null = tutte le colonne disponibili
+  nota: string;
+  logoDataUrl: string | null;
+};
+
+type SharedPdfPrefs = { nota: string; logoDataUrl: string | null };
+
+function loadSharedPdfPrefs(orgId?: string | null): SharedPdfPrefs {
+  const empty: SharedPdfPrefs = { nota: "", logoDataUrl: null };
+  if (!orgId) return empty;
+  try {
+    const raw = localStorage.getItem(`${PDF_SHARED_PREFS_STORAGE_PREFIX}${orgId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        nota: typeof parsed?.nota === "string" ? parsed.nota : "",
+        logoDataUrl: typeof parsed?.logoDataUrl === "string" ? parsed.logoDataUrl : null,
+      };
+    }
+    // Migration: estrai logo+nota dalla vecchia chiave Tabella se presente.
+    const legacy = localStorage.getItem(`${LEGACY_TABELLA_PDF_PREFS_STORAGE_PREFIX}${orgId}`);
+    if (legacy) {
+      const parsed = JSON.parse(legacy);
+      const migrated: SharedPdfPrefs = {
+        nota: typeof parsed?.nota === "string" ? parsed.nota : "",
+        logoDataUrl: typeof parsed?.logoDataUrl === "string" ? parsed.logoDataUrl : null,
+      };
+      try { localStorage.setItem(`${PDF_SHARED_PREFS_STORAGE_PREFIX}${orgId}`, JSON.stringify(migrated)); } catch { /* ignore */ }
+      return migrated;
+    }
+  } catch {
+    return empty;
+  }
+  return empty;
+}
+
+function saveSharedPdfPrefs(orgId: string | null | undefined, prefs: SharedPdfPrefs) {
+  if (!orgId) return;
+  try {
+    localStorage.setItem(`${PDF_SHARED_PREFS_STORAGE_PREFIX}${orgId}`, JSON.stringify(prefs));
+  } catch {
+    // ignore
+  }
+}
+
+function loadPdfColumns(orgId: string | null | undefined, exportKey: string): string[] | null {
+  if (!orgId) return null;
+  try {
+    const raw = localStorage.getItem(`${PDF_COLS_STORAGE_PREFIX}${exportKey}:${orgId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed === null) return null;
+      if (Array.isArray(parsed)) return parsed.filter((s: unknown): s is string => typeof s === "string");
+      return null;
+    }
+    // Migration: per la TabellaPdvPista riusa la legacy `selectedPiste`.
+    if (exportKey === "tabella-pdv-pista") {
+      const legacy = localStorage.getItem(`${LEGACY_TABELLA_PDF_PREFS_STORAGE_PREFIX}${orgId}`);
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        if (Array.isArray(parsed?.selectedPiste)) {
+          const cols = parsed.selectedPiste.filter((s: unknown): s is string => typeof s === "string");
+          try { localStorage.setItem(`${PDF_COLS_STORAGE_PREFIX}${exportKey}:${orgId}`, JSON.stringify(cols)); } catch { /* ignore */ }
+          return cols;
+        }
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function savePdfColumns(orgId: string | null | undefined, exportKey: string, cols: string[] | null) {
+  if (!orgId) return;
+  try {
+    localStorage.setItem(`${PDF_COLS_STORAGE_PREFIX}${exportKey}:${orgId}`, JSON.stringify(cols));
+  } catch {
+    // ignore
+  }
+}
+
+function loadDashboardPdfPrefs(orgId: string | null | undefined, exportKey: string): DashboardPdfPrefs {
+  const shared = loadSharedPdfPrefs(orgId);
+  const cols = loadPdfColumns(orgId, exportKey);
+  return { selectedColumns: cols, nota: shared.nota, logoDataUrl: shared.logoDataUrl };
+}
+
+function saveDashboardPdfPrefs(orgId: string | null | undefined, exportKey: string, prefs: DashboardPdfPrefs) {
+  saveSharedPdfPrefs(orgId, { nota: prefs.nota, logoDataUrl: prefs.logoDataUrl });
+  savePdfColumns(orgId, exportKey, prefs.selectedColumns);
+}
+
+function getPistaRsRowKeys(pista: any): string[] {
+  if (!pista || pista.totalePezzi === 0) return [];
+  const hasRS = !!(pista.rsCalcBreakdown && pista.rsCalcBreakdown.size >= 1);
+  const isMobileFisso = pista.pista === 'mobile' || pista.pista === 'fisso';
+  const pdvList = (pista.pdvBreakdown ?? []).filter((p: any) => p.pezzi > 0);
+  const usePdv = !hasRS && isMobileFisso && pdvList.length >= 1;
+  let suffixes: string[];
+  if (hasRS) suffixes = Array.from(pista.rsCalcBreakdown!.keys()) as string[];
+  else if (usePdv) suffixes = pdvList.map((p: any) => p.codicePos as string);
+  else suffixes = ['totale'];
+  return suffixes.map((s) => `${pista.pista}::${s}`);
+}
+
+export default function DashboardGaraReale() {
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const { profile, organizationBrands, loading: authLoading } = useAuth();
+  // Task #427 — stile vetrina W3: rilevato dal contesto live così cambia
+  // immediatamente alla selezione del preset senza attendere il refresh del profilo.
+  const { accent: liveAccent } = useTheme();
+  const isW3 = liveAccent.type === 'preset' && liveAccent.id === 'w3';
+  const orgId = profile?.organizationId ?? null;
+  // Stesso gating brand degli altri moduli WindTre: org senza brand = nessun
+  // filtro, org con brand = serve WindTre (vedi shared/modules.ts).
+  const sosCaringAllowed = isModuleAllowedForBrands(
+    organizationBrands?.map((b) => b.name) ?? null,
+    "gara_dashboard",
+  );
+  const now = new Date();
+  const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
+  const [expandedPistaCategories, setExpandedPistaCategories] = useState<Set<string>>(new Set());
+  const [expandedRsRows, setExpandedRsRows] = useState<Set<string>>(new Set());
+  const [expandedRsHydratedOrgId, setExpandedRsHydratedOrgId] = useState<string | null>(null);
+  useEffect(() => {
+    if (authLoading || !orgId) return;
+    if (expandedRsHydratedOrgId === orgId) return;
+    let next: Set<string> = new Set();
+    try {
+      const raw = localStorage.getItem(`${EXPANDED_RS_STORAGE_PREFIX}${orgId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          next = new Set(parsed.filter((k): k is string => typeof k === "string"));
+        }
+      }
+    } catch {
+      next = new Set();
+    }
+    setExpandedRsRows(next);
+    setExpandedRsHydratedOrgId(orgId);
+  }, [orgId, authLoading, expandedRsHydratedOrgId]);
+  useEffect(() => {
+    if (authLoading || !orgId) return;
+    if (expandedRsHydratedOrgId !== orgId) return;
+    try {
+      const key = `${EXPANDED_RS_STORAGE_PREFIX}${orgId}`;
+      if (expandedRsRows.size === 0) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, JSON.stringify(Array.from(expandedRsRows)));
+      }
+    } catch {
+      // ignore quota / serialization errors
+    }
+  }, [expandedRsRows, orgId, authLoading, expandedRsHydratedOrgId]);
+  const toggleRsRow = useCallback((key: string) => {
+    setExpandedRsRows(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+  const expandRsRowKeys = useCallback((keys: string[]) => {
+    if (!keys.length) return;
+    setExpandedRsRows(prev => {
+      const next = new Set(prev);
+      for (const k of keys) next.add(k);
+      return next;
+    });
+  }, []);
+  const collapseRsRowKeys = useCallback((keys: string[]) => {
+    if (!keys.length) return;
+    setExpandedRsRows(prev => {
+      const next = new Set(prev);
+      for (const k of keys) next.delete(k);
+      return next;
+    });
+  }, []);
+  const [expandedMobileGroups, setExpandedMobileGroups] = useState<Set<string>>(new Set());
+  const [expandedFissoGroups, setExpandedFissoGroups] = useState<Set<string>>(new Set());
+  const [selectedConfigId, setSelectedConfigId] = useState<string>("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pdvSortKey, setPdvSortKey] = useState<PdvSortKey>('pezzi_default');
+  const [expandedDeviceDrills, setExpandedDeviceDrills] = useState<Set<string>>(new Set());
+  const toggleDeviceDrill = useCallback((key: string) => {
+    setExpandedDeviceDrills((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+  const [expandedAggModelloDrills, setExpandedAggModelloDrills] = useState<Set<string>>(new Set());
+  const [aggModelloDrillMode, setAggModelloDrillMode] = useState<Record<string, 'pdv' | 'rs'>>({});
+  const toggleAggModelloDrill = useCallback((key: string) => {
+    setExpandedAggModelloDrills((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const { config: orgSystemTcDefaults } = useTabelleCalcoloConfig();
+
+  const [selMonth, selYear] = useMemo(() => {
+    const parts = selectedPeriod.split("-");
+    return [parseInt(parts[1]), parseInt(parts[0])];
+  }, [selectedPeriod]);
+
+  const monthOptions = useMemo(() => getMonthOptions(), []);
+
+  const { data: configList } = useQuery<GaraConfigListItem[]>({
+    queryKey: ["/api/gara-config/list", selMonth, selYear],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/gara-config/list?month=${selMonth}&year=${selYear}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore lista config");
+      return res.json();
+    },
+  });
+
+  const effectiveConfigId = selectedConfigId || (configList && configList.length > 0 ? configList[0].id : "");
+
+  // Versione delle regole BiSuite mapping. Cambia ogni volta che le regole
+  // vengono salvate o mergiate (anche fuori da questa pagina). Inserita nella
+  // queryKey delle vendite mappate per forzare un refetch automatico quando
+  // le regole cambiano, senza dover reimportare BiSuite o invalidare a mano.
+  const { data: mappingVersion } = useQuery<{ rulesUpdatedAt: string | null }>({
+    queryKey: ["/api/bisuite-mapping-version"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/bisuite-mapping-version"), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore versione mappatura");
+      return res.json();
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+  });
+  const rulesUpdatedAt = mappingVersion?.rulesUpdatedAt ?? null;
+
+  const { data: mappedData, isLoading: loadingMapped } = useQuery<MappedSalesResponse>({
+    queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear, effectiveConfigId, "inGara", rulesUpdatedAt],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        month: String(selMonth),
+        year: String(selYear),
+        inGaraOnly: "true",
+      });
+      if (effectiveConfigId) params.set("garaConfigId", effectiveConfigId);
+      const res = await fetch(apiUrl(`/api/admin/bisuite-mapped-sales?${params.toString()}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore nel caricamento dati");
+      return res.json();
+    },
+    enabled: !!configList,
+  });
+
+  const { data: garaConfig, isLoading: loadingConfig } = useQuery<GaraConfigRecord | null>({
+    queryKey: ["/api/gara-config", selMonth, selYear, effectiveConfigId],
+    queryFn: async () => {
+      if (!effectiveConfigId) {
+        const res = await fetch(apiUrl(`/api/gara-config?month=${selMonth}&year=${selYear}`), { credentials: "include" });
+        if (!res.ok) throw new Error("Errore config gara");
+        return await res.json() as GaraConfigRecord | null;
+      }
+      const res = await fetch(apiUrl(`/api/gara-config?id=${effectiveConfigId}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore config gara");
+      return await res.json() as GaraConfigRecord | null;
+    },
+    enabled: !!configList,
+  });
+
+  const garaConfigMissing = !loadingConfig && !garaConfig;
+
+  const garaPdvList: GaraConfigPdv[] = garaConfig?.config?.pdvList || [];
+
+  const garaCalcConfig = useMemo(() => {
+    const cfg = garaConfig?.config as unknown as Record<string, unknown> | null;
+    return {
+      pistaMobileConfig: (cfg?.pistaMobileConfig || cfg?.pistaMobile) as OrgConfigResponse["config"]["pistaMobileConfig"] | undefined,
+      pistaFissoConfig: (cfg?.pistaFissoConfig || cfg?.pistaFisso) as OrgConfigResponse["config"]["pistaFissoConfig"] | undefined,
+      energiaConfig: cfg?.energiaConfig as EnergiaConfig | undefined,
+      mobileCategories: cfg?.mobileCategories as MobileCategoryConfig[] | undefined,
+      partnershipRewardConfig: cfg?.partnershipRewardConfig as OrgConfigResponse["config"]["partnershipRewardConfig"] | undefined,
+      assicurazioniConfig: cfg?.assicurazioniConfig as AssicurazioniConfig | undefined,
+      tipologiaGara: (cfg?.tipologiaGara as string) || 'gara_operatore',
+      modalitaInserimentoRS: (cfg?.modalitaInserimentoRS as string) || 'per_pdv',
+      pistaMobileRSConfig: (cfg?.pistaMobileRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; forecastTargetPunti: number; clusterPista: string }> }) || undefined,
+      pistaFissoRSConfig: (cfg?.pistaFissoRSConfig as { sogliePerRS?: Array<{ ragioneSociale: string; soglia1: number; soglia2: number; soglia3: number; soglia4: number; soglia5: number; forecastTargetPunti: number }> }) || undefined,
+      partnershipRewardRSConfig: (cfg?.partnershipRewardRSConfig as { configPerRS?: Array<{ ragioneSociale: string; target100: number; target80: number; premio100: number; premio80: number }> }) || undefined,
+      energiaRSConfig: (cfg?.energiaRSConfig as { configPerRS?: Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; targetS3: number; premio: number; premioS1?: number; premioS2?: number; premioS3?: number; pistaSoglia_S1?: number; pistaSoglia_S2?: number; pistaSoglia_S3?: number; pistaSoglia_S4?: number; pistaSoglia_S5?: number }> }) || undefined,
+      assicurazioniRSConfig: (cfg?.assicurazioniRSConfig as { configPerRS?: Array<{ ragioneSociale: string; pdvInGara: number; targetNoMalus: number; targetS1: number; targetS2: number; premio: number; premioS1?: number; premioS2?: number }> }) || undefined,
+      extraGaraIvaConfig: cfg?.extraGaraIvaConfig as ExtraGaraConfigOverrides | undefined,
+      extraGaraIvaSogliePerRS: cfg?.extraGaraIvaSogliePerRS as ExtraGaraSogliePerRS | undefined,
+      tabelleCalcolo: cfg?.tabelleCalcolo as Record<string, unknown> | undefined,
+      sosCaring: (cfg?.sosCaring as SosCaringData | null | undefined) || null,
+    };
+  }, [garaConfig]);
+
+  const puntiVenditaFromGara: OrgConfigPdv[] = useMemo(() => {
+    return garaPdvList.map((p) => ({
+      id: p.id,
+      codicePos: p.codicePos,
+      nome: p.nome,
+      ragioneSociale: p.ragioneSociale,
+      calendar: p.calendar as StoreCalendar,
+      clusterMobile: p.clusterMobile,
+      clusterFisso: p.clusterFisso,
+      clusterCB: p.clusterCB || '',
+      abilitaEnergia: p.abilitaEnergia,
+      abilitaAssicurazioni: p.abilitaAssicurazioni,
+    }));
+  }, [garaPdvList]);
+
+  const workdayInfo = useMemo<WorkdayInfo>(() => {
+    const calendar = puntiVenditaFromGara[0]?.calendar || DEFAULT_CALENDAR;
+    return getWorkdayInfoForMonth(selYear, selMonth - 1, calendar, new Date());
+  }, [puntiVenditaFromGara, selMonth, selYear]);
+
+  const pistaStats = useMemo(() => {
+    if (!mappedData || garaConfigMissing) return [];
+
+    const puntiVendita = puntiVenditaFromGara;
+    const isRSPerRS = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
+    const mobileConfigs = garaCalcConfig.pistaMobileConfig?.sogliePerPos || [];
+    const fissoConfigs = garaCalcConfig.pistaFissoConfig?.sogliePerPos || [];
+    const mobileRSConfigs = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS || [];
+    const fissoRSConfigs = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS || [];
+    const partnershipRSConfigs = garaCalcConfig.partnershipRewardRSConfig?.configPerRS || [];
+    const energiaConfig = garaCalcConfig.energiaConfig;
+    const energiaRSConfigs = garaCalcConfig.energiaRSConfig?.configPerRS || [];
+    const assicurazioniRSConfigs = garaCalcConfig.assicurazioniRSConfig?.configPerRS || [];
+    const energiaPdvInGara = puntiVendita.filter(p => p.abilitaEnergia).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, isInGara: true }));
+    const mobileCategories = garaCalcConfig.mobileCategories || MOBILE_CATEGORIES_CONFIG_DEFAULT;
+    const numPdvInGaraEnergia = energiaPdvInGara.length || puntiVendita.length || 1;
+    const partnershipConfigs = garaCalcConfig.partnershipRewardConfig?.configPerPos || [];
+    const assicConfig = garaCalcConfig.assicurazioniConfig;
+    const assicPdvInGara: AssicurazioniPdvInGara[] = puntiVendita.filter(p => p.abilitaAssicurazioni).map(p => ({ pdvId: p.codicePos, codicePos: p.codicePos, nome: p.nome, inGara: true }));
+
+
+    const getMobileConfigForPdv = (codicePos: string, ragioneSociale: string): PistaMobilePosConfig | undefined => {
+      if (isRSPerRS) {
+        const rsConfig = mobileRSConfigs.find(c => normalizeRS(c.ragioneSociale) === normalizeRS(ragioneSociale));
+        if (rsConfig) {
+          return {
+            posCode: codicePos,
+            soglia1: rsConfig.soglia1, soglia2: rsConfig.soglia2, soglia3: rsConfig.soglia3, soglia4: rsConfig.soglia4,
+            multiplierSoglia1: (rsConfig as Record<string, unknown>).multiplierSoglia1 as number || 1,
+            multiplierSoglia2: (rsConfig as Record<string, unknown>).multiplierSoglia2 as number || 1.2,
+            multiplierSoglia3: (rsConfig as Record<string, unknown>).multiplierSoglia3 as number || 1.5,
+            multiplierSoglia4: (rsConfig as Record<string, unknown>).multiplierSoglia4 as number || 2,
+            forecastTargetPunti: rsConfig.forecastTargetPunti,
+            clusterPista: rsConfig.clusterPista as unknown as 1 | 2 | 3 | undefined,
+          };
+        }
+        return undefined;
+      }
+      const found = mobileConfigs.find(c => c.posCode === codicePos) || mobileConfigs[0];
+      if (found && !found.multiplierSoglia1) {
+        return { ...found, multiplierSoglia1: 1, multiplierSoglia2: 1.2, multiplierSoglia3: 1.5, multiplierSoglia4: 2 };
+      }
+      return found;
+    };
+
+    const getFissoConfigForPdv = (codicePos: string, ragioneSociale: string): PistaFissoPosConfig | undefined => {
+      if (isRSPerRS) {
+        const rsConfig = fissoRSConfigs.find(c => normalizeRS(c.ragioneSociale) === normalizeRS(ragioneSociale));
+        if (rsConfig) {
+          return {
+            posCode: codicePos,
+            soglia1: rsConfig.soglia1, soglia2: rsConfig.soglia2, soglia3: rsConfig.soglia3, soglia4: rsConfig.soglia4, soglia5: rsConfig.soglia5,
+            multiplierSoglia1: (rsConfig as unknown as Record<string, unknown>).multiplierSoglia1 as number || 2,
+            multiplierSoglia2: (rsConfig as unknown as Record<string, unknown>).multiplierSoglia2 as number || 3,
+            multiplierSoglia3: (rsConfig as unknown as Record<string, unknown>).multiplierSoglia3 as number || 3.5,
+            multiplierSoglia4: (rsConfig as unknown as Record<string, unknown>).multiplierSoglia4 as number || 4,
+            multiplierSoglia5: (rsConfig as unknown as Record<string, unknown>).multiplierSoglia5 as number || 5,
+            forecastTargetPunti: rsConfig.forecastTargetPunti,
+          };
+        }
+        return undefined;
+      }
+      const found = fissoConfigs.find(c => c.posCode === codicePos) || fissoConfigs[0];
+      if (found && !(found as unknown as Record<string, unknown>).multiplierSoglia1) {
+        return { ...found, multiplierSoglia1: 2, multiplierSoglia2: 3, multiplierSoglia3: 3.5, multiplierSoglia4: 4, multiplierSoglia5: 5 };
+      }
+      return found;
+    };
+
+    const getPartnershipConfigForPdv = (codicePos: string, ragioneSociale: string) => {
+      if (isRSPerRS) {
+        const rsConfig = partnershipRSConfigs.find(c => normalizeRS(c.ragioneSociale) === normalizeRS(ragioneSociale));
+        if (rsConfig) {
+          return { posCode: codicePos, config: { target100: rsConfig.target100, target80: rsConfig.target80, premio100: rsConfig.premio100, premio80: rsConfig.premio80 } };
+        }
+        return undefined;
+      }
+      return partnershipConfigs.find(c => c.posCode === codicePos);
+    };
+
+    const garaTC = garaCalcConfig.tabelleCalcolo as Record<string, Record<string, unknown>> | undefined;
+    const fallbackTC = {
+      mobile: { puntiAttivazione: Object.fromEntries(orgSystemTcDefaults.mobile.categories.map(c => [c.type, c.punti])), soglieCluster: orgSystemTcDefaults.mobile.soglieCluster, moltiplicatoriCanone: orgSystemTcDefaults.mobile.moltiplicatoriCanone } as Record<string, unknown>,
+      energia: { compensiBase: orgSystemTcDefaults.energia.compensiBase, bonusPerContratto: orgSystemTcDefaults.energia.bonusPerContratto, pistaBase: orgSystemTcDefaults.energia.pistaBase, pistaDa4: orgSystemTcDefaults.energia.pistaDa4 } as Record<string, unknown>,
+      assicurazioni: { puntiProdotto: orgSystemTcDefaults.assicurazioni.puntiProdotto, premiProdotto: orgSystemTcDefaults.assicurazioni.premiProdotto } as Record<string, unknown>,
+      protecta: { gettoniProdotto: orgSystemTcDefaults.protecta.gettoniProdotto } as Record<string, unknown>,
+      fisso: { gettoniContrattuali: orgSystemTcDefaults.fisso.gettoniContrattuali, soglieCluster: orgSystemTcDefaults.fisso.soglieCluster, euroPerPezzo: orgSystemTcDefaults.fisso.euroPerPezzo } as Record<string, unknown>,
+      extraGara: { puntiAttivazione: orgSystemTcDefaults.extraGara.puntiAttivazione, soglieMultipos: orgSystemTcDefaults.extraGara.soglieMultipos, soglieMonopos: orgSystemTcDefaults.extraGara.soglieMonopos, premiPerSoglia: orgSystemTcDefaults.extraGara.premiPerSoglia } as Record<string, unknown>,
+      partnership: { puntiPartnership: orgSystemTcDefaults.partnership.puntiPartnership, gettoniEvento: orgSystemTcDefaults.partnership.gettoniEvento, clusterGettoniUntied: orgSystemTcDefaults.partnership.clusterGettoniUntied, clusterGettoniRivincoli: orgSystemTcDefaults.partnership.clusterGettoniRivincoli } as Record<string, unknown>,
+    };
+    const mergeSection = (section: string) => {
+      const base = fallbackTC[section as keyof typeof fallbackTC] || {};
+      const over = garaTC?.[section] || {};
+      return { ...base, ...over };
+    };
+    const tcMobile = mergeSection('mobile') as { puntiAttivazione?: Record<string, number>; soglieCluster?: Record<string, number[]>; moltiplicatoriCanone?: Record<string, number[]> };
+    const tcEnergia = mergeSection('energia') as { compensiBase?: Record<string, number>; bonusPerContratto?: Record<string, number>; pistaBase?: Record<string, number>; pistaDa4?: Record<string, number> };
+    const tcAssic = mergeSection('assicurazioni') as { puntiProdotto?: Record<string, number>; premiProdotto?: Record<string, number> };
+    const tcProtecta = mergeSection('protecta') as { gettoniProdotto?: Record<string, number> };
+    const tcFisso = mergeSection('fisso') as { gettoniContrattuali?: Record<string, number>; soglieCluster?: Record<string, number[]>; euroPerPezzo?: Record<string, number> };
+    const tcExtraGara = mergeSection('extraGara') as { puntiAttivazione?: Record<string, number>; soglieMultipos?: Record<string, Record<string, number>>; soglieMonopos?: Record<string, Record<string, number>>; premiPerSoglia?: Record<string, number[]> };
+    const tcPartnership = mergeSection('partnership') as { puntiPartnership?: Record<string, number>; gettoniEvento?: Record<string, number>; clusterGettoniUntied?: Record<string, number>; clusterGettoniRivincoli?: Record<string, number> };
+
+    const normalizeClusterKey = (clusterStr: string): string => {
+      const upper = clusterStr.toUpperCase();
+      if (upper === "CC1") return "cc_1";
+      if (upper === "CC2") return "cc_2";
+      if (upper === "CC3") return "cc_3";
+      return clusterStr;
+    };
+    const getMobileSoglieForCluster = (clusterStr: string | undefined): { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number } | undefined => {
+      if (!tcMobile?.soglieCluster || !clusterStr) return undefined;
+      const key = normalizeClusterKey(clusterStr);
+      const vals = tcMobile.soglieCluster[key];
+      if (!vals || vals.length < 4) return undefined;
+      return { soglia1: vals[0], soglia2: vals[1], soglia3: vals[2], soglia4: vals[3] };
+    };
+    const getFissoSoglieForCluster = (clusterStr: string | undefined): { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number; soglia5?: number } | undefined => {
+      if (!tcFisso?.soglieCluster || !clusterStr) return undefined;
+      const key = normalizeClusterKey(clusterStr);
+      const vals = tcFisso.soglieCluster[key];
+      if (!vals || vals.length < 5) return undefined;
+      return { soglia1: vals[0], soglia2: vals[1], soglia3: vals[2], soglia4: vals[3], soglia5: vals[4] };
+    };
+    const effectiveMobileCategories = (() => {
+      const base = [...mobileCategories];
+      if (tcMobile?.puntiAttivazione) {
+        return base.map(cat => {
+          const override = tcMobile.puntiAttivazione![cat.type];
+          return override !== undefined ? { ...cat, punti: override } : cat;
+        });
+      }
+      return base;
+    })();
+
+    const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara, tcAssic?.puntiProdotto, tcAssic?.premiProdotto);
+    const protectaCalcMap = calcProtectaForAllPdv(mappedData, puntiVendita, tcProtecta?.gettoniProdotto);
+
+    const effectivePremiExtraGara: Record<string, number[]> = (() => {
+      const base = { ...PREMI_EXTRA_GARA };
+      if (tcExtraGara?.premiPerSoglia) {
+        for (const [key, val] of Object.entries(tcExtraGara.premiPerSoglia)) {
+          if (val) base[key as keyof typeof base] = val;
+        }
+      }
+      const overrides = garaCalcConfig.extraGaraIvaConfig?.premiPerSoglia;
+      if (overrides) {
+        for (const [key, val] of Object.entries(overrides)) {
+          if (val) base[key as keyof typeof base] = val;
+        }
+      }
+      return base;
+    })();
+
+    const extraGaraResults: ExtraGaraIvaRsResult[] = (() => {
+      const pvForExtraGara: PuntoVendita[] = puntiVendita.map(p => {
+        const garaPdv = garaPdvList.find(g => g.codicePos === p.codicePos);
+        return {
+          id: p.codicePos,
+          codicePos: p.codicePos,
+          nome: p.nome,
+          ragioneSociale: p.ragioneSociale,
+          calendar: p.calendar,
+          tipoPosizione: "strada" as const,
+          canale: "franchising" as const,
+          clusterMobile: (p.clusterMobile || "") as PuntoVendita["clusterMobile"],
+          clusterFisso: (p.clusterFisso || "") as PuntoVendita["clusterFisso"],
+          clusterCB: (p.clusterCB || "") as PuntoVendita["clusterCB"],
+          clusterPIva: (garaPdv?.clusterPIva || "") as PuntoVendita["clusterPIva"],
+          abilitaEnergia: p.abilitaEnergia ?? false,
+          abilitaAssicurazioni: p.abilitaAssicurazioni ?? false,
+        };
+      });
+
+      const mobileEnumValues = new Set(Object.values(MobileActivationType) as string[]);
+      const attivatoMobileByPos: Record<string, AttivatoMobileDettaglio[]> = {};
+      const attivatoFissoByPos: Record<string, AttivatoFissoRiga[]> = {};
+      const attivatoEnergiaByPos: Record<string, EnergiaAttivatoRiga[]> = {};
+      const attivatoAssicurazioniByPos: Record<string, AssicurazioniAttivatoRiga> = {};
+      const attivatoProtectaByPos: Record<string, ProtectaAttivatoRiga> = {};
+
+      for (const pdv of mappedData.pdvList) {
+        const mobileItems = pdv.items.filter(i => i.pista === "mobile" && mobileEnumValues.has(i.targetCategory));
+        if (mobileItems.length > 0) {
+          attivatoMobileByPos[pdv.codicePos] = mobileItems.map((it, idx) => ({
+            id: `b-${idx}`,
+            type: it.targetCategory as MobileActivationType,
+            pezzi: it.pezzi,
+          }));
+        }
+
+        const fissoItems = pdv.items.filter(i => i.pista === "fisso");
+        const fissoAddons = (pdv.addons || []).filter(a => a.pista === "fisso");
+        if (fissoItems.length > 0 || fissoAddons.length > 0) {
+          attivatoFissoByPos[pdv.codicePos] = [
+            ...fissoItems.map(it => ({
+              categoria: it.targetCategory as FissoCategoriaType,
+              pezzi: it.pezzi,
+            })),
+            ...fissoAddons.map(a => ({
+              categoria: a.targetCategory as FissoCategoriaType,
+              pezzi: a.occorrenze,
+            })),
+          ];
+        }
+
+        const energiaItems = pdv.items.filter(i => i.pista === "energia");
+        if (energiaItems.length > 0) {
+          attivatoEnergiaByPos[pdv.codicePos] = energiaItems.map((it, idx) => ({
+            id: `b-${idx}`,
+            category: it.targetCategory as EnergiaCategory,
+            pezzi: it.pezzi,
+          }));
+        }
+
+        const assicItems = pdv.items.filter(i => i.pista === "assicurazioni");
+        if (assicItems.length > 0) {
+          const riga: AssicurazioniAttivatoRiga = {
+            protezionePro: 0, casaFamigliaFull: 0, casaFamigliaPlus: 0, casaFamigliaStart: 0,
+            sportFamiglia: 0, sportIndividuale: 0, viaggiVacanze: 0, elettrodomestici: 0,
+            micioFido: 0, pagamentoAnnuale: 0, viaggioMondo: 0, viaggioMondoPremio: 0, reloadForever: 0,
+          };
+          for (const it of assicItems) {
+            const key = it.targetCategory as keyof AssicurazioniAttivatoRiga;
+            if (key in riga) riga[key] = it.pezzi;
+          }
+          attivatoAssicurazioniByPos[pdv.codicePos] = riga;
+        }
+
+        const protectaItems = pdv.items.filter(i => i.pista === "protecta");
+        if (protectaItems.length > 0) {
+          const riga = createEmptyProtectaAttivato();
+          for (const it of protectaItems) {
+            const key = it.targetCategory as keyof ProtectaAttivatoRiga;
+            if (key in riga) riga[key] = it.pezzi;
+          }
+          attivatoProtectaByPos[pdv.codicePos] = riga;
+        }
+      }
+
+      const mergedExtraGaraOverrides: ExtraGaraConfigOverrides = {
+        ...garaCalcConfig.extraGaraIvaConfig,
+      };
+      if (tcExtraGara) {
+        if (tcExtraGara.puntiAttivazione && !mergedExtraGaraOverrides.puntiAttivazione) {
+          mergedExtraGaraOverrides.puntiAttivazione = tcExtraGara.puntiAttivazione;
+        }
+        if (tcExtraGara.soglieMultipos && !mergedExtraGaraOverrides.soglieMultipos) {
+          mergedExtraGaraOverrides.soglieMultipos = tcExtraGara.soglieMultipos;
+        }
+        if (tcExtraGara.soglieMonopos && !mergedExtraGaraOverrides.soglieMonopos) {
+          mergedExtraGaraOverrides.soglieMonopos = tcExtraGara.soglieMonopos;
+        }
+        if (tcExtraGara.premiPerSoglia && !mergedExtraGaraOverrides.premiPerSoglia) {
+          mergedExtraGaraOverrides.premiPerSoglia = tcExtraGara.premiPerSoglia;
+        }
+      }
+
+      return calcolaExtraGaraIva({
+        puntiVendita: pvForExtraGara,
+        attivatoMobileByPos,
+        attivatoFissoByPos,
+        attivatoEnergiaByPos,
+        attivatoAssicurazioniByPos,
+        attivatoProtectaByPos,
+        configOverrides: mergedExtraGaraOverrides,
+        soglieOverridePerRS: garaCalcConfig.extraGaraIvaSogliePerRS,
+      });
+    })();
+
+    const stats: Array<{
+      pista: string;
+      label: string;
+      totalePezzi: number;
+      proiezionePezzi: number;
+      calc: PistaCalcResult;
+      calcProiezione: PistaCalcResult;
+      categories: Array<{ category: string; label: string; pezzi: number; canone: number; proiezione: number }>;
+      pdvBreakdown: Array<{
+        codicePos: string;
+        nomeNegozio: string;
+        ragioneSociale: string;
+        normalizedRS: string;
+        pezzi: number;
+        proiezione: number;
+        pdvCalc: PistaCalcResult;
+        categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
+      }>;
+      rsCalcBreakdown?: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: PistaSoglieRef }>;
+      pdvProjCalcMap?: Map<string, PistaCalcResult>;
+      soglieRef?: PistaSoglieRef;
+      thresholdMarkers?: TickerThresholdMarker[];
+    }> = [];
+
+    const pisteOrder: (keyof typeof PISTA_CONFIG)[] = ["mobile", "fisso", "energia", "assicurazioni", "partnership", "cb", "protecta", "extra_gara_iva"];
+
+    for (const pista of pisteOrder) {
+      if (pista === "extra_gara_iva") {
+        const totalPremio = extraGaraResults.reduce((s, r) => s + r.premioTotaleRS, 0);
+        const totalPezzi = extraGaraResults.reduce((s, r) => s + r.pezziTotaliRS, 0);
+        const totalPunti = extraGaraResults.reduce((s, r) => s + r.puntiTotaliRS, 0);
+        const bestSoglia = extraGaraResults.reduce((s, r) => Math.max(s, r.sogliaRaggiunta), 0);
+        const egUniformSoglieRef = (!isRSPerRS || extraGaraResults.length <= 1)
+          ? getUniformPistaSoglieRef(extraGaraResults.map((result) => result.soglie))
+          : undefined;
+        const egThresholdMarkers = thresholdMarkersFromSoglie(egUniformSoglieRef);
+        const proiezionePezziEG = workdayInfo.elapsedWorkingDays > 0
+          ? Math.round((totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+          : totalPezzi;
+        const proiezionePuntiEG = workdayInfo.elapsedWorkingDays > 0
+          ? totalPunti * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays
+          : totalPunti;
+
+        const egCategories: Array<{ category: string; label: string; pezzi: number; canone: number; proiezione: number }> = [];
+        const egCatTotals: Record<string, { pezzi: number; label: string }> = {};
+        for (const rsResult of extraGaraResults) {
+          for (const pdvR of rsResult.pdvResults) {
+            const addCat = (key: string, label: string, pezzi: number) => {
+              if (pezzi > 0) {
+                if (!egCatTotals[key]) egCatTotals[key] = { pezzi: 0, label };
+                egCatTotals[key].pezzi += pezzi;
+              }
+            };
+            addCat("worldStaff", "World/Staff", pdvR.pezziWorldStaff);
+            addCat("fullPlus", "Full Plus/Data 60-100", pdvR.pezziFullPlus);
+            addCat("flexSpecial", "Flex/Special/Data 10", pdvR.pezziFlexSpecial);
+            addCat("fissoPIva", "Fisso P.IVA", pdvR.pezziFissoPIva);
+            addCat("fritzBox", "FRITZ!Box", pdvR.pezziFritzBox);
+            addCat("luceGas", "Luce/Gas Business", pdvR.pezziLuceGas);
+            addCat("protezionePro", "Protezione Pro", pdvR.pezziProtezionePro);
+            addCat("negozioProtetti", "Negozio Protetti", pdvR.pezziNegozioProtetti);
+          }
+        }
+        for (const [key, val] of Object.entries(egCatTotals)) {
+          const proj = workdayInfo.elapsedWorkingDays > 0
+            ? Math.round((val.pezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays) : val.pezzi;
+          egCategories.push({ category: key, label: val.label, pezzi: val.pezzi, canone: 0, proiezione: proj });
+        }
+        egCategories.sort((a, b) => b.pezzi - a.pezzi);
+
+        const egPdvBreakdown = extraGaraResults.flatMap(rsResult =>
+          rsResult.pdvResults.filter(p => p.pezziTotali > 0).map(pdvR => {
+            const pdvProj = workdayInfo.elapsedWorkingDays > 0
+              ? Math.round((pdvR.pezziTotali / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays) : pdvR.pezziTotali;
+            return {
+              codicePos: pdvR.pdvCode,
+              nomeNegozio: pdvR.nome,
+              ragioneSociale: pdvR.ragioneSociale,
+              normalizedRS: normalizeRS(pdvR.ragioneSociale),
+              pezzi: pdvR.pezziTotali,
+              proiezione: pdvProj,
+              pdvCalc: {
+                premioStimato: pdvR.premioTotale,
+                puntiTotali: pdvR.puntiTotali,
+                sogliaRaggiunta: rsResult.sogliaRaggiunta,
+                sogliaLabel: sogliaToLabel(rsResult.sogliaRaggiunta, 4),
+              } as PistaCalcResult,
+              categories: [
+                { category: "worldStaff", label: "World/Staff", pezzi: pdvR.pezziWorldStaff, canone: 0 },
+                { category: "fullPlus", label: "Full Plus/Data 60-100", pezzi: pdvR.pezziFullPlus, canone: 0 },
+                { category: "flexSpecial", label: "Flex/Special/Data 10", pezzi: pdvR.pezziFlexSpecial, canone: 0 },
+                { category: "fissoPIva", label: "Fisso P.IVA", pezzi: pdvR.pezziFissoPIva, canone: 0 },
+                { category: "fritzBox", label: "FRITZ!Box", pezzi: pdvR.pezziFritzBox, canone: 0 },
+                { category: "luceGas", label: "Luce/Gas Business", pezzi: pdvR.pezziLuceGas, canone: 0 },
+                { category: "protezionePro", label: "Protezione Pro", pezzi: pdvR.pezziProtezionePro, canone: 0 },
+                { category: "negozioProtetti", label: "Negozio Protetti", pezzi: pdvR.pezziNegozioProtetti, canone: 0 },
+              ].filter(c => c.pezzi > 0),
+            };
+          })
+        ).sort((a, b) => b.pezzi - a.pezzi);
+
+        let egRsCalcBreakdown: typeof stats[0]["rsCalcBreakdown"] | undefined;
+        if (isRSPerRS && extraGaraResults.length > 0) {
+          egRsCalcBreakdown = new Map();
+          let egTotalPremioProj = 0;
+          for (const rsResult of extraGaraResults) {
+            const projPunti = workdayInfo.elapsedWorkingDays > 0
+              ? rsResult.puntiTotaliRS * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays
+              : rsResult.puntiTotaliRS;
+            const projPezzi = workdayInfo.elapsedWorkingDays > 0
+              ? Math.round(rsResult.pezziTotaliRS * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays)
+              : rsResult.pezziTotaliRS;
+            let projSoglia = 0;
+            if (rsResult.hasBPInRS && projPunti >= rsResult.soglie.s4) projSoglia = 4;
+            else if (projPunti >= rsResult.soglie.s3) projSoglia = 3;
+            else if (projPunti >= rsResult.soglie.s2) projSoglia = 2;
+            else if (projPunti >= rsResult.soglie.s1) projSoglia = 1;
+
+            let projPremio = 0;
+            for (const pdvR of rsResult.pdvResults) {
+              const clusterKey = pdvR.clusterPIva;
+              if (clusterKey && effectivePremiExtraGara[clusterKey]) {
+                const projPdvPezzi = workdayInfo.elapsedWorkingDays > 0
+                  ? Math.round(pdvR.pezziTotali * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays)
+                  : pdvR.pezziTotali;
+                projPremio += projPdvPezzi * (effectivePremiExtraGara[clusterKey][projSoglia] || 0);
+              }
+            }
+            egTotalPremioProj += projPremio;
+
+            egRsCalcBreakdown.set(normalizeRS(rsResult.ragioneSociale), {
+              displayName: rsResult.ragioneSociale,
+              premioAttuale: rsResult.premioTotaleRS,
+              premioProiettato: projPremio,
+              pezziAttuali: rsResult.pezziTotaliRS,
+              pezziProiezione: projPezzi,
+              sogliaAttuale: sogliaToLabel(rsResult.sogliaRaggiunta, 4),
+              sogliaProiezione: sogliaToLabel(projSoglia, 4),
+              puntiAttuali: rsResult.puntiTotaliRS,
+              puntiProiezione: projPunti,
+              soglieRef: rsResult.soglie,
+            });
+          }
+
+          const bestSogliaProj = extraGaraResults.reduce((s, r) => {
+            const pp = workdayInfo.elapsedWorkingDays > 0
+              ? r.puntiTotaliRS * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays : r.puntiTotaliRS;
+            let ps = 0;
+            if (r.hasBPInRS && pp >= r.soglie.s4) ps = 4;
+            else if (pp >= r.soglie.s3) ps = 3;
+            else if (pp >= r.soglie.s2) ps = 2;
+            else if (pp >= r.soglie.s1) ps = 1;
+            return Math.max(s, ps);
+          }, 0);
+
+          stats.push({
+            pista, label: PISTA_CONFIG[pista].label,
+            totalePezzi: totalPezzi, proiezionePezzi: proiezionePezziEG,
+            calc: { premioStimato: totalPremio, puntiTotali: totalPunti, sogliaRaggiunta: bestSoglia, sogliaLabel: sogliaToLabel(bestSoglia, 4) },
+            calcProiezione: { premioStimato: egTotalPremioProj, puntiTotali: proiezionePuntiEG, sogliaRaggiunta: bestSogliaProj, sogliaLabel: sogliaToLabel(bestSogliaProj, 4) },
+            categories: egCategories, pdvBreakdown: egPdvBreakdown, rsCalcBreakdown: egRsCalcBreakdown,
+            soglieRef: egUniformSoglieRef,
+            thresholdMarkers: egThresholdMarkers,
+          });
+        } else {
+          let projPremioNonRS = 0;
+          let projSogliaNonRS = 0;
+          for (const rsResult of extraGaraResults) {
+            const projPuntiRS = workdayInfo.elapsedWorkingDays > 0
+              ? rsResult.puntiTotaliRS * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays
+              : rsResult.puntiTotaliRS;
+            let pSoglia = 0;
+            if (rsResult.hasBPInRS && projPuntiRS >= rsResult.soglie.s4) pSoglia = 4;
+            else if (projPuntiRS >= rsResult.soglie.s3) pSoglia = 3;
+            else if (projPuntiRS >= rsResult.soglie.s2) pSoglia = 2;
+            else if (projPuntiRS >= rsResult.soglie.s1) pSoglia = 1;
+            if (pSoglia > projSogliaNonRS) projSogliaNonRS = pSoglia;
+
+            for (const pdvR of rsResult.pdvResults) {
+              const clusterKey = pdvR.clusterPIva;
+              if (clusterKey && effectivePremiExtraGara[clusterKey]) {
+                const projPdvPezzi = workdayInfo.elapsedWorkingDays > 0
+                  ? Math.round(pdvR.pezziTotali * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays)
+                  : pdvR.pezziTotali;
+                projPremioNonRS += projPdvPezzi * (effectivePremiExtraGara[clusterKey][pSoglia] || 0);
+              }
+            }
+          }
+
+          stats.push({
+            pista, label: PISTA_CONFIG[pista].label,
+            totalePezzi: totalPezzi, proiezionePezzi: proiezionePezziEG,
+            calc: { premioStimato: totalPremio, puntiTotali: totalPunti, sogliaRaggiunta: bestSoglia, sogliaLabel: sogliaToLabel(bestSoglia, 4) },
+            calcProiezione: { premioStimato: projPremioNonRS, puntiTotali: proiezionePuntiEG, sogliaRaggiunta: projSogliaNonRS, sogliaLabel: sogliaToLabel(projSogliaNonRS, 4) },
+            categories: egCategories, pdvBreakdown: egPdvBreakdown,
+            soglieRef: egUniformSoglieRef,
+            thresholdMarkers: egThresholdMarkers,
+          });
+        }
+        continue;
+      }
+
+      const pistaData = mappedData.totaliPerPista[pista];
+      const addonPistaData = mappedData.totaliAddonsPerPista?.[pista];
+      if (!pistaData && !addonPistaData) {
+        stats.push({
+          pista,
+          label: PISTA_CONFIG[pista].label,
+          totalePezzi: 0,
+          proiezionePezzi: 0,
+          calc: EMPTY_CALC,
+          calcProiezione: EMPTY_CALC,
+          categories: [],
+          pdvBreakdown: [],
+        });
+        continue;
+      }
+
+      const baseCategories = Object.values(pistaData || {})
+        .filter((cat: any) => !isCaringItem(pista, cat.targetCategory))
+        .map((cat: any) => {
+          const proiezione = workdayInfo.elapsedWorkingDays > 0
+            ? Math.round((cat.pezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+            : cat.pezzi;
+          return {
+            category: cat.targetCategory,
+            label: cat.targetLabel,
+            pezzi: cat.pezzi,
+            canone: cat.canone || 0,
+            proiezione,
+          };
+        });
+      const addonCategories = addonPistaData ? Object.values(addonPistaData).map((cat: any) => {
+        const proiezione = workdayInfo.elapsedWorkingDays > 0
+          ? Math.round((cat.occorrenze / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+          : cat.occorrenze;
+        return {
+          category: cat.targetCategory,
+          label: cat.targetLabel,
+          pezzi: cat.occorrenze,
+          canone: cat.canone || 0,
+          proiezione,
+        };
+      }) : [];
+      const categories = [...baseCategories, ...addonCategories].sort((a, b) => b.pezzi - a.pezzi);
+
+      const totalePezzi = pista === "mobile"
+        ? categories.filter(c => SIM_CONSUMER_CORE.has(c.category) || SIM_PIVA_CORE.has(c.category)).reduce((sum, c) => sum + c.pezzi, 0)
+        : pista === "fisso"
+          ? categories.filter(c => FISSO_CONSUMER_CORE.has(c.category) || FISSO_BUSINESS_CORE.has(c.category)).reduce((sum, c) => sum + c.pezzi, 0)
+          : categories.reduce((sum, c) => sum + c.pezzi, 0);
+      const proiezionePezzi = workdayInfo.elapsedWorkingDays > 0
+        ? Math.round((totalePezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+        : totalePezzi;
+
+      let aggregateCalc: PistaCalcResult = EMPTY_CALC;
+      let aggregateCalcProiezione: PistaCalcResult = EMPTY_CALC;
+      let pdvProjCalcMap: Map<string, PistaCalcResult> | undefined;
+
+      const pdvBreakdown = mappedData.pdvList
+        .map((pdv) => {
+          const pdvItems = pdv.items.filter((i) => i.pista === pista && !isCaringItem(i.pista, i.targetCategory));
+          const pdvPezzi = pista === "mobile"
+            ? pdvItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
+            : pista === "fisso"
+              ? pdvItems.filter(i => FISSO_CONSUMER_CORE.has(i.targetCategory) || FISSO_BUSINESS_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
+              : pdvItems.reduce((s, i) => s + i.pezzi, 0);
+          const pdvProiezione = workdayInfo.elapsedWorkingDays > 0
+            ? Math.round((pdvPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+            : pdvPezzi;
+
+          const pdvConfig = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
+          const pdvCalendar = pdvConfig?.calendar || DEFAULT_CALENDAR;
+          const pdvWorkday = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCalendar, new Date());
+
+          let pdvCalc = EMPTY_CALC;
+          const pdvRS = pdvConfig?.ragioneSociale || pdv.ragioneSociale;
+          if (pista === "mobile") {
+            const mConfig = getMobileConfigForPdv(pdv.codicePos, pdvRS);
+            const clusterMobile = pdvConfig?.clusterMobile;
+            pdvCalc = calcMobilePerPdv(pdvItems, mConfig, pdvCalendar, selYear, selMonth, effectiveMobileCategories, pdvWorkday, getMobileSoglieForCluster(clusterMobile), tcMobile?.moltiplicatoriCanone);
+          } else if (pista === "fisso") {
+            const fConfig = getFissoConfigForPdv(pdv.codicePos, pdvRS);
+            const cluster = clusterToNumber(pdvConfig?.clusterFisso);
+            pdvCalc = calcFissoPerPdv(pdvItems, fConfig, pdvCalendar, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(pdvConfig?.clusterFisso), tcFisso?.euroPerPezzo, pdv.addons);
+          } else if (pista === "energia") {
+            const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
+            pdvCalc = calcEnergiaPerPdv(pdvItems, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto, tcEnergia?.pistaBase, tcEnergia?.pistaDa4);
+          } else if (pista === "partnership") {
+            const pCfg = getPartnershipConfigForPdv(pdv.codicePos, pdvRS);
+            const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
+            pdvCalc = calcPartnershipPerPdv(pdvItems, prConfig, pdvWorkday.elapsedWorkingDays, pdv.codicePos, tcPartnership, pdvConfig?.clusterCB);
+          } else if (pista === "cb") {
+            const cbAddons = (pdv.addons || []).filter(a => a.pista === 'cb');
+            pdvCalc = calcCBFromItemsAndAddons(pdvItems, cbAddons, pdvConfig?.clusterCB);
+          } else if (pista === "assicurazioni") {
+            pdvCalc = assicCalcMap.get(pdv.codicePos) || EMPTY_CALC;
+          } else if (pista === "protecta") {
+            pdvCalc = protectaCalcMap.get(pdv.codicePos) || EMPTY_CALC;
+          }
+
+          const configuredRS = pdvConfig?.ragioneSociale || pdv.ragioneSociale;
+          const normalizedConfiguredRS = normalizeRS(configuredRS);
+
+          const pdvAddons = (pdv.addons || []).filter(a => a.pista === pista);
+          const addonAsCats = pdvAddons.map(a => ({ category: a.targetCategory, label: a.targetLabel, pezzi: a.occorrenze, canone: a.canone || 0 }));
+          return {
+            codicePos: pdv.codicePos,
+            nomeNegozio: pdv.nomeNegozio,
+            ragioneSociale: configuredRS,
+            normalizedRS: normalizedConfiguredRS,
+            pezzi: pdvPezzi,
+            proiezione: pdvProiezione,
+            pdvCalc,
+            categories: [
+              ...pdvItems.map((i) => ({ category: i.targetCategory, label: i.targetLabel, pezzi: i.pezzi, canone: i.canone || 0 })),
+              ...addonAsCats,
+            ],
+            addons: pdvAddons,
+          };
+        })
+        .filter((p) => p.pezzi > 0 || (p.addons && p.addons.length > 0))
+        .sort((a, b) => b.pezzi - a.pezzi);
+
+      let rsCalcBreakdownMap: Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }> | undefined;
+
+      if (pdvBreakdown.length > 0) {
+        const useRSAggregation = isRSPerRS && (pista === "mobile" || pista === "fisso" || pista === "partnership" || pista === "cb" || pista === "energia" || pista === "assicurazioni");
+
+        if (useRSAggregation) {
+          const rsGroupMap = new Map<string, typeof pdvBreakdown>();
+          for (const pdv of pdvBreakdown) {
+            const rsKey = normalizeRS(pdv.ragioneSociale || 'Senza RS');
+            if (!rsGroupMap.has(rsKey)) rsGroupMap.set(rsKey, []);
+            rsGroupMap.get(rsKey)!.push(pdv);
+          }
+
+          let totalPremio = 0;
+          let totalPunti = 0;
+          let bestSoglia = 0;
+          let totalPremioProj = 0;
+          let totalPuntiProj = 0;
+          let bestSogliaProj = 0;
+          rsCalcBreakdownMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; pezziAttuali: number; pezziProiezione: number; sogliaAttuale: string; sogliaProiezione: string; puntiAttuali: number; puntiProiezione: number; forecastTarget?: number; forecastGap?: number; soglieRef?: { s1: number; s2: number; s3: number; s4?: number; s5?: number } }>();
+
+          rsGroupMap.forEach((rsPdvs, rs) => {
+            const rsItems: AggregatedItem[] = [];
+            const rsAddonsRaw: AddonItem[] = [];
+            for (const pdv of rsPdvs) {
+              const pdvItems2 = pdv.categories.map(c => ({ pista, targetCategory: c.category, targetLabel: c.label, pezzi: c.pezzi, canone: c.canone || 0 }));
+              rsItems.push(...pdvItems2);
+              if (pdv.addons) rsAddonsRaw.push(...pdv.addons);
+            }
+            const mergedItems = new Map<string, AggregatedItem>();
+            for (const item of rsItems) {
+              const key = item.targetCategory;
+              if (mergedItems.has(key)) {
+                mergedItems.get(key)!.pezzi += item.pezzi;
+                mergedItems.get(key)!.canone += item.canone;
+              } else {
+                mergedItems.set(key, { ...item });
+              }
+            }
+            const aggregatedRSItems = Array.from(mergedItems.values());
+            const mergedAddons = new Map<string, AddonItem>();
+            for (const addon of rsAddonsRaw) {
+              const key = addon.targetCategory;
+              if (mergedAddons.has(key)) {
+                mergedAddons.get(key)!.occorrenze += addon.occorrenze;
+                mergedAddons.get(key)!.canone += addon.canone;
+              } else {
+                mergedAddons.set(key, { ...addon });
+              }
+            }
+            const aggregatedRSAddons = Array.from(mergedAddons.values());
+
+            const rsPezziAttuali = pista === "mobile"
+              ? aggregatedRSItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
+              : pista === "fisso"
+                ? aggregatedRSItems.filter(i => FISSO_CONSUMER_CORE.has(i.targetCategory) || FISSO_BUSINESS_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
+                : aggregatedRSItems.reduce((s, i) => s + i.pezzi, 0);
+
+            const firstPdvConfig = puntiVendita.find(p => p.codicePos === rsPdvs[0].codicePos);
+            const rsCalendar = firstPdvConfig?.calendar || DEFAULT_CALENDAR;
+            const rsWorkday = getWorkdayInfoForMonth(selYear, selMonth - 1, rsCalendar, new Date());
+
+            const rsPezziProiezione = rsWorkday.elapsedWorkingDays > 0
+              ? Math.round((rsPezziAttuali / rsWorkday.elapsedWorkingDays) * rsWorkday.totalWorkingDays)
+              : rsPezziAttuali;
+
+            let rsCalc = EMPTY_CALC;
+            if (pista === "mobile") {
+              const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
+              const rsClusterMobile = firstPdvConfig?.clusterMobile;
+              const mRsSoglie = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              const mobileSoglieOverride = mRsSoglie
+                ? { soglia1: mRsSoglie.soglia1, soglia2: mRsSoglie.soglia2, soglia3: mRsSoglie.soglia3, soglia4: mRsSoglie.soglia4 }
+                : getMobileSoglieForCluster(rsClusterMobile);
+              rsCalc = calcMobilePerPdv(aggregatedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, mobileSoglieOverride, tcMobile?.moltiplicatoriCanone);
+            } else if (pista === "fisso") {
+              const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
+              const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
+              const fRsSoglie = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              const fissoSoglieOverride = fRsSoglie
+                ? { soglia1: fRsSoglie.soglia1, soglia2: fRsSoglie.soglia2, soglia3: fRsSoglie.soglia3, soglia4: fRsSoglie.soglia4, soglia5: fRsSoglie.soglia5 }
+                : getFissoSoglieForCluster(firstPdvConfig?.clusterFisso);
+              rsCalc = calcFissoPerPdv(aggregatedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, fissoSoglieOverride, tcFisso?.euroPerPezzo, aggregatedRSAddons);
+            } else if (pista === "partnership") {
+              const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
+              const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
+              rsCalc = calcPartnershipPerPdv(aggregatedRSItems, prConfig, rsWorkday.elapsedWorkingDays, rsPdvs[0].codicePos, tcPartnership, firstPdvConfig?.clusterCB);
+            } else if (pista === "cb") {
+              rsCalc = calcCBFromItems(aggregatedRSItems, firstPdvConfig?.clusterCB);
+            } else if (pista === "energia") {
+              const rsEConf = energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              const rsEnergiaConfig: EnergiaConfig | undefined = rsEConf ? {
+                pdvInGara: rsEConf.pdvInGara,
+                targetNoMalus: rsEConf.targetNoMalus,
+                targetS1: rsEConf.targetS1,
+                targetS2: rsEConf.targetS2,
+                targetS3: rsEConf.targetS3,
+                premio: rsEConf.premio,
+                premioS1: rsEConf.premioS1,
+                premioS2: rsEConf.premioS2,
+                premioS3: rsEConf.premioS3,
+                pistaSoglia_S1: rsEConf.pistaSoglia_S1,
+                pistaSoglia_S2: rsEConf.pistaSoglia_S2,
+                pistaSoglia_S3: rsEConf.pistaSoglia_S3,
+                pistaSoglia_S4: rsEConf.pistaSoglia_S4,
+                pistaSoglia_S5: rsEConf.pistaSoglia_S5,
+              } : energiaConfig;
+              const rsNumPdv = rsEConf?.pdvInGara || rsPdvs.filter(p => {
+                const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
+                return pc?.abilitaEnergia;
+              }).length || 1;
+              rsCalc = calcEnergiaPerPdv(aggregatedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto, tcEnergia?.pistaBase, tcEnergia?.pistaDa4);
+              if (rsCalc.sogliaRaggiunta >= 1) {
+                const cfgE = rsEConf || energiaConfig;
+                const premioPerPdv = rsCalc.sogliaRaggiunta >= 3
+                  ? (cfgE?.premioS3 ?? cfgE?.premio ?? 1000)
+                  : rsCalc.sogliaRaggiunta >= 2
+                    ? (cfgE?.premioS2 ?? cfgE?.premio ?? 500)
+                    : (cfgE?.premioS1 ?? cfgE?.premio ?? 250);
+                rsCalc = { ...rsCalc, premioStimato: premioPerPdv * rsNumPdv };
+              }
+            } else if (pista === "assicurazioni") {
+              const rsAConf = assicurazioniRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              const rsAssicConfig: AssicurazioniConfig | undefined = rsAConf ? {
+                pdvInGara: rsAConf.pdvInGara,
+                targetNoMalus: rsAConf.targetNoMalus,
+                targetS1: rsAConf.targetS1,
+                targetS2: rsAConf.targetS2,
+                premio: rsAConf.premio,
+                premioS1: rsAConf.premioS1,
+                premioS2: rsAConf.premioS2,
+              } : assicConfig;
+              if (rsAssicConfig) {
+                let rsTotalPunti = 0;
+                for (const pdv of rsPdvs) {
+                  const pdvAssicCalc = assicCalcMap.get(pdv.codicePos);
+                  if (pdvAssicCalc) rsTotalPunti += pdvAssicCalc.puntiTotali;
+                }
+                const rsNumPdvAssic = rsAConf?.pdvInGara || rsPdvs.filter(p => {
+                  const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
+                  return pc?.abilitaAssicurazioni;
+                }).length || 1;
+                let rsSoglia = 0;
+                let rsPremio = 0;
+                const aS2Val = rsAssicConfig.premioS2 ?? rsAssicConfig.premio ?? 750;
+                const aS1Val = rsAssicConfig.premioS1 ?? rsAssicConfig.premio ?? 500;
+                if (rsTotalPunti >= rsAssicConfig.targetS2) { rsSoglia = 2; rsPremio = aS2Val * rsNumPdvAssic; }
+                else if (rsTotalPunti >= rsAssicConfig.targetS1) { rsSoglia = 1; rsPremio = aS1Val * rsNumPdvAssic; }
+                rsCalc = { premioStimato: rsPremio, puntiTotali: rsTotalPunti, sogliaRaggiunta: rsSoglia, sogliaLabel: sogliaToLabel(rsSoglia) };
+              }
+            }
+
+            totalPremio += rsCalc.premioStimato;
+            totalPunti += rsCalc.puntiTotali;
+            if (rsCalc.sogliaRaggiunta > bestSoglia) bestSoglia = rsCalc.sogliaRaggiunta;
+
+            const ratio = rsWorkday.elapsedWorkingDays > 0
+              ? rsWorkday.totalWorkingDays / rsWorkday.elapsedWorkingDays
+              : 1;
+            const projectedRSItems = aggregatedRSItems.map(item => {
+              return { ...item, pezzi: Math.round(item.pezzi * ratio), canone: item.canone * ratio };
+            });
+            const projectedRSAddons = aggregatedRSAddons.map(addon => ({
+              ...addon, occorrenze: Math.round(addon.occorrenze * ratio), canone: addon.canone * ratio,
+            }));
+
+            let rsProjCalc = EMPTY_CALC;
+            if (pista === "mobile") {
+              const mConfig = getMobileConfigForPdv(rsPdvs[0].codicePos, rs);
+              const rsClusterMobile2 = firstPdvConfig?.clusterMobile;
+              const mRsSoglie2 = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              const mobileSoglieOverride2 = mRsSoglie2
+                ? { soglia1: mRsSoglie2.soglia1, soglia2: mRsSoglie2.soglia2, soglia3: mRsSoglie2.soglia3, soglia4: mRsSoglie2.soglia4 }
+                : getMobileSoglieForCluster(rsClusterMobile2);
+              rsProjCalc = calcMobilePerPdv(projectedRSItems, mConfig, rsCalendar, selYear, selMonth, effectiveMobileCategories, rsWorkday, mobileSoglieOverride2, tcMobile?.moltiplicatoriCanone);
+            } else if (pista === "fisso") {
+              const fConfig = getFissoConfigForPdv(rsPdvs[0].codicePos, rs);
+              const cluster = clusterToNumber(firstPdvConfig?.clusterFisso);
+              const fRsSoglie2 = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              const fissoSoglieOverride2 = fRsSoglie2
+                ? { soglia1: fRsSoglie2.soglia1, soglia2: fRsSoglie2.soglia2, soglia3: fRsSoglie2.soglia3, soglia4: fRsSoglie2.soglia4, soglia5: fRsSoglie2.soglia5 }
+                : getFissoSoglieForCluster(firstPdvConfig?.clusterFisso);
+              rsProjCalc = calcFissoPerPdv(projectedRSItems, fConfig, rsCalendar, cluster, rsPdvs[0].codicePos, selYear, selMonth, rsWorkday, tcFisso?.gettoniContrattuali, fissoSoglieOverride2, tcFisso?.euroPerPezzo, projectedRSAddons);
+            } else if (pista === "partnership") {
+              const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
+              const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
+              rsProjCalc = calcPartnershipPerPdv(projectedRSItems, prConfig, rsWorkday.totalWorkingDays, rsPdvs[0].codicePos, tcPartnership, firstPdvConfig?.clusterCB);
+            } else if (pista === "cb") {
+              rsProjCalc = calcCBFromItems(projectedRSItems, firstPdvConfig?.clusterCB);
+            } else if (pista === "energia") {
+              const rsEConf = energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              const rsEnergiaConfig: EnergiaConfig | undefined = rsEConf ? {
+                pdvInGara: rsEConf.pdvInGara, targetNoMalus: rsEConf.targetNoMalus,
+                targetS1: rsEConf.targetS1, targetS2: rsEConf.targetS2, targetS3: rsEConf.targetS3,
+                premio: rsEConf.premio,
+                premioS1: rsEConf.premioS1, premioS2: rsEConf.premioS2, premioS3: rsEConf.premioS3,
+                pistaSoglia_S1: rsEConf.pistaSoglia_S1,
+                pistaSoglia_S2: rsEConf.pistaSoglia_S2, pistaSoglia_S3: rsEConf.pistaSoglia_S3,
+                pistaSoglia_S4: rsEConf.pistaSoglia_S4, pistaSoglia_S5: rsEConf.pistaSoglia_S5,
+              } : energiaConfig;
+              const rsNumPdv = rsEConf?.pdvInGara || rsPdvs.filter(p => {
+                const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
+                return pc?.abilitaEnergia;
+              }).length || 1;
+              rsProjCalc = calcEnergiaPerPdv(projectedRSItems, rsEnergiaConfig, rsPdvs[0].codicePos, true, rsNumPdv, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto, tcEnergia?.pistaBase, tcEnergia?.pistaDa4);
+              if (rsProjCalc.sogliaRaggiunta >= 1) {
+                const cfgEProj = rsEConf || energiaConfig;
+                const premioPerPdv = rsProjCalc.sogliaRaggiunta >= 3
+                  ? (cfgEProj?.premioS3 ?? cfgEProj?.premio ?? 1000)
+                  : rsProjCalc.sogliaRaggiunta >= 2
+                    ? (cfgEProj?.premioS2 ?? cfgEProj?.premio ?? 500)
+                    : (cfgEProj?.premioS1 ?? cfgEProj?.premio ?? 250);
+                rsProjCalc = { ...rsProjCalc, premioStimato: premioPerPdv * rsNumPdv };
+              }
+            } else if (pista === "assicurazioni") {
+              const rsAConfProj = assicurazioniRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              const rsAssicConfigProj: AssicurazioniConfig | undefined = rsAConfProj ? {
+                pdvInGara: rsAConfProj.pdvInGara, targetNoMalus: rsAConfProj.targetNoMalus,
+                targetS1: rsAConfProj.targetS1, targetS2: rsAConfProj.targetS2,
+                premio: rsAConfProj.premio, premioS1: rsAConfProj.premioS1, premioS2: rsAConfProj.premioS2,
+              } : assicConfig;
+              if (rsAssicConfigProj) {
+                const totalPuntiProj2 = rsCalc.puntiTotali > 0 && rsWorkday.elapsedWorkingDays > 0
+                  ? Math.round(rsCalc.puntiTotali * rsWorkday.totalWorkingDays / rsWorkday.elapsedWorkingDays) : rsCalc.puntiTotali;
+                const rsNumPdvAssicProj = rsAConfProj?.pdvInGara || rsPdvs.filter(p => {
+                  const pc = puntiVendita.find(pv => pv.codicePos === p.codicePos);
+                  return pc?.abilitaAssicurazioni;
+                }).length || 1;
+                let projSoglia = 0;
+                let projPremio = 0;
+                const projAS2 = rsAssicConfigProj.premioS2 ?? rsAssicConfigProj.premio ?? 750;
+                const projAS1 = rsAssicConfigProj.premioS1 ?? rsAssicConfigProj.premio ?? 500;
+                if (totalPuntiProj2 >= rsAssicConfigProj.targetS2) { projSoglia = 2; projPremio = projAS2 * rsNumPdvAssicProj; }
+                else if (totalPuntiProj2 >= rsAssicConfigProj.targetS1) { projSoglia = 1; projPremio = projAS1 * rsNumPdvAssicProj; }
+                rsProjCalc = { premioStimato: projPremio, puntiTotali: totalPuntiProj2, sogliaRaggiunta: projSoglia, sogliaLabel: sogliaToLabel(projSoglia) };
+              }
+            }
+            totalPremioProj += rsProjCalc.premioStimato;
+            totalPuntiProj += rsProjCalc.puntiTotali;
+            if (rsProjCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = rsProjCalc.sogliaRaggiunta;
+
+            let rsSoglieRef: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
+            if (pista === "mobile") {
+              const mSoglie = garaCalcConfig.pistaMobileRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              if (mSoglie) rsSoglieRef = { s1: mSoglie.soglia1, s2: mSoglie.soglia2, s3: mSoglie.soglia3, s4: mSoglie.soglia4 };
+            } else if (pista === "fisso") {
+              const fSoglie = garaCalcConfig.pistaFissoRSConfig?.sogliePerRS?.find(s => normalizeRS(s.ragioneSociale) === rs);
+              if (fSoglie) rsSoglieRef = { s1: fSoglie.soglia1, s2: fSoglie.soglia2, s3: fSoglie.soglia3, s4: fSoglie.soglia4, s5: fSoglie.soglia5 };
+            } else if (pista === "energia") {
+              const eConf = energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              if (eConf) rsSoglieRef = { s1: eConf.targetS1, s2: eConf.targetS2, s3: eConf.targetS3 };
+            } else if (pista === "assicurazioni") {
+              const aConf = assicurazioniRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
+              if (aConf) rsSoglieRef = { s1: aConf.targetS1, s2: aConf.targetS2, s3: 0 };
+            }
+
+            rsCalcBreakdownMap!.set(rs, {
+              displayName: rsPdvs[0].ragioneSociale || rs,
+              premioAttuale: rsCalc.premioStimato,
+              premioProiettato: rsProjCalc.premioStimato,
+              pezziAttuali: rsPezziAttuali,
+              pezziProiezione: rsPezziProiezione,
+              sogliaAttuale: rsCalc.sogliaLabel,
+              sogliaProiezione: rsProjCalc.sogliaLabel,
+              puntiAttuali: rsCalc.puntiTotali,
+              puntiProiezione: rsProjCalc.puntiTotali,
+              forecastTarget: rsCalc.forecastTarget,
+              forecastGap: rsCalc.forecastGap,
+              soglieRef: rsSoglieRef,
+            });
+          });
+
+          aggregateCalc = {
+            premioStimato: totalPremio,
+            puntiTotali: totalPunti,
+            sogliaRaggiunta: bestSoglia,
+            sogliaLabel: sogliaToLabel(bestSoglia),
+          };
+          aggregateCalcProiezione = {
+            premioStimato: totalPremioProj,
+            puntiTotali: totalPuntiProj,
+            sogliaRaggiunta: bestSogliaProj,
+            sogliaLabel: sogliaToLabel(bestSogliaProj),
+          };
+        } else {
+          let totalPremio = 0;
+          let totalPunti = 0;
+          let bestSoglia = 0;
+          let totalTarget = 0;
+          let totalGap = 0;
+          let hasTarget = false;
+          for (const pdv of pdvBreakdown) {
+            totalPremio += pdv.pdvCalc.premioStimato;
+            totalPunti += pdv.pdvCalc.puntiTotali;
+            if (pdv.pdvCalc.sogliaRaggiunta > bestSoglia) bestSoglia = pdv.pdvCalc.sogliaRaggiunta;
+            if (pdv.pdvCalc.forecastTarget) {
+              hasTarget = true;
+              totalTarget += pdv.pdvCalc.forecastTarget;
+              totalGap += pdv.pdvCalc.forecastGap ?? 0;
+            }
+          }
+
+          if (pista === "energia" && energiaConfig) {
+            let aggSoglia = 0;
+            const eS1 = (energiaConfig.premioS1 ?? energiaConfig.premio ?? 250) * energiaConfig.pdvInGara;
+            const eS2 = (energiaConfig.premioS2 ?? energiaConfig.premio ?? 500) * energiaConfig.pdvInGara;
+            const eS3 = (energiaConfig.premioS3 ?? energiaConfig.premio ?? 1000) * energiaConfig.pdvInGara;
+            if (totalPunti >= energiaConfig.targetS3) { aggSoglia = 3; totalPremio = eS3; }
+            else if (totalPunti >= energiaConfig.targetS2) { aggSoglia = 2; totalPremio = eS2; }
+            else if (totalPunti >= energiaConfig.targetS1) { aggSoglia = 1; totalPremio = eS1; }
+            bestSoglia = aggSoglia;
+          }
+          if (pista === "assicurazioni" && assicConfig) {
+            let aggSoglia = 0;
+            const aS1 = (assicConfig.premioS1 ?? assicConfig.premio ?? 500) * assicConfig.pdvInGara;
+            const aS2 = (assicConfig.premioS2 ?? assicConfig.premio ?? 750) * assicConfig.pdvInGara;
+            if (totalPunti >= assicConfig.targetS2) { aggSoglia = 2; totalPremio = aS2; }
+            else if (totalPunti >= assicConfig.targetS1) { aggSoglia = 1; totalPremio = aS1; }
+            bestSoglia = aggSoglia;
+          }
+
+          aggregateCalc = {
+            premioStimato: totalPremio,
+            puntiTotali: totalPunti,
+            sogliaRaggiunta: bestSoglia,
+            sogliaLabel: sogliaToLabel(bestSoglia),
+            forecastTarget: hasTarget ? totalTarget : undefined,
+            forecastGap: hasTarget ? totalGap : undefined,
+          };
+
+          const projItems = pdvBreakdown.map((pdv) => {
+            const pdvConfig2 = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
+            const pdvCal = pdvConfig2?.calendar || DEFAULT_CALENDAR;
+            const pdvWd = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCal, new Date());
+            const projRatio = pdvWd.elapsedWorkingDays > 0
+              ? pdvWd.totalWorkingDays / pdvWd.elapsedWorkingDays
+              : 1;
+            const projectedItems: AggregatedItem[] = pdv.categories.map((c) => {
+              return { pista, targetCategory: c.category, targetLabel: c.label, pezzi: Math.round(c.pezzi * projRatio), canone: (c.canone || 0) * projRatio };
+            });
+            const projectedAddons: AddonItem[] = (pdv.addons || []).map(a => ({
+              ...a, occorrenze: Math.round(a.occorrenze * projRatio), canone: a.canone * projRatio,
+            }));
+            return { ...pdv, items: projectedItems, addons: projectedAddons };
+          });
+
+          let totalPremioProj = 0;
+          let totalPuntiProj = 0;
+          let bestSogliaProj = 0;
+          const pdvProjCalcLocal = new Map<string, PistaCalcResult>();
+          for (const pdv of projItems) {
+            const pdvConfig3 = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
+            const pdvCalendar3 = pdvConfig3?.calendar || DEFAULT_CALENDAR;
+            const pdvWorkday3 = getWorkdayInfoForMonth(selYear, selMonth - 1, pdvCalendar3, new Date());
+            let projCalc = EMPTY_CALC;
+            const projRS = pdvConfig3?.ragioneSociale || pdv.ragioneSociale;
+            if (pista === "mobile") {
+              const mConfig = getMobileConfigForPdv(pdv.codicePos, projRS);
+              const clusterMobile3 = pdvConfig3?.clusterMobile;
+              projCalc = calcMobilePerPdv(pdv.items, mConfig, pdvCalendar3, selYear, selMonth, effectiveMobileCategories, pdvWorkday3, getMobileSoglieForCluster(clusterMobile3), tcMobile?.moltiplicatoriCanone);
+            } else if (pista === "fisso") {
+              const fConfig = getFissoConfigForPdv(pdv.codicePos, projRS);
+              const cluster = clusterToNumber(pdvConfig3?.clusterFisso);
+              projCalc = calcFissoPerPdv(pdv.items, fConfig, pdvCalendar3, cluster, pdv.codicePos, selYear, selMonth, pdvWorkday3, tcFisso?.gettoniContrattuali, getFissoSoglieForCluster(pdvConfig3?.clusterFisso), tcFisso?.euroPerPezzo, pdv.addons);
+            } else if (pista === "energia") {
+              const isInGara = energiaPdvInGara.some((e) => (e.codicePos === pdv.codicePos || e.pdvId === pdv.codicePos) && e.isInGara);
+              projCalc = calcEnergiaPerPdv(pdv.items, energiaConfig, pdv.codicePos, isInGara, numPdvInGaraEnergia, tcEnergia?.compensiBase, undefined, tcEnergia?.bonusPerContratto, tcEnergia?.pistaBase, tcEnergia?.pistaDa4);
+            } else if (pista === "partnership") {
+              const pCfg = getPartnershipConfigForPdv(pdv.codicePos, projRS);
+              const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
+              projCalc = calcPartnershipPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos, tcPartnership, pdvConfig3?.clusterCB);
+            } else if (pista === "cb") {
+              projCalc = calcCBFromItems(pdv.items, pdvConfig3?.clusterCB);
+            } else if (pista === "assicurazioni" || pista === "protecta") {
+              projCalc = pdv.pdvCalc;
+            }
+            totalPremioProj += projCalc.premioStimato;
+            totalPuntiProj += projCalc.puntiTotali;
+            if (projCalc.sogliaRaggiunta > bestSogliaProj) bestSogliaProj = projCalc.sogliaRaggiunta;
+            pdvProjCalcLocal.set(pdv.codicePos, projCalc);
+          }
+          pdvProjCalcMap = pdvProjCalcLocal;
+
+          if (pista === "energia" && energiaConfig) {
+            let aggSogliaProj = 0;
+            const projES1 = (energiaConfig.premioS1 ?? energiaConfig.premio ?? 250) * energiaConfig.pdvInGara;
+            const projES2 = (energiaConfig.premioS2 ?? energiaConfig.premio ?? 500) * energiaConfig.pdvInGara;
+            const projES3 = (energiaConfig.premioS3 ?? energiaConfig.premio ?? 1000) * energiaConfig.pdvInGara;
+            totalPremioProj = 0;
+            if (totalPuntiProj >= energiaConfig.targetS3) { aggSogliaProj = 3; totalPremioProj = projES3; }
+            else if (totalPuntiProj >= energiaConfig.targetS2) { aggSogliaProj = 2; totalPremioProj = projES2; }
+            else if (totalPuntiProj >= energiaConfig.targetS1) { aggSogliaProj = 1; totalPremioProj = projES1; }
+            bestSogliaProj = aggSogliaProj;
+          }
+          if (pista === "assicurazioni" && assicConfig) {
+            let aggSogliaProj = 0;
+            const projAS1 = (assicConfig.premioS1 ?? assicConfig.premio ?? 500) * assicConfig.pdvInGara;
+            const projAS2 = (assicConfig.premioS2 ?? assicConfig.premio ?? 750) * assicConfig.pdvInGara;
+            totalPremioProj = 0;
+            if (totalPuntiProj >= assicConfig.targetS2) { aggSogliaProj = 2; totalPremioProj = projAS2; }
+            else if (totalPuntiProj >= assicConfig.targetS1) { aggSogliaProj = 1; totalPremioProj = projAS1; }
+            bestSogliaProj = aggSogliaProj;
+          }
+
+          aggregateCalcProiezione = {
+            premioStimato: totalPremioProj,
+            puntiTotali: totalPuntiProj,
+            sogliaRaggiunta: bestSogliaProj,
+            sogliaLabel: sogliaToLabel(bestSogliaProj),
+          };
+        }
+      }
+
+      const rsCalcBreakdown = (rsCalcBreakdownMap && rsCalcBreakdownMap.size > 0) ? rsCalcBreakdownMap : undefined;
+
+      const hasMultipleRsBreakdown = (rsCalcBreakdown?.size ?? 0) > 1;
+      let pistaSoglieRef: PistaSoglieRef | undefined;
+      if (!hasMultipleRsBreakdown) {
+        const singleRsSoglieRef = rsCalcBreakdown?.size === 1
+          ? [...rsCalcBreakdown.values()][0]?.soglieRef
+          : undefined;
+
+        if (singleRsSoglieRef) {
+          pistaSoglieRef = singleRsSoglieRef;
+        } else if (pista === "mobile") {
+          const refs = pdvBreakdown.map((pdv) => {
+            const config = getMobileConfigForPdv(pdv.codicePos, pdv.ragioneSociale);
+            if (!config) return undefined;
+            const pdvConfig = puntiVendita.find((item) => item.codicePos === pdv.codicePos);
+            const override = getMobileSoglieForCluster(pdvConfig?.clusterMobile);
+            return {
+              s1: override?.soglia1 ?? config.soglia1,
+              s2: override?.soglia2 ?? config.soglia2,
+              s3: override?.soglia3 ?? config.soglia3,
+              s4: override?.soglia4 ?? config.soglia4,
+            };
+          });
+          pistaSoglieRef = getUniformPistaSoglieRef(refs);
+        } else if (pista === "fisso") {
+          const refs = pdvBreakdown.map((pdv) => {
+            const config = getFissoConfigForPdv(pdv.codicePos, pdv.ragioneSociale);
+            if (!config) return undefined;
+            const pdvConfig = puntiVendita.find((item) => item.codicePos === pdv.codicePos);
+            const override = getFissoSoglieForCluster(pdvConfig?.clusterFisso);
+            return {
+              s1: override?.soglia1 ?? config.soglia1,
+              s2: override?.soglia2 ?? config.soglia2,
+              s3: override?.soglia3 ?? config.soglia3,
+              s4: override?.soglia4 ?? config.soglia4,
+              s5: override?.soglia5 ?? config.soglia5,
+            };
+          });
+          pistaSoglieRef = getUniformPistaSoglieRef(refs);
+        } else if (pista === "energia" && energiaConfig) {
+          pistaSoglieRef = { s1: energiaConfig.targetS1, s2: energiaConfig.targetS2, s3: energiaConfig.targetS3 };
+        } else if (pista === "assicurazioni" && assicConfig) {
+          pistaSoglieRef = { s1: assicConfig.targetS1, s2: assicConfig.targetS2, s3: 0 };
+        }
+      }
+
+      let pistaThresholdMarkers = thresholdMarkersFromSoglie(pistaSoglieRef);
+      if (!hasMultipleRsBreakdown && pista === "partnership") {
+        pistaThresholdMarkers = getUniformThresholdMarkers(
+          pdvBreakdown.map((pdv) => {
+            const config = getPartnershipConfigForPdv(pdv.codicePos, pdv.ragioneSociale);
+            if (!config) return undefined;
+            return [
+              { label: "80%", value: config.config.target80 },
+              { label: "100%", value: config.config.target100 },
+            ];
+          }),
+        );
+      }
+
+      stats.push({
+        pista,
+        label: PISTA_CONFIG[pista].label,
+        totalePezzi,
+        proiezionePezzi,
+        calc: aggregateCalc,
+        calcProiezione: aggregateCalcProiezione,
+        categories,
+        pdvBreakdown,
+        rsCalcBreakdown,
+        pdvProjCalcMap,
+        soglieRef: pistaSoglieRef,
+        thresholdMarkers: pistaThresholdMarkers,
+      });
+    }
+
+    return stats;
+  }, [mappedData, workdayInfo, garaCalcConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear, orgSystemTcDefaults]);
+
+  // Task #289: "coupon caring" offers are excluded from CB totals; they are
+  // shown separately here (pezzi only, no premio/points) broken down per PDV
+  // and per RS.
+  const caringStats = useMemo(() => {
+    const perPdv: Array<{ codicePos: string; nomeNegozio: string; ragioneSociale: string; pezzi: number }> = [];
+    const rsMap = new Map<string, { ragioneSociale: string; pezzi: number }>();
+    let totale = 0;
+    if (!mappedData) return { totale, perPdv, perRs: [] as Array<{ ragioneSociale: string; pezzi: number }> };
+    const puntiVendita = puntiVenditaFromGara;
+    for (const pdv of mappedData.pdvList) {
+      const pezzi = pdv.items
+        .filter((i) => isCaringItem(i.pista, i.targetCategory))
+        .reduce((s, i) => s + i.pezzi, 0);
+      if (pezzi <= 0) continue;
+      const pdvConfig = puntiVendita.find((p) => p.codicePos === pdv.codicePos);
+      const ragioneSociale = pdvConfig?.ragioneSociale || pdv.ragioneSociale || "N/D";
+      perPdv.push({ codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio, ragioneSociale, pezzi });
+      const rsKey = normalizeRS(ragioneSociale);
+      const existing = rsMap.get(rsKey);
+      if (existing) existing.pezzi += pezzi;
+      else rsMap.set(rsKey, { ragioneSociale, pezzi });
+      totale += pezzi;
+    }
+    perPdv.sort((a, b) => b.pezzi - a.pezzi);
+    const perRs = Array.from(rsMap.values()).sort((a, b) => b.pezzi - a.pezzi);
+    return { totale, perPdv, perRs };
+  }, [mappedData, puntiVenditaFromGara]);
+
+  // Task #392 — colonne extra della Tabella PDV × Pista (vista Pezzi):
+  // IVA (pezzi P.IVA), CB (solo cambi piano), Telefoni, € Accessori/Servizi
+  // (netto IVA ÷1.22, coerente col resto della dashboard e col report
+  // Telegram). Stessa fonte dati (mappedData, quindi stesse esclusioni
+  // annullate/filtri gara) e stessa proiezione a giorni lavorativi.
+  const pezziExtraByPdv = useMemo(() => {
+    const map = new Map<string, PezziExtraPdvEntry>();
+    if (!mappedData || garaConfigMissing) return map;
+    const projInt = (v: number) => workdayInfo.elapsedWorkingDays > 0
+      ? Math.round((v / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+      : v;
+    const projEuro = (v: number) => workdayInfo.elapsedWorkingDays > 0
+      ? (v / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays
+      : v;
+    for (const pdv of mappedData.pdvList) {
+      const pdvConfig = puntiVenditaFromGara.find((p) => p.codicePos === pdv.codicePos);
+      const iva = pdv.pezziIva ?? 0;
+      const cb = pdv.cbCambiPiano ?? 0;
+      const tel = pdv.telefoni ?? 0;
+      const acc = nettoIva(pdv.accessori?.importo ?? 0);
+      const srv = nettoIva(pdv.servizi?.importo ?? 0);
+      map.set(pdv.codicePos, {
+        ragioneSociale: pdvConfig?.ragioneSociale || pdv.ragioneSociale || 'Senza RS',
+        nomeNegozio: pdv.nomeNegozio,
+        cells: {
+          iva: { att: iva, proi: projInt(iva) },
+          cb: { att: cb, proi: projInt(cb) },
+          telefoni: { att: tel, proi: projInt(tel) },
+          acc_euro: { att: acc, proi: projEuro(acc) },
+          srv_euro: { att: srv, proi: projEuro(srv) },
+        },
+      });
+    }
+    return map;
+  }, [mappedData, garaConfigMissing, workdayInfo, puntiVenditaFromGara]);
+
+  // KPI di testata: € Incentivi = premio gara attuale, cioè la somma dei
+  // premi per pista e non il fatturato lordo. Telefoni, € Accessori e
+  // € Servizi (netto IVA ÷1.22) usano invece proiezioni lineari sui giorni
+  // lavorativi.
+  const headerKpi = useMemo(() => {
+    const proj = (v: number) => workdayInfo.elapsedWorkingDays > 0
+      ? (v / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays
+      : v;
+    let telefoni = 0;
+    let accessori = 0;
+    let servizi = 0;
+    for (const pdv of mappedData?.pdvList ?? []) {
+      telefoni += pdv.telefoni ?? 0;
+      accessori += pdv.accessori?.importo ?? 0;
+      servizi += pdv.servizi?.importo ?? 0;
+    }
+    const actual = pistaStats.reduce((s, p) => s + p.calc.premioStimato, 0);
+    const actualProj = pistaStats.reduce((s, p) => s + p.calcProiezione.premioStimato, 0);
+    return {
+      actual, actualProj,
+      telefoni, telefoniProj: Math.round(proj(telefoni)),
+      accessori: nettoIva(accessori), accessoriProj: proj(nettoIva(accessori)),
+      servizi: nettoIva(servizi), serviziProj: proj(nettoIva(servizi)),
+    };
+  }, [mappedData, workdayInfo, pistaStats]);
+
+  const premioPerRS = useMemo(() => {
+    if (!pistaStats.length || garaConfigMissing) return [] as Array<{ displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>;
+    const isRSPerRS = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
+    if (!isRSPerRS) return [];
+
+    const rsMap = new Map<string, { displayName: string; premioAttuale: number; premioProiettato: number; dettaglio: Array<{ pista: string; label: string; premioAttuale: number; premioProiettato: number }> }>();
+
+    for (const pista of pistaStats) {
+      if (!pista.rsCalcBreakdown) continue;
+
+      pista.rsCalcBreakdown.forEach((rsData, rsKey) => {
+        if (!rsMap.has(rsKey)) {
+          rsMap.set(rsKey, { displayName: rsData.displayName, premioAttuale: 0, premioProiettato: 0, dettaglio: [] });
+        }
+        const entry = rsMap.get(rsKey)!;
+        entry.premioAttuale += rsData.premioAttuale;
+        entry.premioProiettato += rsData.premioProiettato;
+        entry.dettaglio.push({
+          pista: pista.pista,
+          label: pista.label,
+          premioAttuale: rsData.premioAttuale,
+          premioProiettato: rsData.premioProiettato,
+        });
+      });
+    }
+
+    return Array.from(rsMap.values()).sort((a, b) => b.premioAttuale - a.premioAttuale);
+  }, [pistaStats, garaCalcConfig, garaConfigMissing]);
+
+  const isLoading = loadingMapped || loadingConfig;
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-transparent" data-testid="dashboard-gara-reale">
+      <AppNavbar title="MyStoreDesk">
+        <Select value={selectedPeriod} onValueChange={(v) => { setSelectedPeriod(v); setSelectedConfigId(""); }} data-testid="select-period">
+          <SelectTrigger className="w-[140px] sm:w-[200px] text-xs sm:text-sm" data-testid="select-period-trigger">
+            <Calendar className="h-4 w-4 mr-1 sm:mr-2 shrink-0" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {monthOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value} data-testid={`select-period-${opt.value}`}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {configList && configList.length > 0 && (
+          <Select value={effectiveConfigId} onValueChange={setSelectedConfigId} data-testid="select-config">
+            <SelectTrigger className="w-[140px] sm:w-[220px] text-xs sm:text-sm" data-testid="select-config-trigger">
+              <Settings className="h-4 w-4 mr-1 sm:mr-2 shrink-0" />
+              <SelectValue placeholder="Config" />
+            </SelectTrigger>
+            <SelectContent>
+              {configList.map((c) => (
+                <SelectItem key={c.id} value={c.id} data-testid={`select-config-${c.id}`}>
+                  {c.name || 'Senza nome'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isRefreshing}
+          data-testid="button-refresh-dashboard"
+          onClick={async () => {
+            setIsRefreshing(true);
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear] }),
+              queryClient.invalidateQueries({ queryKey: ["/api/gara-config", selMonth, selYear, effectiveConfigId] }),
+              queryClient.invalidateQueries({ queryKey: ["/api/gara-config/list", selMonth, selYear] }),
+            ]);
+            const startDate = `${selYear}-${String(selMonth).padStart(2, "0")}-01`;
+            const lastDay = new Date(selYear, selMonth, 0).getDate();
+            const endDate = `${selYear}-${String(selMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+            fetch(apiUrl("/api/bisuite-fetch"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ start_date: startDate, end_date: endDate }),
+            }).then(() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear] });
+            }).catch(() => {});
+            setIsRefreshing(false);
+          }}
+        >
+          <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">Aggiorna</span>
+        </Button>
+      </AppNavbar>
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
+
+        {isLoading ? (
+          <div className="space-y-4" data-testid="loading-state">
+            <KpiCardsSkeleton />
+            <ChartSkeleton />
+            <DataTableSkeleton rows={8} columns={6} />
+          </div>
+        ) : garaConfigMissing ? (
+          <Card data-testid="card-no-gara-config">
+            <CardContent className="py-12 text-center">
+              <Trophy className="h-12 w-12 mx-auto text-amber-500 mb-4" />
+              <p className="text-lg font-medium">Configurazione Gara mancante</p>
+              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1 mb-4">
+                Non esiste una configurazione gara per il mese selezionato. Configura i PDV, cluster e calendari per visualizzare la dashboard.
+              </p>
+              <Button
+                onClick={() => setLocation('/configurazione-gara')}
+                data-testid="button-goto-config-gara"
+              >
+                <Trophy className="h-4 w-4 mr-2" />
+                Vai alla Configurazione Gara
+              </Button>
+            </CardContent>
+          </Card>
+        ) : !mappedData ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-4" />
+              <p className="text-lg font-medium" data-testid="text-no-data">Nessun dato disponibile</p>
+              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Importa le vendite da BiSuite per visualizzare la dashboard</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {mappedData.latestSaleDate && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5" data-testid="text-latest-sale-info">
+                <BarChart3 className="h-4 w-4" />
+                Dati aggiornati al: <span className="font-semibold text-gray-700 dark:text-gray-200">{new Date(mappedData.latestSaleDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+              </div>
+            )}
+            {mappedData.inGaraOnly && mappedData.calendarsAvailable && (
+              <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 -mt-1" data-testid="text-in-gara-info">
+                <Calendar className="h-3.5 w-3.5" />
+                <span>
+                  Solo vendite in giorni di gara: <span className="font-semibold text-gray-700 dark:text-gray-200">{mappedData.totalSales.toLocaleString('it-IT')}</span>
+                  {typeof mappedData.totalSalesUnfiltered === 'number' && (
+                    <> / {mappedData.totalSalesUnfiltered.toLocaleString('it-IT')}</>
+                  )}
+                  {(mappedData.salesExcludedOutOfGara ?? 0) > 0 && (
+                    <> — escluse <span className="font-semibold text-gray-700 dark:text-gray-200">{mappedData.salesExcludedOutOfGara!.toLocaleString('it-IT')}</span> fuori giornata gara</>
+                  )}
+                </span>
+              </div>
+            )}
+            {mappedData.inGaraOnly && !mappedData.calendarsAvailable && (
+              <div className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5 -mt-1" data-testid="text-no-calendar-info">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>Nessun calendario PDV configurato in gara — vengono mostrate tutte le vendite del mese.</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-4">
+              {([
+                { key: 'actual', label: '€ Incentivi', icon: Euro, value: headerKpi.actual, proj: headerKpi.actualProj, euro: true },
+                { key: 'telefoni', label: 'Telefoni', icon: Smartphone, value: headerKpi.telefoni, proj: headerKpi.telefoniProj, euro: false },
+                { key: 'accessori', label: '€ Accessori', icon: Headphones, value: headerKpi.accessori, proj: headerKpi.accessoriProj, euro: true },
+                { key: 'servizi', label: '€ Servizi', icon: Wrench, value: headerKpi.servizi, proj: headerKpi.serviziProj, euro: true },
+              ] as const).map((kpi) => {
+                const Icon = kpi.icon;
+                const fmt = (v: number) => kpi.euro
+                  ? `${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+                  : v.toLocaleString('it-IT');
+                return (
+                  <Card key={kpi.key} data-testid={`card-kpi-${kpi.key}`}>
+                    <CardContent className="p-4 sm:py-5 sm:px-5 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[11px] sm:text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-1 truncate" data-testid={`label-kpi-${kpi.key}`}>{kpi.label}</div>
+                        <div className="text-xl sm:text-2xl font-bold tracking-tight tabular-nums truncate" data-testid={`text-kpi-${kpi.key}`}>{fmt(kpi.value)}</div>
+                        <div className="text-xs sm:text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums truncate" data-testid={`text-kpi-${kpi.key}-proj`}>
+                          {fmt(kpi.proj)} <span className="font-normal text-gray-500 dark:text-slate-400">proiez.</span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 h-11 w-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            <Card data-testid="card-workday-info">
+              <CardContent className="px-4 py-3 sm:py-3.5 sm:px-6">
+                <div className="flex items-center gap-3 sm:gap-8 text-[11px] sm:text-sm flex-wrap">
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-gray-400 dark:text-slate-500 shrink-0" />
+                    <span className="text-gray-500 dark:text-slate-400 hidden sm:inline">Giorni lavorativi:</span>
+                    <span className="text-gray-500 dark:text-slate-400 sm:hidden">GG:</span>
+                    <span className="font-medium" data-testid="text-elapsed-days">{workdayInfo.elapsedWorkingDays}</span>
+                    <span className="text-gray-400 dark:text-slate-500">/ {workdayInfo.totalWorkingDays}</span>
+                  </span>
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <span className="text-gray-500 dark:text-slate-400 hidden sm:inline">Rimanenti:</span>
+                    <span className="text-gray-500 dark:text-slate-400 sm:hidden">Rim:</span>
+                    <span className="font-medium" data-testid="text-remaining-days">{workdayInfo.remainingWorkingDays}</span>
+                  </span>
+                  <span className="flex items-center gap-1 sm:gap-1.5">
+                    <Progress
+                      value={workdayInfo.totalWorkingDays > 0 ? (workdayInfo.elapsedWorkingDays / workdayInfo.totalWorkingDays) * 100 : 0}
+                      className="w-16 sm:w-24 h-2"
+                    />
+                    <span className="font-medium" data-testid="text-progress-pct">
+                      {workdayInfo.totalWorkingDays > 0 ? Math.round((workdayInfo.elapsedWorkingDays / workdayInfo.totalWorkingDays) * 100) : 0}%
+                    </span>
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Task #424 — ticker verticale stile vetrina W3 */}
+            <PistaTicker stats={pistaStats} />
+
+            {premioPerRS.length > 0 && (
+              <PremioPerRsPdfExport premioPerRS={premioPerRS} orgId={orgId} mese={selMonth} anno={selYear} />
+            )}
+
+            {premioPerRS.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="premio-per-rs-summary">
+                {premioPerRS.map((rs) => (
+                  <Card key={rs.displayName} className="border-l-4 border-l-green-500" data-testid={`card-premio-rs-${rs.displayName}`}>
+                    <CardContent className="py-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Trophy className="h-4 w-4 text-amber-500" />
+                          <span className="font-semibold text-sm">{rs.displayName}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-green-700 dark:text-green-400" data-testid={`text-premio-totale-rs-${rs.displayName}`}>
+                            {formatEuro(rs.premioAttuale)}
+                          </div>
+                          <div className="text-sm text-gray-500 dark:text-slate-400">Premio attuale</div>
+                          {rs.premioProiettato > 0 && (
+                            <div className="text-sm mt-0.5">
+                              <TrendingUp className="h-3 w-3 inline mr-1 text-blue-500" />
+                              <span className="font-semibold text-blue-600">{formatEuro(rs.premioProiettato)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        {rs.dettaglio.filter((d: { premioAttuale: number; premioProiettato: number }) => d.premioAttuale > 0 || d.premioProiettato > 0).map((d: { pista: string; label: string; premioAttuale: number; premioProiettato: number }) => (
+                          <div key={d.pista} className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600 dark:text-gray-300">{d.label}</span>
+                            <div className="text-right">
+                              <span className="font-medium">{formatEuro(d.premioAttuale)}</span>
+                              {d.premioProiettato > 0 && (
+                                <span className="text-blue-500 font-medium ml-1">→ {formatEuro(d.premioProiettato)}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {(() => {
+              const allKeys = pistaStats.flatMap((p) => getPistaRsRowKeys(p));
+              if (allKeys.length === 0) return null;
+              const allExpanded = allKeys.every((k) => expandedRsRows.has(k));
+              const noneExpanded = allKeys.every((k) => !expandedRsRows.has(k));
+              return (
+                <div className="flex items-center justify-end gap-2 mb-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1"
+                    onClick={() => expandRsRowKeys(allKeys)}
+                    disabled={allExpanded}
+                    data-testid="btn-expand-all-rs"
+                  >
+                    <ChevronsUpDown className="h-3.5 w-3.5" />
+                    Espandi tutto
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1"
+                    onClick={() => collapseRsRowKeys(allKeys)}
+                    disabled={noneExpanded}
+                    data-testid="btn-collapse-all-rs"
+                  >
+                    <ChevronsDownUp className="h-3.5 w-3.5" />
+                    Collassa tutto
+                  </Button>
+                </div>
+              );
+            })()}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
+              {pistaStats.map((pista) => {
+                const pistaConf = PISTA_CONFIG[pista.pista as keyof typeof PISTA_CONFIG];
+                if (!pistaConf) return null;
+                const Icon = pistaConf.icon;
+                const pistaRowKeys = getPistaRsRowKeys(pista);
+                const showPistaToggle = pistaRowKeys.length >= 2;
+                const pistaAllExpanded = showPistaToggle && pistaRowKeys.every((k) => expandedRsRows.has(k));
+
+                return (
+                  <Card key={pista.pista} className="overflow-hidden" data-testid={`card-pista-${pista.pista}`}>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <div className={`p-1.5 rounded ${pistaConf.color} text-white`}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          {pistaConf.label}
+                        </CardTitle>
+                        <div className="flex items-center gap-1.5">
+                          {showPistaToggle && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs gap-1"
+                              onClick={() =>
+                                pistaAllExpanded
+                                  ? collapseRsRowKeys(pistaRowKeys)
+                                  : expandRsRowKeys(pistaRowKeys)
+                              }
+                              title={pistaAllExpanded ? 'Collassa tutte le righe' : 'Espandi tutte le righe'}
+                              data-testid={`btn-toggle-all-rs-${pista.pista}`}
+                            >
+                              {pistaAllExpanded ? (
+                                <ChevronsDownUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronsUpDown className="h-3.5 w-3.5" />
+                              )}
+                              {pistaAllExpanded ? 'Collassa' : 'Espandi'}
+                            </Button>
+                          )}
+                          {pista.totalePezzi > 0 && (
+                            <ProjectionBadge current={pista.totalePezzi} projected={pista.proiezionePezzi} label={pista.pista} />
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-4xl font-bold tracking-tight tabular-nums" data-testid={`text-pezzi-${pista.pista}`}>{pista.totalePezzi}</span>
+                        <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">pezzi attuali</span>
+                        {pista.rsCalcBreakdown && Array.from(pista.rsCalcBreakdown.entries()).map(([rsKey, rsData]) => (
+                          <span key={rsKey} className="hidden" data-testid={`text-pezzi-${pista.pista}-${rsKey}`}>{rsData.pezziAttuali}</span>
+                        ))}
+                      </div>
+
+                      {(() => {
+                        if (pista.totalePezzi === 0) return null;
+                        const isCB = pista.pista === 'cb';
+                        const isPartnership = pista.pista === 'partnership';
+                        const premioColorVal: 'green' | 'orange' = isCB ? 'orange' : 'green';
+                        const hasRS = !!(pista.rsCalcBreakdown && pista.rsCalcBreakdown.size >= 1);
+                        const isMobileFisso = pista.pista === 'mobile' || pista.pista === 'fisso';
+                        const pdvList = pista.pdvBreakdown.filter(p => p.pezzi > 0);
+                        const usePdv = !hasRS && isMobileFisso && pdvList.length >= 1;
+
+                        type Row = { key: string; testIdSuffix: string; name: string; subtitle?: string; metrics: CompactRowMetrics; detail: React.ReactNode };
+                        const rows: Row[] = [];
+
+                        if (hasRS) {
+                          for (const [rsKey, rsData] of pista.rsCalcBreakdown!.entries()) {
+                            const metrics: CompactRowMetrics = isCB
+                              ? { pezziAtt: rsData.pezziAttuali, pezziProi: rsData.pezziProiezione, premioAtt: rsData.premioAttuale, premioProi: rsData.premioProiettato }
+                              : isPartnership
+                              ? { puntiAtt: rsData.puntiAttuali, puntiProi: rsData.puntiProiezione, premioAtt: rsData.premioAttuale, premioProi: rsData.premioProiettato }
+                              : { puntiAtt: rsData.puntiAttuali, puntiProi: rsData.puntiProiezione, sogliaAtt: rsData.sogliaAttuale, sogliaProi: rsData.sogliaProiezione, premioAtt: rsData.premioAttuale, premioProi: rsData.premioProiettato };
+                            const detail = isCB ? (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="text-center">
+                                  <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Pezzi</div>
+                                  <span className="text-lg font-bold">{rsData.pezziAttuali}</span>
+                                  {rsData.pezziProiezione > rsData.pezziAttuali && <div className="text-xs text-blue-500">→ {rsData.pezziProiezione}</div>}
+                                </div>
+                                <div className="text-center">
+                                  <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Gettoni €</div>
+                                  <span className="text-lg font-bold text-orange-700 dark:text-orange-400">{formatEuro(rsData.premioAttuale)}</span>
+                                  {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                    <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5"><TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}</div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : isPartnership ? (
+                              <>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="text-center">
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Punti</div>
+                                    <span className="text-lg font-bold">{rsData.puntiAttuali.toFixed(2)}</span>
+                                    {rsData.puntiProiezione > rsData.puntiAttuali && <div className="text-xs text-blue-500">→ {rsData.puntiProiezione.toFixed(2)}</div>}
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Premio €</div>
+                                    <span className="text-lg font-bold text-green-700 dark:text-green-400">{formatEuro(rsData.premioAttuale)}</span>
+                                    {rsData.premioProiettato > 0 && rsData.premioProiettato !== rsData.premioAttuale && (
+                                      <div className="text-xs text-blue-500 flex items-center justify-center gap-0.5"><TrendingUp className="h-3 w-3" /> {formatEuro(rsData.premioProiettato)}</div>
+                                    )}
+                                  </div>
+                                </div>
+                                {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-gray-500 dark:text-slate-400 flex items-center gap-1"><Target className="h-3 w-3" /> Target</span>
+                                      <span className="font-medium">{rsData.forecastTarget.toFixed(2)} pt</span>
+                                    </div>
+                                    <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(2)} pt</span>
+                                      <span className="text-gray-500 dark:text-slate-400">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="text-center">
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Soglia Att.</div>
+                                    <Badge className={`text-sm ${getSogliaColor(rsData.sogliaAttuale)}`} variant="outline">{rsData.sogliaAttuale}</Badge>
+                                    {rsData.puntiAttuali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{rsData.puntiAttuali.toFixed(2)} pt</div>}
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Proiezione</div>
+                                    <Badge className={`text-sm ${getSogliaColor(rsData.sogliaProiezione)}`} variant="outline">{rsData.sogliaProiezione}</Badge>
+                                    {rsData.puntiProiezione > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{rsData.puntiProiezione.toFixed(2)} pt</div>}
+                                  </div>
+                                </div>
+                                {rsData.soglieRef && (
+                                  <div className="flex flex-wrap gap-1 justify-center mt-1">
+                                    {[
+                                      { label: "S1", value: rsData.soglieRef.s1 },
+                                      { label: "S2", value: rsData.soglieRef.s2 },
+                                      { label: "S3", value: rsData.soglieRef.s3 },
+                                      ...(rsData.soglieRef.s4 != null && rsData.soglieRef.s4 > 0 ? [{ label: "S4", value: rsData.soglieRef.s4 }] : []),
+                                      ...(rsData.soglieRef.s5 != null && rsData.soglieRef.s5 > 0 ? [{ label: "S5", value: rsData.soglieRef.s5 }] : []),
+                                    ].map((s) => (
+                                      <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5">{s.label}:{s.value}</span>
+                                    ))}
+                                  </div>
+                                )}
+                                {rsData.forecastTarget != null && rsData.forecastTarget > 0 && (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-gray-500 dark:text-slate-400 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                      <span className="font-medium">{rsData.forecastTarget.toFixed(2)} pt</span>
+                                    </div>
+                                    <Progress value={Math.min((rsData.puntiAttuali / rsData.forecastTarget) * 100, 100)} className="h-1.5" />
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className={`font-medium ${(rsData.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(rsData.forecastGap ?? 0) >= 0 ? "+" : ""}{(rsData.forecastGap ?? 0).toFixed(2)} pt</span>
+                                      <span className="text-gray-500 dark:text-slate-400">{Math.round((rsData.puntiAttuali / rsData.forecastTarget) * 100)}%</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            );
+                            rows.push({ key: rsKey, testIdSuffix: rsKey, name: rsData.displayName, metrics, detail });
+                          }
+                        } else if (usePdv) {
+                          for (const p of pdvList) {
+                            const sogliaAtt = p.pdvCalc.sogliaLabel;
+                            const projCalc = pista.pdvProjCalcMap?.get(p.codicePos);
+                            const puntiProi = projCalc?.puntiTotali ?? p.pdvCalc.puntiTotali;
+                            const sogliaProi = projCalc?.sogliaLabel ?? sogliaAtt;
+                            const premioProi = projCalc?.premioStimato ?? p.pdvCalc.premioStimato;
+                            const metrics: CompactRowMetrics = { pezziAtt: p.pezzi, pezziProi: p.proiezione, puntiAtt: p.pdvCalc.puntiTotali, puntiProi, sogliaAtt, sogliaProi, premioAtt: p.pdvCalc.premioStimato, premioProi };
+                            const detail = (
+                              <>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="text-center">
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Soglia Att.</div>
+                                    <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline">{sogliaAtt}</Badge>
+                                    {p.pdvCalc.puntiTotali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{p.pdvCalc.puntiTotali.toFixed(2)} pt</div>}
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Premio €</div>
+                                    <span className="text-base font-bold text-green-700 dark:text-green-400">{formatEuro(p.pdvCalc.premioStimato)}</span>
+                                  </div>
+                                </div>
+                                {p.pdvCalc.forecastTarget != null && p.pdvCalc.forecastTarget > 0 && (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-gray-500 dark:text-slate-400 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                      <span className="font-medium">{p.pdvCalc.forecastTarget.toFixed(2)} pt</span>
+                                    </div>
+                                    <Progress value={Math.min((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100, 100)} className="h-1.5" />
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className={`font-medium ${(p.pdvCalc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(p.pdvCalc.forecastGap ?? 0) >= 0 ? "+" : ""}{(p.pdvCalc.forecastGap ?? 0).toFixed(2)} pt</span>
+                                      <span className="text-gray-500 dark:text-slate-400">{Math.round((p.pdvCalc.puntiTotali / p.pdvCalc.forecastTarget) * 100)}%</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            );
+                            rows.push({ key: p.codicePos, testIdSuffix: p.codicePos, name: p.nomeNegozio, subtitle: `${p.codicePos} · ${p.ragioneSociale}`, metrics, detail });
+                          }
+                        } else {
+                          // Single aggregated "Totale" row
+                          const sogliaAtt = pista.calc.sogliaLabel;
+                          const sogliaProi = pista.calcProiezione.sogliaLabel;
+                          const metrics: CompactRowMetrics = isCB
+                            ? { pezziAtt: pista.totalePezzi, pezziProi: pista.proiezionePezzi, premioAtt: pista.calc.premioStimato, premioProi: pista.calcProiezione.premioStimato }
+                            : isPartnership
+                            ? { puntiAtt: pista.calc.puntiTotali, puntiProi: pista.calcProiezione.puntiTotali, premioAtt: pista.calc.premioStimato, premioProi: pista.calcProiezione.premioStimato }
+                            : { puntiAtt: pista.calc.puntiTotali, puntiProi: pista.calcProiezione.puntiTotali, sogliaAtt, sogliaProi, premioAtt: pista.calc.premioStimato, premioProi: pista.calcProiezione.premioStimato };
+                          const detail = (
+                            <>
+                              {!isCB && !isPartnership && sogliaAtt !== 'N/A' && (
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="text-center">
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Soglia Att.</div>
+                                    <Badge className={`text-sm ${getSogliaColor(sogliaAtt)}`} variant="outline" data-testid={`badge-soglia-${pista.pista}`}>{sogliaAtt}</Badge>
+                                    {pista.calc.puntiTotali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{pista.calc.puntiTotali.toFixed(2)} pt</div>}
+                                  </div>
+                                  <div className="text-center">
+                                    <div className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400 mb-0.5">Proiezione</div>
+                                    <Badge className={`text-sm ${getSogliaColor(sogliaProi)}`} variant="outline" data-testid={`badge-soglia-proiezione-${pista.pista}`}>{sogliaProi}</Badge>
+                                    {pista.calcProiezione.puntiTotali > 0 && <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{pista.calcProiezione.puntiTotali.toFixed(2)} pt</div>}
+                                  </div>
+                                </div>
+                              )}
+                              {pista.soglieRef && !isCB && !isPartnership && (
+                                <div className="flex flex-wrap gap-1.5 justify-center">
+                                  {[
+                                    { label: "S1", value: pista.soglieRef.s1 },
+                                    { label: "S2", value: pista.soglieRef.s2 },
+                                    { label: "S3", value: pista.soglieRef.s3 },
+                                    ...(pista.soglieRef.s4 != null && pista.soglieRef.s4 > 0 ? [{ label: "S4", value: pista.soglieRef.s4 }] : []),
+                                    ...(pista.soglieRef.s5 != null && pista.soglieRef.s5 > 0 ? [{ label: "S5", value: pista.soglieRef.s5 }] : []),
+                                  ].map((s) => (
+                                    <span key={s.label} className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1.5 py-0.5 font-medium">{s.label}:{s.value}</span>
+                                  ))}
+                                </div>
+                              )}
+                              {pista.calc.forecastTarget != null && pista.calc.forecastTarget > 0 && (
+                                <div className="rounded-lg border p-2 space-y-1" data-testid={`objective-gap-${pista.pista}`}>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500 dark:text-slate-400 flex items-center gap-1"><Target className="h-3 w-3" /> Obiettivo</span>
+                                    <span className="font-medium">{pista.calc.forecastTarget.toFixed(2)} pt</span>
+                                  </div>
+                                  <Progress value={Math.min((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100, 100)} className="h-1.5" />
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className={`font-medium ${(pista.calc.forecastGap ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>{(pista.calc.forecastGap ?? 0) >= 0 ? "+" : ""}{(pista.calc.forecastGap ?? 0).toFixed(2)} pt</span>
+                                    <span className="text-gray-400 dark:text-slate-500">{Math.round((pista.calc.puntiTotali / pista.calc.forecastTarget) * 100)}%</span>
+                                  </div>
+                                </div>
+                              )}
+                              {(pista.calc.premioStimato > 0 || pista.calcProiezione.premioStimato > 0) && (
+                                <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3 py-2 space-y-1`}>
+                                  <div className="flex items-center justify-between text-sm">
+                                    <span className="text-gray-500 dark:text-slate-400">Attuale</span>
+                                    <span className={`font-bold ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`}>{formatEuro(pista.calc.premioStimato)}</span>
+                                  </div>
+                                  {pista.calcProiezione.premioStimato > 0 && (
+                                    <div className="flex items-center justify-between text-sm">
+                                      <span className="text-gray-500 dark:text-slate-400 flex items-center gap-1"><TrendingUp className="h-3 w-3 text-blue-500" /> Proiezione</span>
+                                      <span className="font-bold text-blue-600">{formatEuro(pista.calcProiezione.premioStimato)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          );
+                          rows.push({ key: 'totale', testIdSuffix: 'totale', name: 'Totale', metrics, detail });
+                        }
+
+                        return (
+                          <div className="space-y-2">
+                            {rows.map(r => {
+                              const rowKey = `${pista.pista}::${r.testIdSuffix}`;
+                              return (
+                                <PistaCompactRow
+                                  key={r.key}
+                                  testId={`${pista.pista}-${r.testIdSuffix}`}
+                                  expanded={expandedRsRows.has(rowKey)}
+                                  onToggle={() => toggleRsRow(rowKey)}
+                                  name={r.name}
+                                  subtitle={r.subtitle}
+                                  metrics={r.metrics}
+                                  premioColor={premioColorVal}
+                                >
+                                  {r.detail}
+                                </PistaCompactRow>
+                              );
+                            })}
+                            {/* Footer aggregate Totale Premio (always visible) */}
+                            <div className={`rounded-lg border-2 ${isCB ? 'border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/20' : 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20'} px-3.5 py-2.5 mt-3 flex items-center justify-between flex-wrap gap-2`}>
+                              <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">Totale Premio</span>
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <span className={`text-base font-bold tabular-nums ${isCB ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`} data-testid={`text-premio-${pista.pista}`}>{formatEuro(pista.calc.premioStimato)}</span>
+                                {pista.calcProiezione.premioStimato > 0 && (
+                                  <span className="text-sm font-bold tabular-nums text-blue-600 flex items-center gap-1" data-testid={`text-premio-proiezione-${pista.pista}`}>
+                                    <TrendingUp className="h-3 w-3" /> {formatEuro(pista.calcProiezione.premioStimato)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {pista.totalePezzi === 0 ? (
+                        <p className="text-sm text-gray-400 dark:text-slate-500 italic">Nessuna attivazione mappata</p>
+                      ) : (pista.pista === "mobile" || pista.pista === "fisso") ? (
+                        <>
+                          <Separator />
+                          <div className="space-y-3">
+                            {(pista.pista === "mobile" ? groupMobileCategories(pista.categories) : groupFissoCategories(pista.categories)).map((group) => {
+                              const expandedGroups = pista.pista === "mobile" ? expandedMobileGroups : expandedFissoGroups;
+                              const setExpandedGroups = pista.pista === "mobile" ? setExpandedMobileGroups : setExpandedFissoGroups;
+                              const groupExpanded = expandedGroups.has(group.groupKey);
+                              return (
+                                <div key={group.groupKey}>
+                                  <button
+                                    className="flex items-center justify-between w-full text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 py-0.5 -mx-1"
+                                    onClick={() => setExpandedGroups(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(group.groupKey)) next.delete(group.groupKey);
+                                      else next.add(group.groupKey);
+                                      return next;
+                                    })}
+                                    data-testid={`btn-toggle-${pista.pista}-group-${group.groupKey}`}
+                                  >
+                                    <span className="font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-1">
+                                      <span className="text-xs text-gray-400 dark:text-slate-500">{groupExpanded ? "▼" : "▶"}</span>
+                                      {group.groupLabel}
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold tabular-nums">{group.totalPezzi}</span>
+                                      <span className="text-gray-500 dark:text-slate-400 text-xs tabular-nums">→ {group.totalProiezione}</span>
+                                    </div>
+                                  </button>
+                                  {groupExpanded && (
+                                    <div className="ml-4 mt-1.5 space-y-1.5 border-l-2 border-gray-200 dark:border-gray-700 pl-2.5">
+                                      {group.children.map((cat) => (
+                                        <div key={cat.category} className="flex items-center justify-between text-[13px]">
+                                          <span className="text-gray-500 dark:text-gray-400 truncate max-w-[55%]">
+                                            {cat.label}
+                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium tabular-nums">{cat.pezzi}</span>
+                                            <span className="text-gray-500 dark:text-slate-400 text-xs tabular-nums">→ {cat.proiezione}</span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Separator />
+                          <div className="space-y-2">
+                            {(expandedPistaCategories.has(pista.pista) ? pista.categories : pista.categories.slice(0, 6)).map((cat) => (
+                              <div key={cat.category} className="flex items-center justify-between text-[13px]">
+                                <span className="text-gray-600 dark:text-gray-300 truncate max-w-[60%]">{cat.label}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium tabular-nums">{cat.pezzi}</span>
+                                  <span className="text-gray-500 dark:text-slate-400 text-xs tabular-nums">→ {cat.proiezione}</span>
+                                </div>
+                              </div>
+                            ))}
+                            {pista.categories.length > 6 && (
+                              <button
+                                className="text-sm text-primary hover:underline cursor-pointer mt-1"
+                                onClick={() => setExpandedPistaCategories(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(pista.pista)) next.delete(pista.pista);
+                                  else next.add(pista.pista);
+                                  return next;
+                                })}
+                                data-testid={`btn-toggle-categories-${pista.pista}`}
+                              >
+                                {expandedPistaCategories.has(pista.pista)
+                                  ? 'Mostra meno'
+                                  : `+${pista.categories.length - 6} altre categorie`}
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+
+              {caringStats.totale > 0 && (
+                <Card className="overflow-hidden" data-testid="card-caring-utilizzate">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="p-1.5 rounded bg-amber-500 text-white">
+                          <Ticket className="h-4 w-4" />
+                        </div>
+                        Caring utilizzate
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-4xl font-bold tracking-tight tabular-nums" data-testid="text-pezzi-caring">{caringStats.totale}</span>
+                      <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">caring utilizzate</span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      Escluse dal conteggio, dal premio e dai punti Customer Base.
+                    </p>
+                    {caringStats.perRs.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-semibold text-gray-600 dark:text-slate-300">Per Ragione Sociale</div>
+                        {caringStats.perRs.map((rs) => (
+                          <div
+                            key={rs.ragioneSociale}
+                            className="flex items-center justify-between gap-2 text-sm"
+                            data-testid={`caring-rs-${rs.ragioneSociale}`}
+                          >
+                            <span className="truncate text-gray-700 dark:text-slate-200" title={rs.ragioneSociale}>{rs.ragioneSociale}</span>
+                            <span className="font-semibold shrink-0">{rs.pezzi}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {caringStats.perPdv.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-semibold text-gray-600 dark:text-slate-300">Per PDV</div>
+                        {caringStats.perPdv.map((pdv) => (
+                          <div
+                            key={pdv.codicePos}
+                            className="flex items-center justify-between gap-2 text-sm"
+                            data-testid={`caring-pdv-${pdv.codicePos}`}
+                          >
+                            <span className="truncate text-gray-700 dark:text-slate-200" title={`${pdv.nomeNegozio} · ${pdv.ragioneSociale}`}>
+                              {pdv.nomeNegozio}
+                              <span className="text-gray-400 dark:text-slate-500"> · {pdv.ragioneSociale}</span>
+                            </span>
+                            <span className="font-semibold shrink-0">{pdv.pezzi}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {(() => {
+              const kinds: { key: 'smartphone' | 'smartDevice' | 'internetDevice'; label: string }[] = [
+                { key: 'smartphone', label: 'Smartphone' },
+                { key: 'smartDevice', label: 'Smart Device' },
+                { key: 'internetDevice', label: 'Internet Device' },
+              ];
+              type PdvBreakdownEntry = { codicePos: string; nome: string; ragioneSociale: string; totale: number; finanziato: number; rate: number; altro: number };
+              type ModelloAgg = { totale: number; finanziato: number; rate: number; altro: number; perPdv: Map<string, PdvBreakdownEntry> };
+              const aggByKind: Record<'smartphone' | 'smartDevice' | 'internetDevice', Map<string, ModelloAgg>> = {
+                smartphone: new Map(),
+                smartDevice: new Map(),
+                internetDevice: new Map(),
+              };
+              for (const pdv of mappedData.pdvList) {
+                const dev = pdv.devices;
+                if (!dev) continue;
+                const pdvConfig = puntiVenditaFromGara.find(p => p.codicePos === pdv.codicePos);
+                const pdvRS = pdvConfig?.ragioneSociale || pdv.ragioneSociale || 'N/D';
+                const pdvNome = pdv.nomeNegozio || pdv.codicePos;
+                for (const kk of kinds) {
+                  const k = dev[kk.key];
+                  if (!k) continue;
+                  const map = aggByKind[kk.key];
+                  for (const modal of ['finanziato', 'rate', 'altro'] as const) {
+                    for (const [desc, n] of Object.entries(k[modal].descriptions || {})) {
+                      const cur = map.get(desc) || { totale: 0, finanziato: 0, rate: 0, altro: 0, perPdv: new Map<string, PdvBreakdownEntry>() };
+                      cur.totale += n;
+                      cur[modal] += n;
+                      const pdvEntry = cur.perPdv.get(pdv.codicePos) || { codicePos: pdv.codicePos, nome: pdvNome, ragioneSociale: pdvRS, totale: 0, finanziato: 0, rate: 0, altro: 0 };
+                      pdvEntry.totale += n;
+                      pdvEntry[modal] += n;
+                      cur.perPdv.set(pdv.codicePos, pdvEntry);
+                      map.set(desc, cur);
+                    }
+                  }
+                }
+              }
+              const totGlobal = kinds.reduce((s, kk) => {
+                let t = 0;
+                aggByKind[kk.key].forEach((v) => { t += v.totale; });
+                return s + t;
+              }, 0);
+              if (totGlobal <= 0) return null;
+              return (
+                <Card data-testid="card-device-per-modello">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Smartphone className="h-5 w-5" />
+                      Device per modello
+                      <span className="text-sm text-gray-500 dark:text-slate-400 font-normal">({totGlobal} pezzi totali)</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {kinds.map((kk) => {
+                        const map = aggByKind[kk.key];
+                        const rows = Array.from(map.entries())
+                          .map(([desc, agg]) => ({ desc, ...agg }))
+                          .sort((a, b) => b.totale - a.totale);
+                        const totKind = rows.reduce((s, r) => s + r.totale, 0);
+                        return (
+                          <div key={kk.key} className="rounded-lg border bg-violet-50/40 dark:bg-violet-900/10 border-violet-200 dark:border-violet-800 p-3" data-testid={`device-modello-kind-${kk.key}`}>
+                            <div className="flex items-center justify-between mb-2 text-sm">
+                              <span className="font-semibold text-violet-800 dark:text-violet-200">{kk.label}</span>
+                              <span className="font-bold text-violet-800 dark:text-violet-200">{totKind}</span>
+                            </div>
+                            {rows.length === 0 ? (
+                              <div className="text-xs text-gray-500 dark:text-slate-400 italic">Nessun pezzo</div>
+                            ) : (
+                              <div className="max-h-72 overflow-y-auto pr-1 space-y-1">
+                                {rows.map((r) => {
+                                  const tags: string[] = [];
+                                  if (r.finanziato > 0) tags.push(`F:${r.finanziato}`);
+                                  if (r.rate > 0) tags.push(`V:${r.rate}`);
+                                  if (r.altro > 0) tags.push(`A:${r.altro}`);
+                                  const drillKey = `${kk.key}|${r.desc}`;
+                                  const open = expandedAggModelloDrills.has(drillKey);
+                                  const mode = aggModelloDrillMode[drillKey] || 'pdv';
+                                  const pdvEntries = Array.from(r.perPdv.values()).sort((a, b) => b.totale - a.totale);
+                                  const rsMap = new Map<string, PdvBreakdownEntry>();
+                                  for (const pe of pdvEntries) {
+                                    const rsKey = normalizeRS(pe.ragioneSociale);
+                                    const cur = rsMap.get(rsKey) || { codicePos: '', nome: pe.ragioneSociale, ragioneSociale: pe.ragioneSociale, totale: 0, finanziato: 0, rate: 0, altro: 0 };
+                                    cur.totale += pe.totale;
+                                    cur.finanziato += pe.finanziato;
+                                    cur.rate += pe.rate;
+                                    cur.altro += pe.altro;
+                                    rsMap.set(rsKey, cur);
+                                  }
+                                  const rsEntries = Array.from(rsMap.values()).sort((a, b) => b.totale - a.totale);
+                                  const drillEntries = mode === 'rs' ? rsEntries : pdvEntries;
+                                  return (
+                                    <div key={r.desc} data-testid={`device-modello-row-${kk.key}-${r.desc}`}>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleAggModelloDrill(drillKey)}
+                                        className="w-full flex items-center justify-between gap-2 text-xs text-gray-700 dark:text-gray-200 hover-elevate active-elevate-2 rounded px-1 py-0.5 cursor-pointer text-left"
+                                        data-testid={`button-drill-agg-modello-${kk.key}-${r.desc}`}
+                                      >
+                                        <span className="truncate flex items-center gap-1" title={r.desc}>
+                                          <span className="text-[10px] text-gray-400 dark:text-slate-500 w-2 inline-block">{open ? '▾' : '▸'}</span>
+                                          <span className="truncate">{r.desc}</span>
+                                        </span>
+                                        <span className="shrink-0 font-medium">
+                                          {r.totale}
+                                          {tags.length > 0 && <span className="ml-1 text-gray-400 dark:text-slate-500">({tags.join(' · ')})</span>}
+                                        </span>
+                                      </button>
+                                      {open && (
+                                        <div className="mt-1 mb-1 pl-3 border-l-2 border-violet-300 dark:border-violet-700 space-y-1">
+                                          <div className="flex items-center gap-1 text-[10px]">
+                                            <button
+                                              type="button"
+                                              className={`px-1.5 py-0.5 rounded border ${mode === 'pdv' ? 'bg-violet-200 dark:bg-violet-800 border-violet-400' : 'bg-transparent border-violet-200 dark:border-violet-800'}`}
+                                              onClick={() => setAggModelloDrillMode(prev => ({ ...prev, [drillKey]: 'pdv' }))}
+                                              data-testid={`button-drill-mode-pdv-${kk.key}-${r.desc}`}
+                                            >
+                                              Per PDV ({pdvEntries.length})
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className={`px-1.5 py-0.5 rounded border ${mode === 'rs' ? 'bg-violet-200 dark:bg-violet-800 border-violet-400' : 'bg-transparent border-violet-200 dark:border-violet-800'}`}
+                                              onClick={() => setAggModelloDrillMode(prev => ({ ...prev, [drillKey]: 'rs' }))}
+                                              data-testid={`button-drill-mode-rs-${kk.key}-${r.desc}`}
+                                            >
+                                              Per RS ({rsEntries.length})
+                                            </button>
+                                          </div>
+                                          {drillEntries.map((e) => {
+                                            const subTags: string[] = [];
+                                            if (e.finanziato > 0) subTags.push(`F:${e.finanziato}`);
+                                            if (e.rate > 0) subTags.push(`V:${e.rate}`);
+                                            if (e.altro > 0) subTags.push(`A:${e.altro}`);
+                                            const rowKey = mode === 'rs' ? e.ragioneSociale : e.codicePos;
+                                            const label = mode === 'rs' ? e.ragioneSociale : `${e.nome}`;
+                                            const subtitle = mode === 'rs' ? null : e.ragioneSociale;
+                                            return (
+                                              <div key={rowKey} className="flex items-center justify-between gap-2 text-[11px] text-gray-600 dark:text-gray-300" data-testid={`drill-agg-modello-${mode}-${kk.key}-${r.desc}-${rowKey}`}>
+                                                <span className="truncate" title={subtitle ? `${label} · ${subtitle}` : label}>
+                                                  {label}
+                                                  {subtitle && <span className="text-gray-400 dark:text-slate-500"> · {subtitle}</span>}
+                                                </span>
+                                                <span className="shrink-0 font-medium">
+                                                  {e.totale}
+                                                  {subTags.length > 0 && <span className="ml-1 text-gray-400 dark:text-slate-500">({subTags.join(' · ')})</span>}
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-2 italic">F = Finanziato · V = VAR · A = Altro</div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {(() => {
+              const PDV_CHART_COLORS = [
+                "#f97316", "#3b82f6", "#22c55e", "#a855f7", "#ec4899",
+                "#14b8a6", "#eab308", "#6366f1", "#f43f5e", "#0ea5e9",
+                "#84cc16", "#d946ef", "#f59e0b", "#06b6d4", "#8b5cf6",
+              ];
+
+              const pdvListWithRS = mappedData.pdvList.map(pdv => {
+                const pdvConfig = puntiVenditaFromGara.find(p => p.codicePos === pdv.codicePos);
+                const rs = pdvConfig?.ragioneSociale || pdv.ragioneSociale || "N/D";
+                return { ...pdv, configuredRS: rs };
+              });
+
+              const isRSMode = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
+
+              const pdvSummaries = pdvListWithRS.map(pdv => {
+                const corePezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+                const pdvRS = normalizeRS(pdv.configuredRS);
+
+                let pdvPremioTotale = 0;
+                for (const stat of pistaStats) {
+                  const match = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                  if (!match) continue;
+
+                  if (isRSMode && stat.rsCalcBreakdown) {
+                    const rsData = stat.rsCalcBreakdown.get(pdvRS);
+                    if (rsData && rsData.premioAttuale > 0) {
+                      const rsPdvs = stat.pdvBreakdown.filter(b => normalizeRS(b.ragioneSociale) === pdvRS);
+                      const rsTotalPezzi = rsPdvs.reduce((s, b) => s + b.pezzi, 0);
+                      pdvPremioTotale += rsTotalPezzi > 0
+                        ? Math.round((match.pezzi / rsTotalPezzi) * rsData.premioAttuale * 100) / 100
+                        : 0;
+                    }
+                  } else {
+                    if (match.pdvCalc.premioStimato > 0) {
+                      pdvPremioTotale += match.pdvCalc.premioStimato;
+                    } else {
+                      const aggPremio = stat.calc.premioStimato;
+                      const totalPezziPista = stat.pdvBreakdown.reduce((s, b) => s + b.pezzi, 0);
+                      pdvPremioTotale += totalPezziPista > 0
+                        ? Math.round((match.pezzi / totalPezziPista) * aggPremio * 100) / 100
+                        : 0;
+                    }
+                  }
+                }
+
+                return {
+                  codicePos: pdv.codicePos,
+                  nomeNegozio: pdv.nomeNegozio,
+                  configuredRS: pdv.configuredRS,
+                  corePezzi,
+                  premioTotale: pdvPremioTotale,
+                };
+              }).filter(p => p.corePezzi > 0);
+
+              const grandTotalPezzi = pdvSummaries.reduce((s, p) => s + p.corePezzi, 0);
+              const grandTotalPremio = pdvSummaries.reduce((s, p) => s + p.premioTotale, 0);
+
+              const pieData = pdvSummaries
+                .sort((a, b) => b.premioTotale - a.premioTotale)
+                .map((p, i) => ({
+                  name: p.nomeNegozio,
+                  value: Math.round(p.premioTotale * 100) / 100,
+                  pezzi: p.corePezzi,
+                  pct: grandTotalPremio > 0 ? Math.round((p.premioTotale / grandTotalPremio) * 1000) / 10 : 0,
+                  color: PDV_CHART_COLORS[i % PDV_CHART_COLORS.length],
+                }));
+
+              const puntiByPdvByPista = new Map<string, Record<string, number>>();
+              for (const pdv of pdvListWithRS) {
+                const m: Record<string, number> = {};
+                for (const stat of pistaStats) {
+                  const match = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                  if (match) m[stat.pista] = match.pdvCalc.puntiTotali;
+                }
+                puntiByPdvByPista.set(pdv.codicePos, m);
+              }
+              const premioByPdv = new Map<string, number>();
+              for (const s of pdvSummaries) premioByPdv.set(s.codicePos, s.premioTotale);
+
+              const sortValue = (pdv: typeof pdvListWithRS[number]): number | string => {
+                const punti = puntiByPdvByPista.get(pdv.codicePos) || {};
+                switch (pdvSortKey) {
+                  case 'premio': return premioByPdv.get(pdv.codicePos) || 0;
+                  case 'smartphone': return pdvSmartphoneMobileCount(pdv) + pdvSmartphoneCBCount(pdv);
+                  case 'accessori_pezzi': return pdv.accessori?.pezzi || 0;
+                  case 'accessori_fatturato': return nettoIva(pdv.accessori?.importo || 0);
+                  case 'servizi_fatturato': return nettoIva(pdv.servizi?.importo || 0);
+                  case 'nome_az': return (pdv.nomeNegozio || '').toLowerCase();
+                  case 'punti_mobile': return punti.mobile || 0;
+                  case 'punti_fisso': return punti.fisso || 0;
+                  case 'punti_cb': return punti.cb || 0;
+                  case 'punti_energia': return punti.energia || 0;
+                  case 'punti_assicurazioni': return punti.assicurazioni || 0;
+                  case 'punti_protecta': return punti.protecta || 0;
+                  case 'pezzi_default':
+                  default:
+                    return pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+                }
+              };
+              const cmp = (a: typeof pdvListWithRS[number], b: typeof pdvListWithRS[number]) => {
+                const va = sortValue(a); const vb = sortValue(b);
+                if (typeof va === 'string' && typeof vb === 'string') return va.localeCompare(vb);
+                return (Number(vb) || 0) - (Number(va) || 0);
+              };
+
+              const rsGroups = new Map<string, typeof pdvListWithRS>();
+              for (const pdv of pdvListWithRS) {
+                const key = pdv.configuredRS;
+                if (!rsGroups.has(key)) rsGroups.set(key, []);
+                rsGroups.get(key)!.push(pdv);
+              }
+              const groupByRS = pdvSortKey === 'pezzi_default';
+              const sortedRSGroups = Array.from(rsGroups.entries())
+                .map(([rs, pdvs]) => ({ rs, pdvs, totalPezzi: pdvs.reduce((s, p) => s + p.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s2, i) => s2 + i.pezzi, 0), 0) }))
+                .sort((a, b) => b.totalPezzi - a.totalPezzi);
+              const sortedPdvList = groupByRS
+                ? sortedRSGroups.flatMap(g => g.pdvs.slice().sort(cmp))
+                : pdvListWithRS.slice().sort(cmp);
+              const showRSHeaders = groupByRS && rsGroups.size > 1;
+
+              const pdvColorMap = new Map<string, string>();
+              pieData.forEach((p) => { pdvColorMap.set(p.name, p.color); });
+
+              return (
+                <Card data-testid="card-pdv-breakdown">
+                  <CardHeader>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Store className="h-5 w-5" />
+                        Dettaglio per PDV
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 dark:text-slate-400 shrink-0">Ordina per</span>
+                        <Select value={pdvSortKey} onValueChange={(v) => setPdvSortKey(v as PdvSortKey)}>
+                          <SelectTrigger className="h-8 w-[200px] text-xs" data-testid="select-pdv-sort">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PDV_SORT_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {pieData.length > 1 && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
+                        <div className="flex justify-center" data-testid="pdv-pie-chart">
+                          <ResponsiveContainer width="100%" height={280}>
+                            <PieChart>
+                              <Pie
+                                data={pieData}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={110}
+                                paddingAngle={2}
+                                stroke="none"
+                              >
+                                {pieData.map((entry, index) => (
+                                  <Cell key={entry.name} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <RechartsTooltip
+                                formatter={(value: number, name: string) => {
+                                  const entry = pieData.find(p => p.name === name);
+                                  return [`${formatEuro(value)} (${entry?.pct ?? 0}%) · ${entry?.pezzi ?? 0} pezzi`, name];
+                                }}
+                                contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "13px" }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="space-y-1.5" data-testid="pdv-pie-legend">
+                          {pieData.map((p) => (
+                            <div key={p.name} className="flex items-center gap-2 text-sm">
+                              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                              <span className="truncate flex-1 text-gray-700 dark:text-gray-300">{p.name}</span>
+                              <span className="font-bold text-green-700 shrink-0">{formatEuro(p.value)}</span>
+                              <span className="text-gray-500 dark:text-slate-400 shrink-0 w-14 text-right font-semibold">{p.pct}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <Accordion type="multiple" className="space-y-2">
+                      {(() => {
+                        let lastRS = "";
+                        return sortedPdvList.map((pdv) => {
+                          const rsHeader = showRSHeaders && pdv.configuredRS !== lastRS;
+                          if (showRSHeaders) lastRS = pdv.configuredRS;
+                        return (
+                        <Fragment key={pdv.codicePos}>
+                        {rsHeader && (
+                          <div className="flex items-center gap-2 pt-3 pb-1 first:pt-0">
+                            <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{pdv.configuredRS}</span>
+                            <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                          </div>
+                        )}
+                        {(() => {
+                          const totalPezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+                          const proiezione = workdayInfo.elapsedWorkingDays > 0
+                            ? Math.round((totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+                            : totalPezzi;
+                          const pdvSummary = pdvSummaries.find(s => s.codicePos === pdv.codicePos);
+                          const pdvPremioCalc = pdvSummary?.premioTotale ?? 0;
+                          const pctContrib = grandTotalPremio > 0 ? Math.round((pdvPremioCalc / grandTotalPremio) * 1000) / 10 : 0;
+                          const pdvChartColor = pdvColorMap.get(pdv.nomeNegozio) || "#9ca3af";
+
+                          const byPista: Record<string, { pezzi: number; corePezzi: number; items: AggregatedItem[] }> = {};
+                          for (const item of pdv.items) {
+                            if (isCaringItem(item.pista, item.targetCategory)) continue;
+                            if (!byPista[item.pista]) byPista[item.pista] = { pezzi: 0, corePezzi: 0, items: [] };
+                            byPista[item.pista].pezzi += item.pezzi;
+                            if (isCorePezziItem(item.pista, item.targetCategory)) {
+                              byPista[item.pista].corePezzi += item.pezzi;
+                            }
+                            byPista[item.pista].items.push(item);
+                          }
+
+                          const egStat = pistaStats.find(s => s.pista === "extra_gara_iva");
+                          if (egStat) {
+                            const egPdvMatch = egStat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                            if (egPdvMatch && egPdvMatch.pezzi > 0) {
+                              byPista["extra_gara_iva"] = {
+                                pezzi: egPdvMatch.pezzi,
+                                corePezzi: egPdvMatch.pezzi,
+                                items: egPdvMatch.categories.map(c => ({
+                                  pista: "extra_gara_iva",
+                                  targetCategory: c.category,
+                                  targetLabel: c.label,
+                                  pezzi: c.pezzi,
+                                  canone: c.canone,
+                                })),
+                              };
+                            }
+                          }
+
+                          const pdvCalcByPista: Record<string, PistaCalcResult> = {};
+                          const pdvPremioByPista: Record<string, number> = {};
+                          const pdvNormRS = normalizeRS(pdv.configuredRS);
+                          for (const stat of pistaStats) {
+                            const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
+                            if (match) {
+                              pdvCalcByPista[stat.pista] = match.pdvCalc;
+                              if (isRSMode && stat.rsCalcBreakdown) {
+                                const rsData = stat.rsCalcBreakdown.get(pdvNormRS);
+                                if (rsData && rsData.premioAttuale > 0) {
+                                  const rsPdvs = stat.pdvBreakdown.filter(b => normalizeRS(b.ragioneSociale) === pdvNormRS);
+                                  const rsTotalPezzi = rsPdvs.reduce((s, b) => s + b.pezzi, 0);
+                                  pdvPremioByPista[stat.pista] = rsTotalPezzi > 0
+                                    ? Math.round((match.pezzi / rsTotalPezzi) * rsData.premioAttuale * 100) / 100
+                                    : 0;
+                                } else {
+                                  pdvPremioByPista[stat.pista] = 0;
+                                }
+                              } else if (match.pdvCalc.premioStimato > 0) {
+                                pdvPremioByPista[stat.pista] = match.pdvCalc.premioStimato;
+                              } else {
+                                const aggPremio = stat.calc.premioStimato;
+                                const totalPezziPista = stat.pdvBreakdown.reduce((s, b) => s + b.pezzi, 0);
+                                pdvPremioByPista[stat.pista] = totalPezziPista > 0
+                                  ? Math.round((match.pezzi / totalPezziPista) * aggPremio * 100) / 100
+                                  : 0;
+                              }
+                            }
+                          }
+
+                          const totalPremio = Object.values(pdvPremioByPista).reduce((s, v) => s + v, 0);
+
+                          return (
+                            <AccordionItem key={pdv.codicePos} value={pdv.codicePos} className="border rounded-lg px-2 sm:px-4" data-testid={`pdv-accordion-${pdv.codicePos}`}>
+                              <AccordionTrigger className="hover:no-underline py-3.5">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1.5 sm:gap-3">
+                                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: pdvChartColor }} />
+                                    <div className="text-left min-w-0">
+                                      <div className="font-semibold text-sm truncate">{pdv.nomeNegozio}</div>
+                                      <div className="text-xs text-gray-500 dark:text-slate-400 truncate">{pdv.codicePos} · {pdv.ragioneSociale}</div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 sm:gap-4 text-sm flex-wrap pl-6 sm:pl-0">
+                                    <Badge variant="outline" className="text-sm font-bold shrink-0" style={{ color: pdvChartColor, borderColor: pdvChartColor }}>
+                                      {pctContrib}%
+                                    </Badge>
+                                    {totalPremio > 0 && (
+                                      <Badge variant="outline" className="text-green-700 border-green-300 text-sm shrink-0" data-testid={`badge-pdv-premio-${pdv.codicePos}`}>
+                                        {formatEuro(totalPremio)}
+                                      </Badge>
+                                    )}
+                                    <div className="text-right shrink-0">
+                                      <div className="font-bold tabular-nums">{totalPezzi} <span className="text-xs font-medium text-gray-500 dark:text-slate-400">pezzi</span></div>
+                                      <div className="text-xs text-gray-500 dark:text-slate-400 tabular-nums">Proiezione: {proiezione}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-3">
+                                  {Object.entries(byPista).sort(([a], [b]) => pistaOrderRank(a) - pistaOrderRank(b)).map(([pistaKey, pistaData]) => {
+                                    const conf = PISTA_CONFIG[pistaKey as keyof typeof PISTA_CONFIG];
+                                    if (!conf) return null;
+                                    const calc = pdvCalcByPista[pistaKey];
+                                    const pistaAggPremio = pistaStats.find(s => s.pista === pistaKey)?.calc.premioStimato || 0;
+                                    const pistaPdvPremio = pdvPremioByPista[pistaKey] ?? 0;
+                                    const pistaPct = pistaAggPremio > 0 ? Math.round((pistaPdvPremio / pistaAggPremio) * 1000) / 10 : 0;
+                                    return (
+                                      <div key={pistaKey} className={`rounded-lg border p-3 ${conf.lightColor}`}>
+                                        <div className="font-medium text-sm mb-2 flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="truncate">{conf.label}</span>
+                                            {pistaPdvPremio > 0 && (
+                                              <span className="text-xs font-semibold text-green-700 dark:text-green-400 shrink-0" data-testid={`pdv-pista-premio-inline-${pdv.codicePos}-${pistaKey}`}>
+                                                {formatEuro(pistaPdvPremio)}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            <span className="text-xs text-gray-500 dark:text-slate-400">{pistaPct}%</span>
+                                            <span className="font-bold">{pistaData.corePezzi}</span>
+                                          </div>
+                                        </div>
+                                        {pistaKey === 'fisso' && (() => {
+                                          const elapsed = workdayInfo.elapsedWorkingDays;
+                                          const total = workdayInfo.totalWorkingDays;
+                                          const proj = (n: number) => elapsed > 0 ? Math.round((n / elapsed) * total) : n;
+                                          const FISSO_BREAKDOWN: { label: string; cats: string[] }[] = [
+                                            { label: 'Netflix', cats: ['NETFLIX_CON_ADV', 'NETFLIX_SENZA_ADV'] },
+                                            { label: 'Linea Attiva', cats: ['LINEA_ATTIVA'] },
+                                            { label: 'Convergenti', cats: ['CONVERGENZA'] },
+                                            { label: 'Più Sicuri Casa/Ufficio', cats: ['PIU_SICURI_CASA_UFFICIO'] },
+                                          ];
+                                          const rows = FISSO_BREAKDOWN.map((b) => ({
+                                            label: b.label,
+                                            n: countByCats(pdv, 'fisso', new Set(b.cats)),
+                                          }));
+                                          if (rows.every((r) => r.n === 0)) return null;
+                                          return (
+                                            <div className="text-[11px] text-gray-700 dark:text-gray-200 mb-1.5 space-y-0.5" data-testid={`pdv-fisso-breakdown-${pdv.codicePos}`}>
+                                              {rows.map((r) => (
+                                                <div key={r.label} className="flex items-center gap-1 flex-wrap">
+                                                  <span className="font-medium text-gray-600 dark:text-gray-300">{r.label}:</span>
+                                                  <span>{r.n} pz</span>
+                                                  {r.n > 0 && (
+                                                    <>
+                                                      <span className="text-gray-400 dark:text-slate-500">·</span>
+                                                      <span className="text-gray-500 dark:text-slate-400">proiezione {proj(r.n)}</span>
+                                                    </>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          );
+                                        })()}
+                                        {(pistaKey === 'mobile' || pistaKey === 'cb') && (() => {
+                                          const split = pdvSmartphoneSplit(pdv, pistaKey as 'mobile' | 'cb');
+                                          if (split.total <= 0) return null;
+                                          const elapsed = workdayInfo.elapsedWorkingDays;
+                                          const total = workdayInfo.totalWorkingDays;
+                                          const proj = (n: number) => elapsed > 0 ? Math.round((n / elapsed) * total) : n;
+                                          return (
+                                            <div className="text-[11px] text-gray-700 dark:text-gray-200 mb-1.5 space-y-0.5" data-testid={`pdv-smartphone-${pdv.codicePos}-${pistaKey}`}>
+                                              <div className="flex items-center gap-1 flex-wrap">
+                                                <Smartphone className="h-3 w-3" />
+                                                <span className="font-medium">Smartphone:</span>
+                                                <span>{split.total} pz</span>
+                                                <span className="text-gray-400 dark:text-slate-500">·</span>
+                                                <span className="text-gray-500 dark:text-slate-400">proiezione {proj(split.total)}</span>
+                                              </div>
+                                              <div className="pl-4 text-gray-600 dark:text-gray-300 flex items-center gap-2 flex-wrap">
+                                                <span>Finanziato: <span className="font-medium">{split.fin}</span></span>
+                                                <span className="text-gray-400 dark:text-slate-500">·</span>
+                                                <span>VAR: <span className="font-medium">{split.rate}</span></span>
+                                              </div>
+                                            </div>
+                                          );
+                                        })()}
+                                        {(() => {
+                                          const elapsed = workdayInfo.elapsedWorkingDays;
+                                          const total = workdayInfo.totalWorkingDays;
+                                          const projPezzi = elapsed > 0
+                                            ? Math.round((pistaData.corePezzi / elapsed) * total)
+                                            : pistaData.corePezzi;
+                                          const projPunti = elapsed > 0 && calc
+                                            ? (calc.puntiTotali * total) / elapsed
+                                            : (calc?.puntiTotali ?? 0);
+                                          return (
+                                            <div className="text-[11px] text-gray-500 dark:text-slate-400 mb-1.5 space-y-0.5" data-testid={`pdv-pista-proiezione-${pdv.codicePos}-${pistaKey}`}>
+                                              <div className="flex items-center gap-1 flex-wrap">
+                                                <span className="font-medium text-gray-600 dark:text-gray-400">Attuali:</span>
+                                                <span>{pistaData.corePezzi} pz</span>
+                                                {(calc?.puntiTotali ?? 0) > 0 && (
+                                                  <>
+                                                    <span>·</span>
+                                                    <span>{(calc?.puntiTotali ?? 0).toFixed(2)} pt</span>
+                                                  </>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-1 flex-wrap">
+                                                <span className="font-medium text-gray-600 dark:text-gray-400">Proiezione:</span>
+                                                <span>{projPezzi} pz</span>
+                                                {(calc?.puntiTotali ?? 0) > 0 && (
+                                                  <>
+                                                    <span>·</span>
+                                                    <span>{projPunti.toFixed(2)} pt</span>
+                                                  </>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })()}
+                                        {!isRSMode && calc && calc.sogliaLabel !== "N/A" && (
+                                          <div className="space-y-1.5 mb-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <Badge className={`text-xs ${getSogliaColor(calc.sogliaLabel)}`} variant="outline">
+                                                {calc.sogliaLabel}
+                                              </Badge>
+                                              {calc.puntiTotali > 0 && (
+                                                <span className="text-xs text-gray-500 dark:text-slate-400" data-testid={`pdv-pista-punti-${pdv.codicePos}-${pistaKey}`}>{calc.puntiTotali.toFixed(2)} pt</span>
+                                              )}
+                                            </div>
+                                            {(() => {
+                                              const stat = pistaStats.find(s => s.pista === pistaKey);
+                                              if (!stat) return null;
+                                              let ref: { s1: number; s2: number; s3: number; s4?: number; s5?: number } | undefined;
+                                              if (pistaKey === "mobile") {
+                                                const mPdv = garaCalcConfig.pistaMobileConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
+                                                if (mPdv) ref = { s1: mPdv.soglia1, s2: mPdv.soglia2, s3: mPdv.soglia3, s4: mPdv.soglia4 };
+                                              } else if (pistaKey === "fisso") {
+                                                const fPdv = garaCalcConfig.pistaFissoConfig?.sogliePerPos?.find(s => s.posCode === pdv.codicePos);
+                                                if (fPdv) ref = { s1: fPdv.soglia1, s2: fPdv.soglia2, s3: fPdv.soglia3, s4: fPdv.soglia4, s5: fPdv.soglia5 };
+                                              } else if (pistaKey === "extra_gara_iva") {
+                                                const egMatch = stat.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+                                                if (egMatch?.pdvCalc) {
+                                                  ref = stat.soglieRef;
+                                                }
+                                              }
+                                              if (!ref) ref = stat.soglieRef;
+                                              if (!ref) return null;
+                                              const items = [
+                                                { label: "S1", value: ref.s1 },
+                                                { label: "S2", value: ref.s2 },
+                                                { label: "S3", value: ref.s3 },
+                                                ...(ref.s4 != null && ref.s4 > 0 ? [{ label: "S4", value: ref.s4 }] : []),
+                                                ...(ref.s5 != null && ref.s5 > 0 ? [{ label: "S5", value: ref.s5 }] : []),
+                                              ];
+                                              return (
+                                                <div className="flex flex-wrap gap-0.5">
+                                                  {items.map((s) => (
+                                                    <span key={s.label} className="text-[11px] text-gray-500 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5">
+                                                      {s.label}:{s.value}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              );
+                                            })()}
+                                          </div>
+                                        )}
+                                        {isRSMode && (pdvPremioByPista[pistaKey] ?? 0) > 0 && (
+                                          <div className="mb-2">
+                                            <span className="text-xs font-medium text-green-700">{formatEuro(pdvPremioByPista[pistaKey])}</span>
+                                          </div>
+                                        )}
+                                        <div className="space-y-1">
+                                          {(() => {
+                                            const sortedItems = [...pistaData.items].sort((a, b) => b.pezzi - a.pezzi);
+                                            let groupsConfig: { label: string; isMember: (cat: string) => boolean }[] | null = null;
+                                            if (pistaKey === "mobile") {
+                                              groupsConfig = [
+                                                { label: "SIM Consumer", isMember: (cat) => !SIM_PIVA_CORE.has(cat) },
+                                                { label: "SIM IVA", isMember: (cat) => SIM_PIVA_CORE.has(cat) },
+                                              ];
+                                            } else if (pistaKey === "fisso") {
+                                              groupsConfig = [
+                                                { label: "Consumer", isMember: (cat) => !FISSO_BUSINESS_CATEGORIES.has(cat) },
+                                                { label: "Business", isMember: (cat) => FISSO_BUSINESS_CATEGORIES.has(cat) },
+                                              ];
+                                            }
+                                            if (!groupsConfig) {
+                                              return sortedItems.map((item) => (
+                                                <div key={item.targetCategory} className="flex justify-between text-sm">
+                                                  <span className="truncate max-w-[70%]">{item.targetLabel}</span>
+                                                  <span className="font-medium">{item.pezzi}</span>
+                                                </div>
+                                              ));
+                                            }
+                                            return groupsConfig.map((g) => {
+                                              const children = sortedItems.filter((it) => g.isMember(it.targetCategory));
+                                              if (children.length === 0) return null;
+                                              const total = children.reduce((s, c) => s + c.pezzi, 0);
+                                              return (
+                                                <div key={g.label} className="space-y-0.5">
+                                                  <div className="flex justify-between text-sm font-semibold" data-testid={`group-header-${pistaKey}-${g.label}`}>
+                                                    <span className="truncate max-w-[70%]">{g.label}</span>
+                                                    <span>{total}</span>
+                                                  </div>
+                                                  {children.length > 0 && (
+                                                    <div className="pl-3 space-y-0.5">
+                                                      <div className="text-[11px] text-gray-500 dark:text-slate-400 italic">di cui:</div>
+                                                      {children.flatMap((item) => {
+                                                        if (item.targetCategory === "SIM_IVA" && item.descriptions && Object.keys(item.descriptions).length > 0) {
+                                                          return Object.entries(item.descriptions)
+                                                            .sort(([, a], [, b]) => b - a)
+                                                            .map(([desc, count]) => (
+                                                              <div key={`SIM_IVA-${desc}`} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
+                                                                <span className="truncate max-w-[70%]" title={desc}>{desc}</span>
+                                                                <span className="font-medium">{count}</span>
+                                                              </div>
+                                                            ));
+                                                        }
+                                                        const displayLabel = item.targetCategory === "SIM_IVA" ? "Altre SIM IVA" : item.targetLabel;
+                                                        return [(
+                                                          <div key={item.targetCategory} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
+                                                            <span className="truncate max-w-[70%]">{displayLabel}</span>
+                                                            <span className="font-medium">{item.pezzi}</span>
+                                                          </div>
+                                                        )];
+                                                      })}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            });
+                                          })()}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  {(() => {
+                                    const elapsed = workdayInfo.elapsedWorkingDays;
+                                    const total = workdayInfo.totalWorkingDays;
+                                    const acc = pdv.accessori || { pezzi: 0, importo: 0 };
+                                    const srv = pdv.servizi || { pezzi: 0, importo: 0 };
+                                    const accNetto = nettoIva(acc.importo);
+                                    const accIva = ivaOf(acc.importo);
+                                    const srvNetto = nettoIva(srv.importo);
+                                    const srvIva = ivaOf(srv.importo);
+                                    const projAccPz = elapsed > 0 ? Math.round((acc.pezzi / elapsed) * total) : acc.pezzi;
+                                    const projAccImp = elapsed > 0 ? (accNetto / elapsed) * total : accNetto;
+                                    const projSrvPz = elapsed > 0 ? Math.round((srv.pezzi / elapsed) * total) : srv.pezzi;
+                                    const projSrvImp = elapsed > 0 ? (srvNetto / elapsed) * total : srvNetto;
+                                    return (
+                                      <>
+                                        <div className="rounded-lg border p-3 bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-200" data-testid={`pdv-accessori-${pdv.codicePos}`}>
+                                          <div className="font-medium text-sm mb-2 flex items-center justify-between">
+                                            <span>Accessori <span className="text-[10px] font-normal opacity-60">(netto IVA)</span></span>
+                                            <span className="font-bold">{acc.pezzi}</span>
+                                          </div>
+                                          <div className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              <span className="font-medium">Attuali:</span>
+                                              <span>{acc.pezzi} pz</span>
+                                              <span>·</span>
+                                              <span>{formatEuro(accNetto)}</span>
+                                              {accIva > 0 && <span className="opacity-60">(IVA {formatEuro(accIva)})</span>}
+                                            </div>
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              <span className="font-medium">Proiezione:</span>
+                                              <span>{projAccPz} pz</span>
+                                              <span>·</span>
+                                              <span>{formatEuro(projAccImp)}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="rounded-lg border p-3 bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-200" data-testid={`pdv-servizi-${pdv.codicePos}`}>
+                                          <div className="font-medium text-sm mb-2 flex items-center justify-between">
+                                            <span>Servizi <span className="text-[10px] font-normal opacity-60">(netto IVA)</span></span>
+                                            <span className="font-bold">{srv.pezzi}</span>
+                                          </div>
+                                          <div className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              <span className="font-medium">Attuali:</span>
+                                              <span>{srv.pezzi} pz</span>
+                                              <span>·</span>
+                                              <span>{formatEuro(srvNetto)}</span>
+                                              {srvIva > 0 && <span className="opacity-60">(IVA {formatEuro(srvIva)})</span>}
+                                            </div>
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              <span className="font-medium">Proiezione:</span>
+                                              <span>{projSrvPz} pz</span>
+                                              <span>·</span>
+                                              <span>{formatEuro(projSrvImp)}</span>
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 dark:text-slate-400 italic">Spedizione, assistenza, garanteasy</div>
+                                          </div>
+                                        </div>
+                                        {(() => {
+                                          const dev = pdv.devices;
+                                          const kinds: { key: 'smartphone' | 'smartDevice' | 'internetDevice'; label: string }[] = [
+                                            { key: 'smartphone', label: 'Smartphone' },
+                                            { key: 'smartDevice', label: 'Smart Device' },
+                                            { key: 'internetDevice', label: 'Internet Device' },
+                                          ];
+                                          const totAll = kinds.reduce((s, k) => s + deviceKindTotal(dev?.[k.key]), 0);
+                                          if (totAll <= 0) return null;
+                                          return (
+                                            <div className="rounded-lg border p-3 bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-900/30 dark:text-violet-200 sm:col-span-2 lg:col-span-3" data-testid={`pdv-devices-${pdv.codicePos}`}>
+                                              <div className="font-medium text-sm mb-2 flex items-center justify-between">
+                                                <span className="flex items-center gap-1.5"><Smartphone className="h-4 w-4" /> Device venduti</span>
+                                                <span className="font-bold">{totAll}</span>
+                                              </div>
+                                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                {kinds.map((kk) => {
+                                                  const k = dev?.[kk.key] || EMPTY_DEVICE_KIND;
+                                                  const tot = deviceKindTotal(k);
+                                                  const drillKey = `${pdv.codicePos}|${kk.key}`;
+                                                  const open = expandedDeviceDrills.has(drillKey);
+                                                  const merged = mergedDescriptions(k);
+                                                  const sortedAll = Object.entries(merged.all).sort(([, a], [, b]) => b - a);
+                                                  return (
+                                                    <div key={kk.key} className="rounded border bg-white/70 dark:bg-black/20 p-2 text-[12px] text-gray-700 dark:text-gray-200" data-testid={`pdv-device-kind-${pdv.codicePos}-${kk.key}`}>
+                                                      <div className="flex items-center justify-between mb-1">
+                                                        <span className="font-medium">{kk.label}</span>
+                                                        <span className="font-bold">{tot}</span>
+                                                      </div>
+                                                      <div className="text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
+                                                        <div>Finanziato: <span className="font-medium">{k.finanziato.pezzi}</span></div>
+                                                        <div>VAR: <span className="font-medium">{k.rate.pezzi}</span></div>
+                                                        {k.altro.pezzi > 0 && (<div>Altro: <span className="font-medium">{k.altro.pezzi}</span></div>)}
+                                                      </div>
+                                                      {tot > 0 && (
+                                                        <button
+                                                          type="button"
+                                                          className="mt-1.5 text-[11px] text-violet-700 dark:text-violet-300 hover:underline flex items-center gap-1"
+                                                          onClick={() => toggleDeviceDrill(drillKey)}
+                                                          data-testid={`button-drill-device-${pdv.codicePos}-${kk.key}`}
+                                                        >
+                                                          {open ? '▾' : '▸'} {open ? 'Nascondi pezzi' : 'Mostra pezzi'}
+                                                        </button>
+                                                      )}
+                                                      {open && sortedAll.length > 0 && (
+                                                        <div className="mt-1 pl-2 border-l border-violet-200 dark:border-violet-800 space-y-0.5">
+                                                          {sortedAll.map(([desc, count]) => {
+                                                            const fin = merged.fin[desc] || 0;
+                                                            const rate = merged.rate[desc] || 0;
+                                                            const altro = merged.altro[desc] || 0;
+                                                            const tags: string[] = [];
+                                                            if (fin > 0) tags.push(`F:${fin}`);
+                                                            if (rate > 0) tags.push(`V:${rate}`);
+                                                            if (altro > 0) tags.push(`A:${altro}`);
+                                                            return (
+                                                              <div key={desc} className="flex justify-between text-[11px] text-gray-700 dark:text-gray-300 gap-2">
+                                                                <span className="truncate" title={desc}>{desc}</span>
+                                                                <span className="shrink-0 font-medium">
+                                                                  {count}
+                                                                  {tags.length > 0 && <span className="ml-1 text-gray-400 dark:text-slate-500">({tags.join(' · ')})</span>}
+                                                                </span>
+                                                              </div>
+                                                            );
+                                                          })}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                          );
+                                        })()}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })()}
+                        </Fragment>
+                        );
+                        });
+                      })()}
+                    </Accordion>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            <TabellaPdvPista pistaStats={pistaStats} orgId={orgId} mese={selMonth} anno={selYear} pezziExtraByPdv={pezziExtraByPdv} />
+
+            {sosCaringAllowed && garaCalcConfig.sosCaring && garaCalcConfig.sosCaring.rows.length > 0 && (
+              <SosCaringSection
+                data={garaCalcConfig.sosCaring}
+                garaPdvList={garaPdvList}
+                isRSPerRS={garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs'}
+                partnershipRSConfigs={garaCalcConfig.partnershipRewardRSConfig?.configPerRS || []}
+                partnershipPosConfigs={garaCalcConfig.partnershipRewardConfig?.configPerPos || []}
+              />
+            )}
+
+            <Card data-testid="card-rs-breakdown">
+              <CardHeader>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Handshake className="h-5 w-5" />
+                    Dettaglio per Ragione Sociale
+                  </CardTitle>
+                  <DettaglioRsPdfExport
+                    pdvList={mappedData.pdvList}
+                    pistaStats={pistaStats}
+                    orgId={orgId}
+                    mese={selMonth}
+                    anno={selYear}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <RsBreakdown pdvList={mappedData.pdvList} workdayInfo={workdayInfo} pistaStats={pistaStats} />
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type DettaglioRsAggColKey =
+  | "smartphone_mobile"
+  | "smartphone_cb"
+  | "accessori_pezzi"
+  | "accessori_importo"
+  | "servizi_pezzi"
+  | "servizi_importo";
+
+const DETTAGLIO_RS_AGG_COLS: { key: DettaglioRsAggColKey; label: string }[] = [
+  { key: "smartphone_mobile", label: "Smartphone Mobile" },
+  { key: "smartphone_cb", label: "Smartphone CB" },
+  { key: "accessori_pezzi", label: "Accessori (pz)" },
+  { key: "accessori_importo", label: "Accessori netto IVA (€)" },
+  { key: "servizi_pezzi", label: "Servizi (pz)" },
+  { key: "servizi_importo", label: "Servizi netto IVA (€)" },
+];
+
+function DettaglioRsPdfExport({
+  pdvList,
+  pistaStats,
+  orgId,
+  mese,
+  anno,
+}: {
+  pdvList: PdvData[];
+  pistaStats: Array<{ pista: string; calc: PistaCalcResult; pdvBreakdown: Array<{ codicePos: string; pezzi: number; pdvCalc: PistaCalcResult }> }>;
+  orgId?: string | null;
+  mese?: number;
+  anno?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [prefs, setPrefs] = useState<DashboardPdfPrefs>({ selectedColumns: null, nota: "", logoDataUrl: null });
+  const [hydratedOrg, setHydratedOrg] = useState<string | null>(null);
+
+  const { data: orgBranding } = useQuery<{ logoDataUrl: string | null }>({
+    queryKey: ['/api/organization-branding/logo'],
+    enabled: !!orgId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const orgLogoDataUrl = orgBranding?.logoDataUrl ?? null;
+
+  useEffect(() => {
+    if (!orgId) return;
+    if (hydratedOrg === orgId) return;
+    setPrefs(loadDashboardPdfPrefs(orgId, DETTAGLIO_RS_PDF_EXPORT_KEY));
+    setHydratedOrg(orgId);
+  }, [orgId, hydratedOrg]);
+
+  useEffect(() => {
+    if (!open || !orgId) return;
+    const shared = loadSharedPdfPrefs(orgId);
+    setPrefs(prev => ({
+      selectedColumns: prev.selectedColumns,
+      nota: shared.nota,
+      logoDataUrl: shared.logoDataUrl,
+    }));
+  }, [open, orgId]);
+
+  const rsGroups = useMemo(() => {
+    const grouped: Record<string, { ragioneSociale: string; pdvs: PdvData[] }> = {};
+    for (const pdv of pdvList) {
+      const rs = pdv.ragioneSociale || "N/D";
+      if (!grouped[rs]) grouped[rs] = { ragioneSociale: rs, pdvs: [] };
+      grouped[rs].pdvs.push(pdv);
+    }
+    return Object.values(grouped).sort((a, b) => a.ragioneSociale.localeCompare(b.ragioneSociale));
+  }, [pdvList]);
+
+  const pdvPezziPerPista = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    for (const stat of pistaStats) {
+      for (const b of stat.pdvBreakdown) {
+        if (!map.has(b.codicePos)) map.set(b.codicePos, new Map());
+        map.get(b.codicePos)!.set(stat.pista, (map.get(b.codicePos)!.get(stat.pista) ?? 0) + b.pezzi);
+      }
+    }
+    return map;
+  }, [pistaStats]);
+
+  const pisteAttive = useMemo(() => {
+    const totByPista = new Map<string, number>();
+    for (const stat of pistaStats) {
+      const tot = stat.pdvBreakdown.reduce((s, b) => s + b.pezzi, 0);
+      if (tot > 0 && (PISTA_CONFIG as any)[stat.pista]) {
+        totByPista.set(stat.pista, tot);
+      }
+    }
+    return Array.from(totByPista.keys())
+      .sort((a, b) => pistaOrderRank(a) - pistaOrderRank(b))
+      .map(k => ({ key: `pista:${k}`, label: (PISTA_CONFIG as any)[k].label as string, pista: k }));
+  }, [pistaStats]);
+
+  const columnOptions = useMemo(() => [
+    ...pisteAttive.map(p => ({ key: p.key, label: p.label })),
+    ...DETTAGLIO_RS_AGG_COLS.map(c => ({ key: `agg:${c.key}`, label: c.label })),
+  ], [pisteAttive]);
+
+  const baseFilename = () => {
+    const orgPart = orgId || 'org';
+    const mm = mese ? String(mese).padStart(2, '0') : '00';
+    const yy = anno ? String(anno) : '0000';
+    return `dettaglio-ragioni-sociali_${orgPart}_${yy}-${mm}`;
+  };
+
+  const exportPdf = (final: DashboardPdfPrefs) => {
+    const allKeys = columnOptions.map(c => c.key);
+    const selected = (final.selectedColumns ?? allKeys).filter(k => allKeys.includes(k));
+    if (selected.length === 0 || rsGroups.length === 0) return;
+
+    const selectedPiste = pisteAttive.filter(p => selected.includes(p.key));
+    const selectedAgg = DETTAGLIO_RS_AGG_COLS.filter(c => selected.includes(`agg:${c.key}`));
+
+    const fmtNum = (n: number) => Number.isFinite(n) ? n.toFixed(0) : '';
+    const fmtEuro = (n: number) => Number.isFinite(n) ? `€ ${n.toFixed(2).replace('.', ',')}` : '';
+
+    const header: string[] = ["Tipo", "Ragione Sociale", "Codice PDV", "Nome PDV"];
+    for (const p of selectedPiste) header.push(p.label);
+    for (const a of selectedAgg) header.push(a.label);
+
+    const aggValueForPdv = (pdv: PdvData, key: DettaglioRsAggColKey): { num: number; isEuro: boolean } => {
+      switch (key) {
+        case "smartphone_mobile": return { num: pdvSmartphoneMobileCount(pdv), isEuro: false };
+        case "smartphone_cb": return { num: pdvSmartphoneCBCount(pdv), isEuro: false };
+        case "accessori_pezzi": return { num: pdv.accessori?.pezzi ?? 0, isEuro: false };
+        case "accessori_importo": return { num: nettoIva(pdv.accessori?.importo ?? 0), isEuro: true };
+        case "servizi_pezzi": return { num: pdv.servizi?.pezzi ?? 0, isEuro: false };
+        case "servizi_importo": return { num: nettoIva(pdv.servizi?.importo ?? 0), isEuro: true };
+      }
+    };
+
+    const body: string[][] = [];
+    for (const rs of rsGroups) {
+      const rsRow: string[] = ["RS", rs.ragioneSociale, '', `${rs.pdvs.length} PDV`];
+      for (const p of selectedPiste) {
+        let tot = 0;
+        for (const pdv of rs.pdvs) tot += pdvPezziPerPista.get(pdv.codicePos)?.get(p.pista) ?? 0;
+        rsRow.push(tot > 0 ? fmtNum(tot) : '');
+      }
+      for (const a of selectedAgg) {
+        let tot = 0;
+        for (const pdv of rs.pdvs) tot += aggValueForPdv(pdv, a.key).num;
+        const isEuro = aggValueForPdv(rs.pdvs[0], a.key).isEuro;
+        rsRow.push(tot > 0 ? (isEuro ? fmtEuro(tot) : fmtNum(tot)) : '');
+      }
+      body.push(rsRow);
+      for (const pdv of rs.pdvs) {
+        const pdvRow: string[] = ["PDV", rs.ragioneSociale, pdv.codicePos, pdv.nomeNegozio];
+        for (const p of selectedPiste) {
+          const v = pdvPezziPerPista.get(pdv.codicePos)?.get(p.pista) ?? 0;
+          pdvRow.push(v > 0 ? fmtNum(v) : '');
+        }
+        for (const a of selectedAgg) {
+          const { num, isEuro } = aggValueForPdv(pdv, a.key);
+          pdvRow.push(num > 0 ? (isEuro ? fmtEuro(num) : fmtNum(num)) : '');
+        }
+        body.push(pdvRow);
+      }
+    }
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const mm = mese ? String(mese).padStart(2, '0') : '--';
+    const yy = anno ? String(anno) : '----';
+    const startY = drawPdfHeader(doc, {
+      title: 'Dettaglio per Ragione Sociale',
+      subtitle: `Org: ${orgId || '-'}    Periodo: ${mm}/${yy}`,
+      nota: final.nota,
+      logoDataUrl: final.logoDataUrl ?? orgLogoDataUrl,
+    });
+
+    autoTable(doc, {
+      startY,
+      head: [header],
+      body,
+      theme: 'striped',
+      headStyles: { fillColor: [99, 102, 241], fontSize: 8, halign: 'center' },
+      bodyStyles: { fontSize: 8 },
+      styles: { cellPadding: 1.4, overflow: 'linebreak' },
+      columnStyles: {
+        0: { cellWidth: 12 },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 22 },
+        3: { cellWidth: 40 },
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index >= 4) {
+          data.cell.styles.halign = 'right';
+        }
+        if (data.section === 'body' && body[data.row.index]?.[0] === 'RS') {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [238, 242, 255];
+        }
+      },
+      margin: { left: 8, right: 8, top: startY },
+      didDrawPage: (data) => {
+        drawPdfFooterPagination(doc, data.pageNumber);
+      },
+    });
+
+    doc.save(`${baseFilename()}.pdf`);
+  };
+
+  if (rsGroups.length === 0 || columnOptions.length === 0) return null;
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8"
+        onClick={() => setOpen(true)}
+        data-testid="btn-dettaglio-rs-export-pdf"
+      >
+        <Download className="h-3.5 w-3.5 mr-1" />Esporta PDF
+      </Button>
+      <DashboardPdfExportDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Esporta PDF — Dettaglio per Ragione Sociale"
+        description="Personalizza il PDF con il dettaglio per Ragione Sociale (riga per PDV con totali RS)."
+        columnsLabel="Colonne da includere"
+        columnOptions={columnOptions}
+        prefs={prefs}
+        orgLogoDataUrl={orgLogoDataUrl}
+        onPrefsChange={(next) => {
+          setPrefs(next);
+          saveDashboardPdfPrefs(orgId, DETTAGLIO_RS_PDF_EXPORT_KEY, next);
+        }}
+        onConfirm={(final) => {
+          exportPdf(final);
+          setOpen(false);
+        }}
+        testIdPrefix="dettaglio-rs-pdf"
+      />
+    </>
+  );
+}
+
+function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[]; workdayInfo: WorkdayInfo; pistaStats: Array<{ pista: string; calc: PistaCalcResult; pdvBreakdown: Array<{ codicePos: string; pezzi: number; pdvCalc: PistaCalcResult }> }> }) {
+  const rsByName = useMemo(() => {
+    const grouped: Record<string, { ragioneSociale: string; pdvs: PdvData[]; totalPezzi: number }> = {};
+    for (const pdv of pdvList) {
+      const rs = pdv.ragioneSociale || "N/D";
+      if (!grouped[rs]) grouped[rs] = { ragioneSociale: rs, pdvs: [], totalPezzi: 0 };
+      grouped[rs].pdvs.push(pdv);
+      grouped[rs].totalPezzi += pdv.items.filter(i => !isCaringItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+    }
+    return Object.values(grouped).sort((a, b) => b.totalPezzi - a.totalPezzi);
+  }, [pdvList]);
+
+  return (
+    <Accordion type="multiple" className="space-y-2">
+      {rsByName.map((rs) => {
+        const proiezione = workdayInfo.elapsedWorkingDays > 0
+          ? Math.round((rs.totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
+          : rs.totalPezzi;
+
+        const allItems: AggregatedItem[] = [];
+        for (const pdv of rs.pdvs) {
+          for (const item of pdv.items) {
+            if (isCaringItem(item.pista, item.targetCategory)) continue;
+            const existing = allItems.find((i) => i.pista === item.pista && i.targetCategory === item.targetCategory);
+            if (existing) existing.pezzi += item.pezzi;
+            else allItems.push({ ...item });
+          }
+        }
+
+        const byPista: Record<string, number> = {};
+        for (const item of allItems) {
+          byPista[item.pista] = (byPista[item.pista] || 0) + item.pezzi;
+        }
+
+        const egStatRS = pistaStats.find(s => s.pista === "extra_gara_iva");
+        if (egStatRS) {
+          let egPezziRS = 0;
+          for (const pdv of rs.pdvs) {
+            const egMatch = egStatRS.pdvBreakdown.find(b => b.codicePos === pdv.codicePos);
+            if (egMatch) egPezziRS += egMatch.pezzi;
+          }
+          if (egPezziRS > 0) byPista["extra_gara_iva"] = egPezziRS;
+        }
+
+        let rsPremioTotale = 0;
+        for (const pdv of rs.pdvs) {
+          for (const stat of pistaStats) {
+            const match = stat.pdvBreakdown.find((b) => b.codicePos === pdv.codicePos);
+            if (match) {
+              const aggPremio = stat.calc.premioStimato;
+              const totalPuntiPista = stat.pdvBreakdown.reduce((s, b) => s + b.pdvCalc.puntiTotali, 0);
+              rsPremioTotale += totalPuntiPista > 0
+                ? Math.round((match.pdvCalc.puntiTotali / totalPuntiPista) * aggPremio * 100) / 100
+                : 0;
+            }
+          }
+        }
+
+        return (
+          <AccordionItem key={rs.ragioneSociale} value={rs.ragioneSociale} className="border rounded-lg px-2 sm:px-4" data-testid={`rs-accordion-${rs.ragioneSociale}`}>
+            <AccordionTrigger className="hover:no-underline py-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
+                <div className="text-left min-w-0">
+                  <div className="font-medium text-sm truncate">{rs.ragioneSociale}</div>
+                  <div className="text-sm text-gray-500 dark:text-slate-400">{rs.pdvs.length} PDV</div>
+                </div>
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  {rsPremioTotale > 0 && (
+                    <Badge variant="outline" className="text-green-700 border-green-300 text-sm shrink-0">
+                      {formatEuro(rsPremioTotale)}
+                    </Badge>
+                  )}
+                  <div className="text-right shrink-0">
+                    <div className="font-bold text-sm">{rs.totalPezzi} pezzi</div>
+                    <div className="text-sm text-gray-400 dark:text-slate-500">Proiezione: {proiezione}</div>
+                  </div>
+                </div>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-3 pb-3">
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(byPista).sort(([a], [b]) => pistaOrderRank(a) - pistaOrderRank(b)).map(([pistaKey, pezzi]) => {
+                    const conf = PISTA_CONFIG[pistaKey as keyof typeof PISTA_CONFIG];
+                    if (!conf) return null;
+                    return (
+                      <Badge key={pistaKey} variant="outline" className={conf.lightColor}>
+                        {conf.label}: {pezzi}
+                      </Badge>
+                    );
+                  })}
+                </div>
+                {(() => {
+                  const spMob = rs.pdvs.reduce((s, p) => s + pdvSmartphoneMobileCount(p), 0);
+                  const spCB = rs.pdvs.reduce((s, p) => s + pdvSmartphoneCBCount(p), 0);
+                  const accPz = rs.pdvs.reduce((s, p) => s + (p.accessori?.pezzi || 0), 0);
+                  const accImp = rs.pdvs.reduce((s, p) => s + (p.accessori?.importo || 0), 0);
+                  const srvPz = rs.pdvs.reduce((s, p) => s + (p.servizi?.pezzi || 0), 0);
+                  const srvImp = rs.pdvs.reduce((s, p) => s + (p.servizi?.importo || 0), 0);
+                  const elapsed = workdayInfo.elapsedWorkingDays;
+                  const total = workdayInfo.totalWorkingDays;
+                  const pj = (n: number) => elapsed > 0 ? Math.round((n / elapsed) * total) : n;
+                  const pje = (n: number) => elapsed > 0 ? (n / elapsed) * total : n;
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                      <div className="rounded-lg border p-3 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-200">
+                        <div className="text-xs font-medium flex items-center gap-1"><Smartphone className="h-3 w-3" /> Smartphone Mobile</div>
+                        <div className="text-lg font-bold">{spMob}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400">Proiezione: {pj(spMob)}</div>
+                      </div>
+                      <div className="rounded-lg border p-3 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-200">
+                        <div className="text-xs font-medium flex items-center gap-1"><Smartphone className="h-3 w-3" /> Smartphone CB</div>
+                        <div className="text-lg font-bold">{spCB}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400">Proiezione: {pj(spCB)}</div>
+                      </div>
+                      <div className="rounded-lg border p-3 bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/30 dark:text-slate-200" data-testid={`rs-accessori-${rs.ragioneSociale}`}>
+                        <div className="text-xs font-medium">Accessori <span className="font-normal opacity-60">(netto IVA)</span></div>
+                        <div className="text-lg font-bold">{accPz} pz · {formatEuro(nettoIva(accImp))}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400">IVA {formatEuro(ivaOf(accImp))} · Proiezione: {pj(accPz)} pz · {formatEuro(pje(nettoIva(accImp)))}</div>
+                      </div>
+                      <div className="rounded-lg border p-3 bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-200" data-testid={`rs-servizi-${rs.ragioneSociale}`}>
+                        <div className="text-xs font-medium">Servizi <span className="font-normal opacity-60">(netto IVA)</span></div>
+                        <div className="text-lg font-bold">{srvPz} pz · {formatEuro(nettoIva(srvImp))}</div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400">IVA {formatEuro(ivaOf(srvImp))} · Proiezione: {pj(srvPz)} pz · {formatEuro(pje(nettoIva(srvImp)))}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {rs.pdvs.map((pdv) => {
+                    const pdvPezzi = pdv.items.reduce((s, i) => s + i.pezzi, 0);
+                    return (
+                      <div key={pdv.codicePos} className="border rounded p-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="font-medium">{pdv.nomeNegozio}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold">{pdvPezzi}</span>
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-400 dark:text-slate-500">{pdv.codicePos}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        );
+      })}
+    </Accordion>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Gara SOS Caring (Task #327): tabella KPI per negozio + premio/malus su
+// % Balance RS. Dati dal file Excel caricato in Configurazione Gara.
+// ---------------------------------------------------------------------------
+
+const fmtSosInt = (v: number): string => Math.round(v).toLocaleString("it-IT");
+const fmtSosPct = (v: number): string =>
+  `${v.toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+const fmtSosEuro = (v: number): string =>
+  v.toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+
+function SosCaringSection({
+  data,
+  garaPdvList,
+  isRSPerRS,
+  partnershipRSConfigs,
+  partnershipPosConfigs,
+}: {
+  data: SosCaringData;
+  garaPdvList: GaraConfigPdv[];
+  isRSPerRS: boolean;
+  partnershipRSConfigs: Array<{ ragioneSociale: string; premio100: number }>;
+  partnershipPosConfigs: Array<{ posCode: string; config?: { premio100?: number } }>;
+}) {
+  const agg = useMemo(() => aggregateSosCaring(data.rows), [data.rows]);
+
+  const pdvNameByCod = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of garaPdvList) {
+      if (p.codicePos) m.set(normalizeSosPosCode(p.codicePos), p.nome || "");
+    }
+    return m;
+  }, [garaPdvList]);
+
+  const premioForRS = useMemo(() => {
+    const map = new Map<string, { premio: ReturnType<typeof computeSosCaringPremio>; premioPartnership: number; negoziInGara: number }>();
+    for (const rs of agg.perRS) {
+      const rsKey = normalizeRS(rs.ragioneSociale);
+      const pdvsOfRS = garaPdvList.filter(p => normalizeRS(p.ragioneSociale || "") === rsKey);
+      const negoziInGara = pdvsOfRS.length > 0 ? pdvsOfRS.length : rs.rows.length;
+      let premioPartnership = 0;
+      if (isRSPerRS) {
+        const rsCfg = partnershipRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rsKey);
+        premioPartnership = rsCfg?.premio100 || 0;
+      } else {
+        for (const p of pdvsOfRS) {
+          const cfg = partnershipPosConfigs.find(c => normalizeSosPosCode(c.posCode) === normalizeSosPosCode(p.codicePos));
+          premioPartnership += cfg?.config?.premio100 || 0;
+        }
+      }
+      const premio = computeSosCaringPremio({
+        balancePct: rs.totals.balancePct,
+        premioPartnership,
+        negoziInGara,
+        config: data.premioConfig,
+      });
+      map.set(rs.ragioneSociale, { premio, premioPartnership, negoziInGara });
+    }
+    return map;
+  }, [agg.perRS, garaPdvList, isRSPerRS, partnershipRSConfigs, partnershipPosConfigs, data.premioConfig]);
+
+  const periodo = formatAnnoMese(data.annoMese);
+  const uploadedLabel = new Date(data.uploadedAt).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+
+  const numCols = [
+    "text-right tabular-nums px-2 py-1.5 whitespace-nowrap",
+  ][0];
+
+  const renderTotalsCells = (t: SosCaringTotals, opts?: { showBalance?: boolean }) => (
+    <>
+      <td className={numCols}>{fmtSosInt(t.allarmiActual)}</td>
+      <td className={numCols}>{fmtSosInt(t.mnpOut)}</td>
+      <td className={numCols}>{fmtSosInt(t.mnpOutMicro)}</td>
+      <td className={numCols}>{fmtSosInt(t.gaGara)}</td>
+      <td className={numCols}>{fmtSosInt(t.cambiPianoTied)}</td>
+      <td className={numCols}>{fmtSosInt(t.cambiPianoTiedMicro)}</td>
+      <td className={numCols}>—</td>
+      <td className={numCols}>—</td>
+      <td className={`${numCols} bg-emerald-50 dark:bg-emerald-950/40 font-bold text-emerald-700 dark:text-emerald-300`}>
+        {opts?.showBalance === false ? "—" : fmtSosPct(t.balancePct)}
+      </td>
+      <td className={numCols}>{fmtSosInt(t.leveMax)}</td>
+      <td className={numCols}>{fmtSosInt(t.leveSosActual)}</td>
+    </>
+  );
+
+  return (
+    <Card data-testid="card-sos-caring-kpi" className="overflow-hidden">
+      <CardHeader>
+        <div className="flex items-start justify-between flex-wrap gap-2">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5 text-emerald-600" />
+              SOS Caring — KPI per Negozio
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1" data-testid="text-sos-caring-periodo">
+              {periodo ? `Periodo ${periodo}${data.annoMese ? ` (${data.annoMese})` : ""} · ` : ""}
+              Suddivisione per Ragione Sociale
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Dati aggiornati al</p>
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400" data-testid="text-sos-caring-updated">
+              {uploadedLabel}
+            </p>
+            <p className="text-xs text-muted-foreground">{agg.totaleRete.pdvCount} PDV</p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse" data-testid="table-sos-caring">
+            <thead>
+              <tr className="bg-emerald-900 text-white">
+                <th className="text-left px-2 py-2 font-semibold whitespace-nowrap">Punto Vendita</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Allarmi<br />Actual</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">MNP Out<br />su Linee All.</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">MNP Out<br />Micro (di cui)</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">GA<br />Gara</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">CambiPiano<br />TIED</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">CP TIED Micro<br />(di cui)</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">% Balance<br />Actual</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">% Balance<br />Forecast</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap bg-emerald-700">% Balance<br />RS</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Leve<br />Max</th>
+                <th className="text-right px-2 py-2 font-semibold whitespace-nowrap">Leve SOS<br />Caring Actual</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agg.perRS.map((rs: SosCaringRsAggregate) => (
+                <Fragment key={rs.ragioneSociale}>
+                  <tr className="bg-emerald-100/70 dark:bg-emerald-950/50">
+                    <td colSpan={12} className="px-2 py-1.5 font-bold text-emerald-800 dark:text-emerald-300" data-testid={`row-sos-rs-${normalizeRS(rs.ragioneSociale)}`}>
+                      {rs.ragioneSociale} <span className="font-normal text-emerald-600 dark:text-emerald-400">{rs.totals.pdvCount} PDV</span>
+                    </td>
+                  </tr>
+                  {rs.rows.map((r, i) => (
+                    <tr key={`${rs.ragioneSociale}-${r.codicePos}`} className={i % 2 === 1 ? "bg-muted/30" : ""} data-testid={`row-sos-pdv-${r.codicePos}`}>
+                      <td className="px-2 py-1.5">
+                        <span className="text-muted-foreground mr-1">{i + 1}</span>
+                        <span className="font-semibold">{pdvNameByCod.get(normalizeSosPosCode(r.codicePos)) || "—"}</span>
+                        <span className="text-muted-foreground"> · cod. {r.codicePos}</span>
+                      </td>
+                      <td className={numCols}>{fmtSosInt(r.allarmiActual)}</td>
+                      <td className={numCols}>{fmtSosInt(r.mnpOut)}</td>
+                      <td className={numCols}>{fmtSosInt(r.mnpOutMicro)}</td>
+                      <td className={numCols}>{fmtSosInt(r.gaGara)}</td>
+                      <td className={numCols}>{fmtSosInt(r.cambiPianoTied)}</td>
+                      <td className={numCols}>{fmtSosInt(r.cambiPianoTiedMicro)}</td>
+                      <td className={numCols}>{fmtSosPct(r.balanceActualPct)}</td>
+                      <td className={numCols}>{fmtSosPct(r.balanceForecastPct)}</td>
+                      <td className={`${numCols} bg-emerald-50 dark:bg-emerald-950/40 font-semibold text-emerald-700 dark:text-emerald-300`}>
+                        {fmtSosPct(rs.totals.balancePct)}
+                      </td>
+                      <td className={numCols}>{fmtSosInt(r.leveMax)}</td>
+                      <td className={numCols}>{fmtSosInt(r.leveSosActual)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t font-semibold bg-muted/50" data-testid={`row-sos-subtotale-${normalizeRS(rs.ragioneSociale)}`}>
+                    <td className="px-2 py-1.5 uppercase">Subtotale {rs.ragioneSociale}</td>
+                    {renderTotalsCells(rs.totals)}
+                  </tr>
+                </Fragment>
+              ))}
+              <tr className="border-t-2 border-emerald-700 font-bold bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200" data-testid="row-sos-totale-rete">
+                <td className="px-2 py-2">TOTALE RETE ({agg.totaleRete.pdvCount} PDV)</td>
+                {renderTotalsCells(agg.totaleRete)}
+              </tr>
+            </tbody>
+          </table>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            <span className="font-semibold text-emerald-700 dark:text-emerald-400">% Balance RS</span> = MNP Out su Linee Allarmate / (GA Gara + CambiPiano TIED), calcolata sui valori aggregati di ragione sociale e sul totale rete.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="grid-sos-caring-premi">
+          {agg.perRS.map((rs) => {
+            const info = premioForRS.get(rs.ragioneSociale);
+            if (!info) return null;
+            const isMalus = info.premio.fascia === "malus";
+            return (
+              <div
+                key={rs.ragioneSociale}
+                className={`rounded-lg border p-3 ${isMalus ? "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/30" : "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30"}`}
+                data-testid={`card-sos-premio-${normalizeRS(rs.ragioneSociale)}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold truncate">{rs.ragioneSociale}</p>
+                  <Badge variant={isMalus ? "destructive" : "secondary"} className="text-[10px]">
+                    {isMalus ? "MALUS" : "BONUS"} {info.premio.fasciaLabel}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  % Balance RS: <span className="font-semibold">{fmtSosPct(rs.totals.balancePct)}</span>
+                </p>
+                <p className={`text-xl font-bold mt-1 ${isMalus ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`} data-testid={`text-sos-premio-importo-${normalizeRS(rs.ragioneSociale)}`}>
+                  {info.premio.importo >= 0 ? "+" : ""}{fmtSosEuro(info.premio.importo)}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {isMalus
+                    ? `${fmtSosEuro((data.premioConfig?.malusPerNegozio ?? 500))} × ${info.negoziInGara} negozi in gara`
+                    : `${info.premio.bonusPct}% del premio Partnership (${fmtSosEuro(info.premioPartnership)})`}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
