@@ -17,10 +17,11 @@ export const ACCENT_PRESET_IDS = [
 
 export type AccentPresetId = (typeof ACCENT_PRESET_IDS)[number];
 
-// Temi accettati dal server (Task #453). "prisma-light" è la variante
-// editoriale chiara "Prisma Light": si comporta come un tema chiaro ma
-// attiva la composizione dedicata della Dashboard Gara Reale via
-// html[data-skin="prisma-light"]. Tenere allineato con
-// client/src/hooks/useTheme.tsx e il pre-paint di client/index.html.
-export const THEME_IDS = ["light", "dark", "system", "prisma-light"] as const;
+export const THEME_IDS = ["light", "dark", "system"] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
+
+// Task #453 — Prisma Light è una composizione della sola Dashboard Gara
+// Reale, non un quarto tema globale. La preferenza resta separata dal tema
+// base, così le altre pagine continuano a rispettare chiaro/scuro/sistema.
+export const DASHBOARD_STYLE_IDS = ["standard", "prisma-light"] as const;
+export type DashboardStyleId = (typeof DASHBOARD_STYLE_IDS)[number];

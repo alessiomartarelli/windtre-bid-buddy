@@ -50,6 +50,7 @@
       radial-gradient(circle at 60% 100%, hsl(25 96% 73% / 0.20) 0, transparent 33%),
       linear-gradient(115deg, hsl(150 18% 98%), hsl(221 35% 95%));
     background-attachment: fixed;
+    padding-bottom: calc(5.25rem + env(safe-area-inset-bottom));
   }
 
   html[data-skin="prisma-light"] .min-h-screen.bg-background,
@@ -356,6 +357,63 @@
     background: linear-gradient(90deg, hsl(var(--pista-ink, var(--pl-cobalt)) / 0.85), hsl(var(--pista-glow, var(--pl-cobalt)) / 0.85));
   }
 
+  /* Bottom bar mobile richiesta dopo la preview: usa le vere route abilitate
+     all'utente e resta fissa sopra la safe area iOS. Header/menu mobile
+     originali rimangono disponibili. */
+  .pl-mobile-bottom {
+    position: fixed;
+    z-index: 55;
+    left: max(0.65rem, env(safe-area-inset-left));
+    right: max(0.65rem, env(safe-area-inset-right));
+    bottom: max(0.65rem, env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    gap: 0.35rem;
+    min-height: 4rem;
+    padding: 0.45rem;
+    border: 1px solid hsl(0 0% 100% / 0.86);
+    border-radius: 1.15rem;
+    background: hsl(195 32% 98% / 0.82);
+    box-shadow: 0 16px 38px hsl(222 34% 22% / 0.16), inset 0 1px 0 hsl(0 0% 100% / 0.9);
+    backdrop-filter: blur(22px) saturate(155%);
+  }
+  .pl-mobile-bottom-item {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: hsl(var(--pl-soft));
+    border-radius: 0.85rem;
+    min-width: 0;
+    flex: 1;
+    min-height: 3.05rem;
+    padding: 0.35rem 0.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    font-size: 0.58rem;
+    font-weight: 650;
+    line-height: 1;
+    transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+  }
+  .pl-mobile-bottom-item:hover,
+  .pl-mobile-bottom-item:focus-visible {
+    color: hsl(var(--pl-cobalt));
+    background: hsl(0 0% 100% / 0.66);
+    outline: 2px solid hsl(var(--pl-cobalt) / 0.2);
+    outline-offset: -2px;
+  }
+  .pl-mobile-bottom-item:active {
+    transform: translateY(1px);
+  }
+  .pl-mobile-bottom-item.is-active {
+    color: hsl(var(--pl-cobalt));
+    background: hsl(0 0% 100% / 0.82);
+    box-shadow: 0 5px 14px hsl(222 38% 32% / 0.09);
+  }
+
   @media (max-width: 1279px) {
     .pl-grid-top {
       grid-template-columns: 1fr 1fr;
@@ -378,5 +436,13 @@
     .pl-mini strong { font-size: 1.05rem; }
     .pl-hero h1 { font-size: 1.9rem; }
     .pl-hero-side { align-items: flex-start; }
+  }
+  @media (min-width: 1024px) {
+    html[data-skin="prisma-light"] body {
+      padding-bottom: 0;
+    }
+    .pl-mobile-bottom {
+      display: none;
+    }
   }
 }

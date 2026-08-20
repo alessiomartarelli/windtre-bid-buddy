@@ -14,7 +14,8 @@ import {
 import { ACCENT_PRESETS } from '../client/src/lib/appearance.ts';
 
 // Test suite UI Playwright per le preferenze aspetto per-utente (Task #407):
-// tema chiaro/scuro/sistema + palette brand (preset o colore libero) devono
+// tema chiaro/scuro/sistema + composizione Prisma Light della Dashboard +
+// palette brand (preset o colore libero) devono
 // applicarsi subito, persistere sul server (profiles.ui_prefs, merge jsonb
 // atomico via PATCH /api/auth/ui-prefs) e "seguire" l'utente su un nuovo
 // dispositivo (contesto browser senza localStorage) via sync AUTH_PROFILE_EVENT.
@@ -29,7 +30,9 @@ import { ACCENT_PRESETS } from '../client/src/lib/appearance.ts';
 //      cookie => tema+palette arrivano dal server;
 //   6. race tema+palette ravvicinati: entrambe le chiavi sopravvivono nel
 //      jsonb (merge atomico, niente lost update);
-//   7. parità statica: la tabella PRESETS nel pre-paint script di
+//   7. Prisma Light: preferenza separata dal tema, server sync, skin limitata
+//      alla Dashboard Gara Reale e bottom bar mobile fissa;
+//   8. parità statica: la tabella PRESETS nel pre-paint script di
 //      client/index.html combacia con ACCENT_PRESETS di appearance.ts.
 
 const TEAL = ACCENT_PRESETS.find((p) => p.id === 'teal');
@@ -77,7 +80,7 @@ async function openProfile(page) {
 // click del test partono mentre quelle PATCH sono ancora in volo, possono
 // arrivare al server DOPO e sovrascrivere la scelta del test (es. theme
 // "system" che batte "dark"). Aspettiamo quindi il marker locale + la
-// comparsa di theme+accent di default in profiles.ui_prefs.
+// comparsa di theme+accent+dashboardStyle di default in profiles.ui_prefs.
 async function waitInitialPrefsSync(page, pool, profileId) {
   await waitFor(
     () => page.evaluate(() => localStorage.getItem('mystoredesk-prefs-user')),
@@ -86,8 +89,8 @@ async function waitInitialPrefsSync(page, pool, profileId) {
   );
   await waitFor(
     () => readUiPrefs(pool, profileId),
-    (p) => p?.theme != null && p?.accent != null,
-    'initial default prefs persisted to server (theme+accent)',
+    (p) => p?.theme != null && p?.accent != null && p?.dashboardStyle != null,
+    'initial default prefs persisted to server (theme+accent+dashboardStyle)',
   );
 }
 
@@ -171,34 +174,109 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
       'server ui_prefs {theme: light, accent: custom} after switch back',
     );
 
+    // --- Prisma Light: composizione dashboard separata dal tema globale ---
+    // Parti da dark: selezionare Prisma NON deve sovrascrivere il tema base.
+    await page.getByTestId('btn-theme-dark').click();
+    await waitFor(
+      () => readUiPrefs(pool, session.profileId),
+      (p) => p?.theme === 'dark' && p?.dashboardStyle === 'standard',
+      'server base theme dark before Prisma selection',
+    );
+    await page.getByTestId('btn-theme-prisma-light').click();
+    await waitFor(
+      () => readUiPrefs(pool, session.profileId),
+      (p) => p?.theme === 'dark' && p?.dashboardStyle === 'prisma-light',
+      'server ui_prefs preserves theme dark with dashboardStyle prisma-light',
+    );
+    assert.equal(await isDarkClass(page), true,
+      'selezionare Prisma non deve schiarire la pagina Profilo');
+    assert.equal(
+      await page.evaluate(() => document.documentElement.hasAttribute('data-skin')),
+      false,
+      'Prisma Light non deve applicare la skin globale sulla pagina Profilo',
+    );
+    assert.equal(
+      await page.evaluate(() => localStorage.getItem('mystoredesk-dashboard-style')),
+      'prisma-light',
+      'la composizione dashboard deve essere specchiata in localStorage',
+    );
+
     await page.close();
     await context.close();
 
     // --- "Nuovo dispositivo": contesto fresco senza localStorage, solo cookie.
     // Il sync via AUTH_PROFILE_EVENT deve applicare tema+palette dal server.
-    const fresh = await newAuthedContext(browser, session);
+    const fresh = await newAuthedContext(browser, session, { mobile: true });
     const page2 = await fresh.newPage();
-    await page2.goto(`${BASE}/`, { waitUntil: 'networkidle' });
-    await waitFor(
-      () => getPrimaryVar(page2),
-      (v) => v === '210 50% 40%',
-      'fresh context: --primary synced from server (custom light)',
-      20000,
-    );
-    assert.equal(await isDarkClass(page2), false, 'fresh context: theme light synced from server');
+    await page2.goto(`${BASE}/dashboard-gara-reale`, { waitUntil: 'networkidle' });
+    await page2.getByTestId('dashboard-gara-reale').waitFor({ state: 'visible', timeout: 20000 });
+    assert.equal(await isDarkClass(page2), false,
+      'Prisma deve forzare light solo mentre è aperta la Dashboard Gara Reale');
     // Il sync deve anche specchiare in localStorage (mirror per il pre-paint).
     const mirroredTheme = await page2.evaluate(() => localStorage.getItem('mystoredesk-theme'));
-    assert.equal(mirroredTheme, 'light', 'fresh context must mirror theme into localStorage');
+    assert.equal(mirroredTheme, 'dark', 'fresh context must mirror the preserved base theme into localStorage');
     const mirroredAccent = JSON.parse(
       await page2.evaluate(() => localStorage.getItem('mystoredesk-accent')),
     );
     assert.deepEqual(mirroredAccent, { type: 'custom', hex: '#336699' }, 'fresh context must mirror accent into localStorage');
+    assert.equal(
+      await page2.evaluate(() => localStorage.getItem('mystoredesk-dashboard-style')),
+      'prisma-light',
+      'fresh context must mirror dashboardStyle into localStorage',
+    );
+    await page2.getByTestId('prisma-mobile-bottom-bar').waitFor({ state: 'visible', timeout: 20000 });
+    const bottomBar = await page2.getByTestId('prisma-mobile-bottom-bar').evaluate((el) => {
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return {
+        position: style.position,
+        bottom: Math.round(window.innerHeight - rect.bottom),
+      };
+    });
+    assert.equal(bottomBar.position, 'fixed', 'la bottom bar Prisma mobile deve restare fissa');
+    assert.ok(bottomBar.bottom >= 0 && bottomBar.bottom <= 20,
+      `la bottom bar deve aderire al fondo viewport (bottom=${bottomBar.bottom})`);
+    assert.equal(
+      await page2.getByTestId('prisma-mobile-nav-dashboard-gara-reale').getAttribute('aria-current'),
+      'page',
+      'la voce Dashboard della bottom bar deve indicare la route attiva',
+    );
 
     // --- Stabilità UI con palette non-default (Task #413) ---
-    // Con l'accent custom attivo, la Home deve rendere normalmente e i
-    // selettori data-testid devono restare validi: nessun test deve
-    // dipendere da colori/classi della palette di default.
-    await page2.getByTestId('text-home-title').waitFor({ state: 'visible', timeout: 20000 });
+    // Uscendo dalla dashboard, la skin scompare e il tema dark base ritorna.
+    await page2.goto(`${BASE}/profile`, { waitUntil: 'networkidle' });
+    await page2.getByTestId('card-aspetto').waitFor({ state: 'visible', timeout: 20000 });
+    assert.equal(
+      await page2.evaluate(() => document.documentElement.hasAttribute('data-skin')),
+      false,
+      'la skin Prisma deve essere rimossa fuori dalla Dashboard Gara Reale',
+    );
+    assert.equal(await isDarkClass(page2), true,
+      'il tema dark base deve tornare attivo uscendo dalla dashboard Prisma');
+    await waitFor(
+      () => getPrimaryVar(page2),
+      (v) => v === '210 50% 50%',
+      'fresh context: custom accent dark restored outside Prisma',
+      20000,
+    );
+
+    // Il logout deve cancellare il mirror locale per evitare che un altro
+    // account nello stesso browser riceva il pre-paint dell'utente uscente.
+    await page2.getByTestId('button-user-menu').click();
+    await page2.getByText('Esci', { exact: true }).click();
+    await page2.waitForURL(/\/auth\/?$/, { timeout: 20000 });
+    const localPrefsAfterLogout = await page2.evaluate(() => ({
+      theme: localStorage.getItem('mystoredesk-theme'),
+      accent: localStorage.getItem('mystoredesk-accent'),
+      dashboardStyle: localStorage.getItem('mystoredesk-dashboard-style'),
+      user: localStorage.getItem('mystoredesk-prefs-user'),
+    }));
+    assert.deepEqual(localPrefsAfterLogout, {
+      theme: null,
+      accent: null,
+      dashboardStyle: null,
+      user: null,
+    }, 'logout must clear every per-user appearance mirror');
 
     await page2.close();
     await fresh.close();

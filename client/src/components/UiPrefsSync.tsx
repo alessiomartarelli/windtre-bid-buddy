@@ -12,7 +12,13 @@
 //   login e signup), così il sync scatta anche al login "fresco" senza reload.
 import { useEffect, useRef } from "react";
 import { AUTH_PROFILE_EVENT } from "@/hooks/useAuth";
-import { useTheme, hasStoredAccent, type Theme } from "@/hooks/useTheme";
+import {
+  useTheme,
+  hasStoredAccent,
+  hasStoredDashboardStyle,
+  type DashboardStyle,
+  type Theme,
+} from "@/hooks/useTheme";
 import { ACCENT_PRESETS, DEFAULT_ACCENT, hexToHsl, type AccentChoice } from "@/lib/appearance";
 
 const PREFS_USER_KEY = "mystoredesk-prefs-user";
@@ -36,22 +42,28 @@ function validAccent(a: any): AccentChoice | null {
 }
 
 export function UiPrefsSync() {
-  const { setTheme, setAccent } = useTheme();
+  const { setTheme, setAccent, setDashboardStyle } = useTheme();
   const appliedFor = useRef<string | null>(null);
 
   useEffect(() => {
     const onProfile = (e: Event) => {
       const data = (e as CustomEvent).detail as
-        | { id?: string; uiPrefs?: { theme?: string; accent?: any } | null }
+        | { id?: string; uiPrefs?: { theme?: string; accent?: any; dashboardStyle?: string } | null }
         | undefined;
       if (!data?.id || appliedFor.current === data.id) return;
       appliedFor.current = data.id;
 
       const prefs = data.uiPrefs ?? {};
       const sameUser = storedPrefsUser() === data.id;
-      const theme = prefs.theme && ["light", "dark", "system", "prisma-light"].includes(prefs.theme)
+      const theme = prefs.theme && ["light", "dark", "system"].includes(prefs.theme)
         ? (prefs.theme as Theme) : null;
       const accent = validAccent(prefs.accent);
+      const dashboardStyle = prefs.dashboardStyle
+        && ["standard", "prisma-light"].includes(prefs.dashboardStyle)
+        ? (prefs.dashboardStyle as DashboardStyle)
+        : prefs.theme === "prisma-light"
+          ? "prisma-light"
+          : null;
 
       if (sameUser) {
         // Stesso utente del mirror locale: la cache è già sua (e può essere
@@ -59,18 +71,22 @@ export function UiPrefsSync() {
         // non è mai stato scelto.
         if (theme && !hasStoredTheme()) setTheme(theme);
         if (accent && !hasStoredAccent()) setAccent(accent);
+        if (dashboardStyle && !hasStoredDashboardStyle()) {
+          setDashboardStyle(dashboardStyle);
+        }
       } else {
         // Utente diverso (o primo utilizzo): le sue preferenze server vincono
         // sempre; in assenza si torna ai default, senza ereditare l'aspetto
         // dell'account precedente.
         setTheme(theme ?? "system");
         setAccent(accent ?? DEFAULT_ACCENT);
+        setDashboardStyle(dashboardStyle ?? "standard");
       }
       rememberPrefsUser(data.id);
     };
     window.addEventListener(AUTH_PROFILE_EVENT, onProfile);
     return () => window.removeEventListener(AUTH_PROFILE_EVENT, onProfile);
-  }, [setTheme, setAccent]);
+  }, [setTheme, setAccent, setDashboardStyle]);
 
   return null;
 }

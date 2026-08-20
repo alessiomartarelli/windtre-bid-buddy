@@ -8,7 +8,9 @@ import { useTheme, type Theme } from "@/hooks/useTheme";
 import { ACCENT_PRESETS, type AccentChoice, accentEquals, hexToHsl } from "@/lib/appearance";
 import { Palette, Sun, Moon, Monitor, Check, Sparkles } from "lucide-react";
 
-const THEME_OPTIONS: { value: Theme; label: string; Icon: typeof Sun }[] = [
+type AppearanceMode = Theme | "prisma-light";
+
+const THEME_OPTIONS: { value: AppearanceMode; label: string; Icon: typeof Sun }[] = [
   { value: "light", label: "Chiaro", Icon: Sun },
   { value: "dark", label: "Scuro", Icon: Moon },
   { value: "system", label: "Sistema", Icon: Monitor },
@@ -17,12 +19,26 @@ const THEME_OPTIONS: { value: Theme; label: string; Icon: typeof Sun }[] = [
 ];
 
 export function AspettoCard() {
-  const { theme, setTheme, accent, setAccent } = useTheme();
+  const {
+    theme,
+    setTheme,
+    accent,
+    setAccent,
+    dashboardStyle,
+    setDashboardStyle,
+  } = useTheme();
   const [customHex, setCustomHex] = useState(accent.type === "custom" ? accent.hex : "#6366f1");
 
   // La persistenza server è gestita dal ThemeProvider (fire-and-forget su
   // ogni setTheme/setAccent), quindi qui basta applicare la scelta.
-  const chooseTheme = (t: Theme) => setTheme(t);
+  const chooseTheme = (mode: AppearanceMode) => {
+    if (mode === "prisma-light") {
+      setDashboardStyle("prisma-light");
+      return;
+    }
+    setDashboardStyle("standard");
+    setTheme(mode);
+  };
   const chooseAccent = (a: AccentChoice) => setAccent(a);
 
   return (
@@ -45,7 +61,13 @@ export function AspettoCard() {
                 key={value}
                 type="button"
                 onClick={() => chooseTheme(value)}
-                className={`px-4 text-sm font-medium flex items-center gap-2 ${i > 0 ? "border-l" : ""} ${theme === value ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                className={`px-4 text-sm font-medium flex items-center gap-2 ${i > 0 ? "border-l" : ""} ${
+                  (value === "prisma-light"
+                    ? dashboardStyle === "prisma-light"
+                    : dashboardStyle === "standard" && theme === value)
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                }`}
                 data-testid={`btn-theme-${value}`}
               >
                 <Icon className="h-4 w-4" />{label}

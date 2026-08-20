@@ -18,13 +18,12 @@ function persistUiPrefs(patch: Record<string, unknown>): void {
   }
 }
 
-// "prisma-light" (Task #453): variante editoriale chiara. Si risolve come
-// tema chiaro ma imposta html[data-skin="prisma-light"], che attiva la
-// composizione Prisma Light della Dashboard Gara Reale e la pelle carta/vetro.
-export type Theme = "light" | "dark" | "system" | "prisma-light";
+export type Theme = "light" | "dark" | "system";
+export type DashboardStyle = "standard" | "prisma-light";
 
 const STORAGE_KEY = "mystoredesk-theme";
 const ACCENT_STORAGE_KEY = "mystoredesk-accent";
+const DASHBOARD_STYLE_STORAGE_KEY = "mystoredesk-dashboard-style";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -32,6 +31,8 @@ interface ThemeContextValue {
   setTheme: (theme: Theme) => void;
   accent: AccentChoice;
   setAccent: (accent: AccentChoice) => void;
+  dashboardStyle: DashboardStyle;
+  setDashboardStyle: (style: DashboardStyle) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
@@ -40,9 +41,12 @@ function getStoredTheme(): Theme {
   if (typeof window === "undefined") return "system";
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark" || stored === "system" || stored === "prisma-light") {
+    if (stored === "light" || stored === "dark" || stored === "system") {
       return stored;
     }
+    // Compatibilità con la preview iniziale di Task #453: la vecchia chiave
+    // non deve rendere "prisma-light" un tema globale.
+    if (stored === "prisma-light") return "light";
   } catch {
     // localStorage non disponibile (SSR / privacy): default a "system".
   }
@@ -73,16 +77,31 @@ export function hasStoredAccent(): boolean {
   try { return localStorage.getItem(ACCENT_STORAGE_KEY) != null; } catch { return false; }
 }
 
+export function getStoredDashboardStyle(): DashboardStyle {
+  if (typeof window === "undefined") return "standard";
+  try {
+    const stored = localStorage.getItem(DASHBOARD_STYLE_STORAGE_KEY);
+    if (stored === "prisma-light" || stored === "standard") return stored;
+    // Migrazione locale dalla preview iniziale.
+    if (localStorage.getItem(STORAGE_KEY) === "prisma-light") return "prisma-light";
+  } catch {
+    // storage non disponibile: layout standard
+  }
+  return "standard";
+}
+
+export function hasStoredDashboardStyle(): boolean {
+  try {
+    return localStorage.getItem(DASHBOARD_STYLE_STORAGE_KEY) != null
+      || localStorage.getItem(STORAGE_KEY) === "prisma-light";
+  } catch {
+    return false;
+  }
+}
+
 function applyTheme(theme: Theme): "light" | "dark" {
   const isDark = theme === "dark" || (theme === "system" && systemPrefersDark());
   document.documentElement.classList.toggle("dark", isDark);
-  // Skin Prisma Light: attributo hook per il CSS scoped e per la
-  // composizione dedicata della Dashboard Gara Reale (Task #453).
-  if (theme === "prisma-light") {
-    document.documentElement.setAttribute("data-skin", "prisma-light");
-  } else {
-    document.documentElement.removeAttribute("data-skin");
-  }
   return isDark ? "dark" : "light";
 }
 
@@ -92,6 +111,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     typeof window === "undefined" ? "light" : applyTheme(getStoredTheme()),
   );
   const [accent, setAccentState] = useState<AccentChoice>(() => getStoredAccent());
+  const [dashboardStyle, setDashboardStyleState] = useState<DashboardStyle>(
+    () => getStoredDashboardStyle(),
+  );
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
@@ -112,6 +134,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       // Ignora: la palette resta comunque applicata per la sessione.
     }
     persistUiPrefs({ accent: next });
+  }, []);
+
+  const setDashboardStyle = useCallback((next: DashboardStyle) => {
+    setDashboardStyleState(next);
+    try {
+      localStorage.setItem(DASHBOARD_STYLE_STORAGE_KEY, next);
+      // Completa la migrazione dalla preview iniziale.
+      if (localStorage.getItem(STORAGE_KEY) === "prisma-light") {
+        localStorage.setItem(STORAGE_KEY, "light");
+      }
+    } catch {
+      // La scelta resta applicata per la sessione.
+    }
+    persistUiPrefs({ dashboardStyle: next });
   }, []);
 
   // Applica/riapplica la palette quando cambia accent o light/dark (i valori
@@ -139,6 +175,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) {
         setThemeState(getStoredTheme());
+      } else if (e.key === DASHBOARD_STYLE_STORAGE_KEY) {
+        setDashboardStyleState(getStoredDashboardStyle());
       }
     };
     window.addEventListener("storage", onStorage);
@@ -146,7 +184,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme, accent, setAccent }}>
+    <ThemeContext.Provider value={{
+      theme,
+      resolvedTheme,
+      setTheme,
+      accent,
+      setAccent,
+      dashboardStyle,
+      setDashboardStyle,
+    }}>
       {children}
     </ThemeContext.Provider>
   );

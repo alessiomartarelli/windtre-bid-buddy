@@ -21,19 +21,28 @@
       (function () {
         try {
           var stored = localStorage.getItem("mystoredesk-theme");
+          var legacyPrisma = stored === "prisma-light";
           var theme =
-            stored === "light" || stored === "dark" || stored === "system" || stored === "prisma-light"
+            stored === "light" || stored === "dark" || stored === "system"
               ? stored
-              : "system";
+              : legacyPrisma ? "light" : "system";
           var isDark =
             theme === "dark" ||
             (theme === "system" &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", isDark);
-          // Skin Prisma Light (Task #453): attributo prima del primo paint
-          // per evitare flash della composizione standard.
-          if (theme === "prisma-light") {
+          // Skin della sola Dashboard Gara Reale (Task #453). Il controllo
+          // del path evita che Prisma diventi un tema globale sulle altre
+          // pagine; legacyPrisma migra la preview iniziale.
+          var dashboardStyle =
+            localStorage.getItem("mystoredesk-dashboard-style")
+            || (legacyPrisma ? "prisma-light" : "standard");
+          if (
+            dashboardStyle === "prisma-light"
+            && /\/dashboard-gara-reale\/?$/.test(window.location.pathname)
+          ) {
             document.documentElement.setAttribute("data-skin", "prisma-light");
+            document.documentElement.classList.remove("dark");
           }
           // Palette brand per-utente (Task #407): applica gli override prima
           // del primo paint per evitare il flash del colore di default.

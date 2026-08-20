@@ -34,7 +34,10 @@ try {
   // UiPrefsSync applica le preferenze del profilo sopra il localStorage:
   // per la preview impostiamo il tema direttamente sul profilo di test.
   await pool.query(
-    `UPDATE profiles SET ui_prefs = jsonb_set(coalesce(ui_prefs,'{}'::jsonb), '{theme}', '"prisma-light"') WHERE id = $1`,
+    `UPDATE profiles
+        SET ui_prefs = coalesce(ui_prefs,'{}'::jsonb)
+          || '{"theme":"light","dashboardStyle":"prisma-light"}'::jsonb
+      WHERE id = $1`,
     [session.profileId],
   );
   const POS1 = uniq('POS');
@@ -64,7 +67,10 @@ try {
   ]) {
     const context = await newAuthedContext(browser, session, opts);
     const page = await context.newPage();
-    await page.addInitScript(() => localStorage.setItem('mystoredesk-theme', 'prisma-light'));
+    await page.addInitScript(() => {
+      localStorage.setItem('mystoredesk-theme', 'light');
+      localStorage.setItem('mystoredesk-dashboard-style', 'prisma-light');
+    });
     await page.goto(`${BASE}/dashboard-gara-reale`, { waitUntil: 'networkidle' });
     await page.getByTestId('card-kpi-actual').waitFor({ state: 'visible', timeout: 30000 });
     await page.waitForTimeout(1500);

@@ -23,7 +23,9 @@ import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificati
 import { BrandGlyph } from '@/components/BrandLogo';
 import { useTheme, type Theme } from '@/hooks/useTheme';
 
-const themeOptions: Array<{ value: Theme; label: string; icon: typeof Sun }> = [
+type AppearanceMode = Theme | 'prisma-light';
+
+const themeOptions: Array<{ value: AppearanceMode; label: string; icon: typeof Sun }> = [
   { value: 'light', label: 'Chiaro', icon: Sun },
   { value: 'dark', label: 'Scuro', icon: Moon },
   { value: 'system', label: 'Sistema', icon: Monitor },
@@ -32,7 +34,21 @@ const themeOptions: Array<{ value: Theme; label: string; icon: typeof Sun }> = [
 ];
 
 function ThemeToggle() {
-  const { theme, resolvedTheme, setTheme } = useTheme();
+  const {
+    theme,
+    resolvedTheme,
+    setTheme,
+    dashboardStyle,
+    setDashboardStyle,
+  } = useTheme();
+  const chooseAppearance = (mode: AppearanceMode) => {
+    if (mode === 'prisma-light') {
+      setDashboardStyle('prisma-light');
+    } else {
+      setDashboardStyle('standard');
+      setTheme(mode);
+    }
+  };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -43,7 +59,9 @@ function ThemeToggle() {
           data-testid="button-theme-toggle"
           aria-label="Cambia tema"
         >
-          {resolvedTheme === 'dark' ? (
+          {dashboardStyle === 'prisma-light' ? (
+            <Sparkles className="h-4 w-4" />
+          ) : resolvedTheme === 'dark' ? (
             <Moon className="h-4 w-4" />
           ) : (
             <Sun className="h-4 w-4" />
@@ -57,8 +75,14 @@ function ThemeToggle() {
         {themeOptions.map((opt) => (
           <DropdownMenuItem
             key={opt.value}
-            onClick={() => setTheme(opt.value)}
-            className={theme === opt.value ? 'bg-accent' : ''}
+            onClick={() => chooseAppearance(opt.value)}
+            className={
+              (opt.value === 'prisma-light'
+                ? dashboardStyle === 'prisma-light'
+                : dashboardStyle === 'standard' && theme === opt.value)
+                ? 'bg-accent'
+                : ''
+            }
             data-testid={`theme-option-${opt.value}`}
           >
             <opt.icon className="mr-2 h-4 w-4" />
@@ -79,13 +103,30 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
   const [location, setLocation] = useLocation();
   const { user, profile, organization, signOut } = useAuth();
   const { toast } = useToast();
-  const { theme, setTheme } = useTheme();
+  const {
+    theme,
+    resolvedTheme,
+    setTheme,
+    dashboardStyle,
+    setDashboardStyle,
+  } = useTheme();
 
   const handleSignOut = async () => {
     const { error } = await signOut();
     if (error) {
       toast({ title: 'Errore', description: 'Errore durante il logout', variant: 'destructive' });
     } else {
+      // Le preferenze sono per-utente: prima di passare alla schermata auth
+      // rimuovi il mirror locale, così l'account successivo non riceve il
+      // pre-paint (anche solo per un frame) dell'utente uscente.
+      try {
+        localStorage.removeItem('mystoredesk-theme');
+        localStorage.removeItem('mystoredesk-accent');
+        localStorage.removeItem('mystoredesk-dashboard-style');
+        localStorage.removeItem('mystoredesk-prefs-user');
+      } catch {
+        // Storage non disponibile: il logout server resta comunque valido.
+      }
       window.location.href = `${BASE_PATH}/auth`;
     }
   };
@@ -132,6 +173,41 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
     ...(isEnabled('simulatore') ? [{ path: '/dashboard', label: 'Dashboard Sim.', icon: LayoutDashboard }] : []),
     ...(isAdminOrSuper && isEnabled('tabelle_calcolo') ? [{ path: '/tabelle-calcolo', label: 'Tabelle Calcolo', icon: Table2 }] : []),
   ];
+
+  const chooseAppearance = (mode: AppearanceMode) => {
+    if (mode === 'prisma-light') {
+      setDashboardStyle('prisma-light');
+    } else {
+      setDashboardStyle('standard');
+      setTheme(mode);
+    }
+  };
+
+  const isPrismaDashboard =
+    dashboardStyle === 'prisma-light' && location === '/dashboard-gara-reale';
+  const prismaMobileItems = garaItems
+    .filter((item) => [
+      '/dashboard-gara-reale',
+      '/configurazione-gara',
+      '/vendite-bisuite',
+    ].includes(item.path))
+    .slice(0, 3);
+
+  useEffect(() => {
+    if (isPrismaDashboard) {
+      document.documentElement.setAttribute('data-skin', 'prisma-light');
+      // Prisma è sempre light soltanto su questa route; non modifica né
+      // persiste il tema base scelto dall'utente.
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.removeAttribute('data-skin');
+      document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
+    }
+    return () => {
+      document.documentElement.removeAttribute('data-skin');
+      document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
+    };
+  }, [isPrismaDashboard, resolvedTheme]);
 
   useEffect(() => {
     document.body.classList.add('desktop-sidebar-layout');
@@ -346,8 +422,14 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
                 {themeOptions.map((opt) => (
                   <DropdownMenuItem
                     key={opt.value}
-                    onClick={() => setTheme(opt.value)}
-                    className={theme === opt.value ? 'bg-accent' : ''}
+                    onClick={() => chooseAppearance(opt.value)}
+                    className={
+                      (opt.value === 'prisma-light'
+                        ? dashboardStyle === 'prisma-light'
+                        : dashboardStyle === 'standard' && theme === opt.value)
+                        ? 'bg-accent'
+                        : ''
+                    }
                     data-testid={`theme-option-mobile-${opt.value}`}
                   >
                     <opt.icon className="mr-2 h-4 w-4" />
@@ -402,6 +484,30 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
         </div>
       </div>
     </header>
+    {isPrismaDashboard && prismaMobileItems.length > 0 && (
+      <nav
+        className="pl-mobile-bottom lg:hidden"
+        aria-label="Navigazione rapida"
+        data-testid="prisma-mobile-bottom-bar"
+      >
+        {prismaMobileItems.map((item) => {
+          const active = location === item.path;
+          return (
+            <button
+              key={item.path}
+              type="button"
+              className={`pl-mobile-bottom-item ${active ? 'is-active' : ''}`}
+              onClick={() => setLocation(item.path)}
+              aria-current={active ? 'page' : undefined}
+              data-testid={`prisma-mobile-nav-${item.path.replace(/\//g, '')}`}
+            >
+              <item.icon className="h-5 w-5" />
+              <span>{item.label.replace(' BiSuite', '')}</span>
+            </button>
+          );
+        })}
+      </nav>
+    )}
     </>
   );
 }

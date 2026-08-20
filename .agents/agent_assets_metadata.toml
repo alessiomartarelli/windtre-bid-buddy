@@ -64,8 +64,8 @@ content_type = "image/jpeg"
 id = "lPaRRIUw2L3GE5qr4Fx0Q"
 uri = "file://screenshots/prisma-light-mobile.png"
 type = "image"
-title = "Prisma Light — Mobile"
-description = "La stessa dashboard Prisma Light su viewport mobile: colonne collassate, header e menu mobile esistenti preservati."
+title = "Prisma Light — Mobile finale"
+description = "Anteprima finale con bottom bar mobile fissa, header/menu originale e composizione editoriale su dati live."
 logical_id = "404107aa-c5e0-4202-8e0a-266c69766c9f"
 
 [[outputs]]
