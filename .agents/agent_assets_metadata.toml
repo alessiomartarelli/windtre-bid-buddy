@@ -73,17 +73,3 @@ mtime_ms = 1787157751101
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:6f306082-0aa4-49d0-a793-ddca694e781e/404107aa-c5e0-4202-8e0a-266c69766c9f/0ecbc9c3-7cdb-4de4-972d-cf78655a1c04"
 storage_version_token = "1787157920038507"
 content_type = "image/png"
-
-[[outputs]]
-id = "wv_DR9MpO1wlrSjjqlhPH"
-uri = "file://screenshots/prisma-light-desktop-top.jpg"
-type = "image"
-title = "Prisma Light — desktop"
-description = "Dashboard Gara Reale con skin Prisma Light, sidebar preservata (dati di prova)."
-
-[[outputs]]
-id = "P9JCzdMBEjXHYU82AN8H7"
-uri = "file://screenshots/prisma-light-mobile-top.jpg"
-type = "image"
-title = "Prisma Light — mobile"
-description = "Stessa dashboard su viewport 375x812 con skin Prisma Light."
