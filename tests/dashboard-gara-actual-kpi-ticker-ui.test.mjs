@@ -434,3 +434,115 @@ test('Dashboard Gara: il solo addon Pagamento Annuale mostra 0,5 punti e raggiun
     await pool.end().catch(() => {});
   }
 });
+
+// ── Test 4 (Task #456): preset Prisma Light → card "Eventi rilevati" ────────
+// Con dashboardStyle=prisma-light la composizione mockup deve includere la
+// card di confronto piste (prisma-eventi): una riga per pista attiva con
+// barra proporzionale e conteggio "N eventi" dai dati live (pistaStats),
+// senza far sparire le card già presenti (KPI, avanzamento mese, PDV/focus).
+test('Dashboard Gara (Prisma Light): card Eventi rilevati con righe pista e barre dai dati live', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gkpi_pl', fullName: 'Gara Prisma Eventi' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+    // Attiva il preset Prisma Light lato server (fonte di verità ui_prefs).
+    await pool.query(
+      `UPDATE profiles SET ui_prefs = coalesce(ui_prefs,'{}'::jsonb)
+         || '{"theme":"light","dashboardStyle":"prisma-light"}'::jsonb WHERE id = $1`,
+      [session.profileId],
+    );
+    const POS = uniq('POS');
+
+    await insertGaraConfig(pool, session.orgId, {
+      pdvList: [{ codicePos: POS, nome: 'Negozio', ragioneSociale: 'RS Srl', abilitaEnergia: true }],
+      energiaConfig: {
+        pdvInGara: 1,
+        targetNoMalus: 0,
+        targetS1: 1,
+        targetS2: 5,
+        targetS3: 10,
+        premio: 200,
+      },
+    });
+
+    // Piste attive: energia (1 pezzo), mobile (2 pezzi), cb (1 pezzo) e
+    // partnership (twin delle regole CB su MIA → 1 pezzo): 4 in totale.
+    await insertSale(pool, session.orgId, { codicePos: POS, articoli: [artEnergia], cliente: clienteFisica });
+    await insertSale(pool, session.orgId, { codicePos: POS, articoli: [artTied], cliente: clientePrivato });
+    await insertSale(pool, session.orgId, { codicePos: POS, articoli: [artTied], cliente: clientePrivato });
+    await insertSale(pool, session.orgId, { codicePos: POS, articoli: [artMia], cliente: clientePrivato });
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      localStorage.setItem('mystoredesk-theme', 'light');
+      localStorage.setItem('mystoredesk-dashboard-style', 'prisma-light');
+    });
+    await openDashboard(page);
+
+    // Composizione Prisma attiva: hero + card esistenti NON spariscono.
+    await page.getByTestId('prisma-hero').waitFor({ state: 'visible', timeout: 15000 });
+    await page.getByTestId('prisma-top-pdv').waitFor({ state: 'visible', timeout: 15000 });
+    await page.getByTestId('prisma-piste-focus').waitFor({ state: 'visible', timeout: 15000 });
+
+    // ── Card Eventi rilevati presente con indicatore piste attive ─────────
+    const card = page.getByTestId('prisma-eventi');
+    await card.waitFor({ state: 'visible', timeout: 15000 });
+    const cardText = await card.innerText();
+    assert.ok(
+      /categorie mappate sulle piste/i.test(cardText),
+      `la card deve avere il titolo "Categorie mappate sulle piste", trovato: "${cardText}"`,
+    );
+    assert.ok(
+      /eventi rilevati/i.test(cardText),
+      'la card deve avere l\'intestazione "Eventi rilevati"',
+    );
+    assert.equal(
+      flat(await page.getByTestId('prisma-eventi-count').innerText()).toLowerCase(),
+      '4pisteattive',
+      'l\'indicatore deve contare le 4 piste attive del seed (incluso il twin partnership)',
+    );
+
+    // ── Una riga per pista attiva, con conteggi dai dati live ─────────────
+    const rows = await card.locator('[data-testid^="prisma-eventi-pista-"]').count();
+    assert.equal(rows, 4, `attese 4 righe pista, trovate: ${rows}`);
+    for (const pista of ['energia', 'mobile', 'cb', 'partnership']) {
+      await page.getByTestId(`prisma-eventi-pista-${pista}`).waitFor({ state: 'visible', timeout: 5000 });
+    }
+    const evOf = async (pista) => {
+      const txt = await page.getByTestId(`prisma-eventi-value-${pista}`).innerText();
+      assert.ok(/eventi/i.test(txt), `il conteggio ${pista} deve dire "eventi", trovato: "${txt}"`);
+      return parseInt(txt.replace(/\D/g, ''), 10);
+    };
+    const evMobile = await evOf('mobile');
+    const evEnergia = await evOf('energia');
+    const evCb = await evOf('cb');
+    assert.equal(evMobile, 2, `mobile deve contare 2 eventi dal seed, trovato: ${evMobile}`);
+    assert.equal(evEnergia, 1, `energia deve contare 1 evento dal seed, trovato: ${evEnergia}`);
+    assert.equal(evCb, 1, `cb deve contare 1 evento dal seed, trovato: ${evCb}`);
+
+    // ── Barre proporzionali: pista max = 100%, le altre in scala ───────────
+    const widthOf = async (pista) => {
+      const style = await page
+        .getByTestId(`prisma-eventi-pista-${pista}`)
+        .locator('.pl-pista-meter i')
+        .getAttribute('style');
+      const m = /width:\s*([\d.]+)%/.exec(style ?? '');
+      assert.ok(m, `la barra ${pista} deve avere una larghezza percentuale, trovato: "${style}"`);
+      return parseFloat(m[1]);
+    };
+    const wMobile = await widthOf('mobile');
+    const wEnergia = await widthOf('energia');
+    assert.equal(wMobile, 100, `la pista con più eventi deve avere barra al 100%, trovato: ${wMobile}%`);
+    assert.equal(wEnergia, 50, `energia (1/2 eventi) deve avere barra al 50%, trovato: ${wEnergia}%`);
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser?.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});

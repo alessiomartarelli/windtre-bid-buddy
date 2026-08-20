@@ -275,7 +275,7 @@
 
   .pl-right {
     grid-column: 3;
-    grid-row: 1 / span 2;
+    grid-row: 1 / span 3;
     display: flex;
     flex-direction: column;
     gap: 0.9rem;
@@ -355,6 +355,101 @@
     height: 100%;
     border-radius: inherit;
     background: linear-gradient(90deg, hsl(var(--pista-ink, var(--pl-cobalt)) / 0.85), hsl(var(--pista-glow, var(--pl-cobalt)) / 0.85));
+  }
+
+  /* Task #456 — card "Eventi rilevati" del mockup: righe pista con barra
+     comparativa colorata e conteggio eventi allineato a destra. */
+  .pl-comp {
+    grid-column: 1 / 3;
+    grid-row: 3;
+    padding: 1.1rem;
+  }
+  .pl-comp-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .pl-comp h2 {
+    font-family: var(--pl-serif);
+    font-weight: 500;
+    font-size: 1.55rem;
+    letter-spacing: -0.045rem;
+    margin: 0.25rem 0;
+    color: hsl(var(--pl-ink));
+  }
+  .pl-comp p {
+    font-size: 0.66rem;
+    color: hsl(var(--pl-soft));
+    margin: 0;
+  }
+  .pl-score {
+    font-family: var(--pl-mono);
+    font-size: 0.62rem;
+    line-height: 1.4;
+    color: hsl(var(--pl-cobalt));
+    background: hsl(var(--pl-cobalt) / 0.07);
+    padding: 0.45rem 0.55rem;
+    border-radius: 0.55rem;
+    height: fit-content;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .pl-pista-stack {
+    display: grid;
+    gap: 0.7rem;
+    margin-top: 1.2rem;
+  }
+  .pl-pista-real {
+    display: grid;
+    grid-template-columns: minmax(110px, 0.8fr) minmax(140px, 1.5fr) auto;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .pl-pista-name {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: hsl(var(--pl-ink));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pl-pista-meter {
+    height: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: hsl(215 20% 51% / 0.1);
+  }
+  .pl-pista-meter i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, hsl(176 61% 52%), hsl(var(--pl-cobalt)));
+  }
+  .pl-pista-real:nth-child(2) .pl-pista-meter i {
+    background: linear-gradient(90deg, #6fd0a6, #3f9f82);
+  }
+  .pl-pista-real:nth-child(3) .pl-pista-meter i {
+    background: linear-gradient(90deg, #ffd777, #ff916a);
+  }
+  .pl-pista-real:nth-child(4) .pl-pista-meter i {
+    background: linear-gradient(90deg, #85d9de, #4a9eb8);
+  }
+  .pl-pista-real:nth-child(5) .pl-pista-meter i {
+    background: linear-gradient(90deg, #e2bcff, #9778da);
+  }
+  .pl-pista-real:nth-child(6) .pl-pista-meter i {
+    background: linear-gradient(90deg, #ffb3c1, #e5678b);
+  }
+  .pl-pista-real:nth-child(7) .pl-pista-meter i {
+    background: linear-gradient(90deg, #bfd4ff, #6689d8);
+  }
+  .pl-pista-value {
+    min-width: 4.5rem;
+    color: hsl(220 20% 39%);
+    font-family: var(--pl-mono);
+    font-size: 0.62rem;
+    text-align: right;
+    white-space: nowrap;
   }
 
   /* Task #454 — pannello verde "Provenienza verificabile" del mockup:
@@ -468,14 +563,20 @@
     .pl-minis { grid-column: 2; grid-row: 1; grid-template-columns: 1fr; }
     .pl-activity { grid-column: 1; grid-row: 2; }
     .pl-right { grid-column: 2; grid-row: 2; }
+    .pl-comp { grid-column: 1 / -1; grid-row: 3; }
   }
   @media (max-width: 767px) {
     .pl-grid-top {
       grid-template-columns: 1fr;
     }
-    .pl-balance, .pl-minis, .pl-activity, .pl-right {
+    .pl-balance, .pl-minis, .pl-activity, .pl-right, .pl-comp {
       grid-column: 1;
       grid-row: auto;
+    }
+    .pl-comp { padding: 0.9rem; }
+    .pl-pista-real {
+      grid-template-columns: minmax(90px, 0.9fr) minmax(0, 1.4fr) auto;
+      gap: 0.5rem;
     }
     .pl-minis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .pl-mini { padding: 0.7rem; min-height: 4.6rem; }

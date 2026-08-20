@@ -4724,6 +4724,37 @@ export default function DashboardGaraReale() {
                     </article>
                   )}
                 </aside>
+                {/* Task #456 — card "Eventi rilevati" del mockup: una riga per
+                    pista attiva con barra proporzionale e conteggio eventi.
+                    Solo lettura di prismaPanels (pistaStats live), nessun
+                    calcolo nuovo. */}
+                {prismaPanels && prismaPanels.piste.length > 0 && (
+                  <article className="pl-pane pl-comp" data-testid="prisma-eventi">
+                    <div className="pl-comp-top">
+                      <div className="min-w-0">
+                        <div className="pl-tiny">Categorie mappate sulle piste</div>
+                        <h2>Eventi rilevati {(getMonthOptions().find((o) => o.value === selectedPeriod)?.label ?? '') && `a ${(getMonthOptions().find((o) => o.value === selectedPeriod)?.label ?? '').toLowerCase()}`}</h2>
+                        <p>Stesso aggregatore e stesse regole effettive della Dashboard Gara Reale.</p>
+                      </div>
+                      <div className="pl-score" data-testid="prisma-eventi-count">
+                        {prismaPanels.piste.length.toLocaleString('it-IT')}<br />piste attive
+                      </div>
+                    </div>
+                    <div className="pl-pista-stack">
+                      {[...prismaPanels.piste].sort((a, b) => b.pezzi - a.pezzi).map((p) => (
+                        <div className="pl-pista-real" key={p.pista} data-testid={`prisma-eventi-pista-${p.pista}`}>
+                          <span className="pl-pista-name" title={p.label}>{p.label}</span>
+                          <span className="pl-pista-meter">
+                            <i style={{ width: `${Math.max(4, Math.min(100, (p.pezzi / prismaPanels.maxPezzi) * 100))}%` }} />
+                          </span>
+                          <span className="pl-pista-value" data-testid={`prisma-eventi-value-${p.pista}`}>
+                            {p.pezzi.toLocaleString('it-IT')} eventi
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                )}
               </section>
             )}
             {/* Task #454 — pannello verde "Provenienza verificabile" del mockup:
