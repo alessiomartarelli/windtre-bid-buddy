@@ -794,3 +794,148 @@ html.dark[data-accent="w3"] [data-testid="dashboard-gara-reale"] .glass-panel.w3
     break-inside: avoid;
   }
 }
+
+/* ── Prisma Light skin ───────────────────────────────────────────────
+   Editorial paper-and-glass treatment. Deliberately screen-only so PDF
+   output retains the neutral, high-contrast print rules above. */
+@media screen {
+  html[data-skin="prisma-light"],
+  html[data-skin="prisma-light"].dark {
+    --background: 198 22% 96%;
+    --foreground: 224 38% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 224 38% 15%;
+    --popover: 205 28% 99%;
+    --popover-foreground: 224 38% 15%;
+
+    --primary: 224 70% 49%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 202 24% 92%;
+    --secondary-foreground: 224 31% 20%;
+    --muted: 204 20% 92%;
+    --muted-foreground: 220 16% 40%;
+    --accent: 196 42% 92%;
+    --accent-foreground: 224 53% 35%;
+
+    --border: 219 24% 76% / 0.48;
+    --input: 215 23% 79%;
+    --ring: 224 70% 49%;
+    --radius: 1rem;
+
+    --glass-bg: 0 0% 100% / 0.58;
+    --glass-border: 0 0% 100% / 0.78;
+    --glass-shadow: 0 16px 36px hsl(218 32% 29% / 0.08), inset 0 1px 0 hsl(0 0% 100% / 0.86);
+    --glass-blur: 18px;
+  }
+
+  html[data-skin="prisma-light"] body {
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(circle at 7% 5%, hsl(176 61% 63% / 0.30) 0, transparent 27%),
+      radial-gradient(circle at 87% 4%, hsl(258 85% 79% / 0.27) 0, transparent 28%),
+      radial-gradient(circle at 60% 100%, hsl(25 96% 73% / 0.20) 0, transparent 33%),
+      linear-gradient(115deg, hsl(150 18% 98%), hsl(221 35% 95%));
+    background-attachment: fixed;
+  }
+
+  html[data-skin="prisma-light"] .min-h-screen.bg-background,
+  html[data-skin="prisma-light"] .min-h-screen.bg-gradient-to-br {
+    background-color: transparent;
+    background-image: none;
+  }
+
+  /* Navigation keeps its existing 16rem geometry while becoming a quiet pane. */
+  html[data-skin="prisma-light"] [data-testid="desktop-sidebar"] {
+    background: linear-gradient(160deg, hsl(0 0% 100% / 0.76), hsl(199 32% 97% / 0.54));
+    border-color: hsl(0 0% 100% / 0.86);
+    box-shadow: 10px 0 34px hsl(218 31% 35% / 0.06), inset -1px 0 hsl(217 22% 62% / 0.10);
+    backdrop-filter: blur(22px) saturate(145%);
+  }
+
+  html[data-skin="prisma-light"] [data-testid="desktop-sidebar"] > div,
+  html[data-skin="prisma-light"] [data-testid="desktop-sidebar"] > nav {
+    border-color: hsl(218 24% 54% / 0.13);
+  }
+
+  html[data-skin="prisma-light"] [data-testid="desktop-sidebar"] [class*="bg-primary"] {
+    box-shadow: 0 7px 17px hsl(224 70% 49% / 0.20);
+  }
+
+  html[data-skin="prisma-light"] header.sticky {
+    background: hsl(0 0% 100% / 0.64);
+    border-color: hsl(0 0% 100% / 0.86);
+    box-shadow: 0 7px 20px hsl(218 32% 29% / 0.06);
+    backdrop-filter: blur(20px) saturate(150%);
+  }
+
+  /* Shared panes, overlays, menu surfaces, and native table containers. */
+  html[data-skin="prisma-light"] .glass-panel {
+    background: linear-gradient(135deg, hsl(0 0% 100% / 0.68), hsl(200 38% 98% / 0.47));
+    border-color: hsl(0 0% 100% / 0.82);
+    border-radius: calc(var(--radius) + 0.25rem);
+    box-shadow: var(--glass-shadow);
+  }
+
+  html[data-skin="prisma-light"] .glass-overlay,
+  html[data-skin="prisma-light"] [role="dialog"],
+  html[data-skin="prisma-light"] [role="menu"],
+  html[data-skin="prisma-light"] [role="listbox"] {
+    background: linear-gradient(145deg, hsl(0 0% 100% / 0.94), hsl(199 31% 98% / 0.89));
+    border-color: hsl(0 0% 100% / 0.90);
+    box-shadow: 0 18px 45px hsl(218 32% 29% / 0.14), inset 0 1px 0 hsl(0 0% 100% / 0.90);
+  }
+
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] [data-testid^="card-kpi-"],
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] [data-testid^="card-pista-"],
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] [data-testid^="card-premio-rs-"],
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] [data-testid="card-workday-info"] {
+    background-color: hsl(0 0% 100% / 0.58);
+    background-image: linear-gradient(135deg, hsl(0 0% 100% / 0.56), hsl(194 42% 96% / 0.22));
+    border-color: hsl(0 0% 100% / 0.84);
+    border-radius: 1.25rem;
+    box-shadow: var(--glass-shadow);
+  }
+
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] table,
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] thead,
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] tbody,
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] tr {
+    border-color: hsl(218 24% 45% / 0.12);
+  }
+
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] thead {
+    background: hsl(202 33% 94% / 0.63);
+  }
+
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] tbody tr:hover {
+    background: hsl(186 47% 91% / 0.42);
+  }
+
+  /* Preserve every pista's own ink/glow identity, with a brighter paper base. */
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .ticker-pista-card {
+    background:
+      radial-gradient(circle at 100% 0%, hsl(var(--pista-glow) / 0.35) 0%, transparent 43%),
+      radial-gradient(circle at 0% 100%, hsl(var(--pista-ink) / 0.20) 0%, transparent 49%),
+      linear-gradient(142deg, hsl(var(--pista-ink) / 0.16) 0%, hsl(var(--pista-glow) / 0.11) 46%, hsl(0 0% 100% / 0.84) 100%);
+    border-color: hsl(var(--pista-ink) / 0.30);
+    box-shadow: 0 9px 23px hsl(218 32% 29% / 0.09), inset 0 1px 0 hsl(0 0% 100% / 0.76);
+  }
+
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .ticker-pista-card:hover {
+    border-color: hsl(var(--pista-ink) / 0.52);
+    box-shadow: 0 13px 27px hsl(var(--pista-ink) / 0.14), inset 0 1px 0 hsl(0 0% 100% / 0.82);
+  }
+
+  html[data-skin="prisma-light"] .pista-card-header,
+  html[data-skin="prisma-light"] .pista-card-trajectory,
+  html[data-skin="prisma-light"] .pista-card-kpis {
+    background: hsl(0 0% 100% / 0.72);
+    box-shadow: 0 5px 15px hsl(218 32% 29% / 0.08);
+  }
+
+  html[data-skin="prisma-light"] .page-bg {
+    background-color: transparent;
+    background-image: none;
+  }
+}
