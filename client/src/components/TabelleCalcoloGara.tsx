@@ -276,6 +276,80 @@ interface TabelleCalcoloGaraProps {
   onExtraGaraIvaSogliePerRSChange?: (soglie: ExtraGaraSogliePerRS) => void;
 }
 
+// Helpers condivisi tra TabelleCalcoloGara e la sezione standalone
+// Extra Gara P.IVA (montata anche nella tab Soglie di ConfigurazioneGara).
+function useTabelleCalcoloHelpers(config: TabelleCalcoloConfig, baseDefaults: TabelleCalcoloConfig, onChange: (config: TabelleCalcoloConfig) => void) {
+  const isOverridden = useCallback((path: string): boolean => {
+    const current = getNestedValue(config, path);
+    const def = getNestedValue(baseDefaults, path);
+    if (current === undefined || def === undefined) return false;
+    return current !== def;
+  }, [config, baseDefaults]);
+
+  const isArrayOverridden = useCallback((path: string, index: number): boolean => {
+    const current = getNestedArrayValue(config, path, index);
+    const def = getNestedArrayValue(baseDefaults, path, index);
+    if (current === undefined || def === undefined) return false;
+    return current !== def;
+  }, [config, baseDefaults]);
+
+  const updateValue = useCallback((path: string, value: number) => {
+    const next = JSON.parse(JSON.stringify(config));
+    const parts = path.split('.');
+    let current: Record<string, unknown> = next;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!current[parts[i]]) current[parts[i]] = {};
+      current = current[parts[i]] as Record<string, unknown>;
+    }
+    current[parts[parts.length - 1]] = value;
+    onChange(next);
+  }, [config, onChange]);
+
+  const updateArrayValue = useCallback((path: string, index: number, value: number) => {
+    const next = JSON.parse(JSON.stringify(config));
+    const parts = path.split('.');
+    let current: Record<string, unknown> = next;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!current[parts[i]]) current[parts[i]] = {};
+      current = current[parts[i]] as Record<string, unknown>;
+    }
+    const arr = current[parts[parts.length - 1]] as number[];
+    if (Array.isArray(arr)) arr[index] = value;
+    onChange(next);
+  }, [config, onChange]);
+
+  const resetValue = useCallback((path: string) => {
+    const def = getNestedValue(baseDefaults, path);
+    if (def !== undefined) updateValue(path, def);
+  }, [baseDefaults, updateValue]);
+
+  const resetArrayValue = useCallback((path: string, index: number) => {
+    const def = getNestedArrayValue(baseDefaults, path, index);
+    if (def !== undefined) updateArrayValue(path, index, def);
+  }, [baseDefaults, updateArrayValue]);
+
+  return { isOverridden, isArrayOverridden, updateValue, updateArrayValue, resetValue, resetArrayValue };
+}
+
+// Sezione standalone Extra Gara P.IVA: soglie globali (multi/mono POS),
+// punti, premi e personalizzazioni per RS (cluster + numero PDV).
+// Montata nella tab Soglie di ConfigurazioneGara accanto alle altre soglie.
+export function ExtraGaraIvaSoglieSection({ config, onChange, baseDefaults, pdvList, extraGaraIvaSogliePerRS, onExtraGaraIvaSogliePerRSChange }: TabelleCalcoloGaraProps) {
+  const helpers = useTabelleCalcoloHelpers(config, baseDefaults, onChange);
+  return (
+    <div className="space-y-6" data-testid="section-soglie-extra-gara-iva">
+      <ExtraGaraSubTab
+        config={config}
+        baseDefaults={baseDefaults}
+        {...helpers}
+        pdvList={pdvList}
+        extraGaraIvaSogliePerRS={extraGaraIvaSogliePerRS}
+        onExtraGaraIvaSogliePerRSChange={onExtraGaraIvaSogliePerRSChange}
+      />
+    </div>
+  );
+}
+
 export function TabelleCalcoloGara({ config, onChange, baseDefaults, pdvList, extraGaraIvaSogliePerRS, onExtraGaraIvaSogliePerRSChange }: TabelleCalcoloGaraProps) {
   const isOverridden = useCallback((path: string): boolean => {
     const current = getNestedValue(config, path);

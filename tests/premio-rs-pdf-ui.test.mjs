@@ -199,8 +199,9 @@ test('Dashboard Gara Reale: il PDF "Riepilogo Premi per RS" contiene header e im
     // colonna Assicurazioni.
     assert.deepEqual(rowEuro('TOTALE', 4), [1250, 1250, 1250, 1250], 'PDF: riga TOTALE = € 1250 su tutte le colonne');
 
-    // Le RS sono ordinate per premio attuale decrescente: Beta (750) prima di Alfa (500).
-    assert.ok(tokens.indexOf(RS_B) < tokens.indexOf(RS_A), 'PDF: RS Beta (750) prima di RS Alfa (500)');
+    // Task #14: le RS sono ordinate alfabeticamente (deterministico), non per
+    // miglior premio: Alfa prima di Beta anche se Beta ha il premio maggiore.
+    assert.ok(tokens.indexOf(RS_A) < tokens.indexOf(RS_B), 'PDF: RS Alfa prima di RS Beta (ordine alfabetico deterministico)');
 
     await page.close();
     await context.close();

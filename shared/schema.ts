@@ -292,6 +292,26 @@ export const garaConfig = pgTable("gara_config", {
   index("IDX_gara_config_org_month_year").on(table.organizationId, table.month, table.year),
 ]);
 
+// Storico configurazioni gara: ogni update di gara_config che CAMBIA il
+// contenuto archivia qui la revisione PRECEDENTE (snapshot completo del
+// config jsonb). Retention: ultime 20 revisioni per configurazione.
+// Rende recuperabile qualsiasi sovrascrittura (salvataggi, propagazioni).
+export const garaConfigHistory = pgTable("gara_config_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  garaConfigId: varchar("gara_config_id").notNull(),
+  name: varchar("name").default(''),
+  month: integer("month").notNull(),
+  year: integer("year").notNull(),
+  config: jsonb("config").default({}),
+  changedBy: varchar("changed_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("IDX_gara_config_history_cfg_created").on(table.garaConfigId, table.createdAt),
+]);
+
+export type GaraConfigHistory = typeof garaConfigHistory.$inferSelect;
+
 // Report Telegram inviati (Task #332): traccia per org+data+slot l'esito
 // dell'invio schedulato, così al riavvio del processo (es. restart PM2 per
 // memoria) la run interrotta può essere recuperata SOLO per le org rimaste

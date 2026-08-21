@@ -280,8 +280,11 @@ export interface GaraConfigListItem {
 }
 
 export interface GaraConfigHistoryEntry {
+  id: string;
+  name: string | null;
   month: number;
   year: number;
+  createdAt: string | null;
   updatedAt: string | null;
 }
 

@@ -67,6 +67,7 @@ import {
   Play,
   Pause,
   Database,
+  Building2,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -3070,6 +3071,11 @@ export default function DashboardGaraReale() {
   // premi al PDV di destinazione; le vendite senza destinazione finiscono
   // in un bucket esplicito, mai su un negozio errato).
   const [pdvView, setPdvView] = useState<"origine" | "destinazione">("origine");
+  // Filtri perimetro dashboard: RS (chiave normalizzata) e PDV (codicePos).
+  // Selezioni dipendenti: scegliere una RS restringe i PDV ai suoi negozi;
+  // cambiare RS azzera il PDV selezionato se non appartiene alla nuova RS.
+  const [rsFilter, setRsFilter] = useState<string>("all");
+  const [pdvFilter, setPdvFilter] = useState<string>("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pdvSortKey, setPdvSortKey] = useState<PdvSortKey>('pezzi_default');
   const [expandedDeviceDrills, setExpandedDeviceDrills] = useState<Set<string>>(new Set());
@@ -3127,7 +3133,7 @@ export default function DashboardGaraReale() {
   });
   const rulesUpdatedAt = mappingVersion?.rulesUpdatedAt ?? null;
 
-  const { data: mappedData, isLoading: loadingMapped } = useQuery<MappedSalesResponse>({
+  const { data: mappedDataRaw, isLoading: loadingMapped } = useQuery<MappedSalesResponse>({
     queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear, effectiveConfigId, "inGara", rulesUpdatedAt, pdvView],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -3161,7 +3167,38 @@ export default function DashboardGaraReale() {
 
   const garaConfigMissing = !loadingConfig && !garaConfig;
 
-  const garaPdvList: GaraConfigPdv[] = garaConfig?.config?.pdvList || [];
+  const garaPdvListAll: GaraConfigPdv[] = garaConfig?.config?.pdvList || [];
+
+  // Opzioni filtro RS: dalla configurazione gara attiva, ordine alfabetico.
+  const rsFilterOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of garaPdvListAll) {
+      const display = p.ragioneSociale || "N/D";
+      const key = normalizeRS(display);
+      if (!map.has(key)) map.set(key, display);
+    }
+    return Array.from(map.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'it'));
+  }, [garaPdvListAll]);
+
+  // Opzioni filtro PDV: dipendenti dalla RS selezionata.
+  const pdvFilterOptions = useMemo(() => {
+    return garaPdvListAll
+      .filter((p) => rsFilter === "all" || normalizeRS(p.ragioneSociale || "N/D") === rsFilter)
+      .map((p) => ({ codicePos: p.codicePos, label: p.nome ? `${p.nome} (${p.codicePos})` : p.codicePos }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'it'));
+  }, [garaPdvListAll, rsFilter]);
+
+  // Perimetro applicato: la pdvList della config filtrata alimenta tutte le
+  // card, KPI, soglie, premi e proiezioni a valle.
+  const garaPdvList: GaraConfigPdv[] = useMemo(() => {
+    if (rsFilter === "all" && pdvFilter === "all") return garaPdvListAll;
+    return garaPdvListAll.filter((p) => {
+      if (pdvFilter !== "all") return p.codicePos === pdvFilter;
+      return normalizeRS(p.ragioneSociale || "N/D") === rsFilter;
+    });
+  }, [garaPdvListAll, rsFilter, pdvFilter]);
 
   const garaCalcConfig = useMemo(() => {
     const cfg = garaConfig?.config as unknown as Record<string, unknown> | null;
@@ -3185,6 +3222,53 @@ export default function DashboardGaraReale() {
       sosCaring: (cfg?.sosCaring as SosCaringData | null | undefined) || null,
     };
   }, [garaConfig]);
+
+  // Applica il perimetro RS/PDV ai dati vendite mappate: filtra la pdvList e
+  // ricostruisce i totali per pista dagli aggregati dei soli PDV inclusi.
+  // Serie giornaliera e conteggio vendite grezze restano a livello org (non
+  // ricostruibili per PDV lato client).
+  const mappedData = useMemo<MappedSalesResponse | undefined>(() => {
+    if (!mappedDataRaw) return mappedDataRaw;
+    if (rsFilter === "all" && pdvFilter === "all") return mappedDataRaw;
+    const allowedPos = new Set(garaPdvList.map((p) => p.codicePos));
+    const filteredPdvList = mappedDataRaw.pdvList.filter((p) => {
+      if (pdvFilter !== "all") return p.codicePos === pdvFilter;
+      // Filtro per RS: include i PDV della config filtrata e, per PDV non in
+      // config, confronta la RS riportata dalle vendite (chiave normalizzata).
+      return allowedPos.has(p.codicePos) || normalizeRS(p.ragioneSociale || "N/D") === rsFilter;
+    });
+    const totaliPerPista: MappedSalesResponse["totaliPerPista"] = {};
+    const totaliAddonsPerPista: NonNullable<MappedSalesResponse["totaliAddonsPerPista"]> = {};
+    let totalMapped = 0;
+    let totalUnmapped = 0;
+    let totalArticoli = 0;
+    for (const pdv of filteredPdvList) {
+      totalUnmapped += pdv.unmapped;
+      totalArticoli += pdv.totalArticoli;
+      for (const item of pdv.items) {
+        totalMapped += item.pezzi;
+        if (!totaliPerPista[item.pista]) totaliPerPista[item.pista] = {};
+        const bucket = totaliPerPista[item.pista][item.targetCategory];
+        if (bucket) bucket.pezzi += item.pezzi;
+        else totaliPerPista[item.pista][item.targetCategory] = { targetCategory: item.targetCategory, targetLabel: item.targetLabel, pezzi: item.pezzi };
+      }
+      for (const addon of pdv.addons || []) {
+        if (!totaliAddonsPerPista[addon.pista]) totaliAddonsPerPista[addon.pista] = {};
+        const bucket = totaliAddonsPerPista[addon.pista][addon.targetCategory];
+        if (bucket) { bucket.occorrenze += addon.occorrenze; bucket.canone += addon.canone; }
+        else totaliAddonsPerPista[addon.pista][addon.targetCategory] = { targetCategory: addon.targetCategory, targetLabel: addon.targetLabel, occorrenze: addon.occorrenze, canone: addon.canone };
+      }
+    }
+    return {
+      ...mappedDataRaw,
+      pdvList: filteredPdvList,
+      totaliPerPista,
+      totaliAddonsPerPista,
+      totalMapped,
+      totalUnmapped,
+      totalArticoli,
+    };
+  }, [mappedDataRaw, rsFilter, pdvFilter, garaPdvList]);
 
   const puntiVenditaFromGara: OrgConfigPdv[] = useMemo(() => {
     return garaPdvList.map((p) => ({
@@ -4394,7 +4478,8 @@ export default function DashboardGaraReale() {
       totale += pezzi;
     }
     perPdv.sort((a, b) => b.pezzi - a.pezzi);
-    const perRs = Array.from(rsMap.values()).sort((a, b) => b.pezzi - a.pezzi);
+    // Ordine RS deterministico (alfabetico), non per performance.
+    const perRs = Array.from(rsMap.values()).sort((a, b) => a.ragioneSociale.localeCompare(b.ragioneSociale, 'it'));
     return { totale, perPdv, perRs };
   }, [mappedData, puntiVenditaFromGara]);
 
@@ -4548,7 +4633,8 @@ export default function DashboardGaraReale() {
       });
     }
 
-    return Array.from(rsMap.values()).sort((a, b) => b.premioAttuale - a.premioAttuale);
+    // Ordine RS deterministico (alfabetico), non per miglior premio.
+    return Array.from(rsMap.values()).sort((a, b) => a.displayName.localeCompare(b.displayName, 'it'));
   }, [pistaStats, garaCalcConfig, garaConfigMissing]);
 
   const isLoading = loadingMapped || loadingConfig;
@@ -4579,6 +4665,49 @@ export default function DashboardGaraReale() {
             <SelectItem value="destinazione" data-testid="select-pdv-view-destinazione">PDV Destinazione</SelectItem>
           </SelectContent>
         </Select>
+        {rsFilterOptions.length > 1 && (
+          <Select
+            value={rsFilter}
+            onValueChange={(v) => {
+              setRsFilter(v);
+              // Selezioni dipendenti: azzera il PDV se non appartiene alla RS.
+              if (v !== "all" && pdvFilter !== "all") {
+                const stillValid = garaPdvListAll.some((p) => p.codicePos === pdvFilter && normalizeRS(p.ragioneSociale || "N/D") === v);
+                if (!stillValid) setPdvFilter("all");
+              }
+            }}
+            data-testid="select-rs-filter"
+          >
+            <SelectTrigger className="w-[130px] sm:w-[180px] text-xs sm:text-sm" data-testid="select-rs-filter-trigger">
+              <Building2 className="h-4 w-4 mr-1 sm:mr-2 shrink-0" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" data-testid="select-rs-filter-all">Tutte le RS</SelectItem>
+              {rsFilterOptions.map((opt) => (
+                <SelectItem key={opt.key} value={opt.key} data-testid={`select-rs-filter-${opt.key.replace(/\s+/g, '-')}`}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {garaPdvListAll.length > 1 && (
+          <Select value={pdvFilter} onValueChange={setPdvFilter} data-testid="select-pdv-filter">
+            <SelectTrigger className="w-[130px] sm:w-[180px] text-xs sm:text-sm" data-testid="select-pdv-filter-trigger">
+              <Store className="h-4 w-4 mr-1 sm:mr-2 shrink-0" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" data-testid="select-pdv-filter-all">Tutti i PDV</SelectItem>
+              {pdvFilterOptions.map((opt) => (
+                <SelectItem key={opt.codicePos} value={opt.codicePos} data-testid={`select-pdv-filter-${opt.codicePos}`}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {configList && configList.length > 0 && (
           <Select value={effectiveConfigId} onValueChange={setSelectedConfigId} data-testid="select-config">
             <SelectTrigger className="w-[140px] sm:w-[220px] text-xs sm:text-sm" data-testid="select-config-trigger">
@@ -5794,7 +5923,8 @@ export default function DashboardGaraReale() {
               const groupByRS = pdvSortKey === 'pezzi_default';
               const sortedRSGroups = Array.from(rsGroups.entries())
                 .map(([rs, pdvs]) => ({ rs, pdvs, totalPezzi: pdvs.reduce((s, p) => s + p.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s2, i) => s2 + i.pezzi, 0), 0) }))
-                .sort((a, b) => b.totalPezzi - a.totalPezzi);
+                // Ordine RS deterministico (alfabetico), non per performance.
+                .sort((a, b) => a.rs.localeCompare(b.rs, 'it'));
               const sortedPdvList = groupByRS
                 ? sortedRSGroups.flatMap(g => g.pdvs.slice().sort(cmp))
                 : pdvListWithRS.slice().sort(cmp);
@@ -5881,7 +6011,7 @@ export default function DashboardGaraReale() {
                         {rsHeader && (
                           <div className="flex items-center gap-2 pt-3 pb-1 first:pt-0">
                             <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{pdv.configuredRS}</span>
+                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide" data-testid={`rs-group-header-${pdv.configuredRS.replace(/\s+/g, '-')}`}>{pdv.configuredRS}</span>
                             <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
                           </div>
                         )}
@@ -6643,14 +6773,17 @@ function DettaglioRsPdfExport({
 
 function RsBreakdown({ pdvList, workdayInfo, pistaStats }: { pdvList: PdvData[]; workdayInfo: WorkdayInfo; pistaStats: Array<{ pista: string; calc: PistaCalcResult; pdvBreakdown: Array<{ codicePos: string; pezzi: number; pdvCalc: PistaCalcResult }> }> }) {
   const rsByName = useMemo(() => {
+    // Chiave di raggruppamento uniforme (RS normalizzata) e ordine
+    // deterministico (alfabetico), non per performance.
     const grouped: Record<string, { ragioneSociale: string; pdvs: PdvData[]; totalPezzi: number }> = {};
     for (const pdv of pdvList) {
-      const rs = pdv.ragioneSociale || "N/D";
-      if (!grouped[rs]) grouped[rs] = { ragioneSociale: rs, pdvs: [], totalPezzi: 0 };
-      grouped[rs].pdvs.push(pdv);
-      grouped[rs].totalPezzi += pdv.items.filter(i => !isCaringItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+      const rsDisplay = pdv.ragioneSociale || "N/D";
+      const rsKey = normalizeRS(rsDisplay);
+      if (!grouped[rsKey]) grouped[rsKey] = { ragioneSociale: rsDisplay, pdvs: [], totalPezzi: 0 };
+      grouped[rsKey].pdvs.push(pdv);
+      grouped[rsKey].totalPezzi += pdv.items.filter(i => !isCaringItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
     }
-    return Object.values(grouped).sort((a, b) => b.totalPezzi - a.totalPezzi);
+    return Object.values(grouped).sort((a, b) => a.ragioneSociale.localeCompare(b.ragioneSociale, 'it'));
   }, [pdvList]);
 
   return (

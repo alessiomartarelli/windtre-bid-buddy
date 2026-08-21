@@ -1008,7 +1008,7 @@ export async function registerRoutes(
         if (!existing || existing.organizationId !== profile.organizationId) {
           return res.status(404).json({ message: "Configurazione non trovata" });
         }
-        result = await storage.updateGaraConfig(id, config, configName);
+        result = await storage.updateGaraConfig(id, config, configName, profile.id ?? null);
       } else {
         result = await storage.createGaraConfig(profile.organizationId!, month, year, configName, config);
       }
@@ -1045,6 +1045,33 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching gara config history:", error);
       res.status(500).json({ message: "Errore nel recupero dello storico configurazione gara" });
+    }
+  });
+
+  // Revisioni archiviate di una configurazione gara (snapshot pre-update).
+  app.get("/api/gara-config/revisions", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const revisionId = req.query.revisionId as string | undefined;
+      if (revisionId) {
+        const rev = await storage.getGaraConfigRevision(profile.organizationId!, revisionId);
+        if (!rev) return res.status(404).json({ message: "Revisione non trovata" });
+        return res.json(rev);
+      }
+      const configId = req.query.configId as string | undefined;
+      if (!configId) {
+        return res.status(400).json({ message: "Parametro configId richiesto" });
+      }
+      const existing = await storage.getGaraConfigById(configId);
+      if (!existing || existing.organizationId !== profile.organizationId) {
+        return res.status(404).json({ message: "Configurazione non trovata" });
+      }
+      const revisions = await storage.listGaraConfigRevisions(profile.organizationId!, configId);
+      res.json(revisions);
+    } catch (error) {
+      console.error("Error fetching gara config revisions:", error);
+      res.status(500).json({ message: "Errore nel recupero delle revisioni configurazione gara" });
     }
   });
 
@@ -1145,7 +1172,19 @@ export async function registerRoutes(
         };
       }
 
+      // Preserva le impostazioni gara non sostituite dall'import: parti
+      // dall'ultima configurazione esistente per il mese (tabelle di calcolo,
+      // soglie Extra P.IVA, forecast, pesi, ecc.) e sovrascrivi SOLO le
+      // chiavi effettivamente importate. L'import crea comunque un NUOVO
+      // record: la configurazione precedente resta recuperabile.
+      const existingForMonth = await storage.getGaraConfig(profile.organizationId!, month, year);
+      const preservedBase = { ...((existingForMonth?.config as Record<string, unknown> | null) || {}) };
+      // Il dataset SOS Caring è legato al file caricato sulla config di
+      // origine: un import dal simulatore deve ripartire da card vuota
+      // (Task SOS Caring import), quindi NON viene trascinato.
+      delete preservedBase.sosCaring;
       const garaConfigData: Record<string, unknown> = {
+        ...preservedBase,
         pdvList: mapPdvListForGara(pdvList),
         ...extraConfigFields,
         importedFrom: importedFromMeta,

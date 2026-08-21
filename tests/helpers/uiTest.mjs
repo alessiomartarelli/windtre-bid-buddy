@@ -326,6 +326,7 @@ export async function cleanupOrg(pool, session) {
     'bisuite_sales',
     'dts_leads',
     'drms_uploads',
+    'gara_config_history',
     'gara_config',
     'incentivazione_valenze',
     'incentivazione_config',

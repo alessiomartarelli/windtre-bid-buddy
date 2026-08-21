@@ -28,7 +28,7 @@ import {
 import { IncentivazioneConfigSection } from '@/pages/IncentivazioneConfigAdmin';
 import { useEnabledModules } from '@/hooks/useEnabledModules';
 import { WizardStepSkeleton } from "@/components/skeletons";
-import { TabelleCalcoloGara, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
+import { TabelleCalcoloGara, ExtraGaraIvaSoglieSection, deepMergeTabelleCalcolo, type TabelleCalcoloConfig } from '@/components/TabelleCalcoloGara';
 import { useTabelleCalcoloConfig } from '@/hooks/useTabelleCalcoloConfig';
 import type { ExtraGaraSogliePerRS } from '@/lib/calcoloExtraGaraIva';
 import { parseGaraPdf, type PdfGaraData, type PdfType } from '@/lib/parseGaraPdf';
@@ -2358,6 +2358,23 @@ export default function ConfigurazioneGara() {
                   })}
                 </div>
               )}
+
+              {/* Soglie Extra Gara P.IVA: valori globali (multi/mono POS) e
+                  personalizzazioni per RS (cluster + numero PDV), insieme
+                  alle altre soglie della configurazione gara. */}
+              {pdvList.length > 0 && (
+                <div className="space-y-2 pt-4">
+                  <p className="text-sm font-semibold">Soglie Extra Gara P.IVA</p>
+                  <ExtraGaraIvaSoglieSection
+                    config={tabelleCalcolo}
+                    onChange={(newConfig) => { setTabelleCalcolo(newConfig); setIsDirty(true); }}
+                    baseDefaults={tabelleCalcoloDefaults}
+                    pdvList={pdvList}
+                    extraGaraIvaSogliePerRS={extraGaraIvaSogliePerRS}
+                    onExtraGaraIvaSogliePerRSChange={(soglie) => { setExtraGaraIvaSogliePerRS(soglie); setIsDirty(true); }}
+                  />
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="extra" className="space-y-4">
@@ -3064,14 +3081,23 @@ export default function ConfigurazioneGara() {
               ) : (
                 history.map(h => (
                   <Button
-                    key={`${h.year}-${h.month}`}
-                    variant={h.month === selectedMonth && h.year === selectedYear ? 'secondary' : 'ghost'}
-                    className="w-full justify-between h-auto py-2"
-                    onClick={() => { handleMonthChange(h.month, h.year); setHistoryDialogOpen(false); }}
-                    data-testid={`button-history-${h.year}-${h.month}`}
+                    key={h.id}
+                    variant={h.month === selectedMonth && h.year === selectedYear && garaConfigRecord?.id === h.id ? 'secondary' : 'ghost'}
+                    className="w-full justify-between h-auto py-2 gap-2"
+                    onClick={() => {
+                      // Ogni record salvato è distinguibile e recuperabile:
+                      // seleziona mese E carica la configurazione specifica.
+                      handleMonthChange(h.month, h.year);
+                      loadConfigById(h.id, h.month, h.year);
+                      setHistoryDialogOpen(false);
+                    }}
+                    data-testid={`button-history-${h.id}`}
                   >
-                    <span>{MONTHS.find(m => m.value === h.month)?.label} {h.year}</span>
-                    {h.updatedAt && <span className="text-xs text-muted-foreground">{new Date(h.updatedAt).toLocaleDateString('it-IT')}</span>}
+                    <span className="flex flex-col items-start text-left min-w-0">
+                      <span className="truncate max-w-[180px]">{h.name || 'Configurazione'}</span>
+                      <span className="text-xs text-muted-foreground">{MONTHS.find(m => m.value === h.month)?.label} {h.year}</span>
+                    </span>
+                    {h.updatedAt && <span className="text-xs text-muted-foreground shrink-0">{new Date(h.updatedAt).toLocaleDateString('it-IT')}</span>}
                   </Button>
                 ))
               )}
