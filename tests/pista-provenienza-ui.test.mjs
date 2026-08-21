@@ -101,9 +101,10 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     browser = await launchBrowser();
     const context = await newAuthedContext(browser, session);
     const page = await context.newPage();
+    await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(`${BASE}/dashboard-gara-reale`, { waitUntil: 'networkidle', timeout: 45000 });
 
-    const card = page.getByTestId('card-pista-mobile');
+    const card = page.getByTestId('ticker-pista-mobile');
     await card.waitFor({ state: 'visible', timeout: 30000 });
     const panel = page.getByTestId('provenienza-panel-mobile');
     const btn = page.getByTestId('btn-provenienza-mobile');
@@ -111,12 +112,22 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     // Chiuso di default.
     assert.equal(await panel.count(), 0, 'pannello chiuso al primo render');
     assert.equal(await btn.getAttribute('aria-expanded'), 'false', 'aria-expanded=false da chiuso');
+    assert.match(await btn.innerText(), /Dettaglio punti/i, 'il comando deve essere testuale e visibile sulla card ticker');
+    const btnBox = await btn.boundingBox();
+    const cardBox = await card.boundingBox();
+    assert.ok(btnBox && cardBox, 'pulsante e card devono avere dimensioni visibili su mobile');
+    assert.ok(btnBox.x >= cardBox.x && btnBox.x + btnBox.width <= cardBox.x + cardBox.width,
+      'il pulsante deve restare interamente dentro la card a 375px');
 
     // Apertura da tastiera (focus + Enter sul bottone dedicato).
     await btn.focus();
     await page.keyboard.press('Enter');
     await panel.waitFor({ state: 'visible', timeout: 10000 });
     assert.equal(await btn.getAttribute('aria-expanded'), 'true', 'aria-expanded=true da aperto');
+    assert.equal(await card.locator('[data-testid="provenienza-panel-mobile"]').count(), 1,
+      'il pannello deve essere contenuto nella card ticker colorata');
+    assert.equal(await page.getByTestId('card-pista-mobile').locator('[data-testid="provenienza-panel-mobile"]').count(), 0,
+      'la vecchia card bianca non deve contenere la provenienza punti');
 
     // Totale del pannello = totale card = 4,50 pt.
     const totale = provNum(await page.getByTestId('prov-totale-mobile').innerText());
@@ -139,12 +150,11 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     const catB = await page.getByTestId(`prov-cat-mobile-${POS_B}-TIED`).innerText();
     assert.match(catB, /4\s*pz/, `fonte TIED del PDV B = 4 pz (letto "${catB}")`);
 
-    // Contesto: periodo, vista PDV e filtro in-gara dichiarati.
-    const ctx = await page.getByTestId('prov-context-mobile').innerText();
-    assert.match(ctx, new RegExp(`${pad(MONTH)}/${YEAR}`), 'contesto: periodo mese/anno');
-    assert.match(ctx, /Vista PDV: origine/, 'contesto: vista PDV');
-    assert.match(ctx, /Solo vendite in gara/, 'contesto: filtro in gara dichiarato');
-    assert.match(ctx, /Filtri: nessuno/, 'contesto: nessun filtro RS/PDV attivo');
+    // Il pannello è esclusivamente una provenienza punti: niente valori
+    // economici o canoni.
+    const panelText = await panel.innerText();
+    assert.doesNotMatch(panelText, /€|canon/i, 'il dettaglio punti non deve contenere canoni o importi in euro');
+    assert.ok(panelText.includes(RS), 'anche nel calcolo per-PDV deve essere visibile la Ragione Sociale sorgente');
 
     // Tema scuro: pannello ancora visibile e con testo non trasparente.
     await page.locator('html').evaluate((html) => html.classList.add('dark'));
@@ -153,27 +163,13 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     assert.notEqual(darkColor, 'rgba(0, 0, 0, 0)', 'testo del pannello visibile in dark');
     await page.locator('html').evaluate((html) => html.classList.remove('dark'));
 
-    // Click su contenuto NON interattivo DENTRO il pannello: non deve chiuderlo.
-    await page.getByTestId('prov-context-mobile').click();
-    await panel.waitFor({ state: 'visible', timeout: 5000 });
-
-    // Click su un altro bottone interno alla card (toggle categorie): il
-    // guard non deve far cambiare lo stato del pannello.
-    const catToggle = page.getByTestId('btn-toggle-categories-mobile');
-    if (await catToggle.count()) {
-      await catToggle.click();
-      await panel.waitFor({ state: 'visible', timeout: 5000 });
-      assert.equal(await btn.getAttribute('aria-expanded'), 'true', 'bottone interno non tocca il pannello');
-    }
-
-    // Chiusura via click sulla card (zona non interattiva: il numero pezzi).
-    await page.getByTestId('text-pezzi-mobile').click();
+    // Chiusura via click sulla card ticker (zona non interattiva: i punti).
+    await page.getByTestId('ticker-punti-mobile').click();
     await panel.waitFor({ state: 'detached', timeout: 10000 });
     assert.equal(await btn.getAttribute('aria-expanded'), 'false', 'aria-expanded=false dopo chiusura');
 
-    // Riapertura via click sulla card e verifica che i controlli interni
-    // NON aprano/chiudano il pannello (il click su un bottone interno resta suo).
-    await page.getByTestId('text-pezzi-mobile').click();
+    // Riapertura via click sulla card ticker.
+    await page.getByTestId('ticker-punti-mobile').click();
     await panel.waitFor({ state: 'visible', timeout: 10000 });
 
     await page.close();
@@ -235,11 +231,16 @@ test('Provenienza punti: modalità aggregazione per RS riconcilia i subtotali RS
     const page = await context.newPage();
     await page.goto(`${BASE}/dashboard-gara-reale`, { waitUntil: 'networkidle', timeout: 45000 });
 
-    const card = page.getByTestId('card-pista-mobile');
+    const card = page.getByTestId('ticker-pista-mobile');
     await card.waitFor({ state: 'visible', timeout: 30000 });
-    await page.getByTestId('btn-provenienza-mobile').click();
+    const btn = page.getByTestId('btn-provenienza-mobile');
+    assert.equal(await card.locator('[data-testid="btn-provenienza-mobile"]').count(), 1,
+      'il pulsante desktop deve essere dentro la card ticker');
+    await btn.click();
     const panel = page.getByTestId('provenienza-panel-mobile');
     await panel.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(await card.locator('[data-testid="provenienza-panel-mobile"]').count(), 1,
+      'il pannello desktop deve restare dentro la card ticker aperta');
 
     // Subtotali per RS presenti e riconciliati col totale del pannello.
     const totale = provNum(await page.getByTestId('prov-totale-mobile').innerText());

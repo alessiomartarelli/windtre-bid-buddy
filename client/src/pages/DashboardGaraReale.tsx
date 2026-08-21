@@ -1133,6 +1133,15 @@ type TickerPista = {
   proiezionePezzi: number;
   calc: PistaCalcResult;
   calcProiezione: PistaCalcResult;
+  pdvBreakdown: Array<{
+    codicePos: string;
+    nomeNegozio: string;
+    ragioneSociale: string;
+    normalizedRS: string;
+    pezzi: number;
+    pdvCalc: PistaCalcResult;
+    categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
+  }>;
   rsCalcBreakdown?: Map<string, TickerRsDetail>;
   thresholdMarkers?: TickerThresholdMarker[];
   thresholdContext?: TickerThresholdContext;
@@ -1141,6 +1150,7 @@ type TickerPista = {
 };
 
 const fmtTickerVal = (v: number) => (Number.isInteger(v) ? v.toLocaleString('it-IT') : v.toLocaleString('it-IT', { maximumFractionDigits: 2 }));
+const fmtPoints = (v: number) => v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function getScopedThresholdProgress(
   items: Array<{ level: number; points: number }>,
@@ -1159,20 +1169,21 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
     (p) => p.totalePezzi > 0 || p.calc.premioStimato > 0 || p.calcProiezione.premioStimato > 0,
   );
   if (items.length === 0) return null;
-  const expandedPista = expanded ? items.find((p) => p.pista === expanded) ?? null : null;
 
   const renderCard = (p: TickerPista) => {
     const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
     if (!conf) return null;
     const Icon = conf.icon;
     const usePunti = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
-    const att = usePunti ? p.thresholdProgressAttuale ?? p.calc.puntiTotali : p.totalePezzi;
-    const proi = usePunti ? p.thresholdProgressProiezione ?? p.calcProiezione.puntiTotali : p.proiezionePezzi;
-    const trajectoryRatio = proi > 0 ? Math.min((att / proi) * 100, 100) : att > 0 ? 100 : 0;
+    const att = usePunti ? p.calc.puntiTotali : p.totalePezzi;
+    const proi = usePunti ? p.calcProiezione.puntiTotali : p.proiezionePezzi;
+    const trajectoryAtt = usePunti ? p.thresholdProgressAttuale ?? att : att;
+    const trajectoryProi = usePunti ? p.thresholdProgressProiezione ?? proi : proi;
+    const trajectoryRatio = trajectoryProi > 0 ? Math.min((trajectoryAtt / trajectoryProi) * 100, 100) : trajectoryAtt > 0 ? 100 : 0;
     const thresholdMarkers = p.thresholdMarkers ?? [];
-    const trajectoryMax = Math.max(att, proi, ...thresholdMarkers.map((marker) => marker.value), 1);
-    const actualPosition = Math.min((att / trajectoryMax) * 100, 100);
-    const projectedPosition = Math.min((proi / trajectoryMax) * 100, 100);
+    const trajectoryMax = Math.max(trajectoryAtt, trajectoryProi, ...thresholdMarkers.map((marker) => marker.value), 1);
+    const actualPosition = Math.min((trajectoryAtt / trajectoryMax) * 100, 100);
+    const projectedPosition = Math.min((trajectoryProi / trajectoryMax) * 100, 100);
     const thresholdContext = p.thresholdContext ?? {
       scale: thresholdMarkers.length > 0 ? "shared" : "none",
       scope: "totale",
@@ -1203,7 +1214,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
         data-pista={p.pista}
         data-threshold-scale={thresholdContext.scale}
         data-threshold-scope={thresholdContext.scope}
-        className={`ticker-pista-card ticker-pista-card--${p.pista} relative min-h-[206px] rounded-2xl overflow-hidden text-left group cursor-pointer focus-within:ring-2 focus-within:ring-primary border transition-[transform,box-shadow,border-color] duration-200 ease-out ${isOpen ? 'ring-2 ring-primary shadow-lg scale-[1.01]' : 'shadow-sm hover:-translate-y-0.5 hover:shadow-md'}`}
+        className={`ticker-pista-card ticker-pista-card--${p.pista} relative min-h-[206px] rounded-2xl overflow-hidden text-left group cursor-pointer focus-within:ring-2 focus-within:ring-primary border transition-[transform,box-shadow,border-color] duration-200 ease-out ${isOpen ? 'sm:col-span-3 xl:col-span-4 ring-2 ring-primary shadow-lg' : 'shadow-sm hover:-translate-y-0.5 hover:shadow-md'}`}
       >
         {/* Illustrazione vettoriale dedicata alla pista: il pittogramma Lucide
             e le forme CSS sostituiscono la precedente griglia neutra. */}
@@ -1215,7 +1226,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
         </div>
         <div className={`absolute inset-x-0 top-0 z-10 h-1 ${conf.color}`} aria-hidden />
         <div className="pista-card-scrim" aria-hidden />
-        <div className="pista-card-heading absolute inset-x-3 top-3 z-20 flex items-start gap-1.5">
+        <div className="pista-card-heading absolute inset-x-3 top-3 z-30 flex items-start justify-between gap-1.5">
           <button
             type="button"
             className="pista-card-header flex min-w-0 items-center gap-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -1234,6 +1245,21 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
             <span className="min-w-0 truncate text-[10px] font-bold uppercase tracking-[0.1em] text-foreground">
               {conf.label}
             </span>
+          </button>
+          <button
+            type="button"
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-lg border border-border/80 bg-card/90 px-2 py-1.5 text-[9px] font-bold uppercase tracking-wide text-foreground shadow-sm backdrop-blur transition-colors hover:bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-expanded={isOpen}
+            aria-controls={`ticker-detail-${p.pista}`}
+            aria-label={`${isOpen ? "Nascondi" : "Mostra"} provenienza punti ${conf.label}`}
+            data-testid={`btn-provenienza-${p.pista}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleCard();
+            }}
+          >
+            <Info className="h-3 w-3" />
+            Dettaglio punti
           </button>
         </div>
         <div className="pista-card-content">
@@ -1341,6 +1367,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
             </div>
           </div>
         </div>
+        {isOpen && renderDetail(p)}
       </article>
     );
   };
@@ -1353,12 +1380,11 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
     const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string; thresholdMarkers?: TickerThresholdMarker[] }[] = [];
     if (p.rsCalcBreakdown && p.rsCalcBreakdown.size > 0) {
       p.rsCalcBreakdown.forEach((rs, key) => {
-        const usePunti = rs.puntiAttuali > 0 || rs.puntiProiezione > 0;
         blocks.push({
           key, name: rs.displayName,
-          puntiAtt: usePunti ? rs.puntiAttuali : rs.pezziAttuali,
-          puntiProi: usePunti ? rs.puntiProiezione : rs.pezziProiezione,
-          usePunti,
+          puntiAtt: rs.puntiAttuali,
+          puntiProi: rs.puntiProiezione,
+          usePunti: true,
           premioAtt: rs.premioAttuale, premioProi: rs.premioProiettato,
           sogliaAtt: rs.sogliaAttuale, sogliaProi: rs.sogliaProiezione,
           thresholdMarkers: rs.thresholdMarkers,
@@ -1367,9 +1393,9 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
     } else {
       blocks.push({
         key: 'totale', name: 'Totale',
-        puntiAtt: usePuntiTot ? p.calc.puntiTotali : p.totalePezzi,
-        puntiProi: usePuntiTot ? p.calcProiezione.puntiTotali : p.proiezionePezzi,
-        usePunti: usePuntiTot,
+        puntiAtt: p.calc.puntiTotali,
+        puntiProi: p.calcProiezione.puntiTotali,
+        usePunti: true,
         premioAtt: p.calc.premioStimato, premioProi: p.calcProiezione.premioStimato,
         sogliaAtt: p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : '—',
         sogliaProi: p.calcProiezione.sogliaRaggiunta > 0 ? p.calcProiezione.sogliaLabel : '—',
@@ -1377,51 +1403,80 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
       });
     }
     return (
-      <div id={`ticker-detail-${p.pista}`} className="mx-3 mb-3 rounded-2xl border bg-gradient-to-r from-primary/5 via-transparent to-violet-500/5 p-3 space-y-3" data-testid={`ticker-detail-${p.pista}`}>
-        <div className="text-sm font-semibold">{conf?.label ?? p.pista} — dettaglio</div>
-        {blocks.map((b) => (
-          <div key={b.key} className="rounded-xl border bg-card/60 p-3" data-testid={`ticker-detail-rs-${p.pista}-${b.key}`}>
-            <div className="text-xs font-bold uppercase tracking-wide mb-2 truncate">{b.name}</div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div>
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{b.usePunti ? 'Punti' : 'Pezzi'}</div>
-                <div className="text-sm font-bold tabular-nums">{fmtTickerVal(b.puntiAtt)}</div>
-                <div className="text-xs font-medium tabular-nums text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5">
-                  <TrendingUp className="h-3 w-3" /> {fmtTickerVal(b.puntiProi)}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Premio</div>
-                <div className="text-sm font-bold tabular-nums text-green-700 dark:text-green-400">{formatEuro(b.premioAtt)}</div>
-                <div className="text-xs font-medium tabular-nums text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5">
-                  <TrendingUp className="h-3 w-3" /> {formatEuro(b.premioProi)}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Soglia</div>
-                <div className="text-sm font-bold">
-                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">{b.sogliaAtt || '—'}</span>
-                </div>
-                <div className="text-xs font-medium text-blue-600 dark:text-blue-400 flex items-center justify-center gap-0.5 mt-0.5">
-                  <TrendingUp className="h-3 w-3" />
-                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border border-blue-400/60">{b.sogliaProi || '—'}</span>
-                </div>
-              </div>
-            </div>
-            {b.thresholdMarkers && b.thresholdMarkers.length > 0 && (
-              <div
-                className="mt-2 flex flex-wrap justify-center gap-1 border-t border-border/70 pt-2"
-                data-testid={`ticker-detail-thresholds-${p.pista}-${b.key}`}
-              >
-                {b.thresholdMarkers.map((marker) => (
-                  <span key={`${marker.label}-${marker.value}`} className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    {marker.label}: {fmtTickerVal(marker.value)}
+      <div
+        id={`ticker-detail-${p.pista}`}
+        className="relative z-20 mx-3 mb-3 rounded-2xl border bg-card/90 p-3 space-y-3"
+        data-testid={`ticker-detail-${p.pista}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-semibold">Provenienza punti — {conf?.label ?? p.pista}</div>
+          <span className="shrink-0 text-sm font-bold tabular-nums" data-testid={`prov-totale-${p.pista}`}>
+            {fmtPoints(p.calc.puntiTotali)} pt
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Dettaglio delle componenti che concorrono al calcolo dei punti.
+        </p>
+        <div className="space-y-2" data-testid={`provenienza-panel-${p.pista}`}>
+          {blocks.map((b) => {
+            const sourcePdvs = b.key === 'totale'
+              ? p.pdvBreakdown
+              : p.pdvBreakdown.filter((pdv) => pdv.normalizedRS === b.key);
+            return (
+              <div key={b.key} className="rounded-xl border bg-card/60 p-3" data-testid={`prov-row-rs-${p.pista}-${b.key}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate text-xs font-bold uppercase tracking-wide">{b.name}</span>
+                  <span className="shrink-0 text-sm font-bold tabular-nums" data-testid={`prov-punti-rs-${p.pista}-${b.key}`}>
+                    {fmtPoints(b.puntiAtt)} pt
                   </span>
-                ))}
+                </div>
+                <div className="mt-2 space-y-2 border-t border-border/70 pt-2">
+                  {sourcePdvs.map((pdv) => (
+                    <div key={pdv.codicePos} className="rounded-lg bg-muted/45 px-2.5 py-2" data-testid={`prov-row-pdv-${p.pista}-${pdv.codicePos}`}>
+                      <div className="flex items-center justify-between gap-3 text-xs">
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold">{pdv.nomeNegozio} ({pdv.codicePos})</span>
+                          {b.key === 'totale' && (
+                            <span className="block truncate text-[10px] text-muted-foreground">{pdv.ragioneSociale || "Senza Ragione Sociale"}</span>
+                          )}
+                        </span>
+                        {b.key === 'totale' ? (
+                          <span className="shrink-0 font-bold tabular-nums" data-testid={`prov-punti-pdv-${p.pista}-${pdv.codicePos}`}>{fmtPoints(pdv.pdvCalc.puntiTotali)} pt</span>
+                        ) : (
+                          <span className="shrink-0 text-muted-foreground tabular-nums">{pdv.pezzi} pz sorgente</span>
+                        )}
+                      </div>
+                      <div className="mt-1 space-y-0.5">
+                        {pdv.categories.map((category) => (
+                          <div key={category.category} className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground" data-testid={`prov-cat-${p.pista}-${pdv.codicePos}-${category.category}`}>
+                            <span className="min-w-0 truncate">{category.label}</span>
+                            <span className="shrink-0 tabular-nums">{category.pezzi} pz</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {b.thresholdMarkers && b.thresholdMarkers.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1 border-t border-border/70 pt-2" data-testid={`ticker-detail-thresholds-${p.pista}-${b.key}`}>
+                    {b.thresholdMarkers.map((marker) => (
+                      <span key={`${marker.label}-${marker.value}`} className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        {marker.label}: {fmtTickerVal(marker.value)} pt
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-2 text-xs" data-testid={`prov-somma-${p.pista}`}>
+          <span className="text-muted-foreground">Somma {p.rsCalcBreakdown?.size ? "Ragioni Sociali" : "PDV"}</span>
+          <span className="font-bold tabular-nums">
+            {fmtPoints(blocks.reduce((sum, block) => sum + block.puntiAtt, 0))} pt {usePuntiTot ? "= totale card" : "calcolati"}
+          </span>
+        </div>
       </div>
     );
   };
@@ -1445,7 +1500,6 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 p-3">
             {items.map(renderCard)}
           </div>
-          {expandedPista && renderDetail(expandedPista)}
         </CardContent>
       </Card>
     </TooltipProvider>
@@ -5234,13 +5288,6 @@ export default function DashboardGaraReale() {
                     key={pista.pista}
                     className="overflow-hidden"
                     data-testid={`card-pista-${pista.pista}`}
-                    onClick={(e) => {
-                      // Task #489 — click sulla card = apri/chiudi provenienza
-                      // punti, ma senza rubare i click ai controlli interni.
-                      const target = e.target as HTMLElement;
-                      if (target.closest('button, a, input, select, textarea, [role="button"]')) return;
-                      toggleProvenance(pista.pista);
-                    }}
                   >
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
@@ -5251,19 +5298,6 @@ export default function DashboardGaraReale() {
                           {pistaConf.label}
                         </CardTitle>
                         <div className="flex items-center gap-1.5">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => toggleProvenance(pista.pista)}
-                            title="Provenienza punti"
-                            aria-label={`Provenienza punti ${pistaConf.label}`}
-                            aria-expanded={provenanceOpen.has(pista.pista)}
-                            aria-controls={`provenienza-panel-${pista.pista}`}
-                            data-testid={`btn-provenienza-${pista.pista}`}
-                          >
-                            <Info className="h-3.5 w-3.5" />
-                          </Button>
                           {showPistaToggle && (
                             <Button
                               variant="ghost"
@@ -5306,9 +5340,9 @@ export default function DashboardGaraReale() {
                           filtri/perimetro applicati. I subtotali usano gli
                           stessi calcoli della card, quindi la somma coincide
                           col totale mostrato. */}
-                      {provenanceOpen.has(pista.pista) && (() => {
+                      {false && provenanceOpen.has(pista.pista) && (() => {
                         const totPunti = pista.calc.puntiTotali;
-                        const hasRSPanel = !!(pista.rsCalcBreakdown && pista.rsCalcBreakdown.size >= 1);
+                        const hasRSPanel = (pista.rsCalcBreakdown?.size ?? 0) >= 1;
                         const provPdvRows = pista.pdvBreakdown;
                         const subtotali = hasRSPanel
                           ? Array.from(pista.rsCalcBreakdown!.values()).map((r) => r.puntiAttuali)
@@ -5349,7 +5383,7 @@ export default function DashboardGaraReale() {
                               </span>
                             </div>
                             <div className="text-[11px] text-gray-500 dark:text-slate-400 space-y-0.5" data-testid={`prov-context-${pista.pista}`}>
-                              <div>Periodo: {String(selMonth).padStart(2, "0")}/{selYear}{garaConfig?.name ? ` · Config: ${garaConfig.name}` : ""}</div>
+                              <div>Periodo: {String(selMonth).padStart(2, "0")}/{selYear}{garaConfig?.name ? ` · Config: ${garaConfig?.name}` : ""}</div>
                               <div>
                                 Vista PDV: {pdvView === "destinazione" ? "destinazione" : "origine"}
                                 {" · "}Filtri: {filtriAttivi || "nessuno"}
