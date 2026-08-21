@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Run the "Tabella PDV × Pista" UI test suites (Task #384 vista Pezzi,
 # Task #387 export Pezzi, Task #388 export Punti, Task #391 export Vendite
-# BiSuite, Task #423 card KPI di testata Dashboard):
+# BiSuite, Task #423 card KPI di testata Dashboard, Task #474 contenuto
+# PDF "Riepilogo Premi per RS"):
 # tests/pdv-pezzi-extra.test.mjs + tests/pdv-pezzi-table-ui.test.mjs +
 # tests/pdv-pezzi-vendite-export-ui.test.mjs +
-# tests/dashboard-kpi-cards-ui.test.mjs
+# tests/dashboard-kpi-cards-ui.test.mjs + tests/premio-rs-pdf-ui.test.mjs
 # (accorpati in un unico workflow per rispettare il limite di workflow —
 # Task #393, Task #423).
 #
@@ -39,4 +40,5 @@ exec node --import tsx --test \
   tests/pdv-pezzi-extra.test.mjs \
   tests/pdv-pezzi-table-ui.test.mjs \
   tests/pdv-pezzi-vendite-export-ui.test.mjs \
-  tests/dashboard-kpi-cards-ui.test.mjs
+  tests/dashboard-kpi-cards-ui.test.mjs \
+  tests/premio-rs-pdf-ui.test.mjs
