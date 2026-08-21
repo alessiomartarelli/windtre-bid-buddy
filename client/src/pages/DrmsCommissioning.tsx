@@ -87,7 +87,7 @@ const KpiCard = ({ label, value, subvalue, accent, icon: Icon }: {
   icon?: React.ComponentType<any>;
 }) => (
   <div className="relative overflow-hidden border border-neutral-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-    <div className="absolute top-0 left-0 w-1 h-full" style={{ background: accent || "#9ca3af" }} />
+    <div className="absolute top-0 left-0 w-1 h-full" style={{ background: accent || "hsl(var(--muted-foreground))" }} />
     <div className="px-5 py-4">
       <div className="flex items-start justify-between mb-2">
         <div className="text-[10px] uppercase tracking-[0.18em] text-neutral-500 dark:text-slate-400 font-medium">{label}</div>
@@ -503,7 +503,7 @@ function Dashboard({
       .map(([c, v]) => ({
         capitolo: c as CapitoloKey,
         importo: v.importo, righe: v.righe, contratti: v.contratti.size,
-        config: CAPITOLI_CONFIG[c as CapitoloKey] || { label: c, color: "#888", order: 99 },
+        config: CAPITOLI_CONFIG[c as CapitoloKey] || { label: c, color: "hsl(var(--muted-foreground))", order: 99 },
       }))
       .sort((a, b) => (a.config.order || 99) - (b.config.order || 99));
   }, [filteredData]);

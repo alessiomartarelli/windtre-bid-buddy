@@ -146,3 +146,17 @@
   .dark :is(.text-slate-600, .text-slate-700, .text-gray-600, .text-gray-700) { color: #cbd5e1 !important; }
   .dark :is(.text-gray-800, .text-gray-900, .text-slate-800, .text-slate-900) { color: #e2e8f0 !important; }
 }
+
+/* ── Tooltip Recharts (Task #481) ─────────────────────────────
+   Rete di sicurezza per i tooltip dei grafici: se un contentStyle
+   inline non copre superficie/bordo, nei temi scuri il wrapper
+   di default resta bianco con testo scuro. Allineato ai token
+   popover/border-soft; il tema chiaro non è toccato. */
+.dark .recharts-default-tooltip {
+  background-color: hsl(var(--popover)) !important;
+  border-color: hsl(var(--border-soft-strong)) !important;
+  color: hsl(var(--popover-foreground)) !important;
+}
+.dark .recharts-tooltip-label {
+  color: hsl(var(--popover-foreground)) !important;
+}

@@ -6003,7 +6003,7 @@ export default function DashboardGaraReale() {
                                   const entry = pieData.find(p => p.name === name);
                                   return [`${formatEuro(value)} (${entry?.pct ?? 0}%) · ${entry?.pezzi ?? 0} pezzi`, name];
                                 }}
-                                contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: "13px" }}
+                                contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", backgroundColor: "hsl(var(--popover))", color: "hsl(var(--popover-foreground))", fontSize: "13px" }}
                               />
                             </PieChart>
                           </ResponsiveContainer>
@@ -6044,7 +6044,7 @@ export default function DashboardGaraReale() {
                           const pdvSummary = pdvSummaries.find(s => s.codicePos === pdv.codicePos);
                           const pdvPremioCalc = pdvSummary?.premioTotale ?? 0;
                           const pctContrib = grandTotalPremio > 0 ? Math.round((pdvPremioCalc / grandTotalPremio) * 1000) / 10 : 0;
-                          const pdvChartColor = pdvColorMap.get(pdv.nomeNegozio) || "#9ca3af";
+                          const pdvChartColor = pdvColorMap.get(pdv.nomeNegozio) || "hsl(var(--muted-foreground))";
 
                           const byPista: Record<string, { pezzi: number; corePezzi: number; items: AggregatedItem[] }> = {};
                           for (const item of pdv.items) {

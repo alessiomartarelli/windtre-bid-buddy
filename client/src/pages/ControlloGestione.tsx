@@ -927,7 +927,7 @@ export default function ControlloGestione({ embedded = false }: { embedded?: boo
                                 return pct >= 6 ? `${pct}%` : "";
                               }}
                               labelLine={false}
-                              stroke="#fff"
+                              stroke="hsl(var(--card))"
                               strokeWidth={2}
                               onClick={(e: any) => {
                                 const cat = e?.categoria || e?.payload?.categoria;
