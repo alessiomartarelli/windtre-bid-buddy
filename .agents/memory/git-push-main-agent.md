@@ -15,6 +15,20 @@ refs/heads/main` e confronto con `git rev-parse HEAD`. Se gli SHA coincidono
 il push è riuscito; l'"ahead" è solo il tracking ref stantio (cosmetico,
 si sistema da solo al prossimo ciclo della piattaforma).
 
+**Token valido ma `http.extraHeader` rifiutato:** può capitare che
+`GITHUB_TOKEN` risponda 200 sia su `/user` sia sul repository via API, mentre
+Git continui a restituire `invalid credentials` con `Authorization: Bearer`.
+In quel caso usa HTTPS Basic tramite un `GIT_ASKPASS` temporaneo: username
+`x-access-token`, password letta da `GITHUB_TOKEN`, `credential.helper`
+disabilitato. Elimina sempre lo script temporaneo con una trap.
+
+**Why:** il client Git/proxy di questo workspace non inoltra sempre
+`http.extraHeader` come l'API GitHub si aspetta, pur con credenziale valida.
+
+**How to apply:** prima verifica senza stampare il token che `/user` e
+`/repos/<owner>/<repo>` rispondano 200; poi usa AskPass e conferma il push
+confrontando `ls-remote refs/heads/main` e `rev-parse HEAD`.
+
 **Il lock stantio** non è rimovibile via bash (il guard intercetta anche
 `rm` su path dentro `.git`), ma si rimuove con `fs.unlinkSync` nel notebook
 code_execution. Rimuoverlo NON sblocca però fetch/push successivi: il guard
