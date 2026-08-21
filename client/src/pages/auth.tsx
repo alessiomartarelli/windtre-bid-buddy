@@ -230,7 +230,7 @@ export default function Auth() {
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   required
-                  className="h-12 border-white/15 bg-white/[0.07] text-white placeholder:text-slate-400/70 focus-visible:border-primary/80 focus-visible:ring-primary/25 lg:h-10 lg:border-input lg:bg-background lg:text-foreground lg:placeholder:text-muted-foreground"
+                  className="h-12 border-white/15 bg-white/[0.07] text-white placeholder:text-slate-400/70 focus-visible:border-primary/80 focus-visible:ring-primary/25 lg:h-11 lg:border-input lg:bg-background lg:text-foreground lg:placeholder:text-muted-foreground xl:h-10"
                   data-testid="input-login-email"
                 />
               </div>
@@ -244,20 +244,20 @@ export default function Auth() {
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     required
-                    className="h-12 pr-12 border-white/15 bg-white/[0.07] text-white placeholder:text-slate-400/70 focus-visible:border-primary/80 focus-visible:ring-primary/25 lg:h-10 lg:border-input lg:bg-background lg:text-foreground lg:placeholder:text-muted-foreground"
+                    className="h-12 pr-12 border-white/15 bg-white/[0.07] text-white placeholder:text-slate-400/70 focus-visible:border-primary/80 focus-visible:ring-primary/25 lg:h-11 lg:border-input lg:bg-background lg:text-foreground lg:placeholder:text-muted-foreground xl:h-10"
                     data-testid="input-login-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-slate-300/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 lg:right-1 lg:h-10 lg:w-10 lg:text-muted-foreground lg:hover:bg-muted lg:hover:text-foreground"
+                    className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-slate-300/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 lg:right-1 lg:h-11 lg:w-11 lg:text-muted-foreground lg:hover:bg-muted lg:hover:text-foreground xl:h-10 xl:w-10"
                     data-testid="button-toggle-login-password"
                   >
                     {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
-              <Button type="submit" className="h-12 w-full font-semibold shadow-[0_10px_24px_hsl(239_84%_64%_/_0.22)] transition-transform hover:-translate-y-0.5 active:translate-y-0 lg:h-10 lg:shadow-sm lg:hover:translate-y-0 lg:active:translate-y-0" disabled={loading} data-testid="button-login">
+              <Button type="submit" className="h-12 w-full font-semibold shadow-[0_10px_24px_hsl(239_84%_64%_/_0.22)] transition-transform hover:-translate-y-0.5 active:translate-y-0 lg:h-11 lg:shadow-sm lg:hover:translate-y-0 lg:active:translate-y-0 xl:h-10" disabled={loading} data-testid="button-login">
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
