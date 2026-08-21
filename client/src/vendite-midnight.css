@@ -372,25 +372,11 @@ html[data-skin="midnight-violet"] [data-radix-popper-content-wrapper] > div {
     color: var(--vendite-accent) !important;
   }
 
-  /* Incassi: meno colori, importi bianchi e icone/etichette lavanda. */
+  /* Incassi: colori distintivi ripristinati, ma con bordi e superfici più
+     nette rispetto alla versione iniziale del tema scuro. */
   .vendite-dark-contrast [data-testid^="incasso-"] {
-    color: var(--vendite-text-secondary) !important;
     background: rgb(222 212 255 / 8%) !important;
-    border: 1px solid rgb(218 205 255 / 22%);
-  }
-
-  .vendite-dark-contrast [data-testid^="incasso-"] > span:first-child {
-    color: var(--vendite-accent) !important;
-  }
-
-  .vendite-dark-contrast [data-testid^="incasso-"] > span:last-child {
-    color: var(--vendite-text) !important;
-  }
-
-  .vendite-dark-contrast [data-testid^="recap-"] {
-    color: var(--vendite-text) !important;
-    background: rgb(222 212 255 / 8%) !important;
-    border-color: var(--vendite-strong-border) !important;
+    border: 1px solid rgb(218 205 255 / 30%);
   }
 
   /* Navigazione categorie e pannelli: superfici sobrie, stato selezionato
@@ -415,47 +401,51 @@ html[data-skin="midnight-violet"] [data-radix-popper-content-wrapper] > div {
     border-color: var(--vendite-strong-border) !important;
   }
 
-  /* Badge pista/tipo: palette unificata. Stato e quantità restano leggibili
-     senza affidarsi a sette tinte scure diverse. */
-  .vendite-dark-contrast :is(
-    [class*="bg-blue-500/10"],
-    [class*="bg-purple-500/10"],
-    [class*="bg-amber-500/10"],
-    [class*="bg-indigo-500/10"],
-    [class*="bg-teal-500/10"],
-    [class*="bg-red-500/10"],
-    [class*="bg-green-500/10"],
-    [class*="bg-orange-500/10"],
-    [class*="bg-slate-500/10"],
-    [class*="bg-cyan-500/10"],
-    [class*="bg-emerald-500/10"],
-    [class*="bg-rose-500/10"]
-  ) {
-    color: var(--vendite-text) !important;
-    background: rgb(222 212 255 / 9%) !important;
-    border-color: rgb(218 205 255 / 36%) !important;
+  /* Badge pista/tipo: colori originali, alzati di luminosità per mantenere
+     leggibilità su violetto scuro senza ridurli tutti a una tinta sola. */
+  .vendite-dark-contrast [class*="bg-blue-500/10"] {
+    color: #bfdbfe !important; background: rgb(96 165 250 / 18%) !important; border-color: rgb(147 197 253 / 55%) !important;
+  }
+  .vendite-dark-contrast [class*="bg-purple-500/10"] {
+    color: #e9d5ff !important; background: rgb(168 85 247 / 18%) !important; border-color: rgb(216 180 254 / 55%) !important;
+  }
+  .vendite-dark-contrast [class*="bg-amber-500/10"] {
+    color: #fde68a !important; background: rgb(245 158 11 / 18%) !important; border-color: rgb(252 211 77 / 55%) !important;
+  }
+  .vendite-dark-contrast [class*="bg-indigo-500/10"] {
+    color: #c7d2fe !important; background: rgb(99 102 241 / 18%) !important; border-color: rgb(165 180 252 / 55%) !important;
+  }
+  .vendite-dark-contrast [class*="bg-teal-500/10"] {
+    color: #99f6e4 !important; background: rgb(20 184 166 / 18%) !important; border-color: rgb(94 234 212 / 55%) !important;
+  }
+  .vendite-dark-contrast [class*="bg-red-500/10"],
+  .vendite-dark-contrast [class*="bg-rose-500/10"] {
+    color: #fecdd3 !important; background: rgb(244 63 94 / 18%) !important; border-color: rgb(253 164 175 / 55%) !important;
+  }
+  .vendite-dark-contrast [class*="bg-green-500/10"],
+  .vendite-dark-contrast [class*="bg-emerald-500/10"] {
+    color: #bbf7d0 !important; background: rgb(34 197 94 / 18%) !important; border-color: rgb(134 239 172 / 55%) !important;
+  }
+  .vendite-dark-contrast [class*="bg-orange-500/10"] {
+    color: #fed7aa !important; background: rgb(249 115 22 / 18%) !important; border-color: rgb(253 186 116 / 55%) !important;
+  }
+  .vendite-dark-contrast [class*="bg-slate-500/10"] {
+    color: #e2e8f0 !important; background: rgb(100 116 139 / 22%) !important; border-color: rgb(203 213 225 / 45%) !important;
+  }
+  .vendite-dark-contrast [class*="bg-cyan-500/10"] {
+    color: #a5f3fc !important; background: rgb(6 182 212 / 18%) !important; border-color: rgb(103 232 249 / 55%) !important;
   }
 
   .vendite-dark-contrast :is(.text-green-500, .text-green-600) {
     color: var(--vendite-success) !important;
   }
 
-  .vendite-dark-contrast :is(
-    .text-blue-600,
-    .text-blue-700,
-    .text-purple-600,
-    .text-purple-700,
-    .text-indigo-600,
-    .text-indigo-700,
-    .text-teal-600,
-    .text-teal-700,
-    .text-cyan-600,
-    .text-cyan-700,
-    .text-slate-600,
-    .text-slate-700
-  ) {
-    color: var(--vendite-accent) !important;
-  }
+  .vendite-dark-contrast :is(.text-blue-600, .text-blue-700) { color: #93c5fd !important; }
+  .vendite-dark-contrast :is(.text-purple-600, .text-purple-700) { color: #d8b4fe !important; }
+  .vendite-dark-contrast :is(.text-indigo-600, .text-indigo-700) { color: #c7d2fe !important; }
+  .vendite-dark-contrast :is(.text-teal-600, .text-teal-700) { color: #99f6e4 !important; }
+  .vendite-dark-contrast :is(.text-cyan-600, .text-cyan-700) { color: #a5f3fc !important; }
+  .vendite-dark-contrast :is(.text-slate-600, .text-slate-700) { color: #e2e8f0 !important; }
 
   .vendite-dark-contrast :is(.text-red-600, .text-red-700, .text-rose-600, .text-rose-700) {
     color: var(--vendite-danger) !important;
