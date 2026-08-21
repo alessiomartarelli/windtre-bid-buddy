@@ -3133,23 +3133,6 @@ export default function DashboardGaraReale() {
   });
   const rulesUpdatedAt = mappingVersion?.rulesUpdatedAt ?? null;
 
-  const { data: mappedDataRaw, isLoading: loadingMapped } = useQuery<MappedSalesResponse>({
-    queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear, effectiveConfigId, "inGara", rulesUpdatedAt, pdvView],
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        month: String(selMonth),
-        year: String(selYear),
-        inGaraOnly: "true",
-      });
-      if (effectiveConfigId) params.set("garaConfigId", effectiveConfigId);
-      if (pdvView !== "origine") params.set("pdvView", pdvView);
-      const res = await fetch(apiUrl(`/api/admin/bisuite-mapped-sales?${params.toString()}`), { credentials: "include" });
-      if (!res.ok) throw new Error("Errore nel caricamento dati");
-      return res.json();
-    },
-    enabled: !!configList,
-  });
-
   const { data: garaConfig, isLoading: loadingConfig } = useQuery<GaraConfigRecord | null>({
     queryKey: ["/api/gara-config", selMonth, selYear, effectiveConfigId],
     queryFn: async () => {
@@ -3200,6 +3183,43 @@ export default function DashboardGaraReale() {
     });
   }, [garaPdvListAll, rsFilter, pdvFilter]);
 
+  // Task #478 — perimetro RS/PDV passato al server: con un filtro attivo la
+  // query vendite mappate riceve la lista codicePos del perimetro (e la RS,
+  // per coprire PDV non in config) così daily/totalSales/totalImporto sono
+  // ricostruiti dal server sul solo perimetro scelto.
+  const perimeterParams = useMemo(() => {
+    if (rsFilter === "all" && pdvFilter === "all") return null;
+    const codicePos = garaPdvList.map((p) => p.codicePos).filter(Boolean);
+    const ragioneSociale = pdvFilter === "all" && rsFilter !== "all"
+      ? (rsFilterOptions.find((o) => o.key === rsFilter)?.label ?? rsFilter)
+      : undefined;
+    return { codicePos, ragioneSociale };
+  }, [rsFilter, pdvFilter, garaPdvList, rsFilterOptions]);
+  const perimeterKey = perimeterParams
+    ? `${perimeterParams.codicePos.join(",")}|${perimeterParams.ragioneSociale ?? ""}`
+    : "";
+
+  const { data: mappedDataRaw, isLoading: loadingMapped } = useQuery<MappedSalesResponse>({
+    queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear, effectiveConfigId, "inGara", rulesUpdatedAt, pdvView, perimeterKey],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        month: String(selMonth),
+        year: String(selYear),
+        inGaraOnly: "true",
+      });
+      if (effectiveConfigId) params.set("garaConfigId", effectiveConfigId);
+      if (pdvView !== "origine") params.set("pdvView", pdvView);
+      if (perimeterParams) {
+        if (perimeterParams.codicePos.length > 0) params.set("codicePos", perimeterParams.codicePos.join(","));
+        if (perimeterParams.ragioneSociale) params.set("ragioneSociale", perimeterParams.ragioneSociale);
+      }
+      const res = await fetch(apiUrl(`/api/admin/bisuite-mapped-sales?${params.toString()}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore nel caricamento dati");
+      return res.json();
+    },
+    enabled: !!configList,
+  });
+
   const garaCalcConfig = useMemo(() => {
     const cfg = garaConfig?.config as unknown as Record<string, unknown> | null;
     return {
@@ -3225,8 +3245,9 @@ export default function DashboardGaraReale() {
 
   // Applica il perimetro RS/PDV ai dati vendite mappate: filtra la pdvList e
   // ricostruisce i totali per pista dagli aggregati dei soli PDV inclusi.
-  // Serie giornaliera e conteggio vendite grezze restano a livello org (non
-  // ricostruibili per PDV lato client).
+  // Task #478: serie giornaliera e conteggi grezzi (totalSales/totalImporto)
+  // arrivano già filtrati dal server (parametri codicePos/ragioneSociale),
+  // quindi qui passano invariati via spread.
   const mappedData = useMemo<MappedSalesResponse | undefined>(() => {
     if (!mappedDataRaw) return mappedDataRaw;
     if (rsFilter === "all" && pdvFilter === "all") return mappedDataRaw;

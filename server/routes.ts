@@ -3889,8 +3889,22 @@ export async function registerRoutes(
       }
 
       const { selectInGaraSales } = await import("./bisuiteGaraFilter");
-      const { sales, calendarsAvailable, totalSalesUnfiltered, salesExcludedOutOfGara } =
+      const { sales: salesInGara, calendarsAvailable, totalSalesUnfiltered, salesExcludedOutOfGara } =
         selectInGaraSales(allSales, inGaraOnly, garaCfg, pdvView);
+
+      // Task #478 — perimetro opzionale RS/PDV: liste separate da virgola.
+      // Con perimetro attivo daily/totalSales/totalImporto (e tutto il resto)
+      // riflettono solo le vendite del perimetro scelto.
+      const parseCsv = (v: unknown): string[] =>
+        typeof v === "string" ? v.split(",").map((s) => s.trim()).filter(Boolean) : [];
+      const perimeterPos = parseCsv(req.query.codicePos);
+      const perimeterRs = parseCsv(req.query.ragioneSociale);
+      const { filterSalesByPerimeter } = await import("./bisuiteMappedSales");
+      const sales = filterSalesByPerimeter(
+        salesInGara,
+        { codicePos: perimeterPos, ragioniSociali: perimeterRs },
+        pdvView,
+      );
 
       const sysMapping = await storage.getSystemConfig("bisuite_mapping");
       const mappingConfig = sysMapping?.config as { rules?: BiSuiteMappingRule[] } | null;

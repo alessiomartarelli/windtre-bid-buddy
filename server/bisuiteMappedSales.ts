@@ -3,6 +3,7 @@ import { mapBiSuiteArticle } from "../shared/bisuiteMapping";
 import { classifyCategory, isCouponCaring, isPezzoIva } from "../shared/bisuiteClassification";
 import { trendYmdOf } from "../shared/venditeReport";
 import { resolveSalePdvForView, type PdvView } from "../shared/pdvView";
+import { normalizeRsName } from "../shared/ragioneSociale";
 
 // Aggregazione lato server delle vendite BiSuite mappate, estratta dalla route
 // GET /api/admin/bisuite-mapped-sales così da essere richiamabile e testabile
@@ -93,6 +94,42 @@ export type MappableSale = {
   nomeNegozio?: string | null;
   ragioneSociale?: string | null;
 };
+
+// Task #478 — perimetro RS/PDV opzionale della route bisuite-mapped-sales.
+// Filtra le vendite PRIMA dell'aggregazione così che daily/totalSales/
+// totalImporto (non ricostruibili lato client per PDV) riflettano il filtro
+// scelto sulla Dashboard Gara Reale. Semantica allineata al memo client:
+// una vendita è inclusa se il suo codicePos (risolto secondo la vista PDV
+// attiva) è nella lista, OPPURE se la sua ragione sociale (normalizzata)
+// combacia con una delle RS richieste. Liste vuote/assenti = nessun filtro.
+export type SalesPerimeter = {
+  codicePos?: string[];
+  ragioniSociali?: string[];
+};
+
+export function filterSalesByPerimeter<T extends MappableSale>(
+  sales: T[],
+  perimeter: SalesPerimeter | undefined,
+  pdvView: PdvView,
+): T[] {
+  const posList = (perimeter?.codicePos ?? []).map((c) => String(c).trim()).filter(Boolean);
+  const rsList = (perimeter?.ragioniSociali ?? []).map((r) => normalizeRsName(String(r))).filter(Boolean);
+  if (posList.length === 0 && rsList.length === 0) return sales;
+  const posSet = new Set(posList);
+  const rsSet = new Set(rsList);
+  return sales.filter((sale) => {
+    let pos = sale.codicePos || "";
+    if (pdvView === "destinazione") {
+      pos = resolveSalePdvForView(sale, "destinazione").codicePos || "";
+    }
+    if (pos && posSet.has(pos)) return true;
+    if (rsSet.size > 0) {
+      const rs = normalizeRsName(sale.ragioneSociale || "");
+      if (rs && rsSet.has(rs)) return true;
+    }
+    return false;
+  });
+}
 
 const newDeviceTally = (): DeviceTally => ({
   smartphone: { finanziato: { pezzi: 0, descriptions: {} }, rate: { pezzi: 0, descriptions: {} }, altro: { pezzi: 0, descriptions: {} } },
