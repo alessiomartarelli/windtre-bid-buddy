@@ -54,6 +54,167 @@ async function insertSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale,
 
 const provNum = (txt) => Number(String(txt).replace(/[^\d,.-]/g, '').replace(',', '.'));
 
+// ── Task #491 — contrasto WCAG misurato nel pannello (temi scuri) ────────────
+// Stessa matematica delle suite dark-contrast (tests/helpers/contrastScan.mjs),
+// con una differenza: la card ticker ha uno sfondo a gradiente, quindi quando
+// lo sfondo accumulato degli antenati non è opaco prima di incontrare il
+// gradiente, il rapporto viene calcolato come LOWER BOUND componendo lo sfondo
+// residuo sia su nero puro che su bianco puro e prendendo il minimo. Se anche
+// il caso peggiore supera la soglia WCAG, il testo è leggibile davvero.
+const setDarkScheme = async (pool, session, page, scheme) => {
+  await pool.query(
+    `UPDATE profiles
+        SET ui_prefs = coalesce(ui_prefs, '{}'::jsonb) || $2::jsonb
+      WHERE id = $1`,
+    [session.profileId, JSON.stringify({ theme: 'dark', scheme })],
+  );
+  await page.evaluate((s) => {
+    localStorage.setItem('mystoredesk-theme', 'dark');
+    localStorage.setItem('mystoredesk-scheme', s);
+  }, scheme);
+};
+
+const measurePanelContrast = (page, pista) =>
+  page.evaluate((pistaKey) => {
+    const parse = (raw) => {
+      const m = raw.match(/[\d.]+/g);
+      if (!m || m.length < 3) return null;
+      const [r, g, b] = m.slice(0, 3).map(Number);
+      return { r, g, b, a: m.length >= 4 ? Number(m[3]) : 1 };
+    };
+    const lum = ({ r, g, b }) => {
+      const lin = (v) => {
+        const c = v / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      };
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const ratio = (f, bg) => {
+      const lf = lum(f);
+      const lb = lum(bg);
+      return (Math.max(lf, lb) + 0.05) / (Math.min(lf, lb) + 0.05);
+    };
+    const blendOver = (top, bottom) => {
+      const a = top.a + bottom.a * (1 - top.a);
+      return {
+        r: (top.r * top.a + bottom.r * bottom.a * (1 - top.a)) / a,
+        g: (top.g * top.a + bottom.g * bottom.a * (1 - top.a)) / a,
+        b: (top.b * top.a + bottom.b * bottom.a * (1 - top.a)) / a,
+        a,
+      };
+    };
+    const BLACK = { r: 0, g: 0, b: 0, a: 1 };
+    const WHITE = { r: 255, g: 255, b: 255, a: 1 };
+
+    const root = document.getElementById(`ticker-detail-${pistaKey}`);
+    if (!root) return { missingRoot: true, results: [] };
+
+    const results = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    for (let el = root; el; el = walker.nextNode()) {
+      if (!(el instanceof HTMLElement)) continue;
+      const direct = Array.from(el.childNodes)
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => n.textContent)
+        .join('')
+        .trim();
+      if (!direct) continue;
+
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) continue;
+
+      let opacity = 1;
+      for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+        opacity *= Number(getComputedStyle(n).opacity || 1);
+      }
+      const fgRaw = parse(cs.color);
+      if (!fgRaw) continue;
+      const fgBase = { ...fgRaw, a: fgRaw.a * opacity };
+
+      // Sfondo effettivo: fusione risalendo gli antenati; se si incontra un
+      // gradiente con alpha accumulata < 1, si passa alla modalità bounded.
+      let bg = null;
+      let bounded = false;
+      const chain = [];
+      let node = el;
+      while (node) {
+        chain.push(node);
+        node = node.parentElement;
+      }
+      chain.push(document.body, document.documentElement);
+      for (const n of chain) {
+        if (!n) continue;
+        const ncs = getComputedStyle(n);
+        if (ncs.backgroundImage && ncs.backgroundImage !== 'none') {
+          if (!bg || bg.a < 0.999) bounded = true;
+          break;
+        }
+        const c = parse(ncs.backgroundColor);
+        if (c && c.a > 0) {
+          bg = bg ? blendOver(bg, c) : c;
+          if (bg.a >= 0.999) break;
+        }
+      }
+
+      const size = parseFloat(cs.fontSize) || 16;
+      const weight = Number(cs.fontWeight) || 400;
+      const large = size >= 24 || (size >= 18.5 && weight >= 700);
+      const min = large ? 3.0 : 4.5;
+
+      let r;
+      if (bounded || !bg) {
+        const base = bg ?? { r: 0, g: 0, b: 0, a: 0 };
+        const bgDark = base.a > 0 ? blendOver(base, BLACK) : BLACK;
+        const bgLight = base.a > 0 ? blendOver(base, WHITE) : WHITE;
+        const fgDark = fgBase.a < 1 ? blendOver(fgBase, bgDark) : fgBase;
+        const fgLight = fgBase.a < 1 ? blendOver(fgBase, bgLight) : fgBase;
+        r = Math.min(ratio(fgDark, bgDark), ratio(fgLight, bgLight));
+      } else {
+        const solidBg = bg.a < 0.999 ? blendOver(bg, WHITE) : bg;
+        const fg = fgBase.a < 1 ? blendOver(fgBase, solidBg) : fgBase;
+        r = ratio(fg, solidBg);
+      }
+
+      results.push({
+        ratio: Number(r.toFixed(2)),
+        min,
+        bounded,
+        text: direct.slice(0, 60),
+        testid: el.closest('[data-testid]')?.getAttribute('data-testid') || null,
+      });
+    }
+    return { missingRoot: false, results };
+  }, pista);
+
+const assertPanelContrast = async (page, pista, label) => {
+  const { missingRoot, results } = await measurePanelContrast(page, pista);
+  assert.equal(missingRoot, false, `${label}: pannello ticker-detail-${pista} presente`);
+  assert.ok(results.length > 0, `${label}: almeno un elemento testuale misurato`);
+
+  // Copertura minima richiesta dal task: titolo, totale, subtotali PDV,
+  // fonti (categorie) e riga somma devono essere stati misurati davvero.
+  const hasText = (re) => results.some((x) => re.test(x.text));
+  const hasTestid = (prefix) => results.some((x) => x.testid && x.testid.startsWith(prefix));
+  assert.ok(hasText(/Provenienza punti/i), `${label}: titolo del pannello misurato`);
+  assert.ok(hasTestid(`prov-totale-${pista}`), `${label}: totale pannello misurato`);
+  assert.ok(hasTestid(`prov-punti-pdv-${pista}-`) || hasTestid(`prov-punti-rs-${pista}-`),
+    `${label}: subtotali PDV/RS misurati`);
+  assert.ok(hasTestid(`prov-cat-${pista}-`), `${label}: fonti (categorie) misurate`);
+  assert.ok(hasTestid(`prov-somma-${pista}`), `${label}: riga somma misurata`);
+
+  const violations = results.filter((x) => x.ratio < x.min);
+  assert.equal(
+    violations.length,
+    0,
+    `${label}: ${violations.length} violazioni di contrasto:\n` +
+      violations
+        .map((v) => `  - [${v.testid ?? '-'}] "${v.text}" ratio=${v.ratio} (min ${v.min}${v.bounded ? ', bounded' : ''})`)
+        .join('\n'),
+  );
+};
+
 test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale card', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'prov_punti', fullName: 'Provenienza Punti Test' });
@@ -156,13 +317,6 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     assert.doesNotMatch(panelText, /€|canon/i, 'il dettaglio punti non deve contenere canoni o importi in euro');
     assert.ok(panelText.includes(RS), 'anche nel calcolo per-PDV deve essere visibile la Ragione Sociale sorgente');
 
-    // Tema scuro: pannello ancora visibile e con testo non trasparente.
-    await page.locator('html').evaluate((html) => html.classList.add('dark'));
-    await panel.waitFor({ state: 'visible', timeout: 5000 });
-    const darkColor = await panel.evaluate((el) => getComputedStyle(el).color);
-    assert.notEqual(darkColor, 'rgba(0, 0, 0, 0)', 'testo del pannello visibile in dark');
-    await page.locator('html').evaluate((html) => html.classList.remove('dark'));
-
     // Chiusura via click sulla card ticker (zona non interattiva: i punti).
     await page.getByTestId('ticker-punti-mobile').click();
     await panel.waitFor({ state: 'detached', timeout: 10000 });
@@ -171,6 +325,22 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     // Riapertura via click sulla card ticker.
     await page.getByTestId('ticker-punti-mobile').click();
     await panel.waitFor({ state: 'visible', timeout: 10000 });
+
+    // Temi scuri: contrasto WCAG misurato su titolo, subtotali e fonti del
+    // pannello, sia in dark standard che in midnight-violet (Task #491).
+    for (const scheme of ['standard', 'midnight-violet']) {
+      await setDarkScheme(pool, session, page, scheme);
+      await page.reload({ waitUntil: 'networkidle', timeout: 45000 });
+      await page.waitForFunction(
+        () => document.documentElement.classList.contains('dark'),
+        null, { timeout: 15000 },
+      );
+      await card.waitFor({ state: 'visible', timeout: 30000 });
+      await btn.click();
+      await panel.waitFor({ state: 'visible', timeout: 10000 });
+      await page.waitForTimeout(300);
+      await assertPanelContrast(page, 'mobile', `dark ${scheme}`);
+    }
 
     await page.close();
     await context.close();
