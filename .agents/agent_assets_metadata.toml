@@ -88,3 +88,10 @@ uri = "file://screenshots/auth-mobile-night.jpg"
 type = "image"
 title = "Accesso mobile — nuova resa"
 description = "Anteprima reale a 375px: sfondo notte sfumato, card traslucida e campi ad alto contrasto."
+
+[[outputs]]
+id = "71C9VE_drF0_OYBFVVTDR"
+uri = "file://screenshots/auth-mobile-night-refined.jpg"
+type = "image"
+title = "Accesso mobile — versione rifinita"
+description = "Anteprima reale a 375px della seconda iterazione: vetro più leggero, gerarchia più netta e messaggio di accesso autorizzato discreto."

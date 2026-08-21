@@ -191,27 +191,33 @@ export default function Auth() {
 
         <div className="w-full max-w-[420px] lg:max-w-[420px]">
           {/* Mobile brand header */}
-          <div className="lg:hidden flex flex-col items-center gap-3 mb-8 text-center">
+          <div className="lg:hidden flex flex-col items-center gap-3 mb-7 text-center">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-primary flex items-center justify-center shadow-[0_10px_28px_hsl(239_84%_64%_/_0.28)] ring-1 ring-white/15">
+              <div className="relative flex h-12 w-12 items-center justify-center rounded-[0.9rem] bg-primary shadow-[0_12px_30px_hsl(239_84%_64%_/_0.25)] ring-1 ring-white/20">
+                <div className="absolute inset-1 rounded-[0.65rem] border border-white/20" aria-hidden="true" />
                 <BrandGlyph className="w-5 h-5 text-primary-foreground" />
               </div>
-              <h1 className="text-[1.65rem] font-bold tracking-[-0.04em] text-white" data-testid="text-brand-title-mobile">
+              <h1 className="text-[1.75rem] font-bold tracking-[-0.05em] text-white" data-testid="text-brand-title-mobile">
                 MyStoreDesk
               </h1>
             </div>
-            <p className="text-[0.7rem] font-medium uppercase tracking-[0.16em] text-white/45">
+            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/40">
               La scrivania digitale del punto vendita
             </p>
           </div>
 
-          <div className="rounded-[1.35rem] border border-white/15 bg-slate-950/35 p-5 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:p-7 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+          <div className="relative rounded-[1.45rem] border border-white/[0.13] bg-gradient-to-b from-white/[0.085] to-white/[0.035] p-5 shadow-[0_24px_70px_rgba(2,6,23,0.3),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl sm:p-7 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+            <div className="pointer-events-none absolute -top-px left-10 right-10 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" aria-hidden="true" />
             <div className="mb-7 lg:mb-6">
-              <div className="mb-3 hidden h-px w-10 bg-primary/70 lg:block" aria-hidden="true" />
-              <h2 className="text-[1.7rem] font-bold tracking-[-0.04em] text-white lg:text-2xl lg:text-foreground" data-testid="text-auth-title">Bentornato</h2>
+              <div className="mb-4 hidden h-px w-10 bg-primary/70 lg:block" aria-hidden="true" />
+              <h2 className="text-[1.8rem] font-bold tracking-[-0.045em] text-white lg:text-2xl lg:tracking-tight lg:text-foreground" data-testid="text-auth-title">Bentornato</h2>
               <p className="mt-2 text-sm leading-relaxed text-slate-300/75 lg:mt-1 lg:text-muted-foreground">
                 Accedi al tuo account per continuare
               </p>
+              <div className="mt-4 flex items-center gap-2 text-[0.68rem] font-medium text-white/45 lg:hidden">
+                <Shield className="h-4 w-4 shrink-0 text-primary/75" aria-hidden="true" />
+                <span>Piattaforma sicura per operatori e dealer autorizzati</span>
+              </div>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
@@ -244,14 +250,14 @@ export default function Auth() {
                   <button
                     type="button"
                     onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-300/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 lg:right-1 lg:text-muted-foreground lg:hover:bg-muted lg:hover:text-foreground"
+                    className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-slate-300/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 lg:right-1 lg:h-10 lg:w-10 lg:text-muted-foreground lg:hover:bg-muted lg:hover:text-foreground"
                     data-testid="button-toggle-login-password"
                   >
                     {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
-              <Button type="submit" className="h-12 w-full font-semibold shadow-[0_10px_24px_hsl(239_84%_64%_/_0.22)] transition-transform hover:-translate-y-0.5 active:translate-y-0 lg:h-10" disabled={loading} data-testid="button-login">
+              <Button type="submit" className="h-12 w-full font-semibold shadow-[0_10px_24px_hsl(239_84%_64%_/_0.22)] transition-transform hover:-translate-y-0.5 active:translate-y-0 lg:h-10 lg:shadow-sm lg:hover:translate-y-0 lg:active:translate-y-0" disabled={loading} data-testid="button-login">
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
