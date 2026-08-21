@@ -142,6 +142,10 @@ args = "aspetto-ui-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
+args = "dark-contrast-ui-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
 args = "canvass-mapping-tests"
 
 [[workflows.workflow.tasks]]
@@ -666,6 +670,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-amministrazione-pdv-filter-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "dark-contrast-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-dark-contrast-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

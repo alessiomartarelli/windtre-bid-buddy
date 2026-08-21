@@ -3,6 +3,7 @@ import App from "./App";
 import "./index.css";
 import "./prisma-light.css";
 import "./vendite-midnight.css";
+import "./dark-contrast.css";
 
 // Rete di sicurezza per le schede aperte PRIMA di un deploy: quando un
 // chunk hashato non esiste più (build nuova, vecchi chunk rimossi) Vite

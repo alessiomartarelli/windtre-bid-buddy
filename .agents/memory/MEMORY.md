@@ -48,4 +48,5 @@
 - [Vista PDV origine/destinazione](pdv-view-origine-destinazione.md) — destinazione solo da rawData.attivitaDestinazione, mai cross-fallback; bucket esplicito SENZA_DESTINAZIONE; solo mapped-sales accetta pdvView.
 - [PDF content assertions](pdf-content-assertions.md) — jsPDF export: estrai token `(...) Tj`; header autotable spezzati a metà parola (match senza spazi), celle a 0 vuote o "0" a seconda del componente.
 - [Ticker piste: soglie affidabili](ticker-piste-soglie.md) — mostra marker solo da soglie reali e uniformi; mai inferire dal primo PDV, e ometti piste senza modello soglia.
+- [Dark theme contrast layer](dark-theme-contrast-layer.md) — dark-contrast.css importato per ultimo; midnight ha sempre .dark; bordi solo via --border-soft o il test hue 190–250 fallisce.
 - [Icona date nei temi scuri](native-date-indicator-dark.md) — il picker nativo Chromium può restare nero: usa overlay visivo non interattivo e testa che il click raggiunga l’input.

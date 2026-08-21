@@ -941,7 +941,7 @@ function RuleCard({
               {isCustomRule && (
                 <Badge
                   variant="outline"
-                  className="text-[10px] border-slate-300 text-slate-600 bg-slate-50 dark:bg-slate-900 dark:text-slate-300"
+                  className="text-[10px] border-slate-300 text-slate-600 bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
                   title="Regola personalizzata: nessuna controparte nei default canonici."
                   data-testid={`badge-custom-${rule.id}`}
                 >

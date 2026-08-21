@@ -1,0 +1,148 @@
+/* Task #476 — Fondazione condivisa di contrasto per i temi scuri.
+   Generalizza le regole affidabili già attive in Vendite BiSuite
+   (.vendite-dark-contrast) a TUTTA l'app quando è attivo un tema scuro:
+   vale sia per il tema scuro standard (.dark) sia per Midnight Violet
+   (che imposta comunque la classe .dark su <html>). Screen-only: la
+   stampa mantiene le regole neutre di index.css. Il tema chiaro non è
+   toccato. Importato DOPO index.css e vendite-midnight.css così le
+   regole a pari specificità vincono per ordine. */
+
+@media screen {
+  /* ── Nuovo linguaggio dei bordi scuri ─────────────────────────
+     Bordo freddo e desaturato (blu-ghiaccio) al posto delle linee
+     nette viola: alpha basso per un contorno sfumato, hover appena
+     più presente, ombra morbida + hairline chiara in alto. */
+  .dark {
+    --border-soft: 218 45% 80% / 0.15;
+    --border-soft-strong: 218 50% 84% / 0.26;
+    --panel-shadow-soft:
+      0 10px 30px hsl(233 60% 3% / 0.40),
+      inset 0 1px 0 hsl(220 60% 88% / 0.06);
+    --overlay-shadow-soft:
+      0 18px 50px hsl(233 60% 3% / 0.60),
+      inset 0 1px 0 hsl(220 60% 88% / 0.08);
+  }
+
+  /* Midnight Violet: stessa logica, tonalità fredda blu-lavanda
+     (hue ~232) distinta dal viola saturo dei bordi precedenti. */
+  html[data-skin="midnight-violet"] {
+    --border-soft: 232 45% 84% / 0.18;
+    --border-soft-strong: 232 50% 87% / 0.30;
+    --panel-shadow-soft:
+      0 14px 34px hsl(258 70% 6% / 0.46),
+      inset 0 1px 0 hsl(235 70% 90% / 0.06);
+    --overlay-shadow-soft:
+      0 18px 50px hsl(258 70% 6% / 0.62),
+      inset 0 1px 0 hsl(235 70% 90% / 0.08);
+  }
+
+  /* Card e pannelli: bordo soft condiviso, transizione leggera. */
+  .dark .glass-panel {
+    border-color: hsl(var(--border-soft));
+    box-shadow: var(--panel-shadow-soft);
+    transition: border-color 180ms ease, box-shadow 180ms ease;
+  }
+  .dark .glass-panel:hover {
+    border-color: hsl(var(--border-soft-strong));
+  }
+
+  /* Overlay (dialog/popover/select/menu): bordo un filo più presente
+     per staccare dal contenuto sottostante, ombra profonda morbida. */
+  .dark .glass-overlay {
+    border-color: hsl(var(--border-soft-strong));
+    box-shadow: var(--overlay-shadow-soft);
+  }
+
+  /* ── Input e controlli nativi ─────────────────────────────────
+     I widget nativi (date picker, select, scrollbar interne) devono
+     seguire lo schema scuro; placeholder pieno, non semi-trasparente. */
+  .dark input,
+  .dark select,
+  .dark textarea {
+    color-scheme: dark;
+  }
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: hsl(var(--muted-foreground));
+    opacity: 1;
+  }
+
+  /* ── Tabelle con intestazioni/colonne sticky ──────────────────
+     Le celle sticky usano bg-background per coprire lo scroll: in dark
+     restano sulla superficie card, non sul quasi-nero dello sfondo
+     aurora, così non "bucano" la tabella. */
+  .dark table :is(th, td).bg-background {
+    background-color: hsl(var(--card));
+  }
+
+  /* Scrollbar leggibili ma discrete nelle aree scrollabili delle card. */
+  .dark .glass-panel :is([class*="overflow-x-auto"], [class*="overflow-auto"]) {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.45) hsl(var(--card));
+  }
+  .dark .glass-panel :is([class*="overflow-x-auto"], [class*="overflow-auto"])::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  .dark .glass-panel :is([class*="overflow-x-auto"], [class*="overflow-auto"])::-webkit-scrollbar-track {
+    background: hsl(var(--card));
+  }
+  .dark .glass-panel :is([class*="overflow-x-auto"], [class*="overflow-auto"])::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.45);
+    border-radius: 999px;
+  }
+
+  /* ── Badge e chip semantici a bassa alpha ─────────────────────
+     Le combinazioni bg-<hue>-500/10 + testo -600/700 sono illeggibili
+     su superfici scure: si alza la luminosità del testo e appena la
+     alpha dello sfondo mantenendo la semantica del colore (regole
+     estratte da .vendite-dark-contrast). Il nuovo colore dei bordi
+     NON viene riutilizzato come segnale di stato. */
+  .dark [class*="bg-blue-500/10"] {
+    color: #bfdbfe !important; background: rgb(96 165 250 / 18%) !important; border-color: rgb(147 197 253 / 55%) !important;
+  }
+  .dark [class*="bg-purple-500/10"] {
+    color: #e9d5ff !important; background: rgb(168 85 247 / 18%) !important; border-color: rgb(216 180 254 / 55%) !important;
+  }
+  .dark [class*="bg-amber-500/10"] {
+    color: #fde68a !important; background: rgb(245 158 11 / 18%) !important; border-color: rgb(252 211 77 / 55%) !important;
+  }
+  .dark [class*="bg-indigo-500/10"] {
+    color: #c7d2fe !important; background: rgb(99 102 241 / 18%) !important; border-color: rgb(165 180 252 / 55%) !important;
+  }
+  .dark [class*="bg-teal-500/10"] {
+    color: #99f6e4 !important; background: rgb(20 184 166 / 18%) !important; border-color: rgb(94 234 212 / 55%) !important;
+  }
+  .dark [class*="bg-red-500/10"],
+  .dark [class*="bg-rose-500/10"] {
+    color: #fecdd3 !important; background: rgb(244 63 94 / 18%) !important; border-color: rgb(253 164 175 / 55%) !important;
+  }
+  .dark [class*="bg-green-500/10"],
+  .dark [class*="bg-emerald-500/10"] {
+    color: #bbf7d0 !important; background: rgb(34 197 94 / 18%) !important; border-color: rgb(134 239 172 / 55%) !important;
+  }
+  .dark [class*="bg-orange-500/10"] {
+    color: #fed7aa !important; background: rgb(249 115 22 / 18%) !important; border-color: rgb(253 186 116 / 55%) !important;
+  }
+  .dark [class*="bg-slate-500/10"] {
+    color: #e2e8f0 !important; background: rgb(100 116 139 / 22%) !important; border-color: rgb(203 213 225 / 45%) !important;
+  }
+  .dark [class*="bg-cyan-500/10"] {
+    color: #a5f3fc !important; background: rgb(6 182 212 / 18%) !important; border-color: rgb(103 232 249 / 55%) !important;
+  }
+
+  /* ── Testi semantici -600/-700 su superfici scure ─────────────
+     Portati alla variante -300 equivalente (stessa semantica, alta
+     leggibilità). Le pagine che hanno già varianti dark: coerenti
+     ricevono lo stesso valore, quindi nessun cambiamento visivo lì. */
+  .dark :is(.text-blue-600, .text-blue-700) { color: #93c5fd !important; }
+  .dark :is(.text-purple-600, .text-purple-700) { color: #d8b4fe !important; }
+  .dark :is(.text-indigo-600, .text-indigo-700) { color: #c7d2fe !important; }
+  .dark :is(.text-teal-600, .text-teal-700) { color: #99f6e4 !important; }
+  .dark :is(.text-cyan-600, .text-cyan-700) { color: #a5f3fc !important; }
+  .dark :is(.text-green-600, .text-green-700, .text-emerald-600, .text-emerald-700) { color: #86efac !important; }
+  .dark :is(.text-amber-600, .text-amber-700, .text-orange-600, .text-orange-700) { color: #fcd34d !important; }
+  .dark :is(.text-red-600, .text-red-700, .text-rose-600, .text-rose-700) { color: #fda4af !important; }
+  .dark :is(.text-slate-600, .text-slate-700, .text-gray-600, .text-gray-700) { color: #cbd5e1 !important; }
+  .dark :is(.text-gray-800, .text-gray-900, .text-slate-800, .text-slate-900) { color: #e2e8f0 !important; }
+}

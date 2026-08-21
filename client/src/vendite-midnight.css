@@ -23,7 +23,9 @@
     --accent-foreground: 255 100% 97%;
     --destructive: 0 72% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 257 42% 42%;
+    /* Task #476: bordo freddo e desaturato (indaco-blu attenuato) al posto
+       del viola saturo, coerente con lo sfondo blu-notte. */
+    --border: 237 26% 48%;
     --input: 258 52% 22%;
     --ring: 35 91% 60%;
     --glass-bg: 259 55% 20% / 0.82;
@@ -55,13 +57,13 @@
   /* Shell: sidebar desktop e header sticky su ogni pagina. */
   html[data-skin="midnight-violet"] [data-testid="desktop-sidebar"] {
     background: rgb(21 10 48 / 88%);
-    border-color: rgb(196 172 255 / 16%);
+    border-color: hsl(var(--border-soft, 232 45% 84% / 0.18));
     box-shadow: 10px 0 34px rgb(8 3 24 / 35%);
     backdrop-filter: blur(16px);
   }
   html[data-skin="midnight-violet"] header.sticky {
     background: rgb(21 10 48 / 82%);
-    border-color: rgb(196 172 255 / 16%);
+    border-color: hsl(var(--border-soft, 232 45% 84% / 0.18));
     box-shadow: 0 7px 20px rgb(8 3 24 / 35%);
     backdrop-filter: blur(16px);
   }
@@ -70,18 +72,19 @@
      d'import e specificity). */
   html[data-skin="midnight-violet"] .glass-panel {
     background: rgb(53 35 109 / 96%);
-    border: 1px solid rgb(210 193 255 / 24%);
+    border: 1px solid hsl(var(--border-soft, 232 45% 84% / 0.18));
     border-radius: 16px;
     box-shadow:
       0 16px 36px rgb(8 3 24 / 42%),
       inset 0 1px 0 rgb(226 210 255 / 7%);
+    transition: border-color 180ms ease, box-shadow 180ms ease;
   }
   html[data-skin="midnight-violet"] .glass-panel:hover {
-    border-color: rgb(196 172 255 / 28%);
+    border-color: hsl(var(--border-soft-strong, 232 50% 87% / 0.30));
   }
   html[data-skin="midnight-violet"] .glass-overlay {
     background: rgb(39 22 81 / 98%);
-    border: 1px solid rgb(210 193 255 / 28%);
+    border: 1px solid hsl(var(--border-soft-strong, 232 50% 87% / 0.30));
     box-shadow: 0 16px 48px rgb(8 3 24 / 60%);
   }
 }
@@ -109,7 +112,7 @@
   --muted-foreground: 253 38% 71%;
   --accent: 259 48% 28%;
   --accent-foreground: 255 100% 97%;
-  --border: 257 42% 42%;
+  --border: 237 26% 48%;
   --input: 258 52% 22%;
   --ring: 35 91% 60%;
   min-height: 100dvh;
@@ -138,13 +141,13 @@
 .vendite-midnight > header {
   color: #f4f0ff;
   background: rgb(21 10 48 / 88%) !important;
-  border-color: rgb(196 172 255 / 16%) !important;
+  border-color: hsl(var(--border-soft, 232 45% 84% / 0.18)) !important;
   backdrop-filter: blur(16px);
 }
 
 .vendite-midnight > aside [class*="border-"],
 .vendite-midnight > header [class*="border-"] {
-  border-color: rgb(196 172 255 / 16%);
+  border-color: hsl(var(--border-soft, 232 45% 84% / 0.18));
 }
 
 .vendite-midnight .vendite-main {
@@ -156,15 +159,16 @@
 .vendite-midnight .shadcn-card {
   color: #f4f0ff;
   background: rgb(53 35 109 / 96%) !important;
-  border: 1px solid rgb(210 193 255 / 24%) !important;
+  border: 1px solid hsl(var(--border-soft, 232 45% 84% / 0.18)) !important;
   border-radius: 16px;
   box-shadow:
     0 18px 42px rgb(8 3 24 / 50%),
     inset 0 1px 0 rgb(226 210 255 / 8%) !important;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .vendite-midnight .shadcn-card:hover {
-  border-color: rgb(196 172 255 / 28%) !important;
+  border-color: hsl(var(--border-soft-strong, 232 50% 87% / 0.30)) !important;
 }
 
 .vendite-midnight [data-testid="filter-bar"] {
@@ -303,10 +307,10 @@ html[data-skin="midnight-violet"] [data-radix-popper-content-wrapper] > div {
   --muted-foreground: 253 38% 71%;
   --accent: 259 48% 28%;
   --accent-foreground: 255 100% 97%;
-  --border: 257 42% 42%;
+  --border: 237 26% 48%;
   color: #f4f0ff;
   background-color: #241250;
-  border-color: rgb(196 172 255 / 24%);
+  border-color: hsl(var(--border-soft-strong, 232 50% 87% / 0.30));
 }
 
 /* Contrasto funzionale condiviso da Midnight Violet e dal tema standard
@@ -320,7 +324,7 @@ html[data-skin="midnight-violet"] [data-radix-popper-content-wrapper] > div {
   .vendite-dark-contrast [data-testid="filter-bar"] {
     color: var(--vendite-text);
     background: var(--vendite-surface) !important;
-    border-color: var(--vendite-strong-border) !important;
+    border-color: hsl(var(--border-soft-strong, 218 50% 84% / 0.26)) !important;
     box-shadow:
       0 14px 34px rgb(3 2 14 / 42%),
       inset 0 1px 0 rgb(255 255 255 / 7%) !important;
