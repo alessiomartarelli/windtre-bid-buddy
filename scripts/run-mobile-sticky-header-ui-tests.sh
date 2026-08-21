@@ -31,4 +31,5 @@ done
 echo "[mobile-sticky-ui-tests] running suite ..."
 exec node --import tsx --test --test-concurrency=1 \
   tests/mobile-sticky-header-ui.test.mjs \
-  tests/canvass-mobile-align-ui.test.mjs
+  tests/canvass-mobile-align-ui.test.mjs \
+  tests/canvass-detail-mobile-align-ui.test.mjs

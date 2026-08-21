@@ -2438,6 +2438,12 @@ function CanvassCategorieDettaglio({
       return tot(b) - tot(a);
     });
   if (piste.length === 0) return null;
+  // Task #497 — come nel riquadro Canvass globale, su mobile ogni riga
+  // categoria mantiene una colonna numerica comune: conteggi incolonnati a
+  // destra e slot "(N IVA)" riservato anche sulle righe senza IVA, così i
+  // valori non ballano a seconda della lunghezza delle etichette. Le
+  // min-width sono solo mobile (sm:min-w-0) per lasciare il desktop invariato.
+  const hasAnyIva = piste.some(([, cats]) => Object.values(cats).some((v) => v.iva > 0));
   return (
     <div className="rounded-lg border bg-muted/20 p-2 sm:p-3" data-testid={`${testIdPrefix}-categorie-canvass`}>
        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
@@ -2461,12 +2467,30 @@ function CanvassCategorieDettaglio({
                 {Object.entries(cats)
                   .sort(([, a], [, b]) => b.pezzi - a.pezzi)
                   .map(([nome, v]) => (
-                     <div key={nome} className="flex items-center justify-between gap-2 text-sm min-h-7">
+                     <div
+                       key={nome}
+                       className="flex items-center justify-between gap-2 text-sm min-h-7"
+                       data-testid={`${testIdPrefix}-cat-row-${pista}-${nome}`}
+                     >
                       <span className="truncate text-muted-foreground">{nome}</span>
-                      <span className="font-semibold tabular-nums shrink-0">
-                        {v.pezzi}
-                        {v.iva > 0 && (
-                          <span className="ml-1 font-medium text-indigo-600 dark:text-indigo-400">({v.iva} IVA)</span>
+                      <span className="flex shrink-0 items-center whitespace-nowrap font-semibold tabular-nums">
+                        <span
+                          className="min-w-8 text-right sm:min-w-0"
+                          data-testid={`${testIdPrefix}-cat-count-${pista}-${nome}`}
+                        >
+                          {v.pezzi}
+                        </span>
+                        {hasAnyIva && (
+                          v.iva > 0 ? (
+                            <span
+                              className="ml-1 min-w-[3.75rem] text-right font-medium text-indigo-600 dark:text-indigo-400 sm:min-w-0"
+                              data-testid={`${testIdPrefix}-cat-iva-${pista}-${nome}`}
+                            >
+                              ({v.iva} IVA)
+                            </span>
+                          ) : (
+                            <span className="ml-1 min-w-[3.75rem] sm:ml-0 sm:min-w-0" aria-hidden="true" />
+                          )
                         )}
                       </span>
                     </div>
