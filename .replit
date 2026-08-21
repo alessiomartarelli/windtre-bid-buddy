@@ -146,6 +146,10 @@ args = "dark-contrast-ui-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
+args = "dark-contrast-pages-ui-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
 args = "canvass-mapping-tests"
 
 [[workflows.workflow.tasks]]
@@ -203,6 +207,10 @@ args = "dashboard-gara-actual-kpi-ticker-ui-tests"
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "assic-pagamento-annuale"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "dark-contrast-pages-ui-tests"
 
 [[workflows.workflow]]
 name = "Start application"
@@ -681,6 +689,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-dark-contrast-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "dark-contrast-pages-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-dark-contrast-pages-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

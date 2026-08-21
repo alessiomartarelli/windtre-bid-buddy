@@ -67,7 +67,7 @@
   --popover: 232 45% 11%;
   --popover-foreground: 214 60% 96%;
 
-  --primary: 239 84% 67%;
+  --primary: 239 84% 64%; /* leggermente più scuro di indigo-500: bianco su primary >= 4.5 (WCAG) */
   --primary-foreground: 0 0% 100%;
 
   --secondary: 231 36% 19%;

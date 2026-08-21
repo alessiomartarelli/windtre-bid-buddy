@@ -12,3 +12,5 @@ Il livello di contrasto scuro app-wide vive in client/src/dark-contrast.css, imp
 
 **Why:** la skin midnight aveva bordi viola netti (rgb 196/210 172/193 255) sparsi in più selettori con !important; centralizzare nei token evita regressioni a ogni ritocco.
 **How to apply:** nuovo componente scuro → usa i token; nuovo colore semantico → aggiungilo a dark-contrast.css, non alla singola pagina.
+
+**Page-wide scan:** tests/dark-contrast-pages-ui.test.mjs scandisce ogni testo visibile delle pagine dense (dati seminati) in entrambi gli schemi scuri; salta gradienti/disabled. Il `--primary` dark deve dare bianco ≥ 4.5 (oggi 239 84% 64%): rialzarlo di luminosità fa fallire la scansione (nav attiva bg-primary).

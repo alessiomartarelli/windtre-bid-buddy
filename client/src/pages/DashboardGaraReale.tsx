@@ -1066,11 +1066,11 @@ function calcProtectaForAllPdv(
 }
 
 function getSogliaColor(soglia: string): string {
-  if (soglia === "Nessuna" || soglia === "N/A") return "text-red-600 bg-red-50 border-red-200";
-  if (soglia === "S1") return "text-amber-600 bg-amber-50 border-amber-200";
-  if (soglia === "S2") return "text-yellow-600 bg-yellow-50 border-yellow-200";
-  if (soglia === "S3") return "text-lime-600 bg-lime-50 border-lime-200";
-  return "text-green-600 bg-green-50 border-green-200";
+  if (soglia === "Nessuna" || soglia === "N/A") return "text-red-600 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-950/40 dark:border-red-900";
+  if (soglia === "S1") return "text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/40 dark:border-amber-900";
+  if (soglia === "S2") return "text-yellow-600 bg-yellow-50 border-yellow-200 dark:text-yellow-300 dark:bg-yellow-950/40 dark:border-yellow-900";
+  if (soglia === "S3") return "text-lime-600 bg-lime-50 border-lime-200 dark:text-lime-300 dark:bg-lime-950/40 dark:border-lime-900";
+  return "text-green-600 bg-green-50 border-green-200 dark:text-green-300 dark:bg-green-950/40 dark:border-green-900";
 }
 
 function getMonthOptions() {
