@@ -419,7 +419,7 @@ export default function MappaturaBiSuite() {
     <div className="min-h-screen bg-background">
       <AppNavbar title="MyStoreDesk">
         {hasChanges && (
-          <Badge variant="outline" className="hidden sm:inline-flex text-orange-600 border-orange-300 bg-orange-50">
+          <Badge variant="outline" className="hidden sm:inline-flex text-orange-600 border-orange-300 bg-orange-50 dark:text-orange-300 dark:border-orange-900 dark:bg-orange-950/40">
             Modifiche non salvate
           </Badge>
         )}
@@ -931,7 +931,7 @@ function RuleCard({
               {isSynthetic && (
                 <Badge
                   variant="outline"
-                  className="text-[10px] border-amber-400 text-amber-700 bg-amber-50"
+                  className="text-[10px] border-amber-400 text-amber-700 bg-amber-50 dark:border-amber-900 dark:text-amber-300 dark:bg-amber-950/40"
                   title="Regola sintetizzata automaticamente dalla regola CB equivalente. Non modificabile: edita la regola CB per cambiarla."
                   data-testid={`badge-synthetic-${rule.id}`}
                 >
@@ -954,7 +954,7 @@ function RuleCard({
                     <TooltipTrigger asChild>
                       <Badge
                         variant="outline"
-                        className="text-[10px] border-orange-400 text-orange-700 bg-orange-50 cursor-help"
+                        className="text-[10px] border-orange-400 text-orange-700 bg-orange-50 dark:border-orange-900 dark:text-orange-300 dark:bg-orange-950/40 cursor-help"
                         data-testid={`badge-default-diff-${rule.id}`}
                       >
                         Default aggiornato ({diff.length})
