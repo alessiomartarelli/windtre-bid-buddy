@@ -1152,7 +1152,7 @@ type TickerPista = {
     normalizedRS: string;
     pezzi: number;
     pdvCalc: PistaCalcResult;
-    categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
+    categories: Array<{ category: string; label: string; pezzi: number; canone: number; punti?: number }>;
     soglieRef?: PistaSoglieRef;
     thresholdMarkers?: TickerThresholdMarker[];
   }>;
@@ -1474,15 +1474,19 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
             const sourcePdvs = b.key === 'totale'
               ? p.pdvBreakdown
               : p.pdvBreakdown.filter((pdv) => pdv.normalizedRS === b.key);
-            const categoriesByKey = new Map<string, { category: string; label: string; pezzi: number }>();
+            const categoriesByKey = new Map<string, { category: string; label: string; pezzi: number; punti?: number }>();
             sourcePdvs.forEach((pdv) => {
               pdv.categories.forEach((category) => {
                 const current = categoriesByKey.get(category.category);
-                if (current) current.pezzi += category.pezzi;
+                if (current) {
+                  current.pezzi += category.pezzi;
+                  if (category.punti != null) current.punti = (current.punti ?? 0) + category.punti;
+                }
                 else categoriesByKey.set(category.category, {
                   category: category.category,
                   label: category.label,
                   pezzi: category.pezzi,
+                  punti: category.punti,
                 });
               });
             });
@@ -1530,7 +1534,9 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
                       {aggregatedCategories.map((category) => (
                         <div key={category.category} className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground" data-testid={`prov-cat-rs-${p.pista}-${b.key}-${category.category}`}>
                           <span className="min-w-0 truncate">{category.label}</span>
-                          <span className="shrink-0 tabular-nums">{category.pezzi} pz</span>
+                          <span className="shrink-0 tabular-nums">
+                            {category.pezzi} pz{category.punti != null ? ` · ${fmtPoints(category.punti)} pt` : ""}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -1565,7 +1571,9 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
                         {pdv.categories.map((category) => (
                           <div key={category.category} className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground" data-testid={`prov-cat-${p.pista}-${pdv.codicePos}-${category.category}`}>
                             <span className="min-w-0 truncate">{category.label}</span>
-                            <span className="shrink-0 tabular-nums">{category.pezzi} pz</span>
+                            <span className="shrink-0 tabular-nums">
+                              {category.pezzi} pz{category.punti != null ? ` · ${fmtPoints(category.punti)} pt` : ""}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -4161,8 +4169,19 @@ export default function DashboardGaraReale() {
           const normalizedConfiguredRS = normalizeRS(configuredRS);
           const thresholdData = getThresholdDataForPdv(pista, pdv.codicePos, configuredRS);
 
+          const mobilePointsFor = (category: string, pezzi: number) => {
+            if (pista !== "mobile") return undefined;
+            const config = effectiveMobileCategories.find((item) => item.type === category);
+            return config ? pezzi * config.punti : undefined;
+          };
           const pdvAddons = (pdv.addons || []).filter(a => a.pista === pista);
-          const addonAsCats = pdvAddons.map(a => ({ category: a.targetCategory, label: a.targetLabel, pezzi: a.occorrenze, canone: a.canone || 0 }));
+          const addonAsCats = pdvAddons.map(a => ({
+            category: a.targetCategory,
+            label: a.targetLabel,
+            pezzi: a.occorrenze,
+            canone: a.canone || 0,
+            punti: mobilePointsFor(a.targetCategory, a.occorrenze),
+          }));
           return {
             codicePos: pdv.codicePos,
             nomeNegozio: pdv.nomeNegozio,
@@ -4172,7 +4191,13 @@ export default function DashboardGaraReale() {
             proiezione: pdvProiezione,
             pdvCalc,
             categories: [
-              ...pdvItems.map((i) => ({ category: i.targetCategory, label: i.targetLabel, pezzi: i.pezzi, canone: i.canone || 0 })),
+              ...pdvItems.map((i) => ({
+                category: i.targetCategory,
+                label: i.targetLabel,
+                pezzi: i.pezzi,
+                canone: i.canone || 0,
+                punti: mobilePointsFor(i.targetCategory, i.pezzi),
+              })),
               ...addonAsCats,
             ],
             addons: pdvAddons,

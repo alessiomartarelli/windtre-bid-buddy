@@ -432,12 +432,12 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     assert.match(sommaTxt, /4,50|4\.50/, 'riga somma mostra 4,50 pt');
     assert.match(sommaTxt, /= totale card/, 'riconciliazione esplicita col totale card');
 
-    // Fonti aggregate per RS: TIED 5 pezzi, UNTIED 2 pezzi.
+    // Fonti aggregate per RS: TIED 5 pezzi = 3,75 pt, UNTIED 2 pezzi = 1,50 pt.
     const rsCategoryText = await page.locator('[data-testid^="prov-cat-rs-mobile-"]').allInnerTexts();
-    assert.ok(rsCategoryText.some((text) => /Tied/i.test(text) && /5\s*pz/.test(text)),
-      `TIED aggregato RS = 5 pz (${rsCategoryText.join(' | ')})`);
-    assert.ok(rsCategoryText.some((text) => /Untied/i.test(text) && /2\s*pz/.test(text)),
-      `UNTIED aggregato RS = 2 pz (${rsCategoryText.join(' | ')})`);
+    assert.ok(rsCategoryText.some((text) => /Tied/i.test(text) && /5\s*pz/.test(text) && /3,75\s*pt|3\.75\s*pt/.test(text)),
+      `TIED aggregato RS = 5 pz / 3,75 pt (${rsCategoryText.join(' | ')})`);
+    assert.ok(rsCategoryText.some((text) => /Untied/i.test(text) && /2\s*pz/.test(text) && /1,50\s*pt|1\.50\s*pt/.test(text)),
+      `UNTIED aggregato RS = 2 pz / 1,50 pt (${rsCategoryText.join(' | ')})`);
 
     // Task #490 — soglia raggiunta e moltiplicatore applicato per PDV.
     // PDV A: 1,50 pt < soglia1 (3) → "Soglia non raggiunta", nessun ×.
@@ -581,8 +581,8 @@ test('Provenienza punti: modalità aggregazione per RS riconcilia i subtotali RS
     assert.equal(provNum(await page.locator('[data-testid^="prov-pezzi-rs-mobile-"]').first().innerText()), 6,
       'totale RS = 6 pezzi');
     const rsCat = await page.locator('[data-testid^="prov-cat-rs-mobile-"]').allInnerTexts();
-    assert.ok(rsCat.some((text) => /Tied/i.test(text) && /6\s*pz/.test(text)),
-      `fonte TIED aggregata RS = 6 pz (${rsCat.join(' | ')})`);
+    assert.ok(rsCat.some((text) => /Tied/i.test(text) && /6\s*pz/.test(text) && /4,50\s*pt|4\.50\s*pt/.test(text)),
+      `fonte TIED aggregata RS = 6 pz / 4,50 pt (${rsCat.join(' | ')})`);
 
     await page.close();
     await context.close();
