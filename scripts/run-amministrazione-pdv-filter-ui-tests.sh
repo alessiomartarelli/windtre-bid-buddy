@@ -2,6 +2,7 @@
 # Run the "Amministrazione filtri" UI test suites:
 #   - tests/amministrazione-pdv-filter-ui.test.mjs (Task #467, filtro multi-PDV)
 #   - tests/amministrazione-rs-filter-ui.test.mjs  (Task #468, filtro Ragione Sociale)
+#   - tests/amministrazione-search-filter-ui.test.mjs (Task #469, casella Cerca)
 #
 # Test UI Playwright: semina vendite BiSuite su 3 PDV nel mese corrente,
 # apre /amministrazione, seleziona 2 PDV col MultiSelectFilter condiviso
@@ -32,4 +33,5 @@ done
 echo "[amministrazione-pdv-filter-ui-tests] running suite ..."
 exec node --import tsx --test \
   tests/amministrazione-pdv-filter-ui.test.mjs \
-  tests/amministrazione-rs-filter-ui.test.mjs
+  tests/amministrazione-rs-filter-ui.test.mjs \
+  tests/amministrazione-search-filter-ui.test.mjs
