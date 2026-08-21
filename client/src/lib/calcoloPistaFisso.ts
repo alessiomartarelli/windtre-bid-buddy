@@ -250,6 +250,10 @@ export interface CalcoloFissoPerPosResult {
   premio: number;
 
   workdayInfo: WorkdayInfo;
+
+  // Task #490: moltiplicatori effettivamente applicati alle categorie presenti
+  // (undefined se la soglia non ha moltiplicato alcuna categoria).
+  moltiplicatoriApplicati?: number[];
 }
 
 /* -----------------------------------------------------------------------------
@@ -354,6 +358,49 @@ export function getMultiplierForSoglia(
   }
 }
 
+/**
+ * Task #490: unisce ai moltiplicatori del calcolo Fisso base quello
+ * dell'add-on Voce Unlimited, che viene applicato nel wrapper Dashboard perché
+ * dipende dal canone reale aggregato dell'add-on.
+ */
+export function getFissoAppliedMultipliersWithAddons(
+  baseMultipliers: number[] | undefined,
+  soglia: number,
+  addons: Array<{ targetCategory: string; canone?: number; occorrenze?: number }>,
+): number[] | undefined {
+  const multipliers = new Set(baseMultipliers ?? []);
+  for (const addon of addons) {
+    if ((addon.occorrenze ?? 0) <= 0 || (addon.canone ?? 0) === 0) continue;
+
+    switch (addon.targetCategory) {
+      case "LINEA_ATTIVA":
+      case "FIBRA_FTTH_ADDON":
+        multipliers.add(1);
+        break;
+      case "CONVERGENZA":
+      case "CONVERGENZA_LUCE_GAS":
+      case "CONVERGENTE_ASSICUR":
+        multipliers.add(2);
+        break;
+      case "VOCE_UNLIMITED": {
+        if (soglia < 1) break;
+        const multVoce = soglia === 1
+          ? 0.25
+          : soglia <= 3
+            ? 0.5
+            : soglia === 4
+              ? 1
+              : 1.5;
+        multipliers.add(multVoce);
+        break;
+      }
+    }
+  }
+  return multipliers.size > 0
+    ? [...multipliers].sort((a, b) => a - b)
+    : undefined;
+}
+
 /* -----------------------------------------------------------------------------
    Funzione principale: calcolo pista FISSO per POS
 ----------------------------------------------------------------------------- */
@@ -454,6 +501,7 @@ export function calcolaPremioPistaFissoPerPos(params: {
 
   // 4) Calcolo euro premio con logica canoni
   const mult = getMultiplierForSoglia(soglia, pistaConfig);
+  const moltiplicatoriApplicati = new Set<number>();
 
   // Funzione helper per calcolare il premio di una categoria con canoni
   const calcolaPremioCategoria = (
@@ -505,6 +553,18 @@ export function calcolaPremioPistaFissoPerPos(params: {
   if (pezzi2aLinea > 0) {
     premioBase += pezzi2aLinea * ((10 + 1 * 23) * mult);
   }
+
+  const categorieConMoltiplicatoreBase: FissoCategoriaType[] = [
+    "FISSO_FTTC",
+    "FISSO_FTTH",
+    "FISSO_FWA_OUT",
+    "FISSO_FWA_IND_2P",
+    "FISSO_PIVA_1A_LINEA",
+    "FISSO_PIVA_2A_LINEA",
+  ];
+  if (soglia >= 1 && categorieConMoltiplicatoreBase.some((tipo) => getPezzi(tipo) > 0)) {
+    moltiplicatoriApplicati.add(mult);
+  }
   
   // PIÙ SICURI CASA E UFFICIO: bonus fisso 2€ per pezzo
   premioBase += getPezzi("PIU_SICURI_CASA_UFFICIO") * 2;
@@ -522,6 +582,7 @@ export function calcolaPremioPistaFissoPerPos(params: {
     else if (soglia === 4) multChiamate = 1;
     else if (soglia === 5) multChiamate = 1.5;
     premioBase += pezziChiamate * 23 * multChiamate;
+    if (soglia >= 1) moltiplicatoriApplicati.add(multChiamate);
   }
   
   // BOLLETTINO POSTALE: gettone fisso in base alla soglia (no canone/moltiplicatore base)
@@ -550,5 +611,8 @@ export function calcolaPremioPistaFissoPerPos(params: {
     soglia,
     premio,
     workdayInfo,
+    moltiplicatoriApplicati: moltiplicatoriApplicati.size > 0
+      ? [...moltiplicatoriApplicati].sort((a, b) => a - b)
+      : undefined,
   };
 }

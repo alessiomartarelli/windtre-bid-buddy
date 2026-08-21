@@ -81,6 +81,7 @@ import { type GaraConfigRecord, type GaraConfigPdv, type GaraConfigListItem } fr
 import {
   getWorkdayInfoForMonth,
   calcolaPremioPistaFissoPerPos,
+  getFissoAppliedMultipliersWithAddons,
   type WorkdayInfo,
   type FissoCategoriaType,
   type PistaFissoPosConfig,
@@ -560,6 +561,9 @@ interface PistaCalcResult {
   sogliaLabel: string;
   forecastTarget?: number;
   forecastGap?: number;
+  // Task #490: moltiplicatori applicati per la soglia raggiunta, quando il
+  // modello premiale della pista lo prevede (mobile/fisso).
+  moltiplicatoriApplicati?: number[];
 }
 
 type PistaSoglieRef = {
@@ -701,6 +705,7 @@ function calcMobilePerPdv(
     sogliaLabel: sogliaToLabel(result.soglia, 4),
     forecastTarget: result.forecastTargetPunti,
     forecastGap: result.forecastGapPunti,
+    moltiplicatoriApplicati: result.moltiplicatoriApplicati,
   };
 }
 
@@ -808,6 +813,11 @@ function calcFissoPerPdv(
     puntiTotali: result.punti,
     sogliaRaggiunta: result.soglia,
     sogliaLabel: sogliaToLabel(result.soglia, 5),
+    moltiplicatoriApplicati: getFissoAppliedMultipliersWithAddons(
+      result.moltiplicatoriApplicati,
+      result.soglia,
+      fissoAddons,
+    ),
   };
 }
 
@@ -1124,6 +1134,8 @@ type TickerRsDetail = {
   forecastGap?: number;
   soglieRef?: PistaSoglieRef;
   thresholdMarkers?: TickerThresholdMarker[];
+  // Task #490: moltiplicatori applicati alla RS (se il modello li prevede).
+  moltiplicatoriApplicati?: number[];
 };
 
 type TickerPista = {
@@ -1141,6 +1153,8 @@ type TickerPista = {
     pezzi: number;
     pdvCalc: PistaCalcResult;
     categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
+    soglieRef?: PistaSoglieRef;
+    thresholdMarkers?: TickerThresholdMarker[];
   }>;
   rsCalcBreakdown?: Map<string, TickerRsDetail>;
   thresholdMarkers?: TickerThresholdMarker[];
@@ -1152,6 +1166,7 @@ type TickerPista = {
 const fmtTickerVal = (v: number) => (Number.isInteger(v) ? v.toLocaleString('it-IT') : v.toLocaleString('it-IT', { maximumFractionDigits: 2 }));
 const fmtPoints = (v: number) => v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const fmtMult = (v: number) => `×${v.toLocaleString('it-IT', { maximumFractionDigits: 2 })}`;
 function getScopedThresholdProgress(
   items: Array<{ level: number; points: number }>,
 ): number | undefined {
@@ -1377,7 +1392,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
   const renderDetail = (p: TickerPista) => {
     const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
     const usePuntiTot = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
-    const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string; thresholdMarkers?: TickerThresholdMarker[] }[] = [];
+    const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string; sogliaLivelloAtt?: number; moltiplicatori?: number[]; thresholdMarkers?: TickerThresholdMarker[] }[] = [];
     if (p.rsCalcBreakdown && p.rsCalcBreakdown.size > 0) {
       p.rsCalcBreakdown.forEach((rs, key) => {
         blocks.push({
@@ -1387,6 +1402,8 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
           usePunti: true,
           premioAtt: rs.premioAttuale, premioProi: rs.premioProiettato,
           sogliaAtt: rs.sogliaAttuale, sogliaProi: rs.sogliaProiezione,
+          sogliaLivelloAtt: rs.sogliaLivelloAttuale,
+          moltiplicatori: rs.moltiplicatoriApplicati,
           thresholdMarkers: rs.thresholdMarkers,
         });
       });
@@ -1427,8 +1444,19 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
               <div key={b.key} className="rounded-xl border bg-card/60 p-3" data-testid={`prov-row-rs-${p.pista}-${b.key}`}>
                 <div className="flex items-center justify-between gap-3">
                   <span className="min-w-0 truncate text-xs font-bold uppercase tracking-wide">{b.name}</span>
-                  <span className="shrink-0 text-sm font-bold tabular-nums" data-testid={`prov-punti-rs-${p.pista}-${b.key}`}>
-                    {fmtPoints(b.puntiAtt)} pt
+                  <span className="flex shrink-0 items-center gap-2">
+                    {b.key !== 'totale' && (
+                      <ProvThresholdBadge
+                        testId={`prov-soglia-rs-${p.pista}-${b.key}`}
+                        hasThresholdModel={!!(b.thresholdMarkers && b.thresholdMarkers.length > 0)}
+                        sogliaLivello={b.sogliaLivelloAtt ?? 0}
+                        sogliaLabel={b.sogliaAtt}
+                        moltiplicatori={b.moltiplicatori}
+                      />
+                    )}
+                    <span className="text-sm font-bold tabular-nums" data-testid={`prov-punti-rs-${p.pista}-${b.key}`}>
+                      {fmtPoints(b.puntiAtt)} pt
+                    </span>
                   </span>
                 </div>
                 <div className="mt-2 space-y-2 border-t border-border/70 pt-2">
@@ -1442,7 +1470,16 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
                           )}
                         </span>
                         {b.key === 'totale' ? (
-                          <span className="shrink-0 font-bold tabular-nums" data-testid={`prov-punti-pdv-${p.pista}-${pdv.codicePos}`}>{fmtPoints(pdv.pdvCalc.puntiTotali)} pt</span>
+                          <span className="flex shrink-0 items-center gap-2">
+                            <ProvThresholdBadge
+                              testId={`prov-soglia-pdv-${p.pista}-${pdv.codicePos}`}
+                              hasThresholdModel={!!(pdv.thresholdMarkers && pdv.thresholdMarkers.length > 0)}
+                              sogliaLivello={pdv.pdvCalc.sogliaRaggiunta}
+                              sogliaLabel={pdv.pdvCalc.sogliaLabel}
+                              moltiplicatori={pdv.pdvCalc.moltiplicatoriApplicati}
+                            />
+                            <span className="font-bold tabular-nums" data-testid={`prov-punti-pdv-${p.pista}-${pdv.codicePos}`}>{fmtPoints(pdv.pdvCalc.puntiTotali)} pt</span>
+                          </span>
                         ) : (
                           <span className="shrink-0 text-muted-foreground tabular-nums">{pdv.pezzi} pz sorgente</span>
                         )}
@@ -3415,7 +3452,7 @@ export default function DashboardGaraReale() {
         }
         return undefined;
       }
-      const found = mobileConfigs.find(c => c.posCode === codicePos) || mobileConfigs[0];
+      const found = mobileConfigs.find(c => c.posCode === codicePos);
       if (found && !found.multiplierSoglia1) {
         return { ...found, multiplierSoglia1: 1, multiplierSoglia2: 1.2, multiplierSoglia3: 1.5, multiplierSoglia4: 2 };
       }
@@ -3439,7 +3476,7 @@ export default function DashboardGaraReale() {
         }
         return undefined;
       }
-      const found = fissoConfigs.find(c => c.posCode === codicePos) || fissoConfigs[0];
+      const found = fissoConfigs.find(c => c.posCode === codicePos);
       if (found && !(found as unknown as Record<string, unknown>).multiplierSoglia1) {
         return { ...found, multiplierSoglia1: 2, multiplierSoglia2: 3, multiplierSoglia3: 3.5, multiplierSoglia4: 4, multiplierSoglia5: 5 };
       }
@@ -4327,6 +4364,7 @@ export default function DashboardGaraReale() {
               forecastGap: rsCalc.forecastGap,
               soglieRef: rsThresholdData.soglieRef,
               thresholdMarkers: rsThresholdData.thresholdMarkers,
+              moltiplicatoriApplicati: rsCalc.moltiplicatoriApplicati,
             });
           });
 
@@ -7346,5 +7384,35 @@ function SosCaringSection({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function ProvThresholdBadge({
+  testId,
+  hasThresholdModel,
+  sogliaLivello,
+  sogliaLabel,
+  moltiplicatori,
+}: {
+  testId: string;
+  hasThresholdModel: boolean;
+  sogliaLivello: number;
+  sogliaLabel: string;
+  moltiplicatori?: number[];
+}) {
+  if (!hasThresholdModel) return null;
+  const reached = sogliaLivello > 0;
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${reached ? 'border-emerald-300/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'border-border/80 bg-muted/60 text-muted-foreground'}`}
+      data-testid={testId}
+      data-soglia-livello={sogliaLivello}
+      {...(moltiplicatori?.length ? { 'data-moltiplicatori': moltiplicatori.join(',') } : {})}
+    >
+      {reached ? `Soglia ${sogliaLabel}` : 'Soglia non raggiunta'}
+      {reached && moltiplicatori && moltiplicatori.length > 0 && (
+        <span className="font-bold">{moltiplicatori.map(fmtMult).join(' · ')}</span>
+      )}
+    </span>
   );
 }

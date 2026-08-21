@@ -11,6 +11,10 @@ import {
   launchBrowser,
   newAuthedContext,
 } from './helpers/uiTest.mjs';
+import {
+  calcolaPremioPistaFissoPerPos,
+  getFissoAppliedMultipliersWithAddons,
+} from '../client/src/lib/calcoloPistaFisso.ts';
 
 // Task #489 — pannello "Provenienza punti" sulle card pista della Dashboard
 // Gara Reale. Verifica che:
@@ -25,7 +29,7 @@ import {
 //
 // Scenario deterministico: 2 PDV mobile con soglia1 = 3 punti:
 //   PDV A: 2 SIM TIED × 0,75 pt = 1,50 pt
-//   PDV B: 4 SIM TIED × 0,75 pt = 3,00 pt
+//   PDV B: 2 SIM TIED + 2 UNTIED × 0,75 pt = 3,00 pt
 //   Totale card mobile = 4,50 pt → la somma dei subtotali deve quadrare.
 
 const now = new Date();
@@ -39,6 +43,12 @@ const artMobileTied = {
   tipologia: { nome: 'VOCE EASYPAY' },
   dettaglio: { canone: '10' },
 }; // mobile → TIED (0,75 punti)
+
+const artMobileUntied = {
+  categoria: { nome: 'UNTIED' },
+  tipologia: { nome: 'RICARICABILE VOCE' },
+  dettaglio: { canone: '10' },
+}; // mobile → UNTIED (0,75 punti)
 
 async function insertSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale, articoli }) {
   const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
@@ -214,6 +224,104 @@ const assertPanelContrast = async (page, pista, label) => {
         .join('\n'),
   );
 };
+test('Provenienza punti: il Fisso espone solo i moltiplicatori realmente applicati', () => {
+  const pistaConfig = {
+    posCode: 'FISSO-MULT',
+    soglia1: 1,
+    soglia2: 100,
+    soglia3: 200,
+    soglia4: 300,
+    soglia5: 400,
+    multiplierSoglia1: 2,
+    multiplierSoglia2: 3,
+    multiplierSoglia3: 3.5,
+    multiplierSoglia4: 4,
+    multiplierSoglia5: 5,
+  };
+  const common = {
+    annoGara: YEAR,
+    meseGara: MONTH,
+    calendar: { weeklySchedule: { workingDays: [1, 2, 3, 4, 5, 6] } },
+    clusterFisso: 1,
+    posCode: pistaConfig.posCode,
+    pistaConfig,
+  };
+
+  const fissoMoltiplicato = calcolaPremioPistaFissoPerPos({
+    ...common,
+    attivato: [{ categoria: 'FISSO_FTTC', pezzi: 1 }],
+  });
+  assert.equal(fissoMoltiplicato.soglia, 1);
+  assert.deepEqual(fissoMoltiplicato.moltiplicatoriApplicati, [2],
+    'FTTC raggiunge S1 e applica il moltiplicatore base ×2');
+
+  const fissoSoloPremioFisso = calcolaPremioPistaFissoPerPos({
+    ...common,
+    attivato: [{ categoria: 'FRITZ_BOX', pezzi: 1 }],
+  });
+  assert.equal(fissoSoloPremioFisso.soglia, 1);
+  assert.equal(fissoSoloPremioFisso.moltiplicatoriApplicati, undefined,
+    'FRITZ BOX raggiunge S1 ma non dichiara ×2 perché il suo premio è fisso');
+
+  assert.deepEqual(
+    getFissoAppliedMultipliersWithAddons(undefined, 1, [
+      { targetCategory: 'VOCE_UNLIMITED', canone: 23, occorrenze: 1 },
+    ]),
+    [0.25],
+    'Voce Unlimited da solo espone il moltiplicatore di S1 ×0,25',
+  );
+  assert.deepEqual(
+    getFissoAppliedMultipliersWithAddons([2], 1, [
+      { targetCategory: 'VOCE_UNLIMITED', canone: 23, occorrenze: 1 },
+    ]),
+    [0.25, 2],
+    'Voce Unlimited e una categoria base espongono entrambi i moltiplicatori',
+  );
+  assert.equal(
+    getFissoAppliedMultipliersWithAddons(undefined, 1, [
+      { targetCategory: 'VOCE_UNLIMITED', canone: 23, occorrenze: 0 },
+    ]),
+    undefined,
+    'Voce Unlimited con zero occorrenze non dichiara un moltiplicatore non applicato',
+  );
+
+  const addonMultiplierCases = [
+    ['LINEA_ATTIVA', 1],
+    ['FIBRA_FTTH_ADDON', 1],
+    ['CONVERGENZA', 2],
+    ['CONVERGENZA_LUCE_GAS', 2],
+    ['CONVERGENTE_ASSICUR', 2],
+  ];
+  for (const [targetCategory, expectedMultiplier] of addonMultiplierCases) {
+    assert.deepEqual(
+      getFissoAppliedMultipliersWithAddons(undefined, 1, [
+        { targetCategory, canone: 23, occorrenze: 1 },
+      ]),
+      [expectedMultiplier],
+      `${targetCategory} espone il proprio moltiplicatore ×${expectedMultiplier}`,
+    );
+  }
+
+  assert.deepEqual(
+    getFissoAppliedMultipliersWithAddons(undefined, 1, [
+      { targetCategory: 'VOCE_UNLIMITED', canone: 23, occorrenze: 1 },
+      { targetCategory: 'LINEA_ATTIVA', canone: 23, occorrenze: 1 },
+      { targetCategory: 'CONVERGENZA_LUCE_GAS', canone: 23, occorrenze: 1 },
+    ]),
+    [0.25, 1, 2],
+    'tutti i moltiplicatori add-on applicati sono esposti, ordinati e distinti',
+  );
+
+  for (const targetCategory of addonMultiplierCases.map(([category]) => category)) {
+    assert.equal(
+      getFissoAppliedMultipliersWithAddons(undefined, 1, [
+        { targetCategory, canone: 0, occorrenze: 1 },
+      ]),
+      undefined,
+      `${targetCategory} senza base economica non dichiara un moltiplicatore`,
+    );
+  }
+});
 
 test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale card', async () => {
   const pool = await newPool();
@@ -224,6 +332,7 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
 
     const POS_A = uniq('PRVPOSA');
     const POS_B = uniq('PRVPOSB');
+    const POS_NO_MODEL = uniq('PRVNOMD');
     const RS = uniq('ProvenienzaRs Srl');
 
     await pool.query(
@@ -233,6 +342,7 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
         pdvList: [
           { codicePos: POS_A, nome: 'Negozio Prov A', ragioneSociale: RS },
           { codicePos: POS_B, nome: 'Negozio Prov B', ragioneSociale: RS },
+          { codicePos: POS_NO_MODEL, nome: 'Negozio senza modello', ragioneSociale: RS },
         ],
         pistaMobileConfig: {
           sogliePerPos: [POS_A, POS_B].map((posCode) => ({
@@ -245,19 +355,31 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
       })],
     );
 
-    // PDV A: 2 TIED = 1,50 pt; PDV B: 4 TIED = 3,00 pt.
+    // PDV A: 2 TIED = 1,50 pt; PDV B: 2 TIED + 2 UNTIED = 3,00 pt.
     for (let i = 0; i < 2; i++) {
       await insertSale(pool, session.orgId, {
         codicePos: POS_A, nomeNegozio: 'Negozio Prov A', ragioneSociale: RS,
         articoli: [artMobileTied],
       });
     }
-    for (let i = 0; i < 4; i++) {
+    // PDV B usa due gruppi canone: il badge deve dichiarare entrambi i
+    // moltiplicatori realmente applicati (TIED ×2, GA base/UNTIED ×1).
+    for (let i = 0; i < 2; i++) {
       await insertSale(pool, session.orgId, {
         codicePos: POS_B, nomeNegozio: 'Negozio Prov B', ragioneSociale: RS,
         articoli: [artMobileTied],
       });
+      await insertSale(pool, session.orgId, {
+        codicePos: POS_B, nomeNegozio: 'Negozio Prov B', ragioneSociale: RS,
+        articoli: [artMobileUntied],
+      });
     }
+    // Questo PDV ha vendite Mobile ma nessuna configurazione soglie: non deve
+    // ereditare il modello del primo PDV né mostrare marker fuorvianti.
+    await insertSale(pool, session.orgId, {
+      codicePos: POS_NO_MODEL, nomeNegozio: 'Negozio senza modello', ragioneSociale: RS,
+      articoli: [artMobileTied],
+    });
 
     browser = await launchBrowser();
     const context = await newAuthedContext(browser, session);
@@ -297,9 +419,11 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     // Subtotali PDV: A = 1,50; B = 3,00; somma = totale card.
     const puntiA = provNum(await page.getByTestId(`prov-punti-pdv-mobile-${POS_A}`).innerText());
     const puntiB = provNum(await page.getByTestId(`prov-punti-pdv-mobile-${POS_B}`).innerText());
+    const puntiNoModel = provNum(await page.getByTestId(`prov-punti-pdv-mobile-${POS_NO_MODEL}`).innerText());
     assert.equal(puntiA, 1.5, `PDV A = 1,50 pt (letto ${puntiA})`);
     assert.equal(puntiB, 3, `PDV B = 3,00 pt (letto ${puntiB})`);
-    assert.ok(Math.abs((puntiA + puntiB) - totale) < 0.005, 'somma subtotali PDV = totale pannello');
+    assert.equal(puntiNoModel, 0, `PDV senza modello = 0 pt (letto ${puntiNoModel})`);
+    assert.ok(Math.abs((puntiA + puntiB + puntiNoModel) - totale) < 0.005, 'somma subtotali PDV = totale pannello');
 
     const sommaTxt = await page.getByTestId('prov-somma-mobile').innerText();
     assert.match(sommaTxt, /4,50|4\.50/, 'riga somma mostra 4,50 pt');
@@ -308,8 +432,32 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     // Fonti: categoria TIED con i pezzi per PDV.
     const catA = await page.getByTestId(`prov-cat-mobile-${POS_A}-TIED`).innerText();
     assert.match(catA, /2\s*pz/, `fonte TIED del PDV A = 2 pz (letto "${catA}")`);
-    const catB = await page.getByTestId(`prov-cat-mobile-${POS_B}-TIED`).innerText();
-    assert.match(catB, /4\s*pz/, `fonte TIED del PDV B = 4 pz (letto "${catB}")`);
+    const catBTied = await page.getByTestId(`prov-cat-mobile-${POS_B}-TIED`).innerText();
+    const catBUntied = await page.getByTestId(`prov-cat-mobile-${POS_B}-UNTIED`).innerText();
+    assert.match(catBTied, /2\s*pz/, `fonte TIED del PDV B = 2 pz (letto "${catBTied}")`);
+    assert.match(catBUntied, /2\s*pz/, `fonte UNTIED del PDV B = 2 pz (letto "${catBUntied}")`);
+
+    // Task #490 — soglia raggiunta e moltiplicatore applicato per PDV.
+    // PDV A: 1,50 pt < soglia1 (3) → "Soglia non raggiunta", nessun ×.
+    // PDV B: 3,00 pt ≥ soglia1 → "Soglia S1", TIED ×2 e UNTIED ×1.
+    const badgeA = page.getByTestId(`prov-soglia-pdv-mobile-${POS_A}`);
+    const badgeB = page.getByTestId(`prov-soglia-pdv-mobile-${POS_B}`);
+    assert.equal(await badgeA.getAttribute('data-soglia-livello'), '0',
+      'PDV A sotto soglia1 → livello 0');
+    assert.match(await badgeA.innerText(), /Soglia non raggiunta/i,
+      'PDV A deve dichiarare la soglia non raggiunta');
+    assert.doesNotMatch(await badgeA.innerText(), /×/,
+      'PDV A senza soglia non deve mostrare un moltiplicatore');
+    assert.equal(await badgeB.getAttribute('data-soglia-livello'), '1',
+      'PDV B a 3 pt raggiunge soglia1');
+    assert.match(await badgeB.innerText(), /Soglia S1/,
+      'PDV B deve mostrare la soglia raggiunta');
+    assert.equal(await badgeB.getAttribute('data-moltiplicatori'), '1,2',
+      'moltiplicatori S1 realmente applicati ai gruppi UNTIED e TIED');
+    assert.match(await badgeB.innerText(), /×\s*1.*×\s*2/,
+      'PDV B deve mostrare entrambi i moltiplicatori applicati ×1 e ×2');
+    assert.equal(await page.getByTestId(`prov-soglia-pdv-mobile-${POS_NO_MODEL}`).count(), 0,
+      'il PDV senza modello soglie non deve mostrare alcun badge soglia/moltiplicatore');
 
     // Il pannello è esclusivamente una provenienza punti: niente valori
     // economici o canoni.
@@ -423,6 +571,22 @@ test('Provenienza punti: modalità aggregazione per RS riconcilia i subtotali RS
       `somma subtotali RS (${sommaRs}) = totale pannello (${totale})`);
     assert.match(await page.getByTestId('prov-somma-mobile').innerText(), /= totale card/,
       'riconciliazione esplicita col totale card in modalità RS');
+
+    // Task #490 — in modalità per_rs la soglia/moltiplicatore è a livello RS:
+    // 4,50 pt totali ≥ soglia1 (3) → "Soglia S1 ×2"; nessun badge sui PDV
+    // annidati (le soglie non sono per-PDV in questa modalità).
+    const rsBadges = page.locator('[data-testid^="prov-soglia-rs-mobile-"]');
+    assert.equal(await rsBadges.count(), 1, 'un badge soglia per la riga RS');
+    assert.equal(await rsBadges.first().getAttribute('data-soglia-livello'), '1',
+      'RS a 4,50 pt raggiunge soglia1 (3)');
+    assert.match(await rsBadges.first().innerText(), /Soglia S1/,
+      'la riga RS mostra la soglia raggiunta');
+    assert.equal(await rsBadges.first().getAttribute('data-moltiplicatori'), '2',
+      'moltiplicatore tied a S1 = 2 anche in modalità RS');
+    assert.match(await rsBadges.first().innerText(), /×\s*2/,
+      'la riga RS mostra il moltiplicatore applicato ×2');
+    assert.equal(await page.locator('[data-testid^="prov-soglia-pdv-mobile-"]').count(), 0,
+      'nessun badge soglia sui PDV annidati in modalità per_rs');
 
     // I PDV della RS compaiono come fonti annidate con i pezzi.
     await page.getByTestId(`prov-row-pdv-mobile-${POS_A}`).waitFor({ state: 'visible', timeout: 5000 });

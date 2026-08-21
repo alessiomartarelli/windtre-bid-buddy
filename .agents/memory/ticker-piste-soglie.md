@@ -8,3 +8,9 @@ I marker del ticker devono rappresentare solo soglie autentiche della configuraz
 **Why:** un riferimento scelto dal primo PDV o inventato per una pista senza soglie rende la traiettoria visivamente precisa ma commercialmente ingannevole. Allo stesso modo, sommare punti di RS/PDV indipendenti può far superare visivamente una soglia che nessuno ha raggiunto.
 
 **How to apply:** quando si modifica il ticker o si aggiunge una pista, verificare prima quale configurazione governa davvero quella pista e mostrare marker solo se il riferimento aggregato è univoco. Per gli stati “migliore”, selezionare il valore della stessa unità che determina il livello, con i punti come spareggio.
+
+Nel dettaglio “Provenienza punti”, “moltiplicatore applicato” significa l’insieme dei moltiplicatori che hanno davvero inciso sul premio, non il valore nominale della soglia né una media pesata. Mobile può applicare più moltiplicatori per gruppi canone; Fisso può avere categorie a premio fisso o add-on con moltiplicatori propri. Mostrare solo quelli con una base economica e un’occorrenza effettive.
+
+**Why:** un singolo moltiplicatore nominale o medio nasconde i gruppi Mobile diversi e attribuisce falsamente un × alle categorie Fisso il cui premio non è moltiplicato.
+
+**How to apply:** quando cambia un percorso premio, raccogliere i moltiplicatori dal percorso realmente eseguito (compresi wrapper/add-on), deduplicarli e non mostrarli se quel percorso non ha contribuito al premio.

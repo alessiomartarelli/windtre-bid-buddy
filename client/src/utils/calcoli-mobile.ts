@@ -190,6 +190,9 @@ export function calcolaPremioPistaMobilePerPos(options: {
   const valoreCanoni = valoreCanoniOverride ?? attivazioni * (configPos.canoneMedio || 0);
 
   let premioCanone: number;
+  // Task #490: conserva tutti i moltiplicatori realmente applicati. Le tabelle
+  // Mobile possono prevederne più di uno nello stesso PDV (uno per gruppo).
+  const moltiplicatoriApplicati = new Set<number>();
   if (moltiplicatoriPerGruppo && canonePerType && soglia >= 1) {
     const sogliaIdx = Math.min(soglia, 4) - 1;
     const canonePerGruppo: Record<string, number> = {};
@@ -202,10 +205,12 @@ export function calcolaPremioPistaMobilePerPos(options: {
       const mults = moltiplicatoriPerGruppo[gruppo];
       const mult = mults ? (mults[sogliaIdx] ?? 0) : 0;
       premioCanone += mult * canone;
+      if (canone !== 0) moltiplicatoriApplicati.add(mult);
     }
   } else {
     const mult = getMultiplierForSoglia(soglia, configPos);
     premioCanone = mult * valoreCanoni;
+    if (soglia >= 1 && valoreCanoni !== 0) moltiplicatoriApplicati.add(mult);
   }
 
   const premio = premioCanone + agg.gettoneContrattualeEuro + agg.gettoneSogliaEuro;
@@ -231,6 +236,9 @@ export function calcolaPremioPistaMobilePerPos(options: {
     attivazioni,
     runRateGiornalieroPunti,
     runRateGiornalieroAttivazioni,
+    moltiplicatoriApplicati: moltiplicatoriApplicati.size > 0
+      ? [...moltiplicatoriApplicati].sort((a, b) => a - b)
+      : undefined,
     extraGettoniEuro: agg.extraGettoniEuro,
     gettoneContrattualeEuro: agg.gettoneContrattualeEuro,
     gettoneSogliaEuro: agg.gettoneSogliaEuro,

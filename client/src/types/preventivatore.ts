@@ -313,6 +313,9 @@ export interface CalcoloPistaMobilePosResult {
   attivazioni: number;
   runRateGiornalieroPunti: number;
   runRateGiornalieroAttivazioni: number;
+  // Task #490: moltiplicatori effettivamente applicati ai canoni per la soglia
+  // raggiunta (undefined se nessuna soglia raggiunta o canoni assenti).
+  moltiplicatoriApplicati?: number[];
 }
 
 /* =============================================================================
