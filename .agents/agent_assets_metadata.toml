@@ -81,3 +81,10 @@ uri = "file://screenshots/prisma-light-mobile-full.png"
 type = "image"
 title = "Prisma Light — contenuto corretto"
 description = "La vista Prisma termina dopo i pannelli del mockup; la sezione standard Piste in gara e gli altri dettagli operativi non vengono più mostrati."
+
+[[outputs]]
+id = "bkVmIW4al_wnnDLCJUXl6"
+uri = "file://screenshots/auth-mobile-night.jpg"
+type = "image"
+title = "Accesso mobile — nuova resa"
+description = "Anteprima reale a 375px: sfondo notte sfumato, card traslucida e campi ad alto contrasto."

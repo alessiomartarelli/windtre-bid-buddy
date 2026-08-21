@@ -124,7 +124,7 @@ export default function Auth() {
   }
 
   return (
-    <div className="min-h-screen flex" data-testid="page-auth">
+    <div className="min-h-[100dvh] flex overflow-x-hidden bg-background" data-testid="page-auth">
       {/* Left Panel - Feature Cards with dark gradient background */}
       <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-gradient-to-br from-[#131c3b] via-[#1a2148] to-[#101830] p-8 xl:p-12 flex-col justify-between">
         {/* Decorative gradient orbs */}
@@ -174,29 +174,49 @@ export default function Auth() {
       </div>
 
       {/* Right Panel - Login Form */}
-      <div className="w-full lg:w-[45%] flex items-center justify-center p-4 sm:p-8 lg:p-12 bg-background">
-        <div className="w-full max-w-[420px]">
+      <div className="relative isolate w-full lg:w-[45%] flex items-center justify-center overflow-hidden px-4 pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))] sm:p-8 lg:p-12 bg-transparent lg:bg-background">
+        {/* Mobile night surface: intentionally kept out of the desktop composition. */}
+        <div
+          className="pointer-events-none absolute inset-0 -z-10 lg:hidden bg-[radial-gradient(circle_at_12%_8%,hsl(239_84%_64%_/_0.22),transparent_34%),radial-gradient(circle_at_92%_22%,hsl(190_82%_55%_/_0.13),transparent_31%),linear-gradient(145deg,hsl(233_55%_8%)_0%,hsl(232_48%_11%)_48%,hsl(225_45%_15%)_100%)]"
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute -right-24 top-16 -z-10 h-72 w-72 rounded-full bg-primary/10 blur-3xl lg:hidden"
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute -bottom-32 -left-24 -z-10 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl lg:hidden"
+          aria-hidden="true"
+        />
+
+        <div className="w-full max-w-[420px] lg:max-w-[420px]">
           {/* Mobile brand header */}
-          <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center shadow-lg shadow-primary/25">
-              <BrandGlyph className="w-5 h-5 text-primary-foreground" />
+          <div className="lg:hidden flex flex-col items-center gap-3 mb-8 text-center">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-primary flex items-center justify-center shadow-[0_10px_28px_hsl(239_84%_64%_/_0.28)] ring-1 ring-white/15">
+                <BrandGlyph className="w-5 h-5 text-primary-foreground" />
+              </div>
+              <h1 className="text-[1.65rem] font-bold tracking-[-0.04em] text-white" data-testid="text-brand-title-mobile">
+                MyStoreDesk
+              </h1>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-brand-title-mobile">
-              MyStoreDesk
-            </h1>
+            <p className="text-[0.7rem] font-medium uppercase tracking-[0.16em] text-white/45">
+              La scrivania digitale del punto vendita
+            </p>
           </div>
 
-          <div>
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold" data-testid="text-auth-title">Bentornato</h2>
-              <p className="text-muted-foreground text-sm mt-1">
+          <div className="rounded-[1.35rem] border border-white/15 bg-slate-950/35 p-5 shadow-[0_24px_70px_rgba(2,6,23,0.42)] backdrop-blur-xl sm:p-7 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+            <div className="mb-7 lg:mb-6">
+              <div className="mb-3 hidden h-px w-10 bg-primary/70 lg:block" aria-hidden="true" />
+              <h2 className="text-[1.7rem] font-bold tracking-[-0.04em] text-white lg:text-2xl lg:text-foreground" data-testid="text-auth-title">Bentornato</h2>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300/75 lg:mt-1 lg:text-muted-foreground">
                 Accedi al tuo account per continuare
               </p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="login-email" className="text-sm font-medium">Email</Label>
+                <Label htmlFor="login-email" className="text-sm font-medium text-slate-200 lg:text-foreground">Email</Label>
                 <Input
                   id="login-email"
                   type="email"
@@ -204,11 +224,12 @@ export default function Auth() {
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   required
+                  className="h-12 border-white/15 bg-white/[0.07] text-white placeholder:text-slate-400/70 focus-visible:border-primary/80 focus-visible:ring-primary/25 lg:h-10 lg:border-input lg:bg-background lg:text-foreground lg:placeholder:text-muted-foreground"
                   data-testid="input-login-email"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="login-password" className="text-sm font-medium">Password</Label>
+                <Label htmlFor="login-password" className="text-sm font-medium text-slate-200 lg:text-foreground">Password</Label>
                 <div className="relative">
                   <Input
                     id="login-password"
@@ -217,20 +238,20 @@ export default function Auth() {
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     required
-                    className="pr-10"
+                    className="h-12 pr-12 border-white/15 bg-white/[0.07] text-white placeholder:text-slate-400/70 focus-visible:border-primary/80 focus-visible:ring-primary/25 lg:h-10 lg:border-input lg:bg-background lg:text-foreground lg:placeholder:text-muted-foreground"
                     data-testid="input-login-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-300/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 lg:right-1 lg:text-muted-foreground lg:hover:bg-muted lg:hover:text-foreground"
                     data-testid="button-toggle-login-password"
                   >
                     {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
-              <Button type="submit" className="w-full" disabled={loading} data-testid="button-login">
+              <Button type="submit" className="h-12 w-full font-semibold shadow-[0_10px_24px_hsl(239_84%_64%_/_0.22)] transition-transform hover:-translate-y-0.5 active:translate-y-0 lg:h-10" disabled={loading} data-testid="button-login">
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -242,7 +263,7 @@ export default function Auth() {
               </Button>
             </form>
 
-            <p className="text-center text-sm text-muted-foreground mt-6">
+            <p className="mt-6 text-center text-sm leading-relaxed text-slate-300/65 lg:text-muted-foreground">
               Per ottenere un account, contatta l'amministratore della tua organizzazione.
             </p>
           </div>
