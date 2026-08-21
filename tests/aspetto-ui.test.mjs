@@ -332,6 +332,11 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
     assert.equal(await isDarkClass(page2), true, 'Midnight Violet must force dark rendering on Vendite BiSuite');
     assert.equal(await getPrimaryVar(page2), '35 91% 60%',
       'Vendite mantiene il primary arancione di Midnight');
+    assert.equal(
+      await page2.getByTestId('filter-bar').evaluate((element) => getComputedStyle(element).backgroundColor),
+      'rgb(53, 35, 109)',
+      'i pannelli Vendite mantengono la superficie viola di Midnight, non il navy del contrast layer',
+    );
     await assertActiveNavUsesPrimary(
       page2,
       'nav-gara-vendite-bisuite',

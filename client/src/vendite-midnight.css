@@ -142,6 +142,16 @@
   --vendite-strong-border: rgb(218 205 255 / 42%);
 }
 
+/* Il contrast layer è condiviso anche con il dark standard, che usa
+   superfici blu-notte. Midnight Violet conserva invece pannelli viola
+   riconoscibili: l'accento arancione è un dettaglio, non deve cancellare
+   l'identità della pelle. */
+.vendite-midnight.vendite-dark-contrast {
+  --vendite-surface: #35236d;
+  --vendite-surface-raised: #442b85;
+  --vendite-strong-border: rgb(226 210 255 / 45%);
+}
+
 .vendite-midnight > aside,
 .vendite-midnight > header {
   color: #f4f0ff;
