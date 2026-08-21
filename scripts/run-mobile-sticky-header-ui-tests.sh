@@ -29,4 +29,6 @@ for i in $(seq 1 30); do
 done
 
 echo "[mobile-sticky-ui-tests] running suite ..."
-exec node --import tsx --test tests/mobile-sticky-header-ui.test.mjs
+exec node --import tsx --test --test-concurrency=1 \
+  tests/mobile-sticky-header-ui.test.mjs \
+  tests/canvass-mobile-align-ui.test.mjs

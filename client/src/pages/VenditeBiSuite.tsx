@@ -1584,44 +1584,54 @@ export default function VenditeBiSuite() {
                      <p className="text-lg text-green-600 font-bold mb-3 tabular-nums">{formatCurrency(globalCounts.amtByType.canvass)}</p>
                   )}
                   <div className="space-y-1.5">
-                    {(Object.entries(globalCounts.byPista) as [PistaCanvass, number][])
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([pista, count]) => (
-                         <div
-                           key={pista}
-                           className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm min-h-8"
-                           data-testid={`row-summary-pista-${pista}`}
-                         >
-                           <div className="flex min-w-0 items-center gap-1.5">
-                            {PISTA_ICONS[pista]}
-                            <span>{pistaLabels[pista]}</span>
+                    {(() => {
+                      // Slot IVA riservato su ogni riga quando almeno una pista
+                      // ha pezzi IVA: la colonna "di cui N IVA" e i badge restano
+                      // così incolonnati alla stessa estremità destra anche a 375px.
+                      const hasAnyIva = Object.values(globalCounts.ivaByPista).some((v) => (v || 0) > 0);
+                      return (Object.entries(globalCounts.byPista) as [PistaCanvass, number][])
+                        .sort(([, a], [, b]) => b - a)
+                        .map(([pista, count]) => (
+                          <div
+                            key={pista}
+                            className="flex flex-col gap-y-0.5 text-sm min-h-8 sm:flex-row sm:items-center sm:justify-between sm:gap-x-3"
+                            data-testid={`row-summary-pista-${pista}`}
+                          >
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              {PISTA_ICONS[pista]}
+                              <span className="min-w-0 truncate">{pistaLabels[pista]}</span>
+                            </div>
+                            <div className="ml-auto flex w-full shrink-0 items-center justify-end gap-x-2 whitespace-nowrap sm:w-auto">
+                              {(globalCounts.amtByPista[pista] || 0) > 0 && (
+                                <span className="text-sm font-semibold text-muted-foreground tabular-nums">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span>
+                              )}
+                              {hasAnyIva && (
+                                (globalCounts.ivaByPista[pista] || 0) > 0 ? (
+                                  <span
+                                    className="min-w-[5.5rem] text-right text-xs font-semibold text-indigo-600 dark:text-indigo-400 whitespace-nowrap tabular-nums"
+                                    data-testid={`text-iva-${pista}`}
+                                  >
+                                    di cui {globalCounts.ivaByPista[pista]} IVA
+                                  </span>
+                                ) : (
+                                  <span className="min-w-[5.5rem]" aria-hidden="true" />
+                                )
+                              )}
+                              <Badge variant="outline" className={PISTA_CANVASS_COLORS[pista] + " text-sm font-bold min-w-10 justify-center tabular-nums"}>
+                                {count}
+                              </Badge>
+                            </div>
                           </div>
-                           <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:w-auto">
-                            {(globalCounts.amtByPista[pista] || 0) > 0 && (
-                               <span className="text-sm font-semibold text-muted-foreground tabular-nums">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span>
-                            )}
-                            {(globalCounts.ivaByPista[pista] || 0) > 0 && (
-                              <span
-                                 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 whitespace-nowrap"
-                                data-testid={`text-iva-${pista}`}
-                              >
-                                di cui {globalCounts.ivaByPista[pista]} IVA
-                              </span>
-                            )}
-                             <Badge variant="outline" className={PISTA_CANVASS_COLORS[pista] + " text-sm font-bold min-w-10 justify-center tabular-nums"}>
-                              {count}
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
+                        ));
+                    })()}
                     {globalCounts.couponCaring.pezzi > 0 && (
-                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm pt-1.5 mt-1 border-t border-dashed min-h-8" data-testid="row-coupon-caring">
+                       <div className="flex flex-col gap-y-0.5 text-sm pt-1.5 mt-1 border-t border-dashed min-h-8 sm:flex-row sm:items-center sm:justify-between sm:gap-x-3" data-testid="row-coupon-caring">
                          <div className="flex min-w-0 items-center gap-1.5">
-                          <Tag className="h-3 w-3 text-amber-600" />
+                          <Tag className="h-3 w-3 shrink-0 text-amber-600" />
                           <span>Coupon Caring</span>
-                           <span className="text-xs text-muted-foreground">(esclusi da CB)</span>
+                           <span className="min-w-0 truncate text-xs text-muted-foreground">(esclusi da CB)</span>
                         </div>
-                         <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:w-auto">
+                         <div className="ml-auto flex w-full shrink-0 items-center justify-end gap-x-2 whitespace-nowrap sm:w-auto">
                           {globalCounts.couponCaring.importo > 0 && (
                              <span className="text-sm font-semibold text-muted-foreground tabular-nums">{formatCurrency(globalCounts.couponCaring.importo)}</span>
                           )}
