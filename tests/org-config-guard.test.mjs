@@ -51,7 +51,16 @@ async function seedConfig(pool, orgId) {
        VALUES ($1, $2, '2.0')
      ON CONFLICT (organization_id)
        DO UPDATE SET config = EXCLUDED.config`,
-    [orgId, JSON.stringify({ puntiVendita: STRUTTURA, altroSetting: 'x' })],
+    [orgId, JSON.stringify({
+      puntiVendita: STRUTTURA,
+      altroSetting: 'x',
+      telegramReport: {
+        enabled: true,
+        bot_token: 'enc:v1:test-token',
+        chat_id: '-1001234567890',
+        send_times: { parziale: '13:30', chiusura: '22:15' },
+      },
+    })],
   );
 }
 
@@ -61,6 +70,14 @@ async function readPv(pool, orgId) {
     [orgId],
   );
   return r.rows[0]?.pv ?? null;
+}
+
+async function readTelegramConfig(pool, orgId) {
+  const r = await pool.query(
+    `SELECT config->'telegramReport' AS telegram FROM organization_config WHERE organization_id = $1`,
+    [orgId],
+  );
+  return r.rows[0]?.telegram ?? null;
 }
 
 const putConfig = (session, config) =>
@@ -76,6 +93,7 @@ test('org-config guard: admin non può azzerare in massa la struttura', async ()
   try {
     await setRole(pool, session.profileId, 'admin');
     await seedConfig(pool, session.orgId);
+    const telegramBefore = await readTelegramConfig(pool, session.orgId);
 
     // (a) tutti scheletro => 409, DB intatto.
     const allSkel = await putConfig(session, {
@@ -105,11 +123,33 @@ test('org-config guard: admin non può azzerare in massa la struttura', async ()
       [session.orgId],
     );
     assert.equal(cfgAfterOmit.rows[0].s, 'z', 'non-structural settings must still be saved');
+    assert.deepEqual(
+      await readTelegramConfig(pool, session.orgId),
+      telegramBefore,
+      'generic save must preserve the Telegram transport configuration',
+    );
 
     // (d) puntiVendita: null (non-array) => 200 ma struttura preservata.
     const nullKey = await putConfig(session, { puntiVendita: null });
     assert.equal(nullKey.status, 200, `null puntiVendita must be 200 (re-inject), got ${nullKey.status}`);
     assert.deepEqual(await readPv(pool, session.orgId), STRUTTURA, 'null puntiVendita must not wipe the structure');
+    assert.deepEqual(
+      await readTelegramConfig(pool, session.orgId),
+      telegramBefore,
+      'generic save with partial config must keep the Telegram configuration',
+    );
+
+    // (d2) Telegram ha un endpoint admin dedicato: un payload generico non
+    // può né disabilitarlo né sostituire le credenziali di trasporto.
+    const attemptedTelegramOverwrite = await putConfig(session, {
+      telegramReport: { enabled: false, bot_token: '', chat_id: '' },
+    });
+    assert.equal(attemptedTelegramOverwrite.status, 200);
+    assert.deepEqual(
+      await readTelegramConfig(pool, session.orgId),
+      telegramBefore,
+      'generic save must not overwrite the Telegram transport configuration',
+    );
 
     // (e) modifica legittima (rinomina, stesso numero di PDV reali) => 200 e applicata.
     const rinominata = [pdvReale(0), { ...pdvReale(1), nome: 'Negozio Rinominato' }, pdvReale(2)];

@@ -490,6 +490,15 @@ export async function registerRoutes(
       let effectiveConfig: Record<string, unknown> = (config as Record<string, unknown> | null) || {};
       const cur = await storage.getOrgConfig(profile.organizationId);
       const curCfg = (cur?.config as Record<string, unknown> | null) || {};
+      // Il trasporto Telegram viene gestito esclusivamente dall'endpoint admin
+      // dedicato. Il salvataggio generico della configurazione gara non lo
+      // conosce e, sostituendo il JSON intero, potrebbe altrimenti cancellare
+      // flag, chat ID e bot token da un tenant già configurato.
+      if (Object.prototype.hasOwnProperty.call(curCfg, "telegramReport")) {
+        effectiveConfig.telegramReport = curCfg.telegramReport;
+      } else {
+        delete effectiveConfig.telegramReport;
+      }
       if (!['admin', 'super_admin'].includes(profile.role)) {
         const ser = (v: unknown) => JSON.stringify(v ?? null);
         const protectedKeys: ReadonlyArray<"puntiVendita" | "ragioniSociali"> = ["puntiVendita", "ragioniSociali"];

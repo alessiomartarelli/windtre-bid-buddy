@@ -50,6 +50,15 @@ timeout. Do NOT rely on a temporary workflow.
    Il drift viene solo loggato nei log app. NON ri-aggiungere le chiavi
    nei deploy futuri a meno che l'utente non lo chieda.
 
+8. Script Node temporanei eseguiti da `/tmp` sul VPS non risolvono automaticamente
+   i moduli dell'app anche se il comando fa `cd` nella directory applicativa:
+   impostare `NODE_PATH=/var/www/incentive-w3/node_modules`. Con AES-GCM leggere
+   l'auth tag solo dopo `cipher.final()`.
+   **Why:** la risoluzione CommonJS parte dalla directory del file script, non dal cwd,
+   e `getAuthTag()` prima di `final()` fallisce senza eseguire alcuna scrittura.
+   **How to apply:** vale per script di riparazione una tantum caricati in `/tmp`;
+   non inserirvi segreti, passarli solo via stdin e verificare il round-trip sul VPS.
+
 To free workflow slots you may `removeWorkflow` finished test workflows; they
 are also validation commands, so restore them afterward with
 `setValidationCommand({name, command})` (not subject to the workflow limit).
