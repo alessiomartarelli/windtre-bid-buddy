@@ -288,6 +288,16 @@ export interface GaraConfigHistoryEntry {
   updatedAt: string | null;
 }
 
+export interface GaraConfigRevisionEntry {
+  id: string;
+  name: string | null;
+  month: number;
+  year: number;
+  createdAt: string | null;
+  changedBy: string | null;
+  changedByName: string | null;
+}
+
 export interface SalesPdvEntry {
   codicePos: string;
   nomeNegozio: string;
@@ -396,6 +406,38 @@ export function useGaraConfig() {
     }
   }, []);
 
+  const fetchRevisions = useCallback(async (configId: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/gara-config/revisions?configId=${configId}`), { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch revisions');
+      return (await res.json()) as GaraConfigRevisionEntry[];
+    } catch (err) {
+      console.error('[GaraConfig] Error fetching revisions:', err);
+      return null;
+    }
+  }, []);
+
+  const restoreRevision = useCallback(async (revisionId: string) => {
+    setSaving(true);
+    try {
+      const res = await fetch(apiUrl('/api/gara-config/revisions/restore'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ revisionId }),
+      });
+      if (!res.ok) throw new Error('Failed to restore revision');
+      const data = await res.json();
+      setConfig(data);
+      return data as GaraConfigRecord;
+    } catch (err) {
+      console.error('[GaraConfig] Error restoring revision:', err);
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
   const fetchPdvFromSales = useCallback(async (month: number, year: number) => {
     try {
       const res = await fetch(apiUrl(`/api/gara-config/pdv-from-sales?month=${month}&year=${year}`), {
@@ -452,6 +494,8 @@ export function useGaraConfig() {
     saveConfig,
     deleteConfig,
     fetchHistory,
+    fetchRevisions,
+    restoreRevision,
     fetchPdvFromSales,
     importFromSimulator,
     setConfig,

@@ -1075,6 +1075,36 @@ export async function registerRoutes(
     }
   });
 
+  // Ripristina una revisione archiviata nella configurazione corrente.
+  // Il salvataggio via updateGaraConfig archivia a sua volta la versione
+  // sostituita, quindi il ripristino stesso resta annullabile.
+  app.post("/api/gara-config/revisions/restore", isAuthenticated, requireModule("gara_configurazione"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      const { revisionId } = req.body ?? {};
+      if (!revisionId || typeof revisionId !== "string") {
+        return res.status(400).json({ message: "Parametro revisionId richiesto" });
+      }
+      const rev = await storage.getGaraConfigRevision(profile.organizationId!, revisionId);
+      if (!rev) return res.status(404).json({ message: "Revisione non trovata" });
+      const existing = await storage.getGaraConfigById(rev.garaConfigId);
+      if (!existing || existing.organizationId !== profile.organizationId) {
+        return res.status(404).json({ message: "Configurazione non trovata" });
+      }
+      const result = await storage.updateGaraConfig(
+        existing.id,
+        rev.config as Record<string, unknown>,
+        rev.name ?? existing.name ?? "Configurazione",
+        profile.id ?? null,
+      );
+      res.json(result);
+    } catch (error) {
+      console.error("Error restoring gara config revision:", error);
+      res.status(500).json({ message: "Errore nel ripristino della revisione configurazione gara" });
+    }
+  });
+
   interface SimulatorPdvEntry {
     id?: string;
     codicePos: string;

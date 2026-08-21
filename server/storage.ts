@@ -793,7 +793,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async listGaraConfigRevisions(orgId: string, garaConfigId: string): Promise<{ id: string; name: string | null; month: number; year: number; createdAt: Date; changedBy: string | null }[]> {
+  async listGaraConfigRevisions(orgId: string, garaConfigId: string): Promise<{ id: string; name: string | null; month: number; year: number; createdAt: Date; changedBy: string | null; changedByName: string | null }[]> {
     return db.select({
       id: garaConfigHistory.id,
       name: garaConfigHistory.name,
@@ -801,7 +801,9 @@ export class DatabaseStorage implements IStorage {
       year: garaConfigHistory.year,
       createdAt: garaConfigHistory.createdAt,
       changedBy: garaConfigHistory.changedBy,
+      changedByName: profiles.fullName,
     }).from(garaConfigHistory)
+      .leftJoin(profiles, eq(garaConfigHistory.changedBy, profiles.id))
       .where(and(
         eq(garaConfigHistory.organizationId, orgId),
         eq(garaConfigHistory.garaConfigId, garaConfigId),

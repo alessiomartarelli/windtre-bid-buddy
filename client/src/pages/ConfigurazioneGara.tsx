@@ -14,7 +14,8 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { isModuleAllowedForBrands } from '@shared/modules';
-import { useGaraConfig, GaraConfigPdv, GaraConfigData } from '@/hooks/useGaraConfig';
+import { useGaraConfig, GaraConfigPdv, GaraConfigData, type GaraConfigRevisionEntry } from '@/hooks/useGaraConfig';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { CLUSTER_OPTIONS, CLUSTER_PIVA_OPTIONS, WEEKDAY_LABELS, ClusterCode, type ClusterPIvaCode } from '@/types/preventivatore';
 import { getDefaultTarget100, calculateTarget80, calculatePremio80 } from '@/types/partnership-reward';
 import { getThresholdsByCluster, mapClusterMobileToClusterPista, getDefaultFissoThresholds, mapClusterFissoToNumber } from '@/utils/preventivatore-helpers';
@@ -608,6 +609,11 @@ export default function ConfigurazioneGara() {
     return () => document.removeEventListener('mousedown', handler);
   }, [importedFilesPopoverOpen]);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  // Revisioni archiviate (Task #477): per config espansa nel dialog Cronologia.
+  const [revisionsFor, setRevisionsFor] = useState<string | null>(null);
+  const [revisionsList, setRevisionsList] = useState<GaraConfigRevisionEntry[] | null>(null);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<GaraConfigRevisionEntry | null>(null);
   const [addPdvDialogOpen, setAddPdvDialogOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [configName, setConfigName] = useState('');
@@ -740,7 +746,7 @@ export default function ConfigurazioneGara() {
     config: garaConfigRecord,
     configList,
     loading, saving, history,
-    fetchConfig, fetchConfigList, saveConfig, deleteConfig, fetchHistory, fetchPdvFromSales, importFromSimulator,
+    fetchConfig, fetchConfigList, saveConfig, deleteConfig, fetchHistory, fetchRevisions, restoreRevision, fetchPdvFromSales, importFromSimulator,
   } = useGaraConfig();
 
   const isAdminOrSuper = ['super_admin', 'admin'].includes(profile?.role || '');
@@ -1585,6 +1591,45 @@ export default function ConfigurazioneGara() {
   const handleMonthChange = (month: number, year: number) => {
     setSelectedMonth(month);
     setSelectedYear(year);
+  };
+
+  // === Revisioni archiviate (Task #477) ===
+  const toggleRevisions = async (configId: string) => {
+    if (revisionsFor === configId) {
+      setRevisionsFor(null);
+      setRevisionsList(null);
+      return;
+    }
+    setRevisionsFor(configId);
+    setRevisionsList(null);
+    setRevisionsLoading(true);
+    const revs = await fetchRevisions(configId);
+    setRevisionsLoading(false);
+    if (revs === null) {
+      toast({ title: 'Errore', description: 'Impossibile caricare le revisioni.', variant: 'destructive' });
+      setRevisionsFor(null);
+      return;
+    }
+    setRevisionsList(revs);
+  };
+
+  const handleRestoreRevision = async () => {
+    if (!restoreTarget) return;
+    const restored = await restoreRevision(restoreTarget.id);
+    setRestoreTarget(null);
+    if (!restored) {
+      toast({ title: 'Errore', description: 'Impossibile ripristinare la revisione.', variant: 'destructive' });
+      return;
+    }
+    // Carica la configurazione ripristinata nello stato corrente della pagina.
+    handleMonthChange(restored.month, restored.year);
+    await loadConfigById(restored.id, restored.month, restored.year);
+    setRevisionsFor(null);
+    setRevisionsList(null);
+    setHistoryDialogOpen(false);
+    fetchHistory();
+    fetchConfigList(restored.month, restored.year);
+    toast({ title: 'Revisione ripristinata', description: 'La versione sostituita è stata archiviata nella cronologia.' });
   };
 
   const updateMobilePos = (index: number, field: keyof MobilePosConf, value: number) => {
@@ -3080,30 +3125,92 @@ export default function ConfigurazioneGara() {
                 <p className="text-sm text-muted-foreground text-center py-4">Nessuna configurazione salvata.</p>
               ) : (
                 history.map(h => (
-                  <Button
-                    key={h.id}
-                    variant={h.month === selectedMonth && h.year === selectedYear && garaConfigRecord?.id === h.id ? 'secondary' : 'ghost'}
-                    className="w-full justify-between h-auto py-2 gap-2"
-                    onClick={() => {
-                      // Ogni record salvato è distinguibile e recuperabile:
-                      // seleziona mese E carica la configurazione specifica.
-                      handleMonthChange(h.month, h.year);
-                      loadConfigById(h.id, h.month, h.year);
-                      setHistoryDialogOpen(false);
-                    }}
-                    data-testid={`button-history-${h.id}`}
-                  >
-                    <span className="flex flex-col items-start text-left min-w-0">
-                      <span className="truncate max-w-[180px]">{h.name || 'Configurazione'}</span>
-                      <span className="text-xs text-muted-foreground">{MONTHS.find(m => m.value === h.month)?.label} {h.year}</span>
-                    </span>
-                    {h.updatedAt && <span className="text-xs text-muted-foreground shrink-0">{new Date(h.updatedAt).toLocaleDateString('it-IT')}</span>}
-                  </Button>
+                  <div key={h.id} className="space-y-1">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={h.month === selectedMonth && h.year === selectedYear && garaConfigRecord?.id === h.id ? 'secondary' : 'ghost'}
+                        className="flex-1 justify-between h-auto py-2 gap-2 min-w-0"
+                        onClick={() => {
+                          // Ogni record salvato è distinguibile e recuperabile:
+                          // seleziona mese E carica la configurazione specifica.
+                          handleMonthChange(h.month, h.year);
+                          loadConfigById(h.id, h.month, h.year);
+                          setHistoryDialogOpen(false);
+                        }}
+                        data-testid={`button-history-${h.id}`}
+                      >
+                        <span className="flex flex-col items-start text-left min-w-0">
+                          <span className="truncate max-w-[180px]">{h.name || 'Configurazione'}</span>
+                          <span className="text-xs text-muted-foreground">{MONTHS.find(m => m.value === h.month)?.label} {h.year}</span>
+                        </span>
+                        {h.updatedAt && <span className="text-xs text-muted-foreground shrink-0">{new Date(h.updatedAt).toLocaleDateString('it-IT')}</span>}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 px-2"
+                        title="Revisioni archiviate"
+                        onClick={() => toggleRevisions(h.id)}
+                        data-testid={`button-revisions-${h.id}`}
+                      >
+                        <History className="h-4 w-4" />
+                        {revisionsFor === h.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </Button>
+                    </div>
+                    {revisionsFor === h.id && (
+                      <div className="ml-3 pl-3 border-l space-y-1" data-testid={`revisions-panel-${h.id}`}>
+                        {revisionsLoading ? (
+                          <p className="text-xs text-muted-foreground py-1 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Caricamento revisioni…</p>
+                        ) : (revisionsList?.length ?? 0) === 0 ? (
+                          <p className="text-xs text-muted-foreground py-1" data-testid={`revisions-empty-${h.id}`}>Nessuna revisione archiviata.</p>
+                        ) : (
+                          revisionsList!.map(rev => (
+                            <div key={rev.id} className="flex items-center justify-between gap-2 py-1" data-testid={`revision-row-${rev.id}`}>
+                              <span className="flex flex-col items-start text-left min-w-0">
+                                <span className="text-xs truncate max-w-[160px]">{rev.name || 'Configurazione'}</span>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {rev.createdAt ? new Date(rev.createdAt).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                                  {rev.changedByName ? ` · ${rev.changedByName}` : ''}
+                                </span>
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0 h-7 px-2 text-xs"
+                                disabled={saving}
+                                onClick={() => setRestoreTarget(rev)}
+                                data-testid={`button-restore-${rev.id}`}
+                              >
+                                Ripristina
+                              </Button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ))
               )}
             </div>
           </ResponsiveDialogContent>
         </Dialog>
+
+        <AlertDialog open={restoreTarget !== null} onOpenChange={(open) => { if (!open) setRestoreTarget(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Ripristinare questa revisione?</AlertDialogTitle>
+              <AlertDialogDescription>
+                La configurazione corrente verrà sostituita dalla revisione
+                {restoreTarget?.createdAt ? ` del ${new Date(restoreTarget.createdAt).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}` : ''}.
+                La versione sostituita sarà archiviata a sua volta nella cronologia.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-restore-cancel">Annulla</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRestoreRevision} data-testid="button-restore-confirm">Ripristina</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <Dialog open={addPdvDialogOpen} onOpenChange={setAddPdvDialogOpen}>
           <ResponsiveDialogContent className="max-w-sm">
