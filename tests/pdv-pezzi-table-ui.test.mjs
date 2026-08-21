@@ -373,6 +373,7 @@ test('Dashboard Gara Reale: export Excel/CSV/PDF della vista Pezzi con i totali 
     const projFisso = await cellNum(page, 'cell-pezzi-totale-fisso-proiezione');
     const projEnergia = await cellNum(page, 'cell-pezzi-totale-energia-proiezione');
     const projAssic = await cellNum(page, 'cell-pezzi-totale-assicurazioni-proiezione');
+    const projProtecta = await cellNum(page, 'cell-pezzi-totale-protecta-proiezione');
     const projTot = await cellNum(page, 'cell-pezzi-totale-generale-proiezione');
 
     const EXPECTED_HEADER = [
@@ -520,6 +521,49 @@ test('Dashboard Gara Reale: export Excel/CSV/PDF della vista Pezzi con i totali 
       .slice(0, 4);
     assert.equal(alfaNums[0], 2, 'PDF filtrato: RS Alfa mobile attuale = 2');
     assert.equal(alfaNums[2], 2, `PDF filtrato: RS Alfa totale riga = 2 (solo Mobile, non 6) — trovato ${alfaNums.join(',')}`);
+
+    // ── Task #472: PDF con TUTTE le colonne — la colonna "Windtre Protetti"
+    // deve comparire davvero nel contenuto del PDF (header + valori attuali e
+    // proiezioni), non basta che il file sia un PDF valido.
+    await page.getByTestId('btn-tabella-export-pdf').click();
+    await page.getByTestId('dialog-tabella-pdf-export').waitFor({ timeout: 10000 });
+    await page.getByTestId('btn-tabella-pdf-cols-all').click();
+    const [dlPdfAll] = await Promise.all([
+      page.waitForEvent('download', { timeout: 15000 }),
+      page.getByTestId('btn-tabella-pdf-confirm').click(),
+    ]);
+    const pdfAllPath = await dlPdfAll.path();
+    assert.ok(pdfAllPath, 'download.path() PDF (tutte le colonne) disponibile');
+    const tokensAll = pdfTextTokens(fs.readFileSync(pdfAllPath));
+    assert.ok(tokensAll.length > 0, 'PDF completo: testo estraibile');
+    const joinedAll = tokensAll.join(' ');
+    // Header: la label può andare a capo anche a metà parola nella cella
+    // autotable → confronto sul testo senza spazi.
+    assert.ok(joinedAll.replace(/\s+/g, '').includes('WindtreProtetti'), `PDF completo: header "Windtre Protetti" presente (testo: ${joinedAll.slice(0, 400)})`);
+    // Riga TOTALE: attuali e proiezioni delle 5 piste nell'ordine delle
+    // colonne (mobile, fisso, energia, assicurazioni, protecta), identici
+    // ai valori a schermo — incluse le proiezioni Protecta.
+    const idxTotAll = tokensAll.indexOf('Totale complessivo');
+    assert.ok(idxTotAll >= 0, 'PDF completo: riga "Totale complessivo" presente');
+    const totNumsAll = tokensAll.slice(idxTotAll + 1, idxTotAll + 40)
+      .filter(t => /^-?\d+(\.\d+)?$/.test(t))
+      .map(Number)
+      .slice(0, 10);
+    assert.deepEqual(
+      totNumsAll,
+      [3, projMobile, 1, projFisso, 3, projEnergia, 1, projAssic, 1, projProtecta],
+      `PDF completo: TOTALE piste [att, proi] ×5 — protecta = 1/${projProtecta} (trovato: ${totNumsAll.join(',')})`,
+    );
+    // Riga RS Beta: le celle a 0 sono vuote nel PDF (cellPair → ''), quindi
+    // i numeri presenti sono solo le colonne valorizzate, in ordine:
+    // mobile(att,proi), assic(att,proi), protecta(att,proi), iva, cb, ...
+    const idxBeta = tokensAll.indexOf(RS_BETA);
+    assert.ok(idxBeta >= 0, 'PDF completo: riga RS Beta presente');
+    const betaNums = tokensAll.slice(idxBeta + 1, idxBeta + 30)
+      .filter(t => /^-?\d+(\.\d+)?$/.test(t))
+      .map(Number);
+    assert.equal(betaNums[4], 1, `PDF completo: RS Beta protecta attuale = 1 (trovato: ${betaNums.slice(0, 8).join(',')})`);
+    assert.ok(betaNums[5] >= 1, `PDF completo: RS Beta proiezione protecta (${betaNums[5]}) >= attuale (1)`);
   } finally {
     if (browser) await browser.close().catch(() => {});
     await cleanupOrg(pool, session);

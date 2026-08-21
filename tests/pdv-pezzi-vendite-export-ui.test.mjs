@@ -32,6 +32,18 @@ const XLSX = XLSXmod.default ?? XLSXmod;
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
+// Estrae le stringhe testuali `(...) Tj` dal PDF jsPDF (stream non compressi).
+function pdfTextTokens(buf) {
+  const raw = buf.toString('latin1');
+  const tokens = [];
+  const re = /\(((?:\\.|[^\\()])*)\)\s*Tj/g;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    tokens.push(m[1].replace(/\\([()\\])/g, '$1'));
+  }
+  return tokens;
+}
+
 // Categorie BiSuite → pista (CATEGORY_MAP condivisa client/server).
 const CAT_BY_PISTA = {
   mobile: 'UNTIED',
@@ -309,11 +321,37 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     const aoaCsv = sheetAoa(wbCsv.Sheets[wbCsv.SheetNames[0]]);
     assertExportRows(aoaCsv, { gammaDisplay }, 'CSV');
 
-    // ── PDF ── download avvenuto e file non vuoto/valido.
+    // ── PDF ── download valido + contenuto testuale verificato (Task #472):
+    // header e valori della colonna "Windtre Protetti" devono comparire
+    // davvero dentro il PDF, non basta il magic header.
     const { dl: dlP, buf: bufP } = await download('btn-pezzi-export-pdf');
     assert.equal(dlP.suggestedFilename(), `tabella-pdv-pista-pezzi_vendite_${TODAY}.pdf`);
     assert.ok(bufP.length > 1000, `PDF non vuoto (bytes=${bufP.length})`);
     assert.equal(bufP.subarray(0, 5).toString('latin1'), '%PDF-', 'PDF: magic header');
+    const pdfTokens = pdfTextTokens(bufP);
+    assert.ok(pdfTokens.length > 0, 'PDF: testo estraibile (stream jsPDF non compressi)');
+    const pdfJoined = pdfTokens.join(' ');
+    // La label può andare a capo (anche a metà parola) nella cella autotable
+    // → confronto senza spazi.
+    assert.ok(pdfJoined.replace(/\s+/g, '').includes('WindtreProtetti'), `PDF: header "Windtre Protetti" presente (testo: ${pdfJoined.slice(0, 400)})`);
+    // Riga RS Delta: [mobile, fisso, energia, assicurazioni, protecta,
+    // iva, cb, telefoni, € acc, € srv, totale] = [0,1,0,1,1,0,0,0,0,0,3]
+    // — la protecta seminata (ALLARMI) conta 1 nella 5ª colonna pista.
+    const idxDelta = pdfTokens.indexOf('Delta Srl');
+    assert.ok(idxDelta >= 0, 'PDF: riga RS Delta presente');
+    const deltaNums = pdfTokens.slice(idxDelta + 1, idxDelta + 20)
+      .filter(t => /^-?\d+(\.\d+)?$/.test(t))
+      .map(Number)
+      .slice(0, 11);
+    assert.deepEqual(deltaNums, [0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 3], `PDF: RS Delta [mob,fis,ene,ass,pro,iva,cb,tel,acc,srv,tot] (trovato: ${deltaNums.join(',')})`);
+    // Riga TOTALE: protecta = 1 e totale generale = 14.
+    const idxTotPdf = pdfTokens.indexOf('Totale complessivo');
+    assert.ok(idxTotPdf >= 0, 'PDF: riga "Totale complessivo" presente');
+    const totNumsPdf = pdfTokens.slice(idxTotPdf + 1, idxTotPdf + 20)
+      .filter(t => /^-?\d+(\.\d+)?$/.test(t))
+      .map(Number)
+      .slice(0, 11);
+    assert.deepEqual(totNumsPdf, [4, 4, 4, 1, 1, 0, 0, 0, 0, 0, 14], `PDF: TOTALE [mob,fis,ene,ass,pro,iva,cb,tel,acc,srv,tot] (trovato: ${totNumsPdf.join(',')})`);
 
     await page.close();
     await context.close();
