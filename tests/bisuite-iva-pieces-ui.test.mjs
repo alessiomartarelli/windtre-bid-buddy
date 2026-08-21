@@ -34,6 +34,27 @@ const pad = (n) => String(n).padStart(2, '0');
 const DATA_VENDITA = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-10T10:00:00.000Z`;
 
 const flat = (s) => s.replace(/[\s\u00a0]/g, '');
+const fontSizePx = (locator) =>
+  locator.evaluate((el) => Number.parseFloat(window.getComputedStyle(el).fontSize));
+const contrastRatio = (foreground, background) => {
+  const channels = (color) => {
+    const match = color.match(/[\d.]+/g);
+    assert.ok(match?.length >= 3, `colore CSS non riconosciuto: ${color}`);
+    return match.slice(0, 3).map((value) => {
+      const channel = Number(value) / 255;
+      return channel <= 0.04045
+        ? channel / 12.92
+        : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+  };
+  const luminance = (color) => {
+    const [r, g, b] = channels(color);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const lighter = Math.max(luminance(foreground), luminance(background));
+  const darker = Math.min(luminance(foreground), luminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+};
 
 // Articoli realistici: la classificazione usa categoria.nome + descrizione.
 const artTiedIva = {
@@ -143,6 +164,14 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
       flat(await page.getByTestId('sales-category-panel-canvass').innerText()).includes('35,00€'),
       'pannello Canvass: totale articoli 35,00 €',
     );
+    assert.ok(
+      await fontSizePx(page.getByTestId('text-total-amount')) >= 30,
+      'desktop: i valori KPI principali sono almeno 30px',
+    );
+    assert.ok(
+      await fontSizePx(page.getByTestId('text-iva-mobile')) >= 12,
+      'pannello Canvass: il dato IVA secondario è almeno 12px',
+    );
 
     // Task #461: le vecchie tre card sono un pannello navigabile. Su desktop
     // ci sono quattro pulsanti verticali e Accessori è scorporato da Prodotti.
@@ -152,6 +181,10 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
       await desktopCategoryNav.locator('button').count(),
       4,
       'desktop: quattro categorie (Canvass, Servizi, Accessori, Prodotti)',
+    );
+    assert.ok(
+      await fontSizePx(page.getByTestId('sales-category-desktop-canvass').locator('span').last()) >= 14,
+      'desktop: il conteggio nella card categoria è almeno 14px',
     );
     await page.getByTestId('sales-category-desktop-accessori').click();
     await page.getByTestId('sales-category-panel-accessori').waitFor({ state: 'visible', timeout: 15000 });
@@ -303,12 +336,231 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     const mobileCategoryNav = page.getByTestId('sales-category-nav-mobile');
     await mobileCategoryNav.waitFor({ state: 'visible', timeout: 15000 });
     assert.equal(await mobileCategoryNav.locator('button').count(), 4, 'mobile: quattro categorie a icona');
+    assert.ok(
+      await fontSizePx(page.getByTestId('sales-category-mobile-canvass').locator('span').first()) >= 12,
+      'mobile: le etichette categoria restano leggibili ad almeno 12px',
+    );
+    await page.getByTestId('sales-category-mobile-canvass').click();
+    const mobilePistaRow = page.getByTestId('row-summary-pista-mobile');
+    await mobilePistaRow.waitFor({ state: 'visible', timeout: 15000 });
+    await mobilePistaRow.evaluate((row) => {
+      const valueGroup = row.children[1];
+      const spans = valueGroup?.querySelectorAll('span') || [];
+      if (spans[0]) spans[0].textContent = '999.999.999,99 €';
+      if (spans[1]) spans[1].textContent = 'di cui 999999 IVA';
+      const badge = valueGroup?.querySelector('div');
+      if (badge) badge.textContent = '999999';
+    });
+    const overflow = await mobilePistaRow.evaluate((row) => {
+      const rowRect = row.getBoundingClientRect();
+      const panel = row.closest('.shadcn-card');
+      const panelOverflows = panel.scrollWidth > panel.clientWidth + 1;
+      const childOverflows = Array.from(row.querySelectorAll('span, div')).some((child) => {
+        const rect = child.getBoundingClientRect();
+        return rect.left < rowRect.left - 1 || rect.right > rowRect.right + 1;
+      });
+      return {
+        panelOverflows,
+        childOverflows,
+        panelScrollWidth: panel.scrollWidth,
+        panelClientWidth: panel.clientWidth,
+      };
+    });
+    assert.equal(
+      overflow.panelOverflows,
+      false,
+      `mobile: la card Canvass non ha overflow con valori grandi (${JSON.stringify(overflow)})`,
+    );
+    assert.equal(
+      overflow.childOverflows,
+      false,
+      `mobile: la riga Canvass contiene tutti i valori (${JSON.stringify(overflow)})`,
+    );
     await page.getByTestId('sales-category-mobile-servizi').click();
     await page.getByTestId('sales-category-panel-servizi').waitFor({ state: 'visible', timeout: 15000 });
     assert.equal(
       await page.getByTestId('sales-category-mobile-servizi').getAttribute('aria-pressed'),
       'true',
       'mobile: la categoria selezionata espone aria-pressed=true',
+    );
+
+    // Tema scuro: contrasto reale di numeri/testi e icona nativa calendario.
+    await pool.query(
+      `UPDATE profiles
+          SET ui_prefs = coalesce(ui_prefs, '{}'::jsonb)
+            || '{"theme":"dark","scheme":"midnight-violet"}'::jsonb
+        WHERE id = $1`,
+      [session.profileId],
+    );
+    await page.evaluate(() => {
+      localStorage.setItem('mystoredesk-theme', 'dark');
+      localStorage.setItem('mystoredesk-scheme', 'midnight-violet');
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.reload({ waitUntil: 'networkidle' });
+    const darkPage = page.getByTestId('vendite-bisuite-page');
+    await darkPage.waitFor({ state: 'visible', timeout: 20000 });
+    const darkClasses = await darkPage.getAttribute('class');
+    assert.ok(darkClasses.includes('vendite-midnight'), 'Midnight: skin pagina attiva');
+    assert.ok(darkClasses.includes('vendite-dark-contrast'), 'Midnight: correzioni contrasto attive');
+
+    const kpiContrast = await page.getByTestId('text-total-amount').evaluate((el) => {
+      const card = el.closest('.shadcn-card');
+      return {
+        foreground: getComputedStyle(el).color,
+        background: getComputedStyle(card).backgroundColor,
+      };
+    });
+    assert.ok(
+      contrastRatio(kpiContrast.foreground, kpiContrast.background) >= 4.5,
+      `Midnight: contrasto KPI >= 4.5 (${JSON.stringify(kpiContrast)})`,
+    );
+
+    const filterLabelContrast = await page.getByTestId('filter-bar').locator('label').first().evaluate((el) => {
+      const bar = el.closest('[data-testid="filter-bar"]');
+      return {
+        foreground: getComputedStyle(el).color,
+        background: getComputedStyle(bar).backgroundColor,
+      };
+    });
+    assert.ok(
+      contrastRatio(filterLabelContrast.foreground, filterLabelContrast.background) >= 4.5,
+      `Midnight: contrasto etichette filtro >= 4.5 (${JSON.stringify(filterLabelContrast)})`,
+    );
+
+    const calendarIconStyle = await page.getByTestId('icon-from-date-calendar').evaluate((el) => ({
+      color: getComputedStyle(el).color,
+      background: getComputedStyle(el).backgroundColor,
+      opacity: Number(getComputedStyle(el).opacity),
+    }));
+    assert.equal(calendarIconStyle.color, 'rgb(222, 212, 255)', 'Midnight: icona calendario chiara');
+    assert.equal(calendarIconStyle.background, 'rgb(15, 12, 36)', 'Midnight: icona calendario copre quella nativa scura');
+    assert.equal(calendarIconStyle.opacity, 1, 'Midnight: icona calendario pienamente visibile');
+    const midnightDateBox = await page.getByTestId('input-from-date').boundingBox();
+    assert.ok(midnightDateBox, 'Midnight: campo data misurabile');
+    await page.mouse.click(
+      midnightDateBox.x + midnightDateBox.width - 12,
+      midnightDateBox.y + midnightDateBox.height / 2,
+    );
+    assert.equal(
+      await page.getByTestId('input-from-date').evaluate((el) => document.activeElement === el),
+      true,
+      'Midnight: il clic sull’icona continua ad attivare il vero campo data',
+    );
+
+    const tableHeaderStyle = await page.getByTestId('card-lista-vendite').locator('thead th').first().evaluate((el) => ({
+      color: getComputedStyle(el).color,
+      background: getComputedStyle(el).backgroundColor,
+    }));
+    assert.equal(tableHeaderStyle.color, 'rgb(216, 208, 244)', 'Midnight: intestazione tabella chiara');
+    assert.equal(tableHeaderStyle.background, 'rgb(16, 13, 39)', 'Midnight: intestazione tabella su superficie distinta');
+
+    // Tema standard scuro: usa lo stesso strato di contrasto senza la skin Midnight.
+    await pool.query(
+      `UPDATE profiles
+          SET ui_prefs = coalesce(ui_prefs, '{}'::jsonb)
+            || '{"theme":"dark","scheme":"standard"}'::jsonb
+        WHERE id = $1`,
+      [session.profileId],
+    );
+    await page.evaluate(() => {
+      localStorage.setItem('mystoredesk-theme', 'dark');
+      localStorage.setItem('mystoredesk-scheme', 'standard');
+    });
+    await page.reload({ waitUntil: 'networkidle' });
+    const standardDarkPage = page.getByTestId('vendite-bisuite-page');
+    await standardDarkPage.waitFor({ state: 'visible', timeout: 20000 });
+    const standardDarkClasses = await standardDarkPage.getAttribute('class');
+    assert.ok(standardDarkClasses.includes('vendite-dark-contrast'), 'Scuro standard: contrasto pagina attivo');
+    assert.ok(!standardDarkClasses.includes('vendite-midnight'), 'Scuro standard: nessuna skin Midnight');
+
+    const standardDarkStyles = await page.evaluate(() => {
+      const amount = document.querySelector('[data-testid="text-total-amount"]');
+      const card = amount?.closest('.shadcn-card');
+      const filter = document.querySelector('[data-testid="filter-bar"]');
+      const label = filter?.querySelector('label');
+      const input = document.querySelector('[data-testid="input-from-date"]');
+      const icon = document.querySelector('[data-testid="icon-from-date-calendar"]');
+      const tableHeader = document.querySelector('[data-testid="card-lista-vendite"] thead th');
+      return {
+        kpiColor: getComputedStyle(amount).color,
+        cardBackground: getComputedStyle(card).backgroundColor,
+        labelColor: getComputedStyle(label).color,
+        filterBackground: getComputedStyle(filter).backgroundColor,
+        inputBackground: getComputedStyle(input).backgroundColor,
+        iconColor: getComputedStyle(icon).color,
+        iconBackground: getComputedStyle(icon).backgroundColor,
+        tableHeaderColor: getComputedStyle(tableHeader).color,
+        tableHeaderBackground: getComputedStyle(tableHeader).backgroundColor,
+      };
+    });
+    assert.ok(
+      contrastRatio(standardDarkStyles.kpiColor, standardDarkStyles.cardBackground) >= 4.5,
+      `Scuro standard: contrasto KPI >= 4.5 (${JSON.stringify(standardDarkStyles)})`,
+    );
+    assert.ok(
+      contrastRatio(standardDarkStyles.labelColor, standardDarkStyles.filterBackground) >= 4.5,
+      `Scuro standard: contrasto filtri >= 4.5 (${JSON.stringify(standardDarkStyles)})`,
+    );
+    assert.equal(standardDarkStyles.inputBackground, 'rgb(15, 12, 36)', 'Scuro standard: campo data su fondo leggibile');
+    assert.equal(standardDarkStyles.iconColor, 'rgb(222, 212, 255)', 'Scuro standard: icona calendario chiara');
+    assert.equal(standardDarkStyles.iconBackground, 'rgb(15, 12, 36)', 'Scuro standard: icona calendario integrata nel campo');
+    assert.equal(standardDarkStyles.tableHeaderColor, 'rgb(216, 208, 244)', 'Scuro standard: intestazione tabella chiara');
+    assert.equal(standardDarkStyles.tableHeaderBackground, 'rgb(16, 13, 39)', 'Scuro standard: intestazione tabella distinta');
+
+    const standardDarkDateBox = await page.getByTestId('input-from-date').boundingBox();
+    assert.ok(standardDarkDateBox, 'Scuro standard: campo data misurabile');
+    await page.mouse.click(
+      standardDarkDateBox.x + standardDarkDateBox.width - 12,
+      standardDarkDateBox.y + standardDarkDateBox.height / 2,
+    );
+    assert.equal(
+      await page.getByTestId('input-from-date').evaluate((el) => document.activeElement === el),
+      true,
+      'Scuro standard: il clic sull’icona attiva il vero campo data',
+    );
+
+    // Tema chiaro: nessuna regola scura deve trapelare nella pagina.
+    await pool.query(
+      `UPDATE profiles
+          SET ui_prefs = coalesce(ui_prefs, '{}'::jsonb)
+            || '{"theme":"light","scheme":"standard"}'::jsonb
+        WHERE id = $1`,
+      [session.profileId],
+    );
+    await page.evaluate(() => {
+      localStorage.setItem('mystoredesk-theme', 'light');
+      localStorage.setItem('mystoredesk-scheme', 'standard');
+    });
+    await page.reload({ waitUntil: 'networkidle' });
+    const lightPage = page.getByTestId('vendite-bisuite-page');
+    await lightPage.waitFor({ state: 'visible', timeout: 20000 });
+    const lightClasses = await lightPage.getAttribute('class');
+    assert.ok(!lightClasses.includes('vendite-dark-contrast'), 'Chiaro standard: contrasto scuro assente');
+    assert.ok(!lightClasses.includes('vendite-midnight'), 'Chiaro standard: skin Midnight assente');
+    const lightDateStyles = await page.evaluate(() => {
+      const input = document.querySelector('[data-testid="input-from-date"]');
+      const icon = document.querySelector('[data-testid="icon-from-date-calendar"]');
+      return {
+        inputBackground: getComputedStyle(input).backgroundColor,
+        iconColor: getComputedStyle(icon).color,
+        iconBackground: getComputedStyle(icon).backgroundColor,
+      };
+    });
+    assert.notEqual(lightDateStyles.inputBackground, 'rgb(15, 12, 36)', 'Chiaro standard: fondo data non scuro');
+    assert.notEqual(lightDateStyles.iconColor, 'rgb(222, 212, 255)', 'Chiaro standard: icona non eredita il colore dark');
+    assert.notEqual(lightDateStyles.iconBackground, 'rgb(15, 12, 36)', 'Chiaro standard: icona non eredita il fondo dark');
+
+    const lightDateBox = await page.getByTestId('input-from-date').boundingBox();
+    assert.ok(lightDateBox, 'Chiaro standard: campo data misurabile');
+    await page.mouse.click(
+      lightDateBox.x + lightDateBox.width - 12,
+      lightDateBox.y + lightDateBox.height / 2,
+    );
+    assert.equal(
+      await page.getByTestId('input-from-date').evaluate((el) => document.activeElement === el),
+      true,
+      'Chiaro standard: il clic sull’icona attiva il vero campo data',
     );
   } finally {
     if (browser) await browser.close().catch(() => {});

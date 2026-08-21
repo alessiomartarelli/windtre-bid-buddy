@@ -199,8 +199,8 @@ function IncassoBadges({ totals, formatter, compact, activeKey, onSelect }: { to
         const content = (
           <>
             <span className={item.color}>{INCASSO_ICON_MAP[item.icon]}</span>
-            <span className={`${compact ? "text-[10px]" : "text-xs"} text-muted-foreground`}>{item.label}</span>
-            <span className={`${compact ? "text-[10px]" : "text-xs"} font-semibold ${item.color}`}>{formatter(totals[item.key])}</span>
+            <span className={`${compact ? "text-xs" : "text-sm"} text-muted-foreground`}>{item.label}</span>
+            <span className={`${compact ? "text-sm" : "text-base"} font-bold tabular-nums ${item.color}`}>{formatter(totals[item.key])}</span>
           </>
         );
         if (clickable) {
@@ -245,7 +245,7 @@ function ArticleIncassoRecap({
   return (
     <div className="mt-3 pt-2 border-t flex flex-wrap gap-1">
       {items.map(i => (
-        <Badge key={i.key} variant="outline" className={`${i.cls} text-[10px] font-normal`} data-testid={`recap-${i.key}`}>
+        <Badge key={i.key} variant="outline" className={`${i.cls} text-xs sm:text-sm font-normal py-1`} data-testid={`recap-${i.key}`}>
           <span className="opacity-75 mr-1">{i.label}</span>
           <span className="font-semibold">{formatCurrency(i.value)}</span>
         </Badge>
@@ -272,8 +272,9 @@ function getDefaultDates() {
 
 export default function VenditeBiSuite() {
   const { profile } = useAuth();
-  const { scheme } = useTheme();
+  const { scheme, resolvedTheme } = useTheme();
   const isMidnightViolet = scheme === "midnight-violet";
+  const useDarkSalesContrast = resolvedTheme === "dark";
   const [, setLocation] = useLocation();
   const defaults = getDefaultDates();
   const [fromDate, setFromDate] = useState(defaults.from);
@@ -1100,7 +1101,7 @@ export default function VenditeBiSuite() {
 
   return (
     <div
-      className={`min-h-screen bg-background ${isMidnightViolet ? "vendite-midnight" : ""}`}
+      className={`min-h-screen bg-background ${isMidnightViolet ? "vendite-midnight" : ""} ${useDarkSalesContrast ? "vendite-dark-contrast" : ""}`}
       data-testid="vendite-bisuite-page"
       data-sales-style={isMidnightViolet ? "midnight-violet" : "standard"}
     >
@@ -1223,20 +1224,40 @@ export default function VenditeBiSuite() {
           }
         >
           <FilterField label="Da" icon={CalendarRange}>
-            <Input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              data-testid="input-from-date"
-            />
+            <div className="relative">
+              <Input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="pr-10"
+                data-testid="input-from-date"
+              />
+              <span
+                className="pointer-events-none absolute inset-y-px right-px z-10 flex w-9 items-center justify-center rounded-r-md bg-background text-muted-foreground"
+                data-testid="icon-from-date-calendar"
+                aria-hidden="true"
+              >
+                <CalendarRange className="h-4 w-4" />
+              </span>
+            </div>
           </FilterField>
           <FilterField label="A" icon={CalendarRange}>
-            <Input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              data-testid="input-to-date"
-            />
+            <div className="relative">
+              <Input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="pr-10"
+                data-testid="input-to-date"
+              />
+              <span
+                className="pointer-events-none absolute inset-y-px right-px z-10 flex w-9 items-center justify-center rounded-r-md bg-background text-muted-foreground"
+                data-testid="icon-to-date-calendar"
+                aria-hidden="true"
+              >
+                <CalendarRange className="h-4 w-4" />
+              </span>
+            </div>
           </FilterField>
           <FilterField label="Cerca" icon={Search} span={2}>
             <div className="relative">
@@ -1364,7 +1385,7 @@ export default function VenditeBiSuite() {
               <Card>
                 <CardContent className="p-3 sm:p-4 text-center">
                   <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 text-primary" />
-                  <p className="text-lg sm:text-2xl font-bold" data-testid="text-total-sales">
+                   <p className="text-xl sm:text-3xl font-bold tabular-nums" data-testid="text-total-sales">
                     {venditeCount}
                   </p>
                   <p className="text-[10px] sm:text-xs text-muted-foreground">
@@ -1380,7 +1401,7 @@ export default function VenditeBiSuite() {
                 <CardContent className="p-3 sm:p-4 text-center">
                   <Euro className="h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 text-green-500" />
                   <p
-                    className="text-sm sm:text-2xl font-bold text-green-600"
+                     className="text-lg sm:text-3xl font-bold text-green-600 tabular-nums"
                     data-testid="text-total-amount"
                   >
                     {formatCurrency(totaleImporto)}
@@ -1393,7 +1414,7 @@ export default function VenditeBiSuite() {
               <Card>
                 <CardContent className="p-3 sm:p-4 text-center">
                   <Store className="h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 text-blue-500" />
-                  <p className="text-lg sm:text-2xl font-bold" data-testid="text-total-pdv">
+                   <p className="text-xl sm:text-3xl font-bold tabular-nums" data-testid="text-total-pdv">
                     {pdvSummaries.length}
                   </p>
                   <p className="text-[10px] sm:text-xs text-muted-foreground">Punti Vendita</p>
@@ -1402,7 +1423,7 @@ export default function VenditeBiSuite() {
               <Card>
                 <CardContent className="p-3 sm:p-4 text-center">
                   <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 mx-auto mb-1 text-orange-500" />
-                  <p className="text-sm sm:text-2xl font-bold" data-testid="text-avg-sale">
+                   <p className="text-lg sm:text-3xl font-bold tabular-nums" data-testid="text-avg-sale">
                     {aggregateSales.length > 0
                       ? formatCurrency(totaleImporto / aggregateSales.length)
                       : "€ 0"}
@@ -1419,7 +1440,7 @@ export default function VenditeBiSuite() {
                 <CardContent className="p-3 sm:p-4">
                   <div className="flex items-center gap-2 mb-3 flex-wrap">
                     <Wallet className="h-4 w-4 text-primary" />
-                    <span className="font-semibold text-sm">Modalità di Incasso{selectedPdvs.length === 1 ? ` - ${pdvLabelFor(selectedPdvs[0])}` : selectedPdvs.length > 1 ? ` - ${selectedPdvs.length} punti vendita` : ""}</span>
+                     <span className="font-semibold text-base">Modalità di Incasso{selectedPdvs.length === 1 ? ` - ${pdvLabelFor(selectedPdvs[0])}` : selectedPdvs.length > 1 ? ` - ${selectedPdvs.length} punti vendita` : ""}</span>
                     {filterPagamento && (
                       <Button
                         variant="ghost"
@@ -1433,7 +1454,7 @@ export default function VenditeBiSuite() {
                       </Button>
                     )}
                   </div>
-                  <p className="text-[10px] text-muted-foreground mb-2">
+                   <p className="text-xs text-muted-foreground mb-2">
                     Clicca un metodo per filtrare le vendite con quell'incasso.
                   </p>
                   <IncassoBadges
@@ -1480,9 +1501,9 @@ export default function VenditeBiSuite() {
                       data-testid={`sales-category-desktop-${tab.value}`}
                     >
                       <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{tab.label}</span>
+                       <span className="min-w-0 flex-1 truncate text-base font-semibold">{tab.label}</span>
                       <span
-                        className={`rounded-md border px-2 py-0.5 text-xs font-bold ${
+                         className={`rounded-md border px-2.5 py-1 text-sm font-bold tabular-nums ${
                           selected ? "border-foreground/30 bg-background/10" : "border-border bg-background/50"
                         }`}
                         aria-label={`${tab.count} elementi`}
@@ -1519,7 +1540,7 @@ export default function VenditeBiSuite() {
                         data-testid={`sales-category-mobile-${tab.value}`}
                       >
                         <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                        <span className="w-full truncate text-center text-[10px] font-semibold leading-none">
+                         <span className="w-full truncate text-center text-xs font-semibold leading-none">
                           {tab.label}
                         </span>
                         <span className="sr-only">{tab.count} elementi</span>
@@ -1533,54 +1554,58 @@ export default function VenditeBiSuite() {
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <Tag className="h-5 w-5 text-primary" />
-                      <span className="text-xl font-bold tracking-tight">Canvass</span>
+                       <span className="text-2xl font-bold tracking-tight">Canvass</span>
                     </div>
-                    <Badge className={TYPE_COLORS.canvass + " text-sm font-bold"}>
+                     <Badge className={TYPE_COLORS.canvass + " text-base font-bold px-3 py-1 tabular-nums"}>
                       {globalCounts.byType.canvass}
                     </Badge>
                   </div>
                   {(globalCounts.amtByType.canvass || 0) > 0 && (
-                    <p className="text-xs text-green-600 font-medium mb-3">{formatCurrency(globalCounts.amtByType.canvass)}</p>
+                     <p className="text-lg text-green-600 font-bold mb-3 tabular-nums">{formatCurrency(globalCounts.amtByType.canvass)}</p>
                   )}
                   <div className="space-y-1.5">
                     {(Object.entries(globalCounts.byPista) as [PistaCanvass, number][])
                       .sort(([, a], [, b]) => b - a)
                       .map(([pista, count]) => (
-                        <div key={pista} className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1.5">
+                         <div
+                           key={pista}
+                           className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm min-h-8"
+                           data-testid={`row-summary-pista-${pista}`}
+                         >
+                           <div className="flex min-w-0 items-center gap-1.5">
                             {PISTA_ICONS[pista]}
                             <span>{pistaLabels[pista]}</span>
                           </div>
-                          <div className="flex items-center gap-2">
+                           <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:w-auto">
                             {(globalCounts.amtByPista[pista] || 0) > 0 && (
-                              <span className="text-[10px] text-muted-foreground">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span>
+                               <span className="text-sm font-semibold text-muted-foreground tabular-nums">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span>
                             )}
                             {(globalCounts.ivaByPista[pista] || 0) > 0 && (
                               <span
-                                className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400 whitespace-nowrap"
+                                 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 whitespace-nowrap"
                                 data-testid={`text-iva-${pista}`}
                               >
                                 di cui {globalCounts.ivaByPista[pista]} IVA
                               </span>
                             )}
-                            <Badge variant="outline" className={PISTA_CANVASS_COLORS[pista] + " text-[10px]"}>
+                             <Badge variant="outline" className={PISTA_CANVASS_COLORS[pista] + " text-sm font-bold min-w-10 justify-center tabular-nums"}>
                               {count}
                             </Badge>
                           </div>
                         </div>
                       ))}
                     {globalCounts.couponCaring.pezzi > 0 && (
-                      <div className="flex items-center justify-between text-xs pt-1.5 mt-1 border-t border-dashed" data-testid="row-coupon-caring">
-                        <div className="flex items-center gap-1.5">
+                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm pt-1.5 mt-1 border-t border-dashed min-h-8" data-testid="row-coupon-caring">
+                         <div className="flex min-w-0 items-center gap-1.5">
                           <Tag className="h-3 w-3 text-amber-600" />
                           <span>Coupon Caring</span>
-                          <span className="text-[9px] text-muted-foreground">(esclusi da CB)</span>
+                           <span className="text-xs text-muted-foreground">(esclusi da CB)</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                         <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:w-auto">
                           {globalCounts.couponCaring.importo > 0 && (
-                            <span className="text-[10px] text-muted-foreground">{formatCurrency(globalCounts.couponCaring.importo)}</span>
+                             <span className="text-sm font-semibold text-muted-foreground tabular-nums">{formatCurrency(globalCounts.couponCaring.importo)}</span>
                           )}
-                          <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/20 text-[10px]" data-testid="badge-coupon-caring-pezzi">
+                           <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/20 text-sm font-bold min-w-10 justify-center tabular-nums" data-testid="badge-coupon-caring-pezzi">
                             {globalCounts.couponCaring.pezzi}
                           </Badge>
                         </div>
@@ -1600,33 +1625,33 @@ export default function VenditeBiSuite() {
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
                           <Headphones className="h-5 w-5 text-primary" />
-                          <span className="text-xl font-bold tracking-tight">Accessori</span>
+                           <span className="text-2xl font-bold tracking-tight">Accessori</span>
                           {accessoriSummary.importo > 0 && (
-                            <span className="text-[9px] text-muted-foreground">(acc. netto IVA)</span>
+                             <span className="text-xs text-muted-foreground">(acc. netto IVA)</span>
                           )}
                         </div>
-                        <Badge className={TYPE_COLORS.prodotti + " text-sm font-bold"}>
+                         <Badge className={TYPE_COLORS.prodotti + " text-base font-bold px-3 py-1 tabular-nums"}>
                           {accessoriSummary.pezzi}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-3 mb-3">
-                        <p className="text-xs text-green-600 font-medium">{formatCurrency(accessoriNetto)}</p>
+                         <p className="text-lg text-green-600 font-bold tabular-nums">{formatCurrency(accessoriNetto)}</p>
                         {accessoriIva > 0 && (
-                          <span className="text-[10px] text-muted-foreground">
+                           <span className="text-sm text-muted-foreground">
                             IVA {formatCurrency(accessoriIva)}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center justify-between text-xs">
+                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm min-h-8">
                         <span className="text-muted-foreground">ACCESSORI</span>
-                        <div className="flex items-center gap-2">
+                         <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:w-auto">
                           {accessoriNetto > 0 && (
-                            <span className="text-[10px] text-green-600">
+                             <span className="text-sm font-semibold text-green-600 tabular-nums">
                               {formatCurrency(accessoriNetto)}
                               <span className="text-muted-foreground ml-0.5">(n.IVA)</span>
                             </span>
                           )}
-                          <Badge variant="outline" className="text-[10px]">{accessoriSummary.pezzi}</Badge>
+                           <Badge variant="outline" className="text-sm font-bold min-w-10 justify-center tabular-nums">{accessoriSummary.pezzi}</Badge>
                         </div>
                       </div>
                       <ArticleIncassoRecap incasso={globalCounts.incassoAccessori} formatCurrency={formatCurrency} />
@@ -1641,24 +1666,24 @@ export default function VenditeBiSuite() {
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
                         <Package className="h-5 w-5 text-primary" />
-                        <span className="text-xl font-bold tracking-tight">Prodotti</span>
+                         <span className="text-2xl font-bold tracking-tight">Prodotti</span>
                       </div>
-                      <Badge className={TYPE_COLORS.prodotti + " text-sm font-bold"}>
+                       <Badge className={TYPE_COLORS.prodotti + " text-base font-bold px-3 py-1 tabular-nums"}>
                         {prodottiSummaryCount}
                       </Badge>
                     </div>
-                    <p className="text-xs text-green-600 font-medium mb-2">{formatCurrency(prodottiSummaryAmount)}</p>
+                     <p className="text-lg text-green-600 font-bold mb-2 tabular-nums">{formatCurrency(prodottiSummaryAmount)}</p>
                     <div className="space-y-1">
                       {prodottiSummaryEntries.map(([cat, { pezzi, importo }]) => (
-                            <div key={cat} className="flex items-center justify-between text-xs">
+                             <div key={cat} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm min-h-8">
                               <span className="truncate mr-2 text-muted-foreground">{cat}</span>
-                              <div className="flex items-center gap-2 shrink-0">
+                               <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:w-auto">
                                 {importo > 0 && (
-                                  <span className="text-[10px] text-green-600">
+                                   <span className="text-sm font-semibold text-green-600 tabular-nums">
                                     {formatCurrency(importo)}
                                   </span>
                                 )}
-                                <Badge variant="outline" className="text-[10px]">{pezzi}</Badge>
+                                 <Badge variant="outline" className="text-sm font-bold min-w-10 justify-center tabular-nums">{pezzi}</Badge>
                               </div>
                             </div>
                       ))}
@@ -1677,16 +1702,16 @@ export default function VenditeBiSuite() {
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
                         <Wrench className="h-5 w-5 text-primary" />
-                        <span className="text-xl font-bold tracking-tight">Servizi</span>
-                        {globalCounts.serviziLordo > 0 && <span className="text-[9px] text-muted-foreground">(netto IVA)</span>}
+                         <span className="text-2xl font-bold tracking-tight">Servizi</span>
+                         {globalCounts.serviziLordo > 0 && <span className="text-xs text-muted-foreground">(netto IVA)</span>}
                       </div>
-                      <Badge className={TYPE_COLORS.servizi + " text-sm font-bold"}>
+                       <Badge className={TYPE_COLORS.servizi + " text-base font-bold px-3 py-1 tabular-nums"}>
                         {globalCounts.byType.servizi}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-3 mb-2">
-                      <p className="text-xs text-green-600 font-medium">{formatCurrency(serviziNetto)}</p>
-                      {serviziIva > 0 && <span className="text-[10px] text-muted-foreground">IVA {formatCurrency(serviziIva)}</span>}
+                       <p className="text-lg text-green-600 font-bold tabular-nums">{formatCurrency(serviziNetto)}</p>
+                       {serviziIva > 0 && <span className="text-sm text-muted-foreground">IVA {formatCurrency(serviziIva)}</span>}
                     </div>
                     <div className="space-y-1">
                       {Object.entries(globalCounts.serviziByLabel)
@@ -1695,12 +1720,12 @@ export default function VenditeBiSuite() {
                           const netto = nettoIva(importo);
                           const iva = ivaOf(importo);
                           return (
-                            <div key={label} className="flex items-center justify-between text-xs">
+                             <div key={label} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm min-h-8">
                               <span className="truncate mr-2 text-muted-foreground">{label}</span>
-                              <div className="flex items-center gap-2 shrink-0">
-                                {netto > 0 && <span className="text-[10px] text-green-600">{formatCurrency(netto)}</span>}
-                                {iva > 0 && <span className="text-[10px] text-muted-foreground">IVA {formatCurrency(iva)}</span>}
-                                <Badge variant="outline" className="text-[10px]">{pezzi}</Badge>
+                               <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:w-auto">
+                                 {netto > 0 && <span className="text-sm font-semibold text-green-600 tabular-nums">{formatCurrency(netto)}</span>}
+                                 {iva > 0 && <span className="text-sm text-muted-foreground">IVA {formatCurrency(iva)}</span>}
+                                 <Badge variant="outline" className="text-sm font-bold min-w-10 justify-center tabular-nums">{pezzi}</Badge>
                               </div>
                             </div>
                           );
@@ -1736,12 +1761,12 @@ export default function VenditeBiSuite() {
                                 </div>
                                 <div className="text-left min-w-0">
                                   <div className="font-semibold text-sm truncate">{rs.ragioneSociale}</div>
-                                  <div className="text-xs text-muted-foreground">{rs.pdvCodes.size} PDV</div>
+                                 <div className="text-sm text-muted-foreground">{rs.pdvCodes.size} PDV</div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 sm:gap-3 pl-10 sm:pl-0">
-                                <Badge variant="outline" className="text-xs shrink-0">{rs.vendite.length} vendite</Badge>
-                                <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20 shrink-0">{formatCurrency(rs.totaleImporto)}</Badge>
+                                 <Badge variant="outline" className="text-sm font-semibold shrink-0 py-1">{rs.vendite.length} vendite</Badge>
+                                 <Badge className="text-sm font-bold bg-green-500/10 text-green-600 border-green-500/20 shrink-0 py-1 tabular-nums">{formatCurrency(rs.totaleImporto)}</Badge>
                               </div>
                             </div>
                           </AccordionTrigger>
@@ -1814,7 +1839,7 @@ export default function VenditeBiSuite() {
                           </div>
                           <div>
                             <div className="font-semibold text-sm">{selectedAddetto}</div>
-                            <div className="text-xs text-muted-foreground">
+                             <div className="text-sm text-muted-foreground">
                               {addettoSummaries.find(a => a.nomeAddetto === selectedAddetto)?.vendite.length || 0} vendite ·{" "}
                               {formatCurrency(addettoSummaries.find(a => a.nomeAddetto === selectedAddetto)?.totaleImporto || 0)}
                             </div>
@@ -1905,12 +1930,12 @@ export default function VenditeBiSuite() {
                                 </div>
                                 <div className="text-left min-w-0">
                                   <div className="font-semibold text-sm truncate">{addetto.nomeAddetto}</div>
-                                  <div className="text-xs text-muted-foreground">{addetto.pdvCodes.size} PDV</div>
+                                   <div className="text-sm text-muted-foreground">{addetto.pdvCodes.size} PDV</div>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 sm:gap-3 pl-10 sm:pl-0">
-                                <Badge variant="outline" className="text-xs shrink-0">{addetto.vendite.length} vendite</Badge>
-                                <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20 shrink-0">{formatCurrency(addetto.totaleImporto)}</Badge>
+                                 <Badge variant="outline" className="text-sm font-semibold shrink-0 py-1">{addetto.vendite.length} vendite</Badge>
+                                 <Badge className="text-sm font-bold bg-green-500/10 text-green-600 border-green-500/20 shrink-0 py-1 tabular-nums">{formatCurrency(addetto.totaleImporto)}</Badge>
                               </div>
                             </div>
                           </AccordionTrigger>
@@ -1923,11 +1948,11 @@ export default function VenditeBiSuite() {
                                   .map(([pista, count]) => (
                                     <Badge
                                       key={pista}
-                                      className={PISTA_CANVASS_COLORS[pista] + " text-xs gap-1"}
+                                       className={PISTA_CANVASS_COLORS[pista] + " text-sm gap-1 py-1"}
                                     >
                                       {PISTA_ICONS[pista]}
                                       {pistaLabels[pista]}: {count}
-                                      <span className="text-[10px] opacity-75">({formatCurrency(addetto.amountByPista[pista] || 0)})</span>
+                                       <span className="text-xs opacity-75 tabular-nums">({formatCurrency(addetto.amountByPista[pista] || 0)})</span>
                                     </Badge>
                                   ))}
                                 {addetto.countByType.prodotti > 0 && (() => {
@@ -1935,10 +1960,10 @@ export default function VenditeBiSuite() {
                                   const prodNetto = addetto.amountByType.prodotti - accL + nettoIva(accL);
                                   const accIva = ivaOf(accL);
                                   return (
-                                    <Badge className={TYPE_COLORS.prodotti + " text-xs"}>
+                                     <Badge className={TYPE_COLORS.prodotti + " text-sm py-1"}>
                                       Prodotti: {addetto.countByType.prodotti}
-                                      <span className="text-[10px] opacity-75 ml-1">({formatCurrency(prodNetto)}{accL > 0 ? " n.IVA acc." : ""})</span>
-                                      {accIva > 0 && <span className="text-[10px] opacity-60 ml-1">IVA {formatCurrency(accIva)}</span>}
+                                       <span className="text-xs opacity-75 ml-1 tabular-nums">({formatCurrency(prodNetto)}{accL > 0 ? " n.IVA acc." : ""})</span>
+                                       {accIva > 0 && <span className="text-xs opacity-60 ml-1">IVA {formatCurrency(accIva)}</span>}
                                     </Badge>
                                   );
                                 })()}
@@ -1946,10 +1971,10 @@ export default function VenditeBiSuite() {
                                   const srvNetto = nettoIva(addetto.amountByType.servizi);
                                   const srvIva = ivaOf(addetto.amountByType.servizi);
                                   return (
-                                    <Badge className={TYPE_COLORS.servizi + " text-xs"}>
+                                     <Badge className={TYPE_COLORS.servizi + " text-sm py-1"}>
                                       Servizi: {addetto.countByType.servizi}
-                                      <span className="text-[10px] opacity-75 ml-1">({formatCurrency(srvNetto)} n.IVA)</span>
-                                      {srvIva > 0 && <span className="text-[10px] opacity-60 ml-1">IVA {formatCurrency(srvIva)}</span>}
+                                       <span className="text-xs opacity-75 ml-1 tabular-nums">({formatCurrency(srvNetto)} n.IVA)</span>
+                                       {srvIva > 0 && <span className="text-xs opacity-60 ml-1">IVA {formatCurrency(srvIva)}</span>}
                                     </Badge>
                                   );
                                 })()}
@@ -2035,7 +2060,7 @@ export default function VenditeBiSuite() {
                                   <div className="font-semibold text-sm truncate">
                                     {pdv.nomeNegozio}
                                   </div>
-                                  <div className="text-xs text-muted-foreground font-mono truncate">
+                                   <div className="text-sm text-muted-foreground font-mono truncate">
                                     {pdv.codicePos}
                                     {pdv.ragioneSociale && (
                                       <span className="ml-2 font-sans">
@@ -2046,10 +2071,10 @@ export default function VenditeBiSuite() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 sm:gap-3 pl-10 sm:pl-0">
-                                <Badge variant="outline" className="text-xs shrink-0">
+                                 <Badge variant="outline" className="text-sm font-semibold shrink-0 py-1">
                                   {pdv.totaleVendite} vendite
                                 </Badge>
-                                <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20 shrink-0">
+                                 <Badge className="text-sm font-bold bg-green-500/10 text-green-600 border-green-500/20 shrink-0 py-1 tabular-nums">
                                   {formatCurrency(pdv.totaleImporto)}
                                 </Badge>
                               </div>
@@ -2064,11 +2089,11 @@ export default function VenditeBiSuite() {
                                   .map(([pista, count]) => (
                                     <Badge
                                       key={pista}
-                                      className={PISTA_CANVASS_COLORS[pista] + " text-xs gap-1"}
+                                       className={PISTA_CANVASS_COLORS[pista] + " text-sm gap-1 py-1"}
                                     >
                                       {PISTA_ICONS[pista]}
                                       {pistaLabels[pista]}: {count}
-                                      <span className="text-[10px] opacity-75">({formatCurrency(pdv.amountByPista[pista] || 0)})</span>
+                                       <span className="text-xs opacity-75 tabular-nums">({formatCurrency(pdv.amountByPista[pista] || 0)})</span>
                                     </Badge>
                                   ))}
                                 {pdv.countByType.prodotti > 0 && (() => {
@@ -2076,10 +2101,10 @@ export default function VenditeBiSuite() {
                                   const prodNetto = pdv.amountByType.prodotti - accL + nettoIva(accL);
                                   const accIva = ivaOf(accL);
                                   return (
-                                    <Badge className={TYPE_COLORS.prodotti + " text-xs"}>
+                                     <Badge className={TYPE_COLORS.prodotti + " text-sm py-1"}>
                                       Prodotti: {pdv.countByType.prodotti}
-                                      <span className="text-[10px] opacity-75 ml-1">({formatCurrency(prodNetto)}{accL > 0 ? " n.IVA acc." : ""})</span>
-                                      {accIva > 0 && <span className="text-[10px] opacity-60 ml-1">IVA {formatCurrency(accIva)}</span>}
+                                       <span className="text-xs opacity-75 ml-1 tabular-nums">({formatCurrency(prodNetto)}{accL > 0 ? " n.IVA acc." : ""})</span>
+                                       {accIva > 0 && <span className="text-xs opacity-60 ml-1">IVA {formatCurrency(accIva)}</span>}
                                     </Badge>
                                   );
                                 })()}
@@ -2087,10 +2112,10 @@ export default function VenditeBiSuite() {
                                   const srvNetto = nettoIva(pdv.amountByType.servizi);
                                   const srvIva = ivaOf(pdv.amountByType.servizi);
                                   return (
-                                    <Badge className={TYPE_COLORS.servizi + " text-xs"}>
+                                     <Badge className={TYPE_COLORS.servizi + " text-sm py-1"}>
                                       Servizi: {pdv.countByType.servizi}
-                                      <span className="text-[10px] opacity-75 ml-1">({formatCurrency(srvNetto)} n.IVA)</span>
-                                      {srvIva > 0 && <span className="text-[10px] opacity-60 ml-1">IVA {formatCurrency(srvIva)}</span>}
+                                       <span className="text-xs opacity-75 ml-1 tabular-nums">({formatCurrency(srvNetto)} n.IVA)</span>
+                                       {srvIva > 0 && <span className="text-xs opacity-60 ml-1">IVA {formatCurrency(srvIva)}</span>}
                                     </Badge>
                                   );
                                 })()}
@@ -2385,7 +2410,7 @@ function CanvassCategorieDettaglio({
   if (piste.length === 0) return null;
   return (
     <div className="rounded-lg border bg-muted/20 p-2 sm:p-3" data-testid={`${testIdPrefix}-categorie-canvass`}>
-      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+       <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
         Categorie canvass
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2">
@@ -2393,11 +2418,11 @@ function CanvassCategorieDettaglio({
           const iva = ivaByPista[pista] || 0;
           return (
             <div key={pista} className="min-w-0">
-              <div className="flex items-center gap-1.5 text-xs font-medium mb-0.5">
+               <div className="flex items-center gap-1.5 text-sm font-semibold mb-1">
                 {PISTA_ICONS[pista]}
                 <span>{pistaLabels[pista]}</span>
                 {iva > 0 && (
-                  <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400">
+                   <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
                     · {iva} IVA
                   </span>
                 )}
@@ -2406,7 +2431,7 @@ function CanvassCategorieDettaglio({
                 {Object.entries(cats)
                   .sort(([, a], [, b]) => b.pezzi - a.pezzi)
                   .map(([nome, v]) => (
-                    <div key={nome} className="flex items-center justify-between gap-2 text-[11px]">
+                     <div key={nome} className="flex items-center justify-between gap-2 text-sm min-h-7">
                       <span className="truncate text-muted-foreground">{nome}</span>
                       <span className="font-semibold tabular-nums shrink-0">
                         {v.pezzi}
@@ -2436,7 +2461,7 @@ function SalePistaBadges({ classification, pistaLabels = PISTA_CANVASS_LABELS }:
       {pistaBadges.map(([pista, count]) => (
         <Badge
           key={pista}
-          className={PISTA_CANVASS_COLORS[pista] + " text-[10px] px-1.5 py-0 gap-0.5"}
+           className={PISTA_CANVASS_COLORS[pista] + " text-xs px-2 py-0.5 gap-0.5"}
         >
           {PISTA_ICONS[pista]}
           {pistaLabels[pista]}
@@ -2444,12 +2469,12 @@ function SalePistaBadges({ classification, pistaLabels = PISTA_CANVASS_LABELS }:
         </Badge>
       ))}
       {classification.countByType.prodotti > 0 && (
-        <Badge className={TYPE_COLORS.prodotti + " text-[10px] px-1.5 py-0"}>
+         <Badge className={TYPE_COLORS.prodotti + " text-xs px-2 py-0.5"}>
           Prod. {classification.countByType.prodotti > 1 ? `x${classification.countByType.prodotti}` : ""}
         </Badge>
       )}
       {classification.countByType.servizi > 0 && (
-        <Badge className={TYPE_COLORS.servizi + " text-[10px] px-1.5 py-0"}>
+         <Badge className={TYPE_COLORS.servizi + " text-xs px-2 py-0.5"}>
           Serv. {classification.countByType.servizi > 1 ? `x${classification.countByType.servizi}` : ""}
         </Badge>
       )}

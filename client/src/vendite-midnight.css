@@ -87,6 +87,14 @@
 }
 
 .vendite-midnight {
+  --vendite-text: #f7f5ff;
+  --vendite-text-secondary: #d8d0f4;
+  --vendite-accent: #ded4ff;
+  --vendite-success: #86efac;
+  --vendite-danger: #fecdd3;
+  --vendite-surface: #1a1038;
+  --vendite-surface-raised: #2b1a5c;
+  --vendite-strong-border: rgb(218 205 255 / 42%);
   --background: 261 65% 12%;
   --foreground: 255 100% 97%;
   --card: 259 55% 29%;
@@ -113,6 +121,17 @@
     radial-gradient(ellipse at 55% 110%, rgb(78 41 158 / 40%), transparent 55%),
     linear-gradient(170deg, #150a30, #0e0622);
   background-attachment: fixed;
+}
+
+.vendite-dark-contrast {
+  --vendite-text: #f7f5ff;
+  --vendite-text-secondary: #d8d0f4;
+  --vendite-accent: #ded4ff;
+  --vendite-success: #86efac;
+  --vendite-danger: #fecdd3;
+  --vendite-surface: #17132f;
+  --vendite-surface-raised: #211942;
+  --vendite-strong-border: rgb(218 205 255 / 42%);
 }
 
 .vendite-midnight > aside,
@@ -153,7 +172,7 @@
 }
 
 .vendite-midnight [data-testid="filter-bar"] label {
-  color: #9c8dd0;
+  color: #d8d0f4;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: .05em;
@@ -164,12 +183,12 @@
   color-scheme: dark;
   color: #f4f0ff;
   background: #241250 !important;
-  border-color: rgb(196 172 255 / 16%) !important;
+  border-color: rgb(218 205 255 / 42%) !important;
   border-radius: 9px;
 }
 
 .vendite-midnight input::placeholder {
-  color: #9c8dd0;
+  color: #c9c0e8;
 }
 
 .vendite-midnight input:focus-visible,
@@ -191,9 +210,9 @@
 
 .vendite-midnight main button[class*="border-input"],
 .vendite-midnight main button[class*="variant-outline"] {
-  color: #c3b6ee;
+  color: #e5dfff;
   background: #241250;
-  border-color: rgb(196 172 255 / 16%);
+  border-color: rgb(218 205 255 / 42%);
 }
 
 .vendite-midnight .text-primary {
@@ -201,7 +220,7 @@
 }
 
 .vendite-midnight .text-muted-foreground {
-  color: #9c8dd0 !important;
+  color: #d8d0f4 !important;
 }
 
 .vendite-midnight .text-green-600,
@@ -231,12 +250,12 @@
 .vendite-midnight [data-testid="text-total-sales"],
 .vendite-midnight [data-testid="text-total-pdv"],
 .vendite-midnight [data-testid="text-avg-sale"] {
-  color: #ffc873;
+  color: #f7f5ff;
   letter-spacing: -.02em;
 }
 
 .vendite-midnight [data-testid="text-total-amount"] {
-  color: #4ade80 !important;
+  color: #f7f5ff !important;
 }
 
 .vendite-midnight [data-testid="card-lista-vendite"] {
@@ -256,7 +275,7 @@
 }
 
 .vendite-midnight td {
-  border-color: rgb(196 172 255 / 16%) !important;
+  border-color: rgb(218 205 255 / 30%) !important;
 }
 
 .vendite-midnight tbody tr:hover td {
@@ -288,6 +307,220 @@ html[data-skin="midnight-violet"] [data-radix-popper-content-wrapper] > div {
   color: #f4f0ff;
   background-color: #241250;
   border-color: rgb(196 172 255 / 24%);
+}
+
+/* Contrasto funzionale condiviso da Midnight Violet e dal tema standard
+   quando è risolto in dark. Il tema chiaro non viene toccato. */
+@media screen {
+  .vendite-dark-contrast {
+    color: var(--vendite-text);
+  }
+
+  .vendite-dark-contrast .shadcn-card,
+  .vendite-dark-contrast [data-testid="filter-bar"] {
+    color: var(--vendite-text);
+    background: var(--vendite-surface) !important;
+    border-color: var(--vendite-strong-border) !important;
+    box-shadow:
+      0 14px 34px rgb(3 2 14 / 42%),
+      inset 0 1px 0 rgb(255 255 255 / 7%) !important;
+  }
+
+  .vendite-dark-contrast .text-muted-foreground,
+  .vendite-dark-contrast [data-testid="filter-bar"] label,
+  .vendite-dark-contrast input::placeholder {
+    color: var(--vendite-text-secondary) !important;
+    opacity: 1;
+  }
+
+  .vendite-dark-contrast input,
+  .vendite-dark-contrast button[role="combobox"] {
+    color: var(--vendite-text) !important;
+    background: #0f0c24 !important;
+    border-color: var(--vendite-strong-border) !important;
+  }
+
+  .vendite-dark-contrast input[type="date"] {
+    color-scheme: dark;
+  }
+
+  .vendite-dark-contrast input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .vendite-dark-contrast [data-testid^="icon-"][data-testid$="-date-calendar"],
+  .vendite-dark-contrast [data-testid^="icon-from-date-calendar"],
+  .vendite-dark-contrast [data-testid^="icon-to-date-calendar"] {
+    color: var(--vendite-accent) !important;
+    background: #0f0c24 !important;
+  }
+
+  /* KPI: un unico colore testo forte; il significato resta nelle etichette. */
+  .vendite-dark-contrast [data-testid="text-total-sales"],
+  .vendite-dark-contrast [data-testid="text-total-amount"],
+  .vendite-dark-contrast [data-testid="text-total-pdv"],
+  .vendite-dark-contrast [data-testid="text-avg-sale"] {
+    color: var(--vendite-text) !important;
+    text-shadow: 0 1px 16px rgb(255 255 255 / 8%);
+  }
+
+  .vendite-dark-contrast .shadcn-card:has([data-testid="text-total-sales"]) svg,
+  .vendite-dark-contrast .shadcn-card:has([data-testid="text-total-amount"]) svg,
+  .vendite-dark-contrast .shadcn-card:has([data-testid="text-total-pdv"]) svg,
+  .vendite-dark-contrast .shadcn-card:has([data-testid="text-avg-sale"]) svg {
+    color: var(--vendite-accent) !important;
+  }
+
+  /* Incassi: meno colori, importi bianchi e icone/etichette lavanda. */
+  .vendite-dark-contrast [data-testid^="incasso-"] {
+    color: var(--vendite-text-secondary) !important;
+    background: rgb(222 212 255 / 8%) !important;
+    border: 1px solid rgb(218 205 255 / 22%);
+  }
+
+  .vendite-dark-contrast [data-testid^="incasso-"] > span:first-child {
+    color: var(--vendite-accent) !important;
+  }
+
+  .vendite-dark-contrast [data-testid^="incasso-"] > span:last-child {
+    color: var(--vendite-text) !important;
+  }
+
+  .vendite-dark-contrast [data-testid^="recap-"] {
+    color: var(--vendite-text) !important;
+    background: rgb(222 212 255 / 8%) !important;
+    border-color: var(--vendite-strong-border) !important;
+  }
+
+  /* Navigazione categorie e pannelli: superfici sobrie, stato selezionato
+     affidato a bordo/contrasto invece che a molti colori. */
+  .vendite-dark-contrast [data-testid^="sales-category-desktop-"],
+  .vendite-dark-contrast [data-testid^="sales-category-mobile-"] {
+    color: var(--vendite-text-secondary) !important;
+    background: var(--vendite-surface) !important;
+    border-color: rgb(218 205 255 / 30%) !important;
+  }
+
+  .vendite-dark-contrast [data-testid^="sales-category-desktop-"][aria-pressed="true"],
+  .vendite-dark-contrast [data-testid^="sales-category-mobile-"][aria-pressed="true"] {
+    color: var(--vendite-text) !important;
+    background: var(--vendite-surface-raised) !important;
+    border-color: var(--vendite-accent) !important;
+  }
+
+  .vendite-dark-contrast [data-testid^="sales-category-desktop-"] > span:last-child {
+    color: var(--vendite-text) !important;
+    background: #0f0c24 !important;
+    border-color: var(--vendite-strong-border) !important;
+  }
+
+  /* Badge pista/tipo: palette unificata. Stato e quantità restano leggibili
+     senza affidarsi a sette tinte scure diverse. */
+  .vendite-dark-contrast :is(
+    [class*="bg-blue-500/10"],
+    [class*="bg-purple-500/10"],
+    [class*="bg-amber-500/10"],
+    [class*="bg-indigo-500/10"],
+    [class*="bg-teal-500/10"],
+    [class*="bg-red-500/10"],
+    [class*="bg-green-500/10"],
+    [class*="bg-orange-500/10"],
+    [class*="bg-slate-500/10"],
+    [class*="bg-cyan-500/10"],
+    [class*="bg-emerald-500/10"],
+    [class*="bg-rose-500/10"]
+  ) {
+    color: var(--vendite-text) !important;
+    background: rgb(222 212 255 / 9%) !important;
+    border-color: rgb(218 205 255 / 36%) !important;
+  }
+
+  .vendite-dark-contrast :is(.text-green-500, .text-green-600) {
+    color: var(--vendite-success) !important;
+  }
+
+  .vendite-dark-contrast :is(
+    .text-blue-600,
+    .text-blue-700,
+    .text-purple-600,
+    .text-purple-700,
+    .text-indigo-600,
+    .text-indigo-700,
+    .text-teal-600,
+    .text-teal-700,
+    .text-cyan-600,
+    .text-cyan-700,
+    .text-slate-600,
+    .text-slate-700
+  ) {
+    color: var(--vendite-accent) !important;
+  }
+
+  .vendite-dark-contrast :is(.text-red-600, .text-red-700, .text-rose-600, .text-rose-700) {
+    color: var(--vendite-danger) !important;
+  }
+
+  .vendite-dark-contrast .shadcn-card :is(.opacity-60, .opacity-75) {
+    opacity: .92;
+  }
+
+  /* Tabelle: header e prima colonna sticky non devono tornare al background
+     quasi nero generico; ID e metadati usano il secondario ad alto contrasto. */
+  .vendite-dark-contrast table {
+    color: var(--vendite-text);
+  }
+
+  .vendite-dark-contrast table :is(thead, th, th.bg-background) {
+    color: var(--vendite-text-secondary) !important;
+    background: #100d27 !important;
+    border-color: var(--vendite-strong-border) !important;
+  }
+
+  .vendite-dark-contrast table td {
+    color: var(--vendite-text);
+    border-color: rgb(218 205 255 / 28%) !important;
+  }
+
+  .vendite-dark-contrast table td.bg-background {
+    background: var(--vendite-surface) !important;
+  }
+
+  .vendite-dark-contrast table tbody tr:hover td {
+    background: rgb(222 212 255 / 10%) !important;
+  }
+
+  .vendite-dark-contrast [data-testid="card-lista-vendite"] :is(
+    [class*="overflow-x-auto"],
+    [class*="overflow-auto"]
+  ) {
+    scrollbar-color: #746a98 #100d27;
+    scrollbar-width: thin;
+  }
+
+  .vendite-dark-contrast [data-testid="card-lista-vendite"] :is(
+    [class*="overflow-x-auto"],
+    [class*="overflow-auto"]
+  )::-webkit-scrollbar {
+    height: 9px;
+    width: 9px;
+  }
+
+  .vendite-dark-contrast [data-testid="card-lista-vendite"] :is(
+    [class*="overflow-x-auto"],
+    [class*="overflow-auto"]
+  )::-webkit-scrollbar-track {
+    background: #100d27;
+  }
+
+  .vendite-dark-contrast [data-testid="card-lista-vendite"] :is(
+    [class*="overflow-x-auto"],
+    [class*="overflow-auto"]
+  )::-webkit-scrollbar-thumb {
+    background: #746a98;
+    border: 2px solid #100d27;
+    border-radius: 999px;
+  }
 }
 
 @media (max-width: 640px) {
