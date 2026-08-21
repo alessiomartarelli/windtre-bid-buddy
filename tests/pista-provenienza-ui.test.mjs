@@ -211,7 +211,8 @@ const assertPanelContrast = async (page, pista, label) => {
   assert.ok(hasTestid(`prov-totale-${pista}`), `${label}: totale pannello misurato`);
   assert.ok(hasTestid(`prov-punti-pdv-${pista}-`) || hasTestid(`prov-punti-rs-${pista}-`),
     `${label}: subtotali PDV/RS misurati`);
-  assert.ok(hasTestid(`prov-cat-${pista}-`), `${label}: fonti (categorie) misurate`);
+  assert.ok(hasTestid(`prov-cat-${pista}-`) || hasTestid(`prov-cat-rs-${pista}-`),
+    `${label}: fonti (categorie) misurate`);
   assert.ok(hasTestid(`prov-somma-${pista}`), `${label}: riga somma misurata`);
 
   const violations = results.filter((x) => x.ratio < x.min);
@@ -416,48 +417,33 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     const totale = provNum(await page.getByTestId('prov-totale-mobile').innerText());
     assert.equal(totale, 4.5, `totale pannello = 4,50 pt (letto ${totale})`);
 
-    // Subtotali PDV: A = 1,50; B = 3,00; somma = totale card.
-    const puntiA = provNum(await page.getByTestId(`prov-punti-pdv-mobile-${POS_A}`).innerText());
-    const puntiB = provNum(await page.getByTestId(`prov-punti-pdv-mobile-${POS_B}`).innerText());
-    const puntiNoModel = provNum(await page.getByTestId(`prov-punti-pdv-mobile-${POS_NO_MODEL}`).innerText());
-    assert.equal(puntiA, 1.5, `PDV A = 1,50 pt (letto ${puntiA})`);
-    assert.equal(puntiB, 3, `PDV B = 3,00 pt (letto ${puntiB})`);
-    assert.equal(puntiNoModel, 0, `PDV senza modello = 0 pt (letto ${puntiNoModel})`);
-    assert.ok(Math.abs((puntiA + puntiB + puntiNoModel) - totale) < 0.005, 'somma subtotali PDV = totale pannello');
+    // Con "Tutti i PDV" il dettaglio è aggregato per RS: una sola riga,
+    // con pezzi e punti totali, senza elenco dei singoli negozi.
+    const rsPoints = page.locator('[data-testid^="prov-punti-rs-mobile-"]');
+    const rsPieces = page.locator('[data-testid^="prov-pezzi-rs-mobile-"]');
+    assert.equal(await rsPoints.count(), 1, 'una sola riga totale per la RS filtrata/scoped');
+    assert.equal(await rsPieces.count(), 1, 'la riga RS espone anche il totale pezzi');
+    assert.equal(provNum(await rsPoints.first().innerText()), 4.5, 'totale RS = 4,50 pt');
+    assert.equal(provNum(await rsPieces.first().innerText()), 7, 'totale RS = 7 pezzi');
+    assert.equal(await page.locator('[data-testid^="prov-row-pdv-mobile-"]').count(), 0,
+      'con Tutti i PDV non deve comparire il dettaglio dei singoli negozi');
 
     const sommaTxt = await page.getByTestId('prov-somma-mobile').innerText();
     assert.match(sommaTxt, /4,50|4\.50/, 'riga somma mostra 4,50 pt');
     assert.match(sommaTxt, /= totale card/, 'riconciliazione esplicita col totale card');
 
-    // Fonti: categoria TIED con i pezzi per PDV.
-    const catA = await page.getByTestId(`prov-cat-mobile-${POS_A}-TIED`).innerText();
-    assert.match(catA, /2\s*pz/, `fonte TIED del PDV A = 2 pz (letto "${catA}")`);
-    const catBTied = await page.getByTestId(`prov-cat-mobile-${POS_B}-TIED`).innerText();
-    const catBUntied = await page.getByTestId(`prov-cat-mobile-${POS_B}-UNTIED`).innerText();
-    assert.match(catBTied, /2\s*pz/, `fonte TIED del PDV B = 2 pz (letto "${catBTied}")`);
-    assert.match(catBUntied, /2\s*pz/, `fonte UNTIED del PDV B = 2 pz (letto "${catBUntied}")`);
+    // Fonti aggregate per RS: TIED 5 pezzi, UNTIED 2 pezzi.
+    const rsCategoryText = await page.locator('[data-testid^="prov-cat-rs-mobile-"]').allInnerTexts();
+    assert.ok(rsCategoryText.some((text) => /Tied/i.test(text) && /5\s*pz/.test(text)),
+      `TIED aggregato RS = 5 pz (${rsCategoryText.join(' | ')})`);
+    assert.ok(rsCategoryText.some((text) => /Untied/i.test(text) && /2\s*pz/.test(text)),
+      `UNTIED aggregato RS = 2 pz (${rsCategoryText.join(' | ')})`);
 
     // Task #490 — soglia raggiunta e moltiplicatore applicato per PDV.
     // PDV A: 1,50 pt < soglia1 (3) → "Soglia non raggiunta", nessun ×.
     // PDV B: 3,00 pt ≥ soglia1 → "Soglia S1", TIED ×2 e UNTIED ×1.
-    const badgeA = page.getByTestId(`prov-soglia-pdv-mobile-${POS_A}`);
-    const badgeB = page.getByTestId(`prov-soglia-pdv-mobile-${POS_B}`);
-    assert.equal(await badgeA.getAttribute('data-soglia-livello'), '0',
-      'PDV A sotto soglia1 → livello 0');
-    assert.match(await badgeA.innerText(), /Soglia non raggiunta/i,
-      'PDV A deve dichiarare la soglia non raggiunta');
-    assert.doesNotMatch(await badgeA.innerText(), /×/,
-      'PDV A senza soglia non deve mostrare un moltiplicatore');
-    assert.equal(await badgeB.getAttribute('data-soglia-livello'), '1',
-      'PDV B a 3 pt raggiunge soglia1');
-    assert.match(await badgeB.innerText(), /Soglia S1/,
-      'PDV B deve mostrare la soglia raggiunta');
-    assert.equal(await badgeB.getAttribute('data-moltiplicatori'), '1,2',
-      'moltiplicatori S1 realmente applicati ai gruppi UNTIED e TIED');
-    assert.match(await badgeB.innerText(), /×\s*1.*×\s*2/,
-      'PDV B deve mostrare entrambi i moltiplicatori applicati ×1 e ×2');
-    assert.equal(await page.getByTestId(`prov-soglia-pdv-mobile-${POS_NO_MODEL}`).count(), 0,
-      'il PDV senza modello soglie non deve mostrare alcun badge soglia/moltiplicatore');
+    assert.equal(await page.locator('[data-testid^="prov-soglia-pdv-mobile-"]').count(), 0,
+      'il totale RS non deve mostrare badge soglia dei singoli PDV');
 
     // Il pannello è esclusivamente una provenienza punti: niente valori
     // economici o canoni.
@@ -588,11 +574,15 @@ test('Provenienza punti: modalità aggregazione per RS riconcilia i subtotali RS
     assert.equal(await page.locator('[data-testid^="prov-soglia-pdv-mobile-"]').count(), 0,
       'nessun badge soglia sui PDV annidati in modalità per_rs');
 
-    // I PDV della RS compaiono come fonti annidate con i pezzi.
-    await page.getByTestId(`prov-row-pdv-mobile-${POS_A}`).waitFor({ state: 'visible', timeout: 5000 });
-    await page.getByTestId(`prov-row-pdv-mobile-${POS_B}`).waitFor({ state: 'visible', timeout: 5000 });
-    const catB = await page.getByTestId(`prov-cat-mobile-${POS_B}-TIED`).innerText();
-    assert.match(catB, /4\s*pz/, `fonte TIED del PDV B = 4 pz (letto "${catB}")`);
+    // Anche in modalità per-RS i negozi non sono elencati con "Tutti i PDV":
+    // il totale espone pezzi, punti e categorie già aggregati.
+    assert.equal(await page.locator('[data-testid^="prov-row-pdv-mobile-"]').count(), 0,
+      'nessun PDV annidato nel totale RS');
+    assert.equal(provNum(await page.locator('[data-testid^="prov-pezzi-rs-mobile-"]').first().innerText()), 6,
+      'totale RS = 6 pezzi');
+    const rsCat = await page.locator('[data-testid^="prov-cat-rs-mobile-"]').allInnerTexts();
+    assert.ok(rsCat.some((text) => /Tied/i.test(text) && /6\s*pz/.test(text)),
+      `fonte TIED aggregata RS = 6 pz (${rsCat.join(' | ')})`);
 
     await page.close();
     await context.close();

@@ -1177,7 +1177,7 @@ function getScopedThresholdProgress(
     return best;
   }).points;
 }
-function PistaTicker({ stats }: { stats: TickerPista[] }) {
+function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregateByRs: boolean }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [activeThreshold, setActiveThreshold] = useState<string | null>(null);
   const items = stats.filter(
@@ -1387,18 +1387,46 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
     );
   };
 
-  // Dettaglio espanso: prima una ragione sociale e poi l'altra; senza
-  // breakdown RS mostra un unico blocco "Totale".
+  // Con "Tutti i PDV" il dettaglio è aggregato per Ragione Sociale: i
+  // negozi sono fonti di calcolo, non righe da mostrare. Se invece è
+  // selezionato un singolo PDV, resta disponibile il dettaglio puntuale.
   const renderDetail = (p: TickerPista) => {
     const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
     const usePuntiTot = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
-    const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string; sogliaLivelloAtt?: number; moltiplicatori?: number[]; thresholdMarkers?: TickerThresholdMarker[] }[] = [];
-    if (p.rsCalcBreakdown && p.rsCalcBreakdown.size > 0) {
+    const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; pezziAtt: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string; sogliaLivelloAtt?: number; moltiplicatori?: number[]; thresholdMarkers?: TickerThresholdMarker[] }[] = [];
+    if (aggregateByRs) {
+      const pdvsByRs = new Map<string, typeof p.pdvBreakdown>();
+      p.pdvBreakdown.forEach((pdv) => {
+        const key = pdv.normalizedRS || normalizeRS(pdv.ragioneSociale || "Senza Ragione Sociale");
+        const rows = pdvsByRs.get(key) ?? [];
+        rows.push(pdv);
+        pdvsByRs.set(key, rows);
+      });
+      pdvsByRs.forEach((pdvs, key) => {
+        const rs = p.rsCalcBreakdown?.get(key);
+        blocks.push({
+          key,
+          name: rs?.displayName || pdvs[0]?.ragioneSociale || "Senza Ragione Sociale",
+          puntiAtt: rs?.puntiAttuali ?? pdvs.reduce((sum, pdv) => sum + pdv.pdvCalc.puntiTotali, 0),
+          puntiProi: rs?.puntiProiezione ?? pdvs.reduce((sum, pdv) => sum + pdv.pdvCalc.puntiTotali, 0),
+          pezziAtt: rs?.pezziAttuali ?? pdvs.reduce((sum, pdv) => sum + pdv.pezzi, 0),
+          usePunti: true,
+          premioAtt: rs?.premioAttuale ?? 0,
+          premioProi: rs?.premioProiettato ?? 0,
+          sogliaAtt: rs?.sogliaAttuale ?? "—",
+          sogliaProi: rs?.sogliaProiezione ?? "—",
+          sogliaLivelloAtt: rs?.sogliaLivelloAttuale,
+          moltiplicatori: rs?.moltiplicatoriApplicati,
+          thresholdMarkers: rs?.thresholdMarkers,
+        });
+      });
+    } else if (p.rsCalcBreakdown && p.rsCalcBreakdown.size > 0) {
       p.rsCalcBreakdown.forEach((rs, key) => {
         blocks.push({
           key, name: rs.displayName,
           puntiAtt: rs.puntiAttuali,
           puntiProi: rs.puntiProiezione,
+          pezziAtt: rs.pezziAttuali,
           usePunti: true,
           premioAtt: rs.premioAttuale, premioProi: rs.premioProiettato,
           sogliaAtt: rs.sogliaAttuale, sogliaProi: rs.sogliaProiezione,
@@ -1412,6 +1440,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
         key: 'totale', name: 'Totale',
         puntiAtt: p.calc.puntiTotali,
         puntiProi: p.calcProiezione.puntiTotali,
+        pezziAtt: p.totalePezzi,
         usePunti: true,
         premioAtt: p.calc.premioStimato, premioProi: p.calcProiezione.premioStimato,
         sogliaAtt: p.calc.sogliaRaggiunta > 0 ? p.calc.sogliaLabel : '—',
@@ -1428,8 +1457,13 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
       >
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm font-semibold">Provenienza punti — {conf?.label ?? p.pista}</div>
-          <span className="shrink-0 text-sm font-bold tabular-nums" data-testid={`prov-totale-${p.pista}`}>
-            {fmtPoints(p.calc.puntiTotali)} pt
+          <span className="flex shrink-0 items-baseline gap-2 tabular-nums">
+            <span className="text-xs font-semibold text-muted-foreground" data-testid={`prov-totale-pezzi-${p.pista}`}>
+              {fmtTickerVal(p.totalePezzi)} pz
+            </span>
+            <span className="text-sm font-bold" data-testid={`prov-totale-${p.pista}`}>
+              {fmtPoints(p.calc.puntiTotali)} pt
+            </span>
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
@@ -1440,10 +1474,25 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
             const sourcePdvs = b.key === 'totale'
               ? p.pdvBreakdown
               : p.pdvBreakdown.filter((pdv) => pdv.normalizedRS === b.key);
+            const categoriesByKey = new Map<string, { category: string; label: string; pezzi: number }>();
+            sourcePdvs.forEach((pdv) => {
+              pdv.categories.forEach((category) => {
+                const current = categoriesByKey.get(category.category);
+                if (current) current.pezzi += category.pezzi;
+                else categoriesByKey.set(category.category, {
+                  category: category.category,
+                  label: category.label,
+                  pezzi: category.pezzi,
+                });
+              });
+            });
+            const aggregatedCategories = Array.from(categoriesByKey.values())
+              .filter((category) => category.pezzi > 0)
+              .sort((a, b) => b.pezzi - a.pezzi || a.label.localeCompare(b.label, "it"));
             return (
               <div key={b.key} className="rounded-xl border bg-card/60 p-3" data-testid={`prov-row-rs-${p.pista}-${b.key}`}>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate text-xs font-bold uppercase tracking-wide">{b.name}</span>
+                  <span className="min-w-0 truncate text-xs font-bold">{b.name}</span>
                   <span className="flex shrink-0 items-center gap-2">
                     {b.key !== 'totale' && (
                       <ProvThresholdBadge
@@ -1454,13 +1503,41 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
                         moltiplicatori={b.moltiplicatori}
                       />
                     )}
-                    <span className="text-sm font-bold tabular-nums" data-testid={`prov-punti-rs-${p.pista}-${b.key}`}>
-                      {fmtPoints(b.puntiAtt)} pt
-                    </span>
+                    {!aggregateByRs && (
+                      <span className="text-sm font-bold tabular-nums" data-testid={`prov-punti-rs-${p.pista}-${b.key}`}>
+                        {fmtPoints(b.puntiAtt)} pt
+                      </span>
+                    )}
                   </span>
                 </div>
-                <div className="mt-2 space-y-2 border-t border-border/70 pt-2">
-                  {sourcePdvs.map((pdv) => (
+                {aggregateByRs ? (
+                  <div className="mt-2 border-t border-border/70 pt-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg bg-muted/45 px-2.5 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Pezzi</div>
+                        <div className="mt-0.5 text-sm font-bold tabular-nums" data-testid={`prov-pezzi-rs-${p.pista}-${b.key}`}>
+                          {fmtTickerVal(b.pezziAtt)} pz
+                        </div>
+                      </div>
+                      <div className="rounded-lg bg-muted/45 px-2.5 py-2 text-right">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Punti</div>
+                        <div className="mt-0.5 text-sm font-bold tabular-nums" data-testid={`prov-punti-rs-${p.pista}-${b.key}`}>
+                          {fmtPoints(b.puntiAtt)} pt
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 space-y-0.5">
+                      {aggregatedCategories.map((category) => (
+                        <div key={category.category} className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground" data-testid={`prov-cat-rs-${p.pista}-${b.key}-${category.category}`}>
+                          <span className="min-w-0 truncate">{category.label}</span>
+                          <span className="shrink-0 tabular-nums">{category.pezzi} pz</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2 border-t border-border/70 pt-2">
+                    {sourcePdvs.map((pdv) => (
                     <div key={pdv.codicePos} className="rounded-lg bg-muted/45 px-2.5 py-2" data-testid={`prov-row-pdv-${p.pista}-${pdv.codicePos}`}>
                       <div className="flex items-center justify-between gap-3 text-xs">
                         <span className="min-w-0">
@@ -1493,8 +1570,9 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
                         ))}
                       </div>
                     </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
                 {b.thresholdMarkers && b.thresholdMarkers.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1 border-t border-border/70 pt-2" data-testid={`ticker-detail-thresholds-${p.pista}-${b.key}`}>
                     {b.thresholdMarkers.map((marker) => (
@@ -1509,7 +1587,7 @@ function PistaTicker({ stats }: { stats: TickerPista[] }) {
           })}
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-2 text-xs" data-testid={`prov-somma-${p.pista}`}>
-          <span className="text-muted-foreground">Somma {p.rsCalcBreakdown?.size ? "Ragioni Sociali" : "PDV"}</span>
+          <span className="text-muted-foreground">Somma {aggregateByRs || p.rsCalcBreakdown?.size ? "Ragioni Sociali" : "PDV"}</span>
           <span className="font-bold tabular-nums">
             {fmtPoints(blocks.reduce((sum, block) => sum + block.puntiAtt, 0))} pt {usePuntiTot ? "= totale card" : "calcolati"}
           </span>
@@ -5231,7 +5309,7 @@ export default function DashboardGaraReale() {
             )}
 
             {/* Task #424 — ticker verticale stile vetrina W3 */}
-            <PistaTicker stats={pistaStats} />
+            <PistaTicker stats={pistaStats} aggregateByRs={pdvFilter === "all"} />
 
             {premioPerRS.length > 0 && (
               <PremioPerRsPdfExport premioPerRS={premioPerRS} orgId={orgId} mese={selMonth} anno={selYear} />
