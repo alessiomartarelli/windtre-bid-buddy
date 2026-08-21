@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
@@ -279,6 +279,20 @@ export default function VenditeBiSuite() {
   const defaults = getDefaultDates();
   const [fromDate, setFromDate] = useState(defaults.from);
   const [toDate, setToDate] = useState(defaults.to);
+  const fromDateRef = useRef<HTMLInputElement>(null);
+  const toDateRef = useRef<HTMLInputElement>(null);
+  // Il controllo nativo del calendario è nascosto (hotspot disallineato al
+  // centro del campo): il pulsante-icona a destra apre il picker sul vero input.
+  const openDatePicker = useCallback((ref: React.RefObject<HTMLInputElement>) => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    try {
+      el.showPicker?.();
+    } catch {
+      // showPicker può fallire senza gesto utente: il focus resta comunque.
+    }
+  }, []);
   const [searchTerm, setSearchTerm] = useState("");
   // Task #463 — filtro PDV multiselezione: selezione vuota = tutti i PDV;
   // con una o più selezioni si includono le vendite di uno QUALSIASI dei
@@ -1226,37 +1240,43 @@ export default function VenditeBiSuite() {
           <FilterField label="Da" icon={CalendarRange}>
             <div className="relative">
               <Input
+                ref={fromDateRef}
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="pr-10"
+                className="vendite-date-input pr-10"
                 data-testid="input-from-date"
               />
-              <span
-                className="pointer-events-none absolute inset-y-px right-px z-10 flex w-9 items-center justify-center rounded-r-md bg-background text-muted-foreground"
+              <button
+                type="button"
+                onClick={() => openDatePicker(fromDateRef)}
+                className="absolute inset-y-px right-px z-10 flex w-9 cursor-pointer items-center justify-center rounded-r-md bg-background text-muted-foreground"
                 data-testid="icon-from-date-calendar"
-                aria-hidden="true"
+                aria-label="Mostra selettore date"
               >
                 <CalendarRange className="h-4 w-4" />
-              </span>
+              </button>
             </div>
           </FilterField>
           <FilterField label="A" icon={CalendarRange}>
             <div className="relative">
               <Input
+                ref={toDateRef}
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="pr-10"
+                className="vendite-date-input pr-10"
                 data-testid="input-to-date"
               />
-              <span
-                className="pointer-events-none absolute inset-y-px right-px z-10 flex w-9 items-center justify-center rounded-r-md bg-background text-muted-foreground"
+              <button
+                type="button"
+                onClick={() => openDatePicker(toDateRef)}
+                className="absolute inset-y-px right-px z-10 flex w-9 cursor-pointer items-center justify-center rounded-r-md bg-background text-muted-foreground"
                 data-testid="icon-to-date-calendar"
-                aria-hidden="true"
+                aria-label="Mostra selettore date"
               >
                 <CalendarRange className="h-4 w-4" />
-              </span>
+              </button>
             </div>
           </FilterField>
           <FilterField label="Cerca" icon={Search} span={2}>

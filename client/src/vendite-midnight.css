@@ -368,6 +368,11 @@ html[data-skin="midnight-violet"] [data-radix-popper-content-wrapper] > div {
     cursor: pointer;
   }
 
+  .vendite-dark-contrast [data-testid^="icon-"][data-testid$="-date-calendar"]:focus-visible {
+    outline: 2px solid var(--vendite-accent);
+    outline-offset: -2px;
+  }
+
   .vendite-dark-contrast [data-testid^="icon-"][data-testid$="-date-calendar"],
   .vendite-dark-contrast [data-testid^="icon-from-date-calendar"],
   .vendite-dark-contrast [data-testid^="icon-to-date-calendar"] {
@@ -540,4 +545,11 @@ html[data-skin="midnight-violet"] [data-radix-popper-content-wrapper] > div {
   .vendite-midnight .shadcn-card {
     border-radius: 13px;
   }
+}
+/* Task #492 — filtri Da/A di Vendite BiSuite (tutti i temi): il controllo
+   nativo del calendario resterebbe come hotspot disallineato verso il centro
+   (il pr-10 lo spinge dentro il padding). Lo nascondiamo del tutto: il picker
+   si apre dal pulsante-icona sul bordo destro via showPicker(). */
+.vendite-date-input::-webkit-calendar-picker-indicator {
+  display: none;
 }

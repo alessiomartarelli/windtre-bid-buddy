@@ -56,6 +56,91 @@ const contrastRatio = (foreground, background) => {
   return (lighter + 0.05) / (darker + 0.05);
 };
 
+// Task #492: il pulsante calendario visibile e il vero controllo che apre il
+// picker devono coincidere sul bordo destro dei campi Da/A. Verifica geometria
+// (pulsante allineato al margine destro dell'input), assenza dell'hotspot
+// nativo al centro (indicatore nascosto) e invocazione reale di showPicker()
+// sull'input cliccando il pulsante.
+async function checkDateCalendarControl(page, themeLabel) {
+  for (const field of ['from', 'to']) {
+    const input = page.getByTestId(`input-${field}-date`);
+    const button = page.getByTestId(`icon-${field}-date-calendar`);
+
+    const tagName = await button.evaluate((el) => el.tagName);
+    assert.equal(tagName, 'BUTTON', `${themeLabel}: il controllo calendario "${field}" è un vero pulsante`);
+
+    const inputBox = await input.boundingBox();
+    const buttonBox = await button.boundingBox();
+    assert.ok(inputBox && buttonBox, `${themeLabel}: campo e pulsante "${field}" misurabili`);
+    const inputRight = inputBox.x + inputBox.width;
+    const buttonRight = buttonBox.x + buttonBox.width;
+    assert.ok(
+      Math.abs(inputRight - buttonRight) <= 3,
+      `${themeLabel}: pulsante calendario "${field}" allineato al bordo destro (input right=${inputRight}, button right=${buttonRight})`,
+    );
+    assert.ok(
+      buttonBox.width >= 28 && buttonBox.width <= 48,
+      `${themeLabel}: zona cliccabile "${field}" coerente sul bordo destro (width=${buttonBox.width})`,
+    );
+    // Il pulsante non deve coprire il testo: resta dentro il padding destro.
+    assert.ok(
+      buttonBox.x >= inputBox.x + inputBox.width / 2,
+      `${themeLabel}: pulsante "${field}" nella metà destra del campo`,
+    );
+
+    // Nessun hotspot nativo disallineato: l'indicatore webkit è rimosso via
+    // display:none (getComputedStyle sul webkit-pseudo non è affidabile in
+    // Chromium, quindi verifichiamo classe + regola effettivamente caricata).
+    const indicatorHidden = await input.evaluate((el) => {
+      if (!el.classList.contains('vendite-date-input')) return false;
+      for (const sheet of document.styleSheets) {
+        let rules;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of rules) {
+          if (
+            rule.selectorText?.includes('.vendite-date-input::-webkit-calendar-picker-indicator')
+            && rule.style?.display === 'none'
+          ) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+    assert.equal(indicatorHidden, true, `${themeLabel}: indicatore nativo "${field}" nascosto (display:none)`);
+
+    // Il clic sul pulsante visibile apre davvero il selettore del vero input.
+    await page.evaluate(() => {
+      window.__pickerCalls = [];
+      if (!window.__origShowPicker) {
+        window.__origShowPicker = HTMLInputElement.prototype.showPicker;
+      }
+      HTMLInputElement.prototype.showPicker = function () {
+        window.__pickerCalls.push(this.getAttribute('data-testid'));
+      };
+    });
+    await button.click();
+    const pickerCalls = await page.evaluate(() => window.__pickerCalls);
+    assert.deepEqual(
+      pickerCalls,
+      [`input-${field}-date`],
+      `${themeLabel}: il clic sul pulsante "${field}" invoca showPicker sul vero campo data`,
+    );
+    assert.equal(
+      await input.evaluate((el) => document.activeElement === el),
+      true,
+      `${themeLabel}: dopo il clic il focus è sul campo data "${field}"`,
+    );
+    await page.evaluate(() => {
+      HTMLInputElement.prototype.showPicker = window.__origShowPicker;
+    });
+  }
+}
+
 // Articoli realistici: la classificazione usa categoria.nome + descrizione.
 const artTiedIva = {
   categoria: { nome: 'TIED IVA' },
@@ -436,17 +521,7 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     assert.equal(calendarIconStyle.color, 'rgb(222, 212, 255)', 'Midnight: icona calendario chiara');
     assert.equal(calendarIconStyle.background, 'rgb(15, 12, 36)', 'Midnight: icona calendario copre quella nativa scura');
     assert.equal(calendarIconStyle.opacity, 1, 'Midnight: icona calendario pienamente visibile');
-    const midnightDateBox = await page.getByTestId('input-from-date').boundingBox();
-    assert.ok(midnightDateBox, 'Midnight: campo data misurabile');
-    await page.mouse.click(
-      midnightDateBox.x + midnightDateBox.width - 12,
-      midnightDateBox.y + midnightDateBox.height / 2,
-    );
-    assert.equal(
-      await page.getByTestId('input-from-date').evaluate((el) => document.activeElement === el),
-      true,
-      'Midnight: il clic sull’icona continua ad attivare il vero campo data',
-    );
+    await checkDateCalendarControl(page, 'Midnight');
 
     const tableHeaderStyle = await page.getByTestId('card-lista-vendite').locator('thead th').first().evaluate((el) => ({
       color: getComputedStyle(el).color,
@@ -508,17 +583,7 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     assert.equal(standardDarkStyles.tableHeaderColor, 'rgb(216, 208, 244)', 'Scuro standard: intestazione tabella chiara');
     assert.equal(standardDarkStyles.tableHeaderBackground, 'rgb(16, 13, 39)', 'Scuro standard: intestazione tabella distinta');
 
-    const standardDarkDateBox = await page.getByTestId('input-from-date').boundingBox();
-    assert.ok(standardDarkDateBox, 'Scuro standard: campo data misurabile');
-    await page.mouse.click(
-      standardDarkDateBox.x + standardDarkDateBox.width - 12,
-      standardDarkDateBox.y + standardDarkDateBox.height / 2,
-    );
-    assert.equal(
-      await page.getByTestId('input-from-date').evaluate((el) => document.activeElement === el),
-      true,
-      'Scuro standard: il clic sull’icona attiva il vero campo data',
-    );
+    await checkDateCalendarControl(page, 'Scuro standard');
 
     // Tema chiaro: nessuna regola scura deve trapelare nella pagina.
     await pool.query(
@@ -551,17 +616,7 @@ test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagl
     assert.notEqual(lightDateStyles.iconColor, 'rgb(222, 212, 255)', 'Chiaro standard: icona non eredita il colore dark');
     assert.notEqual(lightDateStyles.iconBackground, 'rgb(15, 12, 36)', 'Chiaro standard: icona non eredita il fondo dark');
 
-    const lightDateBox = await page.getByTestId('input-from-date').boundingBox();
-    assert.ok(lightDateBox, 'Chiaro standard: campo data misurabile');
-    await page.mouse.click(
-      lightDateBox.x + lightDateBox.width - 12,
-      lightDateBox.y + lightDateBox.height / 2,
-    );
-    assert.equal(
-      await page.getByTestId('input-from-date').evaluate((el) => document.activeElement === el),
-      true,
-      'Chiaro standard: il clic sull’icona attiva il vero campo data',
-    );
+    await checkDateCalendarControl(page, 'Chiaro standard');
   } finally {
     if (browser) await browser.close().catch(() => {});
     await cleanupOrg(pool, session);
