@@ -49,6 +49,24 @@ async function getPrimaryVar(page) {
   )).trim();
 }
 
+async function assertActiveNavUsesPrimary(page, testId, label) {
+  const colors = await page.evaluate((id) => {
+    const item = document.querySelector(`[data-testid="${id}"]`);
+    if (!item) return null;
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = 'hsl(var(--primary))';
+    document.body.appendChild(probe);
+    const result = {
+      active: getComputedStyle(item).backgroundColor,
+      primary: getComputedStyle(probe).backgroundColor,
+    };
+    probe.remove();
+    return result;
+  }, testId);
+  assert.ok(colors, `${label}: voce attiva presente`);
+  assert.equal(colors.active, colors.primary, `${label}: voce attiva usa l'arancione primary`);
+}
+
 async function isDarkClass(page) {
   return page.evaluate(() => document.documentElement.classList.contains('dark'));
 }
@@ -294,6 +312,11 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
       'midnight-violet',
       'la skin Midnight deve essere attiva anche fuori da Vendite (globale)',
     );
+    await waitFor(
+      () => getPrimaryVar(page2),
+      (v) => v === '35 91% 60%',
+      'Midnight mantiene il primary arancione anche con un accento custom salvato',
+    );
     await page2.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'networkidle' });
     await page2.getByTestId('vendite-bisuite-page').waitFor({ state: 'visible', timeout: 20000 });
     assert.equal(
@@ -307,6 +330,22 @@ test('scenario 1: preset, custom color, dark mode: apply, persist, reload, new d
       'Midnight Violet data-skin must be active on Vendite BiSuite',
     );
     assert.equal(await isDarkClass(page2), true, 'Midnight Violet must force dark rendering on Vendite BiSuite');
+    assert.equal(await getPrimaryVar(page2), '35 91% 60%',
+      'Vendite mantiene il primary arancione di Midnight');
+    await assertActiveNavUsesPrimary(
+      page2,
+      'nav-gara-vendite-bisuite',
+      'Vendite / Midnight',
+    );
+    await page2.goto(`${BASE}/customer-journey`, { waitUntil: 'networkidle' });
+    await page2.getByTestId('input-search-journey').waitFor({ state: 'visible', timeout: 20000 });
+    assert.equal(await getPrimaryVar(page2), '35 91% 60%',
+      'Customer Journey mantiene lo stesso primary arancione di Vendite');
+    await assertActiveNavUsesPrimary(
+      page2,
+      'nav-gara-customer-journey',
+      'Customer Journey / Midnight',
+    );
     await page2.goto(`${BASE}/profile`, { waitUntil: 'networkidle' });
     await page2.getByTestId('card-aspetto').waitFor({ state: 'visible', timeout: 20000 });
     assert.equal(
