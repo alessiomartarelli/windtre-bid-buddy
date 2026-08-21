@@ -423,7 +423,7 @@ export default function Amministrazione() {
             (failedMonths.length > 0
               ? ` Mesi non aggiornati: ${failedMonths.join(", ")}. Premi di nuovo "Aggiorna" per riprovare.`
               : ""),
-          className: "bg-amber-50 border-amber-200 text-amber-800",
+          className: "bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950 dark:border-amber-900 dark:text-amber-300",
         });
       } else {
         toast({

@@ -1112,10 +1112,10 @@ export default function VenditeBiSuite() {
           <div
             className={`flex items-start gap-2 px-4 py-3 rounded-lg text-sm ${
               !fetchResult.success
-                ? "bg-red-50 text-red-700 border border-red-200"
+                ? "bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900"
                 : fetchResult.partial
-                ? "bg-amber-50 text-amber-800 border border-amber-200"
-                : "bg-green-50 text-green-700 border border-green-200"
+                ? "bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900"
+                : "bg-green-50 text-green-700 border border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900"
             }`}
             data-testid={
               !fetchResult.success
