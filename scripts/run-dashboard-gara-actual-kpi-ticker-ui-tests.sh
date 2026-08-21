@@ -11,4 +11,11 @@
 set -euo pipefail
 
 echo "[dashboard-gara-actual-kpi-ticker-ui-tests] running suite ..."
-exec node --import tsx --test tests/dashboard-gara-actual-kpi-ticker-ui.test.mjs
+# Task #489: include anche la suite del pannello "Provenienza punti" delle
+# card pista (stessa pagina, stesso seed pattern) per rispettare il limite
+# di workflow.
+# --test-concurrency=1: due file browser-heavy in parallelo esauriscono i
+# thread del container (pthread_create) — esecuzione sequenziale deterministica.
+exec node --import tsx --test --test-concurrency=1 \
+  tests/dashboard-gara-actual-kpi-ticker-ui.test.mjs \
+  tests/pista-provenienza-ui.test.mjs

@@ -58,6 +58,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
+  Info,
   ChevronsUpDown,
   Download,
   ShieldAlert,
@@ -3065,6 +3066,17 @@ export default function DashboardGaraReale() {
   }, []);
   const [expandedMobileGroups, setExpandedMobileGroups] = useState<Set<string>>(new Set());
   const [expandedFissoGroups, setExpandedFissoGroups] = useState<Set<string>>(new Set());
+  // Task #489 — pannello "Provenienza punti" per card pista: aperto/chiuso
+  // per pista, attivabile cliccando la card (o il bottone dedicato, anche
+  // da tastiera). Mostra da dove arriva il totale punti della card.
+  const [provenanceOpen, setProvenanceOpen] = useState<Set<string>>(new Set());
+  const toggleProvenance = useCallback((pistaKey: string) => {
+    setProvenanceOpen(prev => {
+      const next = new Set(prev);
+      if (next.has(pistaKey)) next.delete(pistaKey); else next.add(pistaKey);
+      return next;
+    });
+  }, []);
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
   // Task #462 — vista PDV: 'origine' (default, comportamento invariato) o
   // 'destinazione' (il server riattribuisce vendite, calendari, soglie e
@@ -5218,7 +5230,18 @@ export default function DashboardGaraReale() {
                 const pistaAllExpanded = showPistaToggle && pistaRowKeys.every((k) => expandedRsRows.has(k));
 
                 return (
-                  <Card key={pista.pista} className="overflow-hidden" data-testid={`card-pista-${pista.pista}`}>
+                  <Card
+                    key={pista.pista}
+                    className="overflow-hidden"
+                    data-testid={`card-pista-${pista.pista}`}
+                    onClick={(e) => {
+                      // Task #489 — click sulla card = apri/chiudi provenienza
+                      // punti, ma senza rubare i click ai controlli interni.
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button, a, input, select, textarea, [role="button"]')) return;
+                      toggleProvenance(pista.pista);
+                    }}
+                  >
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-base flex items-center gap-2">
@@ -5228,6 +5251,19 @@ export default function DashboardGaraReale() {
                           {pistaConf.label}
                         </CardTitle>
                         <div className="flex items-center gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => toggleProvenance(pista.pista)}
+                            title="Provenienza punti"
+                            aria-label={`Provenienza punti ${pistaConf.label}`}
+                            aria-expanded={provenanceOpen.has(pista.pista)}
+                            aria-controls={`provenienza-panel-${pista.pista}`}
+                            data-testid={`btn-provenienza-${pista.pista}`}
+                          >
+                            <Info className="h-3.5 w-3.5" />
+                          </Button>
                           {showPistaToggle && (
                             <Button
                               variant="ghost"
@@ -5263,6 +5299,125 @@ export default function DashboardGaraReale() {
                           <span key={rsKey} className="hidden" data-testid={`text-pezzi-${pista.pista}-${rsKey}`}>{rsData.pezziAttuali}</span>
                         ))}
                       </div>
+
+                      {/* Task #489 — pannello "Provenienza punti": scomposizione
+                          verificabile del totale punti della card per RS/PDV,
+                          con categorie e add-on che alimentano il calcolo e i
+                          filtri/perimetro applicati. I subtotali usano gli
+                          stessi calcoli della card, quindi la somma coincide
+                          col totale mostrato. */}
+                      {provenanceOpen.has(pista.pista) && (() => {
+                        const totPunti = pista.calc.puntiTotali;
+                        const hasRSPanel = !!(pista.rsCalcBreakdown && pista.rsCalcBreakdown.size >= 1);
+                        const provPdvRows = pista.pdvBreakdown;
+                        const subtotali = hasRSPanel
+                          ? Array.from(pista.rsCalcBreakdown!.values()).map((r) => r.puntiAttuali)
+                          : provPdvRows.map((p) => p.pdvCalc.puntiTotali);
+                        const sommaSubtotali = subtotali.reduce((s, v) => s + v, 0);
+                        const quadra = Math.abs(sommaSubtotali - totPunti) < 0.005;
+                        const rsLabelSel = rsFilter !== "all" ? (rsFilterOptions.find((o) => o.key === rsFilter)?.label ?? rsFilter) : null;
+                        const pdvLabelSel = pdvFilter !== "all" ? (pdvFilterOptions.find((o) => o.codicePos === pdvFilter)?.label ?? pdvFilter) : null;
+                        const filtriAttivi = [
+                          rsLabelSel ? `RS: ${rsLabelSel}` : null,
+                          pdvLabelSel ? `PDV: ${pdvLabelSel}` : null,
+                        ].filter(Boolean).join(" · ");
+                        const renderFonti = (cats: Array<{ category: string; label: string; pezzi: number; canone: number }>, keyPrefix: string) => (
+                          <div className="mt-1 space-y-0.5">
+                            {cats.map((c) => (
+                              <div key={`${keyPrefix}-${c.category}`} className="flex items-center justify-between text-xs text-gray-600 dark:text-slate-300" data-testid={`prov-cat-${keyPrefix}-${c.category}`}>
+                                <span className="truncate max-w-[60%]">{c.label}</span>
+                                <span className="tabular-nums">
+                                  {c.pezzi} pz{c.canone > 0 ? ` · ${formatEuro(c.canone)} canone` : ""}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                        return (
+                          <div
+                            id={`provenienza-panel-${pista.pista}`}
+                            className="rounded-lg border bg-gray-50/70 dark:bg-gray-900/50 p-3 space-y-3"
+                            data-testid={`provenienza-panel-${pista.pista}`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-slate-300">
+                                Provenienza punti
+                              </span>
+                              <span className="text-sm font-bold tabular-nums" data-testid={`prov-totale-${pista.pista}`}>
+                                {totPunti.toFixed(2)} pt
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-gray-500 dark:text-slate-400 space-y-0.5" data-testid={`prov-context-${pista.pista}`}>
+                              <div>Periodo: {String(selMonth).padStart(2, "0")}/{selYear}{garaConfig?.name ? ` · Config: ${garaConfig.name}` : ""}</div>
+                              <div>
+                                Vista PDV: {pdvView === "destinazione" ? "destinazione" : "origine"}
+                                {" · "}Filtri: {filtriAttivi || "nessuno"}
+                              </div>
+                              <div>
+                                Solo vendite in gara
+                                {mappedData?.calendarsAvailable
+                                  ? `: calendari applicati${(mappedData?.salesExcludedOutOfGara ?? 0) > 0 ? `, escluse ${mappedData!.salesExcludedOutOfGara!.toLocaleString("it-IT")} vendite fuori giornata gara` : ""}`
+                                  : ": nessun calendario configurato (tutto il mese conta)"}
+                              </div>
+                            </div>
+                            {provPdvRows.length === 0 ? (
+                              <p className="text-xs italic text-gray-400 dark:text-slate-500" data-testid={`prov-empty-${pista.pista}`}>
+                                Nessuna vendita mappata concorre al punteggio in questo periodo.
+                              </p>
+                            ) : hasRSPanel ? (
+                              <div className="space-y-2">
+                                {Array.from(pista.rsCalcBreakdown!.entries()).map(([rsKey, rsData]) => {
+                                  const rsPdvs = provPdvRows.filter((p) => p.normalizedRS === rsKey);
+                                  return (
+                                    <div key={rsKey} className="rounded border bg-white/70 dark:bg-gray-950/40 px-2.5 py-2" data-testid={`prov-row-rs-${pista.pista}-${rsKey}`}>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-xs font-semibold truncate">{rsData.displayName}</span>
+                                        <span className="text-xs font-bold tabular-nums" data-testid={`prov-punti-rs-${pista.pista}-${rsKey}`}>
+                                          {rsData.puntiAttuali.toFixed(2)} pt
+                                        </span>
+                                      </div>
+                                      {rsPdvs.map((p) => (
+                                        <div key={p.codicePos} className="mt-1.5 border-l-2 border-gray-200 dark:border-gray-700 pl-2" data-testid={`prov-row-pdv-${pista.pista}-${p.codicePos}`}>
+                                          <div className="flex items-center justify-between text-xs text-gray-700 dark:text-slate-200">
+                                            <span className="truncate">{p.nomeNegozio} ({p.codicePos})</span>
+                                            <span className="tabular-nums">{p.pezzi} pz</span>
+                                          </div>
+                                          {renderFonti(p.categories, `${pista.pista}-${p.codicePos}`)}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {provPdvRows.map((p) => (
+                                  <div key={p.codicePos} className="rounded border bg-white/70 dark:bg-gray-950/40 px-2.5 py-2" data-testid={`prov-row-pdv-${pista.pista}-${p.codicePos}`}>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-semibold truncate">{p.nomeNegozio} ({p.codicePos}) · {p.ragioneSociale}</span>
+                                      <span className="text-xs font-bold tabular-nums" data-testid={`prov-punti-pdv-${pista.pista}-${p.codicePos}`}>
+                                        {p.pdvCalc.puntiTotali.toFixed(2)} pt
+                                      </span>
+                                    </div>
+                                    {renderFonti(p.categories, `${pista.pista}-${p.codicePos}`)}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {provPdvRows.length > 0 && (
+                              <div className="flex items-center justify-between text-xs border-t pt-2" data-testid={`prov-somma-${pista.pista}`}>
+                                <span className="text-gray-500 dark:text-slate-400">
+                                  Somma {hasRSPanel ? "Ragioni Sociali" : "PDV"}
+                                </span>
+                                <span className={`font-bold tabular-nums ${quadra ? "text-green-700 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}`}>
+                                  {sommaSubtotali.toFixed(2)} pt {quadra ? "= totale card" : `(totale card ${totPunti.toFixed(2)} pt)`}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {(() => {
                         if (pista.totalePezzi === 0) return null;
