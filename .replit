@@ -718,3 +718,14 @@ args = "bash scripts/run-dark-contrast-pages-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "dark-contrast-accents-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-dark-contrast-accents-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true

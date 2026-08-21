@@ -68,6 +68,39 @@ export function hexToHsl(hex: string): Hsl | null {
 
 function hslStr(c: Hsl): string { return `${c.h} ${c.s}% ${c.l}%`; }
 
+// Task #484 — testo su --primary: bianco solo se regge WCAG 4.5 sul colore
+// scelto, altrimenti inchiostro scuro (i preset dark sono spesso troppo
+// chiari per il bianco fisso di index.css).
+function hslLuminance({ h, s, l }: Hsl): number {
+  const sn = s / 100, ln = l / 100;
+  const c = (1 - Math.abs(2 * ln - 1)) * sn;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = ln - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const lin = (v: number) => {
+    const ch = v + m;
+    return ch <= 0.04045 ? ch / 12.92 : ((ch + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+const DARK_INK = "222 47% 5%";
+const DARK_INK_LUM = hslLuminance({ h: 222, s: 47, l: 5 });
+
+export function primaryForegroundFor(primary: Hsl): string {
+  const L = hslLuminance(primary);
+  const white = 1.05 / (L + 0.05);
+  const dark = (L + 0.05) / (DARK_INK_LUM + 0.05);
+  // Bianco se regge 4.5; altrimenti il migliore fra bianco e inchiostro.
+  return white >= 4.5 || white >= dark ? "0 0% 100%" : DARK_INK;
+}
+
 function resolvePrimary(accent: AccentChoice, isDark: boolean): Hsl {
   if (accent.type === "preset") {
     const p = ACCENT_PRESETS.find(p => p.id === accent.id) ?? ACCENT_PRESETS[0];
@@ -80,7 +113,8 @@ function resolvePrimary(accent: AccentChoice, isDark: boolean): Hsl {
 }
 
 const OVERRIDE_KEYS = [
-  "--primary", "--ring", "--brand-indigo", "--accent", "--accent-foreground",
+  "--primary", "--primary-foreground", "--ring", "--brand-indigo",
+  "--accent", "--accent-foreground",
   "--chart-brand-soft", "--chart-brand-strong",
 ] as const;
 
@@ -110,6 +144,7 @@ export function applyAccentVars(accent: AccentChoice, isDark: boolean): void {
   }
   const primary = resolvePrimary(accent, isDark);
   root.style.setProperty("--primary", hslStr(primary));
+  root.style.setProperty("--primary-foreground", primaryForegroundFor(primary));
   root.style.setProperty("--ring", hslStr(primary));
   root.style.setProperty("--brand-indigo", hslStr(primary));
   root.style.setProperty("--chart-brand-soft", hslStr(chartSoft(primary)));

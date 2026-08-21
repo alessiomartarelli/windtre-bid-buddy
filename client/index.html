@@ -118,6 +118,23 @@
               st.setProperty("--primary", v);
               st.setProperty("--ring", v);
               st.setProperty("--brand-indigo", v);
+              // Task #484 — parità con primaryForegroundFor in appearance.ts:
+              // bianco solo se regge WCAG 4.5 sul primary scelto.
+              (function () {
+                var hh = hsl[0], ss = hsl[1] / 100, ll = hsl[2] / 100;
+                var cc = (1 - Math.abs(2 * ll - 1)) * ss;
+                var xx = cc * (1 - Math.abs(((hh / 60) % 2) - 1));
+                var mm = ll - cc / 2;
+                var rgb = hh < 60 ? [cc, xx, 0] : hh < 120 ? [xx, cc, 0] : hh < 180 ? [0, cc, xx] : hh < 240 ? [0, xx, cc] : hh < 300 ? [xx, 0, cc] : [cc, 0, xx];
+                var lin = function (vv) {
+                  var ch = vv + mm;
+                  return ch <= 0.04045 ? ch / 12.92 : Math.pow((ch + 0.055) / 1.055, 2.4);
+                };
+                var L = 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+                var wRatio = 1.05 / (L + 0.05);
+                var dRatio = (L + 0.05) / 0.0546; // inchiostro 222 47% 5% (lum ≈ .0046) + .05
+                st.setProperty("--primary-foreground", wRatio >= 4.5 || wRatio >= dRatio ? "0 0% 100%" : "222 47% 5%");
+              })();
               st.setProperty(
                 "--chart-brand-soft",
                 hsl[0] + " " + Math.max(hsl[1] - 25, 30) + "% " + Math.min(hsl[2] + 28, 84) + "%"
