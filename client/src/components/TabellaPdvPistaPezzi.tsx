@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Download, Shield, Smartphone, Table as TableIcon, Wifi, Zap, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Download, Percent, RefreshCw, Shield, ShieldCheck, Smartphone, Table as TableIcon, Wifi, Zap, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
@@ -17,7 +17,9 @@ import { emptyPezziExtra, sommaPezziExtra, type PezziExtraCounters } from "@shar
 // esclusioni annullate e stessi filtri data/PDV/pista attivi.
 // Energia: countByPista.energia include già i pezzi CF (consumer) e P.IVA
 // (business), quindi la colonna Energia è già la somma delle due categorie.
-const PEZZI_PISTE: PistaCanvass[] = ["mobile", "fisso", "energia", "assicurazioni"];
+// Task #470 — include anche la pista "protecta" (Windtre Protetti / Verisure
+// per le org VF: la label arriva già tradotta via pistaLabels).
+const PEZZI_PISTE: PistaCanvass[] = ["mobile", "fisso", "energia", "assicurazioni", "protecta"];
 
 // Stesse icone/colori della Tabella PDV × Pista della Dashboard Gara Reale
 // (config piste in DashboardGaraReale.tsx): quadratino colorato + icona bianca.
@@ -26,15 +28,18 @@ const PISTA_HEADER_ICONS: Partial<Record<PistaCanvass, { icon: LucideIcon; color
   fisso: { icon: Wifi, color: "bg-green-500" },
   energia: { icon: Zap, color: "bg-amber-500" },
   assicurazioni: { icon: Shield, color: "bg-purple-500" },
+  protecta: { icon: ShieldCheck, color: "bg-rose-500" },
 };
 
 // Task #398 — colonne extra (stesse della vista Pezzi della Dashboard Gara):
 // IVA pezzi, CB solo cambi piano, Telefoni, € Accessori/Servizi netto IVA.
 // NON entrano nella colonna "Totale" di riga (che resta la somma dei pezzi
 // delle 4 piste, coerente con la dashboard).
-const PEZZI_EXTRA_COLS = [
-  { key: "iva", label: "IVA", euro: false },
-  { key: "cb", label: "CB", euro: false },
+// Task #470 — IVA e CB hanno icona/colore come le piste (stesso linguaggio
+// visivo: quadratino colorato + icona bianca), coerenti con la Dashboard Gara.
+const PEZZI_EXTRA_COLS: ReadonlyArray<{ key: "iva" | "cb" | "telefoni" | "accEuro" | "srvEuro"; label: string; euro: boolean; icon?: LucideIcon; color?: string }> = [
+  { key: "iva", label: "IVA", euro: false, icon: Percent, color: "bg-slate-500" },
+  { key: "cb", label: "CB", euro: false, icon: RefreshCw, color: "bg-cyan-500" },
   { key: "telefoni", label: "Telefoni", euro: false },
   { key: "accEuro", label: "€ Accessori", euro: true },
   { key: "srvEuro", label: "€ Servizi", euro: true },
@@ -322,11 +327,17 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
                     </th>
                   );
                 })}
-                {hasExtra && PEZZI_EXTRA_COLS.map(c => (
-                  <th key={c.key} className="text-right px-3 py-2 font-medium whitespace-nowrap sticky top-0 bg-muted z-10" data-testid={`th-pezzi-${c.key}`}>
-                    <span>{c.label}{c.euro ? <span className="text-[10px] font-normal opacity-60" title="Importo al netto IVA (÷1,22), come nella Dashboard Gara"> (netto IVA)</span> : null}</span>
-                  </th>
-                ))}
+                {hasExtra && PEZZI_EXTRA_COLS.map(c => {
+                  const ExtraIcon = c.icon;
+                  return (
+                    <th key={c.key} className="text-right px-3 py-2 font-medium whitespace-nowrap sticky top-0 bg-muted z-10" data-testid={`th-pezzi-${c.key}`}>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {ExtraIcon ? <div className={`p-1 rounded ${c.color} text-white`}><ExtraIcon className="h-3 w-3" /></div> : null}
+                        <span>{c.label}{c.euro ? <span className="text-[10px] font-normal opacity-60" title="Importo al netto IVA (÷1,22), come nella Dashboard Gara"> (netto IVA)</span> : null}</span>
+                      </div>
+                    </th>
+                  );
+                })}
                 <th className="text-right px-3 py-2 font-semibold whitespace-nowrap sticky top-0 bg-muted z-10">Totale</th>
               </tr>
             </thead>

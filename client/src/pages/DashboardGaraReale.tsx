@@ -41,6 +41,8 @@ import {
   Wifi,
   Zap,
   Shield,
+  ShieldCheck,
+  type LucideIcon,
   Handshake,
   BarChart3,
   Calendar,
@@ -48,6 +50,7 @@ import {
   Loader2,
   Trophy,
   Settings,
+  Percent,
   RefreshCw,
   Briefcase,
   Users,
@@ -391,7 +394,7 @@ const PISTA_CONFIG = {
   assicurazioni: { label: "Assicurazioni", icon: Shield, color: "bg-purple-500", lightColor: "bg-purple-50 text-purple-700 border-purple-200" },
   partnership: { label: "Partnership", icon: Handshake, color: "bg-cyan-500", lightColor: "bg-cyan-50 text-cyan-700 border-cyan-200" },
   cb: { label: "Customer Base", icon: Users, color: "bg-orange-500", lightColor: "bg-orange-50 text-orange-700 border-orange-200" },
-  protecta: { label: "Windtre Protetti", icon: Shield, color: "bg-rose-500", lightColor: "bg-rose-50 text-rose-700 border-rose-200" },
+  protecta: { label: "Windtre Protetti", icon: ShieldCheck, color: "bg-rose-500", lightColor: "bg-rose-50 text-rose-700 border-rose-200" },
   extra_gara_iva: { label: "Extra Gara P.IVA", icon: Briefcase, color: "bg-indigo-500", lightColor: "bg-indigo-50 text-indigo-700 border-indigo-200" },
 } as const;
 
@@ -2001,7 +2004,8 @@ function PremioPerRsPdfExport({ premioPerRS, orgId, mese, anno }: { premioPerRS:
 
 // Piste mostrate nella vista "Pezzi" della Tabella PDV × Pista.
 // Energia aggrega già CF (consumer) + P.IVA (business) nel totale pezzi del PDV.
-const PEZZI_TABLE_PISTE = ['mobile', 'fisso', 'energia', 'assicurazioni'] as const;
+// Task #470 — include anche la pista "protecta" (Windtre Protetti).
+const PEZZI_TABLE_PISTE = ['mobile', 'fisso', 'energia', 'assicurazioni', 'protecta'] as const;
 
 type PezziCell = { att: number; proi: number };
 
@@ -2010,9 +2014,11 @@ type PezziCell = { att: number; proi: number };
 // Telefoni e importi Accessori/Servizi (netto IVA, ÷1.22 come nel resto
 // della dashboard e nel report Telegram). Non entrano nella colonna
 // "Totale" di riga (che resta la somma dei pezzi delle 4 piste).
-const PEZZI_EXTRA_COLS = [
-  { key: 'iva', label: 'IVA', euro: false },
-  { key: 'cb', label: 'CB', euro: false },
+// Task #470 — IVA e CB con icona/colore come le colonne pista (stesso
+// linguaggio visivo: quadratino colorato + icona bianca).
+const PEZZI_EXTRA_COLS: ReadonlyArray<{ key: 'iva' | 'cb' | 'telefoni' | 'acc_euro' | 'srv_euro'; label: string; euro: boolean; icon?: LucideIcon; color?: string }> = [
+  { key: 'iva', label: 'IVA', euro: false, icon: Percent, color: 'bg-slate-500' },
+  { key: 'cb', label: 'CB', euro: false, icon: RefreshCw, color: 'bg-cyan-500' },
   { key: 'telefoni', label: 'Telefoni', euro: false },
   { key: 'acc_euro', label: '€ Accessori', euro: true },
   { key: 'srv_euro', label: '€ Servizi', euro: true },
@@ -2025,7 +2031,7 @@ export type PezziExtraPdvEntry = {
   cells: Record<PezziExtraKey, PezziCell>;
 };
 
-type PezziColumn = { key: string; label: string; icon?: any; color?: string; euro: boolean; isPista: boolean };
+type PezziColumn = { key: string; label: string; icon?: LucideIcon; color?: string; euro: boolean; isPista: boolean };
 
 const fmtPezziVal = (v: number, euro: boolean) =>
   euro ? `${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : String(v);
@@ -2344,7 +2350,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv }: { p
       const conf = (PISTA_CONFIG as any)[p.pista];
       return { key: p.pista as string, label: (conf?.label ?? p.pista) as string, icon: conf?.icon, color: conf?.color, euro: false, isPista: true };
     }),
-    ...(pezziExtraByPdv ? PEZZI_EXTRA_COLS.map((c): PezziColumn => ({ key: c.key, label: c.label, euro: c.euro, isPista: false })) : []),
+    ...(pezziExtraByPdv ? PEZZI_EXTRA_COLS.map((c): PezziColumn => ({ key: c.key, label: c.label, icon: c.icon, color: c.color, euro: c.euro, isPista: false })) : []),
   ];
 
   // Somma i pezzi (att/proi) di una mappa cella sulle colonne indicate.

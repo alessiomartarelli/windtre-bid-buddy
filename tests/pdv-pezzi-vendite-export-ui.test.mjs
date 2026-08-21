@@ -38,6 +38,7 @@ const CAT_BY_PISTA = {
   fisso: 'ADSL/FIBRA/FWA CF',
   energia: 'ENERGIA W3',
   assicurazioni: 'ASSICURAZIONI',
+  protecta: 'ALLARMI',
 };
 
 let nextBisuiteId = 391_000_000 + Math.floor(Math.random() * 1_000_000);
@@ -94,19 +95,20 @@ function assertExportRows(aoa, { gammaDisplay }, label) {
   const cFis = col('Fisso - Pezzi');
   const cEne = col('Energia - Pezzi');
   const cAss = col('Assicurazioni - Pezzi');
+  const cPro = col('Windtre Protetti - Pezzi');
   const cTot = col('Totale Pezzi');
 
   const body = aoa.slice(1).filter((r) => r.some((v) => v !== ''));
 
   // Ordine: RS in ordine alfabetico, PDV di ogni RS subito dopo, TOTALE in fondo.
   const expected = [
-    ['RS', 'Delta Srl', '', '', 0, 1, 0, 1, 2],
-    ['PDV', 'Delta Srl', 'POSD1', 'Negozio Delta', 0, 1, 0, 1, 2],
-    ['RS', gammaDisplay, '', '', 4, 3, 4, 0, 11],
-    ['PDV', gammaDisplay, 'POSG1', 'Negozio Gamma 1', 2, 1, 0, 0, 3],
-    ['PDV', gammaDisplay, 'POSG2', 'Negozio Gamma 2', 1, 0, 3, 0, 4],
-    ['PDV', gammaDisplay, 'POSG3', 'Negozio Gamma 3', 1, 2, 1, 0, 4],
-    ['TOTALE', 'Totale complessivo', '', '', 4, 4, 4, 1, 13],
+    ['RS', 'Delta Srl', '', '', 0, 1, 0, 1, 1, 3],
+    ['PDV', 'Delta Srl', 'POSD1', 'Negozio Delta', 0, 1, 0, 1, 1, 3],
+    ['RS', gammaDisplay, '', '', 4, 3, 4, 0, 0, 11],
+    ['PDV', gammaDisplay, 'POSG1', 'Negozio Gamma 1', 2, 1, 0, 0, 0, 3],
+    ['PDV', gammaDisplay, 'POSG2', 'Negozio Gamma 2', 1, 0, 3, 0, 0, 4],
+    ['PDV', gammaDisplay, 'POSG3', 'Negozio Gamma 3', 1, 2, 1, 0, 0, 4],
+    ['TOTALE', 'Totale complessivo', '', '', 4, 4, 4, 1, 1, 14],
   ];
   assert.equal(
     body.length,
@@ -115,7 +117,7 @@ function assertExportRows(aoa, { gammaDisplay }, label) {
   );
   expected.forEach((exp, i) => {
     const row = body[i];
-    const got = [row[0], row[1], String(row[2]), String(row[3]), +row[cMob], +row[cFis], +row[cEne], +row[cAss], +row[cTot]];
+    const got = [row[0], row[1], String(row[2]), String(row[3]), +row[cMob], +row[cFis], +row[cEne], +row[cAss], +row[cPro], +row[cTot]];
     assert.deepEqual(got, exp, `${label}: riga ${i + 1} (${exp[0]} ${exp[1]})`);
   });
 
@@ -145,6 +147,8 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
       { codicePos: 'POSG3', nomeNegozio: 'Negozio Gamma 3', ragioneSociale: 'GAMMA SRL', pista: 'energia' },
       { codicePos: 'POSD1', nomeNegozio: 'Negozio Delta', ragioneSociale: 'Delta Srl', pista: 'fisso' },
       { codicePos: 'POSD1', nomeNegozio: 'Negozio Delta', ragioneSociale: 'Delta Srl', pista: 'assicurazioni' },
+      // Task #470: colonna Windtre Protetti (ALLARMI → protecta).
+      { codicePos: 'POSD1', nomeNegozio: 'Negozio Delta', ragioneSociale: 'Delta Srl', pista: 'protecta' },
     ];
     for (const s of seeds) await insertSale(pool, session.orgId, s);
 
@@ -170,6 +174,7 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
       fisso: 'bg-green-500',
       energia: 'bg-amber-500',
       assicurazioni: 'bg-purple-500',
+      protecta: 'bg-rose-500', // Task #470
     };
     for (const [pista, colorClass] of Object.entries(EXPECTED_HEADER_ICONS)) {
       const th = page.getByTestId(`th-pezzi-${pista}`);
@@ -183,11 +188,23 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
       assert.equal(await iconBox.locator('svg').count(), 1, `th-pezzi-${pista}: icona svg dentro il quadratino ${colorClass}`);
     }
 
+    // ── Task #470: icone colorate anche su IVA e CB (colonne extra) ──
+    const EXPECTED_EXTRA_ICONS = { iva: 'bg-slate-500', cb: 'bg-cyan-500' };
+    for (const [key, colorClass] of Object.entries(EXPECTED_EXTRA_ICONS)) {
+      const th = page.getByTestId(`th-pezzi-${key}`);
+      await th.waitFor({ state: 'visible', timeout: 10000 });
+      const iconBox = th.locator(`div.${colorClass}`);
+      assert.equal(await iconBox.count(), 1, `th-pezzi-${key}: quadratino colorato ${colorClass} presente`);
+      const boxClass = await iconBox.getAttribute('class');
+      assert.ok(boxClass.includes('text-white'), `th-pezzi-${key}: icona bianca (text-white), trovato "${boxClass}"`);
+      assert.equal(await iconBox.locator('svg').count(), 1, `th-pezzi-${key}: icona svg dentro il quadratino ${colorClass}`);
+    }
+
     // Sanity a schermo: RS Gamma unificata (2 righe RS totali) e totali colonna.
     const rsCount = await page.locator('[data-testid^="row-pezzi-rs-"]').count();
     assert.equal(rsCount, 2, `a schermo: 2 righe RS (Gamma unificata + Delta), trovate ${rsCount}`);
     assert.equal((await page.getByTestId('cell-pezzi-tot-mobile').innerText()).trim(), '4');
-    assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '13');
+    assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '14');
 
     // ── Task #443: righe RS espandibili anche da tastiera ──
     // Il toggle è un vero <button> con aria-expanded e aria-controls che
@@ -249,7 +266,7 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     assert.equal(await mobileHeader.getAttribute('aria-sort'), 'ascending', 'Mobile: primo click crescente');
     assert.deepEqual(await visibleGammaPdvCodes(), ['POSG2', 'POSG3', 'POSG1'], 'Mobile crescente: pareggio risolto per nome, poi valore più alto');
     assert.equal(await page.locator('[data-testid^="row-pezzi-rs-"]').count(), 2, 'ordinamento: gruppi RS invariati');
-    assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '13', 'ordinamento: totale invariato');
+    assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '14', 'ordinamento: totale invariato');
 
     await mobileSort.click();
     assert.equal(await mobileHeader.getAttribute('aria-sort'), 'descending', 'Mobile: secondo click decrescente');

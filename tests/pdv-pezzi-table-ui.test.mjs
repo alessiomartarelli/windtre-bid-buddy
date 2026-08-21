@@ -55,6 +55,11 @@ const artAssicCasa = {
   descrizione: 'CASA FAMIGLIA START',
   dettaglio: { prezzo: '5.00' },
 }; // assicurazioni → casaFamigliaStart
+const artProtecta = {
+  categoria: { nome: 'ALLARMI' },
+  tipologia: { nome: 'ALLARMI PROTECTA' },
+  dettaglio: { prezzo: '200' },
+}; // protecta → casaStart (Task #470: colonna Windtre Protetti)
 
 // Task #392 — articoli per le colonne extra IVA / CB / Telefoni / € Acc / € Srv.
 const artMobileTiedIva = {
@@ -172,7 +177,7 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     // (→ 100 netto), Garanteasy 61 lordo (→ 50 netto).
     await insertSale(pool, session.orgId, {
       codicePos: POS_C, nomeNegozio: 'Negozio Beta', ragioneSociale: RS_BETA,
-      articoli: [artAssicCasa, artMobileTiedIva, artCbMiaTied, artCbRivincolo,
+      articoli: [artAssicCasa, artProtecta, artMobileTiedIva, artCbMiaTied, artCbRivincolo,
                  artCbCouponCaring, artTelefono, artAccessorio, artServizio],
     });
     // Vendita ANNULLATA: NON deve contare (stesse esclusioni della dashboard).
@@ -191,8 +196,8 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     await page.getByTestId('btn-tabella-mode-pezzi').click();
     await page.getByTestId('table-pdv-pista-pezzi').waitFor({ timeout: 15000 });
 
-    // Header: 4 piste + colonne extra Task #392 + colonna Totale.
-    for (const pista of ['mobile', 'fisso', 'energia', 'assicurazioni']) {
+    // Header: 5 piste (Task #470: anche protecta) + colonne extra Task #392 + colonna Totale.
+    for (const pista of ['mobile', 'fisso', 'energia', 'assicurazioni', 'protecta']) {
       await page.getByTestId(`th-tabella-pezzi-${pista}`).waitFor({ timeout: 5000 });
     }
     for (const extra of ['iva', 'cb', 'telefoni', 'acc_euro', 'srv_euro']) {
@@ -223,7 +228,8 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     // ── RS Beta: mobile 1 (TIED IVA), assicurazioni 1, totale 2 ──
     assert.equal(await cellNum(page, `cell-pezzi-${betaKey}-mobile-attuale`), 1, 'RS Beta mobile attuale = 1 (TIED IVA)');
     assert.equal(await cellNum(page, `cell-pezzi-${betaKey}-assicurazioni-attuale`), 1, 'RS Beta assicurazioni attuale = 1');
-    assert.equal(await cellNum(page, `cell-pezzi-${betaKey}-totale-attuale`), 2, 'RS Beta totale riga = 2 (le colonne extra NON entrano nel totale)');
+    assert.equal(await cellNum(page, `cell-pezzi-${betaKey}-protecta-attuale`), 1, 'RS Beta protecta attuale = 1 (ALLARMI PROTECTA)');
+    assert.equal(await cellNum(page, `cell-pezzi-${betaKey}-totale-attuale`), 3, 'RS Beta totale riga = 3 (le colonne extra NON entrano nel totale)');
 
     // ── RS Beta: colonne extra Task #392 ──
     assert.equal(await cellNum(page, `cell-pezzi-${betaKey}-iva-attuale`), 1, 'RS Beta IVA attuale = 1 (TIED IVA)');
@@ -248,7 +254,8 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     assert.equal(await cellNum(page, 'cell-pezzi-totale-fisso-attuale'), 1, 'totale colonna fisso = 1');
     assert.equal(await cellNum(page, 'cell-pezzi-totale-energia-attuale'), 3, 'totale colonna energia = 3');
     assert.equal(await cellNum(page, 'cell-pezzi-totale-assicurazioni-attuale'), 1, 'totale colonna assicurazioni = 1');
-    assert.equal(await cellNum(page, 'cell-pezzi-totale-generale-attuale'), 8, 'totale generale = 8 (solo le 4 piste)');
+    assert.equal(await cellNum(page, 'cell-pezzi-totale-protecta-attuale'), 1, 'totale colonna protecta = 1');
+    assert.equal(await cellNum(page, 'cell-pezzi-totale-generale-attuale'), 9, 'totale generale = 9 (solo le 5 piste)');
 
     // Totali delle colonne extra Task #392.
     assert.equal(await cellNum(page, 'cell-pezzi-totale-iva-attuale'), 1, 'totale colonna IVA = 1');
@@ -262,7 +269,7 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     // Le proiezioni sono >= dei valori attuali (stessa proiezione per giorni
     // lavorativi usata dal breakdown: mai sotto l'attuale a metà mese).
     const projTot = await cellNum(page, 'cell-pezzi-totale-generale-proiezione');
-    assert.ok(projTot >= 8, `proiezione totale generale (${projTot}) >= attuale (8)`);
+    assert.ok(projTot >= 9, `proiezione totale generale (${projTot}) >= attuale (9)`);
 
     // ── Toggle di ritorno: la vista punti resta intatta ──
     await page.getByTestId('btn-tabella-mode-punti').click();
@@ -343,7 +350,7 @@ test('Dashboard Gara Reale: export Excel/CSV/PDF della vista Pezzi con i totali 
     // test tabella: IVA 1, CB 2, telefoni 1, € acc 100, € srv 50 netti).
     await insertSale(pool, session.orgId, {
       codicePos: POS_C, nomeNegozio: 'Negozio Beta', ragioneSociale: RS_BETA,
-      articoli: [artAssicCasa, artMobileTiedIva, artCbMiaTied, artCbRivincolo,
+      articoli: [artAssicCasa, artProtecta, artMobileTiedIva, artCbMiaTied, artCbRivincolo,
                  artCbCouponCaring, artTelefono, artAccessorio, artServizio],
     });
     await insertSale(pool, session.orgId, {
@@ -374,6 +381,7 @@ test('Dashboard Gara Reale: export Excel/CSV/PDF della vista Pezzi con i totali 
       'Fisso - Pezzi Attuali', 'Fisso - Pezzi Proiezione',
       'Energia - Pezzi Attuali', 'Energia - Pezzi Proiezione',
       'Assicurazioni - Pezzi Attuali', 'Assicurazioni - Pezzi Proiezione',
+      'Windtre Protetti - Pezzi Attuali', 'Windtre Protetti - Pezzi Proiezione',
       'IVA - Pezzi Attuali', 'IVA - Pezzi Proiezione',
       'CB - Pezzi Attuali', 'CB - Pezzi Proiezione',
       'Telefoni - Pezzi Attuali', 'Telefoni - Pezzi Proiezione',
@@ -398,12 +406,13 @@ test('Dashboard Gara Reale: export Excel/CSV/PDF della vista Pezzi con i totali 
       assert.ok(rsBeta, `${src}: riga RS Beta presente`);
       assert.equal(num(rsBeta[col('Mobile - Pezzi Attuali')]), 1, `${src}: RS Beta mobile = 1 (TIED IVA)`);
       assert.equal(num(rsBeta[col('Assicurazioni - Pezzi Attuali')]), 1, `${src}: RS Beta assicurazioni = 1`);
+      assert.equal(num(rsBeta[col('Windtre Protetti - Pezzi Attuali')]), 1, `${src}: RS Beta protecta = 1`);
       assert.equal(num(rsBeta[col('IVA - Pezzi Attuali')]), 1, `${src}: RS Beta IVA = 1`);
       assert.equal(num(rsBeta[col('CB - Pezzi Attuali')]), 2, `${src}: RS Beta CB = 2 (Coupon Caring escluso)`);
       assert.equal(num(rsBeta[col('Telefoni - Pezzi Attuali')]), 1, `${src}: RS Beta telefoni = 1`);
       assert.equal(num(rsBeta[col('€ Accessori (netto IVA) - Attuale')]), 100, `${src}: RS Beta € accessori = 100`);
       assert.equal(num(rsBeta[col('€ Servizi (netto IVA) - Attuale')]), 50, `${src}: RS Beta € servizi = 50`);
-      assert.equal(num(rsBeta[col('Totale - Pezzi Attuali')]), 2, `${src}: RS Beta totale riga = 2 (extra escluse dal totale)`);
+      assert.equal(num(rsBeta[col('Totale - Pezzi Attuali')]), 3, `${src}: RS Beta totale riga = 3 (extra escluse dal totale)`);
       // Righe PDV (sempre presenti nell'export, anche se collassate a schermo).
       const pdvA = findRow('PDV', r => String(r[2]) === POS_A);
       assert.ok(pdvA, `${src}: riga PDV A presente`);
@@ -416,6 +425,7 @@ test('Dashboard Gara Reale: export Excel/CSV/PDF della vista Pezzi con i totali 
       const pdvC = findRow('PDV', r => String(r[2]) === POS_C);
       assert.ok(pdvC, `${src}: riga PDV C presente`);
       assert.equal(num(pdvC[col('Assicurazioni - Pezzi Attuali')]), 1, `${src}: PDV C assicurazioni = 1`);
+      assert.equal(num(pdvC[col('Windtre Protetti - Pezzi Attuali')]), 1, `${src}: PDV C protecta = 1`);
       assert.equal(num(pdvC[col('IVA - Pezzi Attuali')]), 1, `${src}: PDV C IVA = 1`);
       assert.equal(num(pdvC[col('CB - Pezzi Attuali')]), 2, `${src}: PDV C CB = 2`);
       assert.equal(num(pdvC[col('Telefoni - Pezzi Attuali')]), 1, `${src}: PDV C telefoni = 1`);
@@ -428,13 +438,14 @@ test('Dashboard Gara Reale: export Excel/CSV/PDF della vista Pezzi con i totali 
       assert.equal(num(tot[col('Fisso - Pezzi Attuali')]), 1, `${src}: TOTALE fisso = 1`);
       assert.equal(num(tot[col('Energia - Pezzi Attuali')]), 3, `${src}: TOTALE energia = 3`);
       assert.equal(num(tot[col('Assicurazioni - Pezzi Attuali')]), 1, `${src}: TOTALE assicurazioni = 1`);
+      assert.equal(num(tot[col('Windtre Protetti - Pezzi Attuali')]), 1, `${src}: TOTALE protecta = 1`);
       assert.equal(num(tot[col('IVA - Pezzi Attuali')]), 1, `${src}: TOTALE IVA = 1`);
       assert.equal(num(tot[col('CB - Pezzi Attuali')]), 2, `${src}: TOTALE CB = 2`);
       assert.equal(num(tot[col('Telefoni - Pezzi Attuali')]), 1, `${src}: TOTALE telefoni = 1`);
       assert.equal(num(tot[col('€ Accessori (netto IVA) - Attuale')]), 100, `${src}: TOTALE € accessori = 100`);
       assert.equal(num(tot[col('€ Servizi (netto IVA) - Attuale')]), 50, `${src}: TOTALE € servizi = 50`);
       assert.ok(num(tot[col('€ Accessori (netto IVA) - Proiezione')]) >= 100, `${src}: TOTALE proiezione € accessori >= 100`);
-      assert.equal(num(tot[col('Totale - Pezzi Attuali')]), 8, `${src}: TOTALE generale = 8 (solo le 4 piste)`);
+      assert.equal(num(tot[col('Totale - Pezzi Attuali')]), 9, `${src}: TOTALE generale = 9 (solo le 5 piste)`);
       assert.equal(num(tot[col('Mobile - Pezzi Proiezione')]), projMobile, `${src}: TOTALE proiezione mobile = schermo`);
       assert.equal(num(tot[col('Fisso - Pezzi Proiezione')]), projFisso, `${src}: TOTALE proiezione fisso = schermo`);
       assert.equal(num(tot[col('Energia - Pezzi Proiezione')]), projEnergia, `${src}: TOTALE proiezione energia = schermo`);
@@ -484,7 +495,7 @@ test('Dashboard Gara Reale: export Excel/CSV/PDF della vista Pezzi con i totali 
     const joined = tokens.join(' ');
     // Solo la pista Mobile è inclusa: nessuna colonna Fisso/Energia/Assicurazioni.
     assert.ok(joined.includes('Mobile'), 'PDF: colonna Mobile presente');
-    for (const escluso of ['Fisso', 'Energia', 'Assicurazioni', 'Telefoni', 'Accessori', 'Servizi']) {
+    for (const escluso of ['Fisso', 'Energia', 'Assicurazioni', 'Protetti', 'Telefoni', 'Accessori', 'Servizi']) {
       assert.ok(!joined.includes(escluso), `PDF: colonna esclusa "${escluso}" assente dal PDF filtrato`);
     }
     // Riga TOTALE ricalcolata sulle sole piste incluse: mobile 3/projMobile e
