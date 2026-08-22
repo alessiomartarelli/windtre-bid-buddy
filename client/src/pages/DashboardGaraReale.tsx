@@ -106,6 +106,7 @@ import {
 } from "@/lib/calcoloProtecta";
 import {
   calcolaExtraGaraIva,
+  PUNTI_EXTRA_GARA,
   PREMI_EXTRA_GARA,
   type ExtraGaraConfigOverrides,
   type ExtraGaraSogliePerRS,
@@ -152,6 +153,7 @@ import {
   type ProtectaProduct,
   createEmptyProtectaAttivato,
 } from "@/types/protecta";
+import { calcolaPuntiComponentePista } from "@/lib/provenienzaPunti";
 
 interface AggregatedItem {
   pista: string;
@@ -3699,6 +3701,30 @@ export default function DashboardGaraReale() {
       }
       return base;
     })();
+    const effectiveExtraGaraPoints: Record<string, number> = {
+      ...PUNTI_EXTRA_GARA,
+      ...(tcExtraGara?.puntiAttivazione ?? {}),
+      ...(garaCalcConfig.extraGaraIvaConfig?.puntiAttivazione ?? {}),
+    };
+    const componentPointsContext = {
+      mobile: Object.fromEntries(
+        effectiveMobileCategories.map((category) => [category.type, category.punti]),
+      ),
+      partnership: tcPartnership?.puntiPartnership,
+      assicurazioni: tcAssic?.puntiProdotto,
+      extraGara: effectiveExtraGaraPoints,
+    };
+
+    // La provenienza usa gli stessi coefficienti additivi dei rispettivi
+    // calcolatori. Restituire sempre un numero (anche zero) rende esplicite
+    // anche le componenti che concorrono ai pezzi ma non ai punti.
+    const componentPointsFor = (
+      pistaKey: string,
+      category: string,
+      pezzi: number,
+    ): number => {
+      return calcolaPuntiComponentePista(pistaKey, category, pezzi, componentPointsContext);
+    };
 
     const assicCalcMap = calcAssicurazioniForAllPdv(mappedData, puntiVendita, assicConfig, assicPdvInGara, tcAssic?.puntiProdotto, tcAssic?.premiProdotto);
     const protectaCalcMap = calcProtectaForAllPdv(mappedData, puntiVendita, tcProtecta?.gettoniProdotto);
@@ -3809,8 +3835,11 @@ export default function DashboardGaraReale() {
         ...garaCalcConfig.extraGaraIvaConfig,
       };
       if (tcExtraGara) {
-        if (tcExtraGara.puntiAttivazione && !mergedExtraGaraOverrides.puntiAttivazione) {
-          mergedExtraGaraOverrides.puntiAttivazione = tcExtraGara.puntiAttivazione;
+        if (tcExtraGara.puntiAttivazione || mergedExtraGaraOverrides.puntiAttivazione) {
+          mergedExtraGaraOverrides.puntiAttivazione = {
+            ...(tcExtraGara.puntiAttivazione ?? {}),
+            ...(mergedExtraGaraOverrides.puntiAttivazione ?? {}),
+          };
         }
         if (tcExtraGara.soglieMultipos && !mergedExtraGaraOverrides.soglieMultipos) {
           mergedExtraGaraOverrides.soglieMultipos = tcExtraGara.soglieMultipos;
@@ -3842,7 +3871,7 @@ export default function DashboardGaraReale() {
       proiezionePezzi: number;
       calc: PistaCalcResult;
       calcProiezione: PistaCalcResult;
-      categories: Array<{ category: string; label: string; pezzi: number; canone: number; proiezione: number }>;
+      categories: Array<{ category: string; label: string; pezzi: number; canone: number; proiezione: number; punti?: number }>;
       pdvBreakdown: Array<{
         codicePos: string;
         nomeNegozio: string;
@@ -3851,7 +3880,7 @@ export default function DashboardGaraReale() {
         pezzi: number;
         proiezione: number;
         pdvCalc: PistaCalcResult;
-        categories: Array<{ category: string; label: string; pezzi: number; canone: number }>;
+        categories: Array<{ category: string; label: string; pezzi: number; canone: number; punti?: number }>;
         soglieRef?: PistaSoglieRef;
         thresholdMarkers?: TickerThresholdMarker[];
       }>;
@@ -3886,30 +3915,36 @@ export default function DashboardGaraReale() {
           ? totalPunti * workdayInfo.totalWorkingDays / workdayInfo.elapsedWorkingDays
           : totalPunti;
 
-        const egCategories: Array<{ category: string; label: string; pezzi: number; canone: number; proiezione: number }> = [];
-        const egCatTotals: Record<string, { pezzi: number; label: string }> = {};
+        const egCategories: Array<{ category: string; label: string; pezzi: number; canone: number; proiezione: number; punti?: number }> = [];
+        const egCatTotals: Record<string, { pezzi: number; punti: number; label: string }> = {};
         for (const rsResult of extraGaraResults) {
           for (const pdvR of rsResult.pdvResults) {
-            const addCat = (key: string, label: string, pezzi: number) => {
+            const addCat = (
+              key: string,
+              pointsKey: keyof typeof PUNTI_EXTRA_GARA,
+              label: string,
+              pezzi: number,
+            ) => {
               if (pezzi > 0) {
-                if (!egCatTotals[key]) egCatTotals[key] = { pezzi: 0, label };
+                if (!egCatTotals[key]) egCatTotals[key] = { pezzi: 0, punti: 0, label };
                 egCatTotals[key].pezzi += pezzi;
+                egCatTotals[key].punti += pezzi * (effectiveExtraGaraPoints[pointsKey] ?? 0);
               }
             };
-            addCat("worldStaff", "World/Staff", pdvR.pezziWorldStaff);
-            addCat("fullPlus", "Full Plus/Data 60-100", pdvR.pezziFullPlus);
-            addCat("flexSpecial", "Flex/Special/Data 10", pdvR.pezziFlexSpecial);
-            addCat("fissoPIva", "Fisso P.IVA", pdvR.pezziFissoPIva);
-            addCat("fritzBox", "FRITZ!Box", pdvR.pezziFritzBox);
-            addCat("luceGas", "Luce/Gas Business", pdvR.pezziLuceGas);
-            addCat("protezionePro", "Protezione Pro", pdvR.pezziProtezionePro);
-            addCat("negozioProtetti", "Negozio Protetti", pdvR.pezziNegozioProtetti);
+            addCat("worldStaff", "worldStaff", "World/Staff", pdvR.pezziWorldStaff);
+            addCat("fullPlus", "fullPlusData60_100", "Full Plus/Data 60-100", pdvR.pezziFullPlus);
+            addCat("flexSpecial", "flexSpecialData10", "Flex/Special/Data 10", pdvR.pezziFlexSpecial);
+            addCat("fissoPIva", "fissoPIva", "Fisso P.IVA", pdvR.pezziFissoPIva);
+            addCat("fritzBox", "fritzBox", "FRITZ!Box", pdvR.pezziFritzBox);
+            addCat("luceGas", "luceGas", "Luce/Gas Business", pdvR.pezziLuceGas);
+            addCat("protezionePro", "protezionePro", "Protezione Pro", pdvR.pezziProtezionePro);
+            addCat("negozioProtetti", "negozioProtetti", "Negozio Protetti", pdvR.pezziNegozioProtetti);
           }
         }
         for (const [key, val] of Object.entries(egCatTotals)) {
           const proj = workdayInfo.elapsedWorkingDays > 0
             ? Math.round((val.pezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays) : val.pezzi;
-          egCategories.push({ category: key, label: val.label, pezzi: val.pezzi, canone: 0, proiezione: proj });
+          egCategories.push({ category: key, label: val.label, pezzi: val.pezzi, canone: 0, proiezione: proj, punti: val.punti });
         }
         egCategories.sort((a, b) => b.pezzi - a.pezzi);
 
@@ -3931,14 +3966,14 @@ export default function DashboardGaraReale() {
                 sogliaLabel: sogliaToLabel(rsResult.sogliaRaggiunta, 4),
               } as PistaCalcResult,
               categories: [
-                { category: "worldStaff", label: "World/Staff", pezzi: pdvR.pezziWorldStaff, canone: 0 },
-                { category: "fullPlus", label: "Full Plus/Data 60-100", pezzi: pdvR.pezziFullPlus, canone: 0 },
-                { category: "flexSpecial", label: "Flex/Special/Data 10", pezzi: pdvR.pezziFlexSpecial, canone: 0 },
-                { category: "fissoPIva", label: "Fisso P.IVA", pezzi: pdvR.pezziFissoPIva, canone: 0 },
-                { category: "fritzBox", label: "FRITZ!Box", pezzi: pdvR.pezziFritzBox, canone: 0 },
-                { category: "luceGas", label: "Luce/Gas Business", pezzi: pdvR.pezziLuceGas, canone: 0 },
-                { category: "protezionePro", label: "Protezione Pro", pezzi: pdvR.pezziProtezionePro, canone: 0 },
-                { category: "negozioProtetti", label: "Negozio Protetti", pezzi: pdvR.pezziNegozioProtetti, canone: 0 },
+                { category: "worldStaff", label: "World/Staff", pezzi: pdvR.pezziWorldStaff, canone: 0, punti: pdvR.puntiWorldStaff },
+                { category: "fullPlus", label: "Full Plus/Data 60-100", pezzi: pdvR.pezziFullPlus, canone: 0, punti: pdvR.puntiFullPlus },
+                { category: "flexSpecial", label: "Flex/Special/Data 10", pezzi: pdvR.pezziFlexSpecial, canone: 0, punti: pdvR.puntiFlexSpecial },
+                { category: "fissoPIva", label: "Fisso P.IVA", pezzi: pdvR.pezziFissoPIva, canone: 0, punti: pdvR.puntiFissoPIva },
+                { category: "fritzBox", label: "FRITZ!Box", pezzi: pdvR.pezziFritzBox, canone: 0, punti: pdvR.puntiFritzBox },
+                { category: "luceGas", label: "Luce/Gas Business", pezzi: pdvR.pezziLuceGas, canone: 0, punti: pdvR.puntiLuceGas },
+                { category: "protezionePro", label: "Protezione Pro", pezzi: pdvR.pezziProtezionePro, canone: 0, punti: pdvR.puntiProtezionePro },
+                { category: "negozioProtetti", label: "Negozio Protetti", pezzi: pdvR.pezziNegozioProtetti, canone: 0, punti: pdvR.puntiNegozioProtetti },
               ].filter(c => c.pezzi > 0),
             };
           })
@@ -4169,19 +4204,41 @@ export default function DashboardGaraReale() {
           const normalizedConfiguredRS = normalizeRS(configuredRS);
           const thresholdData = getThresholdDataForPdv(pista, pdv.codicePos, configuredRS);
 
-          const mobilePointsFor = (category: string, pezzi: number) => {
-            if (pista !== "mobile") return undefined;
-            const config = effectiveMobileCategories.find((item) => item.type === category);
-            return config ? pezzi * config.punti : undefined;
-          };
-          const pdvAddons = (pdv.addons || []).filter(a => a.pista === pista);
-          const addonAsCats = pdvAddons.map(a => ({
+          const pdvAddons = (pdv.addons || [])
+            .filter(a => a.pista === pista && !isCaringItem(a.pista, a.targetCategory));
+          const pointProvenanceAddons = (
+            pista === "fisso" || pista === "cb" || pista === "assicurazioni"
+          ) ? pdvAddons : [];
+          const addonAsCats = pointProvenanceAddons.map(a => ({
             category: a.targetCategory,
             label: a.targetLabel,
             pezzi: a.occorrenze,
             canone: a.canone || 0,
-            punti: mobilePointsFor(a.targetCategory, a.occorrenze),
+            // Fisso usa gli add-on solo nel premio economico: non entrano nei
+            // punti. CB e Assicurazioni, invece, li passano al calcolatore.
+            punti: pista === "fisso"
+              ? 0
+              : componentPointsFor(pista, a.targetCategory, a.occorrenze),
           }));
+          const pointCategories = [
+            ...pdvItems.map((i) => ({
+              category: i.targetCategory,
+              label: i.targetLabel,
+              pezzi: i.pezzi,
+              canone: i.canone || 0,
+              punti: componentPointsFor(pista, i.targetCategory, i.pezzi),
+            })),
+            ...addonAsCats,
+          ];
+          const rawCategoryPoints = pointCategories.reduce(
+            (sum, category) => sum + (category.punti ?? 0),
+            0,
+          );
+          const reconciledPointCategories = (
+            pdvCalc.puntiTotali === 0 && Math.abs(rawCategoryPoints) > 0.0001
+          )
+            ? pointCategories.map((category) => ({ ...category, punti: 0 }))
+            : pointCategories;
           return {
             codicePos: pdv.codicePos,
             nomeNegozio: pdv.nomeNegozio,
@@ -4190,16 +4247,8 @@ export default function DashboardGaraReale() {
             pezzi: pdvPezzi,
             proiezione: pdvProiezione,
             pdvCalc,
-            categories: [
-              ...pdvItems.map((i) => ({
-                category: i.targetCategory,
-                label: i.targetLabel,
-                pezzi: i.pezzi,
-                canone: i.canone || 0,
-                punti: mobilePointsFor(i.targetCategory, i.pezzi),
-              })),
-              ...addonAsCats,
-            ],
+            sourceItems: pdvItems,
+            categories: reconciledPointCategories,
             addons: pdvAddons,
             soglieRef: thresholdData.soglieRef,
             thresholdMarkers: thresholdData.thresholdMarkers,
@@ -4233,8 +4282,7 @@ export default function DashboardGaraReale() {
             const rsItems: AggregatedItem[] = [];
             const rsAddonsRaw: AddonItem[] = [];
             for (const pdv of rsPdvs) {
-              const pdvItems2 = pdv.categories.map(c => ({ pista, targetCategory: c.category, targetLabel: c.label, pezzi: c.pezzi, canone: c.canone || 0 }));
-              rsItems.push(...pdvItems2);
+              rsItems.push(...pdv.sourceItems);
               if (pdv.addons) rsAddonsRaw.push(...pdv.addons);
             }
             const mergedItems = new Map<string, AggregatedItem>();
@@ -4296,7 +4344,7 @@ export default function DashboardGaraReale() {
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
               rsCalc = calcPartnershipPerPdv(aggregatedRSItems, prConfig, rsWorkday.elapsedWorkingDays, rsPdvs[0].codicePos, tcPartnership, firstPdvConfig?.clusterCB);
             } else if (pista === "cb") {
-              rsCalc = calcCBFromItems(aggregatedRSItems, firstPdvConfig?.clusterCB);
+              rsCalc = calcCBFromItemsAndAddons(aggregatedRSItems, aggregatedRSAddons, firstPdvConfig?.clusterCB);
             } else if (pista === "energia") {
               const rsEConf = energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs);
               const rsEnergiaConfig: EnergiaConfig | undefined = rsEConf ? {

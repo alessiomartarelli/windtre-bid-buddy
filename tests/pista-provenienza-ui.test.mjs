@@ -15,6 +15,7 @@ import {
   calcolaPremioPistaFissoPerPos,
   getFissoAppliedMultipliersWithAddons,
 } from '../client/src/lib/calcoloPistaFisso.ts';
+import { calcolaPuntiComponentePista } from '../client/src/lib/provenienzaPunti.ts';
 
 // Task #489 — pannello "Provenienza punti" sulle card pista della Dashboard
 // Gara Reale. Verifica che:
@@ -50,6 +51,12 @@ const artMobileUntied = {
   dettaglio: { canone: '10' },
 }; // mobile → UNTIED (0,75 punti)
 
+const artFissoFtth = {
+  categoria: { nome: 'ADSL/FIBRA/FWA CF' },
+  tipologia: { nome: 'FIBRA FTTH CF' },
+  dettaglio: { canone: '25' },
+}; // fisso → FISSO_FTTH (1 punto per pezzo)
+
 async function insertSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale, articoli }) {
   const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
   await pool.query(
@@ -63,6 +70,10 @@ async function insertSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale,
 }
 
 const provNum = (txt) => Number(String(txt).replace(/[^\d,.-]/g, '').replace(',', '.'));
+const componentPoints = (txt) => {
+  const match = String(txt).match(/·\s*([+-]?[\d.]+(?:,\d+)?)\s*pt/i);
+  return match ? Number(match[1].replace(/\./g, '').replace(',', '.')) : NaN;
+};
 
 // ── Task #491 — contrasto WCAG misurato nel pannello (temi scuri) ────────────
 // Stessa matematica delle suite dark-contrast (tests/helpers/contrastScan.mjs),
@@ -225,6 +236,36 @@ const assertPanelContrast = async (page, pista, label) => {
         .join('\n'),
   );
 };
+
+test('Provenienza punti: ogni pista calcola i punti delle componenti col proprio modello', () => {
+  const context = {
+    mobile: { TIED: 0.75 },
+    partnership: { cambio_offerta_rivincoli: 6 },
+    assicurazioni: { protezionePro: 5 },
+    extraGara: { worldStaff: 2 },
+  };
+
+  assert.equal(calcolaPuntiComponentePista('mobile', 'TIED', 4, context), 3);
+
+  // Stesso caso segnalato nel pannello Fisso: anche i coefficienti frazionari
+  // e le categorie a zero devono essere visibili, senza stime proporzionali.
+  assert.equal(calcolaPuntiComponentePista('fisso', 'FISSO_FTTH', 145, context), 145);
+  assert.equal(calcolaPuntiComponentePista('fisso', 'PIU_SICURI_CASA_UFFICIO', 277, context), 69.25);
+  assert.equal(calcolaPuntiComponentePista('fisso', 'CONVERGENZA', 197, context), 0);
+
+  assert.equal(calcolaPuntiComponentePista('energia', 'BUSINESS_CON_SDD', 7, context), 7);
+  assert.equal(calcolaPuntiComponentePista('partnership', 'cambio_offerta_rivincoli', 3, context), 18);
+  assert.equal(calcolaPuntiComponentePista('partnership', 'buy_untied', 3), 6);
+  assert.equal(calcolaPuntiComponentePista('cb', 'cambio_offerta_rivincoli', 8, context), 8);
+  assert.equal(calcolaPuntiComponentePista('cb', 'coupon_caring', 8, context), 0);
+  assert.equal(calcolaPuntiComponentePista('assicurazioni', 'protezionePro', 2, context), 10);
+  assert.equal(calcolaPuntiComponentePista('assicurazioni', 'pagamentoAnnuale', 3), 1.5);
+  assert.equal(calcolaPuntiComponentePista('protecta', 'casaStart', 2, context), 2);
+  assert.equal(calcolaPuntiComponentePista('extra_gara_iva', 'worldStaff', 2, context), 4);
+  assert.equal(calcolaPuntiComponentePista('extra_gara_iva', 'fullPlus', 3), 3);
+  assert.equal(calcolaPuntiComponentePista('fisso', 'CATEGORIA_SCONOSCIUTA', 99, context), 0);
+});
+
 test('Provenienza punti: il Fisso espone solo i moltiplicatori realmente applicati', () => {
   const pistaConfig = {
     posCode: 'FISSO-MULT',
@@ -353,6 +394,14 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
             multiplierSoglia3: 1.5, multiplierSoglia4: 2,
           })),
         },
+        pistaFissoConfig: {
+          sogliePerPos: [POS_A, POS_B].map((posCode) => ({
+            posCode,
+            soglia1: 2, soglia2: 100, soglia3: 200, soglia4: 300, soglia5: 400,
+            multiplierSoglia1: 1, multiplierSoglia2: 1.5,
+            multiplierSoglia3: 2, multiplierSoglia4: 3, multiplierSoglia5: 4,
+          })),
+        },
       })],
     );
 
@@ -380,6 +429,10 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     await insertSale(pool, session.orgId, {
       codicePos: POS_NO_MODEL, nomeNegozio: 'Negozio senza modello', ragioneSociale: RS,
       articoli: [artMobileTied],
+    });
+    await insertSale(pool, session.orgId, {
+      codicePos: POS_A, nomeNegozio: 'Negozio Prov A', ragioneSociale: RS,
+      articoli: [artFissoFtth, artFissoFtth],
     });
 
     browser = await launchBrowser();
@@ -432,12 +485,18 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     assert.match(sommaTxt, /4,50|4\.50/, 'riga somma mostra 4,50 pt');
     assert.match(sommaTxt, /= totale card/, 'riconciliazione esplicita col totale card');
 
-    // Fonti aggregate per RS: TIED 5 pezzi = 3,75 pt, UNTIED 2 pezzi = 1,50 pt.
+    // Fonti aggregate per RS: i pezzi del PDV senza modello restano visibili,
+    // ma valgono 0 punti come nella card. Quindi TIED 5 pezzi = 3,00 pt.
     const rsCategoryText = await page.locator('[data-testid^="prov-cat-rs-mobile-"]').allInnerTexts();
-    assert.ok(rsCategoryText.some((text) => /Tied/i.test(text) && /5\s*pz/.test(text) && /3,75\s*pt|3\.75\s*pt/.test(text)),
-      `TIED aggregato RS = 5 pz / 3,75 pt (${rsCategoryText.join(' | ')})`);
+    assert.ok(rsCategoryText.some((text) => /Tied/i.test(text) && /5\s*pz/.test(text) && /3,00\s*pt|3\.00\s*pt/.test(text)),
+      `TIED aggregato RS = 5 pz / 3,00 pt (${rsCategoryText.join(' | ')})`);
     assert.ok(rsCategoryText.some((text) => /Untied/i.test(text) && /2\s*pz/.test(text) && /1,50\s*pt|1\.50\s*pt/.test(text)),
       `UNTIED aggregato RS = 2 pz / 1,50 pt (${rsCategoryText.join(' | ')})`);
+    assert.equal(
+      rsCategoryText.reduce((sum, text) => sum + componentPoints(text), 0),
+      totale,
+      'la somma dei punti delle categorie Mobile deve riconciliare il totale card',
+    );
 
     // Task #490 — soglia raggiunta e moltiplicatore applicato per PDV.
     // PDV A: 1,50 pt < soglia1 (3) → "Soglia non raggiunta", nessun ×.
@@ -456,7 +515,30 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     await panel.waitFor({ state: 'detached', timeout: 10000 });
     assert.equal(await btn.getAttribute('aria-expanded'), 'false', 'aria-expanded=false dopo chiusura');
 
-    // Riapertura via click sulla card ticker.
+    // La stessa UI espone i punti anche per le piste non Mobile.
+    const fissoPanel = page.getByTestId('provenienza-panel-fisso');
+    await page.getByTestId('btn-provenienza-fisso').click();
+    await fissoPanel.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(provNum(await page.getByTestId('prov-totale-fisso').innerText()), 2,
+      'totale Fisso = 2 FTTH × 1 punto');
+    const fissoCategoryText = await page.locator('[data-testid^="prov-cat-rs-fisso-"]').allInnerTexts();
+    assert.ok(
+      fissoCategoryText.some((text) => /FTTH/i.test(text) && /2\s*pz/.test(text) && /2,00\s*pt|2\.00\s*pt/.test(text)),
+      `Fisso FTTH espone pezzi e punti (${fissoCategoryText.join(' | ')})`,
+    );
+    assert.ok(
+      fissoCategoryText.every((text) => /\d+\s*pz\s*·\s*[\d,.]+\s*pt/.test(text)),
+      `ogni componente Fisso usa il formato pezzi · punti (${fissoCategoryText.join(' | ')})`,
+    );
+    assert.equal(
+      fissoCategoryText.reduce((sum, text) => sum + componentPoints(text), 0),
+      2,
+      'la somma dei punti delle categorie Fisso deve riconciliare il totale card',
+    );
+    await page.getByTestId('ticker-punti-fisso').click();
+    await fissoPanel.waitFor({ state: 'detached', timeout: 10000 });
+
+    // Riapertura Mobile via click sulla card ticker.
     await page.getByTestId('ticker-punti-mobile').click();
     await panel.waitFor({ state: 'visible', timeout: 10000 });
 
@@ -474,6 +556,13 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
       await panel.waitFor({ state: 'visible', timeout: 10000 });
       await page.waitForTimeout(300);
       await assertPanelContrast(page, 'mobile', `dark ${scheme}`);
+      if (scheme === 'midnight-violet' && process.env.PROVENIENZA_SCREENSHOT_PATH) {
+        await page.getByTestId('ticker-punti-mobile').click();
+        await panel.waitFor({ state: 'detached', timeout: 10000 });
+        await page.getByTestId('btn-provenienza-fisso').click();
+        await fissoPanel.waitFor({ state: 'visible', timeout: 10000 });
+        await fissoPanel.screenshot({ path: process.env.PROVENIENZA_SCREENSHOT_PATH });
+      }
     }
 
     await page.close();
