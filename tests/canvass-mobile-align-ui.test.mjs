@@ -49,6 +49,24 @@ const artEnergiaConsumer = {
   descrizione: 'OFFERTA LUCE CASA',
   dettaglio: { prezzo: '0.00' },
 }; // energia, NESSUN pezzo IVA → riga senza dicitura IVA
+const artTelefono = {
+  categoria: { nome: 'TELEFONIA' },
+  tipologia: { nome: 'SMARTPHONE' },
+  descrizione: 'SMARTPHONE TEST',
+  dettaglio: { prezzo: '2939.10' },
+};
+const artRicarica = {
+  categoria: { nome: 'RICARICHE' },
+  tipologia: { nome: 'RICARICA' },
+  descrizione: 'RICARICA TEST',
+  dettaglio: { prezzo: '501.00' },
+};
+const artModem = {
+  categoria: { nome: 'MODEM/ROUTER' },
+  tipologia: { nome: 'MODEM' },
+  descrizione: 'MODEM TEST',
+  dettaglio: { prezzo: '287.52' },
+};
 
 async function insertSale(pool, orgId, articoli) {
   await pool.query(
@@ -71,7 +89,7 @@ async function insertSale(pool, orgId, articoli) {
 
 const boxOf = (locator) => locator.boundingBox();
 
-test('Vendite BiSuite mobile 375px: righe Canvass con colonna numerica comune (badge e IVA incolonnati)', async () => {
+test('Vendite BiSuite mobile: righe riepilogo Canvass e Prodotti allineate e leggibili', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cnv_align', fullName: 'Canvass Align UI Test' });
   let browser;
@@ -83,6 +101,7 @@ test('Vendite BiSuite mobile 375px: righe Canvass con colonna numerica comune (b
     await insertSale(pool, session.orgId, [artTiedIva, ...Array(11).fill(artUntied)]);
     await insertSale(pool, session.orgId, [artFissoIva]);
     await insertSale(pool, session.orgId, [artEnergiaConsumer, artEnergiaConsumer]);
+    await insertSale(pool, session.orgId, [artTelefono, artRicarica, artModem]);
 
     browser = await launchBrowser();
     const context = await newAuthedContext(browser, session);
@@ -106,7 +125,7 @@ test('Vendite BiSuite mobile 375px: righe Canvass con colonna numerica comune (b
     // ── Badge conteggio incolonnati alla stessa estremità destra ──
     const badgeRight = {};
     for (const p of pistas) {
-      const badge = rows[p].locator(':scope > div').nth(1).locator('div').last();
+      const badge = page.getByTestId(`row-summary-pista-${p}-count`);
       const box = await boxOf(badge);
       assert.ok(box, `badge ${p} misurabile`);
       badgeRight[p] = box.x + box.width;
@@ -126,7 +145,7 @@ test('Vendite BiSuite mobile 375px: righe Canvass con colonna numerica comune (b
     assert.equal(await page.getByTestId('text-iva-energia').count(), 0, 'energia senza pezzi IVA: nessuna dicitura');
 
     // ── Leggibilità: nessun testo rimpicciolito sotto i minimi precedenti ──
-    const labelFont = await rows.mobile.locator(':scope > div').first().locator('span').first()
+    const labelFont = await rows.mobile.locator(':scope > span').first()
       .evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
     assert.ok(labelFont >= 14, `etichetta pista leggibile (font-size=${labelFont}px >= 14)`);
     const ivaFont = await page.getByTestId('text-iva-mobile')
@@ -137,23 +156,66 @@ test('Vendite BiSuite mobile 375px: righe Canvass con colonna numerica comune (b
     for (const p of pistas) {
       const geo = await rows[p].evaluate((row) => {
         const label = row.children[0].getBoundingClientRect();
-        const values = row.children[1].getBoundingClientRect();
+        const amountAndIva = row.children[1].getBoundingClientRect();
+        const count = row.children[2].getBoundingClientRect();
         const rowRect = row.getBoundingClientRect();
-        const horizontalOverlap = label.right > values.left + 1 && label.top < values.bottom - 1 && values.top < label.bottom - 1;
+        const valuesLeft = Math.min(amountAndIva.left, count.left);
+        const horizontalOverlap = label.right > valuesLeft + 1;
         const overflow = Array.from(row.querySelectorAll('span, div')).some((child) => {
           const r = child.getBoundingClientRect();
           return r.left < rowRect.left - 1 || r.right > rowRect.right + 1;
         });
-        return { horizontalOverlap, overflow };
+        const center = (r) => r.top + r.height / 2;
+        const centers = [center(label), center(amountAndIva), center(count)];
+        return { horizontalOverlap, overflow, centerSpread: Math.max(...centers) - Math.min(...centers) };
       });
       assert.equal(geo.horizontalOverlap, false, `${p}: etichetta e valori non si sovrappongono`);
       assert.equal(geo.overflow, false, `${p}: nessun contenuto fuori dalla riga`);
+      assert.ok(geo.centerSpread <= 1.5, `${p}: etichetta, dati e badge sulla stessa linea (spread=${geo.centerSpread.toFixed(2)}px)`);
     }
     const pageOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     assert.ok(pageOverflow <= 1, `nessun overflow orizzontale di pagina (${pageOverflow}px)`);
+    if (process.env.CAPTURE_MOBILE_ALIGN) {
+      await page.evaluate(() => document.documentElement.classList.add('dark'));
+      await page.screenshot({ path: '/tmp/vendite-canvass-mobile-align.jpg', fullPage: false });
+    }
+
+    // ── Prodotti: la stessa griglia previene il salto dei dati sotto
+    //    l'etichetta a più larghezze smartphone e con importi a quattro cifre.
+    await page.getByTestId('sales-category-mobile-prodotti').click();
+    const productRows = ['TELEFONIA', 'RICARICHE', 'MODEM/ROUTER'].map((cat) =>
+      page.getByTestId(`row-summary-prodotto-${cat}`),
+    );
+    for (const width of [320, 375, 430]) {
+      await page.setViewportSize({ width, height: 812 });
+      for (const [index, row] of productRows.entries()) {
+        await row.waitFor({ state: 'visible', timeout: 15000 });
+        const geo = await row.evaluate((el) => {
+          const children = Array.from(el.children).map((child) => child.getBoundingClientRect());
+          const center = (r) => r.top + r.height / 2;
+          const centers = children.map(center);
+          const fonts = Array.from(el.children).map((child) => Number.parseFloat(getComputedStyle(child).fontSize));
+          const rect = el.getBoundingClientRect();
+          return {
+            centerSpread: Math.max(...centers) - Math.min(...centers),
+            minFont: Math.min(...fonts),
+            overflow: children.some((r) => r.left < rect.left - 1 || r.right > rect.right + 1),
+          };
+        });
+        assert.ok(geo.centerSpread <= 1.5, `prodotto ${index} a ${width}px: dati sulla stessa linea (spread=${geo.centerSpread.toFixed(2)}px)`);
+        assert.ok(geo.minFont >= 14, `prodotto ${index} a ${width}px: font >= 14px (${geo.minFont}px)`);
+        assert.equal(geo.overflow, false, `prodotto ${index} a ${width}px: nessun overflow`);
+      }
+      if (width === 375 && process.env.CAPTURE_MOBILE_ALIGN) {
+        await page.screenshot({ path: '/tmp/vendite-prodotti-mobile-align.jpg', fullPage: false });
+      }
+      const viewportOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      assert.ok(viewportOverflow <= 1, `prodotti a ${width}px: nessun overflow di pagina (${viewportOverflow}px)`);
+    }
 
     // ── Desktop: riga singola, resa invariata ──
     await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByTestId('sales-category-desktop-canvass').click();
     await page.getByTestId('row-summary-pista-mobile').waitFor({ state: 'visible', timeout: 15000 });
     const desktop = await page.getByTestId('row-summary-pista-mobile').evaluate((row) => {
       const label = row.children[0].getBoundingClientRect();

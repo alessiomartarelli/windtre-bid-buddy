@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
@@ -250,6 +250,58 @@ function ArticleIncassoRecap({
           <span className="font-semibold">{formatCurrency(i.value)}</span>
         </Badge>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Riga riepilogativa a colonne fisse: su smartphone le metriche restano
+ * affiancate all'etichetta, anche quando cambiano numero di cifre o scala
+ * del font del browser. Tutte le card di sintesi la riusano per evitare
+ * regressioni di allineamento fra categorie.
+ */
+function SummaryMetricRow({
+  label,
+  amount,
+  count,
+  countClassName = "",
+  extra,
+  reserveExtraSpace = false,
+  testId,
+  countTestId,
+}: {
+  label: ReactNode;
+  amount?: ReactNode;
+  count: ReactNode;
+  countClassName?: string;
+  extra?: ReactNode;
+  reserveExtraSpace?: boolean;
+  testId?: string;
+  countTestId?: string;
+}) {
+  return (
+    <div
+      className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 text-sm leading-5"
+      data-testid={testId}
+    >
+      <span className="min-w-0 truncate text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 items-center justify-end gap-x-2 whitespace-nowrap tabular-nums">
+        {amount}
+        {extra ? (
+          <span className="min-w-[5.5rem] text-right text-xs font-semibold leading-5 text-indigo-600 dark:text-indigo-400">
+            {extra}
+          </span>
+        ) : reserveExtraSpace ? (
+          <span className="min-w-[5.5rem]" aria-hidden="true" />
+        ) : null}
+      </div>
+      <Badge
+        variant="outline"
+        className={`min-w-10 justify-center px-2 py-1 text-sm font-bold leading-5 tabular-nums ${countClassName}`}
+        data-testid={countTestId}
+      >
+        {count}
+      </Badge>
     </div>
   );
 }
@@ -1592,54 +1644,29 @@ export default function VenditeBiSuite() {
                       return (Object.entries(globalCounts.byPista) as [PistaCanvass, number][])
                         .sort(([, a], [, b]) => b - a)
                         .map(([pista, count]) => (
-                          <div
-                            key={pista}
-                            className="flex flex-col gap-y-0.5 text-sm min-h-8 sm:flex-row sm:items-center sm:justify-between sm:gap-x-3"
-                            data-testid={`row-summary-pista-${pista}`}
-                          >
-                            <div className="flex min-w-0 items-center gap-1.5">
-                              {PISTA_ICONS[pista]}
-                              <span className="min-w-0 truncate">{pistaLabels[pista]}</span>
-                            </div>
-                            <div className="ml-auto flex w-full shrink-0 items-center justify-end gap-x-2 whitespace-nowrap sm:w-auto">
-                              {(globalCounts.amtByPista[pista] || 0) > 0 && (
-                                <span className="text-sm font-semibold text-muted-foreground tabular-nums">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span>
-                              )}
-                              {hasAnyIva && (
-                                (globalCounts.ivaByPista[pista] || 0) > 0 ? (
-                                  <span
-                                    className="min-w-[5.5rem] text-right text-xs font-semibold text-indigo-600 dark:text-indigo-400 whitespace-nowrap tabular-nums"
-                                    data-testid={`text-iva-${pista}`}
-                                  >
-                                    di cui {globalCounts.ivaByPista[pista]} IVA
-                                  </span>
-                                ) : (
-                                  <span className="min-w-[5.5rem]" aria-hidden="true" />
-                                )
-                              )}
-                              <Badge variant="outline" className={PISTA_CANVASS_COLORS[pista] + " text-sm font-bold min-w-10 justify-center tabular-nums"}>
-                                {count}
-                              </Badge>
-                            </div>
-                          </div>
+                           <SummaryMetricRow
+                             key={pista}
+                             testId={`row-summary-pista-${pista}`}
+                             label={<span className="flex min-w-0 items-center gap-1.5">{PISTA_ICONS[pista]}<span className="min-w-0 truncate">{pistaLabels[pista]}</span></span>}
+                             amount={(globalCounts.amtByPista[pista] || 0) > 0 ? <span className="font-semibold text-muted-foreground">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span> : undefined}
+                             extra={(globalCounts.ivaByPista[pista] || 0) > 0 ? <span data-testid={`text-iva-${pista}`}>di cui {globalCounts.ivaByPista[pista]} IVA</span> : undefined}
+                             reserveExtraSpace={hasAnyIva}
+                             count={count}
+                             countClassName={PISTA_CANVASS_COLORS[pista]}
+                             countTestId={`row-summary-pista-${pista}-count`}
+                           />
                         ));
                     })()}
                     {globalCounts.couponCaring.pezzi > 0 && (
-                       <div className="flex flex-col gap-y-0.5 text-sm pt-1.5 mt-1 border-t border-dashed min-h-8 sm:flex-row sm:items-center sm:justify-between sm:gap-x-3" data-testid="row-coupon-caring">
-                         <div className="flex min-w-0 items-center gap-1.5">
-                          <Tag className="h-3 w-3 shrink-0 text-amber-600" />
-                          <span>Coupon Caring</span>
-                           <span className="min-w-0 truncate text-xs text-muted-foreground">(esclusi da CB)</span>
+                        <div className="mt-1 border-t border-dashed pt-1.5">
+                          <SummaryMetricRow
+                            testId="row-coupon-caring"
+                            label={<span className="flex min-w-0 items-center gap-1.5"><Tag className="h-3 w-3 shrink-0 text-amber-600" /><span className="truncate">Coupon Caring <span className="text-xs">(esclusi da CB)</span></span></span>}
+                            amount={globalCounts.couponCaring.importo > 0 ? <span className="font-semibold text-muted-foreground">{formatCurrency(globalCounts.couponCaring.importo)}</span> : undefined}
+                            count={globalCounts.couponCaring.pezzi}
+                            countClassName="bg-amber-500/10 text-amber-700 border-amber-500/20"
+                          />
                         </div>
-                         <div className="ml-auto flex w-full shrink-0 items-center justify-end gap-x-2 whitespace-nowrap sm:w-auto">
-                          {globalCounts.couponCaring.importo > 0 && (
-                             <span className="text-sm font-semibold text-muted-foreground tabular-nums">{formatCurrency(globalCounts.couponCaring.importo)}</span>
-                          )}
-                           <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/20 text-sm font-bold min-w-10 justify-center tabular-nums" data-testid="badge-coupon-caring-pezzi">
-                            {globalCounts.couponCaring.pezzi}
-                          </Badge>
-                        </div>
-                      </div>
                     )}
                   </div>
                   <ArticleIncassoRecap incasso={globalCounts.incassoByType.canvass} formatCurrency={formatCurrency} />
@@ -1672,18 +1699,11 @@ export default function VenditeBiSuite() {
                           </span>
                         )}
                       </div>
-                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm min-h-8">
-                        <span className="text-muted-foreground">ACCESSORI</span>
-                         <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:w-auto">
-                          {accessoriNetto > 0 && (
-                             <span className="text-sm font-semibold text-green-600 tabular-nums">
-                              {formatCurrency(accessoriNetto)}
-                              <span className="text-muted-foreground ml-0.5">(n.IVA)</span>
-                            </span>
-                          )}
-                           <Badge variant="outline" className="text-sm font-bold min-w-10 justify-center tabular-nums">{accessoriSummary.pezzi}</Badge>
-                        </div>
-                      </div>
+                       <SummaryMetricRow
+                         label="ACCESSORI"
+                         amount={accessoriNetto > 0 ? <span className="font-semibold text-green-600">{formatCurrency(accessoriNetto)} <span className="text-muted-foreground">(n.IVA)</span></span> : undefined}
+                         count={accessoriSummary.pezzi}
+                       />
                       <ArticleIncassoRecap incasso={globalCounts.incassoAccessori} formatCurrency={formatCurrency} />
                     </CardContent>
                   </Card>
@@ -1705,17 +1725,13 @@ export default function VenditeBiSuite() {
                      <p className="text-lg text-green-600 font-bold mb-2 tabular-nums">{formatCurrency(prodottiSummaryAmount)}</p>
                     <div className="space-y-1">
                       {prodottiSummaryEntries.map(([cat, { pezzi, importo }]) => (
-                             <div key={cat} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm min-h-8">
-                              <span className="truncate mr-2 text-muted-foreground">{cat}</span>
-                               <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:w-auto">
-                                {importo > 0 && (
-                                   <span className="text-sm font-semibold text-green-600 tabular-nums">
-                                    {formatCurrency(importo)}
-                                  </span>
-                                )}
-                                 <Badge variant="outline" className="text-sm font-bold min-w-10 justify-center tabular-nums">{pezzi}</Badge>
-                              </div>
-                            </div>
+                              <SummaryMetricRow
+                                key={cat}
+                                testId={`row-summary-prodotto-${cat}`}
+                                label={cat}
+                                amount={importo > 0 ? <span className="font-semibold text-green-600">{formatCurrency(importo)}</span> : undefined}
+                                count={pezzi}
+                              />
                       ))}
                     </div>
                     <ArticleIncassoRecap incasso={globalCounts.incassoProdotti} formatCurrency={formatCurrency} />
@@ -1750,14 +1766,13 @@ export default function VenditeBiSuite() {
                           const netto = nettoIva(importo);
                           const iva = ivaOf(importo);
                           return (
-                             <div key={label} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm min-h-8">
-                              <span className="truncate mr-2 text-muted-foreground">{label}</span>
-                               <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:w-auto">
-                                 {netto > 0 && <span className="text-sm font-semibold text-green-600 tabular-nums">{formatCurrency(netto)}</span>}
-                                 {iva > 0 && <span className="text-sm text-muted-foreground">IVA {formatCurrency(iva)}</span>}
-                                 <Badge variant="outline" className="text-sm font-bold min-w-10 justify-center tabular-nums">{pezzi}</Badge>
-                              </div>
-                            </div>
+                              <SummaryMetricRow
+                                key={label}
+                                label={label}
+                                amount={netto > 0 ? <span className="font-semibold text-green-600">{formatCurrency(netto)}</span> : undefined}
+                                extra={iva > 0 ? <>IVA {formatCurrency(iva)}</> : undefined}
+                                count={pezzi}
+                              />
                           );
                         })}
                     </div>
