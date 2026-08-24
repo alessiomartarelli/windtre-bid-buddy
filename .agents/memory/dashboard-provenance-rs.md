@@ -20,3 +20,9 @@ Il formato `N pz · X,XX pt` non è limitato al pannello Provenienza: deve compa
 **Why:** Punti presenti solo nel drill-down della card lasciano le tabelle non riconciliabili e fanno sembrare che il Fisso non produca punti.
 
 **How to apply:** Le tabelle devono riusare i punti categoria già calcolati per la card, mostrando esplicitamente anche `0,00 pt`; i test UI devono aprire una tabella PDV e verificarne una riga Fisso.
+
+Nel Mobile, gli add-on derivati dagli step di vendita (MNP, device finanziati, Più Sicuri, Reload e analoghi) fanno parte del calcolo punti e della provenienza, ma non aumentano il conteggio dei pezzi SIM della card.
+
+**Why:** Sono componenti additive reali del calcolatore Mobile; ometterle dal dettaglio rende la somma delle categorie inferiore al totale punti, mentre contarle come SIM altera il KPI di volume.
+
+**How to apply:** Passare base e add-on allo stesso calcolatore Mobile per attuale e proiezione; mostrare gli add-on come righe distinte con pezzi e punti, mantenendo `totalePezzi` limitato alle categorie SIM core.
