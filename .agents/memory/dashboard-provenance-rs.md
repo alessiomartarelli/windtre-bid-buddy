@@ -14,3 +14,9 @@ Le componenti devono usare lo stesso perimetro di input del calcolatore della pi
 **Why:** Un calcolo parallelo sui dati grezzi può produrre righe categoria plausibili ma non riconciliabili, soprattutto con add-on, PDV senza soglie e override parziali.
 
 **How to apply:** La somma dei punti delle categorie visibili deve uguagliare il subtotale PDV/RS e il totale card; testare esplicitamente anche coefficienti zero e frazionari.
+
+Il formato `N pz · X,XX pt` non è limitato al pannello Provenienza: deve comparire anche nelle tabelle di dettaglio PDV/RS, inclusi riepiloghi e categorie Fisso.
+
+**Why:** Punti presenti solo nel drill-down della card lasciano le tabelle non riconciliabili e fanno sembrare che il Fisso non produca punti.
+
+**How to apply:** Le tabelle devono riusare i punti categoria già calcolati per la card, mostrando esplicitamente anche `0,00 pt`; i test UI devono aprire una tabella PDV e verificarne una riga Fisso.
