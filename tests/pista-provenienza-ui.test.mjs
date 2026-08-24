@@ -538,6 +538,18 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     await page.getByTestId('ticker-punti-fisso').click();
     await fissoPanel.waitFor({ state: 'detached', timeout: 10000 });
 
+    // Anche la tabella di dettaglio PDV, non solo il pannello Provenienza,
+    // deve esporre i punti Fisso riconciliati con la card.
+    const pdvAccordion = page.getByTestId(`pdv-accordion-${POS_A}`);
+    await pdvAccordion.locator('[data-radix-collection-item]').click();
+    const fissoTableCategory = page.getByTestId(`pdv-pista-category-${POS_A}-fisso-FISSO_FTTH`);
+    await fissoTableCategory.waitFor({ state: 'visible', timeout: 10000 });
+    assert.match(
+      await fissoTableCategory.innerText(),
+      /2\s*pz\s*·\s*(?:2,00|2\.00)\s*pt/,
+      'la tabella PDV Fisso mostra pezzi e punti per categoria',
+    );
+
     // Riapertura Mobile via click sulla card ticker.
     await page.getByTestId('ticker-punti-mobile').click();
     await panel.waitFor({ state: 'visible', timeout: 10000 });

@@ -6518,6 +6518,12 @@ export default function DashboardGaraReale() {
                                     const conf = PISTA_CONFIG[pistaKey as keyof typeof PISTA_CONFIG];
                                     if (!conf) return null;
                                     const calc = pdvCalcByPista[pistaKey];
+                                    const pistaPdvBreakdown = pistaStats
+                                      .find((stat) => stat.pista === pistaKey)
+                                      ?.pdvBreakdown.find((entry) => entry.codicePos === pdv.codicePos);
+                                    const puntiCategoria = new Map(
+                                      (pistaPdvBreakdown?.categories ?? []).map((category) => [category.category, category.punti ?? 0]),
+                                    );
                                     const pistaAggPremio = pistaStats.find(s => s.pista === pistaKey)?.calc.premioStimato || 0;
                                     const pistaPdvPremio = pdvPremioByPista[pistaKey] ?? 0;
                                     const pistaPct = pistaAggPremio > 0 ? Math.round((pistaPdvPremio / pistaAggPremio) * 1000) / 10 : 0;
@@ -6550,6 +6556,7 @@ export default function DashboardGaraReale() {
                                           const rows = FISSO_BREAKDOWN.map((b) => ({
                                             label: b.label,
                                             n: countByCats(pdv, 'fisso', new Set(b.cats)),
+                                            punti: b.cats.reduce((sum, category) => sum + (puntiCategoria.get(category) ?? 0), 0),
                                           }));
                                           if (rows.every((r) => r.n === 0)) return null;
                                           return (
@@ -6557,11 +6564,13 @@ export default function DashboardGaraReale() {
                                               {rows.map((r) => (
                                                 <div key={r.label} className="flex items-center gap-1 flex-wrap">
                                                   <span className="font-medium text-gray-600 dark:text-gray-300">{r.label}:</span>
-                                                  <span>{r.n} pz</span>
+                                                   <span>{r.n} pz · {fmtPoints(r.punti)} pt</span>
                                                   {r.n > 0 && (
                                                     <>
                                                       <span className="text-gray-400 dark:text-slate-500">·</span>
-                                                      <span className="text-gray-500 dark:text-slate-400">proiezione {proj(r.n)}</span>
+                                                       <span className="text-gray-500 dark:text-slate-400">
+                                                         proiezione {proj(r.n)} pz · {fmtPoints(elapsed > 0 ? (r.punti * total) / elapsed : r.punti)} pt
+                                                       </span>
                                                     </>
                                                   )}
                                                 </div>
@@ -6695,9 +6704,11 @@ export default function DashboardGaraReale() {
                                             }
                                             if (!groupsConfig) {
                                               return sortedItems.map((item) => (
-                                                <div key={item.targetCategory} className="flex justify-between text-sm">
+                                                 <div key={item.targetCategory} className="flex justify-between text-sm" data-testid={`pdv-pista-category-${pdv.codicePos}-${pistaKey}-${item.targetCategory}`}>
                                                   <span className="truncate max-w-[70%]">{item.targetLabel}</span>
-                                                  <span className="font-medium">{item.pezzi}</span>
+                                                   <span className="font-medium tabular-nums">
+                                                     {item.pezzi} pz · {fmtPoints(puntiCategoria.get(item.targetCategory) ?? 0)} pt
+                                                   </span>
                                                 </div>
                                               ));
                                             }
@@ -6705,11 +6716,12 @@ export default function DashboardGaraReale() {
                                               const children = sortedItems.filter((it) => g.isMember(it.targetCategory));
                                               if (children.length === 0) return null;
                                               const total = children.reduce((s, c) => s + c.pezzi, 0);
+                                               const totalPunti = children.reduce((sum, child) => sum + (puntiCategoria.get(child.targetCategory) ?? 0), 0);
                                               return (
                                                 <div key={g.label} className="space-y-0.5">
                                                   <div className="flex justify-between text-sm font-semibold" data-testid={`group-header-${pistaKey}-${g.label}`}>
                                                     <span className="truncate max-w-[70%]">{g.label}</span>
-                                                    <span>{total}</span>
+                                                     <span className="tabular-nums">{total} pz · {fmtPoints(totalPunti)} pt</span>
                                                   </div>
                                                   {children.length > 0 && (
                                                     <div className="pl-3 space-y-0.5">
@@ -6727,9 +6739,11 @@ export default function DashboardGaraReale() {
                                                         }
                                                         const displayLabel = item.targetCategory === "SIM_IVA" ? "Altre SIM IVA" : item.targetLabel;
                                                         return [(
-                                                          <div key={item.targetCategory} className="flex justify-between text-xs text-gray-700 dark:text-gray-300">
+                                                           <div key={item.targetCategory} className="flex justify-between text-xs text-gray-700 dark:text-gray-300" data-testid={`pdv-pista-category-${pdv.codicePos}-${pistaKey}-${item.targetCategory}`}>
                                                             <span className="truncate max-w-[70%]">{displayLabel}</span>
-                                                            <span className="font-medium">{item.pezzi}</span>
+                                                             <span className="font-medium tabular-nums">
+                                                               {item.pezzi} pz · {fmtPoints(puntiCategoria.get(item.targetCategory) ?? 0)} pt
+                                                             </span>
                                                           </div>
                                                         )];
                                                       })}
