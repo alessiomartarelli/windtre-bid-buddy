@@ -56,6 +56,10 @@ export interface PreventivatoreConfig {
   pistaMobileRSConfig?: PistaMobileRSConfig;
   pistaFissoRSConfig?: PistaFissoRSConfig;
   partnershipRewardRSConfig?: PartnershipRewardRSConfig;
+  // Metadati rimozione blocchi per RS (soglie rimovibili in Config Gara):
+  // record con rimosso?/livelliRimossi? per Energia e Assicurazioni.
+  energiaRSConfig?: { configPerRS: Array<{ ragioneSociale: string; rimosso?: boolean; livelliRimossi?: string[]; [k: string]: unknown }> };
+  assicurazioniRSConfig?: { configPerRS: Array<{ ragioneSociale: string; rimosso?: boolean; livelliRimossi?: string[]; [k: string]: unknown }> };
   // Modalità inserimento RS
   modalitaInserimentoRS?: "per_rs" | "per_pdv" | null;
   // Extra Gara IVA soglie override per RS

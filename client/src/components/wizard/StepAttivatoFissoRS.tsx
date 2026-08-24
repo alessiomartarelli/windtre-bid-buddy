@@ -114,7 +114,8 @@ export const StepAttivatoFissoRS: React.FC<StepAttivatoFissoRSProps> = ({
   // Ottieni la configurazione soglie per una RS - usa trim e lowercase per evitare mismatch
   const getSoglieForRS = (rs: string): SoglieFissoRS | undefined => {
     const normalizedRS = rs.trim().toLowerCase();
-    return pistaFissoRSConfig.sogliePerRS.find(s => 
+    return pistaFissoRSConfig.sogliePerRS.find(s =>
+      !(s as { rimosso?: boolean }).rimosso &&
       s.ragioneSociale.trim().toLowerCase() === normalizedRS
     );
   };

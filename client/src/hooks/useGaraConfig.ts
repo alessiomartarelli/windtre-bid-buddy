@@ -76,6 +76,8 @@ export interface GaraConfigData {
   pistaMobileRSConfig?: {
     sogliePerRS: Array<{
       ragioneSociale: string;
+      /** true = pista rimossa per questa RS nel mese; il record resta per non farla ricreare dagli initializer. */
+      rimosso?: boolean;
       soglia1: number;
       soglia2: number;
       soglia3: number;
@@ -90,6 +92,7 @@ export interface GaraConfigData {
   pistaFissoRSConfig?: {
     sogliePerRS: Array<{
       ragioneSociale: string;
+      rimosso?: boolean;
       soglia1: number;
       soglia2: number;
       soglia3: number;
@@ -106,6 +109,7 @@ export interface GaraConfigData {
   partnershipRewardRSConfig?: {
     configPerRS: Array<{
       ragioneSociale: string;
+      rimosso?: boolean;
       target100: number;
       target80: number;
       premio100: number;
@@ -140,6 +144,9 @@ export interface GaraConfigData {
   energiaRSConfig?: {
     configPerRS: Array<{
       ragioneSociale: string;
+      rimosso?: boolean;
+      /** Livelli disattivati: 'S1'|'S2'|'S3' (target/premio) e 'PS1'..'PS5' (soglie pista). */
+      livelliRimossi?: string[];
       pdvInGara: number;
       targetNoMalus: number;
       targetS1: number;
@@ -159,6 +166,9 @@ export interface GaraConfigData {
   assicurazioniRSConfig?: {
     configPerRS: Array<{
       ragioneSociale: string;
+      rimosso?: boolean;
+      /** Livelli disattivati: 'S1'|'S2'. */
+      livelliRimossi?: string[];
       pdvInGara: number;
       targetNoMalus: number;
       targetS1: number;

@@ -205,7 +205,8 @@ export const StepAttivatoMobileRS: React.FC<StepAttivatoMobileRSProps> = ({
   // Ottieni la configurazione soglie per una RS - usa trim per evitare mismatch
   const getSoglieForRS = (rs: string): SoglieMobileRS | undefined => {
     const normalizedRS = rs.trim().toLowerCase();
-    return pistaMobileRSConfig.sogliePerRS.find(s => 
+    return pistaMobileRSConfig.sogliePerRS.find(s =>
+      !(s as { rimosso?: boolean }).rimosso &&
       s.ragioneSociale.trim().toLowerCase() === normalizedRS
     );
   };

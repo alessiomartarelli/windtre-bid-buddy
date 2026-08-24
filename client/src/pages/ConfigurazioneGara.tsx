@@ -20,6 +20,7 @@ import { CLUSTER_OPTIONS, CLUSTER_PIVA_OPTIONS, WEEKDAY_LABELS, ClusterCode, typ
 import { getDefaultTarget100, calculateTarget80, calculatePremio80 } from '@/types/partnership-reward';
 import { getThresholdsByCluster, mapClusterMobileToClusterPista, getDefaultFissoThresholds, mapClusterFissoToNumber } from '@/utils/preventivatore-helpers';
 import { calcolaSoglieDefaultPerRS as calcolaSoglieEnergiaDefault } from '@/types/energia';
+import { toggleLivelloRimosso, isLivelloRimosso } from '@shared/soglieRimovibili';
 import { apiUrl } from '@/lib/basePath';
 import {
   Loader2, Save, Download, Plus, Trash2, CalendarDays, Store,
@@ -614,6 +615,8 @@ export default function ConfigurazioneGara() {
   const [revisionsList, setRevisionsList] = useState<GaraConfigRevisionEntry[] | null>(null);
   const [revisionsLoading, setRevisionsLoading] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<GaraConfigRevisionEntry | null>(null);
+  // Rimozione intenzionale di un blocco pista per RS (con conferma).
+  const [rimozioneBlocco, setRimozioneBlocco] = useState<{ tipo: 'energia' | 'assicurazioni' | 'mobile' | 'fisso' | 'partnership'; rs: string } | null>(null);
   const [addPdvDialogOpen, setAddPdvDialogOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [configName, setConfigName] = useState('');
@@ -826,14 +829,46 @@ export default function ConfigurazioneGara() {
     const protectaRS = allRsNames.map(rs => ({ ragioneSociale: rs, targetExtra: 0, targetDecurtazione: 0, premioExtra: 350 }));
     const decurtazioneRS = allRsNames.map(rs => ({ ragioneSociale: rs, importo: 0 }));
 
-    setMobileRSConfig(mobileRS);
-    setFissoRSConfig(fissoRS);
-    setPartnershipRSConfig(partnershipRS);
-    setEnergiaRSConfig(energiaRS);
-    setAssicurazioniRSConfig(assicurazioniRS);
+    // La reinizializzazione ricalcola i default, ma NON deve resuscitare
+    // blocchi/livelli rimossi intenzionalmente: preserva i flag per RS.
+    const preserveFlags = <T extends { ragioneSociale: string; rimosso?: boolean; livelliRimossi?: string[] }>(next: T[]) =>
+      (prev: T[]): T[] => next.map(n => {
+        const old = prev.find(p => p.ragioneSociale === n.ragioneSociale);
+        if (!old) return n;
+        return {
+          ...n,
+          ...(old.rimosso ? { rimosso: true } : {}),
+          ...(old.livelliRimossi?.length ? { livelliRimossi: old.livelliRimossi } : {}),
+        };
+      });
+    setMobileRSConfig(preserveFlags(mobileRS));
+    setFissoRSConfig(preserveFlags(fissoRS));
+    setPartnershipRSConfig(preserveFlags(partnershipRS));
+    setEnergiaRSConfig(preserveFlags(energiaRS));
+    setAssicurazioniRSConfig(preserveFlags(assicurazioniRS));
     setProtectaRSConfig(protectaRS);
     setDecurtazioneRSConfig(decurtazioneRS);
   }, []);
+
+  // Rimozione/ripristino di un intero blocco pista per RS: il record resta
+  // nell'array con `rimosso: true`, così load/init non lo ricreano e i
+  // calcolatori lo escludono esplicitamente.
+  const marcaBlocco = useCallback((tipo: 'energia' | 'assicurazioni' | 'mobile' | 'fisso' | 'partnership', rs: string, rimosso: boolean) => {
+    const mark = <T extends { ragioneSociale: string; rimosso?: boolean }>(prev: T[]): T[] =>
+      prev.map(c => c.ragioneSociale === rs ? { ...c, rimosso } : c);
+    if (tipo === 'energia') setEnergiaRSConfig(mark);
+    else if (tipo === 'assicurazioni') setAssicurazioniRSConfig(mark);
+    else if (tipo === 'mobile') setMobileRSConfig(mark);
+    else if (tipo === 'fisso') setFissoRSConfig(mark);
+    else setPartnershipRSConfig(mark);
+    setIsDirty(true);
+  }, []);
+
+  const eseguiRimozioneBlocco = useCallback(() => {
+    if (!rimozioneBlocco) return;
+    marcaBlocco(rimozioneBlocco.tipo, rimozioneBlocco.rs, true);
+    setRimozioneBlocco(null);
+  }, [rimozioneBlocco, marcaBlocco]);
 
   const initializeConfigsFromPdvList = useCallback((pdvs: GaraConfigPdv[]) => {
     setMobileConfig(pdvs.map(p => initMobileConfigForPdv(p)));
@@ -2311,10 +2346,23 @@ export default function ConfigurazioneGara() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                           <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="h-5 w-1 bg-blue-500 rounded-full" />
-                              <h4 className="font-semibold text-xs">Pista Mobile</h4>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-2">
+                                <div className="h-5 w-1 bg-blue-500 rounded-full" />
+                                <h4 className="font-semibold text-xs">Pista Mobile</h4>
+                              </div>
+                              {mc.rimosso ? (
+                                <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => marcaBlocco('mobile', rs, false)} data-testid={`button-ripristina-mobile-rs-${rs}`}>Ripristina</Button>
+                              ) : (
+                                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-muted-foreground hover:text-destructive" onClick={() => setRimozioneBlocco({ tipo: 'mobile', rs })} data-testid={`button-rimuovi-mobile-rs-${rs}`}>
+                                  <Trash2 className="h-3 w-3 mr-1" /> Rimuovi
+                                </Button>
+                              )}
                             </div>
+                            {mc.rimosso && (
+                              <p className="text-[11px] text-muted-foreground rounded-md border border-dashed p-2" data-testid={`banner-mobile-rs-rimossa-${rs}`}>Pista Mobile rimossa per questo mese: non concorre a premi e calcoli.</p>
+                            )}
+                            {!mc.rimosso && (<>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                               {(['soglia1', 'soglia2', 'soglia3', 'soglia4'] as const).map(f => (
                                 <div key={f} className="space-y-0.5">
@@ -2338,15 +2386,29 @@ export default function ConfigurazioneGara() {
                                 ))}
                               </div>
                             </div>
+                            </>)}
                           </div>
 
                           <Separator />
 
                           <div>
                             <div className="flex items-center gap-2 mb-2">
-                              <div className="h-5 w-1 bg-green-500 rounded-full" />
-                              <h4 className="font-semibold text-xs">Pista Fisso</h4>
+                              <div className="flex items-center gap-2">
+                                <div className="h-5 w-1 bg-green-500 rounded-full" />
+                                <h4 className="font-semibold text-xs">Pista Fisso</h4>
+                              </div>
+                              {fc.rimosso ? (
+                                <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => marcaBlocco('fisso', rs, false)} data-testid={`button-ripristina-fisso-rs-${rs}`}>Ripristina</Button>
+                              ) : (
+                                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-muted-foreground hover:text-destructive" onClick={() => setRimozioneBlocco({ tipo: 'fisso', rs })} data-testid={`button-rimuovi-fisso-rs-${rs}`}>
+                                  <Trash2 className="h-3 w-3 mr-1" /> Rimuovi
+                                </Button>
+                              )}
                             </div>
+                            {fc.rimosso && (
+                              <p className="text-[11px] text-muted-foreground rounded-md border border-dashed p-2" data-testid={`banner-fisso-rs-rimossa-${rs}`}>Pista Fisso rimossa per questo mese: non concorre a premi e calcoli.</p>
+                            )}
+                            {!fc.rimosso && (<>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                               {(['soglia1', 'soglia2', 'soglia3', 'soglia4', 'soglia5'] as const).map(f => (
                                 <div key={f} className="space-y-0.5">
@@ -2370,15 +2432,29 @@ export default function ConfigurazioneGara() {
                                 ))}
                               </div>
                             </div>
+                            </>)}
                           </div>
 
                           <Separator />
 
                           <div>
                             <div className="flex items-center gap-2 mb-2">
-                              <div className="h-5 w-1 bg-purple-500 rounded-full" />
-                              <h4 className="font-semibold text-xs">Partnership Reward</h4>
+                              <div className="flex items-center gap-2">
+                                <div className="h-5 w-1 bg-purple-500 rounded-full" />
+                                <h4 className="font-semibold text-xs">Partnership Reward</h4>
+                              </div>
+                              {pc.rimosso ? (
+                                <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => marcaBlocco('partnership', rs, false)} data-testid={`button-ripristina-partnership-rs-${rs}`}>Ripristina</Button>
+                              ) : (
+                                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-muted-foreground hover:text-destructive" onClick={() => setRimozioneBlocco({ tipo: 'partnership', rs })} data-testid={`button-rimuovi-partnership-rs-${rs}`}>
+                                  <Trash2 className="h-3 w-3 mr-1" /> Rimuovi
+                                </Button>
+                              )}
                             </div>
+                            {pc.rimosso && (
+                              <p className="text-[11px] text-muted-foreground rounded-md border border-dashed p-2" data-testid={`banner-partnership-rs-rimossa-${rs}`}>Partnership Reward rimossa per questo mese: non concorre a premi e calcoli.</p>
+                            )}
+                            {!pc.rimosso && (
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                               <div className="space-y-0.5">
                                 <Label className="text-[10px]">Target 100%</Label>
@@ -2397,6 +2473,7 @@ export default function ConfigurazioneGara() {
                                 <Input type="number" step="0.01" className="h-7 text-xs bg-muted" value={pc.premio80} disabled />
                               </div>
                             </div>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
@@ -2451,6 +2528,34 @@ export default function ConfigurazioneGara() {
                     };
                     const pConf = protectaRSConfig.find(c => c.ragioneSociale === rs);
                     const dConf = decurtazioneRSConfig.find(c => c.ragioneSociale === rs);
+                    const toggleLivelloEnergiaRS = (livello: string) => {
+                      setEnergiaRSConfig(prev => prev.map(c => c.ragioneSociale === rs ? { ...c, livelliRimossi: toggleLivelloRimosso(c.livelliRimossi, livello) } : c));
+                      setIsDirty(true);
+                    };
+                    const toggleLivelloAssicRS = (livello: string) => {
+                      setAssicurazioniRSConfig(prev => prev.map(c => c.ragioneSociale === rs ? { ...c, livelliRimossi: toggleLivelloRimosso(c.livelliRimossi, livello) } : c));
+                      setIsDirty(true);
+                    };
+                    const aggiungiEnergiaRS = () => {
+                      const pdvEnergia = rsPdvs.filter(p => p.abilitaEnergia).length;
+                      const soglieE = calcolaSoglieEnergiaDefault(pdvEnergia);
+                      setEnergiaRSConfig(prev => [...prev, {
+                        ragioneSociale: rs, pdvInGara: pdvEnergia,
+                        targetNoMalus: 10 * pdvEnergia, targetS1: 15 * pdvEnergia, targetS2: 25 * pdvEnergia, targetS3: 40 * pdvEnergia,
+                        premioS1: 250, premioS2: 500, premioS3: 1000,
+                        pistaSoglia_S1: soglieE.S1, pistaSoglia_S2: soglieE.S2, pistaSoglia_S3: soglieE.S3, pistaSoglia_S4: soglieE.S4, pistaSoglia_S5: soglieE.S5,
+                      }]);
+                      setIsDirty(true);
+                    };
+                    const aggiungiAssicRS = () => {
+                      const pdvAssic = rsPdvs.filter(p => p.abilitaAssicurazioni).length;
+                      setAssicurazioniRSConfig(prev => [...prev, {
+                        ragioneSociale: rs, pdvInGara: pdvAssic,
+                        targetNoMalus: 15 * pdvAssic, targetS1: 20 * pdvAssic, targetS2: 25 * pdvAssic,
+                        premioS1: 500, premioS2: 750,
+                      }]);
+                      setIsDirty(true);
+                    };
                     const updateProtectaRS = (field: string, value: number) => {
                       setProtectaRSConfig(prev => prev.map(c => c.ragioneSociale === rs ? { ...c, [field]: value } : c));
                       setIsDirty(true);
@@ -2465,11 +2570,27 @@ export default function ConfigurazioneGara() {
                           </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                          {eConf && (
+                          {eConf?.rimosso && (
+                            <div className="flex items-center justify-between gap-3 rounded-md border border-dashed p-3" data-testid={`banner-energia-rs-rimossa-${rs}`}>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Zap className="h-4 w-4" />
+                                Pista Energia rimossa per questo mese: non concorre a premi e calcoli.
+                              </div>
+                              <Button type="button" size="sm" variant="outline" onClick={() => marcaBlocco('energia', rs, false)} data-testid={`button-ripristina-energia-rs-${rs}`}>
+                                Ripristina
+                              </Button>
+                            </div>
+                          )}
+                          {eConf && !eConf.rimosso && (
                             <div className="space-y-3">
-                              <div className="flex items-center gap-2">
-                                <Zap className="h-4 w-4 text-amber-600" />
-                                <Label className="text-xs font-semibold">Energia</Label>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Zap className="h-4 w-4 text-amber-600" />
+                                  <Label className="text-xs font-semibold">Energia</Label>
+                                </div>
+                                <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-muted-foreground hover:text-destructive" onClick={() => setRimozioneBlocco({ tipo: 'energia', rs })} data-testid={`button-rimuovi-energia-rs-${rs}`}>
+                                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Rimuovi
+                                </Button>
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <div className="space-y-1">
@@ -2480,54 +2601,92 @@ export default function ConfigurazioneGara() {
                                   <Label className="text-xs">No Malus</Label>
                                   <Input type="number" className="h-8 text-sm" value={eConf.targetNoMalus} onChange={e => updateEnergiaRS('targetNoMalus', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetNoMalus-${rs}`} />
                                 </div>
-                                <div className="space-y-1">
-                                  <Label className="text-xs">Target S1</Label>
-                                  <Input type="number" className="h-8 text-sm" value={eConf.targetS1} onChange={e => updateEnergiaRS('targetS1', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetS1-${rs}`} />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className="text-xs">Target S2</Label>
-                                  <Input type="number" className="h-8 text-sm" value={eConf.targetS2} onChange={e => updateEnergiaRS('targetS2', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetS2-${rs}`} />
-                                </div>
+                                {(['S1', 'S2'] as const).map(liv => (
+                                  <div key={liv} className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <Label className={`text-xs ${isLivelloRimosso(eConf, liv) ? 'line-through text-muted-foreground' : ''}`}>Target {liv}</Label>
+                                      <button type="button" className="text-muted-foreground hover:text-destructive" title={isLivelloRimosso(eConf, liv) ? `Riattiva livello ${liv}` : `Rimuovi livello ${liv}`} onClick={() => toggleLivelloEnergiaRS(liv)} data-testid={`button-energia-rs-livello-${liv}-${rs}`}>
+                                        {isLivelloRimosso(eConf, liv) ? <Plus className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                                      </button>
+                                    </div>
+                                    <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(eConf, liv)} value={liv === 'S1' ? eConf.targetS1 : eConf.targetS2} onChange={e => updateEnergiaRS(liv === 'S1' ? 'targetS1' : 'targetS2', Number(e.target.value) || 0)} data-testid={`input-energia-rs-target${liv}-${rs}`} />
+                                  </div>
+                                ))}
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <div className="space-y-1">
-                                  <Label className="text-xs">Target S3</Label>
-                                  <Input type="number" className="h-8 text-sm" value={eConf.targetS3} onChange={e => updateEnergiaRS('targetS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetS3-${rs}`} />
+                                  <div className="flex items-center justify-between">
+                                    <Label className={`text-xs ${isLivelloRimosso(eConf, 'S3') ? 'line-through text-muted-foreground' : ''}`}>Target S3</Label>
+                                    <button type="button" className="text-muted-foreground hover:text-destructive" title={isLivelloRimosso(eConf, 'S3') ? 'Riattiva livello S3' : 'Rimuovi livello S3'} onClick={() => toggleLivelloEnergiaRS('S3')} data-testid={`button-energia-rs-livello-S3-${rs}`}>
+                                      {isLivelloRimosso(eConf, 'S3') ? <Plus className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                                    </button>
+                                  </div>
+                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(eConf, 'S3')} value={eConf.targetS3} onChange={e => updateEnergiaRS('targetS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetS3-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio S1 € per PDV</Label>
-                                  <Input type="number" className="h-8 text-sm" value={eConf.premioS1 ?? 250} onChange={e => updateEnergiaRS('premioS1', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS1-${rs}`} />
+                                  <Label className={`text-xs font-semibold ${isLivelloRimosso(eConf, 'S1') ? 'line-through text-muted-foreground' : ''}`}>Premio S1 € per PDV</Label>
+                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(eConf, 'S1')} value={eConf.premioS1 ?? 250} onChange={e => updateEnergiaRS('premioS1', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS1-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio S2 € per PDV</Label>
-                                  <Input type="number" className="h-8 text-sm" value={eConf.premioS2 ?? 500} onChange={e => updateEnergiaRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS2-${rs}`} />
+                                  <Label className={`text-xs font-semibold ${isLivelloRimosso(eConf, 'S2') ? 'line-through text-muted-foreground' : ''}`}>Premio S2 € per PDV</Label>
+                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(eConf, 'S2')} value={eConf.premioS2 ?? 500} onChange={e => updateEnergiaRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS2-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio S3 € per PDV</Label>
-                                  <Input type="number" className="h-8 text-sm" value={eConf.premioS3 ?? 1000} onChange={e => updateEnergiaRS('premioS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS3-${rs}`} />
+                                  <Label className={`text-xs font-semibold ${isLivelloRimosso(eConf, 'S3') ? 'line-through text-muted-foreground' : ''}`}>Premio S3 € per PDV</Label>
+                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(eConf, 'S3')} value={eConf.premioS3 ?? 1000} onChange={e => updateEnergiaRS('premioS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS3-${rs}`} />
                                 </div>
                               </div>
                               <div>
                                 <Label className="text-xs font-semibold mb-2 block">Soglie Pista</Label>
                                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                                  {(['pistaSoglia_S1', 'pistaSoglia_S2', 'pistaSoglia_S3', 'pistaSoglia_S4', 'pistaSoglia_S5'] as const).map(f => (
-                                    <div key={f} className="space-y-1">
-                                      <Label className="text-xs">{f.replace('pistaSoglia_', 'S')}</Label>
-                                      <Input type="number" className="h-8 text-sm" value={eConf[f] ?? ''} onChange={e => updateEnergiaRS(f, Number(e.target.value) || 0)} data-testid={`input-energia-rs-${f}-${rs}`} />
-                                    </div>
-                                  ))}
+                                  {(['pistaSoglia_S1', 'pistaSoglia_S2', 'pistaSoglia_S3', 'pistaSoglia_S4', 'pistaSoglia_S5'] as const).map(f => {
+                                    const livPista = f.replace('pistaSoglia_S', 'PS');
+                                    const rimossoPista = isLivelloRimosso(eConf, livPista);
+                                    return (
+                                      <div key={f} className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                          <Label className={`text-xs ${rimossoPista ? 'line-through text-muted-foreground' : ''}`}>{f.replace('pistaSoglia_', 'S')}</Label>
+                                          <button type="button" className="text-muted-foreground hover:text-destructive" title={rimossoPista ? 'Riattiva soglia' : 'Rimuovi soglia'} onClick={() => toggleLivelloEnergiaRS(livPista)} data-testid={`button-energia-rs-livello-${livPista}-${rs}`}>
+                                            {rimossoPista ? <Plus className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                                          </button>
+                                        </div>
+                                        <Input type="number" className="h-8 text-sm" disabled={rimossoPista} value={eConf[f] ?? ''} onChange={e => updateEnergiaRS(f, Number(e.target.value) || 0)} data-testid={`input-energia-rs-${f}-${rs}`} />
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             </div>
                           )}
+                          {!eConf && (
+                            <Button type="button" size="sm" variant="outline" onClick={aggiungiEnergiaRS} data-testid={`button-aggiungi-energia-rs-${rs}`}>
+                              <Plus className="h-3.5 w-3.5 mr-1" /> Aggiungi pista Energia
+                            </Button>
+                          )}
 
                           {eConf && aConf && <Separator />}
 
-                          {aConf && (
+                          {aConf?.rimosso && (
+                            <div className="flex items-center justify-between gap-3 rounded-md border border-dashed p-3" data-testid={`banner-assic-rs-rimossa-${rs}`}>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Shield className="h-4 w-4" />
+                                Pista Assicurazioni rimossa per questo mese: non concorre a premi e calcoli.
+                              </div>
+                              <Button type="button" size="sm" variant="outline" onClick={() => marcaBlocco('assicurazioni', rs, false)} data-testid={`button-ripristina-assic-rs-${rs}`}>
+                                Ripristina
+                              </Button>
+                            </div>
+                          )}
+                          {aConf && !aConf.rimosso && (
                             <div className="space-y-3">
-                              <div className="flex items-center gap-2">
-                                <Shield className="h-4 w-4 text-purple-600" />
-                                <Label className="text-xs font-semibold">Assicurazioni</Label>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <Shield className="h-4 w-4 text-purple-600" />
+                                  <Label className="text-xs font-semibold">Assicurazioni</Label>
+                                </div>
+                                <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-muted-foreground hover:text-destructive" onClick={() => setRimozioneBlocco({ tipo: 'assicurazioni', rs })} data-testid={`button-rimuovi-assic-rs-${rs}`}>
+                                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Rimuovi
+                                </Button>
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <div className="space-y-1">
@@ -2538,24 +2697,32 @@ export default function ConfigurazioneGara() {
                                   <Label className="text-xs">No Malus</Label>
                                   <Input type="number" className="h-8 text-sm" value={aConf.targetNoMalus} onChange={e => updateAssicRS('targetNoMalus', Number(e.target.value) || 0)} data-testid={`input-assic-rs-targetNoMalus-${rs}`} />
                                 </div>
+                                {(['S1', 'S2'] as const).map(liv => (
+                                  <div key={liv} className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <Label className={`text-xs ${isLivelloRimosso(aConf, liv) ? 'line-through text-muted-foreground' : ''}`}>Target {liv}</Label>
+                                      <button type="button" className="text-muted-foreground hover:text-destructive" title={isLivelloRimosso(aConf, liv) ? `Riattiva livello ${liv}` : `Rimuovi livello ${liv}`} onClick={() => toggleLivelloAssicRS(liv)} data-testid={`button-assic-rs-livello-${liv}-${rs}`}>
+                                        {isLivelloRimosso(aConf, liv) ? <Plus className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                                      </button>
+                                    </div>
+                                    <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(aConf, liv)} value={liv === 'S1' ? aConf.targetS1 : aConf.targetS2} onChange={e => updateAssicRS(liv === 'S1' ? 'targetS1' : 'targetS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-target${liv}-${rs}`} />
+                                  </div>
+                                ))}
                                 <div className="space-y-1">
-                                  <Label className="text-xs">Target S1</Label>
-                                  <Input type="number" className="h-8 text-sm" value={aConf.targetS1} onChange={e => updateAssicRS('targetS1', Number(e.target.value) || 0)} data-testid={`input-assic-rs-targetS1-${rs}`} />
+                                  <Label className={`text-xs font-semibold ${isLivelloRimosso(aConf, 'S1') ? 'line-through text-muted-foreground' : ''}`}>Premio S1 € per PDV</Label>
+                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(aConf, 'S1')} value={aConf.premioS1 ?? 500} onChange={e => updateAssicRS('premioS1', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS1-${rs}`} />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs">Target S2</Label>
-                                  <Input type="number" className="h-8 text-sm" value={aConf.targetS2} onChange={e => updateAssicRS('targetS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-targetS2-${rs}`} />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio S1 € per PDV</Label>
-                                  <Input type="number" className="h-8 text-sm" value={aConf.premioS1 ?? 500} onChange={e => updateAssicRS('premioS1', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS1-${rs}`} />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className="text-xs font-semibold">Premio S2 € per PDV</Label>
-                                  <Input type="number" className="h-8 text-sm" value={aConf.premioS2 ?? 750} onChange={e => updateAssicRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS2-${rs}`} />
+                                  <Label className={`text-xs font-semibold ${isLivelloRimosso(aConf, 'S2') ? 'line-through text-muted-foreground' : ''}`}>Premio S2 € per PDV</Label>
+                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(aConf, 'S2')} value={aConf.premioS2 ?? 750} onChange={e => updateAssicRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS2-${rs}`} />
                                 </div>
                               </div>
                             </div>
+                          )}
+                          {!aConf && (
+                            <Button type="button" size="sm" variant="outline" onClick={aggiungiAssicRS} data-testid={`button-aggiungi-assic-rs-${rs}`}>
+                              <Plus className="h-3.5 w-3.5 mr-1" /> Aggiungi pista Assicurazioni
+                            </Button>
                           )}
 
                           {(aConf || eConf) && pConf && <Separator />}
@@ -3195,6 +3362,22 @@ export default function ConfigurazioneGara() {
             </div>
           </ResponsiveDialogContent>
         </Dialog>
+
+        <AlertDialog open={rimozioneBlocco !== null} onOpenChange={(open) => { if (!open) setRimozioneBlocco(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Rimuovere questa pista per {rimozioneBlocco?.rs}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                La pista non sarà più considerata nei calcoli di questo mese per questa Ragione Sociale.
+                Potrai ripristinarla in qualsiasi momento; i valori inseriti vengono conservati.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-rimozione-blocco-cancel">Annulla</AlertDialogCancel>
+              <AlertDialogAction onClick={eseguiRimozioneBlocco} data-testid="button-rimozione-blocco-confirm">Rimuovi</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <AlertDialog open={restoreTarget !== null} onOpenChange={(open) => { if (!open) setRestoreTarget(null); }}>
           <AlertDialogContent>

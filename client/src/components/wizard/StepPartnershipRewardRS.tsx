@@ -117,23 +117,30 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
     return evento?.pezzi || 0;
   };
 
-  // Calcola totali
+  // Blocco Partnership rimosso per la RS: non concorre a totali e premi
+  const isRSRimossa = (rs: string): boolean =>
+    partnershipRewardRSConfig.configPerRS.some(c => (c as { rimosso?: boolean }).rimosso && c.ragioneSociale === rs);
+
+  // Calcola totali (escludendo le RS con blocco rimosso)
   const totalePezzi = ragioneSocialeList.reduce((sum, rs) => {
+    if (isRSRimossa(rs)) return sum;
     const righe = attivatoCBByRS[rs] ?? [];
     return sum + righe.reduce((pSum, riga) => pSum + riga.pezzi, 0);
   }, 0);
 
   // Calcola i punti inseriti direttamente dagli input
   const totalePuntiInseriti = ragioneSocialeList.reduce((sum, rs) => {
+    if (isRSRimossa(rs)) return sum;
     const righe = attivatoCBByRS[rs] ?? [];
     return sum + righe.reduce((pSum, riga) => pSum + (riga.puntiPartnership * riga.pezzi), 0);
   }, 0);
 
   const aggregatiRS = ragioneSocialeList.map((rs) => {
+    if (isRSRimossa(rs)) return { gettoni: 0, punti: 0, premioTarget: 0, premioTotale: 0 };
     const righe = attivatoCBByRS[rs] ?? [];
     const gettoni = righe.reduce((s, r) => s + (r.pezzi * (r.gettoni || 0)), 0);
     const punti = righe.reduce((s, r) => s + (r.pezzi * (r.puntiPartnership || 0)), 0);
-    const config = partnershipRewardRSConfig.configPerRS.find(c => c.ragioneSociale === rs);
+    const config = partnershipRewardRSConfig.configPerRS.find(c => !(c as { rimosso?: boolean }).rimosso && c.ragioneSociale === rs);
     const target100 = config?.target100 || 0;
     const target80 = config?.target80 || 0;
     const premio100 = config?.premio100 || 0;
@@ -176,10 +183,11 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
         {ragioneSocialeList.map((rs) => {
           const pdvList = ragioneSocialeGroups[rs];
           const isOpen = openCards[rs] ?? true;
-          const config = partnershipRewardRSConfig.configPerRS.find(c => c.ragioneSociale === rs);
-          const totalPezziRS = (attivatoCBByRS[rs] ?? []).reduce((sum, r) => sum + r.pezzi, 0);
+          const rimossaRS = isRSRimossa(rs);
+          const config = partnershipRewardRSConfig.configPerRS.find(c => !(c as { rimosso?: boolean }).rimosso && c.ragioneSociale === rs);
+          const totalPezziRS = rimossaRS ? 0 : (attivatoCBByRS[rs] ?? []).reduce((sum, r) => sum + r.pezzi, 0);
 
-          const righeRS = attivatoCBByRS[rs] ?? [];
+          const righeRS = rimossaRS ? [] : (attivatoCBByRS[rs] ?? []);
           const totaleGettoniRS = righeRS.reduce((sum, r) => sum + (r.pezzi * (r.gettoni || 0)), 0);
           const totalePuntiRS = righeRS.reduce((sum, r) => sum + (r.pezzi * (r.puntiPartnership || 0)), 0);
 
@@ -219,6 +227,11 @@ export const StepPartnershipRewardRS: React.FC<StepPartnershipRewardRSProps> = (
                         <div>
                           <CardTitle className="text-base">{rs}</CardTitle>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {rimossaRS && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground" data-testid={`badge-partnership-rs-rimossa-${rs}`}>
+                                Blocco rimosso
+                              </Badge>
+                            )}
                             <Store className="w-3 h-3" />
                             <span>{pdvList.length} {pdvList.length === 1 ? 'negozio' : 'negozi'}</span>
                             {config && (

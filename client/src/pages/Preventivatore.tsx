@@ -46,6 +46,10 @@ import StepProtecta from "@/components/wizard/StepProtecta";
 import { StepProtectaRS } from "@/components/wizard/StepProtectaRS";
 import { calcolaExtraGaraIva, calcolaTotaleExtraGaraIva, ExtraGaraSogliePerRS } from "@/lib/calcoloExtraGaraIva";
 import { formatCurrency } from "@/utils/format";
+import { isBloccoRimosso, neutralizzaLivelliEnergia, neutralizzaLivelliAssicurazioni, type BloccoRimovibile } from "@shared/soglieRimovibili";
+
+// Record minimo per RS con metadati di rimozione (blocchi soglie rimovibili).
+type RSRemovalMeta = BloccoRimovibile & { ragioneSociale: string; [k: string]: unknown };
 import StepExtraGaraIva from "@/components/wizard/StepExtraGaraIva";
 import { AppNavbar } from "@/components/AppNavbar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -229,6 +233,12 @@ const Preventivatore = () => {
   const [attivatoAssicurazioniByPos, setAttivatoAssicurazioniByPos] = useState<Record<string, AssicurazioniAttivatoRiga>>({});
   const [attivatoAssicurazioniByRS, setAttivatoAssicurazioniByRS] = useState<Record<string, AssicurazioniAttivatoRiga>>({}); // Volumi Assicurazioni aggregati per RS
 
+  // Metadati rimozione blocchi per RS (Config Gara "soglie rimovibili"):
+  // una RS con blocco rimosso non concorre a premi/pezzi; i livelli rimossi
+  // vengono neutralizzati (target => Infinity), senza fallback ai default.
+  const [energiaRSConfig, setEnergiaRSConfig] = useState<{ configPerRS: RSRemovalMeta[] }>({ configPerRS: [] });
+  const [assicurazioniRSConfig, setAssicurazioniRSConfig] = useState<{ configPerRS: RSRemovalMeta[] }>({ configPerRS: [] });
+
   // Protecta state
   const [attivatoProtectaByPos, setAttivatoProtectaByPos] = useState<Record<string, ProtectaAttivatoRiga>>({});
   const [attivatoProtectaByRS, setAttivatoProtectaByRS] = useState<Record<string, ProtectaAttivatoRiga>>({}); // Volumi Protecta aggregati per RS
@@ -349,6 +359,8 @@ const Preventivatore = () => {
       if (cfg.pistaMobileRSConfig) setPistaMobileRSConfig(cfg.pistaMobileRSConfig);
       if (cfg.pistaFissoRSConfig) setPistaFissoRSConfig(cfg.pistaFissoRSConfig);
       if (cfg.partnershipRewardRSConfig) setPartnershipRewardRSConfig(cfg.partnershipRewardRSConfig);
+      if (cfg.energiaRSConfig) setEnergiaRSConfig(cfg.energiaRSConfig);
+      if (cfg.assicurazioniRSConfig) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig);
       if (cfg.modalitaInserimentoRS !== undefined) setModalitaInserimentoRS(cfg.modalitaInserimentoRS);
       if (cfg.extraGaraSoglieOverride) setExtraGaraSoglieOverride(cfg.extraGaraSoglieOverride);
   };
@@ -457,6 +469,8 @@ const Preventivatore = () => {
           if (persistedConfig.partnershipRewardRSConfig) {
             setPartnershipRewardRSConfig(persistedConfig.partnershipRewardRSConfig);
           }
+          if (persistedConfig.energiaRSConfig) setEnergiaRSConfig(persistedConfig.energiaRSConfig);
+          if (persistedConfig.assicurazioniRSConfig) setAssicurazioniRSConfig(persistedConfig.assicurazioniRSConfig);
           setMobileCategories(MOBILE_CATEGORIES_CONFIG_DEFAULT);
         }
         // Resetta solo i dati volume (sia per PDV che per RS)
@@ -516,6 +530,8 @@ const Preventivatore = () => {
           if (data.pistaMobileRSConfig) setPistaMobileRSConfig(data.pistaMobileRSConfig);
           if (data.pistaFissoRSConfig) setPistaFissoRSConfig(data.pistaFissoRSConfig);
           if (data.partnershipRewardRSConfig) setPartnershipRewardRSConfig(data.partnershipRewardRSConfig);
+          if (data.energiaRSConfig) setEnergiaRSConfig(data.energiaRSConfig);
+          if (data.assicurazioniRSConfig) setAssicurazioniRSConfig(data.assicurazioniRSConfig);
           setAttivatoMobileByRS(data.attivatoMobileByRS || {});
           setAttivatoFissoByRS(data.attivatoFissoByRS || {});
           setAttivatoCBByRS(data.attivatoCBByRS || {});
@@ -578,6 +594,8 @@ const Preventivatore = () => {
         if (config.pistaMobileRSConfig) setPistaMobileRSConfig(config.pistaMobileRSConfig);
         if (config.pistaFissoRSConfig) setPistaFissoRSConfig(config.pistaFissoRSConfig);
         if (config.partnershipRewardRSConfig) setPartnershipRewardRSConfig(config.partnershipRewardRSConfig);
+        if ((config as any).energiaRSConfig) setEnergiaRSConfig((config as any).energiaRSConfig);
+        if ((config as any).assicurazioniRSConfig) setAssicurazioniRSConfig((config as any).assicurazioniRSConfig);
         if (config.modalitaInserimentoRS !== undefined) setModalitaInserimentoRS(config.modalitaInserimentoRS);
         return true;
       };
@@ -710,6 +728,8 @@ const Preventivatore = () => {
       pistaMobileRSConfig,
       pistaFissoRSConfig,
       partnershipRewardRSConfig,
+      energiaRSConfig,
+      assicurazioniRSConfig,
       modalitaInserimentoRS,
       extraGaraSoglieOverride: Object.keys(extraGaraSoglieOverride).length > 0 ? extraGaraSoglieOverride : undefined,
       configVersion: '2.0' as const,
@@ -733,7 +753,7 @@ const Preventivatore = () => {
 
     // Salva su backend con debounce (ogni ~2.5s)
     saveRemoteConfigDebounced(configToSave);
-  }, [configGara, numeroPdv, puntiVendita, pistaMobileConfig, pistaFissoConfig, partnershipRewardConfig, calendarioOverrides, energiaConfig, energiaPdvInGara, assicurazioniConfig, assicurazioniPdvInGara, pistaMobileRSConfig, pistaFissoRSConfig, partnershipRewardRSConfig, modalitaInserimentoRS, extraGaraSoglieOverride, saveConfig, saveRemoteConfigDebounced, isLoaded]);
+  }, [configGara, numeroPdv, puntiVendita, pistaMobileConfig, pistaFissoConfig, partnershipRewardConfig, calendarioOverrides, energiaConfig, energiaPdvInGara, assicurazioniConfig, assicurazioniPdvInGara, pistaMobileRSConfig, pistaFissoRSConfig, partnershipRewardRSConfig, energiaRSConfig, assicurazioniRSConfig, modalitaInserimentoRS, extraGaraSoglieOverride, saveConfig, saveRemoteConfigDebounced, isLoaded]);
 
   // Aggiorna automaticamente le soglie FISSO quando cambiano cluster, tipo posizione o sconto
   useEffect(() => {
@@ -1058,7 +1078,7 @@ const Preventivatore = () => {
         processedRS.add(rs);
         
         const rsConf = pistaMobileRSConfig.sogliePerRS.find(
-          s => s.ragioneSociale.trim().toLowerCase() === rs.trim().toLowerCase()
+          s => !(s as { rimosso?: boolean }).rimosso && s.ragioneSociale.trim().toLowerCase() === rs.trim().toLowerCase()
         );
         if (!rsConf) return null;
         
@@ -1138,7 +1158,7 @@ const Preventivatore = () => {
         processedRS.add(rs);
         
         const rsConf = pistaFissoRSConfig.sogliePerRS.find(
-          s => s.ragioneSociale.trim().toLowerCase() === rs.trim().toLowerCase()
+          s => !(s as { rimosso?: boolean }).rimosso && s.ragioneSociale.trim().toLowerCase() === rs.trim().toLowerCase()
         );
         if (!rsConf) return null;
         
@@ -1216,10 +1236,26 @@ const Preventivatore = () => {
 
   const totalePremioFisso = fissoResults.reduce((acc, r) => acc + r.result.premio, 0);
 
+  // --- Blocchi rimossi per RS (soglie rimovibili): helper locali. In
+  // modalità per_rs una RS con blocco rimosso non concorre a premi/pezzi
+  // della sua pista; i livelli rimossi vengono neutralizzati.
+  const normRSKey = (rs: string) => rs.trim().toLowerCase();
+  const findRSMeta = (list: RSRemovalMeta[] | undefined, rs: string) =>
+    (list ?? []).find(c => normRSKey(c.ragioneSociale || '') === normRSKey(rs));
+  const isPerRSMode = modalitaInserimentoRS === 'per_rs';
+  const isEnergiaRSRimossa = (rs: string) => isPerRSMode && isBloccoRimosso(findRSMeta(energiaRSConfig.configPerRS, rs));
+  const isAssicRSRimossa = (rs: string) => isPerRSMode && isBloccoRimosso(findRSMeta(assicurazioniRSConfig.configPerRS, rs));
+  const isPartnershipRSRimossa = (rs: string) => isPerRSMode && isBloccoRimosso(findRSMeta(partnershipRewardRSConfig.configPerRS as unknown as RSRemovalMeta[], rs));
+  const energiaConfigForRS = (rs: string) =>
+    neutralizzaLivelliEnergia({ ...energiaConfig, livelliRimossi: findRSMeta(energiaRSConfig.configPerRS, rs)?.livelliRimossi });
+  const assicConfigForRS = (rs: string) =>
+    neutralizzaLivelliAssicurazioni({ ...assicurazioniConfig, livelliRimossi: findRSMeta(assicurazioniRSConfig.configPerRS, rs)?.livelliRimossi });
+
   // Calcolo risultati Partnership Reward
   const partnershipResults = puntiVendita.map((pdv, index) => {
     const conf = partnershipRewardConfig.configPerPos[index];
     if (!conf || !pdv.codicePos) return null;
+    if (isPartnershipRSRimossa(pdv.ragioneSociale || "Senza RS")) return null;
     const attivato = effectiveCBData[pdv.id] ?? [];
     
     // Calcola giorni lavorativi per il run rate
@@ -1275,7 +1311,11 @@ const Preventivatore = () => {
     if (modalitaInserimentoRS !== "per_rs") {
       return energiaResults.reduce((acc: number, r: any) => acc + r.premioTotale, 0);
     }
-    const premioBaseGlobale = energiaResults.reduce((acc: number, r: any) => acc + r.premioBase + r.bonusRaggiungimentoSoglia, 0);
+    const premioBaseGlobale = energiaResults.reduce((acc: number, r: any, i: number) => {
+      const rs = puntiVendita[i]?.ragioneSociale || "Senza RS";
+      if (isEnergiaRSRimossa(rs)) return acc;
+      return acc + (r?.premioBase || 0) + (r?.bonusRaggiungimentoSoglia || 0);
+    }, 0);
     let premioSogliaGlobale = 0;
     let bonusPistaGlobale = 0;
     const rsGroups: Record<string, number> = {};
@@ -1284,11 +1324,13 @@ const Preventivatore = () => {
       rsGroups[rs] = (rsGroups[rs] || 0) + 1;
     });
     Object.entries(rsGroups).forEach(([rs, numPdv]) => {
+      if (isEnergiaRSRimossa(rs)) return;
+      const confRS = energiaConfigForRS(rs);
       const righe = attivatoEnergiaByRS[rs] ?? [];
       const totalPezzi = righe.reduce((s, r) => s + r.pezzi, 0);
-      const effectiveS1 = (energiaConfig.targetS1 || 0) * numPdv;
-      const effectiveS2 = (energiaConfig.targetS2 || 0) * numPdv;
-      const effectiveS3 = (energiaConfig.targetS3 || 0) * numPdv;
+      const effectiveS1 = (confRS.targetS1 || 0) * numPdv;
+      const effectiveS2 = (confRS.targetS2 || 0) * numPdv;
+      const effectiveS3 = (confRS.targetS3 || 0) * numPdv;
       if (effectiveS3 > 0 && totalPezzi >= effectiveS3) {
         premioSogliaGlobale += 1000;
       } else if (effectiveS2 > 0 && totalPezzi >= effectiveS2) {
@@ -1296,7 +1338,7 @@ const Preventivatore = () => {
       } else if (effectiveS1 > 0 && totalPezzi >= effectiveS1) {
         premioSogliaGlobale += 250;
       }
-      const pista = calcolaBonusPistaEnergiaFn(totalPezzi, energiaConfig, numPdv);
+      const pista = calcolaBonusPistaEnergiaFn(totalPezzi, confRS, numPdv);
       bonusPistaGlobale += pista.bonusTotale;
     });
     return premioBaseGlobale + premioSogliaGlobale + bonusPistaGlobale;
@@ -1323,10 +1365,11 @@ const Preventivatore = () => {
       rsGroups[rs] = (rsGroups[rs] || 0) + 1;
     });
     return Object.entries(rsGroups).reduce((totale, [rs, numPdv]) => {
+      if (isAssicRSRimossa(rs)) return totale;
       const attivato = attivatoAssicurazioniByRS[rs] ?? createEmptyAssicurazioniAttivato();
       return totale + calcolaPremioAssicurazioniPerRS(
         attivato,
-        assicurazioniConfig,
+        assicConfigForRS(rs),
         numPdv,
         tabelleCalcoloConfig?.assicurazioni?.puntiProdotto,
         tabelleCalcoloConfig?.assicurazioni?.premiProdotto,
@@ -1382,29 +1425,36 @@ const Preventivatore = () => {
         .reduce((s: number, r: any) => s + r.result.premioMaturato, 0);
 
       const numPdv = puntiVendita.filter(p => (p.ragioneSociale || "Senza RS") === rs).length;
-      const righeEnergia = attivatoEnergiaByRS[rs] ?? [];
-      const totalPezziEnergia = righeEnergia.reduce((s, r) => s + r.pezzi, 0);
-      const energiaBase = energiaResults
-        .filter((_: any, i: number) => (puntiVendita[i]?.ragioneSociale || "Senza RS") === rs)
-        .reduce((s: number, r: any) => s + (r?.premioBase || 0) + (r?.bonusRaggiungimentoSoglia || 0), 0);
-      let energiaSoglia = 0;
-      const eS1 = (energiaConfig.targetS1 || 0) * numPdv;
-      const eS2 = (energiaConfig.targetS2 || 0) * numPdv;
-      const eS3 = (energiaConfig.targetS3 || 0) * numPdv;
-      if (eS3 > 0 && totalPezziEnergia >= eS3) energiaSoglia = 1000;
-      else if (eS2 > 0 && totalPezziEnergia >= eS2) energiaSoglia = 500;
-      else if (eS1 > 0 && totalPezziEnergia >= eS1) energiaSoglia = 250;
-      const energiaPista = calcolaBonusPistaEnergiaFn(totalPezziEnergia, energiaConfig, numPdv);
-      const energiaRS = energiaBase + energiaSoglia + energiaPista.bonusTotale;
+      let energiaRS = 0;
+      if (!isEnergiaRSRimossa(rs)) {
+        const confRS = energiaConfigForRS(rs);
+        const righeEnergia = attivatoEnergiaByRS[rs] ?? [];
+        const totalPezziEnergia = righeEnergia.reduce((s, r) => s + r.pezzi, 0);
+        const energiaBase = energiaResults
+          .filter((_: any, i: number) => (puntiVendita[i]?.ragioneSociale || "Senza RS") === rs)
+          .reduce((s: number, r: any) => s + (r?.premioBase || 0) + (r?.bonusRaggiungimentoSoglia || 0), 0);
+        let energiaSoglia = 0;
+        const eS1 = (confRS.targetS1 || 0) * numPdv;
+        const eS2 = (confRS.targetS2 || 0) * numPdv;
+        const eS3 = (confRS.targetS3 || 0) * numPdv;
+        if (eS3 > 0 && totalPezziEnergia >= eS3) energiaSoglia = 1000;
+        else if (eS2 > 0 && totalPezziEnergia >= eS2) energiaSoglia = 500;
+        else if (eS1 > 0 && totalPezziEnergia >= eS1) energiaSoglia = 250;
+        const energiaPista = calcolaBonusPistaEnergiaFn(totalPezziEnergia, confRS, numPdv);
+        energiaRS = energiaBase + energiaSoglia + energiaPista.bonusTotale;
+      }
 
-      const attAss = attivatoAssicurazioniByRS[rs] ?? createEmptyAssicurazioniAttivato();
-      const assicRS = calcolaPremioAssicurazioniPerRS(
-        attAss,
-        assicurazioniConfig,
-        numPdv,
-        tabelleCalcoloConfig?.assicurazioni?.puntiProdotto,
-        tabelleCalcoloConfig?.assicurazioni?.premiProdotto,
-      ).premioTotale;
+      let assicRS = 0;
+      if (!isAssicRSRimossa(rs)) {
+        const attAss = attivatoAssicurazioniByRS[rs] ?? createEmptyAssicurazioniAttivato();
+        assicRS = calcolaPremioAssicurazioniPerRS(
+          attAss,
+          assicConfigForRS(rs),
+          numPdv,
+          tabelleCalcoloConfig?.assicurazioni?.puntiProdotto,
+          tabelleCalcoloConfig?.assicurazioni?.premiProdotto,
+        ).premioTotale;
+      }
 
       const protectaRS = protectaResults
         .filter((r: any, i: number) => (puntiVendita[i]?.ragioneSociale || "Senza RS") === rs)
@@ -1435,7 +1485,8 @@ const Preventivatore = () => {
     });
   }, [modalitaInserimentoRS, puntiVendita, mobileResults, fissoResults, partnershipResults, 
       energiaResults, attivatoEnergiaByRS, energiaConfig, attivatoAssicurazioniByRS, 
-      assicurazioniConfig, tabelleCalcoloConfig, protectaResults, extraGaraIvaResults, isProdEnabled]);
+      assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig,
+      tabelleCalcoloConfig, protectaResults, extraGaraIvaResults, isProdEnabled]);
 
   // Numero totale step (dinamico)
   const TOTAL_STEPS = getTotalSteps(configGara.tipologiaGara || "gara_operatore");
