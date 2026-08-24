@@ -660,6 +660,7 @@ export default function ConfigurazioneGara() {
       },
       fisso: {
         soglieCluster: { ...orgTabelleConfig.fisso.soglieCluster },
+        puntiPerPezzo: { ...orgTabelleConfig.fisso.puntiPerPezzo },
         euroPerPezzo: { ...orgTabelleConfig.fisso.euroPerPezzo },
         gettoniContrattuali: { ...orgTabelleConfig.fisso.gettoniContrattuali },
       },

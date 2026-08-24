@@ -7,6 +7,7 @@ import { PUNTI_EXTRA_GARA } from "./calcoloExtraGaraIva";
 
 export interface PistaComponentPointsContext {
   mobile?: Record<string, number>;
+  fisso?: Record<string, number>;
   partnership?: Record<string, number>;
   assicurazioni?: Record<string, number>;
   extraGara?: Record<string, number>;
@@ -45,7 +46,7 @@ export function calcolaPuntiComponentePista(
     return pezzi * (context.mobile?.[category] ?? 0);
   }
   if (pista === "fisso") {
-    return pezzi * (FISSO_POINTS[category] ?? 0);
+    return pezzi * (context.fisso?.[category] ?? FISSO_POINTS[category] ?? 0);
   }
   if (pista === "energia") {
     return Object.prototype.hasOwnProperty.call(ENERGIA_BASE_PAY, category) ? pezzi : 0;

@@ -422,6 +422,7 @@ export function calcolaPremioPistaFissoPerPos(params: {
   gettoniContrattualiOverride?: Record<string, number>;
   soglieOverride?: { soglia1?: number; soglia2?: number; soglia3?: number; soglia4?: number; soglia5?: number };
   euroPerPezzoOverride?: Record<string, number>;
+  puntiPerPezzoOverride?: Record<string, number>;
 }): CalcoloFissoPerPosResult {
   const {
     annoGara,
@@ -437,6 +438,7 @@ export function calcolaPremioPistaFissoPerPos(params: {
     gettoniContrattualiOverride,
     soglieOverride,
     euroPerPezzoOverride,
+    puntiPerPezzoOverride,
   } = params;
 
   const pistaConfig: PistaFissoPosConfig = soglieOverride
@@ -455,12 +457,15 @@ export function calcolaPremioPistaFissoPerPos(params: {
     : GETTONE_CONTRATTUALE_FISSO;
 
   const monthIndex = meseGara - 1;
-  const effectiveCategorie = euroPerPezzoOverride
-    ? categorieConfig.map(c => {
-        const ov = euroPerPezzoOverride[c.type];
-        return ov !== undefined ? { ...c, euroPerPezzo: ov } : c;
-      })
-    : categorieConfig;
+  const effectiveCategorie = categorieConfig.map((category) => ({
+    ...category,
+    ...(euroPerPezzoOverride?.[category.type] !== undefined
+      ? { euroPerPezzo: euroPerPezzoOverride[category.type] }
+      : {}),
+    ...(puntiPerPezzoOverride?.[category.type] !== undefined
+      ? { puntiPerPezzo: puntiPerPezzoOverride[category.type] }
+      : {}),
+  }));
   const categorieMap = new Map<FissoCategoriaType, FissoCategoriaConfig>();
 
   for (const c of effectiveCategorie) {

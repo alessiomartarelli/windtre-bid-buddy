@@ -69,6 +69,10 @@ test('mobile: blocco gara usabile su smartphone', async () => {
     // Tab "Tabelle Calcolo": tabelle con hint di scroll (ScrollableTable).
     await page.getByTestId('tab-tabelle-calcolo').click();
     await page.getByTestId('scrollable-table-viewport').first().waitFor({ state: 'visible', timeout: 20000 });
+    await page.getByTestId('tab-gara-tc-fisso').click();
+    const fissoPuntiFtth = page.getByTestId('input-gara-fisso-punti-FISSO_FTTH');
+    await fissoPuntiFtth.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(await fissoPuntiFtth.inputValue(), '1', 'Configurazione Gara mostra i punti/pezzo Fisso');
     await assertNoHorizontalOverflow(page, 'ConfigurazioneGara/TabelleCalcolo');
 
     // ── Tabelle Calcolo (pagina): sezione gara operatore, tabelle scrollabili ──

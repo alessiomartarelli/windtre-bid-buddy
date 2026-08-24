@@ -1179,6 +1179,7 @@ const Preventivatore = () => {
           attivato: righe,
           workdayInfoOverride,
           gettoniContrattualiOverride: tabelleCalcoloConfig?.fisso?.gettoniContrattuali,
+          puntiPerPezzoOverride: tabelleCalcoloConfig?.fisso?.puntiPerPezzo,
         });
         return { pdv, conf, righe, result };
       }).filter(Boolean) as any[];
@@ -1207,6 +1208,7 @@ const Preventivatore = () => {
         attivato: righe,
         workdayInfoOverride,
         gettoniContrattualiOverride: tabelleCalcoloConfig?.fisso?.gettoniContrattuali,
+        puntiPerPezzoOverride: tabelleCalcoloConfig?.fisso?.puntiPerPezzo,
       });
       return { pdv, conf, righe, result };
     }).filter(Boolean) as any[];

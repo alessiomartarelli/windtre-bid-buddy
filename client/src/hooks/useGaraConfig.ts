@@ -204,6 +204,7 @@ export interface GaraConfigData {
     };
     fisso?: {
       soglieCluster?: Record<string, number[]>;
+      puntiPerPezzo?: Record<string, number>;
       euroPerPezzo?: Record<string, number>;
       gettoniContrattuali?: Record<string, number>;
     };

@@ -45,6 +45,17 @@ const artMobileTied = {
   dettaglio: { canone: '10' },
 }; // mobile → TIED (0,75 punti)
 
+const artMobileTiedConStepETelefono = {
+  ...artMobileTied,
+  dettaglio: {
+    ...artMobileTied.dettaglio,
+    domandeRisposte: [
+      { domandaTesto: 'MNP', risposta: 'SI' },
+      { domandaTesto: 'TELEFONO INCLUSO COMPASS', risposta: 'SI' },
+    ],
+  },
+}; // TIED 0,75 + step MNP 1,20 + device finanziato 1,25
+
 const artMobileUntied = {
   categoria: { nome: 'UNTIED' },
   tipologia: { nome: 'RICARICABILE VOCE' },
@@ -250,6 +261,11 @@ test('Provenienza punti: ogni pista calcola i punti delle componenti col proprio
   // Stesso caso segnalato nel pannello Fisso: anche i coefficienti frazionari
   // e le categorie a zero devono essere visibili, senza stime proporzionali.
   assert.equal(calcolaPuntiComponentePista('fisso', 'FISSO_FTTH', 145, context), 145);
+  assert.equal(
+    calcolaPuntiComponentePista('fisso', 'FISSO_FTTH', 145, { ...context, fisso: { FISSO_FTTH: 2 } }),
+    290,
+    'la provenienza Fisso usa l’override configurato dei punti/pezzo',
+  );
   assert.equal(calcolaPuntiComponentePista('fisso', 'PIU_SICURI_CASA_UFFICIO', 277, context), 69.25);
   assert.equal(calcolaPuntiComponentePista('fisso', 'CONVERGENZA', 197, context), 0);
 
@@ -296,6 +312,14 @@ test('Provenienza punti: il Fisso espone solo i moltiplicatori realmente applica
   assert.equal(fissoMoltiplicato.soglia, 1);
   assert.deepEqual(fissoMoltiplicato.moltiplicatoriApplicati, [2],
     'FTTC raggiunge S1 e applica il moltiplicatore base ×2');
+
+  const fissoConPuntiOverride = calcolaPremioPistaFissoPerPos({
+    ...common,
+    attivato: [{ categoria: 'FISSO_FTTC', pezzi: 2 }],
+    puntiPerPezzoOverride: { FISSO_FTTC: 1.5 },
+  });
+  assert.equal(fissoConPuntiOverride.punti, 3,
+    'il calcolatore Fisso usa l’override configurato dei punti/pezzo');
 
   const fissoSoloPremioFisso = calcolaPremioPistaFissoPerPos({
     ...common,
@@ -405,11 +429,12 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
       })],
     );
 
-    // PDV A: 2 TIED = 1,50 pt; PDV B: 2 TIED + 2 UNTIED = 3,00 pt.
+    // PDV A: 2 TIED + uno step MNP + un device finanziato = 3,95 pt.
+    // PDV B: 2 TIED + 2 UNTIED = 3,00 pt. Totale = 6,95 pt.
     for (let i = 0; i < 2; i++) {
       await insertSale(pool, session.orgId, {
         codicePos: POS_A, nomeNegozio: 'Negozio Prov A', ragioneSociale: RS,
-        articoli: [artMobileTied],
+        articoli: [i === 0 ? artMobileTiedConStepETelefono : artMobileTied],
       });
     }
     // PDV B usa due gruppi canone: il badge deve dichiarare entrambi i
@@ -466,9 +491,9 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     assert.equal(await page.getByTestId('card-pista-mobile').locator('[data-testid="provenienza-panel-mobile"]').count(), 0,
       'la vecchia card bianca non deve contenere la provenienza punti');
 
-    // Totale del pannello = totale card = 4,50 pt.
+    // Totale del pannello = totale card = 6,95 pt.
     const totale = provNum(await page.getByTestId('prov-totale-mobile').innerText());
-    assert.equal(totale, 4.5, `totale pannello = 4,50 pt (letto ${totale})`);
+    assert.equal(totale, 6.95, `totale pannello = 6,95 pt (letto ${totale})`);
 
     // Con "Tutti i PDV" il dettaglio è aggregato per RS: una sola riga,
     // con pezzi e punti totali, senza elenco dei singoli negozi.
@@ -476,13 +501,13 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     const rsPieces = page.locator('[data-testid^="prov-pezzi-rs-mobile-"]');
     assert.equal(await rsPoints.count(), 1, 'una sola riga totale per la RS filtrata/scoped');
     assert.equal(await rsPieces.count(), 1, 'la riga RS espone anche il totale pezzi');
-    assert.equal(provNum(await rsPoints.first().innerText()), 4.5, 'totale RS = 4,50 pt');
+    assert.equal(provNum(await rsPoints.first().innerText()), 6.95, 'totale RS = 6,95 pt');
     assert.equal(provNum(await rsPieces.first().innerText()), 7, 'totale RS = 7 pezzi');
     assert.equal(await page.locator('[data-testid^="prov-row-pdv-mobile-"]').count(), 0,
       'con Tutti i PDV non deve comparire il dettaglio dei singoli negozi');
 
     const sommaTxt = await page.getByTestId('prov-somma-mobile').innerText();
-    assert.match(sommaTxt, /4,50|4\.50/, 'riga somma mostra 4,50 pt');
+    assert.match(sommaTxt, /6,95|6\.95/, 'riga somma mostra 6,95 pt');
     assert.match(sommaTxt, /= totale card/, 'riconciliazione esplicita col totale card');
 
     // Fonti aggregate per RS: i pezzi del PDV senza modello restano visibili,
@@ -492,6 +517,10 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
       `TIED aggregato RS = 5 pz / 3,00 pt (${rsCategoryText.join(' | ')})`);
     assert.ok(rsCategoryText.some((text) => /Untied/i.test(text) && /2\s*pz/.test(text) && /1,50\s*pt|1\.50\s*pt/.test(text)),
       `UNTIED aggregato RS = 2 pz / 1,50 pt (${rsCategoryText.join(' | ')})`);
+    assert.ok(rsCategoryText.some((text) => /^MNP\b/i.test(text) && /1\s*pz/.test(text) && /1,20\s*pt|1\.20\s*pt/.test(text)),
+      `step vendita MNP = 1 pz / 1,20 pt (${rsCategoryText.join(' | ')})`);
+    assert.ok(rsCategoryText.some((text) => /Device finanziato/i.test(text) && /1\s*pz/.test(text) && /1,25\s*pt|1\.25\s*pt/.test(text)),
+      `telefono finanziato = 1 pz / 1,25 pt (${rsCategoryText.join(' | ')})`);
     assert.equal(
       rsCategoryText.reduce((sum, text) => sum + componentPoints(text), 0),
       totale,
@@ -505,9 +534,10 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
       'il totale RS non deve mostrare badge soglia dei singoli PDV');
 
     // Il pannello è esclusivamente una provenienza punti: niente valori
-    // economici o canoni.
+    // economici o canoni. Il simbolo € può comparire nel nome ufficiale della
+    // categoria device (es. "SP < 200€"), ma non come valore autonomo.
     const panelText = await panel.innerText();
-    assert.doesNotMatch(panelText, /€|canon/i, 'il dettaglio punti non deve contenere canoni o importi in euro');
+    assert.doesNotMatch(panelText, /canon|(?:^|\n)\s*€/i, 'il dettaglio punti non deve contenere canoni o importi in euro');
     assert.ok(panelText.includes(RS), 'anche nel calcolo per-PDV deve essere visibile la Ragione Sociale sorgente');
 
     // Chiusura via click sulla card ticker (zona non interattiva: i punti).

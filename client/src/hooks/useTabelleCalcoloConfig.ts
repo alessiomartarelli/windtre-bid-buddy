@@ -17,6 +17,7 @@ export interface TabelleCalcoloValues {
     moltiplicatoriCanone: Record<string, number[]>;
   };
   fisso: {
+    puntiPerPezzo: Record<string, number>;
     euroPerPezzo: Record<string, number>;
     gettoniContrattuali: Record<string, number>;
     soglieCluster: Record<string, number[]>;
@@ -82,8 +83,10 @@ function buildDefaults(): TabelleCalcoloValues {
   });
 
   const fissoEuro: Record<string, number> = {};
+  const fissoPunti: Record<string, number> = {};
   const fissoGettoni: Record<string, number> = {};
   FISSO_CATEGORIE_DEFAULT.forEach((c) => {
+    fissoPunti[c.type] = c.puntiPerPezzo;
     fissoEuro[c.type] = c.euroPerPezzo;
   });
   fissoGettoni["FISSO_FTTC"] = 23;
@@ -165,7 +168,7 @@ function buildDefaults(): TabelleCalcoloValues {
 
   return {
     mobile: { categories: [...MOBILE_CATEGORIES_CONFIG_DEFAULT], soglieCluster: mobileSoglieCluster, moltiplicatoriCanone },
-    fisso: { euroPerPezzo: fissoEuro, gettoniContrattuali: fissoGettoni, soglieCluster: fissoSoglieCluster },
+    fisso: { puntiPerPezzo: fissoPunti, euroPerPezzo: fissoEuro, gettoniContrattuali: fissoGettoni, soglieCluster: fissoSoglieCluster },
     energia: { compensiBase: energiaCompensi, bonusPerContratto: energiaBonus, pistaBase, pistaDa4 },
     assicurazioni: { puntiProdotto: assicPunti, premiProdotto: assicPremi },
     protecta: { gettoniProdotto: protectaGettoni },
@@ -210,6 +213,9 @@ function applyConfigToDefaults(merged: any, defaults: TabelleCalcoloValues): Tab
     }
   }
 
+  if (merged.fisso?.puntiPerPezzo) {
+    Object.assign(result.fisso.puntiPerPezzo, merged.fisso.puntiPerPezzo);
+  }
   if (merged.fisso?.euroPerPezzo) {
     Object.assign(result.fisso.euroPerPezzo, merged.fisso.euroPerPezzo);
   }

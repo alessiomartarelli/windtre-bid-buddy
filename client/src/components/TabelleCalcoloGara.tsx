@@ -25,6 +25,7 @@ export interface TabelleCalcoloConfig {
   };
   fisso?: {
     soglieCluster?: Record<string, number[]>;
+    puntiPerPezzo?: Record<string, number>;
     euroPerPezzo?: Record<string, number>;
     gettoniContrattuali?: Record<string, number>;
   };
@@ -147,7 +148,11 @@ export function buildHardcodedDefaults(): TabelleCalcoloConfig {
   MOBILE_CATEGORIES_CONFIG_DEFAULT.forEach(c => { puntiAttivazione[c.type] = c.punti; });
 
   const euroPerPezzo: Record<string, number> = {};
-  FISSO_CATEGORIE_DEFAULT.forEach(c => { euroPerPezzo[c.type] = c.euroPerPezzo; });
+  const puntiPerPezzo: Record<string, number> = {};
+  FISSO_CATEGORIE_DEFAULT.forEach(c => {
+    puntiPerPezzo[c.type] = c.puntiPerPezzo;
+    euroPerPezzo[c.type] = c.euroPerPezzo;
+  });
 
   const compensiBase: Record<string, number> = { ...ENERGIA_BASE_PAY };
   const pistaBase: Record<string, number> = { ...PISTA_ENERGIA_SOGLIE_BASE };
@@ -178,7 +183,7 @@ export function buildHardcodedDefaults(): TabelleCalcoloConfig {
 
   return {
     mobile: { soglieCluster: { ...MOBILE_SOGLIE_DEFAULTS }, puntiAttivazione, moltiplicatoriCanone: { ...MOLTIPLICATORI_DEFAULTS } },
-    fisso: { soglieCluster: { ...FISSO_SOGLIE_DEFAULTS }, euroPerPezzo, gettoniContrattuali: { ...GETTONI_DEFAULTS } },
+    fisso: { soglieCluster: { ...FISSO_SOGLIE_DEFAULTS }, puntiPerPezzo, euroPerPezzo, gettoniContrattuali: { ...GETTONI_DEFAULTS } },
     energia: { compensiBase, pistaBase, pistaDa4, bonusPerContratto },
     assicurazioni: { puntiProdotto, premiProdotto },
     protecta: { gettoniProdotto },
@@ -631,24 +636,29 @@ function FissoSubTab({ config, baseDefaults, isArrayOverridden, updateArrayValue
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Euro/Pezzo per Categoria Fisso</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Punti ed Euro/Pezzo per Categoria Fisso</CardTitle></CardHeader>
         <CardContent><ScrollableTable>
-          <table className="w-full text-sm" data-testid="table-gara-fisso-euro">
+          <table className="w-full text-sm min-w-[520px]" data-testid="table-gara-fisso-punti-euro">
             <thead>
               <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md sticky left-0 bg-primary z-20">Categoria</th>
+                <th className="p-2 text-center font-medium w-32">Punti/pezzo</th>
                 <th className="p-2 text-center font-medium rounded-tr-md w-32">{'\u20AC'}/pezzo</th>
               </tr>
             </thead>
             <tbody>
               {fissoCategories.map(cat => {
-                const path = `fisso.euroPerPezzo.${cat.type}`;
-                const val = getNestedValue(config, path) ?? cat.euroPerPezzo;
-                const def = getNestedValue(baseDefaults, path) ?? cat.euroPerPezzo;
+                const puntiPath = `fisso.puntiPerPezzo.${cat.type}`;
+                const euroPath = `fisso.euroPerPezzo.${cat.type}`;
+                const puntiVal = getNestedValue(config, puntiPath) ?? cat.puntiPerPezzo;
+                const puntiDef = getNestedValue(baseDefaults, puntiPath) ?? cat.puntiPerPezzo;
+                const euroVal = getNestedValue(config, euroPath) ?? cat.euroPerPezzo;
+                const euroDef = getNestedValue(baseDefaults, euroPath) ?? cat.euroPerPezzo;
                 return (
                   <tr key={cat.type} className="even:bg-muted/30">
                     <td className="p-2 font-medium border border-border sticky left-0 z-10 bg-card [tr:nth-child(even)>&]:bg-[color-mix(in_srgb,hsl(var(--muted))_30%,hsl(var(--card)))]">{cat.label}</td>
-                    <EditableCell value={val} defaultValue={def} isOverridden={isOverridden(path)} onChange={v => updateValue(path, v)} onReset={() => resetValue(path)} testId={`input-gara-fisso-euro-${cat.type}`} />
+                    <EditableCell value={puntiVal} defaultValue={puntiDef} isOverridden={isOverridden(puntiPath)} onChange={v => updateValue(puntiPath, v)} onReset={() => resetValue(puntiPath)} testId={`input-gara-fisso-punti-${cat.type}`} step="0.25" />
+                    <EditableCell value={euroVal} defaultValue={euroDef} isOverridden={isOverridden(euroPath)} onChange={v => updateValue(euroPath, v)} onReset={() => resetValue(euroPath)} testId={`input-gara-fisso-euro-${cat.type}`} />
                   </tr>
                 );
               })}
