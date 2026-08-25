@@ -5615,7 +5615,7 @@ export default function DashboardGaraReale() {
               </div>
             )}
 
-            {(() => {
+            {false && (() => {
               const allKeys = pistaStats.flatMap((p) => getPistaRsRowKeys(p));
               if (allKeys.length === 0) return null;
               const allExpanded = allKeys.every((k) => expandedRsRows.has(k));
@@ -5649,7 +5649,7 @@ export default function DashboardGaraReale() {
             })()}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
-              {pistaStats.map((pista) => {
+              {false && pistaStats.map((pista) => {
                 const pistaConf = PISTA_CONFIG[pista.pista as keyof typeof PISTA_CONFIG];
                 if (!pistaConf) return null;
                 const Icon = pistaConf.icon;
