@@ -1305,6 +1305,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
         <div className="pista-card-content">
           <div
             className="pista-card-trajectory"
+            data-expanded={isOpen ? "true" : "false"}
             data-testid={`ticker-trajectory-${p.pista}`}
             aria-label={`Soglie: attuale ${sogliaAttuale}${thresholdQualifier ? `, ${thresholdQualifier}` : ""}; proiezione ${sogliaProiezione}${thresholdQualifier ? `, ${thresholdQualifier}` : ""}; avanzamento ${trajectoryRatio.toFixed(0)}%`}
           >
