@@ -108,10 +108,13 @@ test('removing and restoring the Energia RS block persists across save and reloa
     await targetS1.waitFor({ state: 'visible', timeout: 20000 });
     assert.equal(await targetS1.inputValue(), '15');
 
-    // --- Rimuovi un singolo livello (S3): input disabilitato.
+    // --- Rimuovi un singolo livello (S3): sparisce l'intera riga
+    // (target + premio), ma resta disponibile il ripristino.
     await page.getByTestId(`button-energia-rs-livello-S3-${RS}`).click();
     const targetS3 = page.getByTestId(`input-energia-rs-targetS3-${RS}`);
-    assert.equal(await targetS3.isDisabled(), true, 'removed level S3 input is disabled');
+    assert.equal(await targetS3.count(), 0, 'removed level S3 target is hidden');
+    assert.equal(await page.getByTestId(`input-energia-rs-premioS3-${RS}`).count(), 0, 'removed level S3 premio is hidden');
+    await page.getByTestId(`button-ripristina-energia-rs-livello-S3-${RS}`).waitFor({ state: 'visible' });
 
     // --- Rimuovi il blocco intero: prima ANNULLA (nessun effetto), poi conferma.
     await page.getByTestId(`button-rimuovi-energia-rs-${RS}`).click();
@@ -149,11 +152,12 @@ test('removing and restoring the Energia RS block persists across save and reloa
     await page.getByTestId(`button-ripristina-energia-rs-${RS}`).click();
     await targetS1.waitFor({ state: 'visible', timeout: 10000 });
     assert.equal(await targetS1.inputValue(), '15', 'restored block keeps its values');
-    assert.equal(await page.getByTestId(`input-energia-rs-targetS3-${RS}`).isDisabled(), true, 'level removal survives block restore');
+    assert.equal(await page.getByTestId(`input-energia-rs-targetS3-${RS}`).count(), 0, 'whole removed row stays hidden after block restore');
 
     // Riattiva anche il livello S3.
-    await page.getByTestId(`button-energia-rs-livello-S3-${RS}`).click();
-    assert.equal(await page.getByTestId(`input-energia-rs-targetS3-${RS}`).isDisabled(), false, 'level can be re-enabled');
+    await page.getByTestId(`button-ripristina-energia-rs-livello-S3-${RS}`).click();
+    assert.equal(await page.getByTestId(`input-energia-rs-targetS3-${RS}`).isVisible(), true, 'whole level row can be restored');
+    assert.equal(await page.getByTestId(`input-energia-rs-premioS3-${RS}`).isVisible(), true, 'restored row includes its premio');
 
     // Salva e verifica che i flag siano rientrati.
     await page.getByTestId('button-save').click();
@@ -626,7 +630,8 @@ test('removed block survives switching month away and back', async () => {
     await page.getByTestId(`button-ripristina-energia-rs-${RS}`).click();
     await targetS1.waitFor({ state: 'visible', timeout: 10000 });
     assert.equal(await targetS1.inputValue(), '15', 'restored block keeps values after month round-trip');
-    assert.equal(await page.getByTestId(`input-energia-rs-targetS3-${RS}`).isDisabled(), true, 'level removal survives month round-trip');
+    assert.equal(await page.getByTestId(`input-energia-rs-targetS3-${RS}`).count(), 0, 'removed row stays hidden after month round-trip');
+    await page.getByTestId(`button-ripristina-energia-rs-livello-S3-${RS}`).waitFor({ state: 'visible' });
 
     await page.close();
     await context.close();
@@ -720,7 +725,8 @@ test('restoring a revision containing removals keeps rimosso/livelliRimossi and 
     await page.getByTestId(`button-ripristina-energia-rs-${RS}`).click();
     await targetS1.waitFor({ state: 'visible', timeout: 10000 });
     assert.equal(await targetS1.inputValue(), '15', 'restored revision preserves block values');
-    assert.equal(await page.getByTestId(`input-energia-rs-targetS3-${RS}`).isDisabled(), true, 'level removal from revision survives block re-enable');
+    assert.equal(await page.getByTestId(`input-energia-rs-targetS3-${RS}`).count(), 0, 'removed row from revision stays hidden after block re-enable');
+    await page.getByTestId(`button-ripristina-energia-rs-livello-S3-${RS}`).waitFor({ state: 'visible' });
 
     await page.close();
     await context.close();

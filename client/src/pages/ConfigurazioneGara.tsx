@@ -2592,7 +2592,7 @@ export default function ConfigurazioneGara() {
                                   <Trash2 className="h-3.5 w-3.5 mr-1" /> Rimuovi
                                 </Button>
                               </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1">
                                   <Label className="text-xs">PDV in Gara</Label>
                                   <Input type="number" className="h-8 text-sm" value={eConf.pdvInGara} onChange={e => updateEnergiaRS('pdvInGara', Number(e.target.value) || 0)} data-testid={`input-energia-rs-pdvInGara-${rs}`} />
@@ -2601,40 +2601,34 @@ export default function ConfigurazioneGara() {
                                   <Label className="text-xs">No Malus</Label>
                                   <Input type="number" className="h-8 text-sm" value={eConf.targetNoMalus} onChange={e => updateEnergiaRS('targetNoMalus', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetNoMalus-${rs}`} />
                                 </div>
-                                {(['S1', 'S2'] as const).map(liv => (
-                                  <div key={liv} className="space-y-1">
-                                    <div className="flex items-center justify-between">
-                                      <Label className={`text-xs ${isLivelloRimosso(eConf, liv) ? 'line-through text-muted-foreground' : ''}`}>Target {liv}</Label>
-                                      <button type="button" className="text-muted-foreground hover:text-destructive" title={isLivelloRimosso(eConf, liv) ? `Riattiva livello ${liv}` : `Rimuovi livello ${liv}`} onClick={() => toggleLivelloEnergiaRS(liv)} data-testid={`button-energia-rs-livello-${liv}-${rs}`}>
-                                        {isLivelloRimosso(eConf, liv) ? <Plus className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                                      </button>
-                                    </div>
-                                    <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(eConf, liv)} value={liv === 'S1' ? eConf.targetS1 : eConf.targetS2} onChange={e => updateEnergiaRS(liv === 'S1' ? 'targetS1' : 'targetS2', Number(e.target.value) || 0)} data-testid={`input-energia-rs-target${liv}-${rs}`} />
-                                  </div>
-                                ))}
                               </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <Label className={`text-xs ${isLivelloRimosso(eConf, 'S3') ? 'line-through text-muted-foreground' : ''}`}>Target S3</Label>
-                                    <button type="button" className="text-muted-foreground hover:text-destructive" title={isLivelloRimosso(eConf, 'S3') ? 'Riattiva livello S3' : 'Rimuovi livello S3'} onClick={() => toggleLivelloEnergiaRS('S3')} data-testid={`button-energia-rs-livello-S3-${rs}`}>
-                                      {isLivelloRimosso(eConf, 'S3') ? <Plus className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                                    </button>
-                                  </div>
-                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(eConf, 'S3')} value={eConf.targetS3} onChange={e => updateEnergiaRS('targetS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-targetS3-${rs}`} />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className={`text-xs font-semibold ${isLivelloRimosso(eConf, 'S1') ? 'line-through text-muted-foreground' : ''}`}>Premio S1 € per PDV</Label>
-                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(eConf, 'S1')} value={eConf.premioS1 ?? 250} onChange={e => updateEnergiaRS('premioS1', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS1-${rs}`} />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className={`text-xs font-semibold ${isLivelloRimosso(eConf, 'S2') ? 'line-through text-muted-foreground' : ''}`}>Premio S2 € per PDV</Label>
-                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(eConf, 'S2')} value={eConf.premioS2 ?? 500} onChange={e => updateEnergiaRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS2-${rs}`} />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className={`text-xs font-semibold ${isLivelloRimosso(eConf, 'S3') ? 'line-through text-muted-foreground' : ''}`}>Premio S3 € per PDV</Label>
-                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(eConf, 'S3')} value={eConf.premioS3 ?? 1000} onChange={e => updateEnergiaRS('premioS3', Number(e.target.value) || 0)} data-testid={`input-energia-rs-premioS3-${rs}`} />
-                                </div>
+                              <div className="space-y-2">
+                                {(['S1', 'S2', 'S3'] as const).map(liv => {
+                                  if (isLivelloRimosso(eConf, liv)) return null;
+                                  const targetField = `target${liv}` as 'targetS1' | 'targetS2' | 'targetS3';
+                                  const premioField = `premio${liv}` as 'premioS1' | 'premioS2' | 'premioS3';
+                                  const premioDefault = liv === 'S1' ? 250 : liv === 'S2' ? 500 : 1000;
+                                  return (
+                                    <div key={liv} className="grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-md border p-3" data-testid={`riga-energia-rs-livello-${liv}-${rs}`}>
+                                      <div className="space-y-1">
+                                        <Label className="text-xs">Target {liv}</Label>
+                                        <Input type="number" className="h-8 text-sm" value={eConf[targetField]} onChange={e => updateEnergiaRS(targetField, Number(e.target.value) || 0)} data-testid={`input-energia-rs-target${liv}-${rs}`} />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label className="text-xs font-semibold">Premio {liv} € per PDV</Label>
+                                        <Input type="number" className="h-8 text-sm" value={eConf[premioField] ?? premioDefault} onChange={e => updateEnergiaRS(premioField, Number(e.target.value) || 0)} data-testid={`input-energia-rs-premio${liv}-${rs}`} />
+                                      </div>
+                                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" title={`Rimuovi intera riga ${liv}`} onClick={() => toggleLivelloEnergiaRS(liv)} data-testid={`button-energia-rs-livello-${liv}-${rs}`}>
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  );
+                                })}
+                                {(['S1', 'S2', 'S3'] as const).filter(liv => isLivelloRimosso(eConf, liv)).map(liv => (
+                                  <Button key={liv} type="button" size="sm" variant="outline" className="mr-2 h-7" onClick={() => toggleLivelloEnergiaRS(liv)} data-testid={`button-ripristina-energia-rs-livello-${liv}-${rs}`}>
+                                    <Plus className="mr-1 h-3.5 w-3.5" /> Ripristina riga {liv}
+                                  </Button>
+                                ))}
                               </div>
                               <div>
                                 <Label className="text-xs font-semibold mb-2 block">Soglie Pista</Label>
@@ -2688,7 +2682,7 @@ export default function ConfigurazioneGara() {
                                   <Trash2 className="h-3.5 w-3.5 mr-1" /> Rimuovi
                                 </Button>
                               </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                              <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1">
                                   <Label className="text-xs">PDV in Gara</Label>
                                   <Input type="number" className="h-8 text-sm" value={aConf.pdvInGara} onChange={e => updateAssicRS('pdvInGara', Number(e.target.value) || 0)} data-testid={`input-assic-rs-pdvInGara-${rs}`} />
@@ -2697,25 +2691,34 @@ export default function ConfigurazioneGara() {
                                   <Label className="text-xs">No Malus</Label>
                                   <Input type="number" className="h-8 text-sm" value={aConf.targetNoMalus} onChange={e => updateAssicRS('targetNoMalus', Number(e.target.value) || 0)} data-testid={`input-assic-rs-targetNoMalus-${rs}`} />
                                 </div>
-                                {(['S1', 'S2'] as const).map(liv => (
-                                  <div key={liv} className="space-y-1">
-                                    <div className="flex items-center justify-between">
-                                      <Label className={`text-xs ${isLivelloRimosso(aConf, liv) ? 'line-through text-muted-foreground' : ''}`}>Target {liv}</Label>
-                                      <button type="button" className="text-muted-foreground hover:text-destructive" title={isLivelloRimosso(aConf, liv) ? `Riattiva livello ${liv}` : `Rimuovi livello ${liv}`} onClick={() => toggleLivelloAssicRS(liv)} data-testid={`button-assic-rs-livello-${liv}-${rs}`}>
-                                        {isLivelloRimosso(aConf, liv) ? <Plus className="h-3 w-3" /> : <X className="h-3 w-3" />}
-                                      </button>
+                              </div>
+                              <div className="space-y-2">
+                                {(['S1', 'S2'] as const).map(liv => {
+                                  if (isLivelloRimosso(aConf, liv)) return null;
+                                  const targetField = `target${liv}` as 'targetS1' | 'targetS2';
+                                  const premioField = `premio${liv}` as 'premioS1' | 'premioS2';
+                                  const premioDefault = liv === 'S1' ? 500 : 750;
+                                  return (
+                                    <div key={liv} className="grid grid-cols-[1fr_1fr_auto] items-end gap-3 rounded-md border p-3" data-testid={`riga-assic-rs-livello-${liv}-${rs}`}>
+                                      <div className="space-y-1">
+                                        <Label className="text-xs">Target {liv}</Label>
+                                        <Input type="number" className="h-8 text-sm" value={aConf[targetField]} onChange={e => updateAssicRS(targetField, Number(e.target.value) || 0)} data-testid={`input-assic-rs-target${liv}-${rs}`} />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label className="text-xs font-semibold">Premio {liv} € per PDV</Label>
+                                        <Input type="number" className="h-8 text-sm" value={aConf[premioField] ?? premioDefault} onChange={e => updateAssicRS(premioField, Number(e.target.value) || 0)} data-testid={`input-assic-rs-premio${liv}-${rs}`} />
+                                      </div>
+                                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" title={`Rimuovi intera riga ${liv}`} onClick={() => toggleLivelloAssicRS(liv)} data-testid={`button-assic-rs-livello-${liv}-${rs}`}>
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
                                     </div>
-                                    <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(aConf, liv)} value={liv === 'S1' ? aConf.targetS1 : aConf.targetS2} onChange={e => updateAssicRS(liv === 'S1' ? 'targetS1' : 'targetS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-target${liv}-${rs}`} />
-                                  </div>
+                                  );
+                                })}
+                                {(['S1', 'S2'] as const).filter(liv => isLivelloRimosso(aConf, liv)).map(liv => (
+                                  <Button key={liv} type="button" size="sm" variant="outline" className="mr-2 h-7" onClick={() => toggleLivelloAssicRS(liv)} data-testid={`button-ripristina-assic-rs-livello-${liv}-${rs}`}>
+                                    <Plus className="mr-1 h-3.5 w-3.5" /> Ripristina riga {liv}
+                                  </Button>
                                 ))}
-                                <div className="space-y-1">
-                                  <Label className={`text-xs font-semibold ${isLivelloRimosso(aConf, 'S1') ? 'line-through text-muted-foreground' : ''}`}>Premio S1 € per PDV</Label>
-                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(aConf, 'S1')} value={aConf.premioS1 ?? 500} onChange={e => updateAssicRS('premioS1', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS1-${rs}`} />
-                                </div>
-                                <div className="space-y-1">
-                                  <Label className={`text-xs font-semibold ${isLivelloRimosso(aConf, 'S2') ? 'line-through text-muted-foreground' : ''}`}>Premio S2 € per PDV</Label>
-                                  <Input type="number" className="h-8 text-sm" disabled={isLivelloRimosso(aConf, 'S2')} value={aConf.premioS2 ?? 750} onChange={e => updateAssicRS('premioS2', Number(e.target.value) || 0)} data-testid={`input-assic-rs-premioS2-${rs}`} />
-                                </div>
                               </div>
                             </div>
                           )}
