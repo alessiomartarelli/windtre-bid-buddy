@@ -1384,7 +1384,11 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
               <strong className="tabular-nums">{trajectoryRatio.toFixed(0)}%</strong>
             </div>
           </div>
-          <div className="pista-card-kpis grid grid-cols-2 gap-1.5 rounded-xl p-2 text-foreground" data-testid={`ticker-kpis-${p.pista}`}>
+          <div
+            className="pista-card-kpis grid grid-cols-2 gap-1.5 rounded-xl p-2 text-foreground"
+            data-expanded={isOpen ? "true" : "false"}
+            data-testid={`ticker-kpis-${p.pista}`}
+          >
             <div className="rounded-lg border border-border/70 bg-background/55 px-2 py-1.5">
               <div className="text-[8px] font-bold uppercase tracking-[0.11em] text-muted-foreground">
                 {usePunti ? 'Punti attuali' : 'Pezzi attuali'}

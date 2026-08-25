@@ -421,6 +421,37 @@ html[data-accent="w3"] [data-testid="dashboard-gara-reale"] [data-testid^="card-
   color: hsl(var(--foreground) / 0.72);
 }
 
+@media (min-width: 640px) {
+  .pista-card-kpis[data-expanded="true"] {
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .pista-card-kpis[data-expanded="true"] > div {
+    min-height: 4.25rem;
+    padding: 0.7rem 0.85rem;
+    border-radius: 0.75rem;
+  }
+
+  .pista-card-kpis[data-expanded="true"] > div > div {
+    gap: 0.35rem;
+    font-size: 0.68rem;
+    line-height: 1.15;
+    letter-spacing: 0.1em;
+  }
+
+  .pista-card-kpis[data-expanded="true"] > div > div svg {
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+
+  .pista-card-kpis[data-expanded="true"] > div > span {
+    margin-top: 0.4rem;
+    font-size: 1.35rem;
+    line-height: 1;
+  }
+}
+
 @media (max-width: 639px) {
   .pista-card-content {
     padding-top: 3.25rem;
