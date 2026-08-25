@@ -101,8 +101,12 @@
       0 12px 28px hsl(218 28% 32% / 0.11);
   }
 
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-illustration {
+    display: none;
+  }
+
   html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-card-scrim {
-    background: linear-gradient(180deg, hsl(0 0% 100% / 0.08), transparent 42%, hsl(215 30% 97% / 0.5) 100%);
+    background: none;
   }
 
   html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-card-header,
