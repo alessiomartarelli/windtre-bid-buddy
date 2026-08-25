@@ -25,6 +25,15 @@ import {
 // La semantica di calcolo (blocco rimosso => nessun premio/marker) vive in
 // shared/soglieRimovibili.ts + DashboardGaraReale; qui si protegge il wiring
 // React di rimozione/persistenza/ripristino, che nessun test API copre.
+//
+// Task #501 — copertura aggiuntiva lato consumo dei flag:
+//   - DashboardGaraReale: blocco Energia rimosso => premio 0, nessun marker
+//     con le soglie della RS rimossa, breakdown per-PDV neutro; livello
+//     Assicurazioni rimosso (S2) => neutralizzato (premio S1, nessun marker S2);
+//   - blocchi Mobile/Fisso/Partnership rimossi => le piste non compaiono nel
+//     ticker (premi assenti) pur con vendite presenti;
+//   - Preventivatore in modalità per_rs: una RS con blocco Energia rimosso
+//     non concorre al premio totale.
 
 const now = new Date();
 const MONTH = now.getMonth() + 1;
@@ -254,6 +263,212 @@ test('dashboard excludes a removed Assicurazioni RS block from pieces, premi and
     const detail = page.getByTestId('ticker-detail-assicurazioni');
     const detailTxt = await detail.innerText();
     assert.ok(!detailTxt.includes(PDV.nome), 'il PDV della RS rimossa non compare nel breakdown');
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// --- Dashboard (Task #501): blocco Energia rimosso per una RS => premio 0,
+// nessun marker con le soglie della RS rimossa, breakdown per-PDV neutro;
+// livello Assicurazioni rimosso (S2) => bonus S1, nessun marker S2.
+const artEnergiaSale = {
+  categoria: { nome: 'ENERGIA W3' },
+  tipologia: { nome: 'ENERGIA' },
+  descrizione: 'OFFERTA LUCE',
+  dettaglio: { prezzo: '0.00' },
+};
+
+async function insertSaleArticoli(pool, orgId, { codicePos, nomeNegozio, ragioneSociale, articoli, cliente }) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const dataVendita = `${YEAR}-${pad(MONTH)}-10T10:00:00.000Z`;
+  const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
+  await pool.query(
+    `INSERT INTO bisuite_sales
+       (organization_id, bisuite_id, data_vendita, codice_pos, nome_negozio,
+        ragione_sociale, stato, totale, raw_data)
+     VALUES ($1, $2, $3, $4, $5, $6, 'FINALIZZATA', '5.00', $7::jsonb)`,
+    [orgId, bisuiteId, dataVendita, codicePos, nomeNegozio, ragioneSociale,
+     JSON.stringify({ cliente, articoli })],
+  );
+}
+
+test('dashboard: removed Energia block => premio 0/no markers/neutral breakdown; removed Assic S2 level => S1 bonus only', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gara_rimov_en', fullName: 'Gara Rimovibili Energia UI', organizationName: uniq('GaraRimovEnergiaUI') });
+  const browser = await launchBrowser();
+  try {
+    const created = await jsonReq(`${BASE}/api/gara-config`, authed(session, {
+      method: 'PUT',
+      body: JSON.stringify({
+        month: MONTH, year: YEAR, name: 'Config rimovibili energia',
+        config: {
+          pdvList: [PDV, PDV_B],
+          tipologiaGara: 'gara_operatore_rs',
+          modalitaInserimentoRS: 'per_rs',
+          energiaRSConfig: {
+            configPerRS: [
+              // RS "CMS SRL": blocco Energia RIMOSSO. Target distintivi (7/8/9)
+              // per verificare che i suoi marker non compaiano sul ticker.
+              { ragioneSociale: RS, pdvInGara: 1, targetNoMalus: 0, targetS1: 7, targetS2: 8, targetS3: 9, premioS1: 999, premioS2: 999, premioS3: 999, rimosso: true },
+              // RS "BETA STORE SRL": attiva, 1 pezzo raggiunge S1 => premio 250.
+              { ragioneSociale: RS_B, pdvInGara: 1, targetNoMalus: 0, targetS1: 1, targetS2: 50, targetS3: 99, premioS1: 250, premioS2: 500, premioS3: 1000 },
+            ],
+          },
+          // La config globale serve al calcolo punti per-PDV; le soglie/premi
+          // effettivi arrivano dal blocco per-RS sotto.
+          assicurazioniConfig: { pdvInGara: 1, targetNoMalus: 0, targetS1: 1, targetS2: 2, premioS1: 500, premioS2: 1100 },
+          assicurazioniRSConfig: {
+            configPerRS: [
+              // RS "CMS SRL": livello S2 rimosso. 1 polizza = 2 punti >= targetS2,
+              // ma con S2 neutralizzato deve valere il bonus S1 (500), non 1100.
+              { ragioneSociale: RS, pdvInGara: 1, targetNoMalus: 0, targetS1: 1, targetS2: 2, premioS1: 500, premioS2: 1100, livelliRimossi: ['S2'] },
+            ],
+          },
+        },
+      }),
+    }));
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+
+    // 1 contratto energia per ciascuna RS + 1 polizza sulla RS col livello rimosso.
+    await insertSaleArticoli(pool, session.orgId, { codicePos: PDV.codicePos, nomeNegozio: PDV.nome, ragioneSociale: RS, articoli: [artEnergiaSale], cliente: { clienteTipo: 'FISICA' } });
+    await insertSaleArticoli(pool, session.orgId, { codicePos: PDV_B.codicePos, nomeNegozio: PDV_B.nome, ragioneSociale: RS_B, articoli: [artEnergiaSale], cliente: { clienteTipo: 'FISICA' } });
+    await insertSaleArticoli(pool, session.orgId, { codicePos: PDV.codicePos, nomeNegozio: PDV.nome, ragioneSociale: RS, articoli: [artAssicCasa], cliente: { clienteTipo: 'PRIVATO' } });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/dashboard-gara-reale`, { waitUntil: 'networkidle' });
+
+    const energiaCard = page.getByTestId('ticker-pista-energia');
+    await energiaCard.waitFor({ state: 'visible', timeout: 30000 });
+
+    // Premio energia = solo RS attiva (250): la RS rimossa vale 0, senza
+    // fallback ai default o alla config org.
+    const premioEnTxt = (await page.getByTestId('ticker-premio-energia').innerText()).trim();
+    const premioEn = Number(premioEnTxt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+    assert.equal(premioEn, 250, `premio energia = solo RS attiva (got "${premioEnTxt}")`);
+
+    // Nessun marker soglia con i target distintivi della RS rimossa (7/8/9).
+    const markerValues = await page
+      .locator('[data-testid^="ticker-threshold-energia-"]')
+      .evaluateAll(els => els.map(el => el.getAttribute('data-threshold-value')));
+    for (const v of ['7', '8', '9']) {
+      assert.ok(!markerValues.includes(v), `nessun marker con la soglia ${v} della RS rimossa (got ${JSON.stringify(markerValues)})`);
+    }
+
+    // Dettagli per-PDV neutri: i pezzi contano solo la RS attiva e la RS
+    // rimossa (e il suo PDV) non compare nel breakdown.
+    await page.getByTestId('ticker-toggle-energia').click();
+    const pezziEnTxt = (await page.getByTestId('prov-totale-pezzi-energia').innerText()).trim();
+    assert.match(pezziEnTxt, /^1\s*pz$/, `pezzi energia escludono la RS rimossa (got "${pezziEnTxt}")`);
+    const detailEnTxt = await page.getByTestId('ticker-detail-energia').innerText();
+    assert.ok(!detailEnTxt.includes(PDV.nome), 'il PDV della RS rimossa non compare nel breakdown energia');
+    assert.ok(!detailEnTxt.toUpperCase().includes('CMS'), 'la RS rimossa non compare nel breakdown energia');
+
+    // Assicurazioni: livello S2 rimosso => 2 punti valgono la soglia S1 (500 €).
+    const premioAsTxt = (await page.getByTestId('ticker-premio-assicurazioni').innerText()).trim();
+    const premioAs = Number(premioAsTxt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+    assert.equal(premioAs, 500, `livello S2 rimosso => bonus S1 (got "${premioAsTxt}")`);
+    assert.equal(
+      (await page.getByTestId('ticker-soglia-attuale-assicurazioni').innerText()).trim(),
+      'S1',
+      'con S2 rimosso la soglia attuale resta S1',
+    );
+    const markerLabelsAs = await page
+      .locator('[data-testid^="ticker-threshold-assicurazioni-"]')
+      .evaluateAll(els => els.map(el => el.getAttribute('data-threshold-label')));
+    assert.ok(!markerLabelsAs.includes('S2'), `nessun marker S2 con il livello rimosso (got ${JSON.stringify(markerLabelsAs)})`);
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// --- Dashboard (Task #501): blocchi Mobile, Fisso e Partnership rimossi =>
+// le piste non compaiono nel ticker (premi assenti) pur con vendite presenti;
+// le piste non rimosse (energia, cb) continuano a comparire.
+test('dashboard: removed Mobile/Fisso/Partnership blocks keep their piste (and premi) out of the ticker', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gara_rimov_mfp', fullName: 'Gara Rimovibili MFP UI', organizationName: uniq('GaraRimovMfpUI') });
+  const browser = await launchBrowser();
+  try {
+    const created = await jsonReq(`${BASE}/api/gara-config`, authed(session, {
+      method: 'PUT',
+      body: JSON.stringify({
+        month: MONTH, year: YEAR, name: 'Config rimovibili mfp',
+        config: {
+          pdvList: [PDV],
+          tipologiaGara: 'gara_operatore_rs',
+          modalitaInserimentoRS: 'per_rs',
+          pistaMobileRSConfig: {
+            sogliePerRS: [{ ragioneSociale: RS, rimosso: true, soglia1: 1, soglia2: 2, soglia3: 3, soglia4: 4, forecastTargetPunti: 10 }],
+          },
+          pistaFissoRSConfig: {
+            sogliePerRS: [{ ragioneSociale: RS, rimosso: true, soglia1: 1, soglia2: 2, soglia3: 3, soglia4: 4, soglia5: 5, forecastTargetPunti: 10 }],
+          },
+          partnershipRewardRSConfig: {
+            configPerRS: [{ ragioneSociale: RS, rimosso: true, target100: 1, target80: 1, premio100: 100, premio80: 80 }],
+          },
+          // Blocco Energia ATTIVO: la card energia fa da ancora (pagina carica,
+          // vendite processate) mentre le piste rimosse devono sparire.
+          energiaRSConfig: {
+            configPerRS: [{ ragioneSociale: RS, pdvInGara: 1, targetNoMalus: 0, targetS1: 1, targetS2: 50, targetS3: 99, premioS1: 200, premioS2: 500, premioS3: 1000 }],
+          },
+        },
+      }),
+    }));
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+
+    // Vendite per TUTTE le piste: mobile (TIED), fisso (FTTH), cb+partnership
+    // (MIA twin), energia.
+    await insertSaleArticoli(pool, session.orgId, {
+      codicePos: PDV.codicePos, nomeNegozio: PDV.nome, ragioneSociale: RS,
+      articoli: [{ categoria: { nome: 'TIED CF' }, tipologia: { nome: 'VOCE EASYPAY' }, dettaglio: { canone: '10' } }],
+      cliente: { clienteTipo: 'PRIVATO' },
+    });
+    await insertSaleArticoli(pool, session.orgId, {
+      codicePos: PDV.codicePos, nomeNegozio: PDV.nome, ragioneSociale: RS,
+      articoli: [{ categoria: { nome: 'ADSL/FIBRA/FWA CF' }, tipologia: { nome: 'FIBRA FTTH CF' }, dettaglio: { prezzo: '0.00' } }],
+      cliente: { clienteTipo: 'PRIVATO' },
+    });
+    await insertSaleArticoli(pool, session.orgId, {
+      codicePos: PDV.codicePos, nomeNegozio: PDV.nome, ragioneSociale: RS,
+      articoli: [{ categoria: { nome: 'MIA TIED' }, tipologia: { nome: 'MIA EASYPAY STANDARD' }, dettaglio: { prezzo: '0.00' } }],
+      cliente: { clienteTipo: 'PRIVATO' },
+    });
+    await insertSaleArticoli(pool, session.orgId, {
+      codicePos: PDV.codicePos, nomeNegozio: PDV.nome, ragioneSociale: RS,
+      articoli: [artEnergiaSale], cliente: { clienteTipo: 'FISICA' },
+    });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/dashboard-gara-reale`, { waitUntil: 'networkidle' });
+
+    // Ancore: energia (blocco attivo, premio 200) e cb (pista non rimovibile,
+    // alimentata dalla stessa vendita MIA del twin partnership).
+    await page.getByTestId('ticker-pista-energia').waitFor({ state: 'visible', timeout: 30000 });
+    await page.getByTestId('ticker-pista-cb').waitFor({ state: 'visible', timeout: 15000 });
+    const premioEnTxt = (await page.getByTestId('ticker-premio-energia').innerText()).trim();
+    const premioEn = Number(premioEnTxt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+    assert.equal(premioEn, 200, `il blocco energia attivo continua a premiare (got "${premioEnTxt}")`);
+
+    // Le piste con blocco rimosso NON devono comparire (premi assenti),
+    // nonostante le vendite mobile/fisso/MIA appena inserite.
+    assert.equal(await page.getByTestId('ticker-pista-mobile').count(), 0,
+      'pista mobile assente con blocco RS rimosso');
+    assert.equal(await page.getByTestId('ticker-pista-fisso').count(), 0,
+      'pista fisso assente con blocco RS rimosso');
+    assert.equal(await page.getByTestId('ticker-pista-partnership').count(), 0,
+      'pista partnership assente con blocco RS rimosso');
 
     await page.close();
     await context.close();
@@ -506,6 +721,66 @@ test('restoring a revision containing removals keeps rimosso/livelliRimossi and 
     await targetS1.waitFor({ state: 'visible', timeout: 10000 });
     assert.equal(await targetS1.inputValue(), '15', 'restored revision preserves block values');
     assert.equal(await page.getByTestId(`input-energia-rs-targetS3-${RS}`).isDisabled(), true, 'level removal from revision survives block re-enable');
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// --- Preventivatore (Task #501): una RS con blocco ENERGIA rimosso non deve
+// concorrere al premio totale in modalità per_rs (né base, né soglia, né pista).
+test('Preventivatore excludes a removed Energia RS block from premi', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gara_rimov_pen', fullName: 'Gara Rimovibili Prev Energia UI', organizationName: uniq('GaraRimovPrevEnUI') });
+  const browser = await launchBrowser();
+  try {
+    const pdvA = { ...PDV, abilitaAssicurazioni: false };
+    const pdvB = { ...PDV, id: 'pdv-2', codicePos: 'POS002', nome: 'Negozio Due', ragioneSociale: RS_B, abilitaAssicurazioni: false };
+    // 1 contratto CONSUMER_NO_SDD per RS: base 55 € + soglia S1 (target 1 => 250 €)
+    // = 305 € a RS (nessun bonus pista sotto i default). Con la rimozione
+    // onorata il totale è 305 € (solo la RS attiva); senza fix sarebbe 610 €.
+    const rigaEnergia = [{ id: 'r1', category: 'CONSUMER_NO_SDD', pezzi: 1 }];
+    const preventivoData = {
+      step: 0,
+      configGara: { nomeGara: 'Test rimozioni energia', haLetteraUfficiale: false, annoGara: YEAR, meseGara: MONTH, tipoPeriodo: 'mensile', tipologiaGara: 'gara_operatore_rs' },
+      numeroPdv: 2,
+      puntiVendita: [pdvA, pdvB],
+      modalitaInserimentoRS: 'per_rs',
+      energiaConfig: { pdvInGara: 1, targetNoMalus: 0, targetS1: 1, targetS2: 99, targetS3: 999 },
+      attivatoEnergiaByRS: {
+        [RS]: rigaEnergia,
+        [RS_B]: rigaEnergia,
+      },
+      // Blocco Energia della RS "CMS SRL" rimosso in Config Gara.
+      energiaRSConfig: {
+        configPerRS: [
+          { ragioneSociale: RS, pdvInGara: 1, targetNoMalus: 0, targetS1: 1, targetS2: 99, targetS3: 999, rimosso: true },
+          { ragioneSociale: RS_B, pdvInGara: 1, targetNoMalus: 0, targetS1: 1, targetS2: 99, targetS3: 999 },
+        ],
+      },
+    };
+    const created = await jsonReq(`${BASE}/api/preventivi`, authed(session, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Preventivo rimozioni energia', data: preventivoData }),
+    }));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/preventivatore?id=${created.body.id}`, { waitUntil: 'networkidle' });
+
+    await page.getByTestId('text-premio-totale').first().waitFor({ state: 'attached', timeout: 30000 });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[data-testid="text-premio-totale"]');
+      return el && /\d/.test(el.textContent || '');
+    }, { timeout: 15000 });
+    const txt = ((await page.getByTestId('text-premio-totale').first().textContent()) || '').trim();
+    const num = Number(txt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+    assert.equal(num, 305, `premio totale energia esclude la RS rimossa (got "${txt}")`);
 
     await page.close();
     await context.close();
