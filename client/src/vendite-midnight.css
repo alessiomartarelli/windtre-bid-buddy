@@ -107,7 +107,6 @@
     box-shadow:
       0 18px 42px rgb(8 3 24 / 0.46),
       0 4px 12px rgb(83 41 154 / 0.18),
-      inset 0 1px 0 rgb(238 225 255 / 0.16),
       inset 0 -1px 0 rgb(12 4 34 / 0.34);
     backdrop-filter: blur(18px) saturate(0.82);
   }
@@ -127,7 +126,6 @@
       0 22px 52px rgb(8 3 24 / 0.52),
       0 7px 20px rgb(104 58 189 / 0.20),
       0 0 0 1px rgb(246 190 88 / 0.10),
-      inset 0 1px 0 rgb(238 225 255 / 0.19),
       inset 0 -1px 0 rgb(12 4 34 / 0.38);
   }
 
