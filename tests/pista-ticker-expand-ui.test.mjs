@@ -1031,12 +1031,9 @@ test('scenario 6: scale uniformi tra RS mostrano i marker, scale diverse restano
     const detailThresholds = page.locator('[data-testid^="ticker-detail-thresholds-mobile-"]');
     assert.equal(
       await detailThresholds.count(),
-      2,
-      'i riferimenti specifici delle due RS devono restare disponibili nel dettaglio',
+      0,
+      'le soglie non devono essere ripetute in fondo al dettaglio punti',
     );
-    const detailTexts = await detailThresholds.allInnerTexts();
-    assert.ok(detailTexts.some((text) => /S1:\s*3/.test(text)), 'il dettaglio deve conservare la scala della prima RS');
-    assert.ok(detailTexts.some((text) => /S1:\s*10/.test(text)), 'il dettaglio deve conservare la scala diversa della seconda RS');
 
     await page.close();
     await context.close();

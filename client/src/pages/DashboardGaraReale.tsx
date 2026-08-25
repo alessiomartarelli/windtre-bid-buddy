@@ -1490,25 +1490,25 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
     return (
       <div
         id={`ticker-detail-${p.pista}`}
-        className="relative z-20 mx-3 mb-3 rounded-2xl border bg-card/90 p-3 space-y-3"
+        className="relative z-20 mx-3 mb-3 space-y-3 rounded-2xl border bg-card/90 p-3 md:space-y-5 md:p-5"
         data-testid={`ticker-detail-${p.pista}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-semibold">Provenienza punti — {conf?.label ?? p.pista}</div>
-          <span className="flex shrink-0 items-baseline gap-2 tabular-nums">
-            <span className="text-xs font-semibold text-muted-foreground" data-testid={`prov-totale-pezzi-${p.pista}`}>
+          <div className="text-sm font-semibold md:text-lg">Provenienza punti — {conf?.label ?? p.pista}</div>
+          <span className="flex shrink-0 items-baseline gap-2 tabular-nums md:gap-4">
+            <span className="text-xs font-semibold text-muted-foreground md:text-base" data-testid={`prov-totale-pezzi-${p.pista}`}>
               {fmtTickerVal(p.totalePezzi)} pz
             </span>
-            <span className="text-sm font-bold" data-testid={`prov-totale-${p.pista}`}>
+            <span className="text-sm font-bold md:text-xl" data-testid={`prov-totale-${p.pista}`}>
               {fmtPoints(p.calc.puntiTotali)} pt
             </span>
           </span>
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground md:text-sm">
           Dettaglio delle componenti che concorrono al calcolo dei punti.
         </p>
-        <div className="space-y-2" data-testid={`provenienza-panel-${p.pista}`}>
+        <div className="space-y-2 md:space-y-4" data-testid={`provenienza-panel-${p.pista}`}>
           {blocks.map((b) => {
             const sourcePdvs = b.key === 'totale'
               ? p.pdvBreakdown
@@ -1533,9 +1533,9 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
               .filter((category) => category.pezzi > 0)
               .sort((a, b) => b.pezzi - a.pezzi || a.label.localeCompare(b.label, "it"));
             return (
-              <div key={b.key} className="rounded-xl border bg-card/60 p-3" data-testid={`prov-row-rs-${p.pista}-${b.key}`}>
+              <div key={b.key} className="rounded-xl border bg-card/60 p-3 md:p-5" data-testid={`prov-row-rs-${p.pista}-${b.key}`}>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate text-xs font-bold">{b.name}</span>
+                  <span className="min-w-0 truncate text-xs font-bold md:text-base">{b.name}</span>
                   <span className="flex shrink-0 items-center gap-2">
                     {b.key !== 'totale' && (
                       <ProvThresholdBadge
@@ -1554,24 +1554,24 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
                   </span>
                 </div>
                 {aggregateByRs ? (
-                  <div className="mt-2 border-t border-border/70 pt-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-lg bg-muted/45 px-2.5 py-2">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Pezzi</div>
-                        <div className="mt-0.5 text-sm font-bold tabular-nums" data-testid={`prov-pezzi-rs-${p.pista}-${b.key}`}>
+                  <div className="mt-2 border-t border-border/70 pt-2 md:mt-4 md:pt-4">
+                    <div className="grid grid-cols-2 gap-2 md:gap-5">
+                      <div className="rounded-lg bg-muted/45 px-2.5 py-2 md:px-4 md:py-3.5">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:text-xs">Pezzi</div>
+                        <div className="mt-0.5 text-sm font-bold tabular-nums md:mt-1 md:text-xl" data-testid={`prov-pezzi-rs-${p.pista}-${b.key}`}>
                           {fmtTickerVal(b.pezziAtt)} pz
                         </div>
                       </div>
-                      <div className="rounded-lg bg-muted/45 px-2.5 py-2 text-right">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Punti</div>
-                        <div className="mt-0.5 text-sm font-bold tabular-nums" data-testid={`prov-punti-rs-${p.pista}-${b.key}`}>
+                      <div className="rounded-lg bg-muted/45 px-2.5 py-2 text-right md:px-4 md:py-3.5">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:text-xs">Punti</div>
+                        <div className="mt-0.5 text-sm font-bold tabular-nums md:mt-1 md:text-xl" data-testid={`prov-punti-rs-${p.pista}-${b.key}`}>
                           {fmtPoints(b.puntiAtt)} pt
                         </div>
                       </div>
                     </div>
-                    <div className="mt-2 space-y-0.5">
+                    <div className="mt-2 space-y-0.5 md:mt-4 md:space-y-2">
                       {aggregatedCategories.map((category) => (
-                        <div key={category.category} className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground" data-testid={`prov-cat-rs-${p.pista}-${b.key}-${category.category}`}>
+                        <div key={category.category} className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground md:text-sm" data-testid={`prov-cat-rs-${p.pista}-${b.key}-${category.category}`}>
                           <span className="min-w-0 truncate">{category.label}</span>
                           <span className="shrink-0 tabular-nums">
                             {category.pezzi} pz{category.punti != null ? ` · ${fmtPoints(category.punti)} pt` : ""}
@@ -1617,15 +1617,6 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
                         ))}
                       </div>
                     </div>
-                    ))}
-                  </div>
-                )}
-                {b.thresholdMarkers && b.thresholdMarkers.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1 border-t border-border/70 pt-2" data-testid={`ticker-detail-thresholds-${p.pista}-${b.key}`}>
-                    {b.thresholdMarkers.map((marker) => (
-                      <span key={`${marker.label}-${marker.value}`} className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        {marker.label}: {fmtTickerVal(marker.value)} pt
-                      </span>
                     ))}
                   </div>
                 )}
