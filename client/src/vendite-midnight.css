@@ -98,8 +98,8 @@
   /* Dashboard Gara: superfici e indicatori usano solo la palette viola/giallo
      del tema. Il colore di categoria rimane confinato alle icone. */
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .ticker-pista-card {
-    background: linear-gradient(145deg, rgb(56 42 91 / 0.82), rgb(39 29 68 / 0.92));
-    border-color: rgb(206 190 235 / 0.20) !important;
+    background: linear-gradient(145deg, rgb(65 38 119 / 0.90), rgb(49 29 91 / 0.95));
+    border-color: rgb(211 193 244 / 0.22) !important;
     box-shadow:
       0 12px 30px rgb(8 3 24 / 0.32),
       inset 0 1px 0 rgb(234 224 255 / 0.08);
@@ -130,7 +130,7 @@
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-header,
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-trajectory,
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-kpis {
-    background: linear-gradient(145deg, rgb(62 48 96 / 0.70), rgb(42 32 72 / 0.78));
+    background: linear-gradient(145deg, rgb(79 49 133 / 0.62), rgb(53 31 96 / 0.76));
     border-color: rgb(211 196 238 / 0.18);
     box-shadow:
       0 7px 18px rgb(8 3 24 / 0.24),
@@ -139,12 +139,12 @@
   }
 
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-kpis > div {
-    background: rgb(32 24 57 / 0.34);
+    background: rgb(42 23 79 / 0.46);
     border-color: rgb(213 198 239 / 0.14);
   }
 
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-kpis > div:nth-child(even) {
-    background: rgb(32 24 57 / 0.34);
+    background: rgb(42 23 79 / 0.46);
     border-color: rgb(213 198 239 / 0.14);
   }
 
