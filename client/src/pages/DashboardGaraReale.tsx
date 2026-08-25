@@ -1381,26 +1381,40 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
               <strong className="tabular-nums">{trajectoryRatio.toFixed(0)}%</strong>
             </div>
           </div>
-          <div className="pista-card-kpis rounded-xl p-2.5 text-foreground" data-testid={`ticker-kpis-${p.pista}`}>
-            <div className="flex items-end justify-between gap-1">
-              <div>
-                <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{usePunti ? 'Punti attuali' : 'Pezzi attuali'}</div>
-                <span className="text-xl font-extrabold leading-none tabular-nums" data-testid={`ticker-punti-${p.pista}`}>{fmtTickerVal(att)}</span>
+          <div className="pista-card-kpis grid grid-cols-2 gap-1.5 rounded-xl p-2 text-foreground" data-testid={`ticker-kpis-${p.pista}`}>
+            <div className="rounded-lg border border-border/70 bg-background/55 px-2 py-1.5">
+              <div className="text-[8px] font-bold uppercase tracking-[0.11em] text-muted-foreground">
+                {usePunti ? 'Punti attuali' : 'Pezzi attuali'}
               </div>
-              {proi > att && (
-                <span className="text-[11px] font-semibold tabular-nums text-blue-600 dark:text-blue-400 flex items-center gap-0.5 pb-0.5">
-                  <TrendingUp className="h-3 w-3" /> {fmtTickerVal(proi)}
-                </span>
-              )}
+              <span className="mt-0.5 block text-base font-extrabold leading-none tabular-nums" data-testid={`ticker-punti-${p.pista}`}>
+                {fmtTickerVal(att)}
+              </span>
             </div>
-            <div className="mt-2 flex items-center justify-between gap-1 border-t border-border/80 pt-2">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Premio</span>
-              <span className="text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400" data-testid={`ticker-premio-${p.pista}`}>{formatEuro(p.calc.premioStimato)}</span>
-              {p.calcProiezione.premioStimato > 0 && p.calcProiezione.premioStimato !== p.calc.premioStimato && (
-                <span className="text-[11px] font-semibold tabular-nums text-blue-600 dark:text-blue-400 flex items-center gap-0.5" data-testid={`ticker-premio-proj-${p.pista}`}>
-                  <TrendingUp className="h-3 w-3" /> {formatEuro(p.calcProiezione.premioStimato)}
-                </span>
-              )}
+            <div className="rounded-lg border border-blue-200/80 bg-blue-50/70 px-2 py-1.5 dark:border-blue-800/80 dark:bg-blue-950/35">
+              <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.11em] text-blue-700 dark:text-blue-300">
+                <TrendingUp className="h-2.5 w-2.5" />
+                {usePunti ? 'Punti proiezione' : 'Pezzi proiezione'}
+              </div>
+              <span className="mt-0.5 block text-base font-extrabold leading-none tabular-nums text-blue-700 dark:text-blue-300">
+                {fmtTickerVal(proi)}
+              </span>
+            </div>
+            <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/60 px-2 py-1.5 dark:border-emerald-900/80 dark:bg-emerald-950/25">
+              <div className="text-[8px] font-bold uppercase tracking-[0.11em] text-emerald-700 dark:text-emerald-400">
+                Premio attuale
+              </div>
+              <span className="mt-0.5 block text-sm font-extrabold leading-none tabular-nums text-emerald-700 dark:text-emerald-400" data-testid={`ticker-premio-${p.pista}`}>
+                {formatEuro(p.calc.premioStimato)}
+              </span>
+            </div>
+            <div className="rounded-lg border border-blue-200/80 bg-blue-50/70 px-2 py-1.5 dark:border-blue-800/80 dark:bg-blue-950/35">
+              <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.11em] text-blue-700 dark:text-blue-300">
+                <TrendingUp className="h-2.5 w-2.5" />
+                Premio proiezione
+              </div>
+              <span className="mt-0.5 block text-sm font-extrabold leading-none tabular-nums text-blue-700 dark:text-blue-300" data-testid={`ticker-premio-proj-${p.pista}`}>
+                {formatEuro(p.calcProiezione.premioStimato)}
+              </span>
             </div>
           </div>
         </div>
