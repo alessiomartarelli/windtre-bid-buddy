@@ -59,7 +59,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
-  Info,
   ChevronsUpDown,
   Download,
   ShieldAlert,
@@ -1289,13 +1288,17 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
             aria-expanded={isOpen}
             aria-controls={`ticker-detail-${p.pista}`}
             aria-label={`${isOpen ? "Nascondi" : "Mostra"} provenienza punti ${conf.label}`}
+            data-state={isOpen ? "open" : "closed"}
             data-testid={`btn-provenienza-${p.pista}`}
             onClick={(event) => {
               event.stopPropagation();
               toggleCard();
             }}
           >
-            <Info className="h-3 w-3" />
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+              aria-hidden
+            />
             Dettaglio punti
           </button>
         </div>
