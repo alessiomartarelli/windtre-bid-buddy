@@ -129,6 +129,7 @@ import {
   type EnergiaAttivatoRiga,
   type EnergiaPdvInGara,
   ENERGIA_BASE_PAY,
+  getSoglieFromConfig,
 } from "@/types/energia";
 import {
   type CBEventType,
@@ -1218,9 +1219,15 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
       scale: thresholdMarkers.length > 0 ? "shared" : "none",
       scope: "totale",
     };
-    const thresholdStatus = (calc: PistaCalcResult) => {
+    const thresholdStatus = (progress: number) => {
       if (thresholdContext.scale === "none") return "Non prevista";
-      return calc.sogliaRaggiunta > 0 ? calc.sogliaLabel : "Non raggiunta";
+      const reached = thresholdMarkers
+        .filter((marker) => progress >= marker.value)
+        .sort((a, b) => b.value - a.value)[0];
+      // Più livelli possono condividere lo stesso valore (es. S1=S2=0,5):
+      // sullo stato mostriamo il livello più alto, mentre il marker conserva
+      // l'etichetta combinata nel tooltip.
+      return reached?.label.split(" · ").at(-1) ?? "Non raggiunta";
     };
     const thresholdQualifier = thresholdContext.scale === "none"
       ? null
@@ -1229,8 +1236,8 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
         : thresholdContext.scope === "pdv"
           ? "miglior PDV"
           : null;
-    const sogliaAttuale = thresholdStatus(p.calc);
-    const sogliaProiezione = thresholdStatus(p.calcProiezione);
+    const sogliaAttuale = thresholdStatus(trajectoryAtt);
+    const sogliaProiezione = thresholdStatus(trajectoryProi);
     const isOpen = expanded === p.pista;
     const toggleCard = () => {
       setActiveThreshold(null);
@@ -3703,10 +3710,25 @@ export default function DashboardGaraReale() {
         const config = rsConfig?.rimosso ? undefined : (rsConfig ?? energiaConfig);
         if (config) {
           const livelli = (rsConfig && !rsConfig.rimosso) ? rsConfig.livelliRimossi : undefined;
+          const numPdv = rsConfig?.pdvInGara
+            || puntiVendita.filter((pdv) =>
+              normalizeRS(pdv.ragioneSociale || "Senza RS") === normalizeRS(ragioneSociale)
+              && pdv.abilitaEnergia
+            ).length
+            || config.pdvInGara
+            || 1;
+          const sogliePista = getSoglieFromConfig(
+            config,
+            numPdv,
+            tcEnergia?.pistaBase,
+            tcEnergia?.pistaDa4,
+          );
           soglieRef = {
-            s1: livelli?.includes('S1') ? undefined : config.targetS1,
-            s2: livelli?.includes('S2') ? undefined : config.targetS2,
-            s3: livelli?.includes('S3') ? undefined : config.targetS3,
+            s1: livelli?.includes('PS1') ? undefined : sogliePista.S1,
+            s2: livelli?.includes('PS2') ? undefined : sogliePista.S2,
+            s3: livelli?.includes('PS3') ? undefined : sogliePista.S3,
+            s4: livelli?.includes('PS4') ? undefined : sogliePista.S4,
+            s5: livelli?.includes('PS5') ? undefined : sogliePista.S5,
           };
         }
       } else if (pista === "assicurazioni") {

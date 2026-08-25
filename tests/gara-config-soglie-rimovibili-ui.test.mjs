@@ -320,7 +320,14 @@ test('dashboard: removed Energia block => premio 0/no markers/neutral breakdown;
               // per verificare che i suoi marker non compaiano sul ticker.
               { ragioneSociale: RS, pdvInGara: 1, targetNoMalus: 0, targetS1: 7, targetS2: 8, targetS3: 9, premioS1: 999, premioS2: 999, premioS3: 999, rimosso: true },
               // RS "BETA STORE SRL": attiva, 1 pezzo raggiunge S1 => premio 250.
-              { ragioneSociale: RS_B, pdvInGara: 1, targetNoMalus: 0, targetS1: 1, targetS2: 50, targetS3: 99, premioS1: 250, premioS2: 500, premioS3: 1000 },
+              {
+                ragioneSociale: RS_B, pdvInGara: 1,
+                targetNoMalus: 0, targetS1: 1, targetS2: 50, targetS3: 99,
+                premioS1: 250, premioS2: 500, premioS3: 1000,
+                // Le cinque "Soglie Pista" Energia devono alimentare il ticker.
+                pistaSoglia_S1: 1, pistaSoglia_S2: 2, pistaSoglia_S3: 3,
+                pistaSoglia_S4: 4, pistaSoglia_S5: 5,
+              },
             ],
           },
           // La config globale serve al calcolo punti per-PDV; le soglie/premi
@@ -360,6 +367,11 @@ test('dashboard: removed Energia block => premio 0/no markers/neutral breakdown;
     const markerValues = await page
       .locator('[data-testid^="ticker-threshold-energia-"]')
       .evaluateAll(els => els.map(el => el.getAttribute('data-threshold-value')));
+    assert.deepEqual(markerValues, ['1', '2', '3', '4', '5'], 'ticker Energia mostra tutte le cinque Soglie Pista configurate');
+    const markerLabels = await page
+      .locator('[data-testid^="ticker-threshold-energia-"]')
+      .evaluateAll(els => els.map(el => el.getAttribute('data-threshold-label')));
+    assert.deepEqual(markerLabels, ['S1', 'S2', 'S3', 'S4', 'S5'], 'marker Energia etichettati S1–S5');
     for (const v of ['7', '8', '9']) {
       assert.ok(!markerValues.includes(v), `nessun marker con la soglia ${v} della RS rimossa (got ${JSON.stringify(markerValues)})`);
     }
