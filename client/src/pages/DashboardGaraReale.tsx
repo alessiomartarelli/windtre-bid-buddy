@@ -1260,7 +1260,6 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
           <span className="pista-illustration__orb pista-illustration__orb--two" />
           <Icon className="pista-illustration__icon" strokeWidth={1.15} />
         </div>
-        <div className={`absolute inset-x-0 top-0 z-10 h-1 ${conf.color}`} aria-hidden />
         <div className="pista-card-scrim" aria-hidden />
         <div className="pista-card-heading absolute inset-x-3 top-3 z-30 flex items-start justify-between gap-1.5">
           <button
