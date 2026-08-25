@@ -1246,17 +1246,47 @@ const Preventivatore = () => {
   const isEnergiaRSRimossa = (rs: string) => isPerRSMode && isBloccoRimosso(findRSMeta(energiaRSConfig.configPerRS, rs));
   const isAssicRSRimossa = (rs: string) => isPerRSMode && isBloccoRimosso(findRSMeta(assicurazioniRSConfig.configPerRS, rs));
   const isPartnershipRSRimossa = (rs: string) => isPerRSMode && isBloccoRimosso(findRSMeta(partnershipRewardRSConfig.configPerRS as unknown as RSRemovalMeta[], rs));
-  // Parità con la Dashboard: le soglie pista personalizzate per RS
-  // (pistaSoglia_S1..S5 in energiaRSConfig.configPerRS) prevalgono su quelle
-  // della config Energia globale; per i campi assenti resta il fallback globale.
+  // Parità con la Dashboard: soglie pista (pistaSoglia_S1..S5), target soglia
+  // (targetS1..S3) e premi soglia (premio, premioS1..S3) personalizzati per RS
+  // in energiaRSConfig.configPerRS prevalgono su quelli della config Energia
+  // globale; per i campi assenti resta il fallback globale.
   const energiaConfigForRS = (rs: string) => {
     const meta = findRSMeta(energiaRSConfig.configPerRS, rs);
-    const soglieRS: Partial<EnergiaConfig> = {};
-    (['pistaSoglia_S1', 'pistaSoglia_S2', 'pistaSoglia_S3', 'pistaSoglia_S4', 'pistaSoglia_S5'] as const).forEach(f => {
+    const overrideRS: Partial<EnergiaConfig> = {};
+    ([
+      'pistaSoglia_S1', 'pistaSoglia_S2', 'pistaSoglia_S3', 'pistaSoglia_S4', 'pistaSoglia_S5',
+      'targetS1', 'targetS2', 'targetS3',
+      'premio', 'premioS1', 'premioS2', 'premioS3',
+    ] as const).forEach(f => {
       const v = meta?.[f];
-      if (typeof v === 'number' && Number.isFinite(v)) soglieRS[f] = v;
+      if (typeof v === 'number' && Number.isFinite(v)) overrideRS[f] = v;
     });
-    return neutralizzaLivelliEnergia({ ...energiaConfig, ...soglieRS, livelliRimossi: meta?.livelliRimossi });
+    return neutralizzaLivelliEnergia({ ...energiaConfig, ...overrideRS, livelliRimossi: meta?.livelliRimossi });
+  };
+  // Premio soglia Energia per una RS in modalità per_rs, con la stessa
+  // semantica della Dashboard quando esiste un blocco per-RS:
+  //   - i target per-RS in configPerRS sono AGGREGATI (Configurazione Gara li
+  //     salva già moltiplicati per i PDV della RS) => confronto diretto;
+  //   - il premio configurato è per-PDV e va moltiplicato per pdvInGara della
+  //     RS (fallback: n° PDV reali della RS nel simulatore).
+  // Senza blocco per-RS restano le semantiche storiche del simulatore:
+  // target globali per-PDV moltiplicati per numPdv e premio flat per RS.
+  const premioSogliaEnergiaRS = (rs: string, totalPezzi: number, numPdv: number, confRS: EnergiaConfig) => {
+    const meta = findRSMeta(energiaRSConfig.configPerRS, rs);
+    const hasRSTargets = (['targetS1', 'targetS2', 'targetS3'] as const)
+      .some(f => typeof meta?.[f] === 'number' && Number.isFinite(meta[f] as number));
+    const targetMult = hasRSTargets ? 1 : numPdv;
+    const metaPdvInGara = typeof meta?.pdvInGara === 'number' && Number.isFinite(meta.pdvInGara) && meta.pdvInGara > 0
+      ? meta.pdvInGara
+      : undefined;
+    const premioMult = meta ? (metaPdvInGara ?? numPdv ?? 1) : 1;
+    const eS1 = (confRS.targetS1 || 0) * targetMult;
+    const eS2 = (confRS.targetS2 || 0) * targetMult;
+    const eS3 = (confRS.targetS3 || 0) * targetMult;
+    if (eS3 > 0 && totalPezzi >= eS3) return (confRS.premioS3 ?? confRS.premio ?? 1000) * premioMult;
+    if (eS2 > 0 && totalPezzi >= eS2) return (confRS.premioS2 ?? confRS.premio ?? 500) * premioMult;
+    if (eS1 > 0 && totalPezzi >= eS1) return (confRS.premioS1 ?? confRS.premio ?? 250) * premioMult;
+    return 0;
   };
   const assicConfigForRS = (rs: string) =>
     neutralizzaLivelliAssicurazioni({ ...assicurazioniConfig, livelliRimossi: findRSMeta(assicurazioniRSConfig.configPerRS, rs)?.livelliRimossi });
@@ -1338,16 +1368,7 @@ const Preventivatore = () => {
       const confRS = energiaConfigForRS(rs);
       const righe = attivatoEnergiaByRS[rs] ?? [];
       const totalPezzi = righe.reduce((s, r) => s + r.pezzi, 0);
-      const effectiveS1 = (confRS.targetS1 || 0) * numPdv;
-      const effectiveS2 = (confRS.targetS2 || 0) * numPdv;
-      const effectiveS3 = (confRS.targetS3 || 0) * numPdv;
-      if (effectiveS3 > 0 && totalPezzi >= effectiveS3) {
-        premioSogliaGlobale += 1000;
-      } else if (effectiveS2 > 0 && totalPezzi >= effectiveS2) {
-        premioSogliaGlobale += 500;
-      } else if (effectiveS1 > 0 && totalPezzi >= effectiveS1) {
-        premioSogliaGlobale += 250;
-      }
+      premioSogliaGlobale += premioSogliaEnergiaRS(rs, totalPezzi, numPdv, confRS);
       const pista = calcolaBonusPistaEnergiaFn(totalPezzi, confRS, numPdv);
       bonusPistaGlobale += pista.bonusTotale;
     });
@@ -1443,13 +1464,7 @@ const Preventivatore = () => {
         const energiaBase = energiaResults
           .filter((_: any, i: number) => (puntiVendita[i]?.ragioneSociale || "Senza RS") === rs)
           .reduce((s: number, r: any) => s + (r?.premioBase || 0) + (r?.bonusRaggiungimentoSoglia || 0), 0);
-        let energiaSoglia = 0;
-        const eS1 = (confRS.targetS1 || 0) * numPdv;
-        const eS2 = (confRS.targetS2 || 0) * numPdv;
-        const eS3 = (confRS.targetS3 || 0) * numPdv;
-        if (eS3 > 0 && totalPezziEnergia >= eS3) energiaSoglia = 1000;
-        else if (eS2 > 0 && totalPezziEnergia >= eS2) energiaSoglia = 500;
-        else if (eS1 > 0 && totalPezziEnergia >= eS1) energiaSoglia = 250;
+        const energiaSoglia = premioSogliaEnergiaRS(rs, totalPezziEnergia, numPdv, confRS);
         const energiaPista = calcolaBonusPistaEnergiaFn(totalPezziEnergia, confRS, numPdv);
         energiaRS = energiaBase + energiaSoglia + energiaPista.bonusTotale;
       }
