@@ -737,6 +737,101 @@ test('restoring a revision containing removals keeps rimosso/livelliRimossi and 
   }
 });
 
+// --- Dashboard (Task #506): livello pista Energia rimosso (PS1–PS5 in
+// livelliRimossi) => neutralizzaLivelliEnergia porta la soglia pista a
+// Infinity: con volumi che supererebbero PS2 il bonus per contratto resta
+// quello del livello PS1, senza fallback alle soglie default.
+test('dashboard: removed Energia pista level (PS2) keeps the per-contract bonus at the lower level', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gara_rimov_ps', fullName: 'Gara Rimovibili Pista UI', organizationName: uniq('GaraRimovPistaUI') });
+  const browser = await launchBrowser();
+  try {
+    // Blocchi identici per le due RS (target alti: nessun premio soglia, il
+    // premio card è SOLO bonus pista): 2 pezzi superano pistaSoglia_S2=2.
+    const mkEnergiaRS = (rs, extra = {}) => ({
+      ragioneSociale: rs, pdvInGara: 1, targetNoMalus: 0,
+      targetS1: 30, targetS2: 50, targetS3: 99,
+      premioS1: 250, premioS2: 500, premioS3: 1000,
+      pistaSoglia_S1: 1, pistaSoglia_S2: 2, pistaSoglia_S3: 90, pistaSoglia_S4: 95, pistaSoglia_S5: 99,
+      ...extra,
+    });
+    const created = await jsonReq(`${BASE}/api/gara-config`, authed(session, {
+      method: 'PUT',
+      body: JSON.stringify({
+        month: MONTH, year: YEAR, name: 'Config rimovibili pista energia',
+        config: {
+          pdvList: [PDV, PDV_B],
+          tipologiaGara: 'gara_operatore_rs',
+          modalitaInserimentoRS: 'per_rs',
+          // Bonus per contratto distintivi: S1=10, S2=100. Con PS2 rimosso la
+          // RS "CMS SRL" deve valere 10 €/contratto, non 100.
+          // Compensi base azzerati: il premio card resta SOLO bonus pista.
+          tabelleCalcolo: {
+            energia: {
+              bonusPerContratto: { S1: 10, S2: 100, S3: 15, S4: 30, S5: 45 },
+              compensiBase: {
+                CONSUMER_CON_SDD: 0, CONSUMER_NO_SDD: 0, BUSINESS_CON_SDD: 0, BUSINESS_NO_SDD: 0,
+                CONSUMER_CON_SDD_W3: 0, CONSUMER_NO_SDD_W3: 0, BUSINESS_CON_SDD_W3: 0, BUSINESS_NO_SDD_W3: 0,
+              },
+            },
+          },
+          energiaRSConfig: {
+            configPerRS: [
+              // RS "CMS SRL": livello pista PS2 RIMOSSO => resta al bonus PS1.
+              mkEnergiaRS(RS, { livelliRimossi: ['PS2'] }),
+              // RS "BETA STORE SRL": controllo — stessi volumi, PS2 attivo.
+              mkEnergiaRS(RS_B),
+            ],
+          },
+        },
+      }),
+    }));
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+
+    // 2 contratti energia per ciascuna RS: volume >= pistaSoglia_S2 (2).
+    for (const target of [
+      { codicePos: PDV.codicePos, nomeNegozio: PDV.nome, ragioneSociale: RS },
+      { codicePos: PDV_B.codicePos, nomeNegozio: PDV_B.nome, ragioneSociale: RS_B },
+    ]) {
+      await insertSaleArticoli(pool, session.orgId, { ...target, articoli: [artEnergiaSale], cliente: { clienteTipo: 'FISICA' } });
+      await insertSaleArticoli(pool, session.orgId, { ...target, articoli: [artEnergiaSale], cliente: { clienteTipo: 'FISICA' } });
+    }
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/dashboard-gara-reale`, { waitUntil: 'networkidle' });
+
+    const energiaCard = page.getByTestId('ticker-pista-energia');
+    await energiaCard.waitFor({ state: 'visible', timeout: 30000 });
+
+    // Premio card = RS con PS2 rimosso (bonus PS1: 10 × 2 = 20) + RS di
+    // controllo (bonus PS2: 100 × 2 = 200) = 220 €. Un regresso in
+    // neutralizzaLivelliEnergia (PS2 che "rientra") darebbe 400 €.
+    // Sanity sul volume: 2 pezzi per RS (>= pistaSoglia_S2), 4 totali.
+    await page.getByTestId('ticker-toggle-energia').click();
+    const pezziTxt = (await page.getByTestId('prov-totale-pezzi-energia').innerText()).trim();
+    assert.match(pezziTxt, /^4\s*pz$/, `2 pezzi per RS, 4 totali (got "${pezziTxt}")`);
+
+    const premioTxt = (await page.getByTestId('ticker-premio-energia').innerText()).trim();
+    const premio = Number(premioTxt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+    assert.equal(premio, 220, `PS2 rimosso => bonus pista al livello inferiore PS1 (got "${premioTxt}")`);
+
+    // Nessun marker sul ticker mostra la soglia pista rimossa (valore 2):
+    // i marker energia restano i target S1/S2/S3 (30/50/99).
+    const markerValues = await page
+      .locator('[data-testid^="ticker-threshold-energia-"]')
+      .evaluateAll(els => els.map(el => el.getAttribute('data-threshold-value')));
+    assert.ok(!markerValues.includes('2'), `nessun marker con la soglia pista rimossa (got ${JSON.stringify(markerValues)})`);
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
 // --- Preventivatore (Task #501): una RS con blocco ENERGIA rimosso non deve
 // concorrere al premio totale in modalità per_rs (né base, né soglia, né pista).
 test('Preventivatore excludes a removed Energia RS block from premi', async () => {
