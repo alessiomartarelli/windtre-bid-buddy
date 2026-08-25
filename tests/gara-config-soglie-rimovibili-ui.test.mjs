@@ -561,6 +561,78 @@ test('Preventivatore excludes a removed Assicurazioni RS block from premi', asyn
   }
 });
 
+// --- Preventivatore (Task #508): in modalità per_rs un livello PISTA Energia
+// rimosso (PS1–PS5) deve restare neutralizzato nel premio totale del
+// simulatore. RS "CMS SRL" ha PS2 in livelliRimossi e volumi oltre quella
+// soglia: il bonus per contratto deve essere quello di PS1 (0 €), non quello
+// di PS2 (5 €/contratto). RS "BETA STORE SRL" senza rimozioni fa da controllo:
+// gli stessi volumi le valgono il bonus PS2 (nessuna over-neutralizzazione).
+test('Preventivatore neutralizes removed Energia pista levels (PS2) in per_rs mode', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gara_rimov_ps', fullName: 'Gara Rimovibili PS UI', organizationName: uniq('GaraRimovPsUI') });
+  const browser = await launchBrowser();
+  try {
+    const pdvA = { ...PDV, abilitaAssicurazioni: false };
+    const pdvB = { ...PDV, id: 'pdv-2', codicePos: 'POS002', nome: 'Negozio Due', ragioneSociale: RS_B, abilitaAssicurazioni: false };
+    // 12 contratti Consumer con SDD per RS (numPdv per RS = 1):
+    //   premio base   = 12 × 70 = 840 € a RS;
+    //   soglie pista  = S1:5, S2:10, S3:90... => 12 pezzi raggiungono PS2;
+    //   bonus pista   = RS_B: 5 €/contratto × 12 = 60 €; RS (PS2 rimosso): PS1 = 0 €;
+    //   premi soglia  = 0 (target S1..S3 irraggiungibili);
+    //   bonus 55×pdvInGara non scatta (12 < 110).
+    // Totale atteso: 840 + 840 + 60 = 1740 €.
+    // Senza neutralizzazione sarebbe 1800 €; con over-neutralizzazione 1680 €.
+    const righeEnergia = [{ id: 'r1', category: 'CONSUMER_CON_SDD', pezzi: 12 }];
+    const preventivoData = {
+      step: 0,
+      configGara: { nomeGara: 'Test pista rimossa', haLetteraUfficiale: false, annoGara: YEAR, meseGara: MONTH, tipoPeriodo: 'mensile', tipologiaGara: 'gara_operatore_rs' },
+      numeroPdv: 2,
+      puntiVendita: [pdvA, pdvB],
+      modalitaInserimentoRS: 'per_rs',
+      energiaConfig: {
+        pdvInGara: 2, targetNoMalus: 10, targetS1: 99, targetS2: 999, targetS3: 9999,
+        pistaSoglia_S1: 5, pistaSoglia_S2: 10, pistaSoglia_S3: 90, pistaSoglia_S4: 95, pistaSoglia_S5: 99,
+      },
+      attivatoEnergiaByRS: {
+        [RS]: righeEnergia,
+        [RS_B]: righeEnergia,
+      },
+      // Livello pista PS2 rimosso per la sola RS "CMS SRL".
+      energiaRSConfig: {
+        configPerRS: [
+          { ragioneSociale: RS, pdvInGara: 1, targetNoMalus: 10, targetS1: 99, targetS2: 999, targetS3: 9999, livelliRimossi: ['PS2'] },
+          { ragioneSociale: RS_B, pdvInGara: 1, targetNoMalus: 10, targetS1: 99, targetS2: 999, targetS3: 9999 },
+        ],
+      },
+    };
+    const created = await jsonReq(`${BASE}/api/preventivi`, authed(session, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Preventivo pista rimossa', data: preventivoData }),
+    }));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/preventivatore?id=${created.body.id}`, { waitUntil: 'networkidle' });
+
+    await page.getByTestId('text-premio-totale').first().waitFor({ state: 'attached', timeout: 30000 });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[data-testid="text-premio-totale"]');
+      return el && /\d/.test(el.textContent || '');
+    }, { timeout: 15000 });
+    const txt = ((await page.getByTestId('text-premio-totale').first().textContent()) || '').trim();
+    const num = Number(txt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+    assert.equal(num, 1740, `PS2 rimosso => bonus pista PS1 per la RS rimossa, PS2 per l'altra (got "${txt}")`);
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
 // --- Task #502: le rimozioni sono MENSILI e devono sopravvivere sia al cambio
 // mese (avanti e indietro), sia al ripristino di una revisione che le contiene.
 // Un loader che ricostruisse i default al cambio mese/ripristino potrebbe
