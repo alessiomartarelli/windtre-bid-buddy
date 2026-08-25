@@ -1246,8 +1246,18 @@ const Preventivatore = () => {
   const isEnergiaRSRimossa = (rs: string) => isPerRSMode && isBloccoRimosso(findRSMeta(energiaRSConfig.configPerRS, rs));
   const isAssicRSRimossa = (rs: string) => isPerRSMode && isBloccoRimosso(findRSMeta(assicurazioniRSConfig.configPerRS, rs));
   const isPartnershipRSRimossa = (rs: string) => isPerRSMode && isBloccoRimosso(findRSMeta(partnershipRewardRSConfig.configPerRS as unknown as RSRemovalMeta[], rs));
-  const energiaConfigForRS = (rs: string) =>
-    neutralizzaLivelliEnergia({ ...energiaConfig, livelliRimossi: findRSMeta(energiaRSConfig.configPerRS, rs)?.livelliRimossi });
+  // Parità con la Dashboard: le soglie pista personalizzate per RS
+  // (pistaSoglia_S1..S5 in energiaRSConfig.configPerRS) prevalgono su quelle
+  // della config Energia globale; per i campi assenti resta il fallback globale.
+  const energiaConfigForRS = (rs: string) => {
+    const meta = findRSMeta(energiaRSConfig.configPerRS, rs);
+    const soglieRS: Partial<EnergiaConfig> = {};
+    (['pistaSoglia_S1', 'pistaSoglia_S2', 'pistaSoglia_S3', 'pistaSoglia_S4', 'pistaSoglia_S5'] as const).forEach(f => {
+      const v = meta?.[f];
+      if (typeof v === 'number' && Number.isFinite(v)) soglieRS[f] = v;
+    });
+    return neutralizzaLivelliEnergia({ ...energiaConfig, ...soglieRS, livelliRimossi: meta?.livelliRimossi });
+  };
   const assicConfigForRS = (rs: string) =>
     neutralizzaLivelliAssicurazioni({ ...assicurazioniConfig, livelliRimossi: findRSMeta(assicurazioniRSConfig.configPerRS, rs)?.livelliRimossi });
 

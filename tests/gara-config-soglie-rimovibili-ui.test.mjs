@@ -633,6 +633,80 @@ test('Preventivatore neutralizes removed Energia pista levels (PS2) in per_rs mo
   }
 });
 
+// --- Task #510: in modalità per_rs le soglie PISTA Energia personalizzate per
+// RS (pistaSoglia_S1..S5 in energiaRSConfig.configPerRS) devono prevalere su
+// quelle della config Energia globale anche nel Preventivatore (parità con la
+// Dashboard). RS "CMS SRL" ha una pistaSoglia_S3 per-RS abbassata a 12: i suoi
+// 12 pezzi valgono il bonus PS3 (15 €/contratto). RS "BETA STORE SRL" non ha
+// soglie per-RS e fa da controllo: con le soglie globali gli stessi 12 pezzi
+// si fermano a PS2 (5 €/contratto).
+test('Preventivatore honors per-RS Energia pista thresholds in per_rs mode', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gara_soglie_rs', fullName: 'Gara Soglie RS UI', organizationName: uniq('GaraSoglieRsUI') });
+  const browser = await launchBrowser();
+  try {
+    const pdvA = { ...PDV, abilitaAssicurazioni: false };
+    const pdvB = { ...PDV, id: 'pdv-2', codicePos: 'POS002', nome: 'Negozio Due', ragioneSociale: RS_B, abilitaAssicurazioni: false };
+    // 12 contratti Consumer con SDD per RS (numPdv per RS = 1):
+    //   premio base       = 12 × 70 = 840 € a RS;
+    //   soglie globali    = S1:5, S2:10, S3:90... => 12 pezzi = PS2 (5 €/contratto);
+    //   soglie per-RS CMS = S3 abbassata a 12    => 12 pezzi = PS3 (15 €/contratto);
+    //   bonus pista       = CMS: 15 × 12 = 180 €; BETA: 5 × 12 = 60 €;
+    //   premi soglia      = 0 (target S1..S3 irraggiungibili);
+    //   bonus 55×pdvInGara non scatta (12 < 110).
+    // Totale atteso: 840 + 840 + 180 + 60 = 1920 €.
+    // Senza fix (soglie globali per tutte le RS) sarebbe 1800 €.
+    const righeEnergia = [{ id: 'r1', category: 'CONSUMER_CON_SDD', pezzi: 12 }];
+    const preventivoData = {
+      step: 0,
+      configGara: { nomeGara: 'Test soglie pista per RS', haLetteraUfficiale: false, annoGara: YEAR, meseGara: MONTH, tipoPeriodo: 'mensile', tipologiaGara: 'gara_operatore_rs' },
+      numeroPdv: 2,
+      puntiVendita: [pdvA, pdvB],
+      modalitaInserimentoRS: 'per_rs',
+      energiaConfig: {
+        pdvInGara: 2, targetNoMalus: 10, targetS1: 99, targetS2: 999, targetS3: 9999,
+        pistaSoglia_S1: 5, pistaSoglia_S2: 10, pistaSoglia_S3: 90, pistaSoglia_S4: 95, pistaSoglia_S5: 99,
+      },
+      attivatoEnergiaByRS: {
+        [RS]: righeEnergia,
+        [RS_B]: righeEnergia,
+      },
+      // Soglie pista personalizzate SOLO per la RS "CMS SRL" (S3 raggiungibile).
+      energiaRSConfig: {
+        configPerRS: [
+          { ragioneSociale: RS, pdvInGara: 1, targetNoMalus: 10, targetS1: 99, targetS2: 999, targetS3: 9999, pistaSoglia_S1: 5, pistaSoglia_S2: 10, pistaSoglia_S3: 12, pistaSoglia_S4: 95, pistaSoglia_S5: 99 },
+          { ragioneSociale: RS_B, pdvInGara: 1, targetNoMalus: 10, targetS1: 99, targetS2: 999, targetS3: 9999 },
+        ],
+      },
+    };
+    const created = await jsonReq(`${BASE}/api/preventivi`, authed(session, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Preventivo soglie pista per RS', data: preventivoData }),
+    }));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/preventivatore?id=${created.body.id}`, { waitUntil: 'networkidle' });
+
+    await page.getByTestId('text-premio-totale').first().waitFor({ state: 'attached', timeout: 30000 });
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[data-testid="text-premio-totale"]');
+      return el && /\d/.test(el.textContent || '');
+    }, { timeout: 15000 });
+    const txt = ((await page.getByTestId('text-premio-totale').first().textContent()) || '').trim();
+    const num = Number(txt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+    assert.equal(num, 1920, `pistaSoglia per-RS => PS3 per CMS, PS2 (globale) per BETA (got "${txt}")`);
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
 // --- Task #502: le rimozioni sono MENSILI e devono sopravvivere sia al cambio
 // mese (avanti e indietro), sia al ripristino di una revisione che le contiene.
 // Un loader che ricostruisse i default al cambio mese/ripristino potrebbe
