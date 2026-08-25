@@ -98,11 +98,17 @@
   /* Dashboard Gara: superfici e indicatori usano solo la palette viola/giallo
      del tema. Il colore di categoria rimane confinato alle icone. */
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .ticker-pista-card {
-    background: linear-gradient(145deg, rgb(65 38 119 / 0.90), rgb(49 29 91 / 0.95));
+    background:
+      radial-gradient(circle at 12% 0%, rgb(186 151 255 / 0.12), transparent 38%),
+      radial-gradient(circle at 88% 100%, rgb(82 42 154 / 0.22), transparent 44%),
+      linear-gradient(145deg, rgb(70 41 128 / 0.94), rgb(48 27 91 / 0.97));
+    background-color: rgb(49 29 91);
     border-color: rgb(211 193 244 / 0.22) !important;
     box-shadow:
-      0 12px 30px rgb(8 3 24 / 0.32),
-      inset 0 1px 0 rgb(234 224 255 / 0.08);
+      0 18px 42px rgb(8 3 24 / 0.46),
+      0 4px 12px rgb(83 41 154 / 0.18),
+      inset 0 1px 0 rgb(238 225 255 / 0.16),
+      inset 0 -1px 0 rgb(12 4 34 / 0.34);
     backdrop-filter: blur(18px) saturate(0.82);
   }
 
@@ -118,9 +124,11 @@
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .ticker-pista-card:focus-within {
     border-color: rgb(246 190 88 / 0.42);
     box-shadow:
-      0 15px 34px rgb(8 3 24 / 0.40),
+      0 22px 52px rgb(8 3 24 / 0.52),
+      0 7px 20px rgb(104 58 189 / 0.20),
       0 0 0 1px rgb(246 190 88 / 0.10),
-      inset 0 1px 0 rgb(234 224 255 / 0.10);
+      inset 0 1px 0 rgb(238 225 255 / 0.19),
+      inset 0 -1px 0 rgb(12 4 34 / 0.38);
   }
 
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-scrim {
@@ -130,22 +138,50 @@
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-header,
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-trajectory,
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-kpis {
-    background: linear-gradient(145deg, rgb(79 49 133 / 0.62), rgb(53 31 96 / 0.76));
+    background:
+      linear-gradient(145deg, rgb(105 70 164 / 0.40), rgb(48 27 89 / 0.66));
+    background-color: rgb(53 31 96);
     border-color: rgb(211 196 238 / 0.18);
     box-shadow:
-      0 7px 18px rgb(8 3 24 / 0.24),
-      inset 0 1px 0 rgb(235 226 255 / 0.06);
+      0 9px 22px rgb(8 3 24 / 0.26),
+      inset 0 1px 0 rgb(238 226 255 / 0.11),
+      inset 0 -1px 0 rgb(16 6 42 / 0.25);
     backdrop-filter: blur(16px) saturate(0.78);
   }
 
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-kpis > div {
-    background: rgb(42 23 79 / 0.46);
+    background: linear-gradient(145deg, rgb(61 34 111 / 0.64), rgb(38 20 73 / 0.58));
+    background-color: rgb(42 23 79);
     border-color: rgb(213 198 239 / 0.14);
+    box-shadow:
+      0 5px 14px rgb(8 3 24 / 0.22),
+      inset 0 1px 0 rgb(238 226 255 / 0.08);
   }
 
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-kpis > div:nth-child(even) {
-    background: rgb(42 23 79 / 0.46);
+    background: linear-gradient(145deg, rgb(61 34 111 / 0.64), rgb(38 20 73 / 0.58));
+    background-color: rgb(42 23 79);
     border-color: rgb(213 198 239 / 0.14);
+  }
+
+  html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] [data-testid^="ticker-detail-"] {
+    background: rgb(48 27 91);
+    border-color: rgb(215 198 244 / 0.20);
+    box-shadow:
+      0 14px 34px rgb(8 3 24 / 0.36),
+      inset 0 1px 0 rgb(240 230 255 / 0.14),
+      inset 18px 0 34px rgb(121 78 196 / 0.10),
+      inset 0 -18px 34px rgb(14 5 39 / 0.24);
+  }
+
+  html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] [data-testid^="prov-row-rs-"] {
+    background: rgb(45 24 86);
+    border-color: rgb(215 198 244 / 0.16);
+    box-shadow:
+      0 8px 20px rgb(8 3 24 / 0.24),
+      inset 0 1px 0 rgb(240 230 255 / 0.10),
+      inset 14px 0 28px rgb(121 78 196 / 0.08),
+      inset 0 -14px 28px rgb(14 5 39 / 0.20);
   }
 
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-kpis > div:nth-child(even) > div {
