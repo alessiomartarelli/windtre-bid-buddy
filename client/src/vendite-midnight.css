@@ -99,8 +99,11 @@
      sottile (icona, barra e marker). Le superfici restano vetro viola neutro,
      così l'insieme è più calmo senza perdere la leggibilità. */
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .ticker-pista-card {
-    background: rgb(49 37 82 / 0.88);
-    border: 3px solid rgb(255 255 255 / 0.92);
+    background:
+      radial-gradient(circle at 100% 0%, hsl(var(--pista-glow) / 0.08) 0%, transparent 42%),
+      radial-gradient(circle at 0% 100%, hsl(264 42% 62% / 0.09) 0%, transparent 48%),
+      linear-gradient(145deg, rgb(56 42 91 / 0.82), rgb(39 29 68 / 0.92));
+    border-color: rgb(206 190 235 / 0.20);
     box-shadow:
       0 12px 30px rgb(8 3 24 / 0.32),
       inset 0 1px 0 rgb(234 224 255 / 0.08);
@@ -109,10 +112,10 @@
 
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .ticker-pista-card:hover,
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .ticker-pista-card:focus-within {
-    border-color: rgb(255 255 255);
+    border-color: rgb(246 190 88 / 0.42);
     box-shadow:
       0 15px 34px rgb(8 3 24 / 0.40),
-      0 0 0 1px rgb(255 255 255 / 0.16),
+      0 0 0 1px rgb(246 190 88 / 0.10),
       inset 0 1px 0 rgb(234 224 255 / 0.10);
   }
 
