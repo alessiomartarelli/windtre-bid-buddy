@@ -52,4 +52,5 @@
 - [Accent primary-foreground dinamico](accent-primary-foreground.md) — override di --primary richiede override di --primary-foreground (bianco vs inchiostro l=5%), duplicato appearance.ts ↔ pre-paint index.html.
 - [Webkit date indicator pseudo](webkit-date-indicator-pseudo.md) — indicatore nativo spinto al centro dal padding-right: nascondilo (display:none) + button showPicker(); getComputedStyle sul webkit-pseudo mente.
 - [Icona date nei temi scuri](native-date-indicator-dark.md) — il picker nativo Chromium può restare nero: usa overlay visivo non interattivo e testa che il click raggiunga l’input.
+- [Preventivatore per_rs removal tests](preventivatore-rs-removal-tests.md) — seed volumi a premio deterministico (TIED/MIGRAZIONI); un effect ri-sincronizza i target Partnership dai default cluster, superali.
 - [Provenienza punti per RS](dashboard-provenance-rs.md) — con “Tutti i PDV” aggrega per RS; totale e componenti mostrano entrambi pezzi+punti, senza elenco negozi.

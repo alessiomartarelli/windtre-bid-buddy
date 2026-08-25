@@ -891,3 +891,187 @@ test('Preventivatore excludes a removed Energia RS block from premi', async () =
     await pool.end().catch(() => {});
   }
 });
+
+// --- Task #507: il Preventivatore in modalità per_rs deve ignorare anche i
+// blocchi MOBILE / FISSO / PARTNERSHIP rimossi (gate isPartnershipRSRimossa e
+// i find `!rimosso` su sogliePerRS), non solo Energia/Assicurazioni.
+// Pattern comune: due RS con attivazioni identiche, blocco rimosso su una;
+// text-premio-totale deve contare SOLO la RS attiva (metà del totale pieno).
+
+// Legge il premio totale dal riepilogo (prima copia attached, mobile o sidebar).
+async function readPremioTotale(page) {
+  await page.getByTestId('text-premio-totale').first().waitFor({ state: 'attached', timeout: 30000 });
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[data-testid="text-premio-totale"]');
+    return el && /\d/.test(el.textContent || '');
+  }, { timeout: 15000 });
+  const txt = ((await page.getByTestId('text-premio-totale').first().textContent()) || '').trim();
+  return { txt, num: Number(txt.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')) };
+}
+
+test('Preventivatore excludes a removed Mobile RS block from premi', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gara_rimov_pmb', fullName: 'Gara Rimovibili Prev Mobile UI', organizationName: uniq('GaraRimovPrevMobUI') });
+  const browser = await launchBrowser();
+  try {
+    const pdvA = { ...PDV, abilitaEnergia: false, abilitaAssicurazioni: false };
+    const pdvB = { ...PDV, id: 'pdv-2', codicePos: 'POS002', nome: 'Negozio Due', ragioneSociale: RS_B, abilitaEnergia: false, abilitaAssicurazioni: false };
+    // 10 TIED per RS: gettone contrattuale 5 €/pezzo = 50 € a RS, indipendente
+    // dalle soglie (canoneMedio 0 => premioCanone 0, nessun extra gettone).
+    const righeMobile = [{ id: 'm1', type: 'TIED', pezzi: 10 }];
+    const preventivoData = {
+      step: 0,
+      configGara: { nomeGara: 'Test rimozioni mobile', haLetteraUfficiale: false, annoGara: YEAR, meseGara: MONTH, tipoPeriodo: 'mensile', tipologiaGara: 'gara_operatore_rs' },
+      numeroPdv: 2,
+      puntiVendita: [pdvA, pdvB],
+      modalitaInserimentoRS: 'per_rs',
+      attivatoMobileByRS: {
+        [RS]: righeMobile,
+        [RS_B]: righeMobile,
+      },
+      // Blocco Mobile della RS "CMS SRL" rimosso in Config Gara.
+      pistaMobileRSConfig: {
+        applicaDecurtazione30SeNoFissoO8Piva: true,
+        sogliePerRS: [
+          { ragioneSociale: RS, soglia1: 100, soglia2: 200, soglia3: 300, soglia4: 400, canoneMedio: 0, rimosso: true },
+          { ragioneSociale: RS_B, soglia1: 100, soglia2: 200, soglia3: 300, soglia4: 400, canoneMedio: 0 },
+        ],
+      },
+    };
+    const created = await jsonReq(`${BASE}/api/preventivi`, authed(session, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Preventivo rimozioni mobile', data: preventivoData }),
+    }));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/preventivatore?id=${created.body.id}`, { waitUntil: 'networkidle' });
+
+    // Con la rimozione onorata il totale è solo la RS attiva: 50 €.
+    // Senza fix sarebbe 100 € (entrambe le RS).
+    const { txt, num } = await readPremioTotale(page);
+    assert.equal(num, 50, `premio totale mobile esclude la RS rimossa (got "${txt}")`);
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+test('Preventivatore excludes a removed Fisso RS block from premi', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gara_rimov_pfs', fullName: 'Gara Rimovibili Prev Fisso UI', organizationName: uniq('GaraRimovPrevFisUI') });
+  const browser = await launchBrowser();
+  try {
+    const pdvA = { ...PDV, abilitaEnergia: false, abilitaAssicurazioni: false };
+    const pdvB = { ...PDV, id: 'pdv-2', codicePos: 'POS002', nome: 'Negozio Due', ragioneSociale: RS_B, abilitaEnergia: false, abilitaAssicurazioni: false };
+    // 2 Migrazioni FTTH/FWA per RS: 80 €/pezzo (40 € gettone + 40 € euro/pezzo)
+    // = 160 € a RS; 0 punti => nessun moltiplicatore soglia, valore deterministico.
+    const righeFisso = [{ categoria: 'MIGRAZIONI_FTTH_FWA', pezzi: 2 }];
+    const preventivoData = {
+      step: 0,
+      configGara: { nomeGara: 'Test rimozioni fisso', haLetteraUfficiale: false, annoGara: YEAR, meseGara: MONTH, tipoPeriodo: 'mensile', tipologiaGara: 'gara_operatore_rs' },
+      numeroPdv: 2,
+      puntiVendita: [pdvA, pdvB],
+      modalitaInserimentoRS: 'per_rs',
+      attivatoFissoByRS: {
+        [RS]: righeFisso,
+        [RS_B]: righeFisso,
+      },
+      // Blocco Fisso della RS "CMS SRL" rimosso in Config Gara.
+      pistaFissoRSConfig: {
+        sogliePerRS: [
+          { ragioneSociale: RS, soglia1: 100, soglia2: 200, soglia3: 300, soglia4: 400, soglia5: 500, rimosso: true },
+          { ragioneSociale: RS_B, soglia1: 100, soglia2: 200, soglia3: 300, soglia4: 400, soglia5: 500 },
+        ],
+      },
+    };
+    const created = await jsonReq(`${BASE}/api/preventivi`, authed(session, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Preventivo rimozioni fisso', data: preventivoData }),
+    }));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/preventivatore?id=${created.body.id}`, { waitUntil: 'networkidle' });
+
+    // Con la rimozione onorata il totale è solo la RS attiva: 160 €.
+    // Senza fix sarebbe 320 € (entrambe le RS).
+    const { txt, num } = await readPremioTotale(page);
+    assert.equal(num, 160, `premio totale fisso esclude la RS rimossa (got "${txt}")`);
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+test('Preventivatore excludes a removed Partnership RS block from premi', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'gara_rimov_ppr', fullName: 'Gara Rimovibili Prev Partnership UI', organizationName: uniq('GaraRimovPrevParUI') });
+  const browser = await launchBrowser();
+  try {
+    const pdvA = { ...PDV, abilitaEnergia: false, abilitaAssicurazioni: false };
+    const pdvB = { ...PDV, id: 'pdv-2', codicePos: 'POS002', nome: 'Negozio Due', ragioneSociale: RS_B, abilitaEnergia: false, abilitaAssicurazioni: false };
+    // Un effetto del Preventivatore ri-sincronizza target100/target80 dai
+    // default cluster CB (fallback 300/240 punti): i target seminati vengono
+    // sovrascritti, quindi servono abbastanza punti da superare il default.
+    // 1 evento CB da 400 punti partnership per RS => premio100 500 € a RS
+    // (gettoni 0, così nessun altro contributo al totale).
+    const righeCB = [{ eventType: 'CAMBIO_PIANO_CONSUMER', pezzi: 1, gettoni: 0, puntiPartnership: 400 }];
+    const partnershipConf = { target100: 1, target80: 1, premio100: 500, premio80: 400 };
+    const preventivoData = {
+      step: 0,
+      configGara: { nomeGara: 'Test rimozioni partnership', haLetteraUfficiale: false, annoGara: YEAR, meseGara: MONTH, tipoPeriodo: 'mensile', tipologiaGara: 'gara_operatore_rs' },
+      numeroPdv: 2,
+      puntiVendita: [pdvA, pdvB],
+      modalitaInserimentoRS: 'per_rs',
+      partnershipRewardConfig: {
+        configPerPos: [
+          { posCode: 'POS001', config: partnershipConf },
+          { posCode: 'POS002', config: partnershipConf },
+        ],
+      },
+      attivatoCBByRS: {
+        [RS]: righeCB,
+        [RS_B]: righeCB,
+      },
+      // Blocco Partnership della RS "CMS SRL" rimosso in Config Gara.
+      partnershipRewardRSConfig: {
+        configPerRS: [
+          { ragioneSociale: RS, ...partnershipConf, rimosso: true },
+          { ragioneSociale: RS_B, ...partnershipConf },
+        ],
+      },
+    };
+    const created = await jsonReq(`${BASE}/api/preventivi`, authed(session, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Preventivo rimozioni partnership', data: preventivoData }),
+    }));
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/preventivatore?id=${created.body.id}`, { waitUntil: 'networkidle' });
+
+    // Con la rimozione onorata il totale è solo la RS attiva: 500 €.
+    // Senza fix sarebbe 1000 € (entrambe le RS).
+    const { txt, num } = await readPremioTotale(page);
+    assert.equal(num, 500, `premio totale partnership esclude la RS rimossa (got "${txt}")`);
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
