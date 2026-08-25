@@ -44,11 +44,7 @@
 
   html[data-skin="prisma-light"] body {
     background-color: hsl(var(--background));
-    background-image:
-      radial-gradient(circle at 7% 5%, hsl(176 61% 63% / 0.30) 0, transparent 27%),
-      radial-gradient(circle at 87% 4%, hsl(258 85% 79% / 0.27) 0, transparent 28%),
-      radial-gradient(circle at 60% 100%, hsl(25 96% 73% / 0.20) 0, transparent 33%),
-      linear-gradient(115deg, hsl(150 18% 98%), hsl(221 35% 95%));
+    background-image: none;
     background-attachment: fixed;
     padding-bottom: calc(5.25rem + env(safe-area-inset-bottom));
   }
@@ -91,11 +87,9 @@
   /* Piste in gara: il colore di categoria resta un segnale, non una
      superficie. Le card condividono una base carta/vetro neutra. */
   html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .ticker-pista-card {
-    background:
-      radial-gradient(circle at 100% 0%, hsl(var(--pista-glow) / 0.055) 0%, transparent 36%),
-      linear-gradient(145deg, hsl(0 0% 100% / 0.88), hsl(215 32% 97% / 0.78));
+    background: linear-gradient(145deg, hsl(0 0% 100% / 0.88), hsl(215 32% 97% / 0.78));
     border-color: hsl(218 24% 72% / 0.38);
-    border-top-color: hsl(var(--pista-ink) / 0.72);
+    border-top-color: hsl(var(--pl-ink) / 0.5);
     box-shadow:
       0 9px 24px hsl(218 28% 32% / 0.08),
       inset 0 1px 0 hsl(0 0% 100% / 0.9);
@@ -105,7 +99,7 @@
   html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .ticker-pista-card:hover,
   html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .ticker-pista-card:focus-within {
     border-color: hsl(222 35% 52% / 0.42);
-    border-top-color: hsl(var(--pista-ink) / 0.82);
+    border-top-color: hsl(var(--pl-ink) / 0.72);
     box-shadow:
       0 12px 28px hsl(218 28% 32% / 0.11),
       inset 0 1px 0 hsl(0 0% 100% / 0.94);
@@ -138,7 +132,25 @@
 
   html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-card-kpis > div:nth-child(even) > div,
   html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-card-kpis > div:nth-child(even) > span {
-    color: hsl(var(--pl-cobalt));
+    color: hsl(var(--foreground));
+  }
+
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-trajectory-projection {
+    background: hsl(var(--pl-soft) / 0.34);
+  }
+
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-trajectory-fill,
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-current-marker,
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-threshold-tick > span {
+    background: hsl(var(--pl-ink));
+  }
+
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-projection-marker {
+    border-color: hsl(var(--pl-soft) / 0.82);
+  }
+
+  html[data-skin="prisma-light"] [data-testid="dashboard-gara-reale"] .pista-trajectory-readout strong {
+    color: hsl(var(--pl-ink));
   }
 
   html[data-skin="prisma-light"] [role="dialog"],
