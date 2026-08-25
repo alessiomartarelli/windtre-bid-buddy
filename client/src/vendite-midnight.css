@@ -140,9 +140,12 @@
     border-color: rgb(213 198 239 / 0.14);
   }
 
-  html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-kpis > div:nth-child(even) > div,
+  html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-kpis > div:nth-child(even) > div {
+    color: rgb(216 208 244) !important;
+  }
+
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-card-kpis > div:nth-child(even) > span {
-    color: hsl(var(--foreground));
+    color: rgb(247 245 255) !important;
   }
 
   html[data-skin="midnight-violet"] [data-testid="dashboard-gara-reale"] .pista-trajectory-projection {
