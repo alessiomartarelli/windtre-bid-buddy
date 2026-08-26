@@ -28,4 +28,5 @@ for i in $(seq 1 30); do
 done
 
 echo "[struttura-guard-tests] route suite ..."
-exec node --test tests/org-config-guard.test.mjs
+# tsx loader: la suite importa anche server/logRedact.ts (redazione log, Task #513).
+exec node --import tsx --test tests/org-config-guard.test.mjs

@@ -19,9 +19,21 @@ export function isSensitiveLogKey(key: string): boolean {
  * Replacer per JSON.stringify: maschera i valori stringa di chiavi
  * sensibili e tronca i data URL immagine molto lunghi.
  */
+// Valori cifrati da cryptoSecret (`enc:v1:<base64>`): anche se la chiave
+// JSON non è "sensibile" (es. annidati in un blob di config), un valore
+// cifrato non deve mai finire nei log, indipendentemente dal nome campo.
+const ENCRYPTED_VALUE_RE = /^enc:v\d+:/;
+
+export function isEncryptedLogValue(value: unknown): boolean {
+  return typeof value === "string" && ENCRYPTED_VALUE_RE.test(value);
+}
+
 export function logJsonReplacer(key: string, value: unknown): unknown {
   if (typeof value === "string") {
     if (key && isSensitiveLogKey(key) && value.length > 0) {
+      return "[redacted]";
+    }
+    if (isEncryptedLogValue(value)) {
       return "[redacted]";
     }
     if (value.length > 200 && /^data:image\//i.test(value)) {

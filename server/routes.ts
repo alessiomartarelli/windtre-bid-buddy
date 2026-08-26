@@ -460,6 +460,25 @@ export async function registerRoutes(
     "drms_commissioning",
   ];
 
+  // Task #513: le credenziali sensibili (BiSuite, trasporto Telegram) vivono
+  // nella stessa riga organization_config ma si leggono/scrivono SOLO dagli
+  // endpoint admin dedicati (/api/admin/bisuite-*, /api/admin/telegram-report),
+  // che restituiscono forme sanificate (has_token, secret cifrato mai in
+  // chiaro). La route generica è accessibile a qualunque utente con uno dei
+  // moduli ORG_CONFIG_MODULES: anche se i segreti sono cifrati, non devono
+  // uscire da qui né finire nei log del middleware API.
+  function sanitizeOrgConfigRow<T extends { config?: unknown } | null | undefined>(row: T): T {
+    if (!row || !row.config || typeof row.config !== "object") return row;
+    const cfg = { ...(row.config as Record<string, unknown>) };
+    delete cfg.bisuiteCredentials;
+    if (cfg.telegramReport && typeof cfg.telegramReport === "object" && !Array.isArray(cfg.telegramReport)) {
+      const tg = { ...(cfg.telegramReport as Record<string, unknown>) };
+      delete tg.bot_token;
+      cfg.telegramReport = tg;
+    }
+    return { ...(row as object), config: cfg } as T;
+  }
+
   app.get("/api/organization-config", isAuthenticated, requireModule(ORG_CONFIG_MODULES), async (req: any, res) => {
     try {
       const userId = req.session.userId;
@@ -468,7 +487,7 @@ export async function registerRoutes(
         return res.json(null);
       }
       const config = await storage.getOrgConfig(profile.organizationId);
-      res.json(config || null);
+      res.json(sanitizeOrgConfigRow(config) || null);
     } catch (error) {
       res.status(500).json({ message: "Error fetching config" });
     }
@@ -545,7 +564,7 @@ export async function registerRoutes(
         }
       }
       const result = await storage.upsertOrgConfig(profile.organizationId, effectiveConfig, configVersion || "2.0", userId);
-      res.json(result);
+      res.json(sanitizeOrgConfigRow(result));
     } catch (error) {
       res.status(500).json({ message: "Error saving config" });
     }

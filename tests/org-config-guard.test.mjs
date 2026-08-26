@@ -201,3 +201,77 @@ test('org-config guard: admin non può azzerare in massa la struttura', async ()
     await pool.end().catch(() => {});
   }
 });
+
+// === Task #513: le credenziali cifrate non escono dalla route generica ===
+//
+// La riga organization_config contiene anche bisuiteCredentials (client
+// secret cifrato) e telegramReport.bot_token (cifrato). Sono gestiti SOLO
+// dagli endpoint admin dedicati: la route generica /api/organization-config
+// (accessibile a chiunque abbia uno dei moduli ORG_CONFIG_MODULES) non deve
+// restituirli, né nel GET né nell'echo del PUT — altrimenti finiscono anche
+// nei log del middleware API.
+
+const getConfig = (session) =>
+  jsonReq(`${BASE}/api/organization-config`, {
+    headers: { Cookie: session.cookieHeader },
+  });
+
+function assertNoSecrets(body, label) {
+  const cfg = body?.config ?? {};
+  assert.ok(!('bisuiteCredentials' in cfg), `${label}: bisuiteCredentials must be stripped`);
+  const tg = cfg.telegramReport;
+  if (tg != null) {
+    assert.ok(!('bot_token' in tg), `${label}: telegramReport.bot_token must be stripped`);
+  }
+  assert.ok(!JSON.stringify(body).includes('enc:v1:'), `${label}: no encrypted value may appear in the response`);
+}
+
+test('org-config: la risposta generica esclude le credenziali cifrate', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'orgcfg_secrets_test', fullName: 'OrgCfg Secrets Test' });
+  try {
+    await setRole(pool, session.profileId, 'admin');
+    await seedConfig(pool, session.orgId);
+
+    // GET: niente bisuiteCredentials, niente bot_token; il resto della
+    // config (struttura, flag Telegram non segreti) resta visibile.
+    const got = await getConfig(session);
+    assert.equal(got.status, 200, `GET must be 200: ${JSON.stringify(got.body)}`);
+    assertNoSecrets(got.body, 'GET');
+    assert.deepEqual(got.body.config.puntiVendita, STRUTTURA, 'GET must still return the structure');
+    assert.equal(got.body.config.telegramReport.enabled, true, 'non-secret Telegram flags stay visible');
+    assert.equal(got.body.config.telegramReport.chat_id, '-1001234567890');
+
+    // PUT: l'echo del salvataggio è anch'esso sanificato, ma i segreti
+    // restano intatti nel DB (preservati dalla guardia del PUT generico).
+    const telegramBefore = await readTelegramConfig(pool, session.orgId);
+    const bisuiteBefore = await readBisuiteCredentials(pool, session.orgId);
+    const saved = await putConfig(session, { altroSetting: 'secrets-check' });
+    assert.equal(saved.status, 200, `PUT must be 200: ${JSON.stringify(saved.body)}`);
+    assertNoSecrets(saved.body, 'PUT echo');
+    assert.deepEqual(await readTelegramConfig(pool, session.orgId), telegramBefore, 'PUT must keep Telegram secrets in the DB');
+    assert.deepEqual(await readBisuiteCredentials(pool, session.orgId), bisuiteBefore, 'PUT must keep BiSuite credentials in the DB');
+  } finally {
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+test('log redaction: valori cifrati e chiavi sensibili annidate mai nei log', async () => {
+  const { logJsonReplacer } = await import('../server/logRedact.ts');
+  const body = {
+    config: {
+      bisuiteCredentials: { api_url: 'https://x', client_id: 'id', client_secret: 'enc:v1:abc' },
+      telegramReport: { enabled: true, bot_token: 'enc:v1:tok', chat_id: '-100' },
+      nested: { deep: { someBlob: 'enc:v2:future-format' } },
+      innocuo: 'valore-normale',
+    },
+    apiKey: 'plain-key',
+  };
+  const out = JSON.stringify(body, logJsonReplacer);
+  assert.ok(!out.includes('enc:v1:'), 'encrypted v1 values must be redacted even under non-sensitive keys');
+  assert.ok(!out.includes('enc:v2:'), 'any enc:vN: prefixed value must be redacted');
+  assert.ok(!out.includes('plain-key'), 'sensitive keys must be redacted');
+  assert.ok(out.includes('valore-normale'), 'normal values must survive');
+  assert.ok(out.includes('[redacted]'));
+});
