@@ -3688,6 +3688,7 @@ export default function DashboardGaraReale() {
       ragioneSociale: string,
     ): { soglieRef?: PistaSoglieRef; thresholdMarkers?: TickerThresholdMarker[] } => {
       let soglieRef: PistaSoglieRef | undefined;
+      let thresholdMarkers: TickerThresholdMarker[] | undefined;
 
       if (pista === "mobile") {
         const config = getMobileConfigForPdv(codicePos, ragioneSociale);
@@ -3755,6 +3756,12 @@ export default function DashboardGaraReale() {
             s2: livelli?.includes('S2') ? undefined : config.targetS2,
             s3: 0,
           };
+          const markers = mergeThresholdMarkers([
+            { label: "No Malus", value: config.targetNoMalus },
+            ...(soglieRef.s1 != null ? [{ label: "S1", value: soglieRef.s1 }] : []),
+            ...(soglieRef.s2 != null ? [{ label: "S2", value: soglieRef.s2 }] : []),
+          ]);
+          thresholdMarkers = markers.length > 0 ? markers : undefined;
         }
       }
 
@@ -3771,7 +3778,7 @@ export default function DashboardGaraReale() {
         };
       }
 
-      return { soglieRef, thresholdMarkers: thresholdMarkersFromSoglie(soglieRef) };
+      return { soglieRef, thresholdMarkers: thresholdMarkers ?? thresholdMarkersFromSoglie(soglieRef) };
     };
     const effectiveMobileCategories = (() => {
       const base = [...mobileCategories];

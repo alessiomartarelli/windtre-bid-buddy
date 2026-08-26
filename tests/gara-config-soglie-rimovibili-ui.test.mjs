@@ -332,12 +332,12 @@ test('dashboard: removed Energia block => premio 0/no markers/neutral breakdown;
           },
           // La config globale serve al calcolo punti per-PDV; le soglie/premi
           // effettivi arrivano dal blocco per-RS sotto.
-          assicurazioniConfig: { pdvInGara: 1, targetNoMalus: 0, targetS1: 1, targetS2: 2, premioS1: 500, premioS2: 1100 },
+          assicurazioniConfig: { pdvInGara: 1, targetNoMalus: 0.5, targetS1: 1, targetS2: 2, premioS1: 500, premioS2: 1100 },
           assicurazioniRSConfig: {
             configPerRS: [
               // RS "CMS SRL": livello S2 rimosso. 1 polizza = 2 punti >= targetS2,
               // ma con S2 neutralizzato deve valere il bonus S1 (500), non 1100.
-              { ragioneSociale: RS, pdvInGara: 1, targetNoMalus: 0, targetS1: 1, targetS2: 2, premioS1: 500, premioS2: 1100, livelliRimossi: ['S2'] },
+              { ragioneSociale: RS, pdvInGara: 1, targetNoMalus: 0.5, targetS1: 1, targetS2: 2, premioS1: 500, premioS2: 1100, livelliRimossi: ['S2'] },
             ],
           },
         },
@@ -397,6 +397,8 @@ test('dashboard: removed Energia block => premio 0/no markers/neutral breakdown;
     const markerLabelsAs = await page
       .locator('[data-testid^="ticker-threshold-assicurazioni-"]')
       .evaluateAll(els => els.map(el => el.getAttribute('data-threshold-label')));
+    assert.ok(markerLabelsAs.includes('No Malus'), `il marker No Malus è visibile come le altre soglie (got ${JSON.stringify(markerLabelsAs)})`);
+    assert.ok(markerLabelsAs.includes('S1'), `il marker S1 resta visibile (got ${JSON.stringify(markerLabelsAs)})`);
     assert.ok(!markerLabelsAs.includes('S2'), `nessun marker S2 con il livello rimosso (got ${JSON.stringify(markerLabelsAs)})`);
 
     await page.close();
