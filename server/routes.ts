@@ -490,14 +490,16 @@ export async function registerRoutes(
       let effectiveConfig: Record<string, unknown> = (config as Record<string, unknown> | null) || {};
       const cur = await storage.getOrgConfig(profile.organizationId);
       const curCfg = (cur?.config as Record<string, unknown> | null) || {};
-      // Il trasporto Telegram viene gestito esclusivamente dall'endpoint admin
-      // dedicato. Il salvataggio generico della configurazione gara non lo
-      // conosce e, sostituendo il JSON intero, potrebbe altrimenti cancellare
-      // flag, chat ID e bot token da un tenant già configurato.
-      if (Object.prototype.hasOwnProperty.call(curCfg, "telegramReport")) {
-        effectiveConfig.telegramReport = curCfg.telegramReport;
-      } else {
-        delete effectiveConfig.telegramReport;
+      // Le configurazioni sensibili vengono gestite esclusivamente dai
+      // rispettivi endpoint admin dedicati. Il salvataggio generico della
+      // configurazione gara sostituisce il JSON intero e non deve quindi
+      // cancellarle né sovrascriverle quando riceve un payload parziale/stale.
+      for (const key of ["telegramReport", "bisuiteCredentials"] as const) {
+        if (Object.prototype.hasOwnProperty.call(curCfg, key)) {
+          effectiveConfig[key] = curCfg[key];
+        } else {
+          delete effectiveConfig[key];
+        }
       }
       if (!['admin', 'super_admin'].includes(profile.role)) {
         const ser = (v: unknown) => JSON.stringify(v ?? null);

@@ -60,6 +60,11 @@ async function seedConfig(pool, orgId) {
         chat_id: '-1001234567890',
         send_times: { parziale: '13:30', chiusura: '22:15' },
       },
+      bisuiteCredentials: {
+        api_url: 'https://db1.bisuite.app',
+        client_id: 'test-client',
+        client_secret: 'enc:v1:test-client-secret',
+      },
     })],
   );
 }
@@ -80,6 +85,14 @@ async function readTelegramConfig(pool, orgId) {
   return r.rows[0]?.telegram ?? null;
 }
 
+async function readBisuiteCredentials(pool, orgId) {
+  const r = await pool.query(
+    `SELECT config->'bisuiteCredentials' AS credentials FROM organization_config WHERE organization_id = $1`,
+    [orgId],
+  );
+  return r.rows[0]?.credentials ?? null;
+}
+
 const putConfig = (session, config) =>
   jsonReq(`${BASE}/api/organization-config`, {
     method: 'PUT',
@@ -94,6 +107,7 @@ test('org-config guard: admin non può azzerare in massa la struttura', async ()
     await setRole(pool, session.profileId, 'admin');
     await seedConfig(pool, session.orgId);
     const telegramBefore = await readTelegramConfig(pool, session.orgId);
+    const bisuiteBefore = await readBisuiteCredentials(pool, session.orgId);
 
     // (a) tutti scheletro => 409, DB intatto.
     const allSkel = await putConfig(session, {
@@ -128,6 +142,11 @@ test('org-config guard: admin non può azzerare in massa la struttura', async ()
       telegramBefore,
       'generic save must preserve the Telegram transport configuration',
     );
+    assert.deepEqual(
+      await readBisuiteCredentials(pool, session.orgId),
+      bisuiteBefore,
+      'generic save must preserve the BiSuite credentials',
+    );
 
     // (d) puntiVendita: null (non-array) => 200 ma struttura preservata.
     const nullKey = await putConfig(session, { puntiVendita: null });
@@ -137,6 +156,11 @@ test('org-config guard: admin non può azzerare in massa la struttura', async ()
       await readTelegramConfig(pool, session.orgId),
       telegramBefore,
       'generic save with partial config must keep the Telegram configuration',
+    );
+    assert.deepEqual(
+      await readBisuiteCredentials(pool, session.orgId),
+      bisuiteBefore,
+      'generic save with partial config must keep the BiSuite credentials',
     );
 
     // (d2) Telegram ha un endpoint admin dedicato: un payload generico non
@@ -149,6 +173,22 @@ test('org-config guard: admin non può azzerare in massa la struttura', async ()
       await readTelegramConfig(pool, session.orgId),
       telegramBefore,
       'generic save must not overwrite the Telegram transport configuration',
+    );
+
+    // (d3) Anche BiSuite ha endpoint admin dedicati: il salvataggio generico
+    // non può cancellare o sostituire le credenziali API.
+    const attemptedBisuiteOverwrite = await putConfig(session, {
+      bisuiteCredentials: {
+        api_url: 'https://db1.bisuite.app',
+        client_id: 'wrong-client',
+        client_secret: 'wrong-secret',
+      },
+    });
+    assert.equal(attemptedBisuiteOverwrite.status, 200);
+    assert.deepEqual(
+      await readBisuiteCredentials(pool, session.orgId),
+      bisuiteBefore,
+      'generic save must not overwrite the BiSuite credentials',
     );
 
     // (e) modifica legittima (rinomina, stesso numero di PDV reali) => 200 e applicata.
