@@ -398,7 +398,7 @@ const PISTA_CONFIG = {
   fisso: { label: "Fisso", icon: Wifi, color: "bg-green-500", lightColor: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900" },
   energia: { label: "Energia", icon: Zap, color: "bg-amber-500", lightColor: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900" },
   assicurazioni: { label: "Assicurazioni", icon: Shield, color: "bg-purple-500", lightColor: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900" },
-  partnership: { label: "Partnership", icon: Handshake, color: "bg-cyan-500", lightColor: "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-900" },
+  partnership: { label: "Partnership Reward", icon: Handshake, color: "bg-cyan-500", lightColor: "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-900" },
   cb: { label: "Customer Base", icon: Users, color: "bg-orange-500", lightColor: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-900" },
   protecta: { label: "Windtre Protetti", icon: ShieldCheck, color: "bg-rose-500", lightColor: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900" },
   extra_gara_iva: { label: "Extra Gara P.IVA", icon: Briefcase, color: "bg-indigo-500", lightColor: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900" },
@@ -910,10 +910,23 @@ function calcPartnershipPerPdv(
   posCode: string,
   tcPartnership?: { puntiPartnership?: Record<string, number>; gettoniEvento?: Record<string, number>; clusterGettoniUntied?: Record<string, number>; clusterGettoniRivincoli?: Record<string, number> },
   clusterCB?: string,
+  pdvAddons: AddonItem[] = [],
 ): PistaCalcResult {
-  if (pdvItems.length === 0) return EMPTY_CALC;
+  if (pdvItems.length === 0 && pdvAddons.length === 0) return EMPTY_CALC;
 
-  const validItems = pdvItems.filter((item) => VALID_CB_TYPES.has(item.targetCategory));
+  const validItems = [
+    ...pdvItems,
+    ...pdvAddons
+      .filter((addon) => addon.pista === "partnership")
+      .map((addon) => ({
+        pista: addon.pista,
+        targetCategory: addon.targetCategory,
+        targetLabel: addon.targetLabel,
+        pezzi: addon.occorrenze,
+        canone: addon.canone,
+        ruleType: "additional" as const,
+      })),
+  ].filter((item) => VALID_CB_TYPES.has(item.targetCategory));
   const attivato: AttivatoCBDettaglio[] = validItems.map((item) => {
     const defaults = PARTNERSHIP_DEFAULTS[item.targetCategory];
     const punti = tcPartnership?.puntiPartnership?.[item.targetCategory]
@@ -4344,7 +4357,7 @@ export default function DashboardGaraReale() {
             } else {
               const pCfg = getPartnershipConfigForPdv(pdv.codicePos, pdvRS);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-              pdvCalc = calcPartnershipPerPdv(pdvItems, prConfig, pdvWorkday.elapsedWorkingDays, pdv.codicePos, tcPartnership, pdvConfig?.clusterCB);
+              pdvCalc = calcPartnershipPerPdv(pdvItems, prConfig, pdvWorkday.elapsedWorkingDays, pdv.codicePos, tcPartnership, pdvConfig?.clusterCB, pdv.addons);
             }
           } else if (pista === "cb") {
             const cbAddons = (pdv.addons || []).filter(a => a.pista === 'cb');
@@ -4388,7 +4401,7 @@ export default function DashboardGaraReale() {
           const pdvAddons = (pdv.addons || [])
             .filter(a => a.pista === pista && !isCaringItem(a.pista, a.targetCategory));
           const pointProvenanceAddons = (
-            pista === "mobile" || pista === "fisso" || pista === "cb" || pista === "assicurazioni"
+            pista === "mobile" || pista === "fisso" || pista === "partnership" || pista === "cb" || pista === "assicurazioni"
           ) ? pdvAddons : [];
           const addonAsCats = pointProvenanceAddons.map(a => ({
             category: a.targetCategory,
@@ -4523,7 +4536,7 @@ export default function DashboardGaraReale() {
             } else if (pista === "partnership" && !isPartnershipRSRimossa(rs)) {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-              rsCalc = calcPartnershipPerPdv(aggregatedRSItems, prConfig, rsWorkday.elapsedWorkingDays, rsPdvs[0].codicePos, tcPartnership, firstPdvConfig?.clusterCB);
+              rsCalc = calcPartnershipPerPdv(aggregatedRSItems, prConfig, rsWorkday.elapsedWorkingDays, rsPdvs[0].codicePos, tcPartnership, firstPdvConfig?.clusterCB, aggregatedRSAddons);
             } else if (pista === "cb") {
               rsCalc = calcCBFromItemsAndAddons(aggregatedRSItems, aggregatedRSAddons, firstPdvConfig?.clusterCB);
             } else if (pista === "energia" && !energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs)?.rimosso) {
@@ -4629,7 +4642,7 @@ export default function DashboardGaraReale() {
             } else if (pista === "partnership" && !isPartnershipRSRimossa(rs)) {
               const pCfg = getPartnershipConfigForPdv(rsPdvs[0].codicePos, rs);
               const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-              rsProjCalc = calcPartnershipPerPdv(projectedRSItems, prConfig, rsWorkday.totalWorkingDays, rsPdvs[0].codicePos, tcPartnership, firstPdvConfig?.clusterCB);
+              rsProjCalc = calcPartnershipPerPdv(projectedRSItems, prConfig, rsWorkday.totalWorkingDays, rsPdvs[0].codicePos, tcPartnership, firstPdvConfig?.clusterCB, projectedRSAddons);
             } else if (pista === "cb") {
               rsProjCalc = calcCBFromItems(projectedRSItems, firstPdvConfig?.clusterCB);
             } else if (pista === "energia" && !energiaRSConfigs.find(c => normalizeRS(c.ragioneSociale) === rs)?.rimosso) {
@@ -4807,7 +4820,7 @@ export default function DashboardGaraReale() {
               if (!isPartnershipRSRimossa(projRS)) {
                 const pCfg = getPartnershipConfigForPdv(pdv.codicePos, projRS);
                 const prConfig: PartnershipRewardPosConfig | undefined = pCfg ? { posCode: pCfg.posCode, config: pCfg.config } : undefined;
-                projCalc = calcPartnershipPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos, tcPartnership, pdvConfig3?.clusterCB);
+                projCalc = calcPartnershipPerPdv(pdv.items, prConfig, pdvWorkday3.totalWorkingDays, pdv.codicePos, tcPartnership, pdvConfig3?.clusterCB, pdv.addons);
               }
             } else if (pista === "cb") {
               projCalc = calcCBFromItems(pdv.items, pdvConfig3?.clusterCB);

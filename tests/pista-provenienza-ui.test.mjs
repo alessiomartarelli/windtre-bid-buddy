@@ -68,6 +68,17 @@ const artFissoFtth = {
   dettaglio: { canone: '25' },
 }; // fisso → FISSO_FTTH (1 punto per pezzo)
 
+const artPartnershipConTelefonoFinanziato = {
+  categoria: { nome: 'MIA TIED' },
+  tipologia: { nome: 'MIA EASYPAY STANDARD' },
+  dettaglio: {
+    canone: '10',
+    domandeRisposte: [
+      { domandaTesto: 'MIA TELEFONO FINANZIAMENTO', risposta: '10' },
+    ],
+  },
+}; // Partnership Reward: rivincolo 4 pt + telefono finanziato 8 pt
+
 async function insertSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale, articoli }) {
   const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
   await pool.query(
@@ -272,6 +283,9 @@ test('Provenienza punti: ogni pista calcola i punti delle componenti col proprio
   assert.equal(calcolaPuntiComponentePista('energia', 'BUSINESS_CON_SDD', 7, context), 7);
   assert.equal(calcolaPuntiComponentePista('partnership', 'cambio_offerta_rivincoli', 3, context), 18);
   assert.equal(calcolaPuntiComponentePista('partnership', 'buy_untied', 3), 6);
+  assert.equal(calcolaPuntiComponentePista('partnership', 'IMP_AGG_0_VAR_FINANZ', 1), 6);
+  assert.equal(calcolaPuntiComponentePista('partnership', 'IMP_AGG_GT0_FINANZ', 1), 8);
+  assert.equal(calcolaPuntiComponentePista('partnership', 'IMP_AGG_GT0_VAR', 1), 6);
   assert.equal(calcolaPuntiComponentePista('cb', 'cambio_offerta_rivincoli', 8, context), 8);
   assert.equal(calcolaPuntiComponentePista('cb', 'coupon_caring', 8, context), 0);
   assert.equal(calcolaPuntiComponentePista('assicurazioni', 'protezionePro', 2, context), 10);
@@ -459,6 +473,10 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
       codicePos: POS_A, nomeNegozio: 'Negozio Prov A', ragioneSociale: RS,
       articoli: [artFissoFtth, artFissoFtth],
     });
+    await insertSale(pool, session.orgId, {
+      codicePos: POS_A, nomeNegozio: 'Negozio Prov A', ragioneSociale: RS,
+      articoli: [artPartnershipConTelefonoFinanziato],
+    });
 
     browser = await launchBrowser();
     const context = await newAuthedContext(browser, session);
@@ -526,6 +544,28 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
       totale,
       'la somma dei punti delle categorie Mobile deve riconciliare il totale card',
     );
+
+    const partnershipBtn = page.getByTestId('btn-provenienza-partnership');
+    await partnershipBtn.click();
+    const partnershipPanel = page.getByTestId('provenienza-panel-partnership');
+    await partnershipPanel.waitFor({ state: 'visible', timeout: 10000 });
+    assert.match(
+      await page.getByTestId('ticker-pista-partnership').innerText(),
+      /Partnership Reward/i,
+      'la pista usa il nome corretto Partnership Reward',
+    );
+    assert.equal(
+      provNum(await page.getByTestId('prov-totale-partnership').innerText()),
+      12,
+      'Partnership Reward include 4 pt del rivincolo + 8 pt del telefono CB',
+    );
+    const partnershipCategories = await page.locator('[data-testid^="prov-cat-rs-partnership-"]').allInnerTexts();
+    assert.ok(
+      partnershipCategories.some((text) => /IMP\.AGG>0 FINANZ/i.test(text) && /1\s*pz/.test(text) && /8,00\s*pt|8\.00\s*pt/.test(text)),
+      `la provenienza mostra il telefono CB finanziato da 8 pt (${partnershipCategories.join(' | ')})`,
+    );
+    await btn.click();
+    await panel.waitFor({ state: 'visible', timeout: 10000 });
 
     // Task #490 — soglia raggiunta e moltiplicatore applicato per PDV.
     // PDV A: 1,50 pt < soglia1 (3) → "Soglia non raggiunta", nessun ×.
