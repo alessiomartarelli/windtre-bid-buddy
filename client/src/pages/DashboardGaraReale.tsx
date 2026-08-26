@@ -6196,58 +6196,62 @@ export default function DashboardGaraReale() {
               })}
 
               {caringStats.totale > 0 && (
-                <Card className="overflow-hidden" data-testid="card-caring-utilizzate">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <div className="p-1.5 rounded bg-amber-500 text-white">
-                          <Ticket className="h-4 w-4" />
+                <Card className="overflow-hidden md:col-span-2 lg:col-span-3" data-testid="card-caring-utilizzate">
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="grid gap-3 md:grid-cols-[minmax(180px,0.75fr)_minmax(160px,0.65fr)_minmax(0,2fr)] md:items-start md:gap-5">
+                      <div className="min-w-0">
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                          <div className="rounded bg-amber-500 p-1 text-white">
+                            <Ticket className="h-3.5 w-3.5" />
+                          </div>
+                          Caring utilizzate
+                        </CardTitle>
+                        <div className="mt-2 flex items-baseline gap-2">
+                          <span className="text-2xl font-bold tracking-tight tabular-nums" data-testid="text-pezzi-caring">{caringStats.totale}</span>
+                          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">totale</span>
                         </div>
-                        Caring utilizzate
-                      </CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-4xl font-bold tracking-tight tabular-nums" data-testid="text-pezzi-caring">{caringStats.totale}</span>
-                      <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">caring utilizzate</span>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-slate-400">
-                      Escluse dal conteggio, dal premio e dai punti Customer Base.
-                    </p>
+                        <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-slate-400">
+                          Escluse dal conteggio, dal premio e dagli eventi Customer Base.
+                        </p>
+                      </div>
+
                     {caringStats.perRs.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="text-xs font-semibold text-gray-600 dark:text-slate-300">Per Ragione Sociale</div>
+                      <div className="min-w-0 space-y-1">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Per Ragione Sociale</div>
                         {caringStats.perRs.map((rs) => (
                           <div
                             key={rs.ragioneSociale}
-                            className="flex items-center justify-between gap-2 text-sm"
+                            className="flex items-center justify-between gap-2 text-xs"
                             data-testid={`caring-rs-${rs.ragioneSociale}`}
                           >
                             <span className="truncate text-gray-700 dark:text-slate-200" title={rs.ragioneSociale}>{rs.ragioneSociale}</span>
-                            <span className="font-semibold shrink-0">{rs.pezzi}</span>
+                            <span className="shrink-0 font-semibold tabular-nums">{rs.pezzi}</span>
                           </div>
                         ))}
                       </div>
                     )}
+
                     {caringStats.perPdv.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="text-xs font-semibold text-gray-600 dark:text-slate-300">Per PDV</div>
-                        {caringStats.perPdv.map((pdv) => (
-                          <div
-                            key={pdv.codicePos}
-                            className="flex items-center justify-between gap-2 text-sm"
-                            data-testid={`caring-pdv-${pdv.codicePos}`}
-                          >
-                            <span className="truncate text-gray-700 dark:text-slate-200" title={`${pdv.nomeNegozio} · ${pdv.ragioneSociale}`}>
-                              {pdv.nomeNegozio}
-                              <span className="text-gray-400 dark:text-slate-500"> · {pdv.ragioneSociale}</span>
-                            </span>
-                            <span className="font-semibold shrink-0">{pdv.pezzi}</span>
-                          </div>
-                        ))}
+                      <div className="min-w-0">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-slate-400">Per PDV</div>
+                        <div className="grid gap-x-5 gap-y-1 sm:grid-cols-2 xl:grid-cols-3">
+                          {caringStats.perPdv.map((pdv) => (
+                            <div
+                              key={pdv.codicePos}
+                              className="flex min-w-0 items-center justify-between gap-2 text-xs"
+                              data-testid={`caring-pdv-${pdv.codicePos}`}
+                            >
+                              <span className="truncate text-gray-700 dark:text-slate-200" title={`${pdv.nomeNegozio} · ${pdv.ragioneSociale}`}>
+                                {pdv.nomeNegozio}
+                                <span className="text-gray-400 dark:text-slate-500"> · {pdv.ragioneSociale}</span>
+                              </span>
+                              <span className="shrink-0 font-semibold tabular-nums">{pdv.pezzi}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
+                    </div>
                   </CardContent>
                 </Card>
               )}
