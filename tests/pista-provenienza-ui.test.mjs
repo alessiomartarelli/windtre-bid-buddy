@@ -574,6 +574,7 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     assert.match(cbText, /Provenienza eventi\s*—\s*Customer Base/i);
     assert.match(cbText, /\bEventi\b/i, 'il KPI Customer Base è etichettato Eventi');
     assert.match(cbText, /\beventi\b/i, 'i valori Customer Base usano l’unità eventi');
+    assert.doesNotMatch(cbText, /\d+[,.]\d+\s+eventi\b/i, 'gli eventi non mostrano cifre decimali');
     assert.doesNotMatch(cbText, /\bpt\b/i, 'la provenienza Customer Base non usa più l’unità punti');
 
     await btn.click();
