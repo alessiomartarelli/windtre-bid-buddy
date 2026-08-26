@@ -564,6 +564,18 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
       partnershipCategories.some((text) => /IMP\.AGG>0 FINANZ/i.test(text) && /1\s*pz/.test(text) && /8,00\s*pt|8\.00\s*pt/.test(text)),
       `la provenienza mostra il telefono CB finanziato da 8 pt (${partnershipCategories.join(' | ')})`,
     );
+
+    const cbBtn = page.getByTestId('btn-provenienza-cb');
+    assert.match(await cbBtn.innerText(), /Dettaglio eventi/i, 'Customer Base usa la terminologia eventi');
+    await cbBtn.click();
+    const cbDetail = page.getByTestId('ticker-detail-cb');
+    await cbDetail.waitFor({ state: 'visible', timeout: 10000 });
+    const cbText = await cbDetail.innerText();
+    assert.match(cbText, /Provenienza eventi\s*—\s*Customer Base/i);
+    assert.match(cbText, /\bEventi\b/i, 'il KPI Customer Base è etichettato Eventi');
+    assert.match(cbText, /\beventi\b/i, 'i valori Customer Base usano l’unità eventi');
+    assert.doesNotMatch(cbText, /\bpt\b/i, 'la provenienza Customer Base non usa più l’unità punti');
+
     await btn.click();
     await panel.waitFor({ state: 'visible', timeout: 10000 });
 

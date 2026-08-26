@@ -1224,6 +1224,9 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
     const trajectoryProi = usePunti ? p.thresholdProgressProiezione ?? proi : proi;
     const trajectoryRatio = trajectoryProi > 0 ? Math.min((trajectoryAtt / trajectoryProi) * 100, 100) : trajectoryAtt > 0 ? 100 : 0;
     const thresholdMarkers = p.thresholdMarkers ?? [];
+    const usesEvents = p.pista === "cb";
+    const valueLabel = usesEvents ? "Eventi" : "Punti";
+    const valueUnit = usesEvents ? "eventi" : "punti";
     const trajectoryMax = Math.max(trajectoryAtt, trajectoryProi, ...thresholdMarkers.map((marker) => marker.value), 1);
     const actualPosition = Math.min((trajectoryAtt / trajectoryMax) * 100, 100);
     const projectedPosition = Math.min((trajectoryProi / trajectoryMax) * 100, 100);
@@ -1299,7 +1302,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
             className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-lg border border-border/80 bg-card/90 px-2 py-1.5 text-[9px] font-bold uppercase tracking-wide text-foreground shadow-sm backdrop-blur transition-colors hover:bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-expanded={isOpen}
             aria-controls={`ticker-detail-${p.pista}`}
-            aria-label={`${isOpen ? "Nascondi" : "Mostra"} provenienza punti ${conf.label}`}
+            aria-label={`${isOpen ? "Nascondi" : "Mostra"} provenienza ${usesEvents ? "eventi" : "punti"} ${conf.label}`}
             data-state={isOpen ? "open" : "closed"}
             data-testid={`btn-provenienza-${p.pista}`}
             onClick={(event) => {
@@ -1311,7 +1314,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
               className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
               aria-hidden
             />
-            Dettaglio punti
+            Dettaglio {usesEvents ? "eventi" : "punti"}
           </button>
         </div>
         <div className="pista-card-content">
@@ -1347,7 +1350,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
               {thresholdMarkers.map((marker, index) => {
                 const markerId = `${p.pista}-${index}-${marker.value}`;
                 const position = Math.min((marker.value / trajectoryMax) * 100, 100);
-                const unit = usePunti ? "punti" : "pezzi";
+                const unit = usePunti ? valueUnit : "pezzi";
                 const description = `Soglia ${marker.label}: ${fmtTickerVal(marker.value)} ${unit}`;
                 return (
                   <Tooltip
@@ -1404,7 +1407,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
           >
             <div className="rounded-lg border border-border/70 bg-background/55 px-2 py-1.5">
               <div className="text-[8px] font-bold uppercase tracking-[0.11em] text-muted-foreground">
-                {usePunti ? 'Punti attuali' : 'Pezzi attuali'}
+                {usePunti ? `${valueLabel} attuali` : 'Pezzi attuali'}
               </div>
               <span className="mt-0.5 block text-base font-extrabold leading-none tabular-nums" data-testid={`ticker-punti-${p.pista}`}>
                 {fmtTickerVal(att)}
@@ -1413,7 +1416,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
             <div className="rounded-lg border border-blue-200/80 bg-blue-50/70 px-2 py-1.5 dark:border-blue-800/80 dark:bg-blue-950/35">
               <div className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-[0.11em] text-blue-700 dark:text-blue-300">
                 <TrendingUp className="h-2.5 w-2.5" />
-                {usePunti ? 'Punti proiezione' : 'Pezzi proiezione'}
+                {usePunti ? `${valueLabel} proiezione` : 'Pezzi proiezione'}
               </div>
               <span className="mt-0.5 block text-base font-extrabold leading-none tabular-nums text-blue-700 dark:text-blue-300">
                 {fmtTickerVal(proi)}
@@ -1448,6 +1451,10 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
   // selezionato un singolo PDV, resta disponibile il dettaglio puntuale.
   const renderDetail = (p: TickerPista) => {
     const conf = PISTA_CONFIG[p.pista as keyof typeof PISTA_CONFIG];
+    const usesEvents = p.pista === "cb";
+    const provenanceNoun = usesEvents ? "eventi" : "punti";
+    const provenanceLabel = usesEvents ? "Eventi" : "Punti";
+    const provenanceUnit = usesEvents ? "eventi" : "pt";
     const usePuntiTot = p.calc.puntiTotali > 0 || p.calcProiezione.puntiTotali > 0;
     const blocks: { key: string; name: string; puntiAtt: number; puntiProi: number; pezziAtt: number; usePunti: boolean; premioAtt: number; premioProi: number; sogliaAtt: string; sogliaProi: string; sogliaLivelloAtt?: number; moltiplicatori?: number[]; thresholdMarkers?: TickerThresholdMarker[] }[] = [];
     if (aggregateByRs) {
@@ -1512,18 +1519,18 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-semibold md:text-lg">Provenienza punti — {conf?.label ?? p.pista}</div>
+          <div className="text-sm font-semibold md:text-lg">Provenienza {provenanceNoun} — {conf?.label ?? p.pista}</div>
           <span className="flex shrink-0 items-baseline gap-2 tabular-nums md:gap-4">
             <span className="text-xs font-semibold text-muted-foreground md:text-base" data-testid={`prov-totale-pezzi-${p.pista}`}>
               {fmtTickerVal(p.totalePezzi)} pz
             </span>
             <span className="text-sm font-bold md:text-xl" data-testid={`prov-totale-${p.pista}`}>
-              {fmtPoints(p.calc.puntiTotali)} pt
+              {fmtPoints(p.calc.puntiTotali)} {provenanceUnit}
             </span>
           </span>
         </div>
         <p className="text-xs text-muted-foreground md:text-sm">
-          Dettaglio delle componenti che concorrono al calcolo dei punti.
+          Dettaglio delle componenti che concorrono al calcolo degli {provenanceNoun}.
         </p>
         <div className="space-y-2 md:space-y-4" data-testid={`provenienza-panel-${p.pista}`}>
           {blocks.map((b) => {
@@ -1565,7 +1572,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
                     )}
                     {!aggregateByRs && (
                       <span className="text-sm font-bold tabular-nums" data-testid={`prov-punti-rs-${p.pista}-${b.key}`}>
-                        {fmtPoints(b.puntiAtt)} pt
+                        {fmtPoints(b.puntiAtt)} {provenanceUnit}
                       </span>
                     )}
                   </span>
@@ -1580,9 +1587,9 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
                         </div>
                       </div>
                       <div className="rounded-lg bg-muted/45 px-2.5 py-2 text-right md:px-4 md:py-3.5">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:text-xs">Punti</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:text-xs">{provenanceLabel}</div>
                         <div className="mt-0.5 text-sm font-bold tabular-nums md:mt-1 md:text-xl" data-testid={`prov-punti-rs-${p.pista}-${b.key}`}>
-                          {fmtPoints(b.puntiAtt)} pt
+                          {fmtPoints(b.puntiAtt)} {provenanceUnit}
                         </div>
                       </div>
                     </div>
@@ -1591,7 +1598,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
                         <div key={category.category} className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground md:text-sm" data-testid={`prov-cat-rs-${p.pista}-${b.key}-${category.category}`}>
                           <span className="min-w-0 truncate">{category.label}</span>
                           <span className="shrink-0 tabular-nums">
-                            {category.pezzi} pz{category.punti != null ? ` · ${fmtPoints(category.punti)} pt` : ""}
+                            {category.pezzi} pz{category.punti != null ? ` · ${fmtPoints(category.punti)} ${provenanceUnit}` : ""}
                           </span>
                         </div>
                       ))}
@@ -1617,7 +1624,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
                               sogliaLabel={pdv.pdvCalc.sogliaLabel}
                               moltiplicatori={pdv.pdvCalc.moltiplicatoriApplicati}
                             />
-                            <span className="font-bold tabular-nums" data-testid={`prov-punti-pdv-${p.pista}-${pdv.codicePos}`}>{fmtPoints(pdv.pdvCalc.puntiTotali)} pt</span>
+                            <span className="font-bold tabular-nums" data-testid={`prov-punti-pdv-${p.pista}-${pdv.codicePos}`}>{fmtPoints(pdv.pdvCalc.puntiTotali)} {provenanceUnit}</span>
                           </span>
                         ) : (
                           <span className="shrink-0 text-muted-foreground tabular-nums">{pdv.pezzi} pz sorgente</span>
@@ -1628,7 +1635,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
                           <div key={category.category} className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground" data-testid={`prov-cat-${p.pista}-${pdv.codicePos}-${category.category}`}>
                             <span className="min-w-0 truncate">{category.label}</span>
                             <span className="shrink-0 tabular-nums">
-                              {category.pezzi} pz{category.punti != null ? ` · ${fmtPoints(category.punti)} pt` : ""}
+                              {category.pezzi} pz{category.punti != null ? ` · ${fmtPoints(category.punti)} ${provenanceUnit}` : ""}
                             </span>
                           </div>
                         ))}
@@ -1644,7 +1651,7 @@ function PistaTicker({ stats, aggregateByRs }: { stats: TickerPista[]; aggregate
         <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-2 text-xs" data-testid={`prov-somma-${p.pista}`}>
           <span className="text-muted-foreground">Somma {aggregateByRs || p.rsCalcBreakdown?.size ? "Ragioni Sociali" : "PDV"}</span>
           <span className="font-bold tabular-nums">
-            {fmtPoints(blocks.reduce((sum, block) => sum + block.puntiAtt, 0))} pt {usePuntiTot ? "= totale card" : "calcolati"}
+            {fmtPoints(blocks.reduce((sum, block) => sum + block.puntiAtt, 0))} {provenanceUnit} {usePuntiTot ? "= totale card" : "calcolati"}
           </span>
         </div>
       </div>
