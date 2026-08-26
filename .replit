@@ -110,6 +110,10 @@ args = "brand-gating-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
+args = "struttura-guard-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
 args = "gara-weights-ui-tests"
 
 [[workflows.workflow.tasks]]
@@ -400,6 +404,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-brand-gating-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "struttura-guard-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-struttura-guard-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
