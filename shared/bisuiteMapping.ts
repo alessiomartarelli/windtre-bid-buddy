@@ -276,7 +276,6 @@ export function getDefaultMappingRules(): BiSuiteMappingRule[] {
     { id: ruleId(), pista: 'mobile', targetCategory: 'DEVICE_1_FIN_SP_LT_200', targetLabel: '1° Device finanziato SP < 200€', conditions: { categoriaBiSuite: 'TIED IVA', domandaTesto: 'TELEFONO INCLUSO FINDOMESTIC', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
 
     { id: ruleId(), pista: 'mobile', targetCategory: 'MNP', targetLabel: 'MNP', conditions: { categoriaBiSuite: 'UNTIED', domandaTesto: 'MNP', rispostaDiversaDa: 'NO' }, priority: 20, enabled: true, ruleType: 'additional' },
-    { id: ruleId(), pista: 'mobile', targetCategory: 'MNP_MVNO', targetLabel: 'MNP da MVNO', conditions: { categoriaBiSuite: 'UNTIED', domandaTesto: 'MNP DA OPERATORI VIRTUALI', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
     { id: ruleId(), pista: 'mobile', targetCategory: 'PIU_SICURI_MOBILE', targetLabel: 'Più Sicuri Mobile', conditions: { categoriaBiSuite: 'UNTIED', domandaTesto: 'PIU SICURI MOBILE', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
     { id: ruleId(), pista: 'mobile', targetCategory: 'PIU_SICURI_MOBILE_PRO', targetLabel: 'Più Sicuri Mobile Pro', conditions: { categoriaBiSuite: 'UNTIED', domandaTesto: 'PIU SICURI MOBILE PRO', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
     { id: ruleId(), pista: 'mobile', targetCategory: 'DEVICE_VAR_SP_LT_200', targetLabel: 'Device VAR < 200€', conditions: { categoriaBiSuite: 'UNTIED', domandaTesto: 'TELEFONO INCLUSO VAR', rispostaContiene: 'SI' }, priority: 20, enabled: true, ruleType: 'additional' },
@@ -1016,9 +1015,17 @@ export function mergeWithDefaultRules(
   // category before computing fingerprints, so we don't inject a duplicate
   // default caring rule and so twins/totals treat caring consistently.
   const { rules: retargetedSaved } = retargetCaringSavedRules(patchedSaved);
-  const existingKeys = new Set(retargetedSaved.map(ruleFingerprint));
+  // MNP da MVNO vale esclusivamente per offerte TIED CF / TIED IVA.
+  // Filtriamo anche le vecchie regole salvate (in passato esisteva un default
+  // UNTIED), così non continuano ad attribuire +1 dopo l'aggiornamento.
+  const constrainedSaved = retargetedSaved.filter((rule) => {
+    if (rule.pista !== 'mobile' || rule.targetCategory !== 'MNP_MVNO') return true;
+    const categoria = (rule.conditions.categoriaBiSuite || '').trim().toUpperCase();
+    return categoria === 'TIED CF' || categoria === 'TIED IVA';
+  });
+  const existingKeys = new Set(constrainedSaved.map(ruleFingerprint));
   const missing = defaults.filter(d => !existingKeys.has(ruleFingerprint(d)));
-  const merged = missing.length === 0 ? retargetedSaved : [...retargetedSaved, ...missing];
+  const merged = missing.length === 0 ? constrainedSaved : [...constrainedSaved, ...missing];
   const partnershipTwins = synthesizePartnershipTwins(merged);
   return partnershipTwins.length === 0 ? merged : [...merged, ...partnershipTwins];
 }

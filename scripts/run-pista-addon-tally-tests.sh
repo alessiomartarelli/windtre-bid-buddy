@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the DB-backed "Tally piste/addon dopo il refactor di aggregazione" suite
-# (tests/pista-addon-tally-db.test.mjs, Task #297).
+# (tests/pista-addon-tally-db.test.mjs e tests/mnp-mvno-offer-scope.test.mjs).
 #
 # Copre il CUORE del mapping per pista di server/bisuiteMappedSales.ts
 # (aggregateMappedSales) NON coperto dalle suite caring/CB e device/accessori:
@@ -13,4 +13,6 @@
 set -euo pipefail
 
 echo "[pista-addon-tally-tests] running suite ..."
-exec node --import tsx --test tests/pista-addon-tally-db.test.mjs
+exec node --import tsx --test \
+  tests/pista-addon-tally-db.test.mjs \
+  tests/mnp-mvno-offer-scope.test.mjs
