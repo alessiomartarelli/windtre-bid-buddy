@@ -2006,7 +2006,7 @@ export default function ConfigurazioneGara() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {([
+                  {(organizationBrands?.length ?? 0) === 0 && ([
                     { field: 'pisteVisibili' as const, label: 'Piste mostrate nel report', hint: 'Le piste deselezionate spariscono da riepiloghi, proiezioni, classifiche e card dedicate (inclusi i Protetti).' },
                     { field: 'telcoPiste' as const, label: 'Piste dei migliori TELCO', hint: 'Il miglior addetto e negozio TELCO sommano i pezzi di queste piste (se visibili).' },
                     { field: 'newCorePiste' as const, label: 'Piste dei migliori NEW CORE', hint: 'Il miglior addetto e negozio NEW CORE sommano i pezzi di queste piste (se visibili).' },
