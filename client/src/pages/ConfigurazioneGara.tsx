@@ -22,7 +22,7 @@ import { getThresholdsByCluster, mapClusterMobileToClusterPista, getDefaultFisso
 import { calcolaSoglieDefaultPerRS as calcolaSoglieEnergiaDefault } from '@/types/energia';
 import { toggleLivelloRimosso, isLivelloRimosso } from '@shared/soglieRimovibili';
 import { PISTA_CANVASS_LABELS, type PistaCanvass } from '@shared/bisuiteClassification';
-import { TELEGRAM_REPORT_PISTE, parseTelegramReportContent } from '@shared/telegramReportContent';
+import { TELEGRAM_REPORT_PISTE, parseTelegramReportContent, parseTelegramReportContentForBrand } from '@shared/telegramReportContent';
 import { apiUrl } from '@/lib/basePath';
 import {
   Loader2, Save, Download, Plus, Trash2, CalendarDays, Store,
@@ -571,6 +571,24 @@ function telegramContentToForm(raw: unknown): TelegramContentForm {
 
 const DEFAULT_TELEGRAM_CONTENT_FORM: TelegramContentForm = telegramContentToForm(undefined);
 
+// Form per-brand (Task #519): selezioni distinte per ogni brand associato
+// all'organizzazione; un brand senza voce salvata eredita la selezione root.
+function telegramContentPerBrandToForm(
+  raw: unknown,
+  brands: Array<{ id: string; name: string }>,
+): Record<string, TelegramContentForm> {
+  const out: Record<string, TelegramContentForm> = {};
+  for (const b of brands) {
+    const cfg = parseTelegramReportContentForBrand(raw, b.id);
+    out[b.id] = {
+      pisteVisibili: [...cfg.pisteVisibili],
+      telcoPiste: [...cfg.telcoPiste],
+      newCorePiste: [...cfg.newCorePiste],
+    };
+  }
+  return out;
+}
+
 export default function ConfigurazioneGara() {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -708,6 +726,20 @@ export default function ConfigurazioneGara() {
         ? list.filter((p) => p !== pista)
         : TELEGRAM_REPORT_PISTE.filter((p) => p === pista || list.includes(p));
       return { ...prev, [field]: next };
+    });
+    setIsDirty(true);
+  }, []);
+  // Selezioni per brand (Task #519): un blocco di checkbox per ogni brand
+  // dell'organizzazione; ogni brand riceve il proprio report Telegram.
+  const [telegramContentPerBrand, setTelegramContentPerBrand] = useState<Record<string, TelegramContentForm>>({});
+  const toggleTelegramBrandPista = useCallback((brandId: string, field: keyof TelegramContentForm, pista: PistaCanvass) => {
+    setTelegramContentPerBrand((prev) => {
+      const cur = prev[brandId] ?? DEFAULT_TELEGRAM_CONTENT_FORM;
+      const list = cur[field];
+      const next = list.includes(pista)
+        ? list.filter((p) => p !== pista)
+        : TELEGRAM_REPORT_PISTE.filter((p) => p === pista || list.includes(p));
+      return { ...prev, [brandId]: { ...cur, [field]: next } };
     });
     setIsDirty(true);
   }, []);
@@ -943,11 +975,12 @@ export default function ConfigurazioneGara() {
       setVenditeForecast(forecastToForm(cfg.venditeForecast));
       setPerformanceWeights(weightsToForm(cfg.performanceWeights));
       setTelegramContent(telegramContentToForm(cfg.telegramReportContent));
+      setTelegramContentPerBrand(telegramContentPerBrandToForm(cfg.telegramReportContent, organizationBrands ?? []));
       setSosCaring(cfg.sosCaring || null);
     }
     setIsDirty(false);
     setInitialLoaded(true);
-  }, [fetchConfig, initializeRSConfigsFromPdvList, tabelleCalcoloDefaults]);
+  }, [fetchConfig, initializeRSConfigsFromPdvList, tabelleCalcoloDefaults, organizationBrands]);
 
   const loadMonthConfig = useCallback(async (month: number, year: number) => {
     setInitialLoaded(false);
@@ -1025,6 +1058,7 @@ export default function ConfigurazioneGara() {
       setVenditeForecast(forecastToForm(cfg.venditeForecast));
       setPerformanceWeights(weightsToForm(cfg.performanceWeights));
       setTelegramContent(telegramContentToForm(cfg.telegramReportContent));
+      setTelegramContentPerBrand(telegramContentPerBrandToForm(cfg.telegramReportContent, organizationBrands ?? []));
       setSosCaring(cfg.sosCaring || null);
     } else {
       setConfigName('');
@@ -1045,6 +1079,7 @@ export default function ConfigurazioneGara() {
       setVenditeForecast(EMPTY_FORECAST_FORM);
       setPerformanceWeights(EMPTY_WEIGHTS_FORM);
       setTelegramContent(DEFAULT_TELEGRAM_CONTENT_FORM);
+      setTelegramContentPerBrand(telegramContentPerBrandToForm(undefined, organizationBrands ?? []));
       setSosCaring(null);
 
       const salesPdvs = await fetchPdvFromSales(month, year);
@@ -1094,6 +1129,13 @@ export default function ConfigurazioneGara() {
       pisteVisibili: telegramContent.pisteVisibili,
       telcoPiste: telegramContent.telcoPiste,
       newCorePiste: telegramContent.newCorePiste,
+      ...(Object.keys(telegramContentPerBrand).length > 0 ? {
+        perBrand: Object.fromEntries(Object.entries(telegramContentPerBrand).map(([brandId, f]) => [brandId, {
+          pisteVisibili: f.pisteVisibili,
+          telcoPiste: f.telcoPiste,
+          newCorePiste: f.newCorePiste,
+        }])),
+      } : {}),
     },
     ...(sosCaring ? { sosCaring } : {}),
     ...(garaConfigRecord?.config ? {
@@ -1987,6 +2029,45 @@ export default function ConfigurazioneGara() {
                       </div>
                     </div>
                   ))}
+                  {(organizationBrands?.length ?? 0) > 0 && (
+                    <div className="space-y-4 border-t pt-4" data-testid="section-telegram-per-brand">
+                      <div>
+                        <Label className="text-xs font-semibold">Report separati per brand</Label>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Ogni brand con almeno un PDV associato nella Struttura riceve un report Telegram
+                          distinto (stesso bot e chat) con le sole vendite dei suoi PDV. Qui scegli i
+                          contenuti di ciascun report; i PDV si associano ai brand in Amministrazione → Struttura.
+                        </p>
+                      </div>
+                      {organizationBrands!.map((brand) => (
+                        <div key={brand.id} className="rounded-md border p-3 space-y-3" data-testid={`card-tg-brand-${brand.id}`}>
+                          <Label className="text-sm font-semibold">{brand.name}</Label>
+                          {([
+                            { field: 'pisteVisibili' as const, label: 'Piste mostrate' },
+                            { field: 'telcoPiste' as const, label: 'Migliori TELCO' },
+                            { field: 'newCorePiste' as const, label: 'Migliori NEW CORE' },
+                          ]).map(({ field, label }) => (
+                            <div key={field}>
+                              <Label className="text-xs font-semibold">{label}</Label>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1.5">
+                                {TELEGRAM_REPORT_PISTE.map((pista) => (
+                                  <label key={pista} className="flex items-center gap-2 text-sm" htmlFor={`tgb-${brand.id}-${field}-${pista}`}>
+                                    <Checkbox
+                                      id={`tgb-${brand.id}-${field}-${pista}`}
+                                      data-testid={`checkbox-tgb-${brand.id}-${field}-${pista}`}
+                                      checked={(telegramContentPerBrand[brand.id] ?? DEFAULT_TELEGRAM_CONTENT_FORM)[field].includes(pista)}
+                                      onCheckedChange={() => toggleTelegramBrandPista(brand.id, field, pista)}
+                                    />
+                                    {PISTA_CANVASS_LABELS[pista]}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div>
                     <Label className="text-xs font-semibold">Criteri fissi (sempre nel report)</Label>
                     <p className="text-[11px] text-muted-foreground mt-1" data-testid="text-tg-criteri-fissi">

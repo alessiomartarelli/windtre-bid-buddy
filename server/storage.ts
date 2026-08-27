@@ -104,8 +104,8 @@ export interface IStorage {
 
   // Telegram report sends (Task #332): dedup/recovery delle run schedulate
   getTelegramReportSentOrgIds(reportDate: string, timeLabel: string): Promise<Set<string>>;
-  getTelegramReportSendLabels(reportDate: string): Promise<Map<string, string[]>>;
-  recordTelegramReportSend(orgId: string, reportDate: string, timeLabel: string): Promise<void>;
+  getTelegramReportSendLabels(reportDate: string): Promise<Map<string, Array<{ timeLabel: string; brandKey: string }>>>;
+  recordTelegramReportSend(orgId: string, reportDate: string, timeLabel: string, brandKey?: string): Promise<void>;
 
   // Gara Config
   getGaraConfig(orgId: string, month: number, year: number): Promise<GaraConfig | undefined>;
@@ -687,26 +687,36 @@ export class DatabaseStorage implements IStorage {
 
   // Tutti gli invii del giorno, per il dedup per fascia logica (Task #334):
   // se un'org cambia orario a metà giornata, il label dell'invio già fatto
-  // non coincide più con lo slot corrente ma la fascia sì.
-  async getTelegramReportSendLabels(reportDate: string): Promise<Map<string, string[]>> {
+  // non coincide più con lo slot corrente ma la fascia sì. Con i report
+  // separati per brand ogni invio porta anche la brandKey ('' = report
+  // unico legacy): il dedup è per org+fascia+brand.
+  async getTelegramReportSendLabels(
+    reportDate: string,
+  ): Promise<Map<string, Array<{ timeLabel: string; brandKey: string }>>> {
     const rows = await db.select({
       orgId: telegramReportSends.organizationId,
       timeLabel: telegramReportSends.timeLabel,
+      brandKey: telegramReportSends.brandKey,
     })
       .from(telegramReportSends)
       .where(eq(telegramReportSends.reportDate, reportDate));
-    const map = new Map<string, string[]>();
+    const map = new Map<string, Array<{ timeLabel: string; brandKey: string }>>();
     for (const r of rows) {
       const list = map.get(r.orgId) ?? [];
-      list.push(r.timeLabel);
+      list.push({ timeLabel: r.timeLabel, brandKey: r.brandKey ?? "" });
       map.set(r.orgId, list);
     }
     return map;
   }
 
-  async recordTelegramReportSend(orgId: string, reportDate: string, timeLabel: string): Promise<void> {
+  async recordTelegramReportSend(
+    orgId: string,
+    reportDate: string,
+    timeLabel: string,
+    brandKey: string = "",
+  ): Promise<void> {
     await db.insert(telegramReportSends)
-      .values({ organizationId: orgId, reportDate, timeLabel })
+      .values({ organizationId: orgId, reportDate, timeLabel, brandKey })
       .onConflictDoNothing();
   }
 

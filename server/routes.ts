@@ -556,6 +556,18 @@ export async function registerRoutes(
             delete effectiveConfig[k];
           }
         }
+        // Task #519 — anche il PUT generico può riscrivere puntiVendita:
+        // normalizzo i brandIds (dedup + scarto di ID non associati all'org)
+        // così questo percorso non può introdurre brand orfani/estranei che
+        // gli endpoint dedicati /api/admin/struttura/* rifiuterebbero.
+        if (Array.isArray(effectiveConfig.puntiVendita)) {
+          const orgBrandIds = new Set((await storage.getOrganizationBrands(profile.organizationId)).map((b) => b.id));
+          effectiveConfig.puntiVendita = (effectiveConfig.puntiVendita as Record<string, unknown>[]).map((p) => {
+            if (!p || typeof p !== "object" || !("brandIds" in p)) return p;
+            const raw = Array.isArray(p.brandIds) ? p.brandIds.map((b) => String(b)) : [];
+            return { ...p, brandIds: Array.from(new Set(raw.filter((id) => orgBrandIds.has(id)))) };
+          });
+        }
         if (wouldMassBlankPuntiVendita(curCfg.puntiVendita, effectiveConfig.puntiVendita)) {
           console.warn(`[org-config] BLOCKED mass-blank puntiVendita save (org=${profile.organizationId}, user=${userId})`);
           return res.status(409).json({
@@ -4481,6 +4493,9 @@ export async function registerRoutes(
     id?: string; codicePos: string; nome: string; ragioneSociale: string;
     canale?: string; tipoPosizione?: string;
     clusterMobile?: string; clusterFisso?: string; clusterCB?: string;
+    // Brand associati al PDV (Task #519, report Telegram separati per brand).
+    // Id dal catalogo brands, validati contro i brand dell'organizzazione.
+    brandIds?: string[];
   };
   const structPdvSchema = z.object({
     codicePos: z.string().trim().min(1, "Codice POS obbligatorio"),
@@ -4491,7 +4506,19 @@ export async function registerRoutes(
     clusterMobile: z.string().trim().optional().default(""),
     clusterFisso: z.string().trim().optional().default(""),
     clusterCB: z.string().trim().optional().default(""),
+    brandIds: z.array(z.string().trim().min(1)).max(20).optional(),
   });
+  // Valida i brandIds contro i brand associati all'organizzazione: id
+  // estranei vengono rifiutati (400) per non salvare associazioni orfane.
+  async function validateBrandIds(orgId: string, brandIds: string[] | undefined): Promise<string | null> {
+    if (!brandIds || brandIds.length === 0) return null;
+    const orgBrands = await storage.getOrganizationBrands(orgId);
+    const valid = new Set(orgBrands.map((b) => b.id));
+    const bad = brandIds.filter((id) => !valid.has(id));
+    return bad.length > 0 ? `Brand non associati all'organizzazione: ${bad.join(", ")}` : null;
+  }
+  const dedupBrandIds = (ids: string[] | undefined): string[] | undefined =>
+    ids === undefined ? undefined : Array.from(new Set(ids));
 
   async function readPv(orgId: string): Promise<StructPdv[]> {
     const cfg = await storage.getOrgConfig(orgId);
@@ -4540,8 +4567,10 @@ export async function registerRoutes(
     if (findCodiceClash(cur, parsed.data.codicePos)) {
       return res.status(409).json({ error: `Codice POS "${parsed.data.codicePos}" già esistente` });
     }
+    const brandErr = await validateBrandIds(orgId, parsed.data.brandIds);
+    if (brandErr) return res.status(400).json({ error: brandErr });
     const newId = `pdv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await writePv(orgId, (pv) => [...pv, { id: newId, ...parsed.data }], profile.id);
+    await writePv(orgId, (pv) => [...pv, { id: newId, ...parsed.data, brandIds: dedupBrandIds(parsed.data.brandIds) ?? [] }], profile.id);
     res.status(201).json({ success: true, id: newId });
   });
 
@@ -4552,6 +4581,9 @@ export async function registerRoutes(
     const orgId = profile.organizationId!;
     const parsed = z.object({ pdvs: z.array(structPdvSchema).min(1) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const allBrandIds = parsed.data.pdvs.flatMap((p) => p.brandIds ?? []);
+    const bulkBrandErr = await validateBrandIds(orgId, allBrandIds);
+    if (bulkBrandErr) return res.status(400).json({ error: bulkBrandErr });
     const cur = await readPv(orgId);
     const existing = new Set(cur.map(p => normLow(p.codicePos || p.nome)));
     const added: string[] = [];
@@ -4561,7 +4593,7 @@ export async function registerRoutes(
       const k = normLow(p.codicePos);
       if (existing.has(k)) { skipped.push(p.codicePos); continue; }
       existing.add(k);
-      toAdd.push({ id: `pdv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ...p });
+      toAdd.push({ id: `pdv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ...p, brandIds: dedupBrandIds(p.brandIds) ?? [] });
       added.push(p.codicePos);
     }
     if (toAdd.length > 0) {
@@ -4586,9 +4618,12 @@ export async function registerRoutes(
       clusterMobile: z.string().trim().optional(),
       clusterFisso: z.string().trim().optional(),
       clusterCB: z.string().trim().optional(),
+      brandIds: z.array(z.string().trim().min(1)).max(20).optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0].message });
+    const putBrandErr = await validateBrandIds(orgId, parsed.data.brandIds);
+    if (putBrandErr) return res.status(400).json({ error: putBrandErr });
     const { oldRagioneSociale, oldCodicePos } = parsed.data;
     const cur = await readPv(orgId);
     const idx = cur.findIndex(p =>
@@ -4614,6 +4649,7 @@ export async function registerRoutes(
       clusterMobile: parsed.data.clusterMobile ?? p.clusterMobile,
       clusterFisso: parsed.data.clusterFisso ?? p.clusterFisso,
       clusterCB: parsed.data.clusterCB ?? p.clusterCB,
+      brandIds: dedupBrandIds(parsed.data.brandIds) ?? p.brandIds ?? [],
     } : p), profile.id);
     // Propagazione su CdG: rename codicePos e/o ragioneSociale
     if (normLow(newCodice) !== normLow(oldCodicePos) || normLow(newRs) !== normLow(oldRagioneSociale)) {

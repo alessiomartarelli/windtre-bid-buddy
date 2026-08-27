@@ -323,10 +323,13 @@ export const telegramReportSends = pgTable("telegram_report_sends", {
   reportDate: varchar("report_date").notNull(),
   // Slot di invio "HH:MM" (default 13:30/22:15, configurabile per org).
   timeLabel: varchar("time_label").notNull(),
+  // Report separati per brand: id del brand del report ('' = report unico
+  // legacy dell'org). Fa parte della chiave di dedup/recovery.
+  brandKey: varchar("brand_key").notNull().default(""),
   sentAt: timestamp("sent_at").defaultNow(),
 }, (table) => [
-  uniqueIndex("UQ_telegram_report_sends_org_date_slot").on(
-    table.organizationId, table.reportDate, table.timeLabel,
+  uniqueIndex("UQ_telegram_report_sends_org_date_slot_brand").on(
+    table.organizationId, table.reportDate, table.timeLabel, table.brandKey,
   ),
 ]);
 

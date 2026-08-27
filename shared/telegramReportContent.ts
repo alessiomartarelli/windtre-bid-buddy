@@ -39,6 +39,21 @@ export interface TelegramReportContentConfig {
 }
 
 /**
+ * Classificazione del brand per il gating contenuti del report:
+ * - "windtre": può mostrare Protetti/Verisure (se la pista è abilitata);
+ * - "other": qualunque altro brand (Vodafone, Fastweb, sconosciuto) —
+ *   fail-closed, MAI Protetti/Verisure.
+ */
+export type TelegramBrandKind = "windtre" | "other";
+
+/** Riconoscimento tollerante del brand WindTre (allineato a shared/modules.ts). */
+export function telegramBrandKindOf(brandName: string | null | undefined): TelegramBrandKind {
+  const norm = String(brandName ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const isW3 = norm.includes("windtre") || norm.includes("wind3") || norm === "w3" || norm.startsWith("w3");
+  return isW3 ? "windtre" : "other";
+}
+
+/**
  * Default legacy-compatibili: tutte le piste visibili; TELCO e NEW CORE
  * allineati ai KPI "TELCO"/"New Core" storici del report (fisso+mobile e
  * assicurazioni+energia).
@@ -80,6 +95,103 @@ export function parseTelegramReportContent(raw: unknown): TelegramReportContentC
     telcoPiste: normalizePiste(o.telcoPiste, DEFAULT_TELEGRAM_REPORT_CONTENT.telcoPiste),
     newCorePiste: normalizePiste(o.newCorePiste, DEFAULT_TELEGRAM_REPORT_CONTENT.newCorePiste),
   };
+}
+
+/**
+ * Configurazione per-brand (report Telegram separati): la selezione
+ * mensile può contenere una mappa `perBrand` (chiave = brandId) con la
+ * stessa terna di array. Un brand senza voce dedicata eredita la
+ * configurazione "root" legacy (retro-compatibile: i record storici hanno
+ * solo i campi root e continuano a valere per tutti i brand).
+ */
+export function parseTelegramReportContentForBrand(
+  raw: unknown,
+  brandId: string | null | undefined,
+): TelegramReportContentConfig {
+  if (brandId && raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const perBrand = (raw as Record<string, unknown>).perBrand;
+    if (perBrand && typeof perBrand === "object" && !Array.isArray(perBrand)) {
+      const entry = (perBrand as Record<string, unknown>)[brandId];
+      if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+        return parseTelegramReportContent(entry);
+      }
+    }
+  }
+  return parseTelegramReportContent(raw);
+}
+
+/**
+ * Gating contenuti per singolo brand (report separati): un report che non
+ * è certamente WindTre non deve contenere alcun riferimento a
+ * Protetti/Verisure. Fail-closed: brand assente/sconosciuto ⇒ "other".
+ */
+export function applyBrandKindGating(
+  cfg: TelegramReportContentConfig,
+  kind: TelegramBrandKind,
+): TelegramReportContentConfig {
+  return applyBrandGating(cfg, kind !== "windtre");
+}
+
+/** PDV della Struttura con associazione brand opzionale (multi-brand). */
+export interface BrandedPdvEntry {
+  codicePos?: string | null;
+  nome?: string | null;
+  brandIds?: unknown;
+}
+
+function pdvCode(p: BrandedPdvEntry): string {
+  return String(p.codicePos || p.nome || "").trim().toLowerCase();
+}
+
+function pdvBrandIds(p: BrandedPdvEntry): string[] {
+  if (!Array.isArray(p.brandIds)) return [];
+  return p.brandIds.map((b) => String(b).trim()).filter(Boolean);
+}
+
+export interface TelegramBrandTarget {
+  brandId: string;
+  brandName: string;
+  kind: TelegramBrandKind;
+  /** Codici POS (lowercase, trim) dei PDV associati al brand. */
+  posCodes: Set<string>;
+}
+
+/**
+ * Ripartizione dei PDV della Struttura sui brand dell'organizzazione.
+ * Ritorna un target SOLO per i brand con almeno un PDV associato; se
+ * NESSUN PDV ha brand assegnati la lista è vuota e il chiamante deve
+ * ricadere sul report unico legacy. Un PDV multi-brand compare in tutti
+ * i suoi target (stessa vendita in più report, per scelta).
+ */
+export function buildTelegramBrandTargets(
+  orgBrands: Array<{ id: string; name: string }>,
+  puntiVendita: unknown,
+): TelegramBrandTarget[] {
+  const pdvs: BrandedPdvEntry[] = Array.isArray(puntiVendita)
+    ? (puntiVendita as BrandedPdvEntry[])
+    : [];
+  const targets: TelegramBrandTarget[] = [];
+  for (const b of orgBrands) {
+    const posCodes = new Set<string>();
+    for (const p of pdvs) {
+      const code = pdvCode(p);
+      if (code && pdvBrandIds(p).includes(b.id)) posCodes.add(code);
+    }
+    if (posCodes.size > 0) {
+      targets.push({ brandId: b.id, brandName: b.name, kind: telegramBrandKindOf(b.name), posCodes });
+    }
+  }
+  return targets;
+}
+
+/** Codici POS della Struttura NON associati ad alcun brand (diagnostica). */
+export function unassignedPosCodes(puntiVendita: unknown): string[] {
+  const pdvs: BrandedPdvEntry[] = Array.isArray(puntiVendita)
+    ? (puntiVendita as BrandedPdvEntry[])
+    : [];
+  return pdvs
+    .filter((p) => pdvCode(p) && pdvBrandIds(p).length === 0)
+    .map((p) => pdvCode(p));
 }
 
 /**

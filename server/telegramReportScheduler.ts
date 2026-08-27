@@ -18,9 +18,18 @@ import {
   trendYmdOf,
 } from "@shared/venditeReport";
 import { buildVenditeReportHtml, reportHtmlFileName } from "@shared/venditeReportHtml";
-import { aggregateDtsReport, filterDtsLeads, type DtsReportAggregates } from "@shared/dtsReport";
+import { aggregateDtsReport, dtsSaleCodiceEsterno, filterDtsLeads, type DtsReportAggregates } from "@shared/dtsReport";
 import { fasciaFromTimeLabel, parseForecastConfig } from "@shared/venditeCommento";
-import { applyBrandGating, parseTelegramReportContent } from "@shared/telegramReportContent";
+import {
+  applyBrandGating,
+  applyBrandKindGating,
+  buildTelegramBrandTargets,
+  parseTelegramReportContent,
+  parseTelegramReportContentForBrand,
+  telegramBrandKindOf,
+  unassignedPosCodes,
+  type TelegramBrandTarget,
+} from "@shared/telegramReportContent";
 import {
   DEFAULT_SEND_TIMES,
   fasciaForLabel,
@@ -257,8 +266,19 @@ export async function sendDailyReportForOrg(params: {
   /** Fascia del commento; se assente si deduce dal timeLabel. */
   fascia?: "parziale" | "chiusura";
   syncFirst?: boolean;
+  /**
+   * Report separato per brand (Task #519): se presente, il report include
+   * SOLO le vendite dei PDV associati al brand (match per codice POS) e i
+   * contenuti sono gated sul brand del report (fail-closed: solo un brand
+   * WindTre può mostrare Protetti/Verisure). Assente ⇒ report unico legacy.
+   */
+  brand?: TelegramBrandTarget | null;
 }): Promise<{ ok: boolean; error?: string; docError?: string }> {
   const { ymd } = romeNowParts();
+  const brand = params.brand ?? null;
+  // Intestazione/filename con il brand, così i report separati della stessa
+  // chat sono immediatamente distinguibili.
+  const reportName = brand ? `${params.orgName} — ${brand.brandName}` : params.orgName;
 
   if (params.syncFirst !== false) {
     try {
@@ -289,6 +309,12 @@ export async function sendDailyReportForOrg(params: {
   const monthFromYmd = monthStartYmd(ymd);
   const fromYmd = trendFromYmd < monthFromYmd ? trendFromYmd : monthFromYmd;
   let rows = await storage.getBisuiteSalesByItalianDateRange(params.orgId, fromYmd, ymd, false);
+  // Report per brand: SOLO le vendite dei PDV associati al brand (match per
+  // codice POS, case-insensitive). Il filtro avviene PRIMA di ogni derivato
+  // (trend, storico, mese, DTS): nessun contenuto cross-brand può filtrare.
+  if (brand) {
+    rows = rows.filter((r) => brand.posCodes.has(String(r.codicePos ?? "").trim().toLowerCase()));
+  }
   // Task #367: canonicalizza le Ragioni Sociali (alias + normalizzazione dal
   // registro RS) così il report aggrega le varianti come un'unica azienda.
   try {
@@ -326,17 +352,28 @@ export async function sendDailyReportForOrg(params: {
   // Fail-closed: se la lettura brand fallisce trattiamo l'org come VF
   // (niente Protetti/Verisure) — meglio nascondere una sezione a un'org
   // WindTre per un errore transitorio che mostrarla per errore a Vodafone.
-  let isVfOrg = true;
-  try {
-    const orgBrands = await storage.getOrganizationBrands(params.orgId);
-    isVfOrg = orgBrands.some((b) => /vodafone|fastweb/i.test(b.name));
-  } catch (e) {
-    console.warn(`[telegram-report] lettura brand org=${params.orgId} fallita (gating VF fail-closed):`, e);
+  let reportContent;
+  if (brand) {
+    // Report per brand (Task #519): config mensile per-brand (fallback alla
+    // config root legacy) + gating sul brand del report: solo un brand
+    // WindTre può mostrare Protetti/Verisure (fail-closed per tutti gli altri).
+    reportContent = applyBrandKindGating(
+      parseTelegramReportContentForBrand(garaCfgObj?.telegramReportContent, brand.brandId),
+      brand.kind,
+    );
+  } else {
+    let isVfOrg = true;
+    try {
+      const orgBrands = await storage.getOrganizationBrands(params.orgId);
+      isVfOrg = orgBrands.some((b) => /vodafone|fastweb/i.test(b.name));
+    } catch (e) {
+      console.warn(`[telegram-report] lettura brand org=${params.orgId} fallita (gating VF fail-closed):`, e);
+    }
+    reportContent = applyBrandGating(
+      parseTelegramReportContent(garaCfgObj?.telegramReportContent),
+      isVfOrg,
+    );
   }
-  const reportContent = applyBrandGating(
-    parseTelegramReportContent(garaCfgObj?.telegramReportContent),
-    isVfOrg,
-  );
   // Accessori e Servizi al netto dell'IVA (Task #335): applicato subito
   // dopo l'aggregazione così messaggio, HTML, proiezione e top-KPI sono
   // tutti coerenti (÷1.22 su fatturati ACCESSORI + tutti i Servizi).
@@ -375,7 +412,7 @@ export async function sendDailyReportForOrg(params: {
   // forecast); senza conteggi ⇒ soli giorni feriali (lun–sab).
   const monthProjection = buildMonthEndProjection(ymd, month.aggregates, forecast) ?? undefined;
   const message = buildTelegramReportMessage({
-    orgName: params.orgName,
+    orgName: reportName,
     dateYMD: ymd,
     timeLabel: params.timeLabel,
     aggregates,
@@ -400,6 +437,19 @@ export async function sendDailyReportForOrg(params: {
     const dtsLeadRows = await storage.getDtsLeads(params.orgId);
     if (dtsLeadRows.length > 0) {
       const monthKey = ymd.slice(0, 7);
+      // Report per brand (Task #519): i lead DTS sono a livello org, non
+      // hanno un brand proprio. Fail-closed: nel report di un brand tengo
+      // solo i lead il cui idVendita corrisponde a una vendita del mese di
+      // quel brand (monthRows è già filtrato per codicePos del brand); i
+      // lead senza vendita collegata vengono omessi per non far trapelare
+      // volumi/consulenti cross-brand.
+      const brandSaleIds: Set<number> | null = params.brand
+        ? new Set(
+            monthRows
+              .map((r) => dtsSaleCodiceEsterno({ codiceEsterno: null, rawData: r.rawData }))
+              .filter((n): n is number => n !== null),
+          )
+        : null;
       const leads = filterDtsLeads(
         dtsLeadRows.map((l) => ({
           leadKey: l.leadKey,
@@ -418,8 +468,11 @@ export async function sendDailyReportForOrg(params: {
         })),
         { month: monthKey },
       );
+      const brandLeads = brandSaleIds
+        ? leads.filter((l) => l.idVendita !== null && brandSaleIds.has(l.idVendita))
+        : leads;
       const agg = aggregateDtsReport(
-        leads,
+        brandLeads,
         monthRows.map((r) => ({
           bisuiteId: r.bisuiteId,
           stato: r.stato,
@@ -438,7 +491,7 @@ export async function sendDailyReportForOrg(params: {
   }
 
   const html = buildVenditeReportHtml({
-    orgName: params.orgName,
+    orgName: reportName,
     dateYMD: ymd,
     timeLabel: params.timeLabel,
     aggregates,
@@ -449,9 +502,9 @@ export async function sendDailyReportForOrg(params: {
     dts,
     content: reportContent,
   });
-  const fileName = reportHtmlFileName(params.orgName, ymd, params.timeLabel);
+  const fileName = reportHtmlFileName(reportName, ymd, params.timeLabel);
   const docResult = await sendTelegramDocument(params.botToken, params.chatId, fileName, html, {
-    caption: `Report vendite ${fmtReportDate(ymd)} — versione leggibile`,
+    caption: `Report vendite${brand ? ` ${brand.brandName}` : ""} ${fmtReportDate(ymd)} — versione leggibile`,
   });
   if (!docResult.ok) {
     console.warn(
@@ -492,7 +545,7 @@ async function runScheduledSendInner(
   // fascia e non per label: se un'org cambia orario a metà giornata, il
   // label registrato (es. "13:30") non coincide più con lo slot nuovo
   // (es. "12:00") ma la fascia sì — così niente doppioni né invii soppressi.
-  let sentLabelsByOrg = new Map<string, string[]>();
+  let sentLabelsByOrg = new Map<string, Array<{ timeLabel: string; brandKey: string }>>();
   try {
     sentLabelsByOrg = await storage.getTelegramReportSendLabels(ymd);
   } catch (err) {
@@ -522,35 +575,80 @@ async function runScheduledSendInner(
       }
       const fascia = fasciaForLabel(timeLabel, times);
       const sentLabels = sentLabelsByOrg.get(org.id) ?? [];
-      if (sentLabels.some((l) => fasciaForLabel(l, times) === fascia)) {
+      // Report separati per brand (Task #519): se almeno un PDV della
+      // Struttura ha brand associati, si invia un report distinto per ogni
+      // brand con PDV (stesso bot/chat). Nessun PDV brandizzato ⇒ report
+      // unico legacy (brandKey ''). Dedup e registrazione per org+fascia+brand.
+      let brandTargets: TelegramBrandTarget[] = [];
+      try {
+        const orgBrands = await storage.getOrganizationBrands(org.id);
+        brandTargets = buildTelegramBrandTargets(orgBrands, cfg?.puntiVendita);
+        if (brandTargets.length > 0) {
+          const unassigned = unassignedPosCodes(cfg?.puntiVendita);
+          if (unassigned.length > 0) {
+            console.warn(
+              `[telegram-report] org=${org.id} (${org.name}): ${unassigned.length} PDV senza brand ` +
+                `(${unassigned.slice(0, 5).join(", ")}${unassigned.length > 5 ? ", …" : ""}) — ` +
+                `le loro vendite NON compaiono in nessun report per brand`,
+            );
+          }
+        }
+      } catch (err) {
+        console.warn(
+          `[telegram-report] lettura brand/struttura fallita org=${org.id}, report unico legacy: ${err}`,
+        );
+      }
+      const reportsToSend: Array<{ brand: TelegramBrandTarget | null; brandKey: string }> =
+        brandTargets.length > 0
+          ? brandTargets.map((b) => ({ brand: b, brandKey: b.brandId }))
+          : [{ brand: null, brandKey: "" }];
+      // La sync BiSuite del giorno va fatta UNA volta per org, non per brand:
+      // syncFirst solo sul primo invio della lista.
+      let firstOfOrg = true;
+      let orgSentAny = false;
+      let orgFailedAny = false;
+      for (const rep of reportsToSend) {
+        const alreadySent = sentLabels.some(
+          (l) => l.brandKey === rep.brandKey && fasciaForLabel(l.timeLabel, times) === fascia,
+        );
+        if (alreadySent) continue;
+        const brandTag = rep.brand ? ` brand=${rep.brand.brandName}` : "";
+        const r = await sendDailyReportForOrg({
+          orgId: org.id,
+          orgName: org.name,
+          botToken: tg.botToken,
+          chatId: tg.chatId,
+          timeLabel,
+          fascia,
+          syncFirst: firstOfOrg,
+          brand: rep.brand,
+        });
+        firstOfOrg = false;
+        if (r.ok) {
+          orgSentAny = true;
+          console.log(`[telegram-report] inviato report ${timeLabel}${brandTag} org=${org.id} (${org.name})`);
+          // Registra l'invio per il dedup/recovery (Task #332). Un errore di
+          // scrittura non deve far ripartire l'org (il messaggio è già arrivato).
+          // Solo il brand inviato con successo viene registrato: gli altri
+          // restano recuperabili.
+          try {
+            await storage.recordTelegramReportSend(org.id, ymd, timeLabel, rep.brandKey);
+          } catch (err) {
+            console.warn(`[telegram-report] registrazione invio fallita org=${org.id}${brandTag}: ${err}`);
+          }
+        } else {
+          orgFailedAny = true;
+          console.error(
+            `[telegram-report] invio FALLITO ${timeLabel}${brandTag} org=${org.id} (${org.name}): ${r.error}`,
+          );
+        }
+      }
+      if (!orgSentAny && !orgFailedAny) {
         deduped++;
         continue;
       }
-      const r = await sendDailyReportForOrg({
-        orgId: org.id,
-        orgName: org.name,
-        botToken: tg.botToken,
-        chatId: tg.chatId,
-        timeLabel,
-        fascia,
-        syncFirst: true,
-      });
-      if (r.ok) {
-        sent++;
-        console.log(`[telegram-report] inviato report ${timeLabel} org=${org.id} (${org.name})`);
-        // Registra l'invio per il dedup/recovery (Task #332). Un errore di
-        // scrittura non deve far ripartire l'org (il messaggio è già arrivato).
-        try {
-          await storage.recordTelegramReportSend(org.id, ymd, timeLabel);
-        } catch (err) {
-          console.warn(`[telegram-report] registrazione invio fallita org=${org.id}: ${err}`);
-        }
-      } else {
-        failed++;
-        console.error(
-          `[telegram-report] invio FALLITO ${timeLabel} org=${org.id} (${org.name}): ${r.error}`,
-        );
-      }
+      if (orgSentAny) sent++;
+      if (orgFailedAny) failed++;
     } catch (err) {
       failed++;
       const msg = err instanceof Error ? err.message : String(err);

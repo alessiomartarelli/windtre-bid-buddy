@@ -276,6 +276,15 @@ export interface GaraConfigData {
     pisteVisibili?: string[];
     telcoPiste?: string[];
     newCorePiste?: string[];
+    /**
+     * Report separati per brand (Task #519): selezioni per brandId; un
+     * brand senza voce eredita la selezione root (legacy).
+     */
+    perBrand?: Record<string, {
+      pisteVisibili?: string[];
+      telcoPiste?: string[];
+      newCorePiste?: string[];
+    }>;
   };
 }
 

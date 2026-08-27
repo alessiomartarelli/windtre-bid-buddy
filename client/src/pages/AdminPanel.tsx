@@ -66,6 +66,8 @@ interface ConfigPdv {
   clusterFisso?: string;
   clusterCB?: string;
   tipoPosizione?: string;
+  /** Brand associati al PDV (report Telegram separati per brand). */
+  brandIds?: string[];
 }
 
 interface Dipendente {
@@ -186,7 +188,13 @@ export default function AdminPanel() {
   };
 
   // === Struttura: dialogs CRUD ===
-  const emptyPdvForm: ConfigPdv = { codicePos: '', nome: '', ragioneSociale: '', canale: '', clusterMobile: '', clusterFisso: '', clusterCB: '', tipoPosizione: '' };
+  const emptyPdvForm: ConfigPdv = { codicePos: '', nome: '', ragioneSociale: '', canale: '', clusterMobile: '', clusterFisso: '', clusterCB: '', tipoPosizione: '', brandIds: [] };
+  const togglePdvBrand = (brandId: string) => {
+    setPdvForm((prev) => {
+      const cur = prev.brandIds ?? [];
+      return { ...prev, brandIds: cur.includes(brandId) ? cur.filter((b) => b !== brandId) : [...cur, brandId] };
+    });
+  };
   const [pdvDialogOpen, setPdvDialogOpen] = useState(false);
   const [pdvDialogMode, setPdvDialogMode] = useState<'create' | 'edit'>('create');
   const [pdvForm, setPdvForm] = useState<ConfigPdv>(emptyPdvForm);
@@ -205,7 +213,7 @@ export default function AdminPanel() {
   };
   const openEditPdv = (pdv: ConfigPdv) => {
     setPdvDialogMode('edit');
-    setPdvForm({ ...pdv });
+    setPdvForm({ ...pdv, brandIds: Array.isArray(pdv.brandIds) ? [...pdv.brandIds] : [] });
     setPdvOrigKey({ rs: pdv.ragioneSociale, codicePos: pdv.codicePos });
     setPdvDialogOpen(true);
   };
@@ -405,7 +413,7 @@ export default function AdminPanel() {
         const rsArr = Array.isArray(data?.config?.ragioniSociali) ? (data.config.ragioniSociali as string[]).map(r => String(r).trim()).filter(Boolean) : [];
         setEmptyRsList(rsArr);
         if (data?.config?.puntiVendita) {
-          setPuntiVendita(data.config.puntiVendita.map((p: Record<string, string>) => ({
+          setPuntiVendita(data.config.puntiVendita.map((p: Record<string, unknown>) => ({
             id: String(p.id || ''),
             codicePos: String(p.codicePos || ''),
             nome: String(p.nome || ''),
@@ -415,6 +423,9 @@ export default function AdminPanel() {
             clusterFisso: String(p.clusterFisso || ''),
             clusterCB: String(p.clusterCB || ''),
             tipoPosizione: String(p.tipoPosizione || ''),
+            // brandIds vanno preservati: perderli qui farebbe sì che un
+            // normale edit del PDV li azzeri silenziosamente (PUT con []).
+            brandIds: Array.isArray(p.brandIds) ? p.brandIds.map((b) => String(b)).filter(Boolean) : [],
           })));
         }
       }
@@ -1123,6 +1134,26 @@ export default function AdminPanel() {
                       <Input data-testid="input-pdv-clusterCB" value={pdvForm.clusterCB || ''} onChange={(e) => setPdvForm(f => ({ ...f, clusterCB: e.target.value }))} placeholder="opzionale" />
                     </div>
                   </div>
+                  {(organizationBrands?.length ?? 0) > 0 && (
+                    <div className="space-y-1.5">
+                      <Label>Brand del PDV</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Determina in quali report Telegram per brand compaiono le vendite di questo PDV (un PDV può avere più brand).
+                      </p>
+                      <div className="flex flex-wrap gap-3">
+                        {organizationBrands!.map((b) => (
+                          <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <Checkbox
+                              checked={(pdvForm.brandIds ?? []).includes(b.id)}
+                              onCheckedChange={() => togglePdvBrand(b.id)}
+                              data-testid={`checkbox-pdv-brand-${b.id}`}
+                            />
+                            {b.name}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <Button type="submit" className="w-full" disabled={pdvSaving} data-testid="button-save-pdv">
                     {pdvSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvataggio...</> : (pdvDialogMode === 'create' ? 'Crea PDV' : 'Salva modifiche')}
                   </Button>

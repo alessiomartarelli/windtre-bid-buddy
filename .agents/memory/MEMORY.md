@@ -55,4 +55,5 @@
 - [Icona date nei temi scuri](native-date-indicator-dark.md) — il picker nativo Chromium può restare nero: usa overlay visivo non interattivo e testa che il click raggiunga l’input.
 - [Preventivatore per_rs removal tests](preventivatore-rs-removal-tests.md) — seed volumi a premio deterministico (TIED/MIGRAZIONI); un effect ri-sincronizza i target Partnership dai default cluster, superali.
 - [Energia per-RS target/premi](energia-rs-target-semantics.md) — configPerRS: target soglia AGGREGATI (già × PDV), premi per-PDV da × pdvInGara; solo il fallback globale usa target × numPdv e premio flat.
+- [Report Telegram per brand](telegram-per-brand-reports.md) — filtro POS pre-aggregati, DTS fail-closed per idVendita, brandIds da preservare in hydrate client e PUT generico, dedup per brand_key.
 - [Provenienza punti per RS](dashboard-provenance-rs.md) — con “Tutti i PDV” aggrega per RS; totale e componenti mostrano entrambi pezzi+punti, senza elenco negozi.

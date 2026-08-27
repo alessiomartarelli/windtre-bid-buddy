@@ -53,7 +53,12 @@ const {
   DEFAULT_TELEGRAM_REPORT_CONTENT,
   TELEGRAM_REPORT_PISTE,
   parseTelegramReportContent,
+  parseTelegramReportContentForBrand,
   applyBrandGating,
+  applyBrandKindGating,
+  telegramBrandKindOf,
+  buildTelegramBrandTargets,
+  unassignedPosCodes,
   effectiveGroupPiste,
   isPistaVisible,
   groupPezziOf,
@@ -1965,6 +1970,72 @@ await test("gating VF: protecta rimossa da visibilità e gruppi anche se salvata
   assert.ok(w.pisteVisibili.includes("protecta")); // WindTre: resta se abilitata
 });
 
+// ── Report separati per brand (Task #519) ────────────────────────────
+console.log("\n— report per brand (Task #519) —");
+
+await test("telegramBrandKindOf: riconoscimento tollerante WindTre, fail-closed sugli altri", () => {
+  for (const n of ["WindTre", "WIND TRE", "wind-tre", "W3", "Wind3"]) {
+    assert.equal(telegramBrandKindOf(n), "windtre", n);
+  }
+  for (const n of ["Vodafone", "Fastweb", "Sky Wifi", "", null, undefined]) {
+    assert.equal(telegramBrandKindOf(n), "other", String(n));
+  }
+});
+
+await test("parseTelegramReportContentForBrand: voce per-brand, fallback legacy root, input rotti", () => {
+  const raw = {
+    pisteVisibili: ["mobile", "fisso"],
+    perBrand: {
+      "b-vf": { pisteVisibili: ["energia"], telcoPiste: [] },
+    },
+  };
+  const vf = parseTelegramReportContentForBrand(raw, "b-vf");
+  assert.deepEqual(vf.pisteVisibili, ["energia"]);
+  assert.deepEqual(vf.telcoPiste, []);
+  // Brand senza voce ⇒ eredita la selezione root legacy.
+  const w3 = parseTelegramReportContentForBrand(raw, "b-w3");
+  assert.deepEqual(w3.pisteVisibili, ["mobile", "fisso"]);
+  // brandId assente o raw non-oggetto ⇒ parse legacy.
+  assert.deepEqual(parseTelegramReportContentForBrand(raw, null).pisteVisibili, ["mobile", "fisso"]);
+  assert.deepEqual(parseTelegramReportContentForBrand(42, "b-vf"), DEFAULT_TELEGRAM_REPORT_CONTENT);
+  assert.deepEqual(parseTelegramReportContentForBrand({ perBrand: { "b-vf": "x" } }, "b-vf"), parseTelegramReportContent({ perBrand: { "b-vf": "x" } }));
+});
+
+await test("applyBrandKindGating: solo windtre conserva protecta; other fail-closed", () => {
+  const full = parseTelegramReportContent({ pisteVisibili: TELEGRAM_REPORT_PISTE, newCorePiste: ["protecta", "energia"] });
+  const w = applyBrandKindGating(full, "windtre");
+  assert.ok(w.pisteVisibili.includes("protecta"));
+  const o = applyBrandKindGating(full, "other");
+  assert.ok(!o.pisteVisibili.includes("protecta"));
+  assert.ok(!o.newCorePiste.includes("protecta"));
+});
+
+await test("buildTelegramBrandTargets: solo brand con PDV, POS normalizzati, multi-brand in entrambi", () => {
+  const brands = [
+    { id: "b-w3", name: "WindTre" },
+    { id: "b-vf", name: "Vodafone" },
+    { id: "b-fw", name: "Fastweb" },
+  ];
+  const pdv = [
+    { codicePos: " P100 ", brandIds: ["b-w3"] },
+    { codicePos: "P200", brandIds: ["b-vf", "b-w3"] }, // multi-brand
+    { codicePos: "P300" }, // senza brand
+    { nome: "SoloNome", brandIds: ["b-vf"] }, // fallback su nome
+  ];
+  const targets = buildTelegramBrandTargets(brands, pdv);
+  assert.deepEqual(targets.map((t) => t.brandId), ["b-w3", "b-vf"]); // b-fw senza PDV escluso
+  const w3 = targets.find((t) => t.brandId === "b-w3");
+  assert.deepEqual([...w3.posCodes].sort(), ["p100", "p200"]);
+  assert.equal(w3.kind, "windtre");
+  const vf = targets.find((t) => t.brandId === "b-vf");
+  assert.deepEqual([...vf.posCodes].sort(), ["p200", "solonome"]);
+  assert.equal(vf.kind, "other");
+  // Struttura senza brand ⇒ nessun target (report unico legacy).
+  assert.deepEqual(buildTelegramBrandTargets(brands, [{ codicePos: "P1" }]), []);
+  assert.deepEqual(buildTelegramBrandTargets(brands, undefined), []);
+  assert.deepEqual(unassignedPosCodes(pdv), ["p300"]);
+});
+
 await test("effectiveGroupPiste: interseca gruppo e piste visibili", () => {
   const c = parseTelegramReportContent({ pisteVisibili: ["mobile"], telcoPiste: ["mobile", "fisso"] });
   assert.deepEqual(effectiveGroupPiste(c, "telco"), ["mobile"]);
@@ -2062,8 +2133,12 @@ if (schedMod.runScheduledSend && storageMod.storage) {
   let mockOrgs = [];
   let mockConfigs = new Map(); // orgId -> config object
   let mockSentLabels = new Map(); // orgId -> string[] (label già inviati oggi)
+  let mockOrgBrands = new Map(); // orgId -> [{ id, name }] (Task #519)
+  let mockSales = []; // righe bisuite restituite dal mock (Task #519)
   let recordedSends = []; // { orgId, ymd, label } registrati dalla run
   let telegramCalls = []; // URL delle chiamate api.telegram.org intercettate
+  let telegramDocs = []; // FormData dei sendDocument (allegati HTML)
+  let mockDtsLeads = []; // lead DTS restituiti dal mock (Task #519)
 
   const originals = {};
   const patch = (name, fn) => {
@@ -2075,21 +2150,32 @@ if (schedMod.runScheduledSend && storageMod.storage) {
     const config = mockConfigs.get(orgId);
     return config ? { organizationId: orgId, config } : undefined;
   });
-  patch("getTelegramReportSendLabels", async () => new Map(mockSentLabels));
-  patch("recordTelegramReportSend", async (orgId, ymd, label) => {
-    recordedSends.push({ orgId, ymd, label });
-    const prev = mockSentLabels.get(orgId) ?? [];
-    mockSentLabels.set(orgId, [...prev, label]);
+  // Il dedup è per org+fascia+brand (Task #519): il mock normalizza le
+  // stringhe legacy in { timeLabel, brandKey: '' } come farebbe il DB.
+  const toSentEntry = (l) => (typeof l === "string" ? { timeLabel: l, brandKey: "" } : l);
+  patch("getTelegramReportSendLabels", async () => {
+    const m = new Map();
+    for (const [k, v] of mockSentLabels) m.set(k, v.map(toSentEntry));
+    return m;
   });
-  patch("getBisuiteSalesByItalianDateRange", async () => []);
+  patch("recordTelegramReportSend", async (orgId, ymd, label, brandKey = "") => {
+    recordedSends.push({ orgId, ymd, label, brandKey });
+    const prev = mockSentLabels.get(orgId) ?? [];
+    mockSentLabels.set(orgId, [...prev, { timeLabel: label, brandKey }]);
+  });
+  patch("getBisuiteSalesByItalianDateRange", async () => mockSales);
   patch("getGaraConfig", async () => undefined);
-  patch("getDtsLeads", async () => []);
+  patch("getDtsLeads", async () => mockDtsLeads);
+  patch("getOrganizationBrands", async (orgId) => mockOrgBrands.get(orgId) ?? []);
 
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, options) => {
     const u = String(url);
     if (u.includes("api.telegram.org")) {
       telegramCalls.push(u);
+      if (u.includes("sendDocument") && options?.body instanceof FormData) {
+        telegramDocs.push(options.body);
+      }
       return {
         ok: true,
         status: 200,
@@ -2108,9 +2194,16 @@ if (schedMod.runScheduledSend && storageMod.storage) {
     },
   });
 
-  const setupScenario = ({ orgs, sent = {} }) => {
+  const setupScenario = ({ orgs, sent = {}, sales = [], dtsLeads = [] }) => {
+    mockDtsLeads = dtsLeads;
+    telegramDocs = [];
     mockOrgs = orgs.map((o) => ({ id: o.id, name: o.name ?? o.id }));
-    mockConfigs = new Map(orgs.map((o) => [o.id, tgConfig(o.sendTimes)]));
+    mockConfigs = new Map(orgs.map((o) => [o.id, {
+      ...tgConfig(o.sendTimes),
+      ...(o.puntiVendita ? { puntiVendita: o.puntiVendita } : {}),
+    }]));
+    mockOrgBrands = new Map(orgs.map((o) => [o.id, o.brands ?? []]));
+    mockSales = sales;
     mockSentLabels = new Map(Object.entries(sent));
     recordedSends = [];
     telegramCalls = [];
@@ -2152,6 +2245,131 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       await runScheduledSend("22:15");
       assert.equal(sendsFor("org-a").length, 1);
       assert.equal(sendsFor("org-a")[0].label, "22:15");
+      assert.equal(telegramCalls.length, 2);
+    });
+
+    await test("report separati per brand: un invio per brand con PDV, POS filtrati, dedup per brand (Task #519)", async () => {
+      const sale = (codicePos, categoria) => ({
+        bisuiteId: `s-${codicePos}-${Math.random().toString(36).slice(2, 6)}`,
+        codicePos,
+        nomeNegozio: `Neg ${codicePos}`,
+        nomeAddetto: "Anna",
+        stato: "OK",
+        // dataVendita di OGGI (Roma) così finisce negli aggregati del giorno
+        dataVendita: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date()),
+        totale: "30",
+        ragioneSociale: "RS Uno",
+        rawData: { articoli: [{ categoria, importo: 30, quantita: 1 }] },
+      });
+      setupScenario({
+        orgs: [{
+          id: "org-b",
+          name: "Org Multi",
+          brands: [
+            { id: "b-w3", name: "WindTre" },
+            { id: "b-vf", name: "Vodafone" },
+            { id: "b-fw", name: "Fastweb" }, // senza PDV: nessun report
+          ],
+          puntiVendita: [
+            { codicePos: "P100", nome: "Neg P100", ragioneSociale: "RS Uno", brandIds: ["b-w3"] },
+            { codicePos: "P200", nome: "Neg P200", ragioneSociale: "RS Uno", brandIds: ["b-vf"] },
+          ],
+        }],
+        sales: [sale("P100", "UNTIED"), sale("P200", "UNTIED")],
+      });
+      await runScheduledSend("13:30");
+      const sends = sendsFor("org-b");
+      assert.equal(sends.length, 2, "un invio registrato per ciascun brand con PDV");
+      assert.deepEqual(sends.map((s) => s.brandKey).sort(), ["b-vf", "b-w3"]);
+      assert.equal(telegramCalls.length, 4, "2 report × (messaggio + allegato)");
+      // Rilancio stesso slot ⇒ dedup per org+fascia+brand: nessun doppione.
+      telegramCalls = [];
+      await runScheduledSend("13:30");
+      assert.equal(sendsFor("org-b").length, 2);
+      assert.equal(telegramCalls.length, 0);
+      // Chiusura: entrambi i brand ripartono (fascia diversa).
+      await runScheduledSend("22:15");
+      assert.equal(sendsFor("org-b").length, 4);
+    });
+
+    await test("DTS nei report per brand: solo i lead agganciati a vendite del brand (fail-closed)", async () => {
+      const oggi = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+      const sale = (codicePos, codiceEsterno) => ({
+        bisuiteId: `s-${codicePos}-${codiceEsterno}`,
+        codicePos,
+        nomeNegozio: `Neg ${codicePos}`,
+        nomeAddetto: "Anna",
+        stato: "OK",
+        dataVendita: oggi,
+        totale: "30",
+        rawData: { codiceEsterno: String(codiceEsterno), articoli: [{ categoria: "UNTIED", importo: 30, quantita: 1 }] },
+      });
+      const lead = (consulente, idVendita) => ({
+        leadKey: `lk-${consulente}-${idVendita}`,
+        consulente,
+        campagna: "CAMP",
+        nominativo: `Cliente ${consulente}`,
+        email: null, codiceFiscale: null, telefono: null,
+        inCarico: null, stato: "FISSATO",
+        data: oggi,
+        idVendita,
+        addettoVendita: null, origineLead: null,
+      });
+      setupScenario({
+        orgs: [{
+          id: "org-d",
+          brands: [{ id: "b-w3", name: "WindTre" }, { id: "b-vf", name: "Vodafone" }],
+          puntiVendita: [
+            { codicePos: "P100", brandIds: ["b-w3"] },
+            { codicePos: "P200", brandIds: ["b-vf"] },
+          ],
+        }],
+        sales: [sale("P100", 111), sale("P200", 222)],
+        dtsLeads: [lead("MARIO_W3", 111), lead("LUCA_VF", 222), lead("SENZA_VENDITA", null)],
+      });
+      await runScheduledSend("13:30");
+      assert.equal(telegramDocs.length, 2, "un allegato HTML per brand");
+      const htmls = await Promise.all(telegramDocs.map((f) => f.get("document").text()));
+      // Senza il filtro per brand ogni report mostrerebbe 3 lead (tutti
+      // quelli dell'org, incluso quello senza vendita collegata). Col
+      // fail-closed ciascun brand vede SOLO il suo lead agganciato.
+      for (const h of htmls) {
+        const m = h.match(/DTS fissati<\/span><b>(\d+)</);
+        assert.ok(m, "sezione DTS presente nell'allegato");
+        assert.equal(m[1], "1", "un solo lead (quello del brand) nel report");
+      }
+    });
+
+    await test("brand parzialmente inviato ⇒ il recovery reinvia SOLO il brand mancante", async () => {
+      setupScenario({
+        orgs: [{
+          id: "org-b",
+          brands: [{ id: "b-w3", name: "WindTre" }, { id: "b-vf", name: "Vodafone" }],
+          puntiVendita: [
+            { codicePos: "P100", brandIds: ["b-w3"] },
+            { codicePos: "P200", brandIds: ["b-vf"] },
+          ],
+        }],
+        sent: { "org-b": [{ timeLabel: "13:30", brandKey: "b-w3" }] },
+      });
+      await runScheduledSend("13:30");
+      const sends = sendsFor("org-b");
+      assert.equal(sends.length, 1, "solo il brand mancante viene recuperato");
+      assert.equal(sends[0].brandKey, "b-vf");
+    });
+
+    await test("org senza PDV brandizzati ⇒ report unico legacy con brandKey ''", async () => {
+      setupScenario({
+        orgs: [{
+          id: "org-l",
+          brands: [{ id: "b-w3", name: "WindTre" }],
+          puntiVendita: [{ codicePos: "P100" }],
+        }],
+      });
+      await runScheduledSend("13:30");
+      const sends = sendsFor("org-l");
+      assert.equal(sends.length, 1);
+      assert.equal(sends[0].brandKey, "");
       assert.equal(telegramCalls.length, 2);
     });
 
