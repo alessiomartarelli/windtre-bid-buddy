@@ -206,6 +206,10 @@ args = "pdv-pezzi-table-ui-tests"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
+args = "pdv-brand-ui-tests"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
 args = "dark-mode-print-ui-tests"
 
 [[workflows.workflow.tasks]]
@@ -642,6 +646,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-mobile-sticky-header-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "pdv-brand-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-pdv-brand-persistence-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
