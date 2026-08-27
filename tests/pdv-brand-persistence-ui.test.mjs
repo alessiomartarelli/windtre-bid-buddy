@@ -21,8 +21,9 @@ import {
 //   1. crea PDV con più brand → persistiti in organization_config;
 //   2. reload pagina → i checkbox si ripopolano dal server;
 //   3. edit di un ALTRO campo (nome) → save → i brandIds restano intatti;
-//   4. il PUT generico /api/organization-config normalizza i brandIds
-//      (dedup + scarto di brand non associati all'org).
+//   4. il PUT generico /api/organization-config rifiuta con 400 i brand non
+//      associati all'org (coerente con gli endpoint dedicati, Task #523) e
+//      deduplica i brandIds validi.
 //
 // I brand vengono seminati direttamente nel dev DB (brands +
 // organization_brands) PRIMA di aprire la pagina, perché la sezione brand del
@@ -202,19 +203,19 @@ test('scenario 1: PDV multi-brand survives reload and unrelated-field edit', asy
 });
 
 // ===========================================================================
-// SCENARIO 2: il PUT generico /api/organization-config normalizza i brandIds
-// dei puntiVendita: dedup + scarto di brand NON associati all'org.
+// SCENARIO 2 (Task #523): il PUT generico /api/organization-config è coerente
+// con gli endpoint dedicati /api/admin/struttura/pdv: brand NON associati
+// all'org vengono RIFIUTATI con 400 (niente scarto silenzioso), mentre i
+// brandIds validi vengono deduplicati al salvataggio.
 // ===========================================================================
-test('scenario 2: generic PUT /api/organization-config drops foreign brands and dedups', async () => {
+test('scenario 2: generic PUT /api/organization-config rejects foreign brands (400) and dedups valid ones', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'pdv_brand_put', fullName: 'Pdv Brand PUT', organizationName: uniq('PdvBrandPUT') });
   const brands = await seedOrgBrands(pool, session.orgId, 1);
   const foreign = await seedForeignBrand(pool);
   const headers = { 'Content-Type': 'application/json', Cookie: session.cookieHeader };
   try {
-    // Config con un PDV che dichiara: brand valido (duplicato), brand
-    // estraneo all'org e un id inesistente.
-    const dirtyPdv = {
+    const basePdv = {
       id: 'pdv-put-test-1',
       codicePos: '90999001',
       nome: 'PDV PUT Test',
@@ -224,27 +225,48 @@ test('scenario 2: generic PUT /api/organization-config drops foreign brands and 
       clusterFisso: '',
       clusterCB: '',
       tipoPosizione: '',
-      brandIds: [brands[0].id, brands[0].id, foreign.id, 'brand-inesistente'],
     };
-    const put = await fetch(`${BASE}/api/organization-config`, {
+
+    // --- 1) Brand estraneo all'org o inesistente → 400, nulla salvato.
+    const dirtyPdv = { ...basePdv, brandIds: [brands[0].id, foreign.id, 'brand-inesistente'] };
+    const putForeign = await fetch(`${BASE}/api/organization-config`, {
       method: 'PUT',
       headers,
       body: JSON.stringify({ config: { puntiVendita: [dirtyPdv], ragioniSociali: ['RS PUT Test'] } }),
     });
+    const putForeignText = await putForeign.text();
+    assert.equal(putForeign.status, 400, `expected 400 for foreign brand, got ${putForeign.status}: ${putForeignText}`);
+    let errBody = {};
+    try { errBody = JSON.parse(putForeignText); } catch {}
+    assert.match(String(errBody.message ?? ''), /Brand non associati/i, 'error message names foreign brands');
+    const afterReject = await readPersistedPdvs(pool, session.orgId);
+    assert.equal(
+      afterReject.find((p) => p.codicePos === '90999001'),
+      undefined,
+      'rejected PUT must not persist the PDV',
+    );
+
+    // --- 2) Brand validi ma duplicati → 200 e dedup al salvataggio.
+    const dupPdv = { ...basePdv, brandIds: [brands[0].id, brands[0].id] };
+    const put = await fetch(`${BASE}/api/organization-config`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ config: { puntiVendita: [dupPdv], ragioniSociali: ['RS PUT Test'] } }),
+    });
     assert.equal(put.status, 200, `PUT organization-config failed: ${await put.text()}`);
 
-    // GET: i brandIds devono essere normalizzati al solo brand dell'org.
+    // GET: i brandIds devono essere deduplicati.
     const get = await fetch(`${BASE}/api/organization-config`, { headers: { Cookie: session.cookieHeader } });
     assert.equal(get.status, 200);
     const cfg = await get.json();
     const saved = (cfg?.config?.puntiVendita ?? []).find((p) => p.codicePos === '90999001');
     assert.ok(saved, 'PDV saved via generic PUT');
-    assert.deepEqual(saved.brandIds, [brands[0].id], 'foreign/unknown brands dropped, duplicates deduped');
+    assert.deepEqual(saved.brandIds, [brands[0].id], 'duplicates deduped');
 
     // Anche nel DB (non solo nella risposta).
     const pdvs = await readPersistedPdvs(pool, session.orgId);
     const inDb = pdvs.find((p) => p.codicePos === '90999001');
-    assert.deepEqual(inDb?.brandIds, [brands[0].id], 'normalized brandIds persisted in DB');
+    assert.deepEqual(inDb?.brandIds, [brands[0].id], 'deduped brandIds persisted in DB');
   } finally {
     await cleanupBrands(pool, [...brands, foreign]);
     await cleanupOrg(pool, session);

@@ -556,16 +556,30 @@ export async function registerRoutes(
             delete effectiveConfig[k];
           }
         }
-        // Task #519 — anche il PUT generico può riscrivere puntiVendita:
-        // normalizzo i brandIds (dedup + scarto di ID non associati all'org)
-        // così questo percorso non può introdurre brand orfani/estranei che
-        // gli endpoint dedicati /api/admin/struttura/* rifiuterebbero.
+        // Task #519/#523 — anche il PUT generico può riscrivere puntiVendita.
+        // Comportamento allineato agli endpoint dedicati /api/admin/struttura/*:
+        // brandIds NON associati all'org vengono RIFIUTATI con 400 (stesso
+        // messaggio di validateBrandIds), mai scartati in silenzio; i brandIds
+        // validi vengono deduplicati al salvataggio.
         if (Array.isArray(effectiveConfig.puntiVendita)) {
           const orgBrandIds = new Set((await storage.getOrganizationBrands(profile.organizationId)).map((b) => b.id));
+          const foreign = new Set<string>();
+          for (const p of effectiveConfig.puntiVendita as Record<string, unknown>[]) {
+            if (!p || typeof p !== "object" || !Array.isArray(p.brandIds)) continue;
+            for (const b of p.brandIds) {
+              const id = String(b);
+              if (!orgBrandIds.has(id)) foreign.add(id);
+            }
+          }
+          if (foreign.size > 0) {
+            return res.status(400).json({
+              message: `Brand non associati all'organizzazione: ${Array.from(foreign).join(", ")}`,
+            });
+          }
           effectiveConfig.puntiVendita = (effectiveConfig.puntiVendita as Record<string, unknown>[]).map((p) => {
             if (!p || typeof p !== "object" || !("brandIds" in p)) return p;
             const raw = Array.isArray(p.brandIds) ? p.brandIds.map((b) => String(b)) : [];
-            return { ...p, brandIds: Array.from(new Set(raw.filter((id) => orgBrandIds.has(id)))) };
+            return { ...p, brandIds: Array.from(new Set(raw)) };
           });
         }
         if (wouldMassBlankPuntiVendita(curCfg.puntiVendita, effectiveConfig.puntiVendita)) {

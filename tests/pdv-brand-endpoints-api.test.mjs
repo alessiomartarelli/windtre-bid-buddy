@@ -13,9 +13,9 @@ import {
 // (Task #522): POST e PUT /api/admin/struttura/pdv devono RIFIUTARE con 400
 // i brandIds non associati all'organizzazione (validateBrandIds in
 // server/routes.ts) senza salvare nulla, e devono deduplicare i brandIds
-// validi al salvataggio. La suite UI pdv-brand-persistence copre solo la
-// normalizzazione del PUT generico /api/organization-config: questo percorso
-// diretto era scoperto.
+// validi al salvataggio. Dal Task #523 anche il PUT generico
+// /api/organization-config rifiuta con 400 i brand estranei (stessa
+// semantica): la suite UI pdv-brand-persistence copre quel percorso.
 //
 // Seed diretto nel dev DB (brands + organization_brands), come nella suite
 // UI. Cleanup completo (org + brand) alla fine.
