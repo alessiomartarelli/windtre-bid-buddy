@@ -278,10 +278,12 @@ test('classifyArticle con indice VF: articolo del listino → canvass con pista 
   const m = classifyArticle({ codice: 'CANOHEWD2208' }, index);
   assert.deepEqual(m, { type: 'canvass', pista: 'mobile' });
   // Un'offerta PISTA IVA del catalogo baked.
-  const ivaOffer = CANVASS_CATALOG.offers.find((o) => o.pista === 'PISTA IVA');
-  assert.ok(ivaOffer);
-  const mIva = classifyArticle({ codice: ivaOffer.codice }, index);
-  assert.deepEqual(mIva, { type: 'canvass', pista: 'iva' });
+  // Task #527 — le offerte PISTA IVA risolvono nella sottopista fine
+  // (IVA VOCE → iva_mobile).
+  const ivaVoceOffer = CANVASS_CATALOG.offers.find((o) => o.pista === 'PISTA IVA' && o.categoria.toUpperCase().includes('IVA VOCE'));
+  assert.ok(ivaVoceOffer);
+  const mIva = classifyArticle({ codice: ivaVoceOffer.codice }, index);
+  assert.deepEqual(mIva, { type: 'canvass', pista: 'iva_mobile' });
   // Match per categoria/tipologia non ambigua, codice sconosciuto.
   const mCat = classifyArticle(
     { codice: 'ZZZ', categoria: { nome: 'OFFERTE VOCE' }, tipologia: { nome: 'OFFERTE VOCE WALLET PAY' } },
@@ -307,7 +309,8 @@ test('classifyArticle con indice: prodotti veri restano prodotti, categorie Wind
 
 test('classifySaleArticles con indice VF: card Canvass e countByPista coerenti', () => {
   const index = buildCanvassIndex(CANVASS_CATALOG.offers);
-  const ivaOffer = CANVASS_CATALOG.offers.find((o) => o.pista === 'PISTA IVA');
+  // Task #527 — offerta IVA VOCE: conta nella sottopista fine iva_mobile.
+  const ivaOffer = CANVASS_CATALOG.offers.find((o) => o.pista === 'PISTA IVA' && o.categoria.toUpperCase().includes('IVA VOCE'));
   const rawData = {
     articoli: [
       { codice: 'CANOHEWD2208', categoria: { nome: 'OFFERTE VOCE' }, tipologia: { nome: 'X' }, descrizione: 'Offerta mobile', dettaglio: { prezzo: '10.00', scontrino: 1 } },
@@ -319,7 +322,7 @@ test('classifySaleArticles con indice VF: card Canvass e countByPista coerenti',
   assert.equal(sc.countByType.canvass, 2);
   assert.equal(sc.countByType.prodotti, 1);
   assert.equal(sc.countByPista.mobile, 1);
-  assert.equal(sc.countByPista.iva, 1);
+  assert.equal(sc.countByPista.iva_mobile, 1);
   assert.equal(sc.hasCanvass, true);
   // Stessa vendita senza indice: tutto ciò che non è in CATEGORY_MAP → prodotti.
   const scNoIdx = classifySaleArticles(rawData);
@@ -453,4 +456,119 @@ test('label piste VF: protecta → Verisure solo per org VF', () => {
   assert.equal(getPistaCanvassLabels(true).protecta, 'Verisure');
   assert.equal(getPistaCanvassLabels(false).protecta, 'Windtre Protetti');
   assert.equal(getPistaCanvassLabels(true).mobile, 'Mobile');
+});
+
+// ===========================================================================
+// Task #527 — sottopiste Vodafone/Fastweb: Luce, Gas, IVA Mobile,
+// IVA Wireline e VAS. Risoluzione FINE dal match listino
+// (pista + categoria + tipologia), fail-closed, e conteggi aggregati
+// senza doppi conteggi in aggregateMappedSales.
+// ===========================================================================
+
+// (classifyArticle è già importato sopra dalla stessa suite.)
+const {
+  pistaFromCanvassMatch,
+  VF_COUNT_ONLY_PISTAS,
+} = await import('../shared/bisuiteClassification.ts');
+const { aggregateMappedSales } = await import('../server/bisuiteMappedSales.ts');
+
+test('pistaFromCanvassMatch: IVA VOCE → iva_mobile', () => {
+  assert.equal(pistaFromCanvassMatch({ pista: 'PISTA IVA', categoria: 'IVA VOCE', tipologia: 'RED START' }), 'iva_mobile');
+});
+
+test('pistaFromCanvassMatch: IVA RETE FISSA → iva_wireline', () => {
+  assert.equal(pistaFromCanvassMatch({ pista: 'PISTA IVA', categoria: 'IVA RETE FISSA', tipologia: 'INTERNET UNLIMITED' }), 'iva_wireline');
+});
+
+test('pistaFromCanvassMatch: Soluzioni Digitali ed Easy Rent → vas', () => {
+  assert.equal(pistaFromCanvassMatch({ pista: 'PISTA IVA', categoria: 'SOLUZIONI - M2M - EASY RENT', tipologia: 'SOLUZIONI DIGITALI' }), 'vas');
+  assert.equal(pistaFromCanvassMatch({ pista: 'PISTA IVA', categoria: 'SOLUZIONI - M2M - EASY RENT', tipologia: 'EASY RENT' }), 'vas');
+});
+
+test('pistaFromCanvassMatch: Energia Fastweb Luce/Gas → luce/gas', () => {
+  assert.equal(pistaFromCanvassMatch({ pista: 'ENERGIA FASTWEB', categoria: 'ENERGIA', tipologia: 'LUCE FASTWEB' }), 'luce');
+  assert.equal(pistaFromCanvassMatch({ pista: 'ENERGIA FASTWEB', categoria: 'ENERGIA', tipologia: 'FASTWEB GAS' }), 'gas');
+});
+
+test('pistaFromCanvassMatch: combinazioni non riconosciute restano generiche (fail-closed)', () => {
+  // IVA con categoria sconosciuta: NON attribuita a una sottopista.
+  assert.equal(pistaFromCanvassMatch({ pista: 'PISTA IVA', categoria: 'ALTRO BUSINESS', tipologia: 'X' }), 'iva');
+  // Energia senza tipologia luce/gas: pista energia generica.
+  assert.equal(pistaFromCanvassMatch({ pista: 'ENERGIA FASTWEB', categoria: 'ENERGIA', tipologia: '' }), 'energia');
+  // Piste non-IVA/energia: invariato.
+  assert.equal(pistaFromCanvassMatch({ pista: 'PISTA MOBILE', categoria: 'CONSUMER', tipologia: 'FAMILY' }), 'mobile');
+});
+
+test('VF_COUNT_ONLY_PISTAS contiene esattamente le 5 sottopiste', () => {
+  assert.deepEqual([...VF_COUNT_ONLY_PISTAS].sort(), ['gas', 'iva_mobile', 'iva_wireline', 'luce', 'vas'].sort());
+});
+
+// --- classifyArticle con indice sintetico --------------------------------
+
+const vfOffers = [
+  { codice: 'CANAAAAA1111', offerId: 'AAAAA', nomeEtichetta: 'IVA Voce Start', pista: 'PISTA IVA', categoria: 'IVA VOCE', tipologia: 'RED START', canone: 10, brand: 'vodafone' },
+  { codice: 'CANBBBBB1111', offerId: 'BBBBB', nomeEtichetta: 'IVA Rete Fissa', pista: 'PISTA IVA', categoria: 'IVA RETE FISSA', tipologia: 'INTERNET', canone: 20, brand: 'vodafone' },
+  { codice: 'CANCCCCC1111', offerId: 'CCCCC', nomeEtichetta: 'Soluzioni Digitali', pista: 'PISTA IVA', categoria: 'SOLUZIONI - M2M - EASY RENT', tipologia: 'SOLUZIONI DIGITALI', canone: 5, brand: 'vodafone' },
+  { codice: 'CANDDDDD1111', offerId: 'DDDDD', nomeEtichetta: 'Luce Fastweb', pista: 'ENERGIA FASTWEB', categoria: 'ENERGIA', tipologia: 'LUCE FASTWEB', canone: 0, brand: 'fastweb' },
+  { codice: 'CANEEEEE1111', offerId: 'EEEEE', nomeEtichetta: 'Gas Fastweb', pista: 'ENERGIA FASTWEB', categoria: 'ENERGIA', tipologia: 'FASTWEB GAS', canone: 0, brand: 'fastweb' },
+];
+const vfIndex = buildCanvassIndex(vfOffers);
+
+const artOf = (codice, categoria = 'CANVASS', tipologia = '') => ({
+  codice,
+  categoria: { nome: categoria },
+  tipologia: { nome: tipologia },
+  descrizione: codice,
+  dettaglio: { canone: '0' },
+});
+
+test('classifyArticle: match listino → sottopista fine', () => {
+  assert.equal(classifyArticle(artOf('CANAAAAA1111'), vfIndex).pista, 'iva_mobile');
+  assert.equal(classifyArticle(artOf('CANBBBBB1111'), vfIndex).pista, 'iva_wireline');
+  assert.equal(classifyArticle(artOf('CANCCCCC1111'), vfIndex).pista, 'vas');
+  assert.equal(classifyArticle(artOf('CANDDDDD1111'), vfIndex).pista, 'luce');
+  assert.equal(classifyArticle(artOf('CANEEEEE1111'), vfIndex).pista, 'gas');
+});
+
+test('classifyArticle: regola KPI per-org vince sulla classificazione automatica', () => {
+  const rules = [{ id: 'r1', enabled: true, conditions: { descrizione: 'CANAAAAA1111' }, target: 'vas' }];
+  const cls = classifyArticle(artOf('CANAAAAA1111'), vfIndex, rules);
+  assert.equal(cls.pista, 'vas');
+});
+
+// --- aggregateMappedSales: conteggi per pista canvass ----------------------
+
+function saleWith(articoli, codicePos = 'POS1') {
+  return {
+    dataVendita: new Date('2026-08-10T10:00:00Z'),
+    totale: '0',
+    codicePos,
+    nomeNegozio: 'Negozio 1',
+    ragioneSociale: 'RS Test',
+    rawData: { articoli, cliente: { clienteTipo: 'PRIVATO' } },
+  };
+}
+
+test('aggregateMappedSales: totaliPistaCanvass solo con canvassIndex', () => {
+  const sales = [saleWith([artOf('CANAAAAA1111'), artOf('CANDDDDD1111')])];
+  const senza = aggregateMappedSales(sales, []);
+  assert.equal(senza.totaliPistaCanvass, undefined);
+  const con = aggregateMappedSales(sales, [], { canvassIndex: vfIndex });
+  assert.deepEqual(con.totaliPistaCanvass, { iva_mobile: 1, luce: 1 });
+});
+
+test('aggregateMappedSales: ogni articolo conta in al più UNA pista (no doppi conteggi)', () => {
+  const sales = [
+    saleWith([artOf('CANDDDDD1111'), artOf('CANEEEEE1111'), artOf('CANEEEEE1111')]),
+    saleWith([artOf('CANBBBBB1111'), artOf('CANCCCCC1111')], 'POS2'),
+  ];
+  const agg = aggregateMappedSales(sales, [], { canvassIndex: vfIndex });
+  assert.deepEqual(agg.totaliPistaCanvass, { luce: 1, gas: 2, iva_wireline: 1, vas: 1 });
+  const totale = Object.values(agg.totaliPistaCanvass).reduce((s, n) => s + n, 0);
+  assert.equal(totale, 5); // = numero articoli canvass classificati
+  // Per-PDV: i bucket rispettano il PDV di origine.
+  const pos1 = agg.pdvList.find((p) => p.codicePos === 'POS1');
+  const pos2 = agg.pdvList.find((p) => p.codicePos === 'POS2');
+  assert.deepEqual(pos1.countByPistaCanvass, { luce: 1, gas: 2 });
+  assert.deepEqual(pos2.countByPistaCanvass, { iva_wireline: 1, vas: 1 });
 });

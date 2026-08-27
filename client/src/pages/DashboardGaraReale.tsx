@@ -1,7 +1,8 @@
 import { useState, useMemo, Fragment, useCallback, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
-import { isModuleAllowedForBrands } from "@shared/modules";
+import { isModuleAllowedForBrands, garaModelsForBrands } from "@shared/modules";
+import { PISTA_CANVASS_LABELS_VF, VF_COUNT_ONLY_PISTAS } from "@shared/bisuiteClassification";
 import { normalizeRsName } from "@shared/ragioneSociale";
 import { neutralizzaLivelliEnergia, neutralizzaLivelliAssicurazioni } from "@shared/soglieRimovibili";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
@@ -350,6 +351,11 @@ interface MappedSalesResponse {
   pdvView?: "origine" | "destinazione";
   /** Task #462 — n. vendite senza PDV destinazione (solo vista destinazione). */
   salesSenzaDestinazione?: number;
+  /** Task #527 — true se l'org ha brand Vodafone/Fastweb (listino canvass). */
+  hasCanvassBrand?: boolean;
+  /** Task #527 — totale pezzi per pista canvass VF (luce, gas, iva_mobile,
+   *  iva_wireline, vas, …); null/assente per org senza brand VF. */
+  totaliPistaCanvass?: Partial<Record<string, number>> | null;
 }
 
 interface OrgConfigPdv {
@@ -3236,6 +3242,10 @@ export default function DashboardGaraReale() {
     organizationBrands?.map((b) => b.name) ?? null,
     "gara_dashboard",
   );
+  // Task #527 — modelli gara per brand: org senza brand = solo WindTre
+  // (invariato); brand WindTre = modello WindTre; brand Vodafone/Fastweb =
+  // sezione piste VF a pezzi; multi-brand = entrambi, separati.
+  const garaModels = garaModelsForBrands(organizationBrands?.map((b) => b.name) ?? null);
   const now = new Date();
   const [selectedPeriod, setSelectedPeriod] = useState(`${now.getFullYear()}-${now.getMonth() + 1}`);
   const [expandedPistaCategories, setExpandedPistaCategories] = useState<Set<string>>(new Set());
@@ -4984,8 +4994,16 @@ export default function DashboardGaraReale() {
       });
     }
 
+    // Task #527 — org SENZA brand WindTre (solo Vodafone/Fastweb): le piste
+    // WindTre-only (Energia, Assicurazioni, Windtre Protetti) non fanno parte
+    // del modello gara VF e spariscono da card, tabelle, ticker ed export.
+    if (!garaModels.windtre) {
+      const windtreOnly = new Set(['energia', 'assicurazioni', 'protecta']);
+      return stats.filter((s) => !windtreOnly.has(s.pista));
+    }
+
     return stats;
-  }, [mappedData, workdayInfo, garaCalcConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear, orgSystemTcDefaults]);
+  }, [mappedData, workdayInfo, garaCalcConfig, puntiVenditaFromGara, garaConfigMissing, selMonth, selYear, orgSystemTcDefaults, garaModels.windtre]);
 
   // Task #289: "coupon caring" offers are excluded from CB totals; they are
   // shown separately here (pezzi only, no premio/points) broken down per PDV
@@ -5640,6 +5658,37 @@ export default function DashboardGaraReale() {
 
             {/* Task #424 — ticker verticale stile vetrina W3 */}
             <PistaTicker stats={pistaStats} aggregateByRs={pdvFilter === "all"} />
+
+            {/* Task #527 — piste Vodafone/Fastweb: solo conteggio pezzi
+                (nessun premio/obiettivo in questa fase). Visibile solo per
+                org con brand VF; nelle org multi-brand convive col modello
+                WindTre in una sezione separata. */}
+            {garaModels.vf && mappedData?.hasCanvassBrand && (
+              <Card data-testid="card-piste-vf">
+                <CardContent className="py-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <BarChart3 className="h-4 w-4 text-indigo-500" />
+                    <span className="font-semibold text-sm">Piste Vodafone/Fastweb — pezzi</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {VF_COUNT_ONLY_PISTAS.map((p) => (
+                      <div
+                        key={p}
+                        className="rounded-lg border p-3 text-center"
+                        data-testid={`vf-pista-${p}`}
+                      >
+                        <div className="text-2xl font-bold" data-testid={`vf-pista-${p}-pezzi`}>
+                          {mappedData?.totaliPistaCanvass?.[p] ?? 0}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                          {PISTA_CANVASS_LABELS_VF[p]}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {premioPerRS.length > 0 && (
               <PremioPerRsPdfExport premioPerRS={premioPerRS} orgId={orgId} mese={selMonth} anno={selYear} />

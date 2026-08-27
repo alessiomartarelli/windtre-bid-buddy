@@ -353,6 +353,10 @@ export async function sendDailyReportForOrg(params: {
   // (niente Protetti/Verisure) — meglio nascondere una sezione a un'org
   // WindTre per un errore transitorio che mostrarla per errore a Vodafone.
   let reportContent;
+  // Task #527 — true quando il report è del modello Vodafone/Fastweb
+  // (brand non-WindTre, o org legacy con brand VF): pilota la
+  // classificazione col listino canvass qui sotto.
+  let isVfReport: boolean;
   if (brand) {
     // Report per brand (Task #519): config mensile per-brand (fallback alla
     // config root legacy) + gating sul brand del report: solo un brand
@@ -361,18 +365,30 @@ export async function sendDailyReportForOrg(params: {
       parseTelegramReportContentForBrand(garaCfgObj?.telegramReportContent, brand.brandId),
       brand.kind,
     );
+    isVfReport = brand.kind !== "windtre";
   } else {
-    let isVfOrg = true;
+    // Report legacy unico (nessun PDV brandizzato). Il modello VF completo
+    // (rimozione assicurazioni + energia→luce/gas + classificazione canvass)
+    // si applica SOLO se l'org è VF pura: in un'org mista WindTre+VF il
+    // report combinato resta col modello WindTre invariato — si applica
+    // soltanto il fail-closed Protetti (Task #515). In caso di errore di
+    // lettura brand si assume org mista (protecta-only), mai il remap VF.
+    let hasVf = true;
+    let hasW3 = true;
     try {
       const orgBrands = await storage.getOrganizationBrands(params.orgId);
-      isVfOrg = orgBrands.some((b) => /vodafone|fastweb/i.test(b.name));
+      hasVf = orgBrands.some((b) => /vodafone|fastweb/i.test(b.name));
+      hasW3 = orgBrands.some((b) => /windtre|wind3|wind 3|w3/i.test(b.name));
     } catch (e) {
       console.warn(`[telegram-report] lettura brand org=${params.orgId} fallita (gating VF fail-closed):`, e);
     }
+    const vfOnly = hasVf && !hasW3;
     reportContent = applyBrandGating(
       parseTelegramReportContent(garaCfgObj?.telegramReportContent),
-      isVfOrg,
+      hasVf,
+      { protectaOnly: hasVf && hasW3 },
     );
+    isVfReport = vfOnly;
   }
   // Accessori e Servizi al netto dell'IVA (Task #335): applicato subito
   // dopo l'aggregazione così messaggio, HTML, proiezione e top-KPI sono
@@ -380,20 +396,46 @@ export async function sendDailyReportForOrg(params: {
   // Le piste NON visibili in telegramReportContent spariscono da tutti gli
   // aggregati del report (mix, per pista, drill-down, trend, storico, mese).
   const visiblePiste = reportContent.pisteVisibili;
+  // Task #527 — report di un brand Vodafone/Fastweb: gli articoli vanno
+  // classificati col listino canvass (+ regole KPI per-org) così le piste
+  // fini (luce, gas, iva_mobile, iva_wireline, vas) hanno conteggi reali.
+  // Best-effort: se il listino non si carica, il report resta come prima
+  // (classificazione WindTre) invece di saltare l'invio.
+  let canvassIndex: import("../shared/canvassMapping").CanvassIndex | null = null;
+  let canvassKpiRules: import("../shared/canvassKpiRules").CanvassKpiRule[] | null = null;
+  if (isVfReport) {
+    try {
+      const { CANVASS_CATALOG } = await import("../shared/canvassCatalog");
+      const { buildCanvassIndex } = await import("../shared/canvassMapping");
+      const { sanitizeCanvassKpiRules } = await import("../shared/canvassKpiRules");
+      const sys = await storage.getSystemConfig("canvass_reference");
+      const saved = sys?.config as { offers?: unknown[] } | null | undefined;
+      const offers = (saved && Array.isArray(saved.offers) && saved.offers.length > 0)
+        ? (saved.offers as typeof CANVASS_CATALOG.offers)
+        : CANVASS_CATALOG.offers;
+      canvassIndex = buildCanvassIndex(offers);
+      const orgCfg = await storage.getOrgConfig(params.orgId);
+      canvassKpiRules = sanitizeCanvassKpiRules(
+        (orgCfg?.config as Record<string, unknown> | null)?.canvassKpiRules,
+      );
+    } catch (e) {
+      console.warn(`[telegram-report] listino canvass non caricato org=${params.orgId} (classificazione legacy):`, e);
+    }
+  }
   const aggregates = applyNettoIvaAccessoriServizi(
-    aggregateDailyReport(todayRows, weights, visiblePiste),
+    aggregateDailyReport(todayRows, weights, visiblePiste, canvassIndex, canvassKpiRules),
   );
-  const trend = buildDailyTrend(trendRows, trendFromYmd, ymd, visiblePiste);
+  const trend = buildDailyTrend(trendRows, trendFromYmd, ymd, visiblePiste, canvassIndex, canvassKpiRules);
   // Anche le pagine storiche per-giorno dell'HTML vanno al netto IVA
   // (accessori/servizi), coerenti con oggi e Totale mese.
-  const history = buildDailyHistory(trendRows, trendFromYmd, ymd, visiblePiste).map((h) => ({
+  const history = buildDailyHistory(trendRows, trendFromYmd, ymd, visiblePiste, canvassIndex, canvassKpiRules).map((h) => ({
     ...h,
     aggregates: applyNettoIvaAccessoriServizi(h.aggregates),
   }));
   // Le righe sono già senza ANNULLATA (includeAnnullate=false in query).
   const month = {
     label: monthLabelOf(ymd),
-    aggregates: applyNettoIvaAccessoriServizi(aggregateDailyReport(monthRows, weights, visiblePiste)),
+    aggregates: applyNettoIvaAccessoriServizi(aggregateDailyReport(monthRows, weights, visiblePiste, canvassIndex, canvassKpiRules)),
   };
   // Riduzione del picco di memoria (Task #332): gli array derivati non
   // servono più (gli aggregati sono già calcolati); azzeriamo i riferimenti

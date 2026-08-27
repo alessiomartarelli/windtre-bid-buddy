@@ -1970,6 +1970,22 @@ await test("gating VF: protecta rimossa da visibilità e gruppi anche se salvata
   assert.ok(w.pisteVisibili.includes("protecta")); // WindTre: resta se abilitata
 });
 
+await test("gating VF protectaOnly (org mista legacy): WindTre invariato, solo Protetti rimosso", () => {
+  const c = applyBrandGating(
+    parseTelegramReportContent({ pisteVisibili: ["mobile", "fisso", "cb", "assicurazioni", "protecta", "energia"], newCorePiste: ["protecta", "assicurazioni", "energia"] }),
+    true,
+    { protectaOnly: true },
+  );
+  assert.ok(!c.pisteVisibili.includes("protecta"), "Protetti rimosso (fail-closed)");
+  assert.ok(!c.newCorePiste.includes("protecta"));
+  // Il modello WindTre NON viene rimappato: energia e assicurazioni restano,
+  // le piste VF non compaiono.
+  assert.ok(c.pisteVisibili.includes("energia"));
+  assert.ok(c.pisteVisibili.includes("assicurazioni"));
+  assert.deepEqual(c.newCorePiste, ["assicurazioni", "energia"]);
+  assert.ok(!c.pisteVisibili.includes("luce") && !c.pisteVisibili.includes("gas"));
+});
+
 // ── Report separati per brand (Task #519) ────────────────────────────
 console.log("\n— report per brand (Task #519) —");
 
@@ -2095,7 +2111,10 @@ await test("HTML: pista esclusa sparisce da card piste, proiezioni e drill; Prot
   });
   assert.ok(!html.includes("Protetti"));
   assert.ok(!html.includes("Verisure"));
-  assert.ok(html.includes("Energia")); // pista visibile resta
+  // Task #527 — nel modello VF la vecchia "energia" è rimappata su
+  // Luce+Gas: la card Energia legacy sparisce dal report VF.
+  assert.ok(!content.pisteVisibili.includes("energia"));
+  assert.ok(content.pisteVisibili.includes("luce") && content.pisteVisibili.includes("gas"));
   // Senza content ⇒ default legacy: Protetti presente.
   const htmlDefault = buildVenditeReportHtml({ orgName: "Org W3", dateYMD: "2026-07-15", timeLabel: "22:30", aggregates: a });
   assert.ok(htmlDefault.includes("WindTre Protetti"));
@@ -2371,6 +2390,71 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       assert.equal(sends.length, 1);
       assert.equal(sends[0].brandKey, "");
       assert.equal(telegramCalls.length, 2);
+    });
+
+    await test("org mista W3+VF senza PDV brandizzati ⇒ report legacy col modello WindTre intatto (no remap VF)", async () => {
+      // Stato di migrazione realistico: brand associati ma nessun PDV
+      // ancora brandizzato ⇒ un solo report combinato. Il modello WindTre
+      // deve restare invariato (Energia e Assicurazioni presenti, niente
+      // Luce/Gas); si applica solo il fail-closed Protetti.
+      const oggi = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+      const sale = (id, categoria) => ({
+        bisuiteId: `s-mix-${id}`,
+        codicePos: "P100",
+        nomeNegozio: "Neg P100",
+        nomeAddetto: "Anna",
+        stato: "OK",
+        dataVendita: oggi,
+        totale: "30",
+        rawData: { articoli: [{ categoria, importo: 30, quantita: 1 }] },
+      });
+      setupScenario({
+        orgs: [{
+          id: "org-mix",
+          name: "Org Mista",
+          brands: [{ id: "b-w3", name: "WindTre" }, { id: "b-vf", name: "Vodafone" }],
+          puntiVendita: [{ codicePos: "P100", nome: "Neg P100" }], // nessun brandIds
+        }],
+        sales: [sale(1, "ENERGIA W3"), sale(2, "ASSICURAZIONI")],
+      });
+      await runScheduledSend("13:30");
+      const sends = sendsFor("org-mix");
+      assert.equal(sends.length, 1, "un solo report legacy");
+      assert.equal(sends[0].brandKey, "");
+      assert.equal(telegramDocs.length, 1);
+      const h = await telegramDocs[0].get("document").text();
+      assert.ok(h.includes("Energia"), "pista Energia WindTre presente nell'HTML");
+      assert.ok(h.includes("Assicurazioni"), "pista Assicurazioni presente nell'HTML");
+      assert.ok(!h.includes("Luce") && !h.includes("IVA Mobile"), "nessuna pista VF nel report legacy misto");
+    });
+
+    await test("org VF pura senza PDV brandizzati ⇒ modello VF (energia→Luce/Gas, no Assicurazioni)", async () => {
+      const oggi = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+      setupScenario({
+        orgs: [{
+          id: "org-vf",
+          name: "Org VF",
+          brands: [{ id: "b-vf", name: "Vodafone" }, { id: "b-fw", name: "Fastweb" }],
+          puntiVendita: [{ codicePos: "P200", nome: "Neg P200" }],
+        }],
+        sales: [{
+          bisuiteId: "s-vf-1",
+          codicePos: "P200",
+          nomeNegozio: "Neg P200",
+          nomeAddetto: "Anna",
+          stato: "OK",
+          dataVendita: oggi,
+          totale: "30",
+          rawData: { articoli: [{ categoria: "UNTIED", importo: 30, quantita: 1 }] },
+        }],
+      });
+      await runScheduledSend("13:30");
+      const sends = sendsFor("org-vf");
+      assert.equal(sends.length, 1);
+      assert.equal(telegramDocs.length, 1);
+      const h = await telegramDocs[0].get("document").text();
+      assert.ok(!h.includes("Assicurazioni"), "Assicurazioni esclusa dal modello VF");
+      assert.ok(!h.includes("Protetti"), "Protetti escluso dal modello VF");
     });
 
     await test("recovery al boot con orari cambiati rispetto agli invii registrati ⇒ nessun duplicato", async () => {

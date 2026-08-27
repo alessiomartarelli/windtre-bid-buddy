@@ -55,6 +55,27 @@ export function isWindtreBrandName(name: string): boolean {
   return norm.includes("windtre") || norm.includes("wind3") || norm === "w3" || norm.startsWith("w3");
 }
 
+// Riconosce i brand Vodafone/Fastweb (listino canvass VF).
+export function isVfBrandName(name: string): boolean {
+  return /vodafone|fastweb/i.test(name);
+}
+
+// === Modelli gara per brand (Task #527) ===
+// Determina quali modelli gara mostrare in Configurazione/Dashboard Gara:
+// - org senza brand associati => solo modello WindTre legacy (invariato);
+// - org con brand => modello WindTre se c'è un brand WindTre, modello
+//   Vodafone/Fastweb (piste a pezzi) se c'è un brand VF; multi-brand = entrambi.
+export function garaModelsForBrands(
+  brandNames: string[] | null | undefined,
+): { windtre: boolean; vf: boolean } {
+  if (!brandNames || brandNames.length === 0) return { windtre: true, vf: false };
+  const windtre = brandNames.some(isWindtreBrandName);
+  const vf = brandNames.some(isVfBrandName);
+  // Fail-safe: brand presenti ma nessuno riconosciuto => modello legacy.
+  if (!windtre && !vf) return { windtre: true, vf: false };
+  return { windtre, vf };
+}
+
 // True se il modulo è consentito dai brand associati all'org.
 // - modulo non brand-gated => sempre true
 // - org senza brand associati (array vuoto/null) => true (fallback: nessun filtro)

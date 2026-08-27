@@ -4099,6 +4099,24 @@ export async function registerRoutes(
         : "none";
       const rulesUpdatedAt = `${savedAt}|${getDefaultRulesHash()}`;
 
+      // Task #527 — org con brand Vodafone/Fastweb: passa il listino canvass
+      // + regole KPI all'aggregazione per i conteggi per pista VF (luce, gas,
+      // iva_mobile, iva_wireline, vas). Org WindTre/senza brand VF: invariato.
+      const orgBrandsMapped = await storage.getOrganizationBrands(orgId);
+      const hasCanvassBrand = orgBrandsMapped.some((b) => /vodafone|fastweb/i.test(b.name));
+      let canvassIndex = null as import("../shared/canvassMapping").CanvassIndex | null;
+      let canvassKpiRules = null as import("../shared/canvassKpiRules").CanvassKpiRule[] | null;
+      if (hasCanvassBrand) {
+        const { buildCanvassIndex } = await import("../shared/canvassMapping");
+        const { sanitizeCanvassKpiRules } = await import("../shared/canvassKpiRules");
+        const { reference } = await resolveCanvassReference();
+        canvassIndex = buildCanvassIndex(reference.offers);
+        const orgCfgMapped = await storage.getOrgConfig(orgId);
+        canvassKpiRules = sanitizeCanvassKpiRules(
+          (orgCfgMapped?.config as Record<string, unknown> | null)?.canvassKpiRules,
+        );
+      }
+
       const { aggregateMappedSales } = await import("./bisuiteMappedSales");
       const {
         pdvList,
@@ -4111,7 +4129,8 @@ export async function registerRoutes(
         latestSaleDate,
         daily,
         salesSenzaDestinazione,
-      } = aggregateMappedSales(sales, rules, { pdvView, pdvDirectory });
+        totaliPistaCanvass,
+      } = aggregateMappedSales(sales, rules, { pdvView, pdvDirectory, canvassIndex, canvassKpiRules });
 
       res.json({
         month,
@@ -4124,6 +4143,10 @@ export async function registerRoutes(
         pdvList,
         totaliPerPista,
         totaliAddonsPerPista,
+        // Task #527 — conteggi pezzi per pista canvass VF (solo org con
+        // brand Vodafone/Fastweb; assente per org WindTre/senza brand VF).
+        hasCanvassBrand,
+        totaliPistaCanvass: totaliPistaCanvass ?? null,
         latestSaleDate: latestSaleDate ? latestSaleDate.toISOString() : null,
         inGaraOnly,
         totalSalesUnfiltered,

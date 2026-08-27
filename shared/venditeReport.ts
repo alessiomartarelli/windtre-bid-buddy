@@ -8,8 +8,10 @@ import {
   PISTA_CANVASS_LABELS,
   TYPE_LABELS,
   type ArticleType,
+  type CanvassIndex,
   type PistaCanvass,
 } from "./bisuiteClassification";
+import type { CanvassKpiRule } from "./canvassKpiRules";
 import { buildCalendar, italianHolidays } from "./incentivazione";
 import {
   buildDirettoreCommento,
@@ -272,6 +274,11 @@ export function aggregateDailyReport(
   rows: VenditaReportRow[],
   weights: PerformanceWeightsConfig = DEFAULT_PERFORMANCE_WEIGHTS,
   visiblePiste?: readonly PistaCanvass[],
+  // Task #527 — org con listino canvass VF: classificazione fine
+  // (luce/gas, iva_mobile/iva_wireline/vas) invece della sola mappa
+  // categorie WindTre. Senza indice: comportamento storico invariato.
+  canvassIndex?: CanvassIndex | null,
+  canvassKpiRules?: CanvassKpiRule[] | null,
 ): DailyReportAggregates {
   // Filtro piste del report Telegram (Task #515): gli articoli canvass delle
   // piste NON visibili sono esclusi da mix, conteggi per pista, drill-down e
@@ -327,7 +334,7 @@ export function aggregateDailyReport(
     let addAcc = addettoDrill.get(addettoKey);
     if (!addAcc) { addAcc = newDrillAcc(); addettoDrill.set(addettoKey, addAcc); }
 
-    const sc = classifySaleArticles(row.rawData);
+    const sc = classifySaleArticles(row.rawData, canvassIndex, canvassKpiRules);
     const custKind = saleCustomerKind(row.rawData);
     for (const t of Object.keys(sc.countByType) as ArticleType[]) {
       let c = sc.countByType[t];
@@ -622,6 +629,8 @@ export function buildDailyTrend(
   fromYMD: string,
   toYMD: string,
   visiblePiste?: readonly PistaCanvass[],
+  canvassIndex?: CanvassIndex | null,
+  canvassKpiRules?: CanvassKpiRule[] | null,
 ): TrendDay[] {
   const re = /^\d{4}-\d{2}-\d{2}$/;
   if (!re.test(fromYMD.trim()) || !re.test(toYMD.trim()) || fromYMD > toYMD) return [];
@@ -639,7 +648,7 @@ export function buildDailyTrend(
     if (!day) continue;
     day.vendite++;
     day.importo += parseTotale(row.totale);
-    const sc = classifySaleArticles(row.rawData);
+    const sc = classifySaleArticles(row.rawData, canvassIndex, canvassKpiRules);
     for (const [pista, count] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
       if (visiblePiste && !visiblePiste.includes(pista)) continue;
       day.countByPista[pista] = (day.countByPista[pista] ?? 0) + count;
@@ -680,6 +689,8 @@ export function buildDailyHistory(
   fromYMD: string,
   toYMD: string,
   visiblePiste?: readonly PistaCanvass[],
+  canvassIndex?: CanvassIndex | null,
+  canvassKpiRules?: CanvassKpiRule[] | null,
 ): DayHistoryEntry[] {
   const re = /^\d{4}-\d{2}-\d{2}$/;
   if (!re.test(fromYMD.trim()) || !re.test(toYMD.trim()) || fromYMD > toYMD) return [];
@@ -695,7 +706,7 @@ export function buildDailyHistory(
   }
   return Array.from(byDay.entries()).map(([ymd, dayRows]) => ({
     ymd,
-    aggregates: aggregateDailyReport(dayRows, undefined, visiblePiste),
+    aggregates: aggregateDailyReport(dayRows, undefined, visiblePiste, canvassIndex, canvassKpiRules),
   }));
 }
 
@@ -824,6 +835,14 @@ export const PERFORMANCE_WEIGHTS: Record<PistaCanvass, number> = {
   // Pista P.IVA del canvass VF (Task #317): usata solo dalla pagina Vendite
   // BiSuite; il report Telegram resta WindTre-only, peso allineato al mobile.
   iva: 1,
+  // Piste Vodafone/Fastweb (Task #527) — per ora solo conteggio pezzi;
+  // pesi allineati alle piste analoghe WindTre (energia/iva) in attesa di
+  // obiettivi/premi dedicati.
+  luce: 2,
+  gas: 2,
+  iva_mobile: 1,
+  iva_wireline: 1,
+  vas: 1,
 };
 
 /** Punti per ogni telefono venduto (categoria TELEFONIA), valore flat. */
@@ -1287,6 +1306,13 @@ export const REPORT_PISTA_ORDER: PistaCanvass[] = [
   "assicurazioni",
   "protecta",
   "energia",
+  // Piste Vodafone/Fastweb (Task #527) — rese visibili solo dal gating
+  // brand/config: nei report WindTre legacy restano a 0 e non compaiono.
+  "luce",
+  "gas",
+  "iva_mobile",
+  "iva_wireline",
+  "vas",
 ];
 
 export const REPORT_TYPE_ORDER: ArticleType[] = ["canvass", "prodotti", "servizi"];

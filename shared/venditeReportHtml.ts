@@ -55,6 +55,12 @@ const PISTA_THEME: Record<PistaCanvass, string> = {
   assicurazioni: "#2dd4bf",
   protecta: "#f87171",
   energia: "#4ade80",
+  // Piste Vodafone/Fastweb (Task #527).
+  luce: "#facc15",
+  gas: "#fb923c",
+  iva_mobile: "#93c5fd",
+  iva_wireline: "#c4b5fd",
+  vas: "#5eead4",
 };
 
 const TYPE_THEME: Record<ArticleType, string> = {

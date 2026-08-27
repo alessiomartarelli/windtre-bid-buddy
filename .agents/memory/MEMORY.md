@@ -57,4 +57,5 @@
 - [Preventivatore per_rs removal tests](preventivatore-rs-removal-tests.md) — seed volumi a premio deterministico (TIED/MIGRAZIONI); un effect ri-sincronizza i target Partnership dai default cluster, superali.
 - [Energia per-RS target/premi](energia-rs-target-semantics.md) — configPerRS: target soglia AGGREGATI (già × PDV), premi per-PDV da × pdvInGara; solo il fallback globale usa target × numPdv e premio flat.
 - [Report Telegram per brand](telegram-per-brand-reports.md) — filtro POS pre-aggregati, DTS fail-closed per idVendita, brandIds da preservare in hydrate client e PUT generico, dedup per brand_key.
+- [Piste canvass VF](vf-piste-taxonomy.md) — nuova pista = anche REPORT_PISTA_ORDER (non esaustivo: se manca non renderizza MAI); default Telegram resta lista WindTre; VF gating energia→luce+gas.
 - [Provenienza punti per RS](dashboard-provenance-rs.md) — con “Tutti i PDV” aggrega per RS; totale e componenti mostrano entrambi pezzi+punti, senza elenco negozi.

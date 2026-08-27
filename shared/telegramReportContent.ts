@@ -27,6 +27,34 @@ export const TELEGRAM_REPORT_PISTE: readonly PistaCanvass[] = [
   "assicurazioni",
   "protecta",
   "energia",
+  // Piste Vodafone/Fastweb (Task #527) — conteggi a pezzi, senza premi.
+  "luce",
+  "gas",
+  "iva_mobile",
+  "iva_wireline",
+  "vas",
+] as const;
+
+/** Piste selezionabili nel report per un brand WindTre (modello storico). */
+export const TELEGRAM_REPORT_PISTE_WINDTRE: readonly PistaCanvass[] = [
+  "mobile",
+  "fisso",
+  "cb",
+  "assicurazioni",
+  "protecta",
+  "energia",
+] as const;
+
+/** Piste selezionabili per un brand Vodafone/Fastweb (Task #527). */
+export const TELEGRAM_REPORT_PISTE_VF: readonly PistaCanvass[] = [
+  "mobile",
+  "fisso",
+  "cb",
+  "luce",
+  "gas",
+  "iva_mobile",
+  "iva_wireline",
+  "vas",
 ] as const;
 
 export interface TelegramReportContentConfig {
@@ -59,7 +87,11 @@ export function telegramBrandKindOf(brandName: string | null | undefined): Teleg
  * assicurazioni+energia).
  */
 export const DEFAULT_TELEGRAM_REPORT_CONTENT: TelegramReportContentConfig = {
-  pisteVisibili: [...TELEGRAM_REPORT_PISTE],
+  // Task #527 — il default resta la lista WindTre storica: i report legacy
+  // (org senza brand / config assenti) devono restare byte-compatibili.
+  // Le piste VF entrano via selezione esplicita o via gating brand VF
+  // (energia ⇒ luce+gas).
+  pisteVisibili: [...TELEGRAM_REPORT_PISTE_WINDTRE],
   telcoPiste: ["mobile", "fisso"],
   newCorePiste: ["assicurazioni", "energia"],
 };
@@ -203,13 +235,40 @@ export function unassignedPosCodes(puntiVendita: unknown): string[] {
 export function applyBrandGating(
   cfg: TelegramReportContentConfig,
   isVfOrg: boolean,
+  opts?: { protectaOnly?: boolean },
 ): TelegramReportContentConfig {
   if (!isVfOrg) return cfg;
-  const drop = (list: PistaCanvass[]) => list.filter((p) => p !== "protecta");
+  if (opts?.protectaOnly) {
+    // Org mista WindTre+VF senza PDV brandizzati (report legacy unico):
+    // il modello WindTre resta INVARIATO (energia/assicurazioni al loro
+    // posto); si applica solo il fail-closed Protetti/Verisure (Task #515).
+    const strip = (list: PistaCanvass[]) => list.filter((p) => p !== "protecta");
+    return {
+      pisteVisibili: strip(cfg.pisteVisibili),
+      telcoPiste: strip(cfg.telcoPiste),
+      newCorePiste: strip(cfg.newCorePiste),
+    };
+  }
+  // Task #527 — il modello VF non contiene le piste WindTre-only:
+  // protecta e assicurazioni vengono rimosse; la vecchia "energia" viene
+  // rimappata sulle due piste VF Luce+Gas (i pezzi VF vivono lì).
+  const remap = (list: PistaCanvass[]): PistaCanvass[] => {
+    const out: PistaCanvass[] = [];
+    for (const p of list) {
+      if (p === "protecta" || p === "assicurazioni") continue;
+      if (p === "energia") {
+        if (!out.includes("luce")) out.push("luce");
+        if (!out.includes("gas")) out.push("gas");
+        continue;
+      }
+      if (!out.includes(p)) out.push(p);
+    }
+    return out;
+  };
   return {
-    pisteVisibili: drop(cfg.pisteVisibili),
-    telcoPiste: drop(cfg.telcoPiste),
-    newCorePiste: drop(cfg.newCorePiste),
+    pisteVisibili: remap(cfg.pisteVisibili),
+    telcoPiste: remap(cfg.telcoPiste),
+    newCorePiste: remap(cfg.newCorePiste),
   };
 }
 

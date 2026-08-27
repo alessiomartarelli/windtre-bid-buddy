@@ -23,6 +23,12 @@ export const CANVASS_KPI_TARGETS: CanvassKpiTarget[] = [
   'assicurazioni',
   'protecta',
   'energia',
+  // Piste Vodafone/Fastweb (Task #527).
+  'luce',
+  'gas',
+  'iva_mobile',
+  'iva_wireline',
+  'vas',
   'escludi',
 ];
 

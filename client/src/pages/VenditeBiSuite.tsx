@@ -83,6 +83,8 @@ import {
   Filter as FilterIcon,
   Layers,
   Route,
+  Flame,
+  Briefcase,
 } from "lucide-react";
 import { FilterBar, FilterField } from "@/components/ui/filter-bar";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
@@ -175,6 +177,12 @@ const PISTA_ICONS: Record<PistaCanvass, React.ReactNode> = {
   assicurazioni: <Shield className="h-3.5 w-3.5" />,
   protecta: <Lock className="h-3.5 w-3.5" />,
   energia: <Zap className="h-3.5 w-3.5" />,
+  // Piste Vodafone/Fastweb (Task #527).
+  luce: <Zap className="h-3.5 w-3.5" />,
+  gas: <Flame className="h-3.5 w-3.5" />,
+  iva_mobile: <Smartphone className="h-3.5 w-3.5" />,
+  iva_wireline: <Wifi className="h-3.5 w-3.5" />,
+  vas: <Briefcase className="h-3.5 w-3.5" />,
 };
 
 const INCASSO_ICON_MAP: Record<string, React.ReactNode> = {

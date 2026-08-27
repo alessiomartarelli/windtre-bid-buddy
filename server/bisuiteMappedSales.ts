@@ -1,6 +1,14 @@
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { mapBiSuiteArticle } from "../shared/bisuiteMapping";
-import { classifyCategory, isCouponCaring, isPezzoIva } from "../shared/bisuiteClassification";
+import {
+  classifyArticle,
+  classifyCategory,
+  isCouponCaring,
+  isPezzoIva,
+  type PistaCanvass,
+} from "../shared/bisuiteClassification";
+import type { CanvassIndex } from "../shared/canvassMapping";
+import type { CanvassKpiRule } from "../shared/canvassKpiRules";
 import { trendYmdOf } from "../shared/venditeReport";
 import {
   resolveSalePdvForView,
@@ -62,6 +70,10 @@ export type PdvAggregate = {
   cbCambiPiano: number;
   /** Task #392 — telefoni venduti (articoli categoria TELEFONIA). */
   telefoni: number;
+  /** Task #527 — pezzi per pista canvass VF (luce, gas, iva_mobile,
+   * iva_wireline, vas, …) via listino canvass + regole KPI. Presente solo
+   * quando l'aggregazione riceve un canvassIndex (org con brand VF). */
+  countByPistaCanvass?: Partial<Record<PistaCanvass, number>>;
   unmapped: number;
   totalArticoli: number;
 };
@@ -88,6 +100,8 @@ export type MappedSalesAggregation = {
   /** Task #462 — n. vendite senza PDV destinazione (solo vista destinazione;
    *  finiscono nel bucket esplicito SENZA_DESTINAZIONE, mai su altri PDV). */
   salesSenzaDestinazione: number;
+  /** Task #527 — totale pezzi per pista canvass VF (solo org con listino). */
+  totaliPistaCanvass?: Partial<Record<PistaCanvass, number>>;
 };
 
 // Forma minima di una riga bisuite_sales necessaria all'aggregazione.
@@ -146,8 +160,17 @@ const newDeviceTally = (): DeviceTally => ({
 export function aggregateMappedSales(
   sales: MappableSale[],
   rules: BiSuiteMappingRule[],
-  opts?: { pdvView?: PdvView; pdvDirectory?: PdvViewDirectory },
+  opts?: {
+    pdvView?: PdvView;
+    pdvDirectory?: PdvViewDirectory;
+    /** Task #527 — listino canvass VF + regole KPI per i conteggi per pista. */
+    canvassIndex?: CanvassIndex | null;
+    canvassKpiRules?: CanvassKpiRule[] | null;
+  },
 ): MappedSalesAggregation {
+  const canvassIndex = opts?.canvassIndex ?? null;
+  const canvassKpiRules = opts?.canvassKpiRules ?? null;
+  const totaliPistaCanvass: Partial<Record<PistaCanvass, number>> = {};
   // Task #462 — vista PDV: 'origine' (default, comportamento invariato:
   // campi legacy della vendita) oppure 'destinazione' (attribuzione al PDV
   // di destinazione da rawData.attivitaDestinazione, con bucket esplicito
@@ -291,6 +314,18 @@ export function aggregateMappedSales(
         if (clsPista === 'cb') {
           byPdv[codicePos].cbCambiPiano += 1;
         }
+        // Task #527 — conteggio pezzi per pista canvass VF (listino + regole
+        // KPI): SOLO quando l'org ha il listino canvass (index presente).
+        // Ogni articolo contribuisce ad al più UNA pista (nessun doppio
+        // conteggio Luce/Gas o IVA Mobile/Wireline/VAS).
+        if (canvassIndex && !coupon) {
+          const vf = classifyArticle(art, canvassIndex, canvassKpiRules);
+          if (vf?.pista) {
+            const bucket = (byPdv[codicePos].countByPistaCanvass ??= {});
+            bucket[vf.pista] = (bucket[vf.pista] || 0) + 1;
+            totaliPistaCanvass[vf.pista] = (totaliPistaCanvass[vf.pista] || 0) + 1;
+          }
+        }
       }
       const mappedResults = mapBiSuiteArticle(art, clienteTipo, rules);
       if (mappedResults.length === 0) continue;
@@ -405,5 +440,6 @@ export function aggregateMappedSales(
     daily: Array.from(byDay.values()).sort((a, b) => a.day.localeCompare(b.day)),
     pdvView,
     salesSenzaDestinazione,
+    ...(canvassIndex ? { totaliPistaCanvass } : {}),
   };
 }

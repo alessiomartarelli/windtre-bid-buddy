@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { isModuleAllowedForBrands } from '@shared/modules';
+import { isModuleAllowedForBrands, garaModelsForBrands } from '@shared/modules';
 import { useGaraConfig, GaraConfigPdv, GaraConfigData, type GaraConfigRevisionEntry } from '@/hooks/useGaraConfig';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { CLUSTER_OPTIONS, CLUSTER_PIVA_OPTIONS, WEEKDAY_LABELS, ClusterCode, type ClusterPIvaCode } from '@/types/preventivatore';
@@ -21,8 +21,8 @@ import { getDefaultTarget100, calculateTarget80, calculatePremio80 } from '@/typ
 import { getThresholdsByCluster, mapClusterMobileToClusterPista, getDefaultFissoThresholds, mapClusterFissoToNumber } from '@/utils/preventivatore-helpers';
 import { calcolaSoglieDefaultPerRS as calcolaSoglieEnergiaDefault } from '@/types/energia';
 import { toggleLivelloRimosso, isLivelloRimosso } from '@shared/soglieRimovibili';
-import { PISTA_CANVASS_LABELS, type PistaCanvass } from '@shared/bisuiteClassification';
-import { TELEGRAM_REPORT_PISTE, parseTelegramReportContent, parseTelegramReportContentForBrand } from '@shared/telegramReportContent';
+import { PISTA_CANVASS_LABELS, PISTA_CANVASS_LABELS_VF, type PistaCanvass } from '@shared/bisuiteClassification';
+import { TELEGRAM_REPORT_PISTE, TELEGRAM_REPORT_PISTE_WINDTRE, TELEGRAM_REPORT_PISTE_VF, telegramBrandKindOf, applyBrandKindGating, parseTelegramReportContent, parseTelegramReportContentForBrand } from '@shared/telegramReportContent';
 import { apiUrl } from '@/lib/basePath';
 import {
   Loader2, Save, Download, Plus, Trash2, CalendarDays, Store,
@@ -579,7 +579,15 @@ function telegramContentPerBrandToForm(
 ): Record<string, TelegramContentForm> {
   const out: Record<string, TelegramContentForm> = {};
   for (const b of brands) {
-    const cfg = parseTelegramReportContentForBrand(raw, b.id);
+    // Task #527 — il form mostra la selezione EFFETTIVA per il brand: il
+    // gating rimuove le piste WindTre-only dai brand VF e rimappa la
+    // "energia" ereditata dal default root su Luce+Gas, così le checkbox
+    // combaciano con ciò che il report invierà davvero (e il salvataggio
+    // per-brand non perde Luce/Gas).
+    const cfg = applyBrandKindGating(
+      parseTelegramReportContentForBrand(raw, b.id),
+      telegramBrandKindOf(b.name),
+    );
     out[b.id] = {
       pisteVisibili: [...cfg.pisteVisibili],
       telcoPiste: [...cfg.telcoPiste],
@@ -792,6 +800,11 @@ export default function ConfigurazioneGara() {
     organizationBrands?.map((b) => b.name) ?? null,
     'gara_configurazione',
   );
+  // Task #527 — modelli gara per brand: org senza brand = modello WindTre
+  // (invariato); org solo Vodafone/Fastweb = niente Energia/Assicurazioni/
+  // Protetti (le piste VF sono a soli pezzi, senza soglie/premi per ora);
+  // multi-brand = entrambi i modelli, separati.
+  const garaModels = garaModelsForBrands(organizationBrands?.map((b) => b.name) ?? null);
   const incentivazioneEnabled = isEnabled('incentivazione_interna');
   const {
     config: garaConfigRecord,
@@ -1141,7 +1154,7 @@ export default function ConfigurazioneGara() {
     ...(garaConfigRecord?.config ? {
       importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
     } : {}),
-  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, performanceWeights, telegramContent, sosCaring, garaConfigRecord]);
+  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, performanceWeights, telegramContent, telegramContentPerBrand, sosCaring, garaConfigRecord]);
 
   const handleSosCaringFile = useCallback(async (file: File) => {
     setSosUploading(true);
@@ -2039,7 +2052,15 @@ export default function ConfigurazioneGara() {
                           contenuti di ciascun report; i PDV si associano ai brand in Amministrazione → Struttura.
                         </p>
                       </div>
-                      {organizationBrands!.map((brand) => (
+                      {organizationBrands!.map((brand) => {
+                        // Task #527 — modello per brand: WindTre mostra le
+                        // piste storiche; Vodafone/Fastweb mostra le piste VF
+                        // (Luce, Gas, IVA Mobile, IVA Wireline, VAS) con le
+                        // etichette VF, senza Assicurazioni/Protetti/Energia.
+                        const brandKind = telegramBrandKindOf(brand.name);
+                        const brandPiste = brandKind === 'windtre' ? TELEGRAM_REPORT_PISTE_WINDTRE : TELEGRAM_REPORT_PISTE_VF;
+                        const brandLabels = brandKind === 'windtre' ? PISTA_CANVASS_LABELS : PISTA_CANVASS_LABELS_VF;
+                        return (
                         <div key={brand.id} className="rounded-md border p-3 space-y-3" data-testid={`card-tg-brand-${brand.id}`}>
                           <Label className="text-sm font-semibold">{brand.name}</Label>
                           {([
@@ -2050,7 +2071,7 @@ export default function ConfigurazioneGara() {
                             <div key={field}>
                               <Label className="text-xs font-semibold">{label}</Label>
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1.5">
-                                {TELEGRAM_REPORT_PISTE.map((pista) => (
+                                {brandPiste.map((pista) => (
                                   <label key={pista} className="flex items-center gap-2 text-sm" htmlFor={`tgb-${brand.id}-${field}-${pista}`}>
                                     <Checkbox
                                       id={`tgb-${brand.id}-${field}-${pista}`}
@@ -2058,14 +2079,15 @@ export default function ConfigurazioneGara() {
                                       checked={(telegramContentPerBrand[brand.id] ?? DEFAULT_TELEGRAM_CONTENT_FORM)[field].includes(pista)}
                                       onCheckedChange={() => toggleTelegramBrandPista(brand.id, field, pista)}
                                     />
-                                    {PISTA_CANVASS_LABELS[pista]}
+                                    {brandLabels[pista]}
                                   </label>
                                 ))}
                               </div>
                             </div>
                           ))}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                   <div>
@@ -2595,7 +2617,21 @@ export default function ConfigurazioneGara() {
             </TabsContent>
 
             <TabsContent value="extra" className="space-y-4">
-              {showPerRS ? (
+              {/* Task #527 — modello VF: niente Energia/Assicurazioni/Protetti
+                  (le piste Vodafone/Fastweb sono a soli pezzi, senza soglie
+                  né premi per ora). Visibile solo con brand WindTre o org
+                  senza brand (modello legacy). */}
+              {!garaModels.windtre && (
+                <Card data-testid="card-extra-vf-empty">
+                  <CardContent className="py-6 text-sm text-muted-foreground">
+                    Le piste Energia, Assicurazioni e Windtre Protetti fanno parte del modello
+                    gara WindTre e non si applicano al modello Vodafone/Fastweb. Le piste
+                    Vodafone/Fastweb (Luce, Gas, IVA Mobile, IVA Wireline, VAS) sono per ora
+                    conteggiate a pezzi, senza obiettivi né premi.
+                  </CardContent>
+                </Card>
+              )}
+              {garaModels.windtre && showPerRS && (
                 <div className="space-y-6">
                   <Card>
                     <CardHeader className="pb-2">
@@ -2871,7 +2907,8 @@ export default function ConfigurazioneGara() {
                     );
                   })}
                 </div>
-              ) : (
+              )}
+              {garaModels.windtre && !showPerRS && (
                 <>
               <Card data-testid="card-energia-config">
                 <CardHeader className="pb-3">

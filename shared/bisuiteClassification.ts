@@ -1,9 +1,45 @@
 import { categorizeCanvassArticle, type CanvassIndex } from './canvassMapping';
+export type { CanvassIndex } from './canvassMapping';
 import { resolveCanvassKpiTarget, type CanvassKpiRule } from './canvassKpiRules';
 
 export type ArticleType = 'canvass' | 'prodotti' | 'servizi';
 
-export type PistaCanvass = 'mobile' | 'fisso' | 'cb' | 'iva' | 'assicurazioni' | 'protecta' | 'energia';
+export type PistaCanvass =
+  | 'mobile'
+  | 'fisso'
+  | 'cb'
+  | 'iva'
+  | 'assicurazioni'
+  | 'protecta'
+  | 'energia'
+  // Piste Vodafone/Fastweb (Task #527) — conteggio pezzi, senza premi/obiettivi.
+  | 'luce'
+  | 'gas'
+  | 'iva_mobile'
+  | 'iva_wireline'
+  | 'vas';
+
+/**
+ * Task #527 — piste specifiche del modello gara Vodafone/Fastweb, mostrate
+ * SOLO a pezzi (nessun obiettivo/soglia/premio in questa fase).
+ */
+export const VF_COUNT_ONLY_PISTAS: readonly PistaCanvass[] = [
+  'luce',
+  'gas',
+  'iva_mobile',
+  'iva_wireline',
+  'vas',
+] as const;
+
+/**
+ * Task #527 — piste WindTre-only: non devono comparire nel modello gara
+ * Vodafone/Fastweb (né in config, né in dashboard/report/export VF).
+ */
+export const WINDTRE_ONLY_PISTAS: readonly PistaCanvass[] = [
+  'assicurazioni',
+  'protecta',
+  'energia',
+] as const;
 
 export interface CategoryClassification {
   type: ArticleType;
@@ -91,6 +127,47 @@ export function pistaFromCanvassListino(pista: string): PistaCanvass | undefined
   return undefined;
 }
 
+/** Forma minima del match listino necessaria alla risoluzione fine pista. */
+export interface CanvassMatchLike {
+  pista: string;
+  categoria: string;
+  tipologia: string;
+}
+
+/**
+ * Task #527 — risoluzione FINE della pista VF dal match listino
+ * (pista + categoria + tipologia), deterministica e fail-closed:
+ *  - PISTA IVA + categoria "IVA VOCE"            → iva_mobile;
+ *  - PISTA IVA + categoria "IVA RETE FISSA"      → iva_wireline;
+ *  - PISTA IVA + Soluzioni Digitali / Easy Rent  → vas;
+ *  - ENERGIA … + tipologia LUCE                  → luce;
+ *  - ENERGIA … + tipologia GAS                   → gas;
+ *  - ogni altra combinazione ricade sulla pista generica del listino
+ *    (`iva`/`energia`/…): MAI attribuita a una sottopista per supposizione.
+ */
+export function pistaFromCanvassMatch(match: CanvassMatchLike): PistaCanvass | undefined {
+  const pista = (match.pista || '').toUpperCase();
+  const cat = (match.categoria || '').toUpperCase();
+  const tip = (match.tipologia || '').toUpperCase();
+  if (/\bIVA\b/.test(pista)) {
+    if (cat.includes('IVA VOCE')) return 'iva_mobile';
+    if (cat.includes('IVA RETE FISSA')) return 'iva_wireline';
+    if (
+      cat.includes('SOLUZIONI') || cat.includes('EASY RENT') ||
+      tip.includes('SOLUZIONI DIGITALI') || tip.includes('EASY RENT')
+    ) {
+      return 'vas';
+    }
+    return 'iva';
+  }
+  if (pista.includes('ENERGIA')) {
+    if (tip.includes('GAS')) return 'gas';
+    if (tip.includes('LUCE')) return 'luce';
+    return 'energia';
+  }
+  return pistaFromCanvassListino(match.pista);
+}
+
 /** Forma minima di articolo BiSuite per la classificazione brand-aware. */
 export interface ClassifiableArticle {
   codice?: unknown;
@@ -131,7 +208,7 @@ export function classifyArticle(
     }
     const match = categorizeCanvassArticle(article, canvassIndex);
     if (match) {
-      return { type: 'canvass', pista: pistaFromCanvassListino(match.pista) };
+      return { type: 'canvass', pista: pistaFromCanvassMatch(match) };
     }
   }
   return classifyCategory(String(article.categoria?.nome ?? '').trim());
@@ -145,6 +222,11 @@ export const PISTA_CANVASS_LABELS: Record<PistaCanvass, string> = {
   assicurazioni: 'Assicurazioni',
   protecta: 'Windtre Protetti',
   energia: 'Energia',
+  luce: 'Luce',
+  gas: 'Gas',
+  iva_mobile: 'IVA Mobile',
+  iva_wireline: 'IVA Wireline',
+  vas: 'VAS',
 };
 
 /**
@@ -169,6 +251,11 @@ export const PISTA_CANVASS_COLORS: Record<PistaCanvass, string> = {
   assicurazioni: 'bg-teal-500/10 text-teal-700 border-teal-500/20',
   protecta: 'bg-red-500/10 text-red-700 border-red-500/20',
   energia: 'bg-green-500/10 text-green-700 border-green-500/20',
+  luce: 'bg-yellow-500/10 text-yellow-700 border-yellow-500/20',
+  gas: 'bg-sky-500/10 text-sky-700 border-sky-500/20',
+  iva_mobile: 'bg-violet-500/10 text-violet-700 border-violet-500/20',
+  iva_wireline: 'bg-fuchsia-500/10 text-fuchsia-700 border-fuchsia-500/20',
+  vas: 'bg-lime-500/10 text-lime-700 border-lime-500/20',
 };
 
 export const TYPE_LABELS: Record<ArticleType, string> = {
@@ -273,6 +360,15 @@ export function isPezzoIva(art: PezzoIvaInput): boolean {
       return cat === 'ASSICURAZIONI BUSINESS PRO';
     case 'iva':
       return true;
+    // Task #527 — le sottopiste P.IVA del listino VF sono per definizione
+    // tutte business; Luce/Gas seguono la stessa regola di Energia.
+    case 'iva_mobile':
+    case 'iva_wireline':
+    case 'vas':
+      return true;
+    case 'luce':
+    case 'gas':
+      return desc.includes('BUSINESS');
     default:
       return false;
   }
