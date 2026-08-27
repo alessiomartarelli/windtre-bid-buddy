@@ -45,8 +45,6 @@ export function defaultEnabledModules(): Record<string, boolean> {
 export const WINDTRE_GATED_MODULES: string[] = [
   "simulatore",
   "tabelle_calcolo",
-  "gara_dashboard",
-  "gara_configurazione",
   "drms_commissioning",
 ];
 

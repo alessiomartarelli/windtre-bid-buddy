@@ -115,11 +115,9 @@ test('scenario 2: org without WindTre modules sees Home with "Nessun modulo atti
     // Operatore: le scorciatoie admin (Amministrazione, DRMS, Config Gara,
     // Tabelle Calcolo) non gli spettano.
     await setRole(pool, session.profileId, 'operatore');
-    // Brand NON WindTre associato: i moduli WindTre-gated (simulatore,
-    // gara_dashboard, tabelle_calcolo, gara_configurazione, drms) vengono
-    // filtrati via. I moduli BiSuite (vendite_bisuite, customer_journey,
-    // incentivazione_interna) NON sono più brand-gated (Task #314): vanno
-    // disabilitati esplicitamente a livello org per avere l'empty-state.
+    // Brand NON WindTre associato: Simulatore/Tabelle/DRMS vengono filtrati.
+    // I moduli multi-brand vanno disabilitati esplicitamente per ottenere
+    // l'empty-state.
     brandId = await attachBrand(pool, session.orgId, uniq('Vodafone'));
     await pool.query(
       `UPDATE organizations SET enabled_modules = $2 WHERE id = $1`,
@@ -128,6 +126,8 @@ test('scenario 2: org without WindTre modules sees Home with "Nessun modulo atti
         customer_journey: false,
         incentivazione_interna: false,
         gestione_dts: false,
+        gara_dashboard: false,
+        gara_configurazione: false,
         amministrazione: false,
         controllo_gestione: false,
       })],

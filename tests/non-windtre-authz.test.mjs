@@ -15,8 +15,8 @@ import {
 //
 // Dal Task #314 i moduli Vendite BiSuite, Incentivazione Interna e Customer
 // Journey NON richiedono più il brand WindTre: un'org con solo brand Fastweb
-// (caso Phone&Phone) deve poterli usare. Restano invece WindTre-gated i
-// moduli simulatore / gara / DRMS.
+// (caso Phone&Phone) deve poterli usare. Dashboard e Configurazione Gara sono
+// multi-brand; restano WindTre-gated solo Simulatore / Tabelle / DRMS.
 //
 // Questa suite congela il comportamento a livello di route HTTP: se qualcuno
 // reintroduce per errore quei moduli in WINDTRE_GATED_MODULES (shared/
@@ -34,12 +34,12 @@ const ALLOWED_ROUTES = [
   '/api/customer-journeys', // customer_journey
   '/api/bisuite-sales?month=7&year=2026', // vendite_bisuite (in alternativa ad altri moduli)
   '/api/incentivazione/config?month=7&year=2026', // incentivazione_interna
+  '/api/gara-config?month=7&year=2026', // gara_configurazione | gara_dashboard
 ];
 
 // Route che DEVONO restare bloccate (403) per un'org solo-Fastweb.
 const BLOCKED_ROUTES = [
   '/api/preventivi', // simulatore
-  '/api/gara-config?month=7&year=2026', // gara_configurazione | gara_dashboard
   '/api/drms', // drms_commissioning
 ];
 
@@ -66,10 +66,10 @@ async function detachBrand(pool, brandId) {
 
 // ===========================================================================
 // SCENARIO 1: org con SOLO brand Fastweb (non-WindTre).
-//   - Vendite BiSuite / Customer Journey / Incentivazione => accesso (200);
-//   - Simulatore / Gara / DRMS => 403 "Modulo non abilitato".
+//   - Vendite BiSuite / Customer Journey / Incentivazione / Gara => accesso;
+//   - Simulatore / DRMS => 403 "Modulo non abilitato".
 // ===========================================================================
-test('scenario 1: Fastweb-only org keeps BiSuite/CJ/Incentivazione, loses WindTre-gated modules', async () => {
+test('scenario 1: Fastweb-only org keeps BiSuite/CJ/Incentivazione/Gara, loses WindTre-only modules', async () => {
   const pool = await newPool();
   const session = await signupAndLogin();
   let brandId;

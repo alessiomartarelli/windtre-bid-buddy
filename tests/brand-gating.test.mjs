@@ -25,6 +25,8 @@ test("moduli non gated sempre consentiti anche senza WindTre", () => {
   for (const key of [
     "amministrazione",
     "controllo_gestione",
+    "gara_dashboard",
+    "gara_configurazione",
     "mappatura_bisuite",
     "vendite_bisuite",
     "incentivazione_interna",
@@ -60,8 +62,6 @@ test("lista moduli gated attesa", () => {
     [...WINDTRE_GATED_MODULES].sort(),
     [
       "drms_commissioning",
-      "gara_configurazione",
-      "gara_dashboard",
       "simulatore",
       "tabelle_calcolo",
     ].sort(),
