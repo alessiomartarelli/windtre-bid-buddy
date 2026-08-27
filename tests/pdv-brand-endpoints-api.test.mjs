@@ -204,3 +204,75 @@ test('struttura PDV endpoints: brand estranei rifiutati, dedup applicato', async
     assert.equal(pv.some((p) => p.codicePos === bad.codicePos), false, 'no bulk PDV must be saved');
   });
 });
+
+// Task #524: la dissociazione di un brand dall'org (PUT
+// /api/admin/organizations/:id/brands) deve ripulire i riferimenti residui
+// nei brandIds dei puntiVendita, altrimenti ogni salvataggio successivo di
+// quei PDV fallirebbe con 400 (validateBrandIds) finché qualcuno non li
+// ripulisce a mano.
+test('dissociazione brand dall\'org: ripulisce i brandIds residui e il PDV resta salvabile', async (t) => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'pdv_brand_dis' });
+  // Il PUT dei brand org richiede super_admin: promuovi l'utente di test.
+  await pool.query(`UPDATE profiles SET role = 'super_admin' WHERE id = $1`, [session.profileId]);
+  const brands = await seedOrgBrands(pool, session.orgId, 2);
+  const headers = { Cookie: session.cookieHeader };
+
+  t.after(async () => {
+    await cleanupBrands(pool, brands);
+    await cleanupOrg(pool, session);
+    await pool.end();
+  });
+
+  // 1) PDV con entrambi i brand associati.
+  const body = pdvBody({ brandIds: [brands[0].id, brands[1].id] });
+  const create = await jsonReq(`${BASE}/api/admin/struttura/pdv`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  assert.equal(create.status, 201, `create failed: ${JSON.stringify(create.body)}`);
+
+  // 2) Dissocia brands[1] dall'org (PUT sostituisce l'insieme).
+  const dis = await jsonReq(`${BASE}/api/admin/organizations/${session.orgId}/brands`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ brandIds: [brands[0].id] }),
+  });
+  assert.equal(dis.status, 200, `dissociate failed: ${JSON.stringify(dis.body)}`);
+  assert.deepEqual(dis.body?.brandIds, [brands[0].id]);
+  assert.equal(dis.body?.pdvPuliti, 1, 'one PDV must be cleaned');
+
+  // 3) Il riferimento residuo è stato rimosso dal PDV.
+  const pv = await readPersistedPdvs(pool, session.orgId);
+  const saved = pv.find((p) => p.codicePos === body.codicePos);
+  assert.ok(saved, 'PDV must still exist');
+  assert.deepEqual(saved.brandIds, [brands[0].id], 'residual brandId must be removed');
+
+  // 4) Il PDV resta salvabile: PUT senza toccare i brandIds → 200 (non 400).
+  const put = await jsonReq(`${BASE}/api/admin/struttura/pdv`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      oldRagioneSociale: body.ragioneSociale,
+      oldCodicePos: body.codicePos,
+      nome: 'Nome Dopo Dissociazione',
+      brandIds: saved.brandIds,
+    }),
+  });
+  assert.equal(put.status, 200, `PDV must stay saveable after brand removal, got ${put.status}: ${JSON.stringify(put.body)}`);
+
+  const pv2 = await readPersistedPdvs(pool, session.orgId);
+  const saved2 = pv2.find((p) => p.codicePos === body.codicePos);
+  assert.equal(saved2?.nome, 'Nome Dopo Dissociazione');
+  assert.deepEqual(saved2?.brandIds, [brands[0].id]);
+
+  // 5) Riassociare non deve toccare nulla (nessun PDV "pulito").
+  const reassoc = await jsonReq(`${BASE}/api/admin/organizations/${session.orgId}/brands`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ brandIds: [brands[0].id, brands[1].id] }),
+  });
+  assert.equal(reassoc.status, 200);
+  assert.equal(reassoc.body?.pdvPuliti, 0, 'no PDV must be touched when brands are re-added');
+});

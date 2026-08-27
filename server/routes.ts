@@ -2176,7 +2176,27 @@ export async function registerRoutes(
         return res.status(400).json({ message: `Brand inesistenti: ${unknown.join(", ")}` });
       }
       const saved = await storage.setOrganizationBrands(org.id, parsed.data.brandIds);
-      res.json({ ok: true, brandIds: saved });
+      // Task #524: alla dissociazione di un brand, ripulisci i riferimenti
+      // residui nei brandIds dei puntiVendita in organization_config,
+      // altrimenti ogni salvataggio successivo di quei PDV fallirebbe con
+      // 400 (validateBrandIds) finché qualcuno non li ripulisce a mano.
+      let pdvPuliti = 0;
+      const allowed = new Set(saved);
+      const cfg = await storage.getOrgConfig(org.id);
+      const config = (cfg?.config as Record<string, unknown> | null) || {};
+      const pv = Array.isArray(config.puntiVendita) ? (config.puntiVendita as Record<string, unknown>[]) : [];
+      const next = pv.map((p) => {
+        const ids = (p as any)?.brandIds;
+        if (!Array.isArray(ids)) return p;
+        const kept = ids.filter((id: unknown) => typeof id === "string" && allowed.has(id));
+        if (kept.length === ids.length) return p;
+        pdvPuliti++;
+        return { ...p, brandIds: kept };
+      });
+      if (pdvPuliti > 0) {
+        await storage.upsertOrgConfig(org.id, { ...config, puntiVendita: next }, cfg?.configVersion || "2.0", req.session.userId ?? null);
+      }
+      res.json({ ok: true, brandIds: saved, pdvPuliti });
     } catch (error) {
       res.status(500).json({ message: "Errore nel salvataggio dei brand dell'organizzazione" });
     }
