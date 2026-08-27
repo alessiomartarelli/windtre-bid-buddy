@@ -2456,7 +2456,14 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       }
       return realClearTimeout(id);
     };
-    const activeTimers = () => fakeTimers.filter((t) => !t.cleared);
+    // Timer ESTRANEI possono finire nella cattura (es. pg-pool arma un
+    // "remove idle client" da 10s in momenti non deterministici): contarli
+    // faceva flakare gli assert `activeTimers().length === 1`. Il timer dello
+    // scheduler è identificato in modo deterministico dal SUO callback
+    // (la closure di scheduleNext chiama runScheduledSend); i timer estranei
+    // restano comunque catturati, così non scattano davvero durante la suite.
+    const isSchedulerTimer = (t) => String(t.fn).includes("runScheduledSend");
+    const activeTimers = () => fakeTimers.filter((t) => !t.cleared && isSchedulerTimer(t));
 
     // Orario di Roma "adesso", per costruire label passati/futuri validi.
     const romeNowMinutes = () => {
@@ -2610,4 +2617,6 @@ if (schedMod.runScheduledSend && storageMod.storage) {
 }
 
 console.log(`\nRisultato: ${passed} passati, ${failed} falliti`);
-if (failed > 0) process.exit(1);
+// Exit esplicito anche in caso di successo: l'import di server/storage crea
+// il pool Postgres, i cui handle vivi terrebbero il processo appeso.
+process.exit(failed > 0 ? 1 : 0);
