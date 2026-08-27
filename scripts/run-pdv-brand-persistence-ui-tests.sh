@@ -29,5 +29,10 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-echo "[pdv-brand-ui-tests] running suite ..."
-exec node --import tsx --test tests/pdv-brand-persistence-ui.test.mjs
+echo "[pdv-brand-ui-tests] running suites (UI + API endpoints dedicati) ..."
+# Include anche la suite API senza browser (Task #522): POST/PUT/bulk
+# /api/admin/struttura/pdv devono rifiutare (400) brand estranei e
+# deduplicare i brandIds validi.
+exec node --import tsx --test \
+  tests/pdv-brand-persistence-ui.test.mjs \
+  tests/pdv-brand-endpoints-api.test.mjs
