@@ -3396,10 +3396,55 @@ export default function DashboardGaraReale() {
 
   const garaPdvListAll: GaraConfigPdv[] = garaConfig?.config?.pdvList || [];
 
-  // Opzioni filtro RS: dalla configurazione gara attiva, ordine alfabetico.
+  // In vista Destinazione serve un catalogo non filtrato dei PDV effettivi:
+  // alimenta selector, RS, calcoli e premi anche quando la destinazione non
+  // coincide con il PDV d'origine. È separato dalla query principale perché
+  // quest'ultima viene ristretta dal filtro RS/PDV attivo.
+  const { data: destinationCatalogData } = useQuery<MappedSalesResponse>({
+    queryKey: ["/api/admin/bisuite-mapped-sales", selMonth, selYear, effectiveConfigId, "destination-catalog", rulesUpdatedAt],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        month: String(selMonth),
+        year: String(selYear),
+        inGaraOnly: "true",
+        pdvView: "destinazione",
+      });
+      if (effectiveConfigId) params.set("garaConfigId", effectiveConfigId);
+      const res = await fetch(apiUrl(`/api/admin/bisuite-mapped-sales?${params.toString()}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore nel caricamento catalogo PDV destinazione");
+      return res.json();
+    },
+    enabled: !!configList && pdvView === "destinazione",
+  });
+
+  const pdvViewCatalog = useMemo<GaraConfigPdv[]>(() => {
+    if (pdvView === "origine") return garaPdvListAll;
+    const byPos = new Map(garaPdvListAll.map((pdv) => [pdv.codicePos, pdv]));
+    for (const pdv of destinationCatalogData?.pdvList ?? []) {
+      if (byPos.has(pdv.codicePos)) continue;
+      byPos.set(pdv.codicePos, {
+        id: `pdv-view-${pdv.codicePos}`,
+        codicePos: pdv.codicePos,
+        nome: pdv.nomeNegozio || pdv.codicePos,
+        ragioneSociale: pdv.ragioneSociale || "N/D",
+        tipoPosizione: "",
+        canale: "",
+        clusterMobile: "",
+        clusterFisso: "",
+        clusterCB: "",
+        clusterPIva: "",
+        abilitaEnergia: false,
+        abilitaAssicurazioni: false,
+        calendar: DEFAULT_CALENDAR,
+      });
+    }
+    return Array.from(byPos.values());
+  }, [pdvView, garaPdvListAll, destinationCatalogData]);
+
+  // Opzioni filtro RS: coerenti con il criterio PDV selezionato.
   const rsFilterOptions = useMemo(() => {
     const map = new Map<string, string>();
-    for (const p of garaPdvListAll) {
+    for (const p of pdvViewCatalog) {
       const display = p.ragioneSociale || "N/D";
       const key = normalizeRS(display);
       if (!map.has(key)) map.set(key, display);
@@ -3407,25 +3452,25 @@ export default function DashboardGaraReale() {
     return Array.from(map.entries())
       .map(([key, label]) => ({ key, label }))
       .sort((a, b) => a.label.localeCompare(b.label, 'it'));
-  }, [garaPdvListAll]);
+  }, [pdvViewCatalog]);
 
   // Opzioni filtro PDV: dipendenti dalla RS selezionata.
   const pdvFilterOptions = useMemo(() => {
-    return garaPdvListAll
+    return pdvViewCatalog
       .filter((p) => rsFilter === "all" || normalizeRS(p.ragioneSociale || "N/D") === rsFilter)
       .map((p) => ({ codicePos: p.codicePos, label: p.nome ? `${p.nome} (${p.codicePos})` : p.codicePos }))
       .sort((a, b) => a.label.localeCompare(b.label, 'it'));
-  }, [garaPdvListAll, rsFilter]);
+  }, [pdvViewCatalog, rsFilter]);
 
   // Perimetro applicato: la pdvList della config filtrata alimenta tutte le
   // card, KPI, soglie, premi e proiezioni a valle.
   const garaPdvList: GaraConfigPdv[] = useMemo(() => {
-    if (rsFilter === "all" && pdvFilter === "all") return garaPdvListAll;
-    return garaPdvListAll.filter((p) => {
+    if (rsFilter === "all" && pdvFilter === "all") return pdvViewCatalog;
+    return pdvViewCatalog.filter((p) => {
       if (pdvFilter !== "all") return p.codicePos === pdvFilter;
       return normalizeRS(p.ragioneSociale || "N/D") === rsFilter;
     });
-  }, [garaPdvListAll, rsFilter, pdvFilter]);
+  }, [pdvViewCatalog, rsFilter, pdvFilter]);
 
   // Task #478 — perimetro RS/PDV passato al server: con un filtro attivo la
   // query vendite mappate riceve la lista codicePos del perimetro (e la RS,

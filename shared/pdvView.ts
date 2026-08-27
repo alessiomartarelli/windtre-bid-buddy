@@ -69,8 +69,14 @@ export function extractPdvDestinazione(raw: any): PdvRef | null {
 export type SaleForPdvView = {
   codicePos?: string | null;
   nomeNegozio?: string | null;
+  ragioneSociale?: string | null;
   rawData?: unknown;
 };
+
+export type PdvViewDirectory = Readonly<Record<string, {
+  nomeNegozio?: string | null;
+  ragioneSociale?: string | null;
+}>>;
 
 export type ResolvedPdvView = PdvRef & {
   /** true sse la vista è Destinazione e la vendita non ha destinazione. */
@@ -104,4 +110,21 @@ export function resolveSalePdvForView(sale: SaleForPdvView, view: PdvView): Reso
     nomeNegozio: norm(sale.nomeNegozio),
     senzaDestinazione: false,
   };
+}
+
+/**
+ * Risolve anche la Ragione Sociale coerente con il PDV mostrato.
+ * In vista Destinazione la RS appartiene al PDV di destinazione censito nella
+ * struttura; non deve mai restare quella del PDV d'origine. Il bucket senza
+ * destinazione e i PDV non censiti non ereditano silenziosamente la RS origine.
+ */
+export function resolveSaleRagioneSocialeForView(
+  sale: SaleForPdvView,
+  view: PdvView,
+  directory?: PdvViewDirectory,
+): string {
+  if (view === "origine") return norm(sale.ragioneSociale);
+  const resolved = resolveSalePdvForView(sale, "destinazione");
+  if (resolved.senzaDestinazione) return "";
+  return norm(directory?.[resolved.codicePos]?.ragioneSociale);
 }

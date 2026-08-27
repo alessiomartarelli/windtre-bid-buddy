@@ -175,11 +175,20 @@ test('scenario 3: perimetro coerente con la vista PDV destinazione', async () =>
     // Vista destinazione: POS-D matcha la trasferita; POS-O NON matcha nulla
     // (la vendita senza destinazione finisce nel bucket SENZA_DESTINAZIONE,
     // mai attribuita cross-fallback all'origine).
-    const destD = filterSalesByPerimeter(allSales, { codicePos: ['POS-D'] }, 'destinazione');
+    const pdvDirectory = {
+      'POS-D': { nomeNegozio: 'Dest', ragioneSociale: 'RS DESTINAZIONE' },
+    };
+    const destD = filterSalesByPerimeter(allSales, { codicePos: ['POS-D'] }, 'destinazione', pdvDirectory);
     assert.equal(destD.length, 1);
-    const aggD = aggregateMappedSales(destD, RULES, { pdvView: 'destinazione' });
+    const aggD = aggregateMappedSales(destD, RULES, { pdvView: 'destinazione', pdvDirectory });
     assert.equal(aggD.totalImporto, 70);
     assert.deepEqual(aggD.daily.map((d) => d.day), ['2026-07-06']);
+    assert.equal(aggD.pdvList[0].ragioneSociale, 'RS DESTINAZIONE');
+    assert.equal(
+      filterSalesByPerimeter(allSales, { ragioniSociali: ['rs destinazione'] }, 'destinazione', pdvDirectory).length,
+      1,
+      'il filtro RS destinazione usa la RS del PDV effettivo',
+    );
     assert.equal(filterSalesByPerimeter(allSales, { codicePos: ['POS-O'] }, 'destinazione').length, 0, 'nessun cross-fallback origine in vista destinazione');
     assert.equal(filterSalesByPerimeter(allSales, { codicePos: ['SENZA_DESTINAZIONE'] }, 'destinazione').length, 1, 'bucket esplicito selezionabile');
   } finally {

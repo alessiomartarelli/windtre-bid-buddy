@@ -108,10 +108,12 @@ import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
 import { accumulaPezziExtra, emptyPezziExtra, type PezziExtraCounters } from "@shared/pdvPezziExtra";
 import {
   resolveSalePdvForView,
+  resolveSaleRagioneSocialeForView,
   extractPdvOrigine,
   extractPdvDestinazione,
   SENZA_DESTINAZIONE_POS,
   type PdvView,
+  type PdvViewDirectory,
 } from "@shared/pdvView";
 import type { CanvassKpiRule } from "@shared/canvassKpiRules";
 
@@ -445,8 +447,8 @@ export default function VenditeBiSuite() {
     },
   });
 
-  const { data, isLoading } = useQuery<{ sales: BisuiteSale[]; count: number }>({
-    queryKey: ["/api/bisuite-sales", orgId, fromDate, toDate, "includeAnnullate"],
+  const { data, isLoading } = useQuery<{ sales: BisuiteSale[]; count: number; pdvDirectory?: PdvViewDirectory }>({
+    queryKey: ["/api/bisuite-sales", orgId, fromDate, toDate, "includeAnnullate", pdvView],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (orgId) params.set("organization_id", orgId);
@@ -455,6 +457,7 @@ export default function VenditeBiSuite() {
       // La pagina vendite grezze deve mostrare anche le ANNULLATA con badge,
       // quindi disattiva il filtro server-side che le esclude di default.
       params.set("includeAnnullate", "true");
+      if (pdvView !== "origine") params.set("pdvView", pdvView);
       const res = await fetch(apiUrl(`/api/bisuite-sales?${params.toString()}`), {
         credentials: "include",
       });
@@ -499,6 +502,7 @@ export default function VenditeBiSuite() {
   // rawSales include anche le ANNULLATA (visibili nella tabella grezza con badge),
   // mentre `sales` viene usato per tutti i conteggi/aggregati e le esclude.
   const fetchedSales = data?.sales || [];
+  const pdvDirectory = data?.pdvDirectory;
   // Task #462 — in vista Destinazione riscriviamo (solo in memoria) i campi
   // PDV della vendita con il PDV di destinazione risolto dal raw: tutti i
   // filtri/riepiloghi/export a valle riflettono così la vista scelta senza
@@ -507,9 +511,14 @@ export default function VenditeBiSuite() {
     if (pdvView === "origine") return fetchedSales;
     return fetchedSales.map((s) => {
       const r = resolveSalePdvForView(s, "destinazione");
-      return { ...s, codicePos: r.codicePos, nomeNegozio: r.nomeNegozio };
+      return {
+        ...s,
+        codicePos: r.codicePos,
+        nomeNegozio: r.nomeNegozio,
+        ragioneSociale: resolveSaleRagioneSocialeForView(s, "destinazione", pdvDirectory) || null,
+      };
     });
-  }, [fetchedSales, pdvView]);
+  }, [fetchedSales, pdvView, pdvDirectory]);
   const sales = useMemo(
     () => rawSales.filter(s => (s.stato || "").trim().toUpperCase() !== "ANNULLATA"),
     [rawSales],

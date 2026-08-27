@@ -2,7 +2,12 @@ import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { mapBiSuiteArticle } from "../shared/bisuiteMapping";
 import { classifyCategory, isCouponCaring, isPezzoIva } from "../shared/bisuiteClassification";
 import { trendYmdOf } from "../shared/venditeReport";
-import { resolveSalePdvForView, type PdvView } from "../shared/pdvView";
+import {
+  resolveSalePdvForView,
+  resolveSaleRagioneSocialeForView,
+  type PdvView,
+  type PdvViewDirectory,
+} from "../shared/pdvView";
 import { normalizeRsName } from "../shared/ragioneSociale";
 
 // Aggregazione lato server delle vendite BiSuite mappate, estratta dalla route
@@ -111,6 +116,7 @@ export function filterSalesByPerimeter<T extends MappableSale>(
   sales: T[],
   perimeter: SalesPerimeter | undefined,
   pdvView: PdvView,
+  pdvDirectory?: PdvViewDirectory,
 ): T[] {
   const posList = (perimeter?.codicePos ?? []).map((c) => String(c).trim()).filter(Boolean);
   const rsList = (perimeter?.ragioniSociali ?? []).map((r) => normalizeRsName(String(r))).filter(Boolean);
@@ -124,7 +130,7 @@ export function filterSalesByPerimeter<T extends MappableSale>(
     }
     if (pos && posSet.has(pos)) return true;
     if (rsSet.size > 0) {
-      const rs = normalizeRsName(sale.ragioneSociale || "");
+      const rs = normalizeRsName(resolveSaleRagioneSocialeForView(sale, pdvView, pdvDirectory));
       if (rs && rsSet.has(rs)) return true;
     }
     return false;
@@ -140,7 +146,7 @@ const newDeviceTally = (): DeviceTally => ({
 export function aggregateMappedSales(
   sales: MappableSale[],
   rules: BiSuiteMappingRule[],
-  opts?: { pdvView?: PdvView },
+  opts?: { pdvView?: PdvView; pdvDirectory?: PdvViewDirectory },
 ): MappedSalesAggregation {
   // Task #462 — vista PDV: 'origine' (default, comportamento invariato:
   // campi legacy della vendita) oppure 'destinazione' (attribuzione al PDV
@@ -180,18 +186,20 @@ export function aggregateMappedSales(
     // invariato al byte); solo la vista Destinazione passa dal resolver.
     let effettivoPos = sale.codicePos;
     let effettivoNome = sale.nomeNegozio;
+    let effettivaRs = sale.ragioneSociale || "";
     if (pdvView === "destinazione") {
       const resolvedPdv = resolveSalePdvForView(sale, "destinazione");
       if (resolvedPdv.senzaDestinazione) salesSenzaDestinazione++;
       effettivoPos = resolvedPdv.codicePos;
       effettivoNome = resolvedPdv.nomeNegozio;
+      effettivaRs = resolveSaleRagioneSocialeForView(sale, "destinazione", opts?.pdvDirectory);
     }
     const codicePos = effettivoPos || "UNKNOWN";
     if (!byPdv[codicePos]) {
       byPdv[codicePos] = {
         codicePos,
         nomeNegozio: effettivoNome || codicePos,
-        ragioneSociale: sale.ragioneSociale || "",
+        ragioneSociale: effettivaRs,
         items: [],
         addons: [],
         accessori: { pezzi: 0, importo: 0 },

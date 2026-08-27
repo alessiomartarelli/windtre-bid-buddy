@@ -17,6 +17,7 @@ const {
   extractPdvOrigine,
   extractPdvDestinazione,
   resolveSalePdvForView,
+  resolveSaleRagioneSocialeForView,
   normalizePdvView,
   SENZA_DESTINAZIONE_POS,
   SENZA_DESTINAZIONE_LABEL,
@@ -77,6 +78,24 @@ test('resolveSalePdvForView: destinazione assente => bucket esplicito', () => {
   assert.deepEqual(o, { codicePos: 'ORG1', nomeNegozio: 'Org Uno', senzaDestinazione: false });
 });
 
+test('resolveSaleRagioneSocialeForView: la destinazione usa la RS del PDV effettivo', () => {
+  const sale = mkSale({
+    pos: 'ORG1',
+    nome: 'Org Uno',
+    dest: { codiceOperatoreWind: 'DST1', nominativo: 'Dest Uno' },
+  });
+  const directory = {
+    DST1: { nomeNegozio: 'Dest Uno', ragioneSociale: 'RS DESTINAZIONE' },
+  };
+  assert.equal(resolveSaleRagioneSocialeForView(sale, 'origine', directory), 'RS TEST');
+  assert.equal(resolveSaleRagioneSocialeForView(sale, 'destinazione', directory), 'RS DESTINAZIONE');
+  assert.equal(
+    resolveSaleRagioneSocialeForView(mkSale({ pos: 'ORG2', nome: 'Org Due' }), 'destinazione', directory),
+    '',
+    'senza destinazione non eredita la RS origine',
+  );
+});
+
 test('normalizePdvView: whitelist con default origine', () => {
   assert.equal(normalizePdvView('destinazione'), 'destinazione');
   assert.equal(normalizePdvView('origine'), 'origine');
@@ -109,13 +128,20 @@ test('aggregateMappedSales: vista destinazione riattribuisce e isola i senza-des
     // Non trasferita: nessuna destinazione
     mkSale({ pos: 'ORG2', nome: 'Org Due' }),
   ];
-  const agg = aggregateMappedSales(sales, RULES, { pdvView: 'destinazione' });
+  const agg = aggregateMappedSales(sales, RULES, {
+    pdvView: 'destinazione',
+    pdvDirectory: {
+      DST1: { nomeNegozio: 'Dest Uno', ragioneSociale: 'RS DESTINAZIONE' },
+    },
+  });
   assert.equal(agg.pdvView, 'destinazione');
   assert.equal(agg.salesSenzaDestinazione, 1);
   assert.deepEqual(Object.keys(agg.byPdv).sort(), ['DST1', SENZA_DESTINAZIONE_POS].sort());
   assert.equal(agg.byPdv['DST1'].nomeNegozio, 'Dest Uno');
+  assert.equal(agg.byPdv['DST1'].ragioneSociale, 'RS DESTINAZIONE');
   // La vendita senza destinazione NON è attribuita a ORG2 né a DST1.
   assert.equal(agg.byPdv[SENZA_DESTINAZIONE_POS].nomeNegozio, SENZA_DESTINAZIONE_LABEL);
+  assert.equal(agg.byPdv[SENZA_DESTINAZIONE_POS].ragioneSociale, '');
   assert.equal(agg.byPdv[SENZA_DESTINAZIONE_POS].totalArticoli, 1);
   // Totali complessivi identici tra le due viste (cambia solo l'attribuzione).
   const org = aggregateMappedSales(sales, RULES);

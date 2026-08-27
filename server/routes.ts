@@ -3452,6 +3452,34 @@ export async function registerRoutes(
       // chiamante può passare includeAnnullate=true per includerle (usato dalla
       // pagina VenditeBiSuite che mostra anche le righe annullate con badge).
       const includeAnnullate = req.query.includeAnnullate === "true";
+      const { normalizePdvView } = await import("../shared/pdvView");
+      const pdvView = normalizePdvView(req.query.pdvView);
+
+      const buildPdvDirectory = async (months: Array<{ year: number; month: number }>) => {
+        if (pdvView !== "destinazione") return {};
+        const directory = new Map<string, { nomeNegozio: string; ragioneSociale: string }>();
+        const addList = (list: unknown) => {
+          if (!Array.isArray(list)) return;
+          for (const raw of list) {
+            if (!raw || typeof raw !== "object") continue;
+            const pdv = raw as { codicePos?: unknown; nome?: unknown; ragioneSociale?: unknown };
+            const codicePos = typeof pdv.codicePos === "string" ? pdv.codicePos.trim() : "";
+            if (!codicePos) continue;
+            directory.set(codicePos, {
+              nomeNegozio: typeof pdv.nome === "string" && pdv.nome.trim() ? pdv.nome.trim() : codicePos,
+              ragioneSociale: typeof pdv.ragioneSociale === "string" ? pdv.ragioneSociale.trim() : "",
+            });
+          }
+        };
+
+        const orgConfig = await storage.getOrgConfig(orgId);
+        addList((orgConfig?.config as { puntiVendita?: unknown } | null | undefined)?.puntiVendita);
+        for (const period of months) {
+          const cfg = await storage.getGaraConfig(orgId, period.month, period.year);
+          addList((cfg?.config as { pdvList?: unknown } | null | undefined)?.pdvList);
+        }
+        return Object.fromEntries(directory);
+      };
 
       // Filtro per-operatore (Task #158): l'operatore vede solo le vendite il
       // cui addetto rientra nei nominativi BiSuite a lui associati
@@ -3478,16 +3506,25 @@ export async function registerRoutes(
       const monthParam = req.query.month ? parseInt(req.query.month as string, 10) : NaN;
       if (Number.isFinite(yearParam) && Number.isFinite(monthParam) && monthParam >= 1 && monthParam <= 12) {
         const sales = canonRs(applyOperatorFilter(await storage.getBisuiteSalesByItalianMonth(orgId, yearParam, monthParam, includeAnnullate)));
-        return res.json({ sales, count: sales.length });
+        const pdvDirectory = await buildPdvDirectory([{ year: yearParam, month: monthParam }]);
+        return res.json({ sales, count: sales.length, pdvDirectory });
       }
 
       const fromYMD = toItalianYMD(req.query.from as string | undefined);
       const toYMD = toItalianYMD(req.query.to as string | undefined);
-      if (fromYMD === null || toYMD === null) {
+      if (!fromYMD || !toYMD) {
         return res.status(400).json({ error: "Parametri from/to non validi (atteso YYYY-MM-DD)" });
       }
+      const periods: Array<{ year: number; month: number }> = [];
+      const cursor = new Date(`${fromYMD.slice(0, 7)}-01T00:00:00Z`);
+      const stop = new Date(`${toYMD.slice(0, 7)}-01T00:00:00Z`);
+      while (cursor <= stop && periods.length < 120) {
+        periods.push({ year: cursor.getUTCFullYear(), month: cursor.getUTCMonth() + 1 });
+        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+      }
       const sales = canonRs(applyOperatorFilter(await storage.getBisuiteSalesByItalianDateRange(orgId, fromYMD, toYMD, includeAnnullate)));
-      res.json({ sales, count: sales.length });
+      const pdvDirectory = await buildPdvDirectory(periods);
+      res.json({ sales, count: sales.length, pdvDirectory });
     } catch (error: unknown) {
       console.error("BiSuite sales read error:", error);
       const msg = error instanceof Error ? error.message : String(error);
@@ -3948,6 +3985,20 @@ export async function registerRoutes(
         }
       }
 
+      const garaPdvList = ((garaCfg?.config as { pdvList?: Array<{
+        codicePos?: string;
+        nome?: string;
+        ragioneSociale?: string;
+      }> } | null | undefined)?.pdvList ?? []);
+      const pdvDirectory = Object.fromEntries(
+        garaPdvList
+          .filter((p) => p.codicePos)
+          .map((p) => [p.codicePos!, {
+            nomeNegozio: p.nome || p.codicePos,
+            ragioneSociale: p.ragioneSociale || "",
+          }]),
+      );
+
       const { selectInGaraSales } = await import("./bisuiteGaraFilter");
       const { sales: salesInGara, calendarsAvailable, totalSalesUnfiltered, salesExcludedOutOfGara } =
         selectInGaraSales(allSales, inGaraOnly, garaCfg, pdvView);
@@ -3964,6 +4015,7 @@ export async function registerRoutes(
         salesInGara,
         { codicePos: perimeterPos, ragioniSociali: perimeterRs },
         pdvView,
+        pdvDirectory,
       );
 
       const sysMapping = await storage.getSystemConfig("bisuite_mapping");
@@ -3988,7 +4040,7 @@ export async function registerRoutes(
         latestSaleDate,
         daily,
         salesSenzaDestinazione,
-      } = aggregateMappedSales(sales, rules, { pdvView });
+      } = aggregateMappedSales(sales, rules, { pdvView, pdvDirectory });
 
       res.json({
         month,
