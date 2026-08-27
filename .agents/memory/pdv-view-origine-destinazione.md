@@ -13,15 +13,19 @@ della vendita (`codicePos`/`nomeNegozio`) restano SEMPRE l'origine.
 - In vista Destinazione, vendite senza destinazione → bucket esplicito
   `SENZA_DESTINAZIONE` (mai attribuite a un altro negozio); banner con conteggio
   sia in Vendite che in Dashboard.
-- SOLO la route GET /api/admin/bisuite-mapped-sales accetta `pdvView`
-  (aggregazione + calendario in-gara sul lato scelto). Tutti gli altri consumer
-  (CJ, CdG, incentivi, report Telegram) restano ancorati all'origine — non
-  estendere il parametro altrove senza richiesta esplicita.
-- Il client Vendite deriva la vista riscrivendo in memoria codicePos/nomeNegozio
-  dell'array vendite; i dati memorizzati non cambiano mai.
+- La Ragione Sociale segue sempre il PDV effettivo della vista: in Destinazione
+  va risolta dal catalogo struttura/gara del periodo, mai ereditata dall'origine.
+- Dashboard e Vendite devono derivare TUTTI i dati a valle dalla stessa vista:
+  selector, filtri, KPI, tabelle, grafici, premi, proiezioni, riepiloghi RS ed export.
+- Il catalogo mensile della gara integra/sovrascrive la struttura generale: una
+  destinazione censita solo nella gara deve comunque avere nome e RS corretti.
+- I client possono riscrivere in memoria codicePos/nomeNegozio/RS per la vista;
+  i dati memorizzati non cambiano mai. Gli altri moduli restano ancorati
+  all'origine finché non viene richiesto esplicitamente.
 
 **Why:** una vendita trasferita deve poter essere analizzata sul negozio di
 destinazione senza alterare l'attribuzione storica usata dagli altri moduli.
+Rimappare solo codice e nome lascia RS, filtri e aggregati incoerenti.
 
 **How to apply:** qualsiasi nuova feature "per destinazione" passa da
 `resolveSalePdvForView`/`extractPdvDestinazione`; vista origine deve restare
