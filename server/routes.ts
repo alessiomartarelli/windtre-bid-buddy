@@ -136,6 +136,33 @@ const isAuthenticated: RequestHandler = async (req: any, res, next) => {
   return res.status(401).json({ message: "Unauthorized" });
 };
 
+// Task #524/#525: rimuove dai brandIds dei puntiVendita in organization_config
+// gli id di brand non più validi (dissociati o eliminati), altrimenti ogni
+// salvataggio successivo di quei PDV fallirebbe con 400 (validateBrandIds).
+// Ritorna il numero di PDV ripuliti.
+async function cleanupPdvBrandRefs(
+  orgId: string,
+  keepBrandId: (id: string) => boolean,
+  updatedBy: string | null,
+): Promise<number> {
+  let pdvPuliti = 0;
+  const cfg = await storage.getOrgConfig(orgId);
+  const config = (cfg?.config as Record<string, unknown> | null) || {};
+  const pv = Array.isArray(config.puntiVendita) ? (config.puntiVendita as Record<string, unknown>[]) : [];
+  const next = pv.map((p) => {
+    const ids = (p as any)?.brandIds;
+    if (!Array.isArray(ids)) return p;
+    const kept = ids.filter((id: unknown) => typeof id === "string" && keepBrandId(id));
+    if (kept.length === ids.length) return p;
+    pdvPuliti++;
+    return { ...p, brandIds: kept };
+  });
+  if (pdvPuliti > 0) {
+    await storage.upsertOrgConfig(orgId, { ...config, puntiVendita: next }, cfg?.configVersion || "2.0", updatedBy);
+  }
+  return pdvPuliti;
+}
+
 // Blocca le route se nessuno dei moduli indicati è abilitato per l'org dell'utente.
 // Accetta una singola chiave o un array (semantica OR: basta che uno sia abilitato).
 // super_admin bypassa sempre. Richiede isAuthenticated prima.
@@ -2128,9 +2155,21 @@ export async function registerRoutes(
       const brand = await storage.getBrand(req.params.id);
       if (!brand) return res.status(404).json({ message: "Brand non trovato" });
       const removedAssociations = await storage.countBrandAssociations(brand.id);
+      // Task #525: prima del delete globale, ripulisci i riferimenti residui
+      // nei brandIds dei puntiVendita di TUTTE le org associate, altrimenti
+      // (le associazioni org↔brand cadono in cascata via FK) ogni salvataggio
+      // successivo di quei PDV fallirebbe con 400 (validateBrandIds).
+      // Itera TUTTE le org (non solo quelle con associazione corrente):
+      // possono esistere riferimenti residui anche in org senza associazione
+      // (dati legacy o dissociazioni precedenti alla pulizia automatica).
+      let pdvPuliti = 0;
+      const orgs = await storage.getOrganizations();
+      for (const o of orgs) {
+        pdvPuliti += await cleanupPdvBrandRefs(o.id, (id) => id !== brand.id, req.session.userId ?? null);
+      }
       // Le associazioni org↔brand vengono rimosse in cascata (FK).
       await storage.deleteBrand(brand.id);
-      res.json({ ok: true, removedAssociations });
+      res.json({ ok: true, removedAssociations, pdvPuliti });
     } catch (error) {
       res.status(500).json({ message: "Errore nell'eliminazione del brand" });
     }
@@ -2180,22 +2219,8 @@ export async function registerRoutes(
       // residui nei brandIds dei puntiVendita in organization_config,
       // altrimenti ogni salvataggio successivo di quei PDV fallirebbe con
       // 400 (validateBrandIds) finché qualcuno non li ripulisce a mano.
-      let pdvPuliti = 0;
       const allowed = new Set(saved);
-      const cfg = await storage.getOrgConfig(org.id);
-      const config = (cfg?.config as Record<string, unknown> | null) || {};
-      const pv = Array.isArray(config.puntiVendita) ? (config.puntiVendita as Record<string, unknown>[]) : [];
-      const next = pv.map((p) => {
-        const ids = (p as any)?.brandIds;
-        if (!Array.isArray(ids)) return p;
-        const kept = ids.filter((id: unknown) => typeof id === "string" && allowed.has(id));
-        if (kept.length === ids.length) return p;
-        pdvPuliti++;
-        return { ...p, brandIds: kept };
-      });
-      if (pdvPuliti > 0) {
-        await storage.upsertOrgConfig(org.id, { ...config, puntiVendita: next }, cfg?.configVersion || "2.0", req.session.userId ?? null);
-      }
+      const pdvPuliti = await cleanupPdvBrandRefs(org.id, (id) => allowed.has(id), req.session.userId ?? null);
       res.json({ ok: true, brandIds: saved, pdvPuliti });
     } catch (error) {
       res.status(500).json({ message: "Errore nel salvataggio dei brand dell'organizzazione" });

@@ -276,3 +276,111 @@ test('dissociazione brand dall\'org: ripulisce i brandIds residui e il PDV resta
   assert.equal(reassoc.status, 200);
   assert.equal(reassoc.body?.pdvPuliti, 0, 'no PDV must be touched when brands are re-added');
 });
+
+// Task #525: l'eliminazione GLOBALE di un brand (DELETE /api/admin/brands/:id)
+// deve ripulire i riferimenti residui nei brandIds dei puntiVendita di tutte
+// le org associate. Le associazioni org↔brand cadono in cascata via FK, ma
+// senza pulizia i PDV resterebbero non salvabili (400 validateBrandIds).
+test('eliminazione globale brand: ripulisce i brandIds residui e il PDV resta salvabile', async (t) => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'pdv_brand_del' });
+  // Il DELETE dei brand richiede super_admin: promuovi l'utente di test.
+  await pool.query(`UPDATE profiles SET role = 'super_admin' WHERE id = $1`, [session.profileId]);
+  const brands = await seedOrgBrands(pool, session.orgId, 2);
+  const headers = { Cookie: session.cookieHeader };
+
+  // Seconda org SENZA associazione al brand ma con un riferimento residuo
+  // (dati legacy): anche lei deve essere ripulita dal DELETE globale.
+  const other = await signup({ prefix: 'pdv_brand_del_other' });
+  const otherHeaders = { Cookie: other.cookieHeader };
+
+  t.after(async () => {
+    await cleanupBrands(pool, brands);
+    await cleanupOrg(pool, session);
+    await cleanupOrg(pool, other);
+    await pool.end();
+  });
+
+  // 1) PDV con entrambi i brand associati.
+  const body = pdvBody({ brandIds: [brands[0].id, brands[1].id] });
+  const create = await jsonReq(`${BASE}/api/admin/struttura/pdv`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  assert.equal(create.status, 201, `create failed: ${JSON.stringify(create.body)}`);
+
+  // 1b) PDV nella seconda org (senza brand), poi inietta via SQL un
+  // riferimento residuo a brands[1] (org NON associata al brand).
+  const otherBody = pdvBody({ brandIds: [] });
+  const otherCreate = await jsonReq(`${BASE}/api/admin/struttura/pdv`, {
+    method: 'POST',
+    headers: otherHeaders,
+    body: JSON.stringify(otherBody),
+  });
+  assert.equal(otherCreate.status, 201, `other-org create failed: ${JSON.stringify(otherCreate.body)}`);
+  await pool.query(
+    `UPDATE organization_config
+        SET config = jsonb_set(config, '{puntiVendita}',
+          (SELECT jsonb_agg(
+             CASE WHEN p ->> 'codicePos' = $2
+                  THEN jsonb_set(p, '{brandIds}', to_jsonb(ARRAY[$3::text]))
+                  ELSE p END)
+             FROM jsonb_array_elements(config -> 'puntiVendita') AS p))
+      WHERE organization_id = $1`,
+    [other.orgId, otherBody.codicePos, brands[1].id],
+  );
+  const injected = (await readPersistedPdvs(pool, other.orgId)).find((p) => p.codicePos === otherBody.codicePos);
+  assert.deepEqual(injected?.brandIds, [brands[1].id], 'residual ref must be injected');
+
+  // 2) DELETE globale di brands[1].
+  const del = await jsonReq(`${BASE}/api/admin/brands/${brands[1].id}`, {
+    method: 'DELETE',
+    headers,
+  });
+  assert.equal(del.status, 200, `delete failed: ${JSON.stringify(del.body)}`);
+  assert.equal(del.body?.pdvPuliti, 2, 'both PDVs (associated org + legacy residual org) must be cleaned');
+
+  // 3) Il riferimento residuo è stato rimosso dal PDV.
+  const pv = await readPersistedPdvs(pool, session.orgId);
+  const saved = pv.find((p) => p.codicePos === body.codicePos);
+  assert.ok(saved, 'PDV must still exist');
+  assert.deepEqual(saved.brandIds, [brands[0].id], 'deleted brandId must be removed');
+
+  // 4) Il PDV resta salvabile: PUT → 200 (non 400).
+  const put = await jsonReq(`${BASE}/api/admin/struttura/pdv`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      oldRagioneSociale: body.ragioneSociale,
+      oldCodicePos: body.codicePos,
+      nome: 'Nome Dopo Delete Brand',
+      brandIds: saved.brandIds,
+    }),
+  });
+  assert.equal(put.status, 200, `PDV must stay saveable after brand delete, got ${put.status}: ${JSON.stringify(put.body)}`);
+
+  const pv2 = await readPersistedPdvs(pool, session.orgId);
+  const saved2 = pv2.find((p) => p.codicePos === body.codicePos);
+  assert.equal(saved2?.nome, 'Nome Dopo Delete Brand');
+  assert.deepEqual(saved2?.brandIds, [brands[0].id]);
+
+  // 5) Anche la seconda org (senza associazione) è stata ripulita e il suo
+  // PDV resta salvabile.
+  const otherPv = await readPersistedPdvs(pool, other.orgId);
+  const otherSaved = otherPv.find((p) => p.codicePos === otherBody.codicePos);
+  assert.ok(otherSaved, 'other-org PDV must still exist');
+  assert.deepEqual(otherSaved.brandIds, [], 'legacy residual brandId must be removed');
+
+  const otherPut = await jsonReq(`${BASE}/api/admin/struttura/pdv`, {
+    method: 'PUT',
+    headers: otherHeaders,
+    body: JSON.stringify({
+      oldRagioneSociale: otherBody.ragioneSociale,
+      oldCodicePos: otherBody.codicePos,
+      nome: 'Nome Altro Org Dopo Delete',
+      brandIds: otherSaved.brandIds,
+    }),
+  });
+  assert.equal(otherPut.status, 200, `other-org PDV must stay saveable, got ${otherPut.status}: ${JSON.stringify(otherPut.body)}`);
+});
