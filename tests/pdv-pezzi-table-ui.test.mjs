@@ -586,7 +586,7 @@ const PISTA_LABELS = {
   fisso: 'Fisso',
   energia: 'Energia',
   assicurazioni: 'Assicurazioni',
-  partnership: 'Partnership',
+  partnership: 'Partnership Reward',
   cb: 'Customer Base',
   protecta: 'Windtre Protetti',
   extra_gara_iva: 'Extra Gara P.IVA',

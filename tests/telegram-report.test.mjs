@@ -49,6 +49,16 @@ const {
   hasForecast,
   EMPTY_FORECAST,
 } = await import("../shared/venditeCommento.ts");
+const {
+  DEFAULT_TELEGRAM_REPORT_CONTENT,
+  TELEGRAM_REPORT_PISTE,
+  parseTelegramReportContent,
+  applyBrandGating,
+  effectiveGroupPiste,
+  isPistaVisible,
+  groupPezziOf,
+  buildGroupTopByPezzi,
+} = await import("../shared/telegramReportContent.ts");
 
 let passed = 0;
 let failed = 0;
@@ -104,6 +114,40 @@ await test("vendite ANNULLATA escluse da tutti i conteggi (case-insensitive)", (
   assert.equal(a.countByType.prodotti, 0);
   assert.equal(a.perPdv.length, 1);
   assert.equal(a.perPdv[0].vendite, 1);
+});
+
+await test("visiblePiste: pezzi delle piste nascoste esclusi da mix/pista/drill-down (Task #515)", () => {
+  const rows = [
+    sale({ totale: "130", nomeAddetto: "Anna", articoli: [art("UNTIED", 30), art("ENERGIA W3", 10), art("TELEFONIA", 100)] }),
+    sale({ totale: "25", nomeAddetto: "Bruno", codicePos: "POS2", nomeNegozio: "Negozio 2", articoli: [art("ENERGIA W3", 25)] }),
+  ];
+  const a = aggregateDailyReport(rows, undefined, ["mobile", "fisso"]);
+  // I totali per VENDITA restano a livello scontrino (includono anche telefoni).
+  assert.equal(a.vendite, 2);
+  assert.equal(a.importo, 155);
+  // Il mix canvass esclude i pezzi/importi di energia (nascosta).
+  assert.equal(a.countByType.canvass, 1);
+  assert.equal(a.amountByType.canvass, 30);
+  assert.equal(a.countByPista.mobile, 1);
+  assert.equal(a.countByPista.energia, undefined);
+  assert.equal(a.amountByPista.energia, undefined);
+  // Drill-down PDV/addetto senza la pista nascosta; energiaByCliente vuoto.
+  const pos2 = a.perPdv.find((p) => p.codicePos === "POS2");
+  assert.equal(pos2.dettaglio.countByPista.energia ?? 0, 0);
+  const anna = a.perAddetto.find((x) => x.nomeAddetto === "Anna");
+  assert.equal(anna.dettaglio.countByPista.energia ?? 0, 0);
+  assert.equal(anna.dettaglio.countByPista.mobile, 1);
+  assert.equal(a.energiaByCliente.privato.pezzi + a.energiaByCliente.business.pezzi, 0);
+  // Coupon Caring è il dettaglio della pista CB: con cb nascosta sparisce.
+  const ccRows = [sale({ totale: "10", articoli: [art("MIA TIED", 10, { descrizione: "COUPON CARING" })] })];
+  const ccHidden = aggregateDailyReport(ccRows, undefined, ["mobile"]);
+  assert.equal(ccHidden.couponCaring.pezzi, 0, "coupon caring nascosto senza pista cb");
+  const ccShown = aggregateDailyReport(ccRows, undefined, ["cb"]);
+  assert.ok(ccShown.couponCaring.pezzi >= 0); // shape invariata
+  // Senza parametro: nessun filtro (comportamento storico).
+  const full = aggregateDailyReport(rows);
+  assert.equal(full.countByType.canvass, 3);
+  assert.equal(full.countByPista.energia, 2);
 });
 
 await test("aggregazione per tipo e pista su più vendite", () => {
@@ -1769,9 +1813,10 @@ await test("parziale con vendite: apertura ☀️, lead 'Finora', standout negoz
   assert.ok(s.includes("Centro"));
   assert.ok(s.includes("Mario Rossi"));
   assert.ok(s.includes("Sul mese"));
-  // Standout cita i PEZZI (canvass/telefoni), non il punteggio.
-  assert.ok(/pezz[io] canvass|telefon[io]/.test(s));
-  assert.ok(!/di performance|punt[io]/.test(s));
+  // Standout TELCO a pezzi (UNTIED ⇒ mobile), nessun punteggio pesato.
+  assert.ok(s.includes("TELCO"));
+  assert.ok(/pezz[io]/.test(s));
+  assert.ok(!/di performance|puntegg/.test(s));
 });
 
 await test("chiusura con vendite: apertura 🌙 e lead 'In chiusura'", () => {
@@ -1891,6 +1936,112 @@ await test("accessori/servizi: menzione a parte, senza citare il punteggio", () 
   assert.ok(s.includes("arricchisce lo scontrino"));
   assert.ok(s.includes("accessori"));
   assert.ok(!s.includes("A parte dal punteggio"));
+});
+
+// ── Contenuti report Telegram (Task #515) ────────────────────────────
+console.log("\n— telegramReportContent (Task #515) —");
+
+await test("parse: default legacy con input assente/non-oggetto", () => {
+  for (const raw of [undefined, null, 42, "x", []]) {
+    assert.deepEqual(parseTelegramReportContent(raw), DEFAULT_TELEGRAM_REPORT_CONTENT);
+  }
+  assert.deepEqual(DEFAULT_TELEGRAM_REPORT_CONTENT.pisteVisibili, ["mobile", "fisso", "cb", "assicurazioni", "protecta", "energia"]);
+  assert.deepEqual(DEFAULT_TELEGRAM_REPORT_CONTENT.telcoPiste, ["mobile", "fisso"]);
+  assert.deepEqual(DEFAULT_TELEGRAM_REPORT_CONTENT.newCorePiste, ["assicurazioni", "energia"]);
+});
+
+await test("parse: array vuoto rispettato, campo mancante ⇒ default, whitelist+ordine normalizzati", () => {
+  const c = parseTelegramReportContent({ pisteVisibili: ["energia", "mobile", "iva", "boh"], telcoPiste: [] });
+  assert.deepEqual(c.pisteVisibili, ["mobile", "energia"]); // ordine canonico, ignoti scartati
+  assert.deepEqual(c.telcoPiste, []); // vuoto esplicito rispettato
+  assert.deepEqual(c.newCorePiste, DEFAULT_TELEGRAM_REPORT_CONTENT.newCorePiste);
+});
+
+await test("gating VF: protecta rimossa da visibilità e gruppi anche se salvata", () => {
+  const c = applyBrandGating(parseTelegramReportContent({ pisteVisibili: TELEGRAM_REPORT_PISTE, newCorePiste: ["protecta", "energia"] }), true);
+  assert.ok(!c.pisteVisibili.includes("protecta"));
+  assert.ok(!c.newCorePiste.includes("protecta"));
+  const w = applyBrandGating(parseTelegramReportContent({ pisteVisibili: TELEGRAM_REPORT_PISTE }), false);
+  assert.ok(w.pisteVisibili.includes("protecta")); // WindTre: resta se abilitata
+});
+
+await test("effectiveGroupPiste: interseca gruppo e piste visibili", () => {
+  const c = parseTelegramReportContent({ pisteVisibili: ["mobile"], telcoPiste: ["mobile", "fisso"] });
+  assert.deepEqual(effectiveGroupPiste(c, "telco"), ["mobile"]);
+  assert.equal(isPistaVisible(c, "fisso"), false);
+});
+
+await test("groupPezziOf/buildGroupTopByPezzi: somma pezzi per gruppo, esclude N/D", () => {
+  const a = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario", articoli: [art("UNTIED", 30), art("UNTIED", 30)] }),
+    sale({ codicePos: "P2", nomeNegozio: "Mare", nomeAddetto: "Luigi", articoli: [art("ADSL/FIBRA/FWA CF", 30), art("ALLARMI", 60)] }),
+  ]);
+  assert.equal(groupPezziOf(a, ["mobile", "fisso"]), 3);
+  const top = buildGroupTopByPezzi(a, ["mobile", "fisso"]);
+  assert.equal(top.addetto?.nome, "Mario");
+  assert.equal(top.addetto?.pezzi, 2);
+  assert.equal(top.negozio?.nome, "Centro");
+  const soloProt = buildGroupTopByPezzi(a, ["protecta"]);
+  assert.equal(soloProt.addetto?.nome, "Luigi");
+});
+
+await test("commento: pista esclusa sparisce da testo; VF senza riferimenti Protetti/Verisure", () => {
+  const contentVf = applyBrandGating(parseTelegramReportContent(undefined), true);
+  const s = buildDirettoreCommento({
+    fascia: "parziale", dateYMD: "2026-07-15", forecast: cjForecast,
+    today: cjToday, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26,
+    content: contentVf,
+  });
+  assert.ok(!s.includes("Protetti"));
+  assert.ok(!s.includes("Verisure"));
+});
+
+await test("commento: gruppi indipendenti — TELCO vuoto ⇒ blocco assente, NEW CORE resta", () => {
+  const today = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Anna", articoli: [art("ENERGIA W3", 30)] }),
+  ]);
+  const content = parseTelegramReportContent({ telcoPiste: [], newCorePiste: ["energia"] });
+  const s = buildDirettoreCommento({
+    fascia: "parziale", dateYMD: "2026-07-15", forecast: cjForecast,
+    today, month: cjMonth, elapsedWorkingDays: 10, totalWorkingDays: 26,
+    content,
+  });
+  assert.ok(!s.includes("TELCO"));
+  assert.ok(s.includes("NEW CORE"));
+  assert.ok(s.includes("Anna"));
+});
+
+await test("HTML: pista esclusa sparisce da card piste, proiezioni e drill; Protetti omesso", () => {
+  const a = aggregateDailyReport([
+    sale({ codicePos: "P1", nomeNegozio: "Centro", nomeAddetto: "Mario", articoli: [art("UNTIED", 30), art("ALLARMI", 60), art("LUCE", 20)] }),
+  ]);
+  const content = applyBrandGating(parseTelegramReportContent(undefined), true); // niente protecta
+  const proj = buildMonthEndProjection("2026-07-15", a, cjForecast) ?? undefined;
+  const html = buildVenditeReportHtml({
+    orgName: "Org VF", dateYMD: "2026-07-15", timeLabel: "22:30",
+    aggregates: a, month: { label: "Luglio 2026", aggregates: a }, monthProjection: proj,
+    content,
+  });
+  assert.ok(!html.includes("Protetti"));
+  assert.ok(!html.includes("Verisure"));
+  assert.ok(html.includes("Energia")); // pista visibile resta
+  // Senza content ⇒ default legacy: Protetti presente.
+  const htmlDefault = buildVenditeReportHtml({ orgName: "Org W3", dateYMD: "2026-07-15", timeLabel: "22:30", aggregates: a });
+  assert.ok(htmlDefault.includes("WindTre Protetti"));
+});
+
+await test("HTML: classifiche PDV/addetti ordinate per pezzi delle piste visibili", () => {
+  const a = aggregateDailyReport([
+    // P1/Mario: importo alto ma pezzi mobile 1; P2/Luigi: 3 pezzi mobile.
+    sale({ codicePos: "P1", nomeNegozio: "Alfa", nomeAddetto: "Mario", totale: "900", articoli: [art("UNTIED", 900)] }),
+    sale({ codicePos: "P2", nomeNegozio: "Beta", nomeAddetto: "Luigi", totale: "90", articoli: [art("UNTIED", 30), art("UNTIED", 30), art("UNTIED", 30)] }),
+  ]);
+  const html = buildVenditeReportHtml({ orgName: "O", dateYMD: "2026-07-15", timeLabel: "22:30", aggregates: a });
+  const iBeta = html.indexOf("Beta");
+  const iAlfa = html.indexOf("Alfa");
+  assert.ok(iBeta >= 0 && iAlfa >= 0 && iBeta < iAlfa, "Beta (3 pz) prima di Alfa (1 pz)");
+  assert.ok(html.indexOf("Luigi") < html.indexOf("🥇") + 200); // medaglia sul primo per pezzi
+  assert.ok(/3 pz/.test(html));
 });
 
 // ── Scheduler con storage mockato (Task #333) ────────────────────────

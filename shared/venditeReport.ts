@@ -18,6 +18,9 @@ import {
   type ForecastConfig,
   type Fascia,
 } from "./venditeCommento";
+// Import SOLO type: telegramReportContent.ts importa a sua volta tipi da
+// questo modulo (nessun ciclo runtime).
+import type { TelegramReportContentConfig } from "./telegramReportContent";
 
 // Shape minimale della vendita necessaria al report: sottoinsieme di
 // `BisuiteSale` (shared/schema.ts) senza dipendere da Drizzle.
@@ -268,7 +271,14 @@ export function energiaClienteFromDescrizione(descrizione: string): "privato" | 
 export function aggregateDailyReport(
   rows: VenditaReportRow[],
   weights: PerformanceWeightsConfig = DEFAULT_PERFORMANCE_WEIGHTS,
+  visiblePiste?: readonly PistaCanvass[],
 ): DailyReportAggregates {
+  // Filtro piste del report Telegram (Task #515): gli articoli canvass delle
+  // piste NON visibili sono esclusi da mix, conteggi per pista, drill-down e
+  // punteggi. I totali per VENDITA (vendite/importo, che includono anche
+  // telefoni/accessori/servizi) restano a livello scontrino. Senza parametro
+  // (chiamanti storici: Dashboard, pagine Vendite) nessun filtro.
+  const pistaVisible = (p: PistaCanvass): boolean => !visiblePiste || visiblePiste.includes(p);
   const countByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
   const amountByType: Record<ArticleType, number> = { canvass: 0, prodotti: 0, servizi: 0 };
   const countByPista: Partial<Record<PistaCanvass, number>> = {};
@@ -320,10 +330,22 @@ export function aggregateDailyReport(
     const sc = classifySaleArticles(row.rawData);
     const custKind = saleCustomerKind(row.rawData);
     for (const t of Object.keys(sc.countByType) as ArticleType[]) {
-      countByType[t] += sc.countByType[t];
-      amountByType[t] += sc.amountByType[t];
+      let c = sc.countByType[t];
+      let a = sc.amountByType[t];
+      if (t === "canvass" && visiblePiste) {
+        // I pezzi/importi canvass delle piste nascoste non contano nel mix.
+        for (const [p, n] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
+          if (!pistaVisible(p)) {
+            c -= n;
+            a -= sc.amountByPista[p] ?? 0;
+          }
+        }
+      }
+      countByType[t] += c;
+      amountByType[t] += a;
     }
     for (const [pista, count] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
+      if (!pistaVisible(pista)) continue;
       countByPista[pista] = (countByPista[pista] ?? 0) + count;
       amountByPista[pista] = (amountByPista[pista] ?? 0) + (sc.amountByPista[pista] ?? 0);
       if (custKind === "business") {
@@ -334,7 +356,9 @@ export function aggregateDailyReport(
     for (const article of sc.articles) {
       // Report dedicato Coupon Caring (esclusi dai pezzi CB): totale +
       // breakdown per categoria BiSuite (MIA TIED / MIA UNTIED).
-      if (article.couponCaring) {
+      // Coupon Caring è il dettaglio dedicato della pista CB: se la pista CB
+      // non è visibile nel report, anche la card Coupon Caring sparisce.
+      if (article.couponCaring && pistaVisible("cb")) {
         couponCaring.pezzi++;
         couponCaring.importo += article.prezzo;
         const ccLabel = article.categoriaNome.trim() || "Altro";
@@ -343,7 +367,7 @@ export function aggregateDailyReport(
         ccEntry.importo += article.prezzo;
         couponCaringMap.set(ccLabel, ccEntry);
       }
-      if (article.pista) {
+      if (article.pista && pistaVisible(article.pista)) {
         // Etichetta dei chip nella card "La gara delle piste". Per la maggior
         // parte delle piste è la categoria BiSuite (es. mobile ⇒ TIED CF /
         // UNTIED). Per assicurazioni ed energia la categoria è un unico bucket
@@ -593,7 +617,12 @@ export function addYmdDays(ymd: string, days: number): string {
  * ANNULLATA e le righe senza data riconoscibile o fuori intervallo sono
  * escluse. Intervallo non valido o rovesciato ⇒ [].
  */
-export function buildDailyTrend(rows: VenditaTrendRow[], fromYMD: string, toYMD: string): TrendDay[] {
+export function buildDailyTrend(
+  rows: VenditaTrendRow[],
+  fromYMD: string,
+  toYMD: string,
+  visiblePiste?: readonly PistaCanvass[],
+): TrendDay[] {
   const re = /^\d{4}-\d{2}-\d{2}$/;
   if (!re.test(fromYMD.trim()) || !re.test(toYMD.trim()) || fromYMD > toYMD) return [];
 
@@ -612,6 +641,7 @@ export function buildDailyTrend(rows: VenditaTrendRow[], fromYMD: string, toYMD:
     day.importo += parseTotale(row.totale);
     const sc = classifySaleArticles(row.rawData);
     for (const [pista, count] of Object.entries(sc.countByPista) as [PistaCanvass, number][]) {
+      if (visiblePiste && !visiblePiste.includes(pista)) continue;
       day.countByPista[pista] = (day.countByPista[pista] ?? 0) + count;
     }
   }
@@ -649,6 +679,7 @@ export function buildDailyHistory(
   rows: VenditaTrendRow[],
   fromYMD: string,
   toYMD: string,
+  visiblePiste?: readonly PistaCanvass[],
 ): DayHistoryEntry[] {
   const re = /^\d{4}-\d{2}-\d{2}$/;
   if (!re.test(fromYMD.trim()) || !re.test(toYMD.trim()) || fromYMD > toYMD) return [];
@@ -664,7 +695,7 @@ export function buildDailyHistory(
   }
   return Array.from(byDay.entries()).map(([ymd, dayRows]) => ({
     ymd,
-    aggregates: aggregateDailyReport(dayRows),
+    aggregates: aggregateDailyReport(dayRows, undefined, visiblePiste),
   }));
 }
 
@@ -1001,13 +1032,24 @@ export interface TopKpiEntry {
   negozio: TopKpiWinner | null;
 }
 
+/** Piste dei gruppi TELCO/NEW CORE per i migliori per KPI (default legacy). */
+export interface TopKpiGroups {
+  telcoPiste: PistaCanvass[];
+  newCorePiste: PistaCanvass[];
+}
+
+const DEFAULT_TOP_KPI_GROUPS: TopKpiGroups = {
+  telcoPiste: ["mobile", "fisso"],
+  newCorePiste: ["assicurazioni", "energia"],
+};
+
 /** Valore di un KPI dal drill-down di un addetto/negozio. */
-function drilldownKpiValue(d: ReportDrilldown, key: TopKpiKey): number {
+function drilldownKpiValue(d: ReportDrilldown, key: TopKpiKey, groups: TopKpiGroups): number {
   switch (key) {
     case "telco":
-      return (d.countByPista.fisso ?? 0) + (d.countByPista.mobile ?? 0);
+      return groups.telcoPiste.reduce((s, p) => s + (d.countByPista[p] ?? 0), 0);
     case "newcore":
-      return (d.countByPista.assicurazioni ?? 0) + (d.countByPista.energia ?? 0);
+      return groups.newCorePiste.reduce((s, p) => s + (d.countByPista[p] ?? 0), 0);
     case "telefoni":
       return (
         d.prodottiByCategoria.find((c) => c.categoria.trim().toUpperCase() === TELEFONI_CATEGORIA)
@@ -1039,7 +1081,8 @@ const TOP_KPI_DEFS: ReadonlyArray<{ key: TopKpiKey; label: string; unit: "pz" | 
  * maggiore per superare). KPI a zero per tutti (né addetto né negozio) ⇒
  * la voce non compare nel risultato.
  */
-export function buildTopPerKpi(a: DailyReportAggregates): TopKpiEntry[] {
+export function buildTopPerKpi(a: DailyReportAggregates, groups?: TopKpiGroups): TopKpiEntry[] {
+  const g = groups ?? DEFAULT_TOP_KPI_GROUPS;
   const best = <T,>(
     items: T[],
     getDrill: (x: T) => ReportDrilldown,
@@ -1050,7 +1093,7 @@ export function buildTopPerKpi(a: DailyReportAggregates): TopKpiEntry[] {
     for (const it of items) {
       const nome = getNome(it);
       if (!nome || nome === "N/D") continue;
-      const valore = drilldownKpiValue(getDrill(it), key);
+      const valore = drilldownKpiValue(getDrill(it), key, g);
       if (valore > 0 && (win === null || valore > win.valore)) win = { nome, valore };
     }
     return win;
@@ -1298,6 +1341,11 @@ export interface TelegramReportParams {
   forecast?: ForecastConfig;
   /** Fascia esplicita; se assente derivata da `timeLabel`. */
   fascia?: Fascia;
+  /**
+   * Configurazione contenuti report (Task #515), GIÀ gated per brand.
+   * Assente ⇒ default legacy (tutte le piste, gruppi storici).
+   */
+  content?: TelegramReportContentConfig;
 }
 
 /**
@@ -1337,6 +1385,7 @@ export function buildTelegramReportMessage(p: TelegramReportParams): string {
       month,
       elapsedWorkingDays: elapsed,
       totalWorkingDays: total,
+      content: p.content,
     }),
   );
 

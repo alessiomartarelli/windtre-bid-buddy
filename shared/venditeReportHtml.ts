@@ -38,6 +38,13 @@ import {
   TYPE_LABELS,
 } from "./bisuiteClassification";
 import { type DtsReportAggregates, type DtsIncidenza } from "./dtsReport";
+import {
+  type TelegramReportContentConfig,
+  DEFAULT_TELEGRAM_REPORT_CONTENT,
+  effectiveGroupPiste,
+  groupPezziOf,
+  isPistaVisible,
+} from "./telegramReportContent";
 
 // Palette per pista su fondo scuro (varianti luminose dei colori badge app).
 const PISTA_THEME: Record<PistaCanvass, string> = {
@@ -119,6 +126,12 @@ export interface VenditeReportHtmlParams {
    * prodotto. Assente ⇒ la sezione non compare.
    */
   dts?: DtsReportAggregates;
+  /**
+   * Configurazione contenuti report (Task #515), GIÀ gated per brand
+   * (applyBrandGating): piste visibili in tutte le sezioni e gruppi
+   * TELCO/NEW CORE dei "migliori". Assente ⇒ default legacy.
+   */
+  content?: TelegramReportContentConfig;
 }
 
 // ---------------------------------------------------------------------------
@@ -244,9 +257,10 @@ function heroSection(a: DailyReportAggregates, trend: TrendDay[] | undefined, op
     </div>`;
 }
 
-function highlightsSection(a: DailyReportAggregates): string {
+function highlightsSection(a: DailyReportAggregates, content: TelegramReportContentConfig): string {
   const items: string[] = [];
   const topPista = REPORT_PISTA_ORDER
+    .filter((p) => isPistaVisible(content, p))
     .map((p) => ({ p, n: a.countByPista[p] ?? 0 }))
     .sort((x, y) => y.n - x.n)[0];
   if (topPista && topPista.n > 0) {
@@ -271,8 +285,13 @@ const TOP_KPI_ICON: Record<TopKpiKey, string> = {
  * valore maturato (pz o €). Usata sia nella pagina giorno sia nel
  * "Totale mese" (senza proiezione). KPI a zero per tutti ⇒ riga assente.
  */
-function topPerKpiSection(a: DailyReportAggregates, title: string): string {
-  const entries = buildTopPerKpi(a);
+function topPerKpiSection(a: DailyReportAggregates, title: string, content: TelegramReportContentConfig): string {
+  // Gruppi TELCO/NEW CORE dalla config contenuti (intersecati con le piste
+  // visibili): gruppo vuoto ⇒ valore 0 per tutti ⇒ riga assente.
+  const entries = buildTopPerKpi(a, {
+    telcoPiste: effectiveGroupPiste(content, "telco"),
+    newCorePiste: effectiveGroupPiste(content, "newcore"),
+  });
   if (entries.length === 0) return "";
   const fmtVal = (unit: "pz" | "€", v: number) => (unit === "€" ? fmtEuro(v) : `${v} pz`);
   const cell = (icon: string, who: string, w: { nome: string; valore: number } | null, unit: "pz" | "€") =>
@@ -304,8 +323,8 @@ function trendSection(trend: TrendDay[] | undefined): string {
     </div>`;
 }
 
-function pisteSection(a: DailyReportAggregates, trend: TrendDay[] | undefined, titolo = "La gara delle piste"): string {
-  const active = REPORT_PISTA_ORDER.filter((p) => (a.countByPista[p] ?? 0) > 0);
+function pisteSection(a: DailyReportAggregates, trend: TrendDay[] | undefined, content: TelegramReportContentConfig, titolo = "La gara delle piste"): string {
+  const active = REPORT_PISTA_ORDER.filter((p) => isPistaVisible(content, p) && (a.countByPista[p] ?? 0) > 0);
   if (active.length === 0) return "";
   const maxCount = Math.max(...active.map((p) => a.countByPista[p] ?? 0), 1);
   const rows = active
@@ -422,7 +441,20 @@ const PROJ_KPI_STYLE: Record<string, { icon: string; color: string }> = {
   servizi: { icon: "🛠️", color: ORANGE },
 };
 
-function projectionSection(proj: MonthEndProjection | undefined): string {
+// Pista collegata a ogni riga di proiezione (le voci senza pista — Telefoni,
+// Accessori, Servizi — restano sempre: criteri fissi, Task #515).
+const PROJ_KEY_PISTA: Record<string, PistaCanvass> = {
+  mobile: "mobile",
+  mobileIva: "mobile",
+  fisso: "fisso",
+  fissoIva: "fisso",
+  energia: "energia",
+  assicurazioni: "assicurazioni",
+  protetti: "protecta",
+  cb: "cb",
+};
+
+function projectionSection(proj: MonthEndProjection | undefined, content: TelegramReportContentConfig): string {
   if (!proj) return "";
   const width = Math.min(100, Math.max(6, proj.totalWorkingDays > 0
     ? Math.round((proj.elapsedWorkingDays / proj.totalWorkingDays) * 100)
@@ -437,7 +469,13 @@ function projectionSection(proj: MonthEndProjection | undefined): string {
         <div class="pbar"><i style="width:${width}%;background:linear-gradient(90deg,${s.color},${s.color}66)"></i></div>
       </div>`;
   };
-  const rows = proj.kpis.map(row).join("\n        ");
+  const rows = proj.kpis
+    .filter((e) => {
+      const pista = PROJ_KEY_PISTA[e.key];
+      return pista === undefined || isPistaVisible(content, pista);
+    })
+    .map(row)
+    .join("\n        ");
   return `<div class="card"><h2>Proiezione fine mese <span class="h2-sub">${escapeHtml(proj.label)} · ${Math.round(proj.elapsedWorkingDays)}/${Math.round(proj.totalWorkingDays)} gg lavorativi</span></h2>
         ${rows}
     </div>`;
@@ -456,9 +494,9 @@ function rankBar(pct: number, color: string): string {
  * categorie Prodotti/Servizi con fatturato. Nessun dato ⇒ stringa vuota
  * (la riga resta non toccabile).
  */
-function drillPanel(d: ReportDrilldown): string {
+function drillPanel(d: ReportDrilldown, content: TelegramReportContentConfig): string {
   const parts: string[] = [];
-  const piste = REPORT_PISTA_ORDER.filter((p) => (d.countByPista[p] ?? 0) > 0);
+  const piste = REPORT_PISTA_ORDER.filter((p) => isPistaVisible(content, p) && (d.countByPista[p] ?? 0) > 0);
   if (piste.length > 0) {
     const chips = piste
       .map((p) => `<span class="chip"><b style="color:${PISTA_THEME[p]}">${escapeHtml(PISTA_CANVASS_LABELS[p])}</b> ×${d.countByPista[p]}</span>`)
@@ -488,41 +526,50 @@ function rankRow(inner: string, drill: string): string {
   return `<details class="rank"><summary>\n        ${inner}\n        <span class="drill-hint">Tocca per il dettaglio ▾</span>\n      </summary>${drill}</details>`;
 }
 
-function pdvSection(a: DailyReportAggregates): string {
+function pdvSection(a: DailyReportAggregates, content: TelegramReportContentConfig): string {
   if (a.perPdv.length === 0) return "";
-  // Classifica per PUNTEGGIO performance: solo barra (valore punti nascosto),
-  // fatturato mantenuto come informazione nella riga di dettaglio.
-  const maxPunti = Math.max(...a.perPdv.map((p) => p.punteggio), 1);
-  const rows = a.perPdv
+  // Classifica per PEZZI nelle piste selezionate (Task #515), non più per
+  // punteggio pesato. Sort stabile: a parità di pezzi resta l'ordine
+  // esistente (importo decrescente). Barra proporzionale ai pezzi.
+  const ranked = [...a.perPdv].sort(
+    (x, y) => groupPezziOf(y.dettaglio, content.pisteVisibili) - groupPezziOf(x.dettaglio, content.pisteVisibili),
+  );
+  const maxPezzi = Math.max(...ranked.map((p) => groupPezziOf(p.dettaglio, content.pisteVisibili)), 1);
+  const rows = ranked
     .map((pdv) => {
       const name = pdv.nomeNegozio || "N/D";
-      const inner = `<span class="rank-top"><span class="rank-name">${escapeHtml(name)}</span></span>
+      const pezzi = groupPezziOf(pdv.dettaglio, content.pisteVisibili);
+      const inner = `<span class="rank-top"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-val">${pezzi} pz</span></span>
         <span class="rank-sub"><span class="mono">${escapeHtml(pdv.codicePos)}</span> · ${pdv.vendite} vendite · ${escapeHtml(fmtEuro(pdv.importo))}</span>
-        ${rankBar((pdv.punteggio / maxPunti) * 100, ORANGE)}`;
-      return rankRow(inner, drillPanel(pdv.dettaglio));
+        ${rankBar((pezzi / maxPezzi) * 100, ORANGE)}`;
+      return rankRow(inner, drillPanel(pdv.dettaglio, content));
     })
     .join("\n        ");
-  return `<div class="card"><h2>Per punto vendita</h2>
+  return `<div class="card"><h2>Per punto vendita <span class="h2-sub">per pezzi piste selezionate</span></h2>
         ${rows}
     </div>`;
 }
 
-function addettiSection(a: DailyReportAggregates): string {
+function addettiSection(a: DailyReportAggregates, content: TelegramReportContentConfig): string {
   if (a.perAddetto.length === 0) return "";
-  // Classifica per PUNTEGGIO performance: medaglie sull'ordine per punteggio
-  // (valore punti nascosto), fatturato come informazione secondaria nella riga.
-  const maxPunti = Math.max(...a.perAddetto.map((p) => p.punteggio), 1);
+  // Classifica per PEZZI nelle piste selezionate (Task #515): medaglie
+  // sull'ordine per pezzi, fatturato come informazione secondaria.
+  const ranked = [...a.perAddetto].sort(
+    (x, y) => groupPezziOf(y.dettaglio, content.pisteVisibili) - groupPezziOf(x.dettaglio, content.pisteVisibili),
+  );
+  const maxPezzi = Math.max(...ranked.map((p) => groupPezziOf(p.dettaglio, content.pisteVisibili)), 1);
   const medals = ["🥇", "🥈", "🥉"];
-  const rows = a.perAddetto
+  const rows = ranked
     .map((add, i) => {
       const medal = medals[i] ? `${medals[i]} ` : "";
-      const inner = `<span class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span></span>
+      const pezzi = groupPezziOf(add.dettaglio, content.pisteVisibili);
+      const inner = `<span class="rank-top"><span class="rank-name">${medal}${escapeHtml(add.nomeAddetto)}</span><span class="rank-val">${pezzi} pz</span></span>
         <span class="rank-sub">${add.vendite} vendite · ${escapeHtml(fmtEuro(add.importo))}</span>
-        ${rankBar((add.punteggio / maxPunti) * 100, "#60a5fa")}`;
-      return rankRow(inner, drillPanel(add.dettaglio));
+        ${rankBar((pezzi / maxPezzi) * 100, "#60a5fa")}`;
+      return rankRow(inner, drillPanel(add.dettaglio, content));
     })
     .join("\n        ");
-  return `<div class="card"><h2>Per addetto</h2>
+  return `<div class="card"><h2>Per addetto <span class="h2-sub">per pezzi piste selezionate</span></h2>
         ${rows}
     </div>`;
 }
@@ -532,7 +579,11 @@ function addettiSection(a: DailyReportAggregates): string {
  * stati venduti Protetti, celebra il miglior venditore (addetto e/o negozio);
  * altrimenti ricorda che è la leva a più alto valore.
  */
-function protettiSection(a: DailyReportAggregates, scope: "giorno" | "mese"): string {
+function protettiSection(a: DailyReportAggregates, scope: "giorno" | "mese", content: TelegramReportContentConfig): string {
+  // Card presente SOLO se la pista protecta è visibile nella config
+  // contenuti (Task #515): per le org Vodafone il gating brand la rimuove
+  // sempre (nessun riferimento a Protetti/Verisure).
+  if (!isPistaVisible(content, "protecta")) return "";
   const n = a.countByPista.protecta ?? 0;
   const when = scope === "giorno" ? "oggi" : "nel mese";
   if (n === 0) {
@@ -591,24 +642,25 @@ function daySections(
   a: DailyReportAggregates,
   trendSlice: TrendDay[] | undefined,
   hero: HeroOpts,
+  content: TelegramReportContentConfig,
 ): string {
   const parts: string[] = [heroSection(a, trendSlice, hero)];
   if (a.vendite === 0) {
     parts.push(`<div class="card empty">Nessuna vendita registrata in questa giornata.</div>`);
-    parts.push(protettiSection(a, "giorno"));
+    parts.push(protettiSection(a, "giorno", content));
     parts.push(trendSection(trendSlice));
   } else {
-    parts.push(highlightsSection(a));
-    parts.push(topPerKpiSection(a, "I migliori del giorno"));
-    parts.push(protettiSection(a, "giorno"));
+    parts.push(highlightsSection(a, content));
+    parts.push(topPerKpiSection(a, "I migliori del giorno", content));
+    parts.push(protettiSection(a, "giorno", content));
     parts.push(trendSection(trendSlice));
-    parts.push(pisteSection(a, trendSlice));
+    parts.push(pisteSection(a, trendSlice, content));
     parts.push(couponCaringSection(a, "giorno"));
     parts.push(tipiSection(a));
     parts.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
     parts.push(categorieSection("Servizi (netto IVA)", a.serviziByCategoria, TYPE_THEME.servizi));
-    parts.push(pdvSection(a));
-    parts.push(addettiSection(a));
+    parts.push(pdvSection(a, content));
+    parts.push(addettiSection(a, content));
   }
   return parts.filter(Boolean).join("\n    ");
 }
@@ -635,7 +687,7 @@ function dtsIncRow(nome: string, i: DtsIncidenza): string {
  * pista, categoria canvass e prodotto. Aggregato vuoto (nessun lead e
  * nessuna vendita) ⇒ stringa vuota.
  */
-function dtsSection(dts: DtsReportAggregates | undefined): string {
+function dtsSection(dts: DtsReportAggregates | undefined, content: TelegramReportContentConfig): string {
   if (!dts) return "";
   if (dts.totaleLead === 0 && dts.vendite.totale === 0) return "";
   const kpi = `<div class="dts-kpis">
@@ -644,8 +696,10 @@ function dtsSection(dts: DtsReportAggregates | undefined): string {
     <div><span class="muted">Conversione</span><b>${dts.conversionePct === null ? "—" : String(dts.conversionePct).replace(".", ",") + "%"}</b></div>
     <div><span class="muted">Incidenza vendite</span><b>${dtsPct(dts.vendite)}</b></div>
   </div>`;
+  // Filtro piste (Task #515): il drill-down per pista rispetta le piste
+  // visibili del report; 'iva' non è configurabile e resta sempre visibile.
   const piste = (Object.entries(dts.perPista) as Array<[PistaCanvass, DtsIncidenza]>)
-    .filter(([, v]) => v.totale > 0)
+    .filter(([p, v]) => v.totale > 0 && (p === "iva" || isPistaVisible(content, p)))
     .sort((a, b) => b[1].dts - a[1].dts || b[1].totale - a[1].totale)
     .map(([p, v]) => dtsIncRow(PISTA_CANVASS_LABELS[p] ?? p, v))
     .join("");
@@ -669,6 +723,7 @@ function dtsSection(dts: DtsReportAggregates | undefined): string {
 function monthSections(
   month: { label: string; aggregates: DailyReportAggregates },
   history: DayHistoryEntry[] | undefined,
+  content: TelegramReportContentConfig,
   projection?: MonthEndProjection,
   dts?: DtsReportAggregates,
 ): string {
@@ -681,11 +736,11 @@ function monthSections(
   ];
   if (a.vendite === 0) {
     parts.push(`<div class="card empty">Nessuna vendita registrata nel mese.</div>`);
-    parts.push(protettiSection(a, "mese"));
+    parts.push(protettiSection(a, "mese", content));
   } else {
-    parts.push(highlightsSection(a));
-    parts.push(topPerKpiSection(a, "I migliori del mese"));
-    parts.push(protettiSection(a, "mese"));
+    parts.push(highlightsSection(a, content));
+    parts.push(topPerKpiSection(a, "I migliori del mese", content));
+    parts.push(protettiSection(a, "mese", content));
     // Andamento del mese: giorni dello storico che appartengono al mese.
     if (history && history.length >= 2) {
       const monthDays = history.filter((h) => h.ymd.slice(0, 7) === history[history.length - 1].ymd.slice(0, 7));
@@ -699,16 +754,16 @@ function monthSections(
         parts.push(trendSection(asTrend));
       }
     }
-    parts.push(projectionSection(projection));
-    parts.push(pisteSection(a, undefined, "La gara delle piste · mese"));
+    parts.push(projectionSection(projection, content));
+    parts.push(pisteSection(a, undefined, content, "La gara delle piste · mese"));
     parts.push(couponCaringSection(a, "mese"));
     parts.push(tipiSection(a));
     parts.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
     parts.push(categorieSection("Servizi (netto IVA)", a.serviziByCategoria, TYPE_THEME.servizi));
-    parts.push(pdvSection(a));
-    parts.push(addettiSection(a));
+    parts.push(pdvSection(a, content));
+    parts.push(addettiSection(a, content));
   }
-  parts.push(dtsSection(dts));
+  parts.push(dtsSection(dts, content));
   return parts.filter(Boolean).join("\n    ");
 }
 
@@ -721,6 +776,7 @@ function monthSections(
  */
 export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
   const a = p.aggregates;
+  const content = p.content ?? DEFAULT_TELEGRAM_REPORT_CONTENT;
   const dateLabel = fmtReportDate(p.dateYMD);
   const title = `Report vendite ${dateLabel}`;
   const trend = p.trend && p.trend.length >= 2 ? p.trend : undefined;
@@ -739,24 +795,24 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
     const sections: string[] = [heroSection(a, trend, hero)];
     if (a.vendite === 0) {
       sections.push(`<div class="card empty">Nessuna vendita registrata oggi.</div>`);
-      sections.push(protettiSection(a, "giorno"));
+      sections.push(protettiSection(a, "giorno", content));
       sections.push(trendSection(trend));
     } else {
-      sections.push(highlightsSection(a));
-      sections.push(topPerKpiSection(a, "I migliori del giorno"));
-      sections.push(protettiSection(a, "giorno"));
+      sections.push(highlightsSection(a, content));
+      sections.push(topPerKpiSection(a, "I migliori del giorno", content));
+      sections.push(protettiSection(a, "giorno", content));
       sections.push(trendSection(trend));
-      sections.push(pisteSection(a, trend));
+      sections.push(pisteSection(a, trend, content));
       sections.push(couponCaringSection(a, "giorno"));
       sections.push(tipiSection(a));
       sections.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
       sections.push(categorieSection("Servizi (netto IVA)", a.serviziByCategoria, TYPE_THEME.servizi));
-      sections.push(pdvSection(a));
-      sections.push(addettiSection(a));
+      sections.push(pdvSection(a, content));
+      sections.push(addettiSection(a, content));
     }
     body = `<div class="page" data-page="d0">${sections.filter(Boolean).join("\n    ")}</div>`;
     if (p.month) {
-      body += `\n    <div class="page" data-page="month" hidden>${monthSections(p.month, undefined, p.monthProjection, p.dts)}</div>`;
+      body += `\n    <div class="page" data-page="month" hidden>${monthSections(p.month, undefined, content, p.monthProjection, p.dts)}</div>`;
       script = navScript([{ ymd: p.dateYMD }], true);
       nav = navBar(true);
     }
@@ -776,10 +832,10 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
         vsPrevLabel: isLast ? undefined : "vs giorno prima",
         clickHint: p.month ? "Tocca per il totale del mese ›" : undefined,
       };
-      return `<div class="page" data-page="d${i}"${isLast ? "" : " hidden"}>${daySections(day.aggregates, trendSlice, hero)}</div>`;
+      return `<div class="page" data-page="d${i}"${isLast ? "" : " hidden"}>${daySections(day.aggregates, trendSlice, hero, content)}</div>`;
     });
     if (p.month) {
-      pages.push(`<div class="page" data-page="month" hidden>${monthSections(p.month, days, p.monthProjection, p.dts)}</div>`);
+      pages.push(`<div class="page" data-page="month" hidden>${monthSections(p.month, days, content, p.monthProjection, p.dts)}</div>`);
     }
     body = pages.join("\n    ");
     nav = navBar(Boolean(p.month));

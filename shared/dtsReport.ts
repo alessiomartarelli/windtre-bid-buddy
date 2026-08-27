@@ -360,9 +360,15 @@ function isAnnullata(stato: string | null | undefined): boolean {
 export function aggregateDtsReport(
   leads: DtsLead[],
   sales: DtsSaleRow[],
-  opts?: { codicePos?: string | null },
+  opts?: { codicePos?: string | null; visiblePiste?: readonly PistaCanvass[] },
 ): DtsReportAggregates {
   const codicePosFilter = (opts?.codicePos ?? "").trim();
+  // Filtro piste del report Telegram: gli articoli canvass delle piste non
+  // visibili sono esclusi da per-pista, categorie canvass e KPI derivati.
+  // La pista tecnica "iva" non è configurabile e resta sempre visibile.
+  const visiblePiste = opts?.visiblePiste;
+  const pistaVisible = (p: PistaCanvass): boolean =>
+    p === "iva" || !visiblePiste || visiblePiste.includes(p);
   const activeSales = sales.filter(
     (s) =>
       !isAnnullata(s.stato) &&
@@ -440,7 +446,7 @@ export function aggregateDtsReport(
 
     const sc = classifySaleArticles(s.rawData);
     for (const art of sc.articles) {
-      if (art.pista) {
+      if (art.pista && pistaVisible(art.pista)) {
         pistaTot[art.pista] = (pistaTot[art.pista] ?? 0) + 1;
         neg.pistaTot[art.pista] = (neg.pistaTot[art.pista] ?? 0) + 1;
         if (isDts) {
@@ -448,7 +454,7 @@ export function aggregateDtsReport(
           neg.pistaDts[art.pista] = (neg.pistaDts[art.pista] ?? 0) + 1;
         }
       }
-      if (art.type === "canvass") {
+      if (art.type === "canvass" && (art.pista == null || pistaVisible(art.pista))) {
         const label = art.categoriaNome.trim() || "Altro";
         const e = catCanvass.get(label) ?? { dts: 0, totale: 0 };
         e.totale++;

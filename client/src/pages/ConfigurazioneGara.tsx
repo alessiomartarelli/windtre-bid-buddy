@@ -21,6 +21,8 @@ import { getDefaultTarget100, calculateTarget80, calculatePremio80 } from '@/typ
 import { getThresholdsByCluster, mapClusterMobileToClusterPista, getDefaultFissoThresholds, mapClusterFissoToNumber } from '@/utils/preventivatore-helpers';
 import { calcolaSoglieDefaultPerRS as calcolaSoglieEnergiaDefault } from '@/types/energia';
 import { toggleLivelloRimosso, isLivelloRimosso } from '@shared/soglieRimovibili';
+import { PISTA_CANVASS_LABELS, type PistaCanvass } from '@shared/bisuiteClassification';
+import { TELEGRAM_REPORT_PISTE, parseTelegramReportContent } from '@shared/telegramReportContent';
 import { apiUrl } from '@/lib/basePath';
 import {
   Loader2, Save, Download, Plus, Trash2, CalendarDays, Store,
@@ -513,20 +515,6 @@ type WeightsFormKey =
   | 'mobile' | 'fisso' | 'energia' | 'assicurazioni' | 'protecta' | 'cb'
   | 'telefoni' | 'ivaMultiplier';
 
-const WEIGHTS_PISTA_FIELDS: Array<{ key: WeightsFormKey; label: string; placeholder: string }> = [
-  { key: 'mobile', label: 'Mobile', placeholder: 'default 1' },
-  { key: 'fisso', label: 'Fisso', placeholder: 'default 3' },
-  { key: 'energia', label: 'Energia', placeholder: 'default 2' },
-  { key: 'assicurazioni', label: 'Assicurazioni', placeholder: 'default 2' },
-  { key: 'protecta', label: 'Protetti', placeholder: 'default 10' },
-  { key: 'cb', label: 'Cb', placeholder: 'default 0,5' },
-];
-
-const WEIGHTS_ALTRI_FIELDS: Array<{ key: WeightsFormKey; label: string; placeholder: string }> = [
-  { key: 'telefoni', label: 'Telefoni (per pezzo)', placeholder: 'default 1' },
-  { key: 'ivaMultiplier', label: 'Moltiplicatore P.IVA', placeholder: 'default 2' },
-];
-
 type WeightsForm = Record<WeightsFormKey, string>;
 
 const EMPTY_WEIGHTS_FORM: WeightsForm = {
@@ -562,6 +550,26 @@ function weightsFormToPayload(f: WeightsForm): Record<WeightsFormKey, number | n
 function weightsFormHasValue(f: WeightsForm): boolean {
   return (Object.keys(EMPTY_WEIGHTS_FORM) as WeightsFormKey[]).some((k) => f[k].trim() !== '');
 }
+
+// Contenuti report Telegram (Task #515): piste mostrate nel report e gruppi
+// TELCO/NEW CORE dei "migliori del giorno" (classificati per pezzi).
+// Telefoni/Accessori/Servizi hanno criteri fissi e restano sempre visibili.
+type TelegramContentForm = {
+  pisteVisibili: PistaCanvass[];
+  telcoPiste: PistaCanvass[];
+  newCorePiste: PistaCanvass[];
+};
+
+function telegramContentToForm(raw: unknown): TelegramContentForm {
+  const cfg = parseTelegramReportContent(raw);
+  return {
+    pisteVisibili: [...cfg.pisteVisibili],
+    telcoPiste: [...cfg.telcoPiste],
+    newCorePiste: [...cfg.newCorePiste],
+  };
+}
+
+const DEFAULT_TELEGRAM_CONTENT_FORM: TelegramContentForm = telegramContentToForm(undefined);
 
 export default function ConfigurazioneGara() {
   const now = new Date();
@@ -692,8 +700,15 @@ export default function ConfigurazioneGara() {
     setIsDirty(true);
   }, []);
   const [performanceWeights, setPerformanceWeights] = useState<WeightsForm>(EMPTY_WEIGHTS_FORM);
-  const setWeightsField = useCallback((key: WeightsFormKey, value: string) => {
-    setPerformanceWeights((prev) => ({ ...prev, [key]: value }));
+  const [telegramContent, setTelegramContent] = useState<TelegramContentForm>(DEFAULT_TELEGRAM_CONTENT_FORM);
+  const toggleTelegramPista = useCallback((field: keyof TelegramContentForm, pista: PistaCanvass) => {
+    setTelegramContent((prev) => {
+      const list = prev[field];
+      const next = list.includes(pista)
+        ? list.filter((p) => p !== pista)
+        : TELEGRAM_REPORT_PISTE.filter((p) => p === pista || list.includes(p));
+      return { ...prev, [field]: next };
+    });
     setIsDirty(true);
   }, []);
 
@@ -927,6 +942,7 @@ export default function ConfigurazioneGara() {
       setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
       setVenditeForecast(forecastToForm(cfg.venditeForecast));
       setPerformanceWeights(weightsToForm(cfg.performanceWeights));
+      setTelegramContent(telegramContentToForm(cfg.telegramReportContent));
       setSosCaring(cfg.sosCaring || null);
     }
     setIsDirty(false);
@@ -1008,6 +1024,7 @@ export default function ConfigurazioneGara() {
       setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
       setVenditeForecast(forecastToForm(cfg.venditeForecast));
       setPerformanceWeights(weightsToForm(cfg.performanceWeights));
+      setTelegramContent(telegramContentToForm(cfg.telegramReportContent));
       setSosCaring(cfg.sosCaring || null);
     } else {
       setConfigName('');
@@ -1027,6 +1044,7 @@ export default function ConfigurazioneGara() {
       setExtraGaraIvaSogliePerRS({});
       setVenditeForecast(EMPTY_FORECAST_FORM);
       setPerformanceWeights(EMPTY_WEIGHTS_FORM);
+      setTelegramContent(DEFAULT_TELEGRAM_CONTENT_FORM);
       setSosCaring(null);
 
       const salesPdvs = await fetchPdvFromSales(month, year);
@@ -1072,11 +1090,16 @@ export default function ConfigurazioneGara() {
     ...(Object.keys(extraGaraIvaSogliePerRS).length > 0 ? { extraGaraIvaSogliePerRS } : {}),
     ...(forecastFormHasValue(venditeForecast) ? { venditeForecast: forecastFormToPayload(venditeForecast) } : {}),
     ...(weightsFormHasValue(performanceWeights) ? { performanceWeights: weightsFormToPayload(performanceWeights) } : {}),
+    telegramReportContent: {
+      pisteVisibili: telegramContent.pisteVisibili,
+      telcoPiste: telegramContent.telcoPiste,
+      newCorePiste: telegramContent.newCorePiste,
+    },
     ...(sosCaring ? { sosCaring } : {}),
     ...(garaConfigRecord?.config ? {
       importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
     } : {}),
-  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, performanceWeights, sosCaring, garaConfigRecord]);
+  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, performanceWeights, telegramContent, sosCaring, garaConfigRecord]);
 
   const handleSosCaringFile = useCallback(async (file: File) => {
     setSosUploading(true);
@@ -1925,60 +1948,50 @@ export default function ConfigurazioneGara() {
                 </CardContent>
               </Card>
 
-              <Card data-testid="card-performance-weights">
+              <Card data-testid="card-telegram-content">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Medal className="h-4 w-4" />
-                    Pesi punteggio performance (report Telegram)
+                    Contenuti report Telegram
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Punti assegnati a ogni attivazione per il PUNTEGGIO PERFORMANCE che ordina
-                    "il migliore" e le classifiche addetti/negozi del report Telegram.
-                    Le attivazioni a cliente P.IVA valgono il moltiplicatore indicato; i telefoni
-                    contano a pezzo (flat). Campo vuoto = default di sistema.
-                    Valgono per {MONTHS.find(m => m.value === selectedMonth)?.label} {selectedYear}.
+                    Scegli le piste mostrate nel report Telegram (testo e allegato HTML) e le
+                    piste che concorrono ai "migliori del giorno" TELCO e NEW CORE, classificati
+                    per numero totale di pezzi. Telefoni (pezzi), Accessori e Servizi (fatturato
+                    netto IVA) hanno criteri fissi e restano sempre nel report. Le scelte valgono
+                    solo per il report Telegram (non per Dashboard o calcoli gara) e per{' '}
+                    {MONTHS.find(m => m.value === selectedMonth)?.label} {selectedYear}.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label className="text-xs font-semibold">Punti per pista</Label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
-                      {WEIGHTS_PISTA_FIELDS.map((f) => (
-                        <div key={f.key}>
-                          <Label htmlFor={`weight-${f.key}`} className="text-xs text-muted-foreground">{f.label}</Label>
-                          <Input
-                            id={`weight-${f.key}`}
-                            data-testid={`input-weight-${f.key}`}
-                            type="number"
-                            inputMode="decimal"
-                            className="h-8 text-sm"
-                            placeholder={f.placeholder}
-                            value={performanceWeights[f.key]}
-                            onChange={(e) => setWeightsField(f.key, e.target.value)}
-                          />
-                        </div>
-                      ))}
+                  {([
+                    { field: 'pisteVisibili' as const, label: 'Piste mostrate nel report', hint: 'Le piste deselezionate spariscono da riepiloghi, proiezioni, classifiche e card dedicate (inclusi i Protetti).' },
+                    { field: 'telcoPiste' as const, label: 'Piste dei migliori TELCO', hint: 'Il miglior addetto e negozio TELCO sommano i pezzi di queste piste (se visibili).' },
+                    { field: 'newCorePiste' as const, label: 'Piste dei migliori NEW CORE', hint: 'Il miglior addetto e negozio NEW CORE sommano i pezzi di queste piste (se visibili).' },
+                  ]).map(({ field, label, hint }) => (
+                    <div key={field}>
+                      <Label className="text-xs font-semibold">{label}</Label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{hint}</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                        {TELEGRAM_REPORT_PISTE.map((pista) => (
+                          <label key={pista} className="flex items-center gap-2 text-sm" htmlFor={`tg-${field}-${pista}`}>
+                            <Checkbox
+                              id={`tg-${field}-${pista}`}
+                              data-testid={`checkbox-tg-${field}-${pista}`}
+                              checked={telegramContent[field].includes(pista)}
+                              onCheckedChange={() => toggleTelegramPista(field, pista)}
+                            />
+                            {PISTA_CANVASS_LABELS[pista]}
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  ))}
                   <div>
-                    <Label className="text-xs font-semibold">Telefoni e moltiplicatore P.IVA</Label>
-                    <div className="grid grid-cols-2 gap-3 mt-2">
-                      {WEIGHTS_ALTRI_FIELDS.map((f) => (
-                        <div key={f.key}>
-                          <Label htmlFor={`weight-${f.key}`} className="text-xs text-muted-foreground">{f.label}</Label>
-                          <Input
-                            id={`weight-${f.key}`}
-                            data-testid={`input-weight-${f.key}`}
-                            type="number"
-                            inputMode="decimal"
-                            className="h-8 text-sm"
-                            placeholder={f.placeholder}
-                            value={performanceWeights[f.key]}
-                            onChange={(e) => setWeightsField(f.key, e.target.value)}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    <Label className="text-xs font-semibold">Criteri fissi (sempre nel report)</Label>
+                    <p className="text-[11px] text-muted-foreground mt-1" data-testid="text-tg-criteri-fissi">
+                      📱 Telefoni: pezzi · 🎧 Accessori: fatturato netto IVA · 🛠️ Servizi: fatturato netto IVA
+                    </p>
                   </div>
                 </CardContent>
               </Card>

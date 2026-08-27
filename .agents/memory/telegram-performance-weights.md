@@ -5,6 +5,15 @@ description: How configurable performance-score weights reach the live Telegram 
 
 # Telegram report performance weights
 
+**DEPRECATI per standout/classifiche Telegram:** da Task #515 il "migliore"
+TELCO/NEW CORE e le classifiche generali PDV/addetti del report Telegram sono
+per SOMMA PEZZI delle piste selezionate in
+`gara_config.config.telegramReportContent` (vedi
+telegram-report-content-config.md). `performanceWeights` resta nel payload
+interno per compatibilità e la vecchia card UI pesi è stata sostituita dalla
+card contenuti (`card-telegram-content`). Non reintrodurre i pesi come driver
+del report senza richiesta esplicita.
+
 Performance-score weights are per-org/per-mese in
 `gara_config.config.performanceWeights`. The scheduled Telegram report loads
 them and passes them into the daily aggregation; the message text and the HTML

@@ -312,4 +312,60 @@ test("buildVenditeReportHtml: dts vuoto (0 lead, 0 vendite) non compare", () => 
   assert.ok(!html.includes("Drive to Store"));
 });
 
+test("buildVenditeReportHtml: drill-down DTS per pista rispetta le piste visibili (Task #515)", () => {
+  const aggregates = aggregateDailyReport([]);
+  const inc = (dts, totale) => ({ dts, totale, incidenzaPct: totale > 0 ? Math.round((dts / totale) * 1000) / 10 : null });
+  const dts = {
+    totaleLead: 3,
+    leadConvertiti: 2,
+    conversionePct: 66.7,
+    vendite: inc(2, 10),
+    perPista: { mobile: inc(1, 4), energia: inc(1, 3), iva: inc(1, 2) },
+    perCategoriaCanvass: [],
+    perProdotto: [],
+    perNegozio: [],
+    perConsulente: [],
+  };
+  const html = buildVenditeReportHtml({
+    orgName: "Org Test",
+    dateYMD: "2026-07-14",
+    aggregates,
+    month: { label: "luglio", aggregates },
+    dts,
+    content: {
+      pisteVisibili: ["mobile"],
+      telcoPiste: ["mobile"],
+      newCorePiste: [],
+    },
+  });
+  const start = html.indexOf("Drive to Store");
+  assert.ok(start >= 0);
+  const section = html.slice(start, html.indexOf("</section>", start));
+  assert.ok(section.includes("Mobile"));
+  assert.ok(!section.includes("Energia"));
+  // 'iva' non è configurabile: resta sempre visibile.
+  assert.ok(section.includes("P. IVA") || section.toLowerCase().includes("iva"));
+});
+
+test("aggregateDtsReport: visiblePiste esclude piste nascoste da perPista e categorie canvass", () => {
+  // La vendita 10 è DTS (lead M1). Articoli su due piste canvass.
+  const raw = {
+    codiceEsterno: "10",
+    articoli: [
+      { categoria: { nome: "UNTIED" }, dettaglio: { prezzo: "30" } },
+      { categoria: { nome: "ENERGIA W3" }, dettaglio: { prezzo: "0" } },
+    ],
+  };
+  const salesRows = [sale(10, { raw })];
+  const full = aggregateDtsReport(LEADS, salesRows);
+  assert.ok(full.perPista.mobile);
+  assert.ok(full.perPista.energia);
+  const filtered = aggregateDtsReport(LEADS, salesRows, { visiblePiste: ["mobile", "fisso"] });
+  assert.ok(filtered.perPista.mobile);
+  assert.equal(filtered.perPista.energia, undefined);
+  // Anche le categorie canvass della pista nascosta spariscono.
+  assert.ok(!filtered.perCategoriaCanvass.some((c) => c.nome.includes("ENERGIA")));
+  assert.ok(filtered.perCategoriaCanvass.some((c) => c.nome.includes("UNTIED")));
+});
+
 console.log(`\n${passed} test passati.`);

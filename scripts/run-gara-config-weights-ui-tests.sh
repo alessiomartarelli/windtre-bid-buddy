@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Run the Configurazione Gara "Pesi punteggio performance" UI test suite
-# (tests/gara-config-weights-ui.test.mjs).
+# Run the Configurazione Gara "Contenuti report Telegram" UI test suite
+# (tests/gara-config-weights-ui.test.mjs, Task #515 — sostituisce la vecchia
+# card dei pesi performance).
 #
-# Test UI Playwright: protegge il wiring fra gli input `input-weight-*` della
-# card `card-performance-weights`, il salvataggio in
-# `gara_config.config.performanceWeights` e il ricaricamento (reload pagina +
-# cambio mese). Verifica che i valori digitati persistano, che i campi vuoti
-# ricadano sui default (payload null), e che cambiando mese i pesi si azzerino
-# e tornino ricaricati al mese salvato. Richiede:
+# Test UI Playwright: protegge il wiring fra i checkbox `checkbox-tg-*` della
+# card `card-telegram-content`, il salvataggio in
+# `gara_config.config.telegramReportContent` e il ricaricamento (reload pagina
+# + cambio mese). Richiede:
 #   - il workflow "Start application" attivo (app su localhost:5000);
 #   - DATABASE_URL (verifica/cleanup della config nel dev DB);
 #   - chromium di sistema (Nix) trovato via `which chromium`.

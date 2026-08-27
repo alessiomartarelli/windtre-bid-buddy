@@ -7,18 +7,22 @@
 // giorno ma test stabili). Caricabile via loader tsx senza server/DB.
 import {
   type DailyReportAggregates,
-  type ReportDrilldown,
   telefoniPezziOf,
   businessPezziOf,
   accessoriImportoOf,
-  topPerformerDetail,
-  canvassPezziOf,
-  telefoniPezziDrill,
   bestProtettiSeller,
   projectMonthEnd,
   pctDelta,
   fmtEuro,
 } from "./venditeReport";
+import type { PistaCanvass } from "./bisuiteClassification";
+import {
+  type TelegramReportContentConfig,
+  DEFAULT_TELEGRAM_REPORT_CONTENT,
+  buildGroupTopByPezzi,
+  effectiveGroupPiste,
+  isPistaVisible,
+} from "./telegramReportContent";
 
 export type Fascia = "parziale" | "chiusura";
 
@@ -168,6 +172,8 @@ interface DimInput {
   forecast: number | null;
   today: number;
   month: number;
+  /** Pista collegata (dimensioni pista): filtrata dalla config contenuti. */
+  pista?: PistaCanvass;
 }
 
 interface DimEval {
@@ -308,6 +314,12 @@ export interface CommentoParams {
   month: DailyReportAggregates;
   elapsedWorkingDays: number;
   totalWorkingDays: number;
+  /**
+   * Configurazione contenuti report (Task #515): piste visibili e gruppi
+   * TELCO/NEW CORE. Assente ⇒ default legacy (tutte le piste, gruppi
+   * storici). Va passata GIÀ gated per brand (applyBrandGating).
+   */
+  content?: TelegramReportContentConfig;
 }
 
 /**
@@ -317,24 +329,29 @@ export interface CommentoParams {
  */
 export function buildDirettoreCommento(p: CommentoParams): string {
   const { fascia, today, month, forecast: fc } = p;
+  const content = p.content ?? DEFAULT_TELEGRAM_REPORT_CONTENT;
   const elapsed = Math.max(0, p.elapsedWorkingDays);
   const total = Math.max(0, p.totalWorkingDays);
   const seed = seedFromYMD(p.dateYMD);
 
   const dims: DimInput[] = [
-    { label: "mobile", unit: "pz", forecast: fc.mobileVolumi, today: today.countByPista.mobile ?? 0, month: month.countByPista.mobile ?? 0 },
-    { label: "mobile P.IVA", unit: "pz", forecast: fc.mobileIvaVolumi, today: businessPezziOf(today, "mobile"), month: businessPezziOf(month, "mobile") },
-    { label: "fisso", unit: "pz", forecast: fc.fissoVolumi, today: today.countByPista.fisso ?? 0, month: month.countByPista.fisso ?? 0 },
-    { label: "fisso P.IVA", unit: "pz", forecast: fc.fissoIvaVolumi, today: businessPezziOf(today, "fisso"), month: businessPezziOf(month, "fisso") },
-    { label: "energia", unit: "pz", forecast: fc.energiaVolumi, today: today.countByPista.energia ?? 0, month: month.countByPista.energia ?? 0 },
-    { label: "assicurazioni", unit: "pz", forecast: fc.assicurazioniVolumi, today: today.countByPista.assicurazioni ?? 0, month: month.countByPista.assicurazioni ?? 0 },
-    { label: "protetti", unit: "pz", forecast: fc.protettiVolumi, today: today.countByPista.protecta ?? 0, month: month.countByPista.protecta ?? 0 },
-    { label: "cb", unit: "pz", forecast: fc.cbVolumi, today: today.countByPista.cb ?? 0, month: month.countByPista.cb ?? 0 },
+    { label: "mobile", unit: "pz", pista: "mobile", forecast: fc.mobileVolumi, today: today.countByPista.mobile ?? 0, month: month.countByPista.mobile ?? 0 },
+    { label: "mobile P.IVA", unit: "pz", pista: "mobile", forecast: fc.mobileIvaVolumi, today: businessPezziOf(today, "mobile"), month: businessPezziOf(month, "mobile") },
+    { label: "fisso", unit: "pz", pista: "fisso", forecast: fc.fissoVolumi, today: today.countByPista.fisso ?? 0, month: month.countByPista.fisso ?? 0 },
+    { label: "fisso P.IVA", unit: "pz", pista: "fisso", forecast: fc.fissoIvaVolumi, today: businessPezziOf(today, "fisso"), month: businessPezziOf(month, "fisso") },
+    { label: "energia", unit: "pz", pista: "energia", forecast: fc.energiaVolumi, today: today.countByPista.energia ?? 0, month: month.countByPista.energia ?? 0 },
+    { label: "assicurazioni", unit: "pz", pista: "assicurazioni", forecast: fc.assicurazioniVolumi, today: today.countByPista.assicurazioni ?? 0, month: month.countByPista.assicurazioni ?? 0 },
+    { label: "protetti", unit: "pz", pista: "protecta", forecast: fc.protettiVolumi, today: today.countByPista.protecta ?? 0, month: month.countByPista.protecta ?? 0 },
+    { label: "cb", unit: "pz", pista: "cb", forecast: fc.cbVolumi, today: today.countByPista.cb ?? 0, month: month.countByPista.cb ?? 0 },
     { label: "telefonia", unit: "pz", forecast: fc.telefoniPezzi, today: telefoniPezziOf(today), month: telefoniPezziOf(month) },
     { label: "accessori", unit: "€", forecast: fc.accessoriFatturato, today: accessoriImportoOf(today), month: accessoriImportoOf(month) },
     { label: "servizi", unit: "€", forecast: fc.serviziFatturato, today: today.amountByType.servizi, month: month.amountByType.servizi },
   ];
+  // Le dimensioni-pista escluse dalla config non compaiono in NESSUN
+  // framing (giornata, mese, spunto strategico); Telefoni/Accessori/
+  // Servizi restano sempre (criteri fissi, Task #515).
   const tracked = dims
+    .filter((d) => d.pista === undefined || isPistaVisible(content, d.pista))
     .map((d) => evalDim(d, elapsed, total))
     .filter((d): d is DimEval => d !== null);
 
@@ -361,8 +378,9 @@ export function buildDirettoreCommento(p: CommentoParams): string {
     if (tracked.length > 0 && month.vendite > 0) {
       out.push(meseFraming(tracked, overallMonthDelta));
     }
-    // WindTre Protetti: sempre citato, anche a giornata al palo (Task #282).
-    out.push(protettiFraming(today));
+    // WindTre Protetti: citato anche a giornata al palo (Task #282), ma
+    // SOLO se la pista è visibile nella config contenuti (Task #515).
+    if (isPistaVisible(content, "protecta")) out.push(protettiFraming(today));
     out.push(pick(CHIUSURA_MOTIVAZIONALE[fascia][band], (seed * 2654435761) >>> 0));
     return out.join("\n\n");
   }
@@ -375,12 +393,14 @@ export function buildDirettoreCommento(p: CommentoParams): string {
     out.push(meseFraming(tracked, overallMonthDelta));
   }
 
-  // ── Standout negozio/addetto (per punteggio performance) ───────────
-  const standout = standoutFraming(today, fc);
-  if (standout) out.push(standout);
+  // ── Migliori del giorno TELCO / NEW CORE (pezzi, Task #515) ────────
+  const telcoStandout = gruppoFraming("📡 TELCO", today, effectiveGroupPiste(content, "telco"));
+  if (telcoStandout) out.push(telcoStandout);
+  const newCoreStandout = gruppoFraming("🧭 NEW CORE", today, effectiveGroupPiste(content, "newcore"));
+  if (newCoreStandout) out.push(newCoreStandout);
 
-  // ── WindTre Protetti: sempre citato, con congratulazioni ───────────
-  out.push(protettiFraming(today));
+  // ── WindTre Protetti: citato se visibile, con congratulazioni ──────
+  if (isPistaVisible(content, "protecta")) out.push(protettiFraming(today));
 
   // ── Accessori/Servizi: menzione a parte, fuori dal punteggio ───────
   const accServ = accessoriServiziFraming(today);
@@ -441,46 +461,26 @@ function meseFraming(tracked: DimEval[], overallMonthDelta: number | null): stri
 }
 
 /**
- * Descrive i pezzi effettivi di un vincitore: pezzi canvass (tutte le piste)
- * + telefoni, senza citare il punteggio. Stringa vuota se entrambi a 0.
+ * Migliori del giorno di un gruppo di piste (Task #515): miglior addetto e
+ * miglior negozio per SOMMA PEZZI nelle piste selezionate del gruppo.
+ * Nessun punteggio pesato. null se il gruppo è vuoto o nessuno sopra zero.
  */
-function descriviPezzi(d: ReportDrilldown): string {
-  const canvass = canvassPezziOf(d);
-  const tel = telefoniPezziDrill(d);
+function gruppoFraming(
+  titolo: string,
+  today: DailyReportAggregates,
+  piste: PistaCanvass[],
+): string | null {
+  if (piste.length === 0) return null;
+  const { addetto, negozio } = buildGroupTopByPezzi(today, piste);
+  if (!addetto && !negozio) return null;
+  const pezziTxt = (n: number) => `<b>${n}</b> ${n === 1 ? "pezzo" : "pezzi"}`;
   const parts: string[] = [];
-  if (canvass > 0) parts.push(`<b>${canvass}</b> ${canvass === 1 ? "pezzo" : "pezzi"} canvass`);
-  if (tel > 0) parts.push(`<b>${tel}</b> ${tel === 1 ? "telefono" : "telefoni"}`);
-  return parts.join(" e ");
-}
-
-function standoutFraming(today: DailyReportAggregates, fc: ForecastConfig): string | null {
-  const parts: string[] = [];
-  // "Il migliore" resta scelto per punteggio performance (Task #282), ma il
-  // commento cita i PEZZI effettivi (canvass + telefoni), non il punteggio.
-  const { negozio: topPdv, addetto: topAddetto } = topPerformerDetail(today);
-  if (topPdv) {
-    const desc = descriviPezzi(topPdv.dettaglio);
-    parts.push(`In evidenza <b>${escTg(topPdv.nome)}</b>${desc ? ` con ${desc}` : ""}`);
+  if (negozio) parts.push(`in evidenza <b>${escTg(negozio.nome)}</b> con ${pezziTxt(negozio.pezzi)}`);
+  if (addetto) {
+    const frase = `l'addetto <b>${escTg(addetto.nome)}</b> con ${pezziTxt(addetto.pezzi)}`;
+    parts.push(parts.length > 0 ? `bravo ${frase}` : `bravo ${frase}`);
   }
-  if (topAddetto) {
-    const desc = descriviPezzi(topAddetto.dettaglio);
-    const frase = `l'addetto <b>${escTg(topAddetto.nome)}</b>${desc ? ` con ${desc}` : ""}`;
-    parts.push(parts.length > 0 ? `bravo ${frase}` : `Bravo ${frase}`);
-  }
-  if (parts.length === 0) return null;
-  let s = parts.join(", ");
-  // Sotto tono: negozio marcatamente sotto la quota media (caso evidente).
-  const negozi = today.perPdv.filter((p) => p.vendite > 0);
-  if (negozi.length >= 3) {
-    const numNegozi = (fc.numeroNegoziCc ?? 0) + (fc.numeroNegoziStrada ?? 0);
-    const divisore = numNegozi > 0 ? numNegozi : negozi.length;
-    const attesa = divisore > 0 ? today.importo / divisore : 0;
-    const laggard = [...negozi].reverse().find((p) => attesa > 0 && p.importo < attesa * 0.5);
-    if (laggard && nomePdv(laggard) !== topPdv?.nome) {
-      s += `; occhio a <b>${escTg(nomePdv(laggard))}</b>, sotto la sua media`;
-    }
-  }
-  return s + ".";
+  return `${titolo} — ${parts.join(", ")}.`;
 }
 
 /**

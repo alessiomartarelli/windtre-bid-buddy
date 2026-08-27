@@ -32,7 +32,7 @@ const signupAndLogin = () =>
 // Route che DEVONO restare accessibili (NON 403) per un'org solo-Fastweb.
 const ALLOWED_ROUTES = [
   '/api/customer-journeys', // customer_journey
-  '/api/bisuite-sales', // vendite_bisuite (in alternativa ad altri moduli)
+  '/api/bisuite-sales?month=7&year=2026', // vendite_bisuite (in alternativa ad altri moduli)
   '/api/incentivazione/config?month=7&year=2026', // incentivazione_interna
 ];
 

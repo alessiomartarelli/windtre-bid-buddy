@@ -268,6 +268,15 @@ export interface GaraConfigData {
   };
   /** Gara SOS Caring (Task #327): dataset Excel caring PDV + fasce premio. */
   sosCaring?: import('@shared/sosCaring').SosCaringData | null;
+  /**
+   * Contenuti report Telegram (Task #515): piste visibili nel report e
+   * gruppi TELCO/NEW CORE dei "migliori del giorno" (per pezzi).
+   */
+  telegramReportContent?: {
+    pisteVisibili?: string[];
+    telcoPiste?: string[];
+    newCorePiste?: string[];
+  };
 }
 
 export interface GaraConfigRecord {

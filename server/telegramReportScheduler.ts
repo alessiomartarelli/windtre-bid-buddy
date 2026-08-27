@@ -20,6 +20,7 @@ import {
 import { buildVenditeReportHtml, reportHtmlFileName } from "@shared/venditeReportHtml";
 import { aggregateDtsReport, filterDtsLeads, type DtsReportAggregates } from "@shared/dtsReport";
 import { fasciaFromTimeLabel, parseForecastConfig } from "@shared/venditeCommento";
+import { applyBrandGating, parseTelegramReportContent } from "@shared/telegramReportContent";
 import {
   DEFAULT_SEND_TIMES,
   fasciaForLabel,
@@ -318,21 +319,44 @@ export async function sendDailyReportForOrg(params: {
     garaCfgObj = garaCfg?.config as Record<string, unknown> | undefined;
   }
   const weights = parsePerformanceWeights(garaCfgObj?.performanceWeights);
+  // Contenuti report (Task #515): piste visibili + gruppi TELCO/NEW CORE
+  // dalla Configurazione gara (gara_config.config.telegramReportContent),
+  // con gating brand: le org Vodafone/Fastweb non devono vedere alcun
+  // riferimento a Protetti/Verisure, qualunque cosa dica il config.
+  // Fail-closed: se la lettura brand fallisce trattiamo l'org come VF
+  // (niente Protetti/Verisure) — meglio nascondere una sezione a un'org
+  // WindTre per un errore transitorio che mostrarla per errore a Vodafone.
+  let isVfOrg = true;
+  try {
+    const orgBrands = await storage.getOrganizationBrands(params.orgId);
+    isVfOrg = orgBrands.some((b) => /vodafone|fastweb/i.test(b.name));
+  } catch (e) {
+    console.warn(`[telegram-report] lettura brand org=${params.orgId} fallita (gating VF fail-closed):`, e);
+  }
+  const reportContent = applyBrandGating(
+    parseTelegramReportContent(garaCfgObj?.telegramReportContent),
+    isVfOrg,
+  );
   // Accessori e Servizi al netto dell'IVA (Task #335): applicato subito
   // dopo l'aggregazione così messaggio, HTML, proiezione e top-KPI sono
   // tutti coerenti (÷1.22 su fatturati ACCESSORI + tutti i Servizi).
-  const aggregates = applyNettoIvaAccessoriServizi(aggregateDailyReport(todayRows, weights));
-  const trend = buildDailyTrend(trendRows, trendFromYmd, ymd);
+  // Le piste NON visibili in telegramReportContent spariscono da tutti gli
+  // aggregati del report (mix, per pista, drill-down, trend, storico, mese).
+  const visiblePiste = reportContent.pisteVisibili;
+  const aggregates = applyNettoIvaAccessoriServizi(
+    aggregateDailyReport(todayRows, weights, visiblePiste),
+  );
+  const trend = buildDailyTrend(trendRows, trendFromYmd, ymd, visiblePiste);
   // Anche le pagine storiche per-giorno dell'HTML vanno al netto IVA
   // (accessori/servizi), coerenti con oggi e Totale mese.
-  const history = buildDailyHistory(trendRows, trendFromYmd, ymd).map((h) => ({
+  const history = buildDailyHistory(trendRows, trendFromYmd, ymd, visiblePiste).map((h) => ({
     ...h,
     aggregates: applyNettoIvaAccessoriServizi(h.aggregates),
   }));
   // Le righe sono già senza ANNULLATA (includeAnnullate=false in query).
   const month = {
     label: monthLabelOf(ymd),
-    aggregates: applyNettoIvaAccessoriServizi(aggregateDailyReport(monthRows, weights)),
+    aggregates: applyNettoIvaAccessoriServizi(aggregateDailyReport(monthRows, weights, visiblePiste)),
   };
   // Riduzione del picco di memoria (Task #332): gli array derivati non
   // servono più (gli aggregati sono già calcolati); azzeriamo i riferimenti
@@ -358,6 +382,7 @@ export async function sendDailyReportForOrg(params: {
     monthAggregates: month.aggregates,
     forecast,
     fascia: params.fascia ?? fasciaFromTimeLabel(params.timeLabel),
+    content: reportContent,
   });
   const result = await sendTelegramMessage(params.botToken, params.chatId, message);
   if (!result.ok) {
@@ -402,6 +427,9 @@ export async function sendDailyReportForOrg(params: {
           nomeNegozio: r.nomeNegozio,
           rawData: r.rawData,
         })),
+        // Le piste nascoste nel report Telegram spariscono anche dal
+        // drill-down DTS (per pista, categorie canvass); "iva" resta sempre.
+        { visiblePiste },
       );
       if (agg.totaleLead > 0 || agg.vendite.dts > 0) dts = agg;
     }
@@ -419,6 +447,7 @@ export async function sendDailyReportForOrg(params: {
     month,
     monthProjection,
     dts,
+    content: reportContent,
   });
   const fileName = reportHtmlFileName(params.orgName, ymd, params.timeLabel);
   const docResult = await sendTelegramDocument(params.botToken, params.chatId, fileName, html, {

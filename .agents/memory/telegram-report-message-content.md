@@ -57,7 +57,7 @@ accessori gonfierebbero lo scontrino senza riflettere la performance commerciale
 `businessCountByPista` sia popolato per quella pista via `saleCustomerKind`
 (livello vendita, per TUTTE le piste — non la descrizione).
 
-**WindTre Protetti SEMPRE citato:** sia il testo (`protettiFraming`) sia l'HTML
+**[SUPERATO: Protetti compare solo se la pista è abilitata in telegramReportContent e l'org NON è Vodafone/Fastweb — vedi telegram-report-content-config.md] WindTre Protetti SEMPRE citato:** sia il testo (`protettiFraming`) sia l'HTML
 (`protettiSection`, card presente in pagine giorno/mese e single-page) menzionano
 sempre i Protetti, con congratulazioni al miglior venditore (`bestProtettiSeller`)
 se >0, altrimenti richiamo a spingere. È la leva a più alto peso (10).
