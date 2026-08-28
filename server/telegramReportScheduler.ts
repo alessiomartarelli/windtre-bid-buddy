@@ -310,6 +310,12 @@ export async function sendDailyReportForOrg(params: {
   const monthFromYmd = monthStartYmd(ymd);
   const fromYmd = trendFromYmd < monthFromYmd ? trendFromYmd : monthFromYmd;
   let rows = await storage.getBisuiteSalesByItalianDateRange(params.orgId, fromYmd, ymd, false);
+  // Phone&Phone: BiSuite invia i negozi col solo nome (codice POS vuoto).
+  // Nel report vanno mostrati tutti gli store e il Back Office, ma non i
+  // banchetti temporanei. La regola è volutamente limitata a questa org.
+  if (params.orgName.replace(/[^a-z0-9]/gi, "").toLowerCase() === "phonephone") {
+    rows = rows.filter((r) => !/\bbanchett[oi]\b/i.test(String(r.nomeNegozio ?? "")));
+  }
   // Report per brand: SOLO le vendite dei PDV associati al brand (match per
   // codice POS, case-insensitive). Il filtro avviene PRIMA di ogni derivato
   // (trend, storico, mese, DTS): nessun contenuto cross-brand può filtrare.

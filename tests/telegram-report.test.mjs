@@ -282,6 +282,29 @@ await test("per-PDV: raggruppa per codicePos, ordina per importo↓, N/D per man
   assert.equal(pdvA.nomeNegozio, "Alfa");
 });
 
+await test("per-PDV: codice POS vuoto usa nome negozio e non accorpa store distinti", () => {
+  const a = aggregateDailyReport([
+    sale({ codicePos: "", nomeNegozio: "Vodafone Store Roma Est", totale: "100" }),
+    sale({ codicePos: null, nomeNegozio: "Vodafone Store Fiumicino", totale: "80" }),
+    sale({ codicePos: "", nomeNegozio: "Vodafone Store Roma Est", totale: "20" }),
+    sale({ codicePos: "", nomeNegozio: "Back Office Vodafone Partner", totale: "10" }),
+  ]);
+  assert.deepEqual(
+    a.perPdv.map((p) => p.nomeNegozio),
+    ["Vodafone Store Roma Est", "Vodafone Store Fiumicino", "Back Office Vodafone Partner"],
+  );
+  assert.equal(a.perPdv[0].vendite, 2);
+  const html = buildVenditeReportHtml({
+    orgName: "Phone&Phone",
+    dateYMD: "2026-08-28",
+    aggregates: a,
+  });
+  assert.ok(html.includes("Vodafone Store Roma Est"));
+  assert.ok(html.includes("Vodafone Store Fiumicino"));
+  assert.ok(html.includes("Back Office Vodafone Partner"));
+  assert.ok(!html.includes('<span class="mono">Vodafone Store Roma Est</span>'), "nome non duplicato come codice POS");
+});
+
 await test("totale malformato ⇒ 0, non NaN", () => {
   const a = aggregateDailyReport([sale({ totale: "abc" }), sale({ totale: null })]);
   assert.equal(a.importo, 0);
@@ -2512,6 +2535,35 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       }
       return out;
     };
+
+    await test("Phone&Phone: tutti gli store senza codice POS + Back Office, banchetti esclusi", async () => {
+      const row = (id, nomeNegozio) => ({
+        ...saleFull(id, "", [artFull(null, "UNTIED", 30)]),
+        codicePos: "",
+        nomeNegozio,
+      });
+      setupScenario({
+        orgs: [{
+          id: "org-phone",
+          name: "Phone&Phone",
+          brands: [],
+          puntiVendita: [],
+        }],
+        sales: [
+          row("roma-est", "VODAFONE STORE ROMA EST"),
+          row("fiumicino", "VODAFONE STORE FIUMICINO"),
+          row("back-office", "BACK OFFICE VODAFONE PARTNER"),
+          row("banchetto", "BANCHETTO FCO"),
+        ],
+      });
+      await runScheduledSend("13:30");
+      assert.equal(telegramDocs.length, 1);
+      const h = await telegramDocs[0].get("document").text();
+      assert.ok(h.includes("VODAFONE STORE ROMA EST"));
+      assert.ok(h.includes("VODAFONE STORE FIUMICINO"));
+      assert.ok(h.includes("BACK OFFICE VODAFONE PARTNER"));
+      assert.ok(!h.includes("BANCHETTO FCO"));
+    });
 
     await test("brand VF con vendite del listino ⇒ card Luce/Gas con conteggi reali; report WindTre intatto (Task #529)", async () => {
       setupScenario({

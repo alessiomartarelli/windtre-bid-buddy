@@ -326,7 +326,16 @@ export function aggregateDailyReport(
 
     // Chiavi PDV/addetto calcolate PRIMA del loop articoli: servono anche
     // agli accumulatori del drill-down per-articolo.
-    const key = (row.codicePos ?? "").trim() || "N/D";
+    const codicePos = (row.codicePos ?? "").trim();
+    const nomeNegozio = (row.nomeNegozio ?? "").trim();
+    // Alcuni flussi BiSuite (es. Phone&Phone) non valorizzano codicePos ma
+    // forniscono correttamente nomeNegozio. Usare sempre "N/D" accorpava
+    // negozi distinti in un unico PDV nel report Telegram.
+    const key = codicePos
+      ? `pos:${codicePos.toLocaleLowerCase("it")}`
+      : nomeNegozio
+        ? `name:${nomeNegozio.toLocaleLowerCase("it")}`
+        : "nd";
     const addettoName = (row.nomeAddetto ?? "").trim() || "N/D";
     const addettoKey = addettoName.toLowerCase();
     let pdvAcc = pdvDrill.get(key);
@@ -478,8 +487,8 @@ export function aggregateDailyReport(
       if (!existing.nomeNegozio && row.nomeNegozio) existing.nomeNegozio = row.nomeNegozio.trim();
     } else {
       pdvMap.set(key, {
-        codicePos: key,
-        nomeNegozio: (row.nomeNegozio ?? "").trim(),
+        codicePos: codicePos || nomeNegozio || "N/D",
+        nomeNegozio,
         vendite: 1,
         importo: tot,
       });

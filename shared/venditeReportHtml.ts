@@ -586,8 +586,10 @@ function pdvSection(a: DailyReportAggregates, content: TelegramReportContentConf
     .map((pdv) => {
       const name = pdv.nomeNegozio || "N/D";
       const pezzi = groupPezziOf(pdv.dettaglio, content.pisteVisibili);
+      const code = pdv.codicePos.trim();
+      const showCode = code.toLocaleLowerCase("it") !== name.trim().toLocaleLowerCase("it");
       const inner = `<span class="rank-top"><span class="rank-name">${escapeHtml(name)}</span><span class="rank-val">${pezzi} pz</span></span>
-        <span class="rank-sub"><span class="mono">${escapeHtml(pdv.codicePos)}</span> · ${pdv.vendite} vendite · ${escapeHtml(fmtEuro(pdv.importo))}</span>
+        <span class="rank-sub">${showCode ? `<span class="mono">${escapeHtml(code)}</span> · ` : ""}${pdv.vendite} vendite · ${escapeHtml(fmtEuro(pdv.importo))}</span>
         ${rankBar((pezzi / maxPezzi) * 100, ORANGE)}`;
       return rankRow(inner, drillPanel(pdv.dettaglio, content));
     })
