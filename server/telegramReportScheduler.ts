@@ -18,6 +18,7 @@ import {
   trendYmdOf,
 } from "@shared/venditeReport";
 import { buildVenditeReportHtml, reportHtmlFileName } from "@shared/venditeReportHtml";
+import type { VfPistaConf } from "@shared/vfPisteCalc";
 import { aggregateDtsReport, dtsSaleCodiceEsterno, filterDtsLeads, type DtsReportAggregates } from "@shared/dtsReport";
 import { fasciaFromTimeLabel, parseForecastConfig } from "@shared/venditeCommento";
 import {
@@ -365,7 +366,10 @@ export async function sendDailyReportForOrg(params: {
       parseTelegramReportContentForBrand(garaCfgObj?.telegramReportContent, brand.brandId),
       brand.kind,
     );
-    isVfReport = brand.kind !== "windtre";
+    // "other" è volutamente fail-closed per i contenuti Protetti, ma non
+    // significa necessariamente Vodafone/Fastweb (può essere TIM o un brand
+    // futuro). Classificazione, soglie e premi VF solo per nomi VF espliciti.
+    isVfReport = /vodafone|fastweb/i.test(brand.brandName);
   } else {
     // Report legacy unico (nessun PDV brandizzato). Il modello VF completo
     // (rimozione assicurazioni + energia→luce/gas + classificazione canvass)
@@ -448,6 +452,15 @@ export async function sendDailyReportForOrg(params: {
   // dallo stesso record già caricato per i pesi (Task #283)
   // + fascia dedotta dall'orario (13:30 parziale / 22:30 chiusura).
   const forecast = parseForecastConfig(garaCfgObj?.venditeForecast);
+  // Le soglie/premi VF del report aggregato sono quelli globali del mese.
+  // Gli override per RS restano applicati nella Dashboard quando il
+  // perimetro è una singola RS; un report brand multi-RS non deve scegliere
+  // arbitrariamente l'override di una RS.
+  const vfPisteConfig = isVfReport
+    ? (((garaCfgObj?.vfPisteConfig as {
+        configPerPista?: Partial<Record<string, VfPistaConf>>;
+      } | undefined)?.configPerPista) ?? {})
+    : undefined;
   // Proiezione a fine mese: un KPI per riga (volumi per pista + Telefoni + Accessori/Servizi)
   // stimati sui giorni lavorativi trascorsi, dagli aggregati del mese. I giorni
   // lavorativi tengono conto della divisione CC/strada (conteggi negozi dal
@@ -543,6 +556,7 @@ export async function sendDailyReportForOrg(params: {
     monthProjection,
     dts,
     content: reportContent,
+    vfPisteConfig,
   });
   const fileName = reportHtmlFileName(reportName, ymd, params.timeLabel);
   const docResult = await sendTelegramDocument(params.botToken, params.chatId, fileName, html, {

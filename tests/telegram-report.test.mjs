@@ -2151,6 +2151,7 @@ if (schedMod.runScheduledSend && storageMod.storage) {
   // Stato del mock, reimpostato da setupScenario per ogni test.
   let mockOrgs = [];
   let mockConfigs = new Map(); // orgId -> config object
+  let mockGaraConfigs = new Map(); // orgId -> gara_config.config del mese
   let mockSentLabels = new Map(); // orgId -> string[] (label già inviati oggi)
   let mockOrgBrands = new Map(); // orgId -> [{ id, name }] (Task #519)
   let mockSales = []; // righe bisuite restituite dal mock (Task #519)
@@ -2186,7 +2187,10 @@ if (schedMod.runScheduledSend && storageMod.storage) {
     mockSentLabels.set(orgId, [...prev, { timeLabel: label, brandKey }]);
   });
   patch("getBisuiteSalesByItalianDateRange", async () => mockSales);
-  patch("getGaraConfig", async () => undefined);
+  patch("getGaraConfig", async (orgId) => {
+    const config = mockGaraConfigs.get(orgId);
+    return config ? { organizationId: orgId, config } : undefined;
+  });
   patch("getDtsLeads", async () => mockDtsLeads);
   patch("getOrganizationBrands", async (orgId) => mockOrgBrands.get(orgId) ?? []);
   patch("getSystemConfig", async (key) => {
@@ -2229,6 +2233,9 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       ...tgConfig(o.sendTimes),
       ...(o.puntiVendita ? { puntiVendita: o.puntiVendita } : {}),
     }]));
+    mockGaraConfigs = new Map(orgs
+      .filter((o) => o.garaConfig)
+      .map((o) => [o.id, o.garaConfig]));
     mockOrgBrands = new Map(orgs.map((o) => [o.id, o.brands ?? []]));
     mockSales = sales;
     mockSentLabels = new Map(Object.entries(sent));
@@ -2516,6 +2523,14 @@ if (schedMod.runScheduledSend && storageMod.storage) {
             { codicePos: "P100", nome: "Neg P100", brandIds: ["b-w3"] },
             { codicePos: "P200", nome: "Neg P200", brandIds: ["b-vf"] },
           ],
+          garaConfig: {
+            vfPisteConfig: {
+              configPerPista: {
+                luce: { targetS1: 1, targetS2: 2, targetS3: 4, premioS1: 50, premioS2: 100, premioS3: 200 },
+                gas: { targetS1: 2, targetS2: 3, targetS3: 5, premioS1: 60, premioS2: 120, premioS3: 240 },
+              },
+            },
+          },
         }],
         sales: [
           // Brand VF: 2 pezzi Luce + 1 pezzo Gas dal listino (match per codice).
@@ -2539,10 +2554,14 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       // Card Luce e Gas con i pezzi REALI classificati dal listino.
       assert.match(vfHtml, />Luce<\/span><span class="pval">2 pz/, "card Luce con 2 pezzi nel report VF");
       assert.match(vfHtml, />Gas<\/span><span class="pval">1 pz/, "card Gas con 1 pezzo nel report VF");
+      assert.ok(vfHtml.includes("Raggiunta S2 · premio 100,00 €"), "soglia e premio Luce configurati nell'HTML");
+      assert.ok(vfHtml.includes("S3 4 pz / 200,00 €"), "obiettivi completi Luce nell'HTML");
+      assert.ok(vfHtml.includes("Mancano 1 pz alla prossima soglia"), "avanzamento Gas nell'HTML");
       assert.ok(!/>Energia<\/span>/.test(vfHtml), "nessuna card Energia generica nel report VF");
       // Il report WindTre resta col modello classico: niente piste VF,
       // la vendita UNTIED conta nella pista Mobile.
       assert.ok(!/>Luce<\/span>/.test(w3Html) && !/>Gas<\/span>/.test(w3Html), "nessuna pista VF nel report WindTre");
+      assert.ok(!w3Html.includes("Raggiunta S2 · premio 100,00 €"), "nessun premio VF nel report WindTre");
       assert.match(w3Html, />Mobile<\/span><span class="pval">1 pz/, "vendita UNTIED nella pista Mobile del report WindTre");
     });
 
@@ -2574,6 +2593,31 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       assert.match(h, />Mobile<\/span><span class="pval">1 pz/, "classificazione legacy attiva (UNTIED → Mobile)");
       // ...mentre l'offerta del listino non produce alcuna card Luce.
       assert.ok(!/>Luce<\/span>/.test(h), "nessuna card Luce senza listino (fallback legacy)");
+    });
+
+    await test("brand non-WindTre ma non VF ⇒ non riceve classificazione, soglie o premi Vodafone", async () => {
+      setupScenario({
+        orgs: [{
+          id: "org-other",
+          name: "Org Other",
+          brands: [{ id: "b-tim", name: "TIM" }],
+          puntiVendita: [{ codicePos: "P300", nome: "Neg P300", brandIds: ["b-tim"] }],
+          garaConfig: {
+            vfPisteConfig: {
+              configPerPista: {
+                luce: { targetS1: 1, targetS2: 2, targetS3: 3, premioS1: 50, premioS2: 100, premioS3: 200 },
+              },
+            },
+          },
+        }],
+        sales: [saleFull("other1", "P300", [artFull("CANLUCE12208", "OFFERTE ENERGIA VF", 25)])],
+        canvassRef: listinoVf,
+      });
+      await runScheduledSend("13:30");
+      assert.equal(telegramDocs.length, 1);
+      const h = await telegramDocs[0].get("document").text();
+      assert.ok(!/>Luce<\/span>/.test(h), "nessuna pista VF per un brand diverso da Vodafone/Fastweb");
+      assert.ok(!h.includes("premio 50,00 €"), "nessun premio VF per un brand diverso da Vodafone/Fastweb");
     });
 
     await test("recovery al boot con orari cambiati rispetto agli invii registrati ⇒ nessun duplicato", async () => {

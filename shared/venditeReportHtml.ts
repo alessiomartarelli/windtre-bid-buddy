@@ -36,7 +36,12 @@ import {
   type PistaCanvass,
   PISTA_CANVASS_LABELS,
   TYPE_LABELS,
+  VF_PISTAS,
 } from "./bisuiteClassification";
+import {
+  calcVfPistaResult,
+  type VfPistaConf,
+} from "./vfPisteCalc";
 import { type DtsReportAggregates, type DtsIncidenza } from "./dtsReport";
 import {
   type TelegramReportContentConfig,
@@ -138,6 +143,13 @@ export interface VenditeReportHtmlParams {
    * TELCO/NEW CORE dei "migliori". Assente ⇒ default legacy.
    */
   content?: TelegramReportContentConfig;
+  /**
+   * Obiettivi/soglie/premi globali delle piste Vodafone/Fastweb.
+   * Il report Telegram è aggregato a livello brand/org: usa quindi la
+   * configurazione globale, mentre gli override per RS restano nella
+   * Dashboard quando il perimetro è una singola RS.
+   */
+  vfPisteConfig?: Partial<Record<string, VfPistaConf>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +341,13 @@ function trendSection(trend: TrendDay[] | undefined): string {
     </div>`;
 }
 
-function pisteSection(a: DailyReportAggregates, trend: TrendDay[] | undefined, content: TelegramReportContentConfig, titolo = "La gara delle piste"): string {
+function pisteSection(
+  a: DailyReportAggregates,
+  trend: TrendDay[] | undefined,
+  content: TelegramReportContentConfig,
+  titolo = "La gara delle piste",
+  vfPisteConfig?: Partial<Record<string, VfPistaConf>>,
+): string {
   const active = REPORT_PISTA_ORDER.filter((p) => isPistaVisible(content, p) && (a.countByPista[p] ?? 0) > 0);
   if (active.length === 0) return "";
   const maxCount = Math.max(...active.map((p) => a.countByPista[p] ?? 0), 1);
@@ -354,10 +372,33 @@ function pisteSection(a: DailyReportAggregates, trend: TrendDay[] | undefined, c
         .map((c) => `<span class="chip">${escapeHtml(c.categoria)} ×${c.pezzi}</span>`)
         .join("");
 
+      let vfProgress = "";
+      if (VF_PISTAS.includes(pista as (typeof VF_PISTAS)[number])) {
+        const conf = vfPisteConfig?.[pista];
+        if (conf && (conf.targetS1 > 0 || conf.targetS2 > 0 || conf.targetS3 > 0)) {
+          const result = calcVfPistaResult(count, conf);
+          const targets = [
+            conf.targetS1 > 0 ? `S1 ${conf.targetS1} pz / ${fmtEuro(conf.premioS1 ?? 0)}` : "",
+            conf.targetS2 > 0 ? `S2 ${conf.targetS2} pz / ${fmtEuro(conf.premioS2 ?? 0)}` : "",
+            conf.targetS3 > 0 ? `S3 ${conf.targetS3} pz / ${fmtEuro(conf.premioS3 ?? 0)}` : "",
+          ].filter(Boolean);
+          const stato = result.soglia
+            ? `Raggiunta ${result.soglia} · premio ${fmtEuro(result.premio)}`
+            : result.nextTarget !== null
+              ? `Mancano ${Math.max(0, result.nextTarget - count)} pz alla prossima soglia`
+              : "Nessuna soglia raggiunta";
+          vfProgress = `<div class="pmeta">
+            <span class="chip">${escapeHtml(stato)}</span>
+            ${targets.map((t) => `<span class="chip">${escapeHtml(t)}</span>`).join("")}
+          </div>`;
+        }
+      }
+
       return `<div class="prow">
         <div class="prow-head"><span class="pname" style="color:${color}">${escapeHtml(label)}</span><span class="pval">${count} pz · ${escapeHtml(fmtEuro(amount))}</span></div>
         <div class="pbar"><i style="width:${width}%;background:linear-gradient(90deg,${color},${color}66)"></i></div>
         <div class="pmeta">${chips}${delta}</div>
+        ${vfProgress}
       </div>`;
     })
     .join("\n        ");
@@ -649,6 +690,7 @@ function daySections(
   trendSlice: TrendDay[] | undefined,
   hero: HeroOpts,
   content: TelegramReportContentConfig,
+  vfPisteConfig?: Partial<Record<string, VfPistaConf>>,
 ): string {
   const parts: string[] = [heroSection(a, trendSlice, hero)];
   if (a.vendite === 0) {
@@ -660,7 +702,7 @@ function daySections(
     parts.push(topPerKpiSection(a, "I migliori del giorno", content));
     parts.push(protettiSection(a, "giorno", content));
     parts.push(trendSection(trendSlice));
-    parts.push(pisteSection(a, trendSlice, content));
+    parts.push(pisteSection(a, trendSlice, content, "La gara delle piste", vfPisteConfig));
     parts.push(couponCaringSection(a, "giorno"));
     parts.push(tipiSection(a));
     parts.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
@@ -732,6 +774,7 @@ function monthSections(
   content: TelegramReportContentConfig,
   projection?: MonthEndProjection,
   dts?: DtsReportAggregates,
+  vfPisteConfig?: Partial<Record<string, VfPistaConf>>,
 ): string {
   const a = month.aggregates;
   const parts: string[] = [
@@ -761,7 +804,7 @@ function monthSections(
       }
     }
     parts.push(projectionSection(projection, content));
-    parts.push(pisteSection(a, undefined, content, "La gara delle piste · mese"));
+    parts.push(pisteSection(a, undefined, content, "La gara delle piste · mese", vfPisteConfig));
     parts.push(couponCaringSection(a, "mese"));
     parts.push(tipiSection(a));
     parts.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
@@ -808,7 +851,7 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
       sections.push(topPerKpiSection(a, "I migliori del giorno", content));
       sections.push(protettiSection(a, "giorno", content));
       sections.push(trendSection(trend));
-      sections.push(pisteSection(a, trend, content));
+      sections.push(pisteSection(a, trend, content, "La gara delle piste", p.vfPisteConfig));
       sections.push(couponCaringSection(a, "giorno"));
       sections.push(tipiSection(a));
       sections.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
@@ -818,7 +861,7 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
     }
     body = `<div class="page" data-page="d0">${sections.filter(Boolean).join("\n    ")}</div>`;
     if (p.month) {
-      body += `\n    <div class="page" data-page="month" hidden>${monthSections(p.month, undefined, content, p.monthProjection, p.dts)}</div>`;
+      body += `\n    <div class="page" data-page="month" hidden>${monthSections(p.month, undefined, content, p.monthProjection, p.dts, p.vfPisteConfig)}</div>`;
       script = navScript([{ ymd: p.dateYMD }], true);
       nav = navBar(true);
     }
@@ -838,10 +881,10 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
         vsPrevLabel: isLast ? undefined : "vs giorno prima",
         clickHint: p.month ? "Tocca per il totale del mese ›" : undefined,
       };
-      return `<div class="page" data-page="d${i}"${isLast ? "" : " hidden"}>${daySections(day.aggregates, trendSlice, hero, content)}</div>`;
+      return `<div class="page" data-page="d${i}"${isLast ? "" : " hidden"}>${daySections(day.aggregates, trendSlice, hero, content, p.vfPisteConfig)}</div>`;
     });
     if (p.month) {
-      pages.push(`<div class="page" data-page="month" hidden>${monthSections(p.month, days, content, p.monthProjection, p.dts)}</div>`);
+      pages.push(`<div class="page" data-page="month" hidden>${monthSections(p.month, days, content, p.monthProjection, p.dts, p.vfPisteConfig)}</div>`);
     }
     body = pages.join("\n    ");
     nav = navBar(Boolean(p.month));
