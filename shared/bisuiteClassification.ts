@@ -20,8 +20,10 @@ export type PistaCanvass =
   | 'vas';
 
 /**
- * Task #527 — piste specifiche del modello gara Vodafone/Fastweb, mostrate
- * SOLO a pezzi (nessun obiettivo/soglia/premio in questa fase).
+ * Piste specifiche del modello gara Vodafone/Fastweb (Task #527).
+ * Dal Task #528 sono configurabili con obiettivi/soglie/premi in
+ * Configurazione Gara (blocchi vfPisteConfig / vfPisteRSConfig); senza
+ * config restano a solo conteggio pezzi (comportamento invariato).
  */
 export const VF_COUNT_ONLY_PISTAS: readonly PistaCanvass[] = [
   'luce',
@@ -30,6 +32,12 @@ export const VF_COUNT_ONLY_PISTAS: readonly PistaCanvass[] = [
   'iva_wireline',
   'vas',
 ] as const;
+
+/** Alias leggibile post-Task #528: le piste VF non sono più "solo conteggio". */
+export const VF_PISTAS = VF_COUNT_ONLY_PISTAS;
+
+/** Chiave di una pista Vodafone/Fastweb. */
+export type VfPistaKey = 'luce' | 'gas' | 'iva_mobile' | 'iva_wireline' | 'vas';
 
 /**
  * Task #527 — piste WindTre-only: non devono comparire nel modello gara

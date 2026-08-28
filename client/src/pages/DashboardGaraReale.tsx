@@ -4,6 +4,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { isModuleAllowedForBrands, garaModelsForBrands } from "@shared/modules";
 import { PISTA_CANVASS_LABELS_VF, VF_COUNT_ONLY_PISTAS } from "@shared/bisuiteClassification";
 import { normalizeRsName } from "@shared/ragioneSociale";
+import { resolveVfEffectiveRsKey, resolveVfPistaConf, calcVfPistaResult } from "@shared/vfPisteCalc";
 import { neutralizzaLivelliEnergia, neutralizzaLivelliAssicurazioni } from "@shared/soglieRimovibili";
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -356,6 +357,16 @@ interface MappedSalesResponse {
   /** Task #527 — totale pezzi per pista canvass VF (luce, gas, iva_mobile,
    *  iva_wireline, vas, …); null/assente per org senza brand VF. */
   totaliPistaCanvass?: Partial<Record<string, number>> | null;
+}
+
+// Task #528 — config obiettivi/soglie/premi per una pista Vodafone/Fastweb.
+interface VfPistaConfEntry {
+  targetS1: number;
+  targetS2: number;
+  targetS3: number;
+  premioS1?: number;
+  premioS2?: number;
+  premioS3?: number;
 }
 
 interface OrgConfigPdv {
@@ -3539,6 +3550,9 @@ export default function DashboardGaraReale() {
       extraGaraIvaSogliePerRS: cfg?.extraGaraIvaSogliePerRS as ExtraGaraSogliePerRS | undefined,
       tabelleCalcolo: cfg?.tabelleCalcolo as Record<string, unknown> | undefined,
       sosCaring: (cfg?.sosCaring as SosCaringData | null | undefined) || null,
+      // Task #528 — obiettivi/soglie/premi piste Vodafone/Fastweb.
+      vfPisteConfig: cfg?.vfPisteConfig as { configPerPista?: Partial<Record<string, VfPistaConfEntry>> } | undefined,
+      vfPisteRSConfig: cfg?.vfPisteRSConfig as { configPerRS?: Array<{ ragioneSociale: string; rimosso?: boolean; perPista: Partial<Record<string, VfPistaConfEntry>> }> } | undefined,
     };
   }, [garaConfig]);
 
@@ -3589,6 +3603,37 @@ export default function DashboardGaraReale() {
       totalArticoli,
     };
   }, [mappedDataRaw, rsFilter, pdvFilter, garaPdvList]);
+
+  // Task #528 — calcolo soglie/premi piste VF dal perimetro corrente:
+  // i conteggi (totaliPistaCanvass) arrivano già filtrati dal server sul
+  // perimetro RS/PDV; la RS effettiva è quella del PDV selezionato, del
+  // filtro RS, o l'unica RS del catalogo (org mono-RS senza selettore).
+  // Config assente o con target tutti a 0 = solo conteggio pezzi (#527).
+  const vfPisteCalc = useMemo(() => {
+    const global = garaCalcConfig.vfPisteConfig?.configPerPista ?? {};
+    const perRS = garaCalcConfig.vfPisteRSConfig?.configPerRS ?? [];
+    const effectiveRsKey = resolveVfEffectiveRsKey({ pdvFilter, rsFilter, catalog: pdvViewCatalog });
+    const results: Record<string, { pezzi: number; conf: VfPistaConfEntry | null; soglia: "S1" | "S2" | "S3" | null; premio: number; nextTarget: number | null }> = {};
+    let totalePremio = 0;
+    let hasConfig = false;
+    for (const p of VF_COUNT_ONLY_PISTAS) {
+      const pezzi = mappedData?.totaliPistaCanvass?.[p] ?? 0;
+      const conf = resolveVfPistaConf({ pista: p, global, perRS, effectiveRsKey });
+      let soglia: "S1" | "S2" | "S3" | null = null;
+      let premio = 0;
+      let nextTarget: number | null = null;
+      if (conf) {
+        hasConfig = true;
+        const r = calcVfPistaResult(pezzi, conf);
+        soglia = r.soglia;
+        premio = r.premio;
+        nextTarget = r.nextTarget;
+        totalePremio += premio;
+      }
+      results[p] = { pezzi, conf, soglia, premio, nextTarget };
+    }
+    return { results, totalePremio, hasConfig };
+  }, [garaCalcConfig.vfPisteConfig, garaCalcConfig.vfPisteRSConfig, mappedData, rsFilter, pdvFilter, pdvViewCatalog]);
 
   const puntiVenditaFromGara: OrgConfigPdv[] = useMemo(() => {
     return garaPdvList.map((p) => ({
@@ -5666,25 +5711,58 @@ export default function DashboardGaraReale() {
             {garaModels.vf && mappedData?.hasCanvassBrand && (
               <Card data-testid="card-piste-vf">
                 <CardContent className="py-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <BarChart3 className="h-4 w-4 text-indigo-500" />
-                    <span className="font-semibold text-sm">Piste Vodafone/Fastweb — pezzi</span>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-indigo-500" />
+                      <span className="font-semibold text-sm">
+                        {vfPisteCalc.hasConfig ? 'Piste Vodafone/Fastweb' : 'Piste Vodafone/Fastweb — pezzi'}
+                      </span>
+                    </div>
+                    {/* Task #528 — premio totale dalle soglie raggiunte */}
+                    {vfPisteCalc.hasConfig && (
+                      <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums" data-testid="vf-piste-premio-totale">
+                        {vfPisteCalc.totalePremio.toLocaleString('it-IT')} € premio
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                    {VF_COUNT_ONLY_PISTAS.map((p) => (
-                      <div
-                        key={p}
-                        className="rounded-lg border p-3 text-center"
-                        data-testid={`vf-pista-${p}`}
-                      >
-                        <div className="text-2xl font-bold" data-testid={`vf-pista-${p}-pezzi`}>
-                          {mappedData?.totaliPistaCanvass?.[p] ?? 0}
+                    {VF_COUNT_ONLY_PISTAS.map((p) => {
+                      const calc = vfPisteCalc.results[p];
+                      return (
+                        <div
+                          key={p}
+                          className="rounded-lg border p-3 text-center"
+                          data-testid={`vf-pista-${p}`}
+                        >
+                          <div className="text-2xl font-bold" data-testid={`vf-pista-${p}-pezzi`}>
+                            {calc?.pezzi ?? (mappedData?.totaliPistaCanvass?.[p] ?? 0)}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                            {PISTA_CANVASS_LABELS_VF[p]}
+                          </div>
+                          {/* Task #528 — soglia raggiunta e premio dalla config gara */}
+                          {calc?.conf && (
+                            <div className="mt-2 space-y-1">
+                              <div className="text-[11px] tabular-nums" data-testid={`vf-pista-${p}-soglia`}>
+                                {calc.soglia ? (
+                                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">Soglia {calc.soglia} raggiunta</span>
+                                ) : (
+                                  <span className="text-gray-500 dark:text-slate-400">Nessuna soglia raggiunta</span>
+                                )}
+                              </div>
+                              {calc.nextTarget != null && (
+                                <div className="text-[11px] text-gray-500 dark:text-slate-400 tabular-nums" data-testid={`vf-pista-${p}-next-target`}>
+                                  Prossimo target: {calc.nextTarget.toLocaleString('it-IT')}
+                                </div>
+                              )}
+                              <div className="text-xs font-semibold tabular-nums" data-testid={`vf-pista-${p}-premio`}>
+                                {calc.premio.toLocaleString('it-IT')} €
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs text-gray-500 dark:text-slate-400 mt-1">
-                          {PISTA_CANVASS_LABELS_VF[p]}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

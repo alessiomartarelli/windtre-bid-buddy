@@ -178,6 +178,37 @@ export interface GaraConfigData {
       premioS2?: number;
     }>;
   };
+  /**
+   * Task #528 — obiettivi/soglie/premi per le 5 piste Vodafone/Fastweb
+   * (luce, gas, iva_mobile, iva_wireline, vas). Target = pezzi; premio =
+   * € flat della soglia più alta raggiunta. Assente = solo conteggio pezzi
+   * (comportamento Task #527).
+   */
+  vfPisteConfig?: {
+    configPerPista: Partial<Record<string, {
+      targetS1: number;
+      targetS2: number;
+      targetS3: number;
+      premioS1?: number;
+      premioS2?: number;
+      premioS3?: number;
+    }>>;
+  };
+  /** Task #528 — override per Ragione Sociale delle piste VF. */
+  vfPisteRSConfig?: {
+    configPerRS: Array<{
+      ragioneSociale: string;
+      rimosso?: boolean;
+      perPista: Partial<Record<string, {
+        targetS1: number;
+        targetS2: number;
+        targetS3: number;
+        premioS1?: number;
+        premioS2?: number;
+        premioS3?: number;
+      }>>;
+    }>;
+  };
   protectaRSConfig?: {
     configPerRS: Array<{
       ragioneSociale: string;

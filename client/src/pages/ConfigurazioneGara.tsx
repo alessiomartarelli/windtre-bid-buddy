@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react';
 import { AppNavbar } from '@/components/AppNavbar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import { getDefaultTarget100, calculateTarget80, calculatePremio80 } from '@/typ
 import { getThresholdsByCluster, mapClusterMobileToClusterPista, getDefaultFissoThresholds, mapClusterFissoToNumber } from '@/utils/preventivatore-helpers';
 import { calcolaSoglieDefaultPerRS as calcolaSoglieEnergiaDefault } from '@/types/energia';
 import { toggleLivelloRimosso, isLivelloRimosso } from '@shared/soglieRimovibili';
-import { PISTA_CANVASS_LABELS, PISTA_CANVASS_LABELS_VF, type PistaCanvass } from '@shared/bisuiteClassification';
+import { PISTA_CANVASS_LABELS, PISTA_CANVASS_LABELS_VF, VF_PISTAS, type PistaCanvass } from '@shared/bisuiteClassification';
 import { TELEGRAM_REPORT_PISTE, TELEGRAM_REPORT_PISTE_WINDTRE, TELEGRAM_REPORT_PISTE_VF, telegramBrandKindOf, applyBrandKindGating, parseTelegramReportContent, parseTelegramReportContentForBrand } from '@shared/telegramReportContent';
 import { apiUrl } from '@/lib/basePath';
 import {
@@ -383,6 +383,10 @@ type FissoRSConf = NonNullable<GaraConfigData['pistaFissoRSConfig']>['sogliePerR
 type PartnershipRSConf = NonNullable<GaraConfigData['partnershipRewardRSConfig']>['configPerRS'][number];
 type EnergiaRSConf = NonNullable<GaraConfigData['energiaRSConfig']>['configPerRS'][number];
 type AssicurazioniRSConf = NonNullable<GaraConfigData['assicurazioniRSConfig']>['configPerRS'][number];
+// Task #528 — obiettivi/soglie/premi piste Vodafone/Fastweb.
+type VfPistaConf = NonNullable<NonNullable<GaraConfigData['vfPisteConfig']>['configPerPista'][string]>;
+type VfPisteRSConf = NonNullable<GaraConfigData['vfPisteRSConfig']>['configPerRS'][number];
+const EMPTY_VF_PISTA_CONF: VfPistaConf = { targetS1: 0, targetS2: 0, targetS3: 0, premioS1: 0, premioS2: 0, premioS3: 0 };
 
 function CodiciRSInput({ codici, onChange, rsName }: { codici: string[]; onChange: (codici: string[]) => void; rsName: string }) {
   const [inputVal, setInputVal] = useState('');
@@ -684,6 +688,9 @@ export default function ConfigurazioneGara() {
 
   const [energiaRSConfig, setEnergiaRSConfig] = useState<EnergiaRSConf[]>([]);
   const [assicurazioniRSConfig, setAssicurazioniRSConfig] = useState<AssicurazioniRSConf[]>([]);
+  // Task #528 — piste VF: config globale per pista + override per RS.
+  const [vfPisteConfig, setVfPisteConfig] = useState<Partial<Record<string, VfPistaConf>>>({});
+  const [vfPisteRSConfig, setVfPisteRSConfig] = useState<VfPisteRSConf[]>([]);
   const [protectaRSConfig, setProtectaRSConfig] = useState<Array<{ ragioneSociale: string; targetExtra: number; targetDecurtazione: number; premioExtra: number }>>([]);
   const [decurtazioneRSConfig, setDecurtazioneRSConfig] = useState<Array<{ ragioneSociale: string; importo: number }>>([]);
 
@@ -979,6 +986,8 @@ export default function ConfigurazioneGara() {
       if (cfg.assicurazioniConfig) setAssicurazioniConfig(cfg.assicurazioniConfig);
       if (cfg.energiaRSConfig?.configPerRS?.length) setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
+      setVfPisteConfig(cfg.vfPisteConfig?.configPerPista ?? {});
+      setVfPisteRSConfig(cfg.vfPisteRSConfig?.configPerRS ?? []);
       if (cfg.protectaRSConfig?.configPerRS?.length) setProtectaRSConfig(cfg.protectaRSConfig.configPerRS);
       if (cfg.decurtazioneRSConfig?.configPerRS?.length) setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
       if (cfg.importedFiles?.length) setImportedFiles(cfg.importedFiles as Array<{ label: string; type: PdfType; fileName: string }>);
@@ -1055,6 +1064,8 @@ export default function ConfigurazioneGara() {
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) {
         setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
       }
+      setVfPisteConfig(cfg.vfPisteConfig?.configPerPista ?? {});
+      setVfPisteRSConfig(cfg.vfPisteRSConfig?.configPerRS ?? []);
       if (cfg.protectaRSConfig?.configPerRS?.length) {
         setProtectaRSConfig(cfg.protectaRSConfig.configPerRS);
       }
@@ -1082,6 +1093,8 @@ export default function ConfigurazioneGara() {
       setPartnershipRSConfig([]);
       setEnergiaRSConfig([]);
       setAssicurazioniRSConfig([]);
+      setVfPisteConfig({});
+      setVfPisteRSConfig([]);
       setProtectaRSConfig([]);
       setDecurtazioneRSConfig([]);
       setImportedFiles([]);
@@ -1131,6 +1144,12 @@ export default function ConfigurazioneGara() {
     assicurazioniConfig,
     energiaRSConfig: { configPerRS: energiaRSConfig },
     assicurazioniRSConfig: { configPerRS: assicurazioniRSConfig },
+    // Task #528 — blocchi piste VF salvati solo per org con modello VF:
+    // le org WindTre restano invariate.
+    ...(garaModels.vf ? {
+      vfPisteConfig: { configPerPista: vfPisteConfig },
+      vfPisteRSConfig: { configPerRS: vfPisteRSConfig },
+    } : {}),
     protectaRSConfig: { configPerRS: protectaRSConfig },
     decurtazioneRSConfig: { configPerRS: decurtazioneRSConfig },
     importedFiles,
@@ -1154,7 +1173,7 @@ export default function ConfigurazioneGara() {
     ...(garaConfigRecord?.config ? {
       importedFrom: (garaConfigRecord.config as unknown as GaraConfigData).importedFrom,
     } : {}),
-  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, performanceWeights, telegramContent, telegramContentPerBrand, sosCaring, garaConfigRecord]);
+  }), [pdvList, tipologiaGara, modalitaRS, mobileConfig, fissoConfig, partnershipConfig, mobileRSConfig, fissoRSConfig, partnershipRSConfig, energiaConfig, assicurazioniConfig, energiaRSConfig, assicurazioniRSConfig, vfPisteConfig, vfPisteRSConfig, garaModels.vf, protectaRSConfig, decurtazioneRSConfig, importedFiles, tabelleCalcolo, extraGaraIvaSogliePerRS, venditeForecast, performanceWeights, telegramContent, telegramContentPerBrand, sosCaring, garaConfigRecord]);
 
   const handleSosCaringFile = useCallback(async (file: File) => {
     setSosUploading(true);
@@ -1673,6 +1692,8 @@ export default function ConfigurazioneGara() {
       if (cfg.partnershipRewardRSConfig?.configPerRS?.length) setPartnershipRSConfig(cfg.partnershipRewardRSConfig.configPerRS);
       if (cfg.energiaRSConfig?.configPerRS?.length) setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
       if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
+      setVfPisteConfig(cfg.vfPisteConfig?.configPerPista ?? {});
+      setVfPisteRSConfig(cfg.vfPisteRSConfig?.configPerRS ?? []);
       if (cfg.protectaRSConfig?.configPerRS?.length) setProtectaRSConfig(cfg.protectaRSConfig.configPerRS);
       if (cfg.decurtazioneRSConfig?.configPerRS?.length) setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
       if (cfg.importedFiles?.length) setImportedFiles(cfg.importedFiles as Array<{ label: string; type: PdfType; fileName: string }>);
@@ -2617,19 +2638,154 @@ export default function ConfigurazioneGara() {
             </TabsContent>
 
             <TabsContent value="extra" className="space-y-4">
-              {/* Task #527 — modello VF: niente Energia/Assicurazioni/Protetti
-                  (le piste Vodafone/Fastweb sono a soli pezzi, senza soglie
-                  né premi per ora). Visibile solo con brand WindTre o org
-                  senza brand (modello legacy). */}
+              {/* Task #527 — modello VF: niente Energia/Assicurazioni/Protetti.
+                  Task #528 — le piste Vodafone/Fastweb ora hanno obiettivi,
+                  soglie e premi configurabili (globali o per RS). */}
               {!garaModels.windtre && (
                 <Card data-testid="card-extra-vf-empty">
                   <CardContent className="py-6 text-sm text-muted-foreground">
                     Le piste Energia, Assicurazioni e Windtre Protetti fanno parte del modello
-                    gara WindTre e non si applicano al modello Vodafone/Fastweb. Le piste
-                    Vodafone/Fastweb (Luce, Gas, IVA Mobile, IVA Wireline, VAS) sono per ora
-                    conteggiate a pezzi, senza obiettivi né premi.
+                    gara WindTre e non si applicano al modello Vodafone/Fastweb. Configura qui
+                    sotto obiettivi, soglie e premi delle piste Vodafone/Fastweb (Luce, Gas,
+                    IVA Mobile, IVA Wireline, VAS).
                   </CardContent>
                 </Card>
+              )}
+              {garaModels.vf && !showPerRS && (
+                <Card data-testid="card-vf-piste-config">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Piste Vodafone/Fastweb — Obiettivi e Premi</CardTitle>
+                    <CardDescription className="text-xs">
+                      Target in pezzi per soglia (S1–S3) e premio € della soglia raggiunta.
+                      Lascia i target a 0 per mantenere la pista a solo conteggio pezzi.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {VF_PISTAS.map((pista) => {
+                      const conf = vfPisteConfig[pista] ?? EMPTY_VF_PISTA_CONF;
+                      const update = (field: keyof VfPistaConf, value: number) => {
+                        setVfPisteConfig(prev => ({ ...prev, [pista]: { ...(prev[pista] ?? EMPTY_VF_PISTA_CONF), [field]: value } }));
+                        setIsDirty(true);
+                      };
+                      return (
+                        <div key={pista} className="rounded-md border p-3 space-y-2" data-testid={`riga-vf-pista-${pista}`}>
+                          <Label className="text-xs font-semibold">{PISTA_CANVASS_LABELS_VF[pista]}</Label>
+                          <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                            {(['S1', 'S2', 'S3'] as const).map(liv => {
+                              const targetField = `target${liv}` as 'targetS1' | 'targetS2' | 'targetS3';
+                              const premioField = `premio${liv}` as 'premioS1' | 'premioS2' | 'premioS3';
+                              return (
+                                <Fragment key={liv}>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Target {liv}</Label>
+                                    <Input type="number" className="h-8 text-sm" value={conf[targetField]} onChange={e => update(targetField, Number(e.target.value) || 0)} data-testid={`input-vf-${pista}-target${liv}`} />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Premio {liv} €</Label>
+                                    <Input type="number" className="h-8 text-sm" value={conf[premioField] ?? 0} onChange={e => update(premioField, Number(e.target.value) || 0)} data-testid={`input-vf-${pista}-premio${liv}`} />
+                                  </div>
+                                </Fragment>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+              {garaModels.vf && showPerRS && (
+                <div className="space-y-6">
+                  <Card data-testid="card-vf-piste-rs-header">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base">Piste Vodafone/Fastweb per Ragione Sociale</CardTitle>
+                      <CardDescription className="text-xs">
+                        Obiettivi, soglie e premi delle piste VF separati per ogni Ragione Sociale.
+                        Le RS senza blocco usano la configurazione globale (se presente).
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                  {Array.from(rsGroups.entries()).map(([rs, rsPdvs]) => {
+                    const vConf = vfPisteRSConfig.find(c => c.ragioneSociale === rs);
+                    const aggiungiVfRS = () => {
+                      setVfPisteRSConfig(prev => [...prev, {
+                        ragioneSociale: rs,
+                        perPista: Object.fromEntries(VF_PISTAS.map(p => [p, { ...(vfPisteConfig[p] ?? EMPTY_VF_PISTA_CONF) }])),
+                      }]);
+                      setIsDirty(true);
+                    };
+                    const marcaVfRS = (rimosso: boolean) => {
+                      setVfPisteRSConfig(prev => prev.map(c => c.ragioneSociale === rs ? { ...c, rimosso } : c));
+                      setIsDirty(true);
+                    };
+                    const updateVfRS = (pista: string, field: keyof VfPistaConf, value: number) => {
+                      setVfPisteRSConfig(prev => prev.map(c => c.ragioneSociale === rs
+                        ? { ...c, perPista: { ...c.perPista, [pista]: { ...(c.perPista[pista] ?? EMPTY_VF_PISTA_CONF), [field]: value } } }
+                        : c));
+                      setIsDirty(true);
+                    };
+                    return (
+                      <Card key={rs} data-testid={`card-vf-rs-${rs}`}>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-semibold">{rs}</CardTitle>
+                          <CardDescription className="text-xs">{rsPdvs.length} PDV</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {vConf?.rimosso && (
+                            <div className="flex items-center justify-between gap-3 rounded-md border border-dashed p-3" data-testid={`banner-vf-rs-rimossa-${rs}`}>
+                              <div className="text-xs text-muted-foreground">
+                                Obiettivi piste VF rimossi per questa RS: valgono i soli conteggi pezzi.
+                              </div>
+                              <Button type="button" size="sm" variant="outline" onClick={() => marcaVfRS(false)} data-testid={`button-ripristina-vf-rs-${rs}`}>
+                                Ripristina
+                              </Button>
+                            </div>
+                          )}
+                          {vConf && !vConf.rimosso && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-end">
+                                <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-muted-foreground hover:text-destructive" onClick={() => marcaVfRS(true)} data-testid={`button-rimuovi-vf-rs-${rs}`}>
+                                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Rimuovi
+                                </Button>
+                              </div>
+                              {VF_PISTAS.map((pista) => {
+                                const conf = vConf.perPista[pista] ?? EMPTY_VF_PISTA_CONF;
+                                return (
+                                  <div key={pista} className="rounded-md border p-3 space-y-2" data-testid={`riga-vf-rs-${pista}-${rs}`}>
+                                    <Label className="text-xs font-semibold">{PISTA_CANVASS_LABELS_VF[pista]}</Label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                                      {(['S1', 'S2', 'S3'] as const).map(liv => {
+                                        const targetField = `target${liv}` as 'targetS1' | 'targetS2' | 'targetS3';
+                                        const premioField = `premio${liv}` as 'premioS1' | 'premioS2' | 'premioS3';
+                                        return (
+                                          <Fragment key={liv}>
+                                            <div className="space-y-1">
+                                              <Label className="text-xs">Target {liv}</Label>
+                                              <Input type="number" className="h-8 text-sm" value={conf[targetField]} onChange={e => updateVfRS(pista, targetField, Number(e.target.value) || 0)} data-testid={`input-vf-rs-${pista}-target${liv}-${rs}`} />
+                                            </div>
+                                            <div className="space-y-1">
+                                              <Label className="text-xs">Premio {liv} €</Label>
+                                              <Input type="number" className="h-8 text-sm" value={conf[premioField] ?? 0} onChange={e => updateVfRS(pista, premioField, Number(e.target.value) || 0)} data-testid={`input-vf-rs-${pista}-premio${liv}-${rs}`} />
+                                            </div>
+                                          </Fragment>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {!vConf && (
+                            <Button type="button" size="sm" variant="outline" onClick={aggiungiVfRS} data-testid={`button-aggiungi-vf-rs-${rs}`}>
+                              <Plus className="h-3.5 w-3.5 mr-1" /> Aggiungi obiettivi piste VF
+                            </Button>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               )}
               {garaModels.windtre && showPerRS && (
                 <div className="space-y-6">
