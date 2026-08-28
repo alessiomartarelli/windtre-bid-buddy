@@ -182,13 +182,13 @@ const artEnergiaConsumer = {
   dettaglio: { prezzo: '0.00' },
 };
 
-async function insertSale(pool, orgId, { codicePos, nomeNegozio, nomeAddetto, articoli }) {
+async function insertSale(pool, orgId, { codicePos, nomeNegozio, nomeAddetto, ragioneSociale = null, articoli }) {
   const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
   await pool.query(
     `INSERT INTO bisuite_sales
        (organization_id, bisuite_id, data_vendita, codice_pos, nome_negozio,
-        nome_addetto, stato, totale, raw_data)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+         nome_addetto, ragione_sociale, stato, totale, raw_data)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)`,
     [
       orgId,
       bisuiteId,
@@ -196,12 +196,51 @@ async function insertSale(pool, orgId, { codicePos, nomeNegozio, nomeAddetto, ar
       codicePos,
       nomeNegozio,
       nomeAddetto,
+      ragioneSociale,
       'FINALIZZATA',
       '35.00',
       JSON.stringify({ articoli }),
     ],
   );
 }
+
+test('Vendite BiSuite UI: Phone&Phone distingue i nomi negozio senza codice POS ed esclude i banchetti', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'phone_pdv_ui', fullName: 'Phone PDV UI Test' });
+  let browser;
+  try {
+    await setRole(pool, session.profileId, 'admin');
+    const base = {
+      codicePos: '',
+      nomeAddetto: 'ADDETTO TEST',
+      ragioneSociale: 'Phone&Phone S.r.l.',
+      articoli: [artUntied],
+    };
+    await insertSale(pool, session.orgId, { ...base, nomeNegozio: 'VODAFONE STORE ROMA EST' });
+    await insertSale(pool, session.orgId, { ...base, nomeNegozio: 'VODAFONE STORE FIUMICINO' });
+    await insertSale(pool, session.orgId, { ...base, nomeNegozio: 'BACK OFFICE VODAFONE PARTNER' });
+    await insertSale(pool, session.orgId, { ...base, nomeNegozio: 'BANCHETTO FCO' });
+
+    browser = await launchBrowser();
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'networkidle' });
+    await page.getByTestId('text-total-pdv').waitFor({ timeout: 20000 });
+
+    assert.equal((await page.getByTestId('text-total-pdv').innerText()).trim(), '3');
+    const body = await page.locator('body').innerText();
+    assert.ok(body.includes('VODAFONE STORE ROMA EST'));
+    assert.ok(body.includes('VODAFONE STORE FIUMICINO'));
+    assert.ok(body.includes('BACK OFFICE VODAFONE PARTNER'));
+    assert.ok(!body.includes('BANCHETTO FCO'));
+
+    await context.close();
+  } finally {
+    if (browser) await browser.close();
+    await cleanupOrg(pool, session.orgId);
+    await pool.end();
+  }
+});
 
 test('Vendite BiSuite UI: pezzi IVA per pista nel riquadro Canvass e nei dettagli PDV/Addetto', async () => {
   const pool = await newPool();

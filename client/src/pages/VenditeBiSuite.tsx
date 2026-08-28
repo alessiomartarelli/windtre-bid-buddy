@@ -136,6 +136,18 @@ interface BisuiteSale {
   fetchedAt: string | null;
 }
 
+/** Chiave PDV coerente per filtri, KPI, riepiloghi ed export.
+ * BiSuite può lasciare codicePos vuoto pur fornendo nomeNegozio. */
+function salePdvKey(sale: Pick<BisuiteSale, "codicePos" | "nomeNegozio">): string {
+  return sale.codicePos?.trim() || sale.nomeNegozio?.trim() || "N/D";
+}
+
+/** Phone&Phone: i banchetti temporanei non fanno parte dei PDV del report. */
+function isPhonePhoneBanchetto(sale: Pick<BisuiteSale, "ragioneSociale" | "nomeNegozio">): boolean {
+  const rs = (sale.ragioneSociale ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  return rs.startsWith("phonephone") && /\bbanchett[oi]\b/i.test(sale.nomeNegozio ?? "");
+}
+
 interface ArticleIncasso {
   scontrinato: number;
   fuoriScontrino: number;
@@ -516,8 +528,12 @@ export default function VenditeBiSuite() {
   // filtri/riepiloghi/export a valle riflettono così la vista scelta senza
   // toccare i dati memorizzati. In vista Origine l'array resta invariato.
   const rawSales = useMemo(() => {
-    if (pdvView === "origine") return fetchedSales;
-    return fetchedSales.map((s) => {
+    // Regola concordata per Phone&Phone: conserva tutti gli store e Back
+    // Office, esclude soltanto i banchetti temporanei. Applicata a monte,
+    // così KPI, tabella, riepiloghi ed export usano lo stesso perimetro.
+    const sourceSales = fetchedSales.filter((s) => !isPhonePhoneBanchetto(s));
+    if (pdvView === "origine") return sourceSales;
+    return sourceSales.map((s) => {
       const r = resolveSalePdvForView(s, "destinazione");
       return {
         ...s,
@@ -570,7 +586,7 @@ export default function VenditeBiSuite() {
     // le righe ANNULLATA (con il loro badge), che invece sono escluse dagli
     // aggregati calcolati su `sales`.
     let filtered = selectedPdvs.length > 0
-      ? rawSales.filter((s) => selectedPdvs.includes(s.codicePos || "N/D"))
+      ? rawSales.filter((s) => selectedPdvs.includes(salePdvKey(s)))
       : rawSales;
 
     if (filterStato !== "all") {
@@ -614,11 +630,11 @@ export default function VenditeBiSuite() {
 
   // Task #463 — opzioni del filtro PDV: elenco stabile (codice + nome) dei
   // punti vendita presenti nella finestra caricata, nella vista corrente.
-  // Le vendite senza codice finiscono sotto "N/D".
+  // Se manca il codice POS, il nome negozio distingue comunque i PDV.
   const pdvOptions = useMemo(() => {
     const map = new Map<string, string>();
     for (const s of rawSales) {
-      const code = s.codicePos || "N/D";
+      const code = salePdvKey(s);
       if (!map.has(code)) map.set(code, s.nomeNegozio || code);
     }
     return Array.from(map, ([value, label]) => ({ value, label }))
@@ -775,7 +791,7 @@ export default function VenditeBiSuite() {
   const pdvSummaries = useMemo(() => {
     const map: Record<string, PdvSummary> = {};
     for (const sale of aggregateSales) {
-      const code = sale.codicePos || "N/D";
+      const code = salePdvKey(sale);
       if (!map[code]) {
         map[code] = {
           codicePos: code,
@@ -901,7 +917,7 @@ export default function VenditeBiSuite() {
     const map = new Map<string, IncassoTotals>();
     const grouped = new Map<string, BisuiteSale[]>();
     for (const sale of aggregateSales) {
-      const code = sale.codicePos || "N/D";
+      const code = salePdvKey(sale);
       if (!grouped.has(code)) grouped.set(code, []);
       grouped.get(code)!.push(sale);
     }
@@ -932,7 +948,7 @@ export default function VenditeBiSuite() {
       if (!componentFilterActive) {
         entry.totaleImporto += parseFloat(sale.totale || "0") || 0;
       }
-      entry.pdvCodes.add(sale.codicePos || "N/D");
+      entry.pdvCodes.add(salePdvKey(sale));
     }
     return Array.from(map.values()).sort((a, b) => b.vendite.length - a.vendite.length);
   }, [aggregateSales, componentFilterActive, saleClassifications, articleMatchesFilter]);
@@ -966,7 +982,7 @@ export default function VenditeBiSuite() {
       });
       const entry = map.get(addetto)!;
       entry.vendite.push(sale);
-      entry.pdvCodes.add(sale.codicePos || "N/D");
+      entry.pdvCodes.add(salePdvKey(sale));
       const sc = saleClassifications.get(sale.id);
       let saleFilteredAmount = 0;
       if (sc) {
