@@ -2158,6 +2158,9 @@ if (schedMod.runScheduledSend && storageMod.storage) {
   let telegramCalls = []; // URL delle chiamate api.telegram.org intercettate
   let telegramDocs = []; // FormData dei sendDocument (allegati HTML)
   let mockDtsLeads = []; // lead DTS restituiti dal mock (Task #519)
+  // Listino canvass VF (Task #529): valore restituito da getSystemConfig
+  // ("canvass_reference"); la stringa "throw" simula il DB irraggiungibile.
+  let mockCanvassRef;
 
   const originals = {};
   const patch = (name, fn) => {
@@ -2186,6 +2189,10 @@ if (schedMod.runScheduledSend && storageMod.storage) {
   patch("getGaraConfig", async () => undefined);
   patch("getDtsLeads", async () => mockDtsLeads);
   patch("getOrganizationBrands", async (orgId) => mockOrgBrands.get(orgId) ?? []);
+  patch("getSystemConfig", async (key) => {
+    if (mockCanvassRef === "throw") throw new Error("DB non raggiungibile (test)");
+    return key === "canvass_reference" ? mockCanvassRef : undefined;
+  });
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
@@ -2213,8 +2220,9 @@ if (schedMod.runScheduledSend && storageMod.storage) {
     },
   });
 
-  const setupScenario = ({ orgs, sent = {}, sales = [], dtsLeads = [] }) => {
+  const setupScenario = ({ orgs, sent = {}, sales = [], dtsLeads = [], canvassRef } = {}) => {
     mockDtsLeads = dtsLeads;
+    mockCanvassRef = canvassRef;
     telegramDocs = [];
     mockOrgs = orgs.map((o) => ({ id: o.id, name: o.name ?? o.id }));
     mockConfigs = new Map(orgs.map((o) => [o.id, {
@@ -2455,6 +2463,117 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       const h = await telegramDocs[0].get("document").text();
       assert.ok(!h.includes("Assicurazioni"), "Assicurazioni esclusa dal modello VF");
       assert.ok(!h.includes("Protetti"), "Protetti escluso dal modello VF");
+    });
+
+    // ── Report brand VF con listino canvass reale (Task #529) ─────────────
+    // Listino di test deterministico: due offerte ENERGIA (LUCE e GAS) che
+    // matchano per codice esatto.
+    const listinoVf = {
+      config: {
+        offers: [
+          { codice: "CANLUCE12208", offerId: "LUCE1", nomeEtichetta: "Luce Casa", pista: "ENERGIA VODAFONE", categoria: "ENERGIA CASA", tipologia: "LUCE", canone: 0, brand: "vodafone" },
+          { codice: "CANGAS012208", offerId: "GAS01", nomeEtichetta: "Gas Casa", pista: "ENERGIA VODAFONE", categoria: "ENERGIA CASA", tipologia: "GAS", canone: 0, brand: "vodafone" },
+        ],
+      },
+    };
+    const oggiRoma = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+    // Articolo in forma BiSuite completa ({categoria:{nome}}, dettaglio.prezzo):
+    // solo così la classificazione da listino (e quella legacy) lo vede.
+    const artFull = (codice, catNome, prezzo) => ({
+      codice,
+      categoria: { nome: catNome },
+      tipologia: { nome: "OFFERTA VF" },
+      descrizione: `Art ${codice ?? catNome}`,
+      dettaglio: { prezzo: String(prezzo) },
+    });
+    const saleFull = (id, codicePos, articoli) => ({
+      bisuiteId: `s-529-${id}`,
+      codicePos,
+      nomeNegozio: `Neg ${codicePos}`,
+      nomeAddetto: "Anna",
+      stato: "OK",
+      dataVendita: oggiRoma(),
+      totale: "30",
+      rawData: { articoli },
+    });
+    // Ogni allegato per nome file (contiene lo slug "org — brand").
+    const docsByName = async () => {
+      const out = new Map();
+      for (const f of telegramDocs) {
+        const doc = f.get("document");
+        out.set(String(doc.name ?? ""), await doc.text());
+      }
+      return out;
+    };
+
+    await test("brand VF con vendite del listino ⇒ card Luce/Gas con conteggi reali; report WindTre intatto (Task #529)", async () => {
+      setupScenario({
+        orgs: [{
+          id: "org-529",
+          name: "Org Multi",
+          brands: [{ id: "b-w3", name: "WindTre" }, { id: "b-vf", name: "Vodafone" }],
+          puntiVendita: [
+            { codicePos: "P100", nome: "Neg P100", brandIds: ["b-w3"] },
+            { codicePos: "P200", nome: "Neg P200", brandIds: ["b-vf"] },
+          ],
+        }],
+        sales: [
+          // Brand VF: 2 pezzi Luce + 1 pezzo Gas dal listino (match per codice).
+          saleFull("vf1", "P200", [
+            artFull("CANLUCE12208", "OFFERTE ENERGIA VF", 25),
+            artFull("CANGAS012208", "OFFERTE ENERGIA VF", 20),
+          ]),
+          saleFull("vf2", "P200", [artFull("CANLUCE12208", "OFFERTE ENERGIA VF", 25)]),
+          // Brand WindTre: una vendita mobile classica.
+          saleFull("w31", "P100", [artFull(null, "UNTIED", 30)]),
+        ],
+        canvassRef: listinoVf,
+      });
+      await runScheduledSend("13:30");
+      assert.equal(sendsFor("org-529").length, 2, "un invio per ciascun brand");
+      assert.equal(telegramDocs.length, 2, "un allegato HTML per brand");
+      const docs = await docsByName();
+      const vfHtml = [...docs.entries()].find(([n]) => n.includes("vodafone"))?.[1];
+      const w3Html = [...docs.entries()].find(([n]) => n.includes("windtre"))?.[1];
+      assert.ok(vfHtml && w3Html, "allegati riconoscibili per brand nel nome file");
+      // Card Luce e Gas con i pezzi REALI classificati dal listino.
+      assert.match(vfHtml, />Luce<\/span><span class="pval">2 pz/, "card Luce con 2 pezzi nel report VF");
+      assert.match(vfHtml, />Gas<\/span><span class="pval">1 pz/, "card Gas con 1 pezzo nel report VF");
+      assert.ok(!/>Energia<\/span>/.test(vfHtml), "nessuna card Energia generica nel report VF");
+      // Il report WindTre resta col modello classico: niente piste VF,
+      // la vendita UNTIED conta nella pista Mobile.
+      assert.ok(!/>Luce<\/span>/.test(w3Html) && !/>Gas<\/span>/.test(w3Html), "nessuna pista VF nel report WindTre");
+      assert.match(w3Html, />Mobile<\/span><span class="pval">1 pz/, "vendita UNTIED nella pista Mobile del report WindTre");
+    });
+
+    await test("brand VF con listino NON caricabile ⇒ il report esce comunque (classificazione legacy, Task #529)", async () => {
+      setupScenario({
+        orgs: [{
+          id: "org-529f",
+          name: "Org VF",
+          brands: [{ id: "b-vf", name: "Vodafone" }],
+          puntiVendita: [{ codicePos: "P200", nome: "Neg P200", brandIds: ["b-vf"] }],
+        }],
+        sales: [saleFull("vf1", "P200", [
+          // Offerta del listino: senza listino non è classificabile per pista.
+          artFull("CANLUCE12208", "OFFERTE ENERGIA VF", 25),
+          // Categoria della mappa legacy WindTre: DEVE finire in pista Mobile,
+          // prova che la classificazione legacy è davvero attiva.
+          artFull(null, "UNTIED", 30),
+        ])],
+        canvassRef: "throw",
+      });
+      await runScheduledSend("13:30");
+      const sends = sendsFor("org-529f");
+      assert.equal(sends.length, 1, "l'invio NON deve saltare se il listino non si carica");
+      assert.equal(sends[0].brandKey, "b-vf");
+      assert.equal(telegramCalls.length, 2, "messaggio + allegato inviati comunque");
+      assert.equal(telegramDocs.length, 1);
+      const h = await telegramDocs[0].get("document").text();
+      // Fallback = classificazione legacy WindTre: UNTIED conta in Mobile...
+      assert.match(h, />Mobile<\/span><span class="pval">1 pz/, "classificazione legacy attiva (UNTIED → Mobile)");
+      // ...mentre l'offerta del listino non produce alcuna card Luce.
+      assert.ok(!/>Luce<\/span>/.test(h), "nessuna card Luce senza listino (fallback legacy)");
     });
 
     await test("recovery al boot con orari cambiati rispetto agli invii registrati ⇒ nessun duplicato", async () => {
