@@ -102,3 +102,10 @@ uri = "file://screenshots/auth-tablet-landscape-1024.jpg"
 type = "image"
 title = "Accesso su tablet orizzontale"
 description = "Anteprima reale a 1024×768: layout ampio, senza overflow e con controlli touch da 44px."
+
+[[outputs]]
+id = "-NjzADTrgXOh1Sz-uoNTz"
+uri = "file://exports/report-vendite-phone-phone-2026-08-29-2215-corretto.html"
+type = "text"
+title = "Report Vendite Phone&Phone corretto"
+description = "Report del 29 agosto 2026 con le piste Vodafone/Fastweb valorizzate correttamente e senza i vecchi indicatori P.IVA."
