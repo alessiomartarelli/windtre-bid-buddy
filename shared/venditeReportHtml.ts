@@ -480,9 +480,14 @@ const PROJ_KPI_STYLE: Record<string, { icon: string; color: string }> = {
   fisso: { icon: "🏠", color: PISTA_THEME.fisso },
   fissoIva: { icon: "🏢", color: PISTA_THEME.fisso },
   energia: { icon: "⚡", color: PISTA_THEME.energia },
+  luce: { icon: "💡", color: PISTA_THEME.luce },
+  gas: { icon: "🔥", color: PISTA_THEME.gas },
   assicurazioni: { icon: "🛡️", color: PISTA_THEME.assicurazioni },
   protetti: { icon: "🔒", color: PISTA_THEME.protecta },
   cb: { icon: "💳", color: PISTA_THEME.cb },
+  iva_mobile: { icon: "🏢", color: PISTA_THEME.iva_mobile },
+  iva_wireline: { icon: "🏢", color: PISTA_THEME.iva_wireline },
+  vas: { icon: "✨", color: PISTA_THEME.vas },
   telefoni: { icon: "📲", color: ORANGE },
   accessori: { icon: "🎧", color: ORANGE },
   servizi: { icon: "🛠️", color: ORANGE },
@@ -499,6 +504,11 @@ const PROJ_KEY_PISTA: Record<string, PistaCanvass> = {
   assicurazioni: "assicurazioni",
   protetti: "protecta",
   cb: "cb",
+  luce: "luce",
+  gas: "gas",
+  iva_mobile: "iva_mobile",
+  iva_wireline: "iva_wireline",
+  vas: "vas",
 };
 
 function projectionSection(proj: MonthEndProjection | undefined, content: TelegramReportContentConfig): string {

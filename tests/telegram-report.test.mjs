@@ -933,6 +933,39 @@ await test("HTML: pagina Totale mese con hero, gara piste mese e bottone Mese", 
   assert.ok(html.includes("Tocca per tornare al giorno"));
 });
 
+await test("HTML: proiezione VF usa per ogni pista gli stessi colori del giornaliero", () => {
+  const a = aggregateDailyReport([
+    sale({ totale: "10", articoli: [art("UNTIED", 10)] }),
+  ]);
+  const proj = buildMonthEndProjection("2026-08-29", a, undefined, { model: "vf" });
+  const html = buildVenditeReportHtml({
+    orgName: "Phone&Phone",
+    dateYMD: "2026-08-29",
+    aggregates: a,
+    history: [
+      { ymd: "2026-08-28", aggregates: a },
+      { ymd: "2026-08-29", aggregates: a },
+    ],
+    month: { label: "agosto 2026", aggregates: a },
+    monthProjection: proj ?? undefined,
+    content: {
+      pisteVisibili: ["mobile", "fisso", "cb", "luce", "gas", "iva_mobile", "iva_wireline", "vas"],
+      telcoPiste: ["mobile", "fisso"],
+      newCorePiste: ["cb", "luce", "gas", "iva_mobile", "iva_wireline", "vas"],
+    },
+  });
+  for (const [label, color] of [
+    ["Luce", "#facc15"],
+    ["Gas", "#fb923c"],
+    ["IVA Mobile", "#93c5fd"],
+    ["IVA Wireline", "#c4b5fd"],
+    ["VAS", "#5eead4"],
+  ]) {
+    assert.ok(html.includes(`style="color:${color}`), `${label} deve usare il colore pista giornaliero`);
+    assert.ok(html.includes(`background:linear-gradient(90deg,${color},${color}66)`), `${label} deve usare il gradiente pista giornaliero`);
+  }
+});
+
 await test("HTML: history/trend disallineati ⇒ pagina senza trend, nessun crash, JSON label safe", () => {
   const html = buildVenditeReportHtml({
     orgName: "Org Test",
