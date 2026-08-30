@@ -101,6 +101,10 @@ import {
   PISTA_CANVASS_LABELS,
   getPistaCanvassLabels,
   PISTA_CANVASS_COLORS,
+  venditePisteForModel,
+  trendPisteForModel,
+  trendExtraForModel,
+  pezziExtraColKeysForModel,
   TYPE_LABELS,
   TYPE_COLORS,
 } from "@/lib/bisuiteClassification";
@@ -517,11 +521,31 @@ export default function VenditeBiSuite() {
 
   // Per le org VF la pista "protecta" si chiama "Verisure" (lead Verisure,
   // non esiste "Windtre Protetti").
-  const pistaLabels = getPistaCanvassLabels(!!canvassIndex);
+  // Task #534 — il modello brand deriva da hasCanvassBrand (l'API lo
+  // restituisce anche con listino vuoto), NON dalla presenza di offerte:
+  // un'org VF senza offerte caricate deve comunque vedere la tassonomia VF.
+  const isVfModel = !!canvassRef?.hasCanvassBrand;
+  const pistaLabels = getPistaCanvassLabels(isVfModel);
+  // Tassonomia piste per modello brand, condivisa tra grafico Andamento KPI,
+  // Tabella PDV × Pista (Pezzi) ed export: stesse piste, stesso ordine,
+  // stessi totali in tutta la pagina.
+  const venditePiste = useMemo(() => venditePisteForModel(isVfModel), [isVfModel]);
+  const trendPiste = useMemo(() => trendPisteForModel(isVfModel), [isVfModel]);
+  const trendExtras = useMemo(() => trendExtraForModel(isVfModel), [isVfModel]);
+  const pezziExtraColKeys = useMemo(() => pezziExtraColKeysForModel(isVfModel), [isVfModel]);
+  // Piste ammesse alla visualizzazione (filtro Pista, riepiloghi, badge):
+  // per VF SOLO le piste del modello (niente energia/assicurazioni/protecta/
+  // P.IVA generica); per WindTre comportamento storico (tutte le label).
+  const vfPisteSet = useMemo(() => new Set<PistaCanvass>(venditePiste), [venditePiste]);
+  const isPistaVisible = useCallback(
+    (p: PistaCanvass) => (isVfModel ? vfPisteSet.has(p) : true),
+    [isVfModel, vfPisteSet],
+  );
   const visiblePistaKeys = useMemo(
-    () => (Object.keys(pistaLabels) as PistaCanvass[])
-      .filter((p) => !(canvassIndex && p === "iva")),
-    [pistaLabels, canvassIndex],
+    () => (isVfModel
+      ? [...venditePiste]
+      : (Object.keys(pistaLabels) as PistaCanvass[])),
+    [isVfModel, venditePiste, pistaLabels],
   );
 
   // rawSales include anche le ANNULLATA (visibili nella tabella grezza con badge),
@@ -866,8 +890,9 @@ export default function VenditeBiSuite() {
   // vendite compaiono a 0 (linea continua, niente buchi).
   const andamentoPezzi = useMemo((): PezziTrendPoint[] => {
     const emptyPoint = (day: string): PezziTrendPoint => ({
-      day, mobile: 0, fisso: 0, energia: 0, assicurazioni: 0, iva: 0, cb: 0, telefoni: 0,
+      day, perPista: {}, iva: 0, cb: 0, telefoni: 0,
     });
+    const trendPisteSet = new Set<PistaCanvass>(trendPiste);
     const byDay = new Map<string, PezziTrendPoint>();
     for (const sale of aggregateSales) {
       // data_vendita è salvata come wall-time italiano e serializzata ISO "Z"
@@ -887,8 +912,8 @@ export default function VenditeBiSuite() {
           point = emptyPoint(day);
           byDay.set(day, point);
         }
-        if (art.pista === "mobile" || art.pista === "fisso" || art.pista === "energia" || art.pista === "assicurazioni") {
-          point[art.pista]++;
+        if (art.pista && trendPisteSet.has(art.pista)) {
+          point.perPista[art.pista] = (point.perPista[art.pista] || 0) + 1;
         }
         // Stessi contatori extra della tabella (IVA/CB/Telefoni), riusando la
         // logica condivisa per non divergere dalle regole di classificazione.
@@ -916,7 +941,7 @@ export default function VenditeBiSuite() {
     // mostra i giorni PIÙ RECENTI, non i primi, così il grafico resta
     // coerente con "cosa sta succedendo adesso".
     return out.length >= 800 ? out.slice(-400) : out;
-  }, [aggregateSales, saleClassifications, articleMatchesFilter, fromDate, toDate]);
+  }, [aggregateSales, saleClassifications, articleMatchesFilter, fromDate, toDate, trendPiste]);
 
   const incassoByPdv = useMemo(() => {
     const map = new Map<string, IncassoTotals>();
@@ -1678,10 +1703,10 @@ export default function VenditeBiSuite() {
                       // Slot IVA riservato su ogni riga quando almeno una pista
                       // ha pezzi IVA: la colonna "di cui N IVA" e i badge restano
                       // così incolonnati alla stessa estremità destra anche a 375px.
-                      const hasAnyIva = !canvassIndex
+                      const hasAnyIva = !isVfModel
                         && Object.values(globalCounts.ivaByPista).some((v) => (v || 0) > 0);
                       return (Object.entries(globalCounts.byPista) as [PistaCanvass, number][])
-                        .filter(([pista]) => !(canvassIndex && pista === "iva"))
+                        .filter(([pista]) => isPistaVisible(pista))
                         .sort(([, a], [, b]) => b - a)
                         .map(([pista, count]) => (
                            <SummaryMetricRow
@@ -1689,7 +1714,7 @@ export default function VenditeBiSuite() {
                              testId={`row-summary-pista-${pista}`}
                              label={<span className="flex min-w-0 items-center gap-1.5">{PISTA_ICONS[pista]}<span className="min-w-0 truncate">{pistaLabels[pista]}</span></span>}
                              amount={(globalCounts.amtByPista[pista] || 0) > 0 ? <span className="font-semibold text-muted-foreground">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span> : undefined}
-                              extra={!canvassIndex && (globalCounts.ivaByPista[pista] || 0) > 0 ? <span data-testid={`text-iva-${pista}`}>di cui {globalCounts.ivaByPista[pista]} IVA</span> : undefined}
+                              extra={!isVfModel && (globalCounts.ivaByPista[pista] || 0) > 0 ? <span data-testid={`text-iva-${pista}`}>di cui {globalCounts.ivaByPista[pista]} IVA</span> : undefined}
                              reserveExtraSpace={hasAnyIva}
                              count={count}
                              countClassName={PISTA_CANVASS_COLORS[pista]}
@@ -2028,7 +2053,7 @@ export default function VenditeBiSuite() {
                             <div className="space-y-3 pb-2">
                               <div className="flex flex-wrap gap-2">
                                 {(Object.entries(addetto.countByPista) as [PistaCanvass, number][])
-                                  .filter(([pista, c]) => c > 0 && !(canvassIndex && pista === "iva"))
+                                  .filter(([pista, c]) => c > 0 && isPistaVisible(pista))
                                   .sort(([, a], [, b]) => b - a)
                                   .map(([pista, count]) => (
                                     <Badge
@@ -2107,11 +2132,11 @@ export default function VenditeBiSuite() {
             <GraficoAndamentoPezzi
               data={andamentoPezzi}
               pistaLabels={pistaLabels}
-              hasExtra={pdvSummaries.some(p =>
-                p.pezziExtra.iva > 0 || p.pezziExtra.cb > 0 || p.pezziExtra.telefoni > 0,
-              )}
+              piste={trendPiste}
+              extras={trendExtras}
+              hasExtra={trendExtras.some(k => pdvSummaries.some(p => p.pezziExtra[k] > 0))}
             />
-            <TabellaPdvPistaPezzi rows={pdvSummaries} pistaLabels={pistaLabels} />
+            <TabellaPdvPistaPezzi rows={pdvSummaries} pistaLabels={pistaLabels} piste={venditePiste} extraColKeys={pezziExtraColKeys} />
 
             {viewMode === "vendite" && (
               <Card>
@@ -2169,7 +2194,7 @@ export default function VenditeBiSuite() {
                             <div className="space-y-3 pb-2">
                               <div className="flex flex-wrap gap-2">
                                 {(Object.entries(pdv.countByPista) as [PistaCanvass, number][])
-                                  .filter(([pista, c]) => c > 0 && !(canvassIndex && pista === "iva"))
+                                  .filter(([pista, c]) => c > 0 && isPistaVisible(pista))
                                   .sort(([, a], [, b]) => b - a)
                                   .map(([pista, count]) => (
                                     <Badge
@@ -2327,7 +2352,7 @@ export default function VenditeBiSuite() {
                                 {sale.nomeCliente || "-"}
                               </TableCell>
                               <TableCell>
-                                <SalePistaBadges classification={sc} pistaLabels={pistaLabels} hideLegacyIva={!!canvassIndex} />
+                                <SalePistaBadges classification={sc} pistaLabels={pistaLabels} hideLegacyIva={isVfModel} />
                               </TableCell>
                               <TableCell className="hidden sm:table-cell">
                                 <Badge
@@ -2367,6 +2392,7 @@ export default function VenditeBiSuite() {
         sale={selectedSale}
         classification={selectedSale ? saleClassifications.get(selectedSale.id) : undefined}
         canvassIndex={canvassIndex}
+        isVfModel={isVfModel}
         kpiRules={kpiRules}
         pistaLabels={pistaLabels}
         onClose={() => setSelectedSale(null)}
@@ -2603,6 +2629,7 @@ function SaleDetailDialog({
   sale,
   classification,
   canvassIndex,
+  isVfModel = false,
   kpiRules,
   pistaLabels = PISTA_CANVASS_LABELS,
   onClose,
@@ -2610,6 +2637,7 @@ function SaleDetailDialog({
   sale: BisuiteSale | null;
   classification?: SaleClassification;
   canvassIndex?: ReturnType<typeof buildCanvassIndex> | null;
+  isVfModel?: boolean;
   kpiRules?: CanvassKpiRule[] | null;
   pistaLabels?: Record<PistaCanvass, string>;
   onClose: () => void;
@@ -2693,7 +2721,7 @@ function SaleDetailDialog({
 
           {classification && (
             <div className="flex flex-wrap gap-2">
-              <SalePistaBadges classification={classification} pistaLabels={pistaLabels} hideLegacyIva={!!canvassIndex} />
+              <SalePistaBadges classification={classification} pistaLabels={pistaLabels} hideLegacyIva={isVfModel} />
             </div>
           )}
 

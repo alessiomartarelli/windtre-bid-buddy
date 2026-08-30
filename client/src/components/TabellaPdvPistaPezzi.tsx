@@ -2,12 +2,12 @@ import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Download, Percent, RefreshCw, Shield, ShieldCheck, Smartphone, Table as TableIcon, Wifi, Zap, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Briefcase, ChevronDown, ChevronRight, Download, Flame, Percent, RefreshCw, Shield, ShieldCheck, Smartphone, Sparkles, Table as TableIcon, Wifi, Zap, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollableTable } from "@/components/ui/scrollable-table";
 import { normalizeRsName } from "@shared/ragioneSociale";
-import type { PistaCanvass } from "@/lib/bisuiteClassification";
+import type { PezziExtraColKey, PistaCanvass } from "@/lib/bisuiteClassification";
 import { emptyPezziExtra, sommaPezziExtra, type PezziExtraCounters } from "@shared/pdvPezziExtra";
 
 // Tabella PDV × Pista (solo Pezzi) per la pagina Vendite BiSuite.
@@ -19,7 +19,10 @@ import { emptyPezziExtra, sommaPezziExtra, type PezziExtraCounters } from "@shar
 // (business), quindi la colonna Energia è già la somma delle due categorie.
 // Task #470 — include anche la pista "protecta" (Windtre Protetti / Verisure
 // per le org VF: la label arriva già tradotta via pistaLabels).
-const PEZZI_PISTE: PistaCanvass[] = ["mobile", "fisso", "energia", "assicurazioni", "protecta"];
+// Task #534 — l'elenco piste NON è più fisso WindTre: arriva via props dalla
+// tassonomia condivisa (venditePisteForModel in shared/bisuiteClassification),
+// quindi le org Vodafone/Fastweb vedono Mobile/Fisso/CB/Luce/Gas/IVA Mobile/
+// IVA Wireline/VAS e le colonne extra IVA/CB spariscono (già piste).
 
 // Stesse icone/colori della Tabella PDV × Pista della Dashboard Gara Reale
 // (config piste in DashboardGaraReale.tsx): quadratino colorato + icona bianca.
@@ -29,6 +32,13 @@ const PISTA_HEADER_ICONS: Partial<Record<PistaCanvass, { icon: LucideIcon; color
   energia: { icon: Zap, color: "bg-amber-500" },
   assicurazioni: { icon: Shield, color: "bg-purple-500" },
   protecta: { icon: ShieldCheck, color: "bg-rose-500" },
+  // Piste Vodafone/Fastweb (Task #534)
+  cb: { icon: RefreshCw, color: "bg-cyan-500" },
+  luce: { icon: Zap, color: "bg-yellow-500" },
+  gas: { icon: Flame, color: "bg-orange-500" },
+  iva_mobile: { icon: Briefcase, color: "bg-sky-500" },
+  iva_wireline: { icon: Percent, color: "bg-violet-500" },
+  vas: { icon: Sparkles, color: "bg-teal-500" },
 };
 
 // Task #398 — colonne extra (stesse della vista Pezzi della Dashboard Gara):
@@ -37,14 +47,13 @@ const PISTA_HEADER_ICONS: Partial<Record<PistaCanvass, { icon: LucideIcon; color
 // delle 4 piste, coerente con la dashboard).
 // Task #470 — IVA e CB hanno icona/colore come le piste (stesso linguaggio
 // visivo: quadratino colorato + icona bianca), coerenti con la Dashboard Gara.
-const PEZZI_EXTRA_COLS: ReadonlyArray<{ key: "iva" | "cb" | "telefoni" | "accEuro" | "srvEuro"; label: string; euro: boolean; icon?: LucideIcon; color?: string }> = [
+const ALL_PEZZI_EXTRA_COLS: ReadonlyArray<{ key: PezziExtraColKey; label: string; euro: boolean; icon?: LucideIcon; color?: string }> = [
   { key: "iva", label: "IVA", euro: false, icon: Percent, color: "bg-slate-500" },
   { key: "cb", label: "CB", euro: false, icon: RefreshCw, color: "bg-cyan-500" },
   { key: "telefoni", label: "Telefoni", euro: false },
   { key: "accEuro", label: "€ Accessori", euro: true },
   { key: "srvEuro", label: "€ Servizi", euro: true },
 ] as const;
-type PezziExtraKey = typeof PEZZI_EXTRA_COLS[number]["key"];
 
 const fmtVal = (v: number, euro: boolean) =>
   euro ? `${v.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : String(v);
@@ -61,6 +70,10 @@ export interface PdvPezziRow {
 interface Props {
   rows: PdvPezziRow[];
   pistaLabels: Record<PistaCanvass, string>;
+  /** Piste (in ordine) del modello brand attivo — tassonomia condivisa. */
+  piste: readonly PistaCanvass[];
+  /** Colonne extra da mostrare per il modello attivo. */
+  extraColKeys: readonly PezziExtraColKey[];
 }
 
 type Cell = number;
@@ -95,9 +108,15 @@ const sortedPdvList = (pdvList: PdvEntry[], sort: PdvSort) => {
   });
 };
 
-export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
+export function TabellaPdvPistaPezzi({ rows, pistaLabels, piste, extraColKeys }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pdvSort, setPdvSort] = useState<PdvSort>(null);
+  const extraCols = useMemo(
+    () => extraColKeys
+      .map(k => ALL_PEZZI_EXTRA_COLS.find(c => c.key === k))
+      .filter((c): c is typeof ALL_PEZZI_EXTRA_COLS[number] => !!c),
+    [extraColKeys],
+  );
 
   const { rsRows, totals, grandTotal, totalsExtra, hasExtra } = useMemo(() => {
     type RsAggregate = Omit<RsEntry, "rsKey" | "pdvList"> & { pdvs: Map<string, PdvEntry> };
@@ -115,7 +134,7 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
         entry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio, perPista: new Map(), extra: emptyPezziExtra() });
       }
       const pdvEntry = entry.pdvs.get(pdv.codicePos)!;
-      for (const pista of PEZZI_PISTE) {
+      for (const pista of piste) {
         const n = pdv.countByPista[pista] || 0;
         if (n === 0) continue;
         pdvEntry.perPista.set(pista, (pdvEntry.perPista.get(pista) || 0) + n);
@@ -142,7 +161,7 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
     const totalsExtra = emptyPezziExtra();
     let grandTotal = 0;
     for (const rs of rsRows) {
-      for (const pista of PEZZI_PISTE) {
+      for (const pista of piste) {
         const n = rs.perPista.get(pista) || 0;
         totals.set(pista, (totals.get(pista) || 0) + n);
         grandTotal += n;
@@ -150,10 +169,10 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
       sommaPezziExtra(totalsExtra, rs.extra);
     }
     return { rsRows, totals, grandTotal, totalsExtra, hasExtra };
-  }, [rows]);
+  }, [rows, piste]);
 
   const sumRow = (perPista: Map<PistaCanvass, Cell>) =>
-    PEZZI_PISTE.reduce((acc, p) => acc + (perPista.get(p) || 0), 0);
+    piste.reduce((acc, p) => acc + (perPista.get(p) || 0), 0);
 
   const toggleRs = (rsKey: string) => {
     setExpanded(prev => {
@@ -178,30 +197,30 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
   // sono numerici arrotondati a 2 decimali (niente immagini/icone in cella).
   const round2 = (v: number) => Math.round(v * 100) / 100;
   const extraExportVals = (extra: PezziExtraCounters): number[] =>
-    PEZZI_EXTRA_COLS.map(c => (c.euro ? round2(extra[c.key]) : extra[c.key]));
+    extraCols.map(c => (c.euro ? round2(extra[c.key]) : extra[c.key]));
 
   const buildExportRows = () => {
     const header: (string | number)[] = ["Tipo", "Ragione Sociale", "Codice PDV", "Nome PDV"];
-    for (const p of PEZZI_PISTE) header.push(`${pistaLabels[p]} - Pezzi`);
-    if (hasExtra) for (const c of PEZZI_EXTRA_COLS) header.push(c.euro ? `${c.label} (netto IVA)` : c.label);
+    for (const p of piste) header.push(`${pistaLabels[p]} - Pezzi`);
+    if (hasExtra) for (const c of extraCols) header.push(c.euro ? `${c.label} (netto IVA)` : c.label);
     header.push("Totale Pezzi");
     const out: (string | number)[][] = [header];
     for (const rs of rsRows) {
       const rsRow: (string | number)[] = ["RS", rs.displayName, "", ""];
-      for (const p of PEZZI_PISTE) rsRow.push(rs.perPista.get(p) || 0);
+      for (const p of piste) rsRow.push(rs.perPista.get(p) || 0);
       if (hasExtra) rsRow.push(...extraExportVals(rs.extra));
       rsRow.push(sumRow(rs.perPista));
       out.push(rsRow);
       for (const pdv of rs.pdvList) {
         const pdvRow: (string | number)[] = ["PDV", rs.displayName, pdv.codicePos, pdv.nomeNegozio];
-        for (const p of PEZZI_PISTE) pdvRow.push(pdv.perPista.get(p) || 0);
+        for (const p of piste) pdvRow.push(pdv.perPista.get(p) || 0);
         if (hasExtra) pdvRow.push(...extraExportVals(pdv.extra));
         pdvRow.push(sumRow(pdv.perPista));
         out.push(pdvRow);
       }
     }
     const totRow: (string | number)[] = ["TOTALE", "Totale complessivo", "", ""];
-    for (const p of PEZZI_PISTE) totRow.push(totals.get(p) || 0);
+    for (const p of piste) totRow.push(totals.get(p) || 0);
     if (hasExtra) totRow.push(...extraExportVals(totalsExtra));
     totRow.push(grandTotal);
     out.push(totRow);
@@ -296,7 +315,7 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
             <thead>
               <tr className="border-b">
                 <th className="text-left px-3 py-2 font-medium sticky left-0 top-0 bg-muted z-20 min-w-[180px]">RS / PDV</th>
-                {PEZZI_PISTE.map(p => {
+                {piste.map(p => {
                   const conf = PISTA_HEADER_ICONS[p];
                   const Icon = conf?.icon;
                   const isActive = pdvSort?.pista === p;
@@ -327,7 +346,7 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
                     </th>
                   );
                 })}
-                {hasExtra && PEZZI_EXTRA_COLS.map(c => {
+                {hasExtra && extraCols.map(c => {
                   const ExtraIcon = c.icon;
                   return (
                     <th key={c.key} className="text-right px-3 py-2 font-medium whitespace-nowrap sticky top-0 bg-muted z-10" data-testid={`th-pezzi-${c.key}`}>
@@ -351,14 +370,16 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels }: Props) {
                   sumRow={sumRow}
                   hasExtra={hasExtra}
                   pdvSort={pdvSort}
+                  piste={piste}
+                  extraCols={extraCols}
                 />
               ))}
               <tr className="border-t-2 font-bold bg-primary/5" data-testid="row-pezzi-totale">
                 <td className="px-3 py-2 sticky left-0 bg-card z-10">Totale complessivo</td>
-                {PEZZI_PISTE.map(p => (
+                {piste.map(p => (
                   <td key={p} className="text-right px-3 py-2 tabular-nums" data-testid={`cell-pezzi-tot-${p}`}>{totals.get(p) || 0}</td>
                 ))}
-                {hasExtra && PEZZI_EXTRA_COLS.map(c => (
+                {hasExtra && extraCols.map(c => (
                   <td key={c.key} className="text-right px-3 py-2 tabular-nums" data-testid={`cell-pezzi-tot-${c.key}`}>{fmtVal(totalsExtra[c.key], c.euro)}</td>
                 ))}
                 <td className="text-right px-3 py-2 tabular-nums" data-testid="cell-pezzi-tot-generale">{grandTotal}</td>
@@ -379,6 +400,8 @@ function RsGroup({
   sumRow,
   hasExtra,
   pdvSort,
+  piste,
+  extraCols,
 }: {
   rs: RsEntry;
   expanded: boolean;
@@ -386,6 +409,8 @@ function RsGroup({
   sumRow: (m: Map<PistaCanvass, number>) => number;
   hasExtra: boolean;
   pdvSort: PdvSort;
+  piste: readonly PistaCanvass[];
+  extraCols: ReadonlyArray<typeof ALL_PEZZI_EXTRA_COLS[number]>;
 }) {
   const pdvList = useMemo(() => sortedPdvList(rs.pdvList, pdvSort), [rs.pdvList, pdvSort]);
   // Id sicuri per aria-controls (niente spazi: lista separata da spazi).
@@ -416,10 +441,10 @@ function RsGroup({
             {rs.displayName}
           </button>
         </td>
-        {PEZZI_PISTE.map(p => (
+        {piste.map(p => (
           <td key={p} className="text-right px-3 py-2 tabular-nums">{rs.perPista.get(p) || 0}</td>
         ))}
-        {hasExtra && PEZZI_EXTRA_COLS.map(c => (
+        {hasExtra && extraCols.map(c => (
           <td key={c.key} className="text-right px-3 py-2 tabular-nums" data-testid={`cell-pezzi-rs-${rs.rsKey}-${c.key}`}>{fmtVal(rs.extra[c.key], c.euro)}</td>
         ))}
         <td className="text-right px-3 py-2 tabular-nums font-bold">{sumRow(rs.perPista)}</td>
@@ -430,10 +455,10 @@ function RsGroup({
             <div className="truncate max-w-[220px]">{pdv.nomeNegozio}</div>
             <div className="text-[10px] font-mono text-muted-foreground">{pdv.codicePos}</div>
           </td>
-          {PEZZI_PISTE.map(p => (
+          {piste.map(p => (
             <td key={p} className="text-right px-3 py-1.5 tabular-nums">{pdv.perPista.get(p) || 0}</td>
           ))}
-          {hasExtra && PEZZI_EXTRA_COLS.map(c => (
+          {hasExtra && extraCols.map(c => (
             <td key={c.key} className="text-right px-3 py-1.5 tabular-nums" data-testid={`cell-pezzi-pdv-${pdv.codicePos}-${c.key}`}>{fmtVal(pdv.extra[c.key], c.euro)}</td>
           ))}
           <td className="text-right px-3 py-1.5 tabular-nums font-medium">{sumRow(pdv.perPista)}</td>

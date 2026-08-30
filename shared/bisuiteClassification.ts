@@ -49,6 +49,72 @@ export const WINDTRE_ONLY_PISTAS: readonly PistaCanvass[] = [
   'energia',
 ] as const;
 
+/**
+ * Task #534 — tassonomia unica delle piste della pagina Vendite BiSuite per
+ * modello brand. Grafico "Andamento KPI", Tabella PDV × Pista (Pezzi) e i
+ * relativi export DEVONO consumare questi elenchi (mai duplicare le liste
+ * nei componenti): stesso ordine, stesse piste, stessi totali.
+ */
+export const VENDITE_PISTE_WINDTRE: readonly PistaCanvass[] = [
+  'mobile',
+  'fisso',
+  'energia',
+  'assicurazioni',
+  'protecta',
+] as const;
+
+/** Piste Vendite del modello Vodafone/Fastweb: NIENTE energia/assicurazioni/
+ * protecta/iva generica — energia è divisa in luce+gas, la P.IVA in
+ * iva_mobile/iva_wireline/vas, e CB è una pista di prima classe. */
+export const VENDITE_PISTE_VF: readonly PistaCanvass[] = [
+  'mobile',
+  'fisso',
+  'cb',
+  'luce',
+  'gas',
+  'iva_mobile',
+  'iva_wireline',
+  'vas',
+] as const;
+
+/** Elenco piste della Tabella PDV × Pista (Pezzi) per il modello attivo. */
+export function venditePisteForModel(isVfOrg: boolean): readonly PistaCanvass[] {
+  return isVfOrg ? VENDITE_PISTE_VF : VENDITE_PISTE_WINDTRE;
+}
+
+/** Serie pista del grafico "Andamento KPI nel periodo" (WindTre storico:
+ * 4 piste, senza protecta; VF: tutte le piste del modello). */
+export const TREND_PISTE_WINDTRE: readonly PistaCanvass[] = [
+  'mobile',
+  'fisso',
+  'energia',
+  'assicurazioni',
+] as const;
+
+export function trendPisteForModel(isVfOrg: boolean): readonly PistaCanvass[] {
+  return isVfOrg ? VENDITE_PISTE_VF : TREND_PISTE_WINDTRE;
+}
+
+/** KPI extra del grafico (serie oltre le piste). Per VF niente IVA generica
+ * (spaccata in piste dedicate) né CB extra (è già una pista). */
+export type TrendExtraKey = 'iva' | 'cb' | 'telefoni';
+export const TREND_EXTRA_WINDTRE: readonly TrendExtraKey[] = ['iva', 'cb', 'telefoni'] as const;
+export const TREND_EXTRA_VF: readonly TrendExtraKey[] = ['telefoni'] as const;
+
+export function trendExtraForModel(isVfOrg: boolean): readonly TrendExtraKey[] {
+  return isVfOrg ? TREND_EXTRA_VF : TREND_EXTRA_WINDTRE;
+}
+
+/** Colonne extra della Tabella PDV × Pista (Pezzi) per modello: per VF
+ * cadono IVA (piste dedicate) e CB (colonna pista), restano Telefoni e €. */
+export type PezziExtraColKey = 'iva' | 'cb' | 'telefoni' | 'accEuro' | 'srvEuro';
+export const PEZZI_EXTRA_COL_KEYS_WINDTRE: readonly PezziExtraColKey[] = ['iva', 'cb', 'telefoni', 'accEuro', 'srvEuro'] as const;
+export const PEZZI_EXTRA_COL_KEYS_VF: readonly PezziExtraColKey[] = ['telefoni', 'accEuro', 'srvEuro'] as const;
+
+export function pezziExtraColKeysForModel(isVfOrg: boolean): readonly PezziExtraColKey[] {
+  return isVfOrg ? PEZZI_EXTRA_COL_KEYS_VF : PEZZI_EXTRA_COL_KEYS_WINDTRE;
+}
+
 export interface CategoryClassification {
   type: ArticleType;
   pista?: PistaCanvass;
