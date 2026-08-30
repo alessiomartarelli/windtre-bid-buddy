@@ -518,6 +518,11 @@ export default function VenditeBiSuite() {
   // Per le org VF la pista "protecta" si chiama "Verisure" (lead Verisure,
   // non esiste "Windtre Protetti").
   const pistaLabels = getPistaCanvassLabels(!!canvassIndex);
+  const visiblePistaKeys = useMemo(
+    () => (Object.keys(pistaLabels) as PistaCanvass[])
+      .filter((p) => !(canvassIndex && p === "iva")),
+    [pistaLabels, canvassIndex],
+  );
 
   // rawSales include anche le ANNULLATA (visibili nella tabella grezza con badge),
   // mentre `sales` viene usato per tutti i conteggi/aggregati e le esclude.
@@ -1443,7 +1448,7 @@ export default function VenditeBiSuite() {
                 </SelectTrigger>
                 <SelectContent className="bg-popover z-50">
                   <SelectItem value="all">Tutte le piste</SelectItem>
-                  {(Object.keys(pistaLabels) as PistaCanvass[]).map((p) => (
+                  {visiblePistaKeys.map((p) => (
                     <SelectItem key={p} value={p}>
                       {pistaLabels[p]}
                     </SelectItem>
@@ -1673,8 +1678,10 @@ export default function VenditeBiSuite() {
                       // Slot IVA riservato su ogni riga quando almeno una pista
                       // ha pezzi IVA: la colonna "di cui N IVA" e i badge restano
                       // così incolonnati alla stessa estremità destra anche a 375px.
-                      const hasAnyIva = Object.values(globalCounts.ivaByPista).some((v) => (v || 0) > 0);
+                      const hasAnyIva = !canvassIndex
+                        && Object.values(globalCounts.ivaByPista).some((v) => (v || 0) > 0);
                       return (Object.entries(globalCounts.byPista) as [PistaCanvass, number][])
+                        .filter(([pista]) => !(canvassIndex && pista === "iva"))
                         .sort(([, a], [, b]) => b - a)
                         .map(([pista, count]) => (
                            <SummaryMetricRow
@@ -1682,7 +1689,7 @@ export default function VenditeBiSuite() {
                              testId={`row-summary-pista-${pista}`}
                              label={<span className="flex min-w-0 items-center gap-1.5">{PISTA_ICONS[pista]}<span className="min-w-0 truncate">{pistaLabels[pista]}</span></span>}
                              amount={(globalCounts.amtByPista[pista] || 0) > 0 ? <span className="font-semibold text-muted-foreground">{formatCurrency(globalCounts.amtByPista[pista] || 0)}</span> : undefined}
-                             extra={(globalCounts.ivaByPista[pista] || 0) > 0 ? <span data-testid={`text-iva-${pista}`}>di cui {globalCounts.ivaByPista[pista]} IVA</span> : undefined}
+                              extra={!canvassIndex && (globalCounts.ivaByPista[pista] || 0) > 0 ? <span data-testid={`text-iva-${pista}`}>di cui {globalCounts.ivaByPista[pista]} IVA</span> : undefined}
                              reserveExtraSpace={hasAnyIva}
                              count={count}
                              countClassName={PISTA_CANVASS_COLORS[pista]}
@@ -2021,7 +2028,7 @@ export default function VenditeBiSuite() {
                             <div className="space-y-3 pb-2">
                               <div className="flex flex-wrap gap-2">
                                 {(Object.entries(addetto.countByPista) as [PistaCanvass, number][])
-                                  .filter(([, c]) => c > 0)
+                                  .filter(([pista, c]) => c > 0 && !(canvassIndex && pista === "iva"))
                                   .sort(([, a], [, b]) => b - a)
                                   .map(([pista, count]) => (
                                     <Badge
@@ -2162,7 +2169,7 @@ export default function VenditeBiSuite() {
                             <div className="space-y-3 pb-2">
                               <div className="flex flex-wrap gap-2">
                                 {(Object.entries(pdv.countByPista) as [PistaCanvass, number][])
-                                  .filter(([, c]) => c > 0)
+                                  .filter(([pista, c]) => c > 0 && !(canvassIndex && pista === "iva"))
                                   .sort(([, a], [, b]) => b - a)
                                   .map(([pista, count]) => (
                                     <Badge
@@ -2320,7 +2327,7 @@ export default function VenditeBiSuite() {
                                 {sale.nomeCliente || "-"}
                               </TableCell>
                               <TableCell>
-                                <SalePistaBadges classification={sc} pistaLabels={pistaLabels} />
+                                <SalePistaBadges classification={sc} pistaLabels={pistaLabels} hideLegacyIva={!!canvassIndex} />
                               </TableCell>
                               <TableCell className="hidden sm:table-cell">
                                 <Badge
@@ -2551,11 +2558,19 @@ function CanvassCategorieDettaglio({
     </div>
   );
 }
-function SalePistaBadges({ classification, pistaLabels = PISTA_CANVASS_LABELS }: { classification?: SaleClassification; pistaLabels?: Record<PistaCanvass, string> }) {
+function SalePistaBadges({
+  classification,
+  pistaLabels = PISTA_CANVASS_LABELS,
+  hideLegacyIva = false,
+}: {
+  classification?: SaleClassification;
+  pistaLabels?: Record<PistaCanvass, string>;
+  hideLegacyIva?: boolean;
+}) {
   if (!classification) return <span className="text-xs text-muted-foreground">-</span>;
 
   const pistaBadges = (Object.entries(classification.countByPista) as [PistaCanvass, number][])
-    .filter(([, c]) => c > 0)
+    .filter(([pista, c]) => c > 0 && !(hideLegacyIva && pista === "iva"))
     .sort(([, a], [, b]) => b - a);
 
   return (
@@ -2678,7 +2693,7 @@ function SaleDetailDialog({
 
           {classification && (
             <div className="flex flex-wrap gap-2">
-              <SalePistaBadges classification={classification} pistaLabels={pistaLabels} />
+              <SalePistaBadges classification={classification} pistaLabels={pistaLabels} hideLegacyIva={!!canvassIndex} />
             </div>
           )}
 

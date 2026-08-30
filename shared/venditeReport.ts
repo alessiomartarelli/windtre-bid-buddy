@@ -1275,6 +1275,7 @@ export function buildMonthEndProjection(
   ymd: string,
   monthAgg: DailyReportAggregates,
   storeCounts?: StoreTypeCounts,
+  opts?: { model?: "windtre" | "vf" },
 ): MonthEndProjection | null {
   const wd = blendedWorkingDays(ymd, storeCounts);
   if (!wd) return null;
@@ -1286,19 +1287,34 @@ export function buildMonthEndProjection(
     maturato,
     proiezione: round(projectMonthEnd(maturato, wd.elapsed, wd.total)),
   });
-  const kpis: ProjectionEntry[] = [
-    mk("mobile", "Mobile", "pz", monthAgg.countByPista.mobile ?? 0),
-    mk("mobileIva", "Mobile P.IVA", "pz", businessPezziOf(monthAgg, "mobile")),
-    mk("fisso", "Fisso", "pz", monthAgg.countByPista.fisso ?? 0),
-    mk("fissoIva", "Fisso P.IVA", "pz", businessPezziOf(monthAgg, "fisso")),
-    mk("energia", "Energia", "pz", monthAgg.countByPista.energia ?? 0),
-    mk("assicurazioni", "Assicurazioni", "pz", monthAgg.countByPista.assicurazioni ?? 0),
-    mk("protetti", "Protetti", "pz", monthAgg.countByPista.protecta ?? 0),
-    mk("cb", "Cb", "pz", monthAgg.countByPista.cb ?? 0),
+  const commonTail = [
     mk("telefoni", "Telefoni", "pz", telefoniPezziOf(monthAgg)),
     mk("accessori", "Accessori", "€", accessoriImportoOf(monthAgg)),
     mk("servizi", "Servizi", "€", monthAgg.amountByType.servizi),
   ];
+  const kpis: ProjectionEntry[] = opts?.model === "vf"
+    ? [
+        mk("mobile", "Mobile", "pz", monthAgg.countByPista.mobile ?? 0),
+        mk("fisso", "Fisso", "pz", monthAgg.countByPista.fisso ?? 0),
+        mk("cb", "Cb", "pz", monthAgg.countByPista.cb ?? 0),
+        mk("luce", "Luce", "pz", monthAgg.countByPista.luce ?? 0),
+        mk("gas", "Gas", "pz", monthAgg.countByPista.gas ?? 0),
+        mk("iva_mobile", "IVA Mobile", "pz", monthAgg.countByPista.iva_mobile ?? 0),
+        mk("iva_wireline", "IVA Wireline", "pz", monthAgg.countByPista.iva_wireline ?? 0),
+        mk("vas", "VAS", "pz", monthAgg.countByPista.vas ?? 0),
+        ...commonTail,
+      ]
+    : [
+        mk("mobile", "Mobile", "pz", monthAgg.countByPista.mobile ?? 0),
+        mk("mobileIva", "Mobile P.IVA", "pz", businessPezziOf(monthAgg, "mobile")),
+        mk("fisso", "Fisso", "pz", monthAgg.countByPista.fisso ?? 0),
+        mk("fissoIva", "Fisso P.IVA", "pz", businessPezziOf(monthAgg, "fisso")),
+        mk("energia", "Energia", "pz", monthAgg.countByPista.energia ?? 0),
+        mk("assicurazioni", "Assicurazioni", "pz", monthAgg.countByPista.assicurazioni ?? 0),
+        mk("protetti", "Protetti", "pz", monthAgg.countByPista.protecta ?? 0),
+        mk("cb", "Cb", "pz", monthAgg.countByPista.cb ?? 0),
+        ...commonTail,
+      ];
   return {
     label: monthLabelOf(ymd),
     elapsedWorkingDays: wd.elapsed,

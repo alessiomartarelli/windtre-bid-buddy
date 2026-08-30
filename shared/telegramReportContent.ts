@@ -265,8 +265,18 @@ export function applyBrandGating(
     }
     return out;
   };
+  const remappedVisible = remap(cfg.pisteVisibili);
+  // Le configurazioni storiche VF, salvate prima dell'introduzione delle
+  // piste dedicate, non contengono IVA Mobile / IVA Wireline / VAS. In quel
+  // caso le aggiungiamo al perimetro VF; se la configurazione contiene già
+  // almeno una pista dedicata, rispettiamo invece la selezione esplicita.
+  const vfIvaPiste: PistaCanvass[] = ["iva_mobile", "iva_wireline", "vas"];
+  const hasExplicitVfIvaSelection = cfg.pisteVisibili.some((p) => vfIvaPiste.includes(p));
+  const pisteVisibili = hasExplicitVfIvaSelection
+    ? remappedVisible
+    : [...remappedVisible, ...vfIvaPiste.filter((p) => !remappedVisible.includes(p))];
   return {
-    pisteVisibili: remap(cfg.pisteVisibili),
+    pisteVisibili,
     telcoPiste: remap(cfg.telcoPiste),
     newCorePiste: remap(cfg.newCorePiste),
   };

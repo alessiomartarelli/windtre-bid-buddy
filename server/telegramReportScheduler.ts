@@ -471,7 +471,12 @@ export async function sendDailyReportForOrg(params: {
   // stimati sui giorni lavorativi trascorsi, dagli aggregati del mese. I giorni
   // lavorativi tengono conto della divisione CC/strada (conteggi negozi dal
   // forecast); senza conteggi ⇒ soli giorni feriali (lun–sab).
-  const monthProjection = buildMonthEndProjection(ymd, month.aggregates, forecast) ?? undefined;
+  const monthProjection = buildMonthEndProjection(
+    ymd,
+    month.aggregates,
+    forecast,
+    { model: isVfReport ? "vf" : "windtre" },
+  ) ?? undefined;
   const message = buildTelegramReportMessage({
     orgName: reportName,
     dateYMD: ymd,

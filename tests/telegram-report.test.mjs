@@ -2496,13 +2496,16 @@ if (schedMod.runScheduledSend && storageMod.storage) {
     });
 
     // ── Report brand VF con listino canvass reale (Task #529) ─────────────
-    // Listino di test deterministico: due offerte ENERGIA (LUCE e GAS) che
-    // matchano per codice esatto.
+    // Listino di test deterministico: cinque offerte VF che matchano per
+    // codice esatto (Luce, Gas, IVA Mobile, IVA Wireline e VAS).
     const listinoVf = {
       config: {
         offers: [
           { codice: "CANLUCE12208", offerId: "LUCE1", nomeEtichetta: "Luce Casa", pista: "ENERGIA VODAFONE", categoria: "ENERGIA CASA", tipologia: "LUCE", canone: 0, brand: "vodafone" },
           { codice: "CANGAS012208", offerId: "GAS01", nomeEtichetta: "Gas Casa", pista: "ENERGIA VODAFONE", categoria: "ENERGIA CASA", tipologia: "GAS", canone: 0, brand: "vodafone" },
+          { codice: "CANIVAM12208", offerId: "IVAM1", nomeEtichetta: "IVA Mobile", pista: "PISTA IVA", categoria: "IVA VOCE", tipologia: "MOBILE", canone: 0, brand: "vodafone" },
+          { codice: "CANIVAW12208", offerId: "IVAW1", nomeEtichetta: "IVA Wireline", pista: "PISTA IVA", categoria: "IVA RETE FISSA", tipologia: "WIRELINE", canone: 0, brand: "vodafone" },
+          { codice: "CANVAS012208", offerId: "VAS01", nomeEtichetta: "Soluzioni Digitali", pista: "PISTA IVA", categoria: "SOLUZIONI DIGITALI", tipologia: "VAS", canone: 0, brand: "vodafone" },
         ],
       },
     };
@@ -2585,10 +2588,13 @@ if (schedMod.runScheduledSend && storageMod.storage) {
           },
         }],
         sales: [
-          // Brand VF: 2 pezzi Luce + 1 pezzo Gas dal listino (match per codice).
+          // Brand VF: conteggi reali per tutte le cinque piste dedicate.
           saleFull("vf1", "P200", [
             artFull("CANLUCE12208", "OFFERTE ENERGIA VF", 25),
             artFull("CANGAS012208", "OFFERTE ENERGIA VF", 20),
+            artFull("CANIVAM12208", "OFFERTE IVA VF", 10),
+            artFull("CANIVAW12208", "OFFERTE IVA VF", 10),
+            artFull("CANVAS012208", "OFFERTE VAS VF", 10),
           ]),
           saleFull("vf2", "P200", [artFull("CANLUCE12208", "OFFERTE ENERGIA VF", 25)]),
           // Brand WindTre: una vendita mobile classica.
@@ -2606,6 +2612,12 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       // Card Luce e Gas con i pezzi REALI classificati dal listino.
       assert.match(vfHtml, />Luce<\/span><span class="pval">2 pz/, "card Luce con 2 pezzi nel report VF");
       assert.match(vfHtml, />Gas<\/span><span class="pval">1 pz/, "card Gas con 1 pezzo nel report VF");
+      assert.match(vfHtml, />IVA Mobile<\/span><span class="pval">1 pz/, "card IVA Mobile valorizzata nel report VF");
+      assert.match(vfHtml, />IVA Wireline<\/span><span class="pval">1 pz/, "card IVA Wireline valorizzata nel report VF");
+      assert.match(vfHtml, />VAS<\/span><span class="pval">1 pz/, "card VAS valorizzata nel report VF");
+      assert.ok(vfHtml.includes("IVA Mobile"), "proiezione/card IVA Mobile presente");
+      assert.ok(!vfHtml.includes("Mobile P.IVA"), "vecchio indicatore Mobile P.IVA assente dal modello VF");
+      assert.ok(!vfHtml.includes("Fisso P.IVA"), "vecchio indicatore Fisso P.IVA assente dal modello VF");
       assert.ok(vfHtml.includes("Raggiunta S2 · premio 100,00 €"), "soglia e premio Luce configurati nell'HTML");
       assert.ok(vfHtml.includes("S3 4 pz / 200,00 €"), "obiettivi completi Luce nell'HTML");
       assert.ok(vfHtml.includes("Mancano 1 pz alla prossima soglia"), "avanzamento Gas nell'HTML");
