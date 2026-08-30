@@ -128,6 +128,20 @@ test('org-config guard: admin non può azzerare in massa la struttura', async ()
     assert.equal(nearTotal.status, 409, `near-total blank must be 409, got ${nearTotal.status}: ${JSON.stringify(nearTotal.body)}`);
     assert.deepEqual(await readPv(pool, session.orgId), STRUTTURA, 'structure must be untouched after near-total 409');
 
+    // (b2) incidente reale: un solo PDV interamente compilato (TEST) al posto
+    // della struttura reale. Non contiene scheletri, ma è comunque una
+    // modifica strutturale vietata al PUT generico del Simulatore.
+    const oneFilledTestPdv = await putConfig(session, {
+      puntiVendita: [{
+        ...pdvReale(99),
+        codicePos: '900000',
+        nome: 'TEST',
+        ragioneSociale: 'CMS',
+      }],
+    });
+    assert.equal(oneFilledTestPdv.status, 409, `one-filled-test-PDV save must be 409, got ${oneFilledTestPdv.status}: ${JSON.stringify(oneFilledTestPdv.body)}`);
+    assert.deepEqual(await readPv(pool, session.orgId), STRUTTURA, 'structure must be untouched after one-filled-test-PDV 409');
+
     // (c) chiave omessa => 200, struttura preservata, altre chiavi salvate.
     const omitted = await putConfig(session, { altroSetting: 'z' });
     assert.equal(omitted.status, 200, `omitted-key save must be 200: ${JSON.stringify(omitted.body)}`);
@@ -191,11 +205,19 @@ test('org-config guard: admin non può azzerare in massa la struttura', async ()
       'generic save must not overwrite the BiSuite credentials',
     );
 
-    // (e) modifica legittima (rinomina, stesso numero di PDV reali) => 200 e applicata.
+    // (e) Anche una rinomina passa dagli endpoint struttura dedicati: il PUT
+    // generico deve rifiutarla, senza modificare il DB.
     const rinominata = [pdvReale(0), { ...pdvReale(1), nome: 'Negozio Rinominato' }, pdvReale(2)];
-    const legit = await putConfig(session, { puntiVendita: rinominata });
-    assert.equal(legit.status, 200, `legit edit must be 200: ${JSON.stringify(legit.body)}`);
-    assert.deepEqual(await readPv(pool, session.orgId), rinominata, 'legit edit must be applied');
+    const renameViaGeneric = await putConfig(session, { puntiVendita: rinominata });
+    assert.equal(renameViaGeneric.status, 409, `rename via generic save must be 409: ${JSON.stringify(renameViaGeneric.body)}`);
+    assert.deepEqual(await readPv(pool, session.orgId), STRUTTURA, 'generic rename must leave structure untouched');
+
+    // (f) Le impostazioni non anagrafiche del PDV (cluster/calendario) restano
+    // modificabili dal Simulatore.
+    const withCluster = STRUTTURA.map((p, i) => i === 0 ? { ...p, clusterMobile: 'strada_2' } : p);
+    const settingsEdit = await putConfig(session, { puntiVendita: withCluster });
+    assert.equal(settingsEdit.status, 200, `PDV settings edit must be 200: ${JSON.stringify(settingsEdit.body)}`);
+    assert.deepEqual(await readPv(pool, session.orgId), withCluster, 'non-canonical PDV settings must be applied');
   } finally {
     await cleanupOrg(pool, session);
     await pool.end().catch(() => {});

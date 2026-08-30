@@ -15,7 +15,11 @@ import { AVATAR_MAX_BYTES } from "@shared/avatar";
 import { normalizeConfig, buildCalendar, normN, SECTION_IDS } from "@shared/incentivazione";
 import { dtsSaleCodiceEsterno } from "@shared/dtsReport";
 import { normalizeTimeLabel, parseSendTimes } from "@shared/telegramSendTimes";
-import { wouldMassBlankPuntiVendita } from "@shared/strutturaGuard";
+import {
+  wouldChangePuntiVenditaAnagrafica,
+  wouldChangeRagioniSociali,
+  wouldMassBlankPuntiVendita,
+} from "@shared/strutturaGuard";
 import { registerCdgRoutes } from "./cdgRoutes";
 import { cdgStorage } from "./cdgStorage";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
@@ -613,6 +617,21 @@ export async function registerRoutes(
           console.warn(`[org-config] BLOCKED mass-blank puntiVendita save (org=${profile.organizationId}, user=${userId})`);
           return res.status(409).json({
             message: "Salvataggio bloccato: il salvataggio azzererebbe nome, codice POS e ragione sociale di tutti i punti vendita. Modifica la struttura da Gestione organizzazione → Struttura.",
+          });
+        }
+        // Il PUT generico del Simulatore non può mai aggiungere, rimuovere o
+        // rinominare l'anagrafica canonica. In passato una riduzione del numero
+        // di PDV nel wizard ha sostituito 13 negozi reali con un solo PDV di
+        // test. Le modifiche strutturali intenzionali passano esclusivamente
+        // dagli endpoint strutturali dedicati di Gestione organizzazione o CdG
+        // (admin-gated, validati e con storico automatico).
+        if (
+          wouldChangePuntiVenditaAnagrafica(curCfg.puntiVendita, effectiveConfig.puntiVendita) ||
+          wouldChangeRagioniSociali(curCfg.ragioniSociali, effectiveConfig.ragioniSociali)
+        ) {
+          console.warn(`[org-config] BLOCKED canonical structure change via generic save (org=${profile.organizationId}, user=${userId})`);
+          return res.status(409).json({
+            message: "Salvataggio bloccato: il Simulatore non può aggiungere, rimuovere o rinominare punti vendita e ragioni sociali. Usa la gestione Struttura dedicata.",
           });
         }
       }

@@ -5,6 +5,8 @@ import assert from "node:assert/strict";
 import {
   hasAnagrafica,
   countPdvConAnagrafica,
+  wouldChangePuntiVenditaAnagrafica,
+  wouldChangeRagioniSociali,
   wouldMassBlankPuntiVendita,
 } from "../shared/strutturaGuard.ts";
 
@@ -84,4 +86,48 @@ test("NON blocca quando la struttura corrente è vuota o scheletro (primo setup)
 test("NON blocca quando incoming non è un array (chiave omessa: gestita con re-iniezione)", () => {
   assert.equal(wouldMassBlankPuntiVendita([pdvPieno()], undefined), false);
   assert.equal(wouldMassBlankPuntiVendita([pdvPieno()], null), false);
+});
+
+test("BLOCCA qualsiasi rimozione di PDV reali dal PUT generico", () => {
+  const current = [
+    pdvPieno({ id: "a", codicePos: "9001" }),
+    pdvPieno({ id: "b", codicePos: "9002" }),
+  ];
+  assert.equal(wouldChangePuntiVenditaAnagrafica(current, [current[0]]), true);
+});
+
+test("BLOCCA la sostituzione con un PDV di test anche senza scheletri", () => {
+  const current = Array.from({ length: 13 }, (_, i) =>
+    pdvPieno({ id: `pdv-${i}`, codicePos: `900${i}` }),
+  );
+  const incoming = [pdvPieno({
+    id: "pdv-test",
+    codicePos: "900000",
+    nome: "TEST",
+    ragioneSociale: "CMS",
+  })];
+  assert.equal(wouldChangePuntiVenditaAnagrafica(current, incoming), true);
+});
+
+test("consente al Simulatore di cambiare cluster/calendario senza toccare l'anagrafica", () => {
+  const current = [pdvPieno({ id: "a", codicePos: "9001" })];
+  const incoming = [{
+    ...current[0],
+    clusterMobile: "strada_2",
+    calendar: { weeklySchedule: { workingDays: [1, 2, 3, 4, 5] } },
+  }];
+  assert.equal(wouldChangePuntiVenditaAnagrafica(current, incoming), false);
+});
+
+test("BLOCCA rimozioni e rinomine delle ragioni sociali dal PUT generico", () => {
+  const current = [
+    { id: "rs-1", nome: "CMS S.R.L" },
+    { id: "rs-2", nome: "CMS Evo S.R.L" },
+  ];
+  assert.equal(wouldChangeRagioniSociali(current, [current[0]]), true);
+  assert.equal(wouldChangeRagioniSociali(current, [
+    current[0],
+    { ...current[1], nome: "Rinominata" },
+  ]), true);
+  assert.equal(wouldChangeRagioniSociali(current, [...current].reverse()), false);
 });

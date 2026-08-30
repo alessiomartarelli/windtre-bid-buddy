@@ -10,6 +10,7 @@
 // nei test tsx e essere condivisa tra server e (in futuro) client.
 
 export type StrutturaPdvAnagrafica = {
+  id?: unknown;
   codicePos?: unknown;
   nome?: unknown;
   ragioneSociale?: unknown;
@@ -61,4 +62,64 @@ export function wouldMassBlankPuntiVendita(
     (p) => p !== null && typeof p === "object" && !hasAnagrafica(p),
   );
   return hasScheletri && incFilled < curFilled;
+}
+
+const norm = (v: unknown): string =>
+  typeof v === "string" ? v.trim().toLocaleLowerCase("it-IT") : "";
+
+/**
+ * Il PUT generico di organization_config può aggiornare soglie e impostazioni
+ * del Simulatore, ma NON l'anagrafica canonica. A struttura già inizializzata,
+ * qualsiasi aggiunta/rimozione/rinomina di PDV deve passare dagli endpoint
+ * strutturali dedicati (Gestione organizzazione o CdG), che archiviano e
+ * validano esplicitamente la modifica.
+ *
+ * Confronta solo i campi anagrafici: cluster, calendario e altre impostazioni
+ * del singolo PDV restano modificabili dal Simulatore.
+ */
+export function wouldChangePuntiVenditaAnagrafica(
+  current: unknown,
+  incoming: unknown,
+): boolean {
+  if (!Array.isArray(current) || countPdvConAnagrafica(current) === 0) return false;
+  if (!Array.isArray(incoming)) return false;
+  const signatures = (rows: unknown[]) => rows
+    .filter(hasAnagrafica)
+    .map((row) => {
+      const p = row as StrutturaPdvAnagrafica;
+      return JSON.stringify([
+        norm(p.id),
+        norm(p.codicePos),
+        norm(p.nome),
+        norm(p.ragioneSociale),
+      ]);
+    })
+    .sort();
+  return JSON.stringify(signatures(current)) !== JSON.stringify(signatures(incoming));
+}
+
+type RagioneSocialeEntry = {
+  id?: unknown;
+  nome?: unknown;
+  name?: unknown;
+  ragioneSociale?: unknown;
+};
+
+/** Protegge allo stesso modo il registro delle ragioni sociali. */
+export function wouldChangeRagioniSociali(
+  current: unknown,
+  incoming: unknown,
+): boolean {
+  if (!Array.isArray(current) || current.length === 0) return false;
+  if (!Array.isArray(incoming)) return false;
+  const signatures = (rows: unknown[]) => rows.map((row) => {
+    if (typeof row === "string") return norm(row);
+    if (!row || typeof row !== "object") return "";
+    const r = row as RagioneSocialeEntry;
+    return JSON.stringify([
+      norm(r.id),
+      norm(r.nome ?? r.name ?? r.ragioneSociale),
+    ]);
+  }).filter(Boolean).sort();
+  return JSON.stringify(signatures(current)) !== JSON.stringify(signatures(incoming));
 }
