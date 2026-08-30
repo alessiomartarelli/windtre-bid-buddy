@@ -1857,7 +1857,7 @@ export default function VenditeBiSuite() {
                     Riepilogo per Ragione Sociale
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                  <CardContent className="px-3 sm:px-6">
                   <Accordion type="multiple" className="space-y-2">
                     {rsSummaries.map((rs) => {
                       const rsIncasso = computeIncassoTotals(rs.vendite);
@@ -2158,29 +2158,29 @@ export default function VenditeBiSuite() {
                         <AccordionItem
                           key={pdv.codicePos}
                           value={pdv.codicePos}
-                          className="border rounded-lg px-2 sm:px-4"
+                          className="min-w-0 overflow-hidden border rounded-lg px-2 sm:px-4"
                         >
-                          <AccordionTrigger className="hover:no-underline">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full pr-4 gap-1 sm:gap-2">
-                              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                          <AccordionTrigger className="min-w-0 overflow-hidden hover:no-underline">
+                            <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:justify-between pr-2 sm:pr-4 gap-1 sm:gap-2">
+                              <div className="flex min-w-0 max-w-full items-start gap-2 sm:items-center sm:gap-3">
                                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                                   <Store className="h-4 w-4 text-primary" />
                                 </div>
-                                <div className="text-left min-w-0">
-                                  <div className="font-semibold text-sm truncate">
+                                <div className="min-w-0 flex-1 text-left">
+                                  <div className="break-words text-sm font-semibold leading-tight">
                                     {pdv.nomeNegozio}
                                   </div>
-                                   <div className="text-sm text-muted-foreground font-mono truncate">
-                                    {pdv.codicePos}
+                                   <div className="mt-0.5 flex min-w-0 flex-wrap gap-x-1 text-sm leading-tight text-muted-foreground">
+                                     <span className="min-w-0 break-words font-mono">{pdv.codicePos}</span>
                                     {pdv.ragioneSociale && (
-                                      <span className="ml-2 font-sans">
-                                        · {pdv.ragioneSociale}
+                                       <span className="min-w-0 break-words font-sans">
+                                         · {pdv.ragioneSociale}
                                       </span>
                                     )}
                                   </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 sm:gap-3 pl-10 sm:pl-0">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2 pl-10 sm:flex-nowrap sm:gap-3 sm:pl-0">
                                  <Badge variant="outline" className="text-sm font-semibold shrink-0 py-1">
                                   {pdv.totaleVendite} vendite
                                 </Badge>
