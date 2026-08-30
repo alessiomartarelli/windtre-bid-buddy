@@ -201,9 +201,9 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels, piste, extraColKeys }:
 
   const buildExportRows = () => {
     const header: (string | number)[] = ["Tipo", "Ragione Sociale", "Codice PDV", "Nome PDV"];
-    for (const p of piste) header.push(`${pistaLabels[p]} - Pezzi`);
+    for (const p of piste) header.push(`${pistaLabels[p]} - Volumi`);
     if (hasExtra) for (const c of extraCols) header.push(c.euro ? `${c.label} (netto IVA)` : c.label);
-    header.push("Totale Pezzi");
+    header.push("Totale Volumi");
     const out: (string | number)[][] = [header];
     for (const rs of rsRows) {
       const rsRow: (string | number)[] = ["RS", rs.displayName, "", ""];
@@ -227,12 +227,12 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels, piste, extraColKeys }:
     return out;
   };
 
-  const baseFilename = () => `tabella-pdv-pista-pezzi_vendite_${new Date().toISOString().slice(0, 10)}`;
+  const baseFilename = () => `tabella-pdv-pista-volumi_vendite_${new Date().toISOString().slice(0, 10)}`;
 
   const exportExcel = () => {
     const ws = XLSX.utils.aoa_to_sheet(buildExportRows());
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "PDV x Pista (Pezzi)");
+    XLSX.utils.book_append_sheet(wb, ws, "PDV x Pista (Volumi)");
     XLSX.writeFile(wb, `${baseFilename()}.xlsx`);
   };
 
@@ -257,7 +257,7 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels, piste, extraColKeys }:
     const body = allRows.slice(1).map(r => r.map(v => String(v)));
     const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
     doc.setFontSize(13);
-    doc.text("Tabella PDV × Pista (Pezzi) — Vendite", 8, 12);
+    doc.text("Tabella PDV × Pista (Volumi) — Vendite", 8, 12);
     autoTable(doc, {
       startY: 18,
       head: [header],
@@ -291,7 +291,7 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels, piste, extraColKeys }:
         <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="flex items-center gap-2 text-base">
             <TableIcon className="h-5 w-5 text-primary" />
-            Tabella PDV × Pista (Pezzi)
+            Tabella PDV × Pista (Volumi)
           </CardTitle>
           <div className="flex gap-2 flex-wrap items-center">
             <Button size="sm" variant="outline" className="h-8" onClick={() => setExpanded(new Set(allKeys))} disabled={allExpanded} data-testid="btn-pezzi-expand-all">Espandi tutto</Button>

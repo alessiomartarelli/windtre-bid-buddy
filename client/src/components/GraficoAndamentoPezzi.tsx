@@ -65,7 +65,7 @@ const EXTRA_LABELS: Record<TrendExtraKey | "totale", string> = {
   iva: "IVA",
   cb: "CB",
   telefoni: "Telefoni",
-  totale: "Totale pezzi",
+  totale: "Totale volumi",
 };
 
 const fmtDay = (day: string) => {
@@ -182,7 +182,7 @@ export function GraficoAndamentoPezzi({ data, pistaLabels, piste, extras, hasExt
             Andamento KPI nel periodo
           </CardTitle>
           <p className="text-xs text-muted-foreground pl-7">
-            Pezzi per giorno, con gli stessi filtri della tabella
+            Volumi per giorno, con gli stessi filtri della tabella
           </p>
         </div>
         {/* I chip fanno da legenda interattiva: piste principali prima, KPI
