@@ -568,6 +568,7 @@ export async function sendDailyReportForOrg(params: {
     dts,
     content: reportContent,
     vfPisteConfig,
+    isVfModel: isVfReport,
   });
   const fileName = reportHtmlFileName(reportName, ymd, params.timeLabel);
   const docResult = await sendTelegramDocument(params.botToken, params.chatId, fileName, html, {

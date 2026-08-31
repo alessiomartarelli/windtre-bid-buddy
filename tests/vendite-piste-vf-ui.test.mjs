@@ -106,7 +106,7 @@ function assertVfExportRows(aoa, label) {
 
   // 8 colonne pista VF, nell'ordine della tassonomia condivisa, subito dopo
   // le 4 colonne anagrafiche.
-  const expectedPisteHeaders = VENDITE_PISTE_VF.map((p) => `${VF_LABELS[p]} - Pezzi`);
+  const expectedPisteHeaders = VENDITE_PISTE_VF.map((p) => `${VF_LABELS[p]} - Volumi`);
   assert.deepEqual(
     header.slice(4, 4 + expectedPisteHeaders.length),
     expectedPisteHeaders,
@@ -115,10 +115,10 @@ function assertVfExportRows(aoa, label) {
   // Colonne extra VF: Telefoni + € (niente IVA/CB come colonne extra).
   assert.deepEqual(
     header.slice(4 + expectedPisteHeaders.length),
-    ['Telefoni', '€ Accessori (netto IVA)', '€ Servizi (netto IVA)', 'Totale Pezzi'],
+    ['Telefoni', '€ Accessori (netto IVA)', '€ Servizi (netto IVA)', 'Totale Volumi'],
     `${label}: colonne extra VF (senza IVA/CB) + Totale`,
   );
-  for (const bad of ['Energia - Pezzi', 'Assicurazioni - Pezzi', 'Windtre Protetti - Pezzi', 'P.IVA - Pezzi', 'IVA', 'CB']) {
+  for (const bad of ['Energia - Volumi', 'Assicurazioni - Volumi', 'Windtre Protetti - Volumi', 'P.IVA - Volumi', 'IVA', 'CB']) {
     assert.ok(!header.includes(bad), `${label}: colonna WindTre-only/extra "${bad}" assente (header: ${header.join(', ')})`);
   }
 
@@ -267,20 +267,20 @@ test('Vendite BiSuite (org Vodafone/Fastweb): grafico, tabella, filtro Pista ed 
     };
 
     const { dl: dlX, buf: bufX } = await download('btn-pezzi-export-excel');
-    assert.equal(dlX.suggestedFilename(), `tabella-pdv-pista-pezzi_vendite_${TODAY}.xlsx`);
+    assert.equal(dlX.suggestedFilename(), `tabella-pdv-pista-volumi_vendite_${TODAY}.xlsx`);
     const wb = XLSX.read(bufX, { type: 'buffer' });
-    assert.deepEqual(wb.SheetNames, ['PDV x Pista (Pezzi)']);
-    assertVfExportRows(sheetAoa(wb.Sheets['PDV x Pista (Pezzi)']), 'Excel');
+    assert.deepEqual(wb.SheetNames, ['PDV x Pista (Volumi)']);
+    assertVfExportRows(sheetAoa(wb.Sheets['PDV x Pista (Volumi)']), 'Excel');
 
     const { dl: dlC, buf: bufC } = await download('btn-pezzi-export-csv');
-    assert.equal(dlC.suggestedFilename(), `tabella-pdv-pista-pezzi_vendite_${TODAY}.csv`);
+    assert.equal(dlC.suggestedFilename(), `tabella-pdv-pista-volumi_vendite_${TODAY}.csv`);
     const csvText = bufC.toString('utf8');
     assert.ok(csvText.startsWith('\uFEFF'), 'CSV: BOM UTF-8 presente');
     const wbCsv = XLSX.read(csvText.replace(/^\uFEFF/, ''), { type: 'string', FS: ';' });
     assertVfExportRows(sheetAoa(wbCsv.Sheets[wbCsv.SheetNames[0]]), 'CSV');
 
     const { dl: dlP, buf: bufP } = await download('btn-pezzi-export-pdf');
-    assert.equal(dlP.suggestedFilename(), `tabella-pdv-pista-pezzi_vendite_${TODAY}.pdf`);
+    assert.equal(dlP.suggestedFilename(), `tabella-pdv-pista-volumi_vendite_${TODAY}.pdf`);
     assert.equal(bufP.subarray(0, 5).toString('latin1'), '%PDF-', 'PDF: magic header');
     const pdfTokens = pdfTextTokens(bufP);
     assert.ok(pdfTokens.length > 0, 'PDF: testo estraibile');
@@ -288,10 +288,10 @@ test('Vendite BiSuite (org Vodafone/Fastweb): grafico, tabella, filtro Pista ed 
     // Header pista VF presenti (le celle autotable possono spezzare le label
     // anche a metà parola → confronto senza spazi).
     for (const p of VENDITE_PISTE_VF) {
-      const needle = `${VF_LABELS[p]}-Pezzi`.replace(/\s+/g, '');
-      assert.ok(pdfNoSpace.includes(needle), `PDF: header "${VF_LABELS[p]} - Pezzi" presente`);
+      const needle = `${VF_LABELS[p]}-Volumi`.replace(/\s+/g, '');
+      assert.ok(pdfNoSpace.includes(needle), `PDF: header "${VF_LABELS[p]} - Volumi" presente`);
     }
-    for (const bad of ['Energia-Pezzi', 'Assicurazioni-Pezzi', 'WindtreProtetti', 'P.IVA-Pezzi']) {
+    for (const bad of ['Energia-Volumi', 'Assicurazioni-Volumi', 'WindtreProtetti', 'P.IVA-Volumi']) {
       assert.ok(!pdfNoSpace.includes(bad), `PDF: "${bad}" assente nel modello VF`);
     }
     // Riga TOTALE: [8 piste] + [tel, acc, srv] + totale = 12 numeri.

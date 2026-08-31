@@ -67,3 +67,8 @@ test('ogni pista di entrambi i modelli ha una label', () => {
     }
   }
 });
+
+test('la pista cb è Upselling solo per Vodafone/Fastweb', () => {
+  assert.equal(getPistaCanvassLabels(true).cb, 'Upselling');
+  assert.equal(getPistaCanvassLabels(false).cb, 'CB');
+});

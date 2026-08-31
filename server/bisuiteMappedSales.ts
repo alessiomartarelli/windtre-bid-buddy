@@ -3,6 +3,7 @@ import { mapBiSuiteArticle } from "../shared/bisuiteMapping";
 import {
   classifyArticle,
   classifyCategory,
+  classificationPistaCounts,
   isCouponCaring,
   isPezzoIva,
   type PistaCanvass,
@@ -279,6 +280,22 @@ export function aggregateMappedSales(
     let mappedCount = 0;
     for (const art of articoli) {
       const catNome = (art.categoria?.nome || '').toUpperCase().trim();
+      const tipNome = String(art.tipologia?.nome || '').trim();
+      const coupon = isCouponCaring(catNome, tipNome);
+      // Il conteggio VF deve vedere anche segnali Upselling agganciati a un
+      // articolo prodotto/servizio, prima dei relativi `continue`.
+      if (canvassIndex && !coupon) {
+        const vf = classifyArticle(art, canvassIndex, canvassKpiRules);
+        if (vf) {
+          for (const [pista, volume] of Object.entries(
+            classificationPistaCounts(art, vf, canvassIndex),
+          ) as [PistaCanvass, number][]) {
+            const bucket = (byPdv[codicePos].countByPistaCanvass ??= {});
+            bucket[pista] = (bucket[pista] || 0) + volume;
+            totaliPistaCanvass[pista] = (totaliPistaCanvass[pista] || 0) + volume;
+          }
+        }
+      }
       if (PRODOTTI_CATS.has(catNome) || SERVIZI_CATS.has(catNome)) {
         const dett = art.dettaglio || {};
         const imp = parseFloat(String(dett.importoImponibile ?? '')) || parseFloat(String(dett.prezzo ?? '')) || 0;
@@ -305,26 +322,12 @@ export function aggregateMappedSales(
       // pezzi P.IVA e cambi piano CB, per categoria BiSuite (non per regola
       // di mapping: così i twin partnership delle regole CB non raddoppiano).
       {
-        const tipNome = String(art.tipologia?.nome || '').trim();
-        const coupon = isCouponCaring(catNome, tipNome);
         const clsPista = coupon ? undefined : classifyCategory(catNome)?.pista;
         if (clsPista && isPezzoIva({ pista: clsPista, categoriaNome: catNome, descrizione: String(art.descrizione || '') })) {
           byPdv[codicePos].pezziIva += 1;
         }
         if (clsPista === 'cb') {
           byPdv[codicePos].cbCambiPiano += 1;
-        }
-        // Task #527 — conteggio pezzi per pista canvass VF (listino + regole
-        // KPI): SOLO quando l'org ha il listino canvass (index presente).
-        // Ogni articolo contribuisce ad al più UNA pista (nessun doppio
-        // conteggio Luce/Gas o IVA Mobile/Wireline/VAS).
-        if (canvassIndex && !coupon) {
-          const vf = classifyArticle(art, canvassIndex, canvassKpiRules);
-          if (vf?.pista) {
-            const bucket = (byPdv[codicePos].countByPistaCanvass ??= {});
-            bucket[vf.pista] = (bucket[vf.pista] || 0) + 1;
-            totaliPistaCanvass[vf.pista] = (totaliPistaCanvass[vf.pista] || 0) + 1;
-          }
         }
       }
       const mappedResults = mapBiSuiteArticle(art, clienteTipo, rules);

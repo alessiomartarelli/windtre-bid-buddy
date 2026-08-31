@@ -97,6 +97,7 @@ import {
   type SaleClassification,
   classifySaleArticles,
   classifyArticle,
+  classifiedArticlePistaCounts,
   isPezzoIva,
   PISTA_CANVASS_LABELS,
   getPistaCanvassLabels,
@@ -598,9 +599,12 @@ export default function VenditeBiSuite() {
   const componentFilterActive = filterType !== "all" || filterPista !== "all";
 
   const articleMatchesFilter = useCallback(
-    (art: { type: ArticleType; pista?: PistaCanvass }) => {
+    (art: SaleClassification["articles"][number]) => {
       if (filterType !== "all" && art.type !== filterType) return false;
-      if (filterPista !== "all" && art.pista !== filterPista) return false;
+      if (
+        filterPista !== "all" &&
+        !(classifiedArticlePistaCounts(art)[filterPista as PistaCanvass] ?? 0)
+      ) return false;
       return true;
     },
     [filterType, filterPista],
@@ -742,10 +746,13 @@ export default function VenditeBiSuite() {
         byType[art.type]++;
         amtByType[art.type] += art.prezzo;
         addIncasso(incassoByType[art.type], art);
-        if (art.pista) {
-          byPista[art.pista] = (byPista[art.pista] || 0) + 1;
-          amtByPista[art.pista] = (amtByPista[art.pista] || 0) + art.prezzo;
-          if (isPezzoIva(art)) ivaByPista[art.pista] = (ivaByPista[art.pista] || 0) + 1;
+        for (const [pista, volume] of Object.entries(classifiedArticlePistaCounts(art)) as [PistaCanvass, number][]) {
+          if (filterPista !== "all" && pista !== filterPista) continue;
+          byPista[pista] = (byPista[pista] || 0) + volume;
+          if (pista === art.pista) {
+            amtByPista[pista] = (amtByPista[pista] || 0) + art.prezzo;
+            if (isPezzoIva(art)) ivaByPista[pista] = (ivaByPista[pista] || 0) + 1;
+          }
         }
         // Coupon Caring: esclusi dai pezzi CB, contati in un riquadro dedicato.
         if (art.couponCaring) {
@@ -860,10 +867,13 @@ export default function VenditeBiSuite() {
           else entry.articleIncasso.fuoriScontrino += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
           entry.articleIncasso.finanziato += art.importoFinanziato;
           entry.articleIncasso.credito += art.importoCredito;
-          if (art.pista) {
-            entry.countByPista[art.pista] = (entry.countByPista[art.pista] || 0) + 1;
-            entry.amountByPista[art.pista] = (entry.amountByPista[art.pista] || 0) + art.prezzo;
-            accumulaCategoriaCanvass(entry.categorieByPista, entry.ivaByPista, art);
+          for (const [pista, volume] of Object.entries(classifiedArticlePistaCounts(art)) as [PistaCanvass, number][]) {
+            if (filterPista !== "all" && pista !== filterPista) continue;
+            entry.countByPista[pista] = (entry.countByPista[pista] || 0) + volume;
+            if (pista === art.pista) {
+              entry.amountByPista[pista] = (entry.amountByPista[pista] || 0) + art.prezzo;
+              accumulaCategoriaCanvass(entry.categorieByPista, entry.ivaByPista, art);
+            }
           }
           // Task #398 — contatori extra (IVA/CB/Telefoni/€ Accessori/€ Servizi)
           // per la Tabella PDV × Pista (Pezzi): stessi filtri e stessa
@@ -912,8 +922,11 @@ export default function VenditeBiSuite() {
           point = emptyPoint(day);
           byDay.set(day, point);
         }
-        if (art.pista && trendPisteSet.has(art.pista)) {
-          point.perPista[art.pista] = (point.perPista[art.pista] || 0) + 1;
+        for (const [pista, volume] of Object.entries(classifiedArticlePistaCounts(art)) as [PistaCanvass, number][]) {
+          if (filterPista !== "all" && pista !== filterPista) continue;
+          if (trendPisteSet.has(pista)) {
+            point.perPista[pista] = (point.perPista[pista] || 0) + volume;
+          }
         }
         // Stessi contatori extra della tabella (IVA/CB/Telefoni), riusando la
         // logica condivisa per non divergere dalle regole di classificazione.
@@ -1028,10 +1041,13 @@ export default function VenditeBiSuite() {
           else entry.articleIncasso.fuoriScontrino += art.importoScontrino > 0 ? art.importoScontrino : art.prezzo;
           entry.articleIncasso.finanziato += art.importoFinanziato;
           entry.articleIncasso.credito += art.importoCredito;
-          if (art.pista) {
-            entry.countByPista[art.pista] = (entry.countByPista[art.pista] || 0) + 1;
-            entry.amountByPista[art.pista] = (entry.amountByPista[art.pista] || 0) + art.prezzo;
-            accumulaCategoriaCanvass(entry.categorieByPista, entry.ivaByPista, art);
+          for (const [pista, volume] of Object.entries(classifiedArticlePistaCounts(art)) as [PistaCanvass, number][]) {
+            if (filterPista !== "all" && pista !== filterPista) continue;
+            entry.countByPista[pista] = (entry.countByPista[pista] || 0) + volume;
+            if (pista === art.pista) {
+              entry.amountByPista[pista] = (entry.amountByPista[pista] || 0) + art.prezzo;
+              accumulaCategoriaCanvass(entry.categorieByPista, entry.ivaByPista, art);
+            }
           }
         }
       }

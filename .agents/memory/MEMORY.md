@@ -60,3 +60,4 @@
 - [Piste canvass VF](vf-piste-taxonomy.md) — nuova pista = anche REPORT_PISTA_ORDER (non esaustivo: se manca non renderizza MAI); default Telegram resta lista WindTre; VF gating energia→luce+gas.
 - [Phone&Phone PDV Telegram](phone-phone-pdv-report.md) — codice POS BiSuite vuoto: raggruppa per nome; escludi solo BANCHETTO, conserva Back Office e store.
 - [Provenienza punti per RS](dashboard-provenance-rs.md) — con “Tutti i PDV” aggrega per RS; totale e componenti mostrano entrambi pezzi+punti, senza elenco negozi.
+- [VF Upselling allowlist](vf-upselling-allowlist.md) — la pista cb VF si chiama Upselling e conta solo segnali commerciali ammessi, fail-closed e multi-volume; WindTre resta CB.

@@ -16,7 +16,7 @@ import {
 // nella pagina Vendite BiSuite devono contenere i numeri giusti.
 //
 // Copre:
-//   - Excel: foglio "PDV x Pista (Pezzi)" con header, righe RS/PDV e riga
+//   - Excel: foglio "PDV x Pista (Volumi)" con header, righe RS/PDV e riga
 //     TOTALE coerenti coi pezzi seminati (classificazione client-side,
 //     shared/bisuiteClassification CATEGORY_MAP);
 //   - CSV: stesso contenuto (separatore ";", BOM UTF-8);
@@ -103,12 +103,12 @@ function assertExportRows(aoa, { gammaDisplay }, label) {
     assert.ok(i >= 0, `${label}: colonna "${name}" presente (header: ${header.join(', ')})`);
     return i;
   };
-  const cMob = col('Mobile - Pezzi');
-  const cFis = col('Fisso - Pezzi');
-  const cEne = col('Energia - Pezzi');
-  const cAss = col('Assicurazioni - Pezzi');
-  const cPro = col('Windtre Protetti - Pezzi');
-  const cTot = col('Totale Pezzi');
+  const cMob = col('Mobile - Volumi');
+  const cFis = col('Fisso - Volumi');
+  const cEne = col('Energia - Volumi');
+  const cAss = col('Assicurazioni - Volumi');
+  const cPro = col('Windtre Protetti - Volumi');
+  const cTot = col('Totale Volumi');
 
   const body = aoa.slice(1).filter((r) => r.some((v) => v !== ''));
 
@@ -303,17 +303,17 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
 
     // ── Excel ──
     const { dl: dlX, buf: bufX } = await download('btn-pezzi-export-excel');
-    assert.equal(dlX.suggestedFilename(), `tabella-pdv-pista-pezzi_vendite_${TODAY}.xlsx`);
+    assert.equal(dlX.suggestedFilename(), `tabella-pdv-pista-volumi_vendite_${TODAY}.xlsx`);
     const wb = XLSX.read(bufX, { type: 'buffer' });
-    assert.deepEqual(wb.SheetNames, ['PDV x Pista (Pezzi)']);
-    const aoaXlsx = sheetAoa(wb.Sheets['PDV x Pista (Pezzi)']);
+    assert.deepEqual(wb.SheetNames, ['PDV x Pista (Volumi)']);
+    const aoaXlsx = sheetAoa(wb.Sheets['PDV x Pista (Volumi)']);
     const gammaDisplay = gammaDisplays.find((g) => aoaXlsx.some((r) => r[1] === g));
     assert.ok(gammaDisplay, `una variante Gamma presente nel file: ${JSON.stringify(aoaXlsx.map((r) => r[1]))}`);
     assertExportRows(aoaXlsx, { gammaDisplay }, 'Excel');
 
     // ── CSV ── (BOM UTF-8 + separatore ";"; riparsato con SheetJS)
     const { dl: dlC, buf: bufC } = await download('btn-pezzi-export-csv');
-    assert.equal(dlC.suggestedFilename(), `tabella-pdv-pista-pezzi_vendite_${TODAY}.csv`);
+    assert.equal(dlC.suggestedFilename(), `tabella-pdv-pista-volumi_vendite_${TODAY}.csv`);
     const csvText = bufC.toString('utf8');
     assert.ok(csvText.startsWith('\uFEFF'), 'CSV: BOM UTF-8 presente');
     assert.ok(csvText.split('\n')[0].includes(';'), 'CSV: separatore ";"');
@@ -325,7 +325,7 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     // header e valori della colonna "Windtre Protetti" devono comparire
     // davvero dentro il PDF, non basta il magic header.
     const { dl: dlP, buf: bufP } = await download('btn-pezzi-export-pdf');
-    assert.equal(dlP.suggestedFilename(), `tabella-pdv-pista-pezzi_vendite_${TODAY}.pdf`);
+    assert.equal(dlP.suggestedFilename(), `tabella-pdv-pista-volumi_vendite_${TODAY}.pdf`);
     assert.ok(bufP.length > 1000, `PDF non vuoto (bytes=${bufP.length})`);
     assert.equal(bufP.subarray(0, 5).toString('latin1'), '%PDF-', 'PDF: magic header');
     const pdfTokens = pdfTextTokens(bufP);

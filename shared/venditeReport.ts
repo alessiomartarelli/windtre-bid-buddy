@@ -5,6 +5,8 @@
 // senza dev server né DB.
 import {
   classifySaleArticles,
+  classifiedArticlePistaCounts,
+  getPistaCanvassLabels,
   PISTA_CANVASS_LABELS,
   TYPE_LABELS,
   type ArticleType,
@@ -383,6 +385,15 @@ export function aggregateDailyReport(
         ccEntry.importo += article.prezzo;
         couponCaringMap.set(ccLabel, ccEntry);
       }
+      for (const [pista, volume] of Object.entries(classifiedArticlePistaCounts(article)) as [PistaCanvass, number][]) {
+        if (!pistaVisible(pista)) continue;
+        pdvAcc.countByPista[pista] = (pdvAcc.countByPista[pista] ?? 0) + volume;
+        addAcc.countByPista[pista] = (addAcc.countByPista[pista] ?? 0) + volume;
+        if (custKind === "business") {
+          pdvAcc.businessCountByPista[pista] = (pdvAcc.businessCountByPista[pista] ?? 0) + volume;
+          addAcc.businessCountByPista[pista] = (addAcc.businessCountByPista[pista] ?? 0) + volume;
+        }
+      }
       if (article.pista && pistaVisible(article.pista)) {
         // Etichetta dei chip nella card "La gara delle piste". Per la maggior
         // parte delle piste è la categoria BiSuite (es. mobile ⇒ TIED CF /
@@ -403,16 +414,6 @@ export function aggregateDailyReport(
         const map = catByPista[article.pista] ?? new Map<string, number>();
         map.set(chipLabel, (map.get(chipLabel) ?? 0) + 1);
         catByPista[article.pista] = map;
-        // Drill-down: canvass per pista del PDV e dell'addetto.
-        pdvAcc.countByPista[article.pista] = (pdvAcc.countByPista[article.pista] ?? 0) + 1;
-        addAcc.countByPista[article.pista] = (addAcc.countByPista[article.pista] ?? 0) + 1;
-        // Split P.IVA/CF per pista al livello di addetto/negozio (Task #282):
-        // determinato dal tipo cliente della vendita (`custKind`), coerente
-        // con `businessCountByPista` aggregato. Serve al punteggio performance.
-        if (custKind === "business") {
-          pdvAcc.businessCountByPista[article.pista] = (pdvAcc.businessCountByPista[article.pista] ?? 0) + 1;
-          addAcc.businessCountByPista[article.pista] = (addAcc.businessCountByPista[article.pista] ?? 0) + 1;
-        }
         // Split energia CF (Consumer) vs Business (P.IVA) dalla descrizione
         // dell'offerta, non dal tipo cliente della vendita (Task #264).
         if (article.pista === "energia") {
@@ -1296,7 +1297,7 @@ export function buildMonthEndProjection(
     ? [
         mk("mobile", "Mobile", "pz", monthAgg.countByPista.mobile ?? 0),
         mk("fisso", "Fisso", "pz", monthAgg.countByPista.fisso ?? 0),
-        mk("cb", "Cb", "pz", monthAgg.countByPista.cb ?? 0),
+        mk("cb", getPistaCanvassLabels(true).cb, "pz", monthAgg.countByPista.cb ?? 0),
         mk("luce", "Luce", "pz", monthAgg.countByPista.luce ?? 0),
         mk("gas", "Gas", "pz", monthAgg.countByPista.gas ?? 0),
         mk("iva_mobile", "IVA Mobile", "pz", monthAgg.countByPista.iva_mobile ?? 0),
@@ -1312,7 +1313,7 @@ export function buildMonthEndProjection(
         mk("energia", "Energia", "pz", monthAgg.countByPista.energia ?? 0),
         mk("assicurazioni", "Assicurazioni", "pz", monthAgg.countByPista.assicurazioni ?? 0),
         mk("protetti", "Protetti", "pz", monthAgg.countByPista.protecta ?? 0),
-        mk("cb", "Cb", "pz", monthAgg.countByPista.cb ?? 0),
+        mk("cb", getPistaCanvassLabels(false).cb, "pz", monthAgg.countByPista.cb ?? 0),
         ...commonTail,
       ];
   return {

@@ -249,6 +249,7 @@ test('validateCanvassHeaders: tollera spazi nelle intestazioni', () => {
 const {
   classifyArticle,
   classifySaleArticles,
+  countVfUpsellingVolumes,
   pistaFromCanvassListino,
   PISTA_CANVASS_LABELS,
   PISTA_CANVASS_COLORS,
@@ -328,6 +329,180 @@ test('classifySaleArticles con indice VF: card Canvass e countByPista coerenti',
   const scNoIdx = classifySaleArticles(rawData);
   assert.equal(scNoIdx.countByType.canvass, 0);
   assert.equal(scNoIdx.countByType.prodotti, 3);
+});
+
+test('Upselling VF: tutte e sole le famiglie di domande ammesse contano con risposta positiva', () => {
+  const allowedQuestions = [
+    'RETE SICURA 2.0',
+    'RETE SICURA 2.0 CB',
+    'RETE SICURA FAMILY',
+    'RETE SICURA FAMILY CB',
+    'FASTWEB PROTECT',
+    'VODAFONE CLUB GA',
+    'VODAFONE CLUB CB',
+    'FASTWEB UP PLUS',
+    'ONE NUMBER',
+    'KASKO SMARTPHONE FACILE GA',
+    'KASKO SMARTPHONE FACILE CB',
+    'VODAFONE CLUB ABBINATE ALLA VENDITA DI UN TNP',
+    'VODAFONE CLUB PLUS GA',
+    'VODAFONE CLUB PLUS CB',
+    'TRADE IN DIGITALE',
+    'forward trade in',
+    'EXTENDER',
+    'SUPER WI-FI EXTENDER 6 GA',
+    'SUPER WI-FI EXTENDER 6 CB',
+    'VODAFONE SEVEN BOOSTER WI-FI 7 GA',
+    'VODAFONE SEVEN BOOSTER WI-FI 7 CB',
+    'FASTWEB SEVEN BOOSTER',
+    'trade in',
+    'trade in cb',
+  ];
+  for (const domanda of allowedQuestions) {
+    const article = { dettaglio: { domandeRisposte: [{ domanda, risposta: 'SI' }] } };
+    assert.equal(countVfUpsellingVolumes(article), 1, `domanda ammessa non conteggiata: ${domanda}`);
+  }
+
+  const excludedQuestions = [
+    'smartphone easy cb',
+    'MOP + RIC',
+    'GIGA FAMILY IN CB',
+    'TNP FASCIA ALTA IN CB',
+    'ADD ON CHIAMATE (OPZIONI FLAT)',
+    'ASSICURAZIONE QUIXA',
+  ];
+  for (const domanda of excludedQuestions) {
+    const article = { dettaglio: { domandeRisposte: [{ domanda, risposta: 'SI' }] } };
+    assert.equal(countVfUpsellingVolumes(article), 0, `domanda fuori allowlist conteggiata: ${domanda}`);
+  }
+  assert.equal(
+    countVfUpsellingVolumes({ dettaglio: { domandeRisposte: [{ domanda: 'RETE SICURA 2.0', risposta: 'NO' }] } }),
+    0,
+  );
+});
+
+test('Upselling VF: offerte MM4M, change order, booster e servizi ammessi sono fail-closed', () => {
+  const allowedOffers = [
+    'RETE SICURA 2.0 CB',
+    'RETE SICURA FAMILY CB',
+    'FASTWEB PROTECT',
+    'VODAFONE CLUB',
+    'FASTWEB UP PLUS',
+    'ONE NUMBER GA / CB',
+    'VODAFONE MOBILE START SPECIAL',
+    'VODAFONE MOBILE PRO SPECIAL',
+    'VODAFONE MOBILE POWER SPECIAL',
+    'VODAFONE MOBILE ULTRA SPECIAL',
+    'VODAFONE MOBILE ULTRA PLUS',
+    'CHANGE ORDER FASTWEB IN UPGRADE (MOBILE START)',
+    'CHANGE ORDER FASTWEB IN UPGRADE (MOBILE PRO)',
+    'CHANGE ORDER FASTWEB IN UPGRADE (POWER)',
+    'CHANGE ORDER FASTWEB IN UPGRADE (ULTRA)',
+    'KASKO GA',
+    'VODAFONE CLUB PLUS GA',
+    'VODAFONE CLUB PLUS',
+    'TRADE IN DIGITALE',
+    'SUPER WIFI EXTENDER IN CB',
+    'VODAFONE SEVEN BOOSTER WI-FI 7 CB',
+    'FASTWEB SEVEN BOOSTER',
+    'TRADE IN',
+  ];
+  for (const nomeEtichetta of allowedOffers) {
+    assert.equal(
+      countVfUpsellingVolumes({}, { pista: 'PISTA CB', categoria: 'X', tipologia: 'Y', nomeEtichetta }),
+      1,
+      `offerta ammessa non conteggiata: ${nomeEtichetta}`,
+    );
+  }
+  for (const nomeEtichetta of ['SMART TV cb O CONSOLE cb', 'ADD ON CHIAMATE CB', 'GIGA FAMILY IN CB', 'VODAFONE CARE']) {
+    assert.equal(
+      countVfUpsellingVolumes({}, { pista: 'PISTA CB', categoria: 'X', tipologia: 'Y', nomeEtichetta }),
+      0,
+      `offerta fuori allowlist conteggiata: ${nomeEtichetta}`,
+    );
+  }
+});
+
+test('Upselling VF: più voci sulla stessa offerta contano separatamente, i duplicati no', () => {
+  const article = {
+    dettaglio: {
+      domandeRisposte: [
+        { domanda: 'KASKO SMARTPHONE FACILE CB', risposta: 'SI' },
+        { domanda: 'trade in cb', risposta: 'SI' },
+        { domanda: 'forward trade in', risposta: 'SI' },
+        { domanda: 'KASKO SMARTPHONE FACILE CB', risposta: 'SI' },
+      ],
+    },
+  };
+  assert.equal(countVfUpsellingVolumes(article), 3);
+  assert.equal(
+    countVfUpsellingVolumes(
+      { dettaglio: { domandeRisposte: [{ domanda: 'trade in cb', risposta: 'SI' }] } },
+      { pista: 'PISTA CB', categoria: 'X', tipologia: 'Y', nomeEtichetta: 'TRADE IN' },
+    ),
+    1,
+  );
+});
+
+test('Upselling VF: vendita base conserva la propria pista e aggiunge i volumi Upselling', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const sc = classifySaleArticles({
+    articoli: [{
+      codice: 'CANOHEWD2208',
+      categoria: { nome: 'OFFERTE VOCE' },
+      tipologia: { nome: 'OFFERTE VOCE WALLET PAY' },
+      dettaglio: {
+        prezzo: 10,
+        domandeRisposte: [
+          { domanda: 'RETE SICURA 2.0', risposta: 'SI' },
+          { domanda: 'VODAFONE CLUB GA', risposta: 'SI' },
+        ],
+      },
+    }],
+  }, index);
+  assert.deepEqual(sc.countByPista, { mobile: 1, cb: 2 });
+});
+
+test('Upselling VF: una regola KPI cb troppo ampia non aggira la allowlist', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const rules = [{ id: 'cb-all', target: 'cb', conditions: { categoria: 'OFFERTE VOCE' }, enabled: true }];
+  const excluded = classifySaleArticles({
+    articoli: [{
+      codice: 'CANOHEWD2208',
+      categoria: { nome: 'OFFERTE VOCE' },
+      dettaglio: { domandeRisposte: [{ domanda: 'GIGA FAMILY IN CB', risposta: 'SI' }] },
+    }],
+  }, index, rules);
+  assert.equal(excluded.countByPista.cb, undefined);
+
+  const allowed = classifySaleArticles({
+    articoli: [{
+      codice: 'CANOHEWD2208',
+      categoria: { nome: 'OFFERTE VOCE' },
+      dettaglio: { domandeRisposte: [{ domanda: 'RETE SICURA 2.0', risposta: 'SI' }] },
+    }],
+  }, index, rules);
+  assert.equal(allowed.countByPista.cb, 1);
+});
+
+test('Upselling VF: una regola KPI escludi sopprime anche segnali ammessi', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const rules = [{ id: 'exclude', target: 'escludi', conditions: { categoria: 'OFFERTE VOCE' }, enabled: true }];
+  const sc = classifySaleArticles({
+    articoli: [{
+      codice: 'CANOHEWD2208',
+      categoria: { nome: 'OFFERTE VOCE' },
+      dettaglio: { domandeRisposte: [{ domanda: 'RETE SICURA 2.0', risposta: 'SI' }] },
+    }],
+  }, index, rules);
+  assert.deepEqual(sc.countByPista, {});
+});
+
+test('Upselling VF: i change order accettano solo le etichette esatte', () => {
+  const match = (nomeEtichetta) => ({ pista: 'PISTA CB', categoria: 'X', tipologia: 'Y', nomeEtichetta });
+  assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (MOBILE PRO)')), 1);
+  assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (MOBILE PRO EXTRA)')), 0);
+  assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (MOBILE START TEST)')), 0);
 });
 
 // === Regole KPI configurabili (canvassKpiRules) ===
@@ -557,7 +732,7 @@ test('aggregateMappedSales: totaliPistaCanvass solo con canvassIndex', () => {
   assert.deepEqual(con.totaliPistaCanvass, { iva_mobile: 1, luce: 1 });
 });
 
-test('aggregateMappedSales: ogni articolo conta in al più UNA pista (no doppi conteggi)', () => {
+test('aggregateMappedSales: le piste base non si duplicano', () => {
   const sales = [
     saleWith([artOf('CANDDDDD1111'), artOf('CANEEEEE1111'), artOf('CANEEEEE1111')]),
     saleWith([artOf('CANBBBBB1111'), artOf('CANCCCCC1111')], 'POS2'),
@@ -571,4 +746,28 @@ test('aggregateMappedSales: ogni articolo conta in al più UNA pista (no doppi c
   const pos2 = agg.pdvList.find((p) => p.codicePos === 'POS2');
   assert.deepEqual(pos1.countByPistaCanvass, { luce: 1, gas: 2 });
   assert.deepEqual(pos2.countByPistaCanvass, { iva_wireline: 1, vas: 1 });
+});
+
+test('aggregateMappedSales: segnali Upselling su prodotti e regola escludi restano in parità', () => {
+  const prodotto = {
+    codice: 'ACC1',
+    categoria: { nome: 'ACCESSORI' },
+    tipologia: { nome: 'ACCESSORI' },
+    descrizione: 'Accessorio',
+    dettaglio: {
+      prezzo: '10',
+      domandeRisposte: [
+        { domanda: 'KASKO SMARTPHONE FACILE CB', risposta: 'SI' },
+        { domanda: 'trade in cb', risposta: 'SI' },
+      ],
+    },
+  };
+  const counted = aggregateMappedSales([saleWith([prodotto])], [], { canvassIndex: vfIndex });
+  assert.deepEqual(counted.totaliPistaCanvass, { cb: 2 });
+
+  const excluded = aggregateMappedSales([saleWith([prodotto])], [], {
+    canvassIndex: vfIndex,
+    canvassKpiRules: [{ id: 'exclude', target: 'escludi', conditions: { categoria: 'ACCESSORI' }, enabled: true }],
+  });
+  assert.deepEqual(excluded.totaliPistaCanvass, {});
 });

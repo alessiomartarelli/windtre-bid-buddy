@@ -118,6 +118,7 @@ export function pezziExtraColKeysForModel(isVfOrg: boolean): readonly PezziExtra
 export interface CategoryClassification {
   type: ArticleType;
   pista?: PistaCanvass;
+  excludedFromPiste?: boolean;
 }
 
 const EXCLUDED_CATEGORIES = new Set(['ARROTONDAMENTO']);
@@ -206,6 +207,7 @@ export interface CanvassMatchLike {
   pista: string;
   categoria: string;
   tipologia: string;
+  nomeEtichetta?: string;
 }
 
 /**
@@ -249,8 +251,113 @@ export interface ClassifiableArticle {
   tipologia?: { nome?: unknown } | null;
   descrizione?: unknown;
   dettaglio?: {
-    domandeRisposte?: Array<{ domandaTesto?: string; risposta?: string }>;
+    domandeRisposte?: Array<{ domanda?: string; domandaTesto?: string; risposta?: string }>;
   } | null;
+}
+
+function normalizeVfUpsellingText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+
+const VF_UPSELLING_QUESTION_KEYS: Readonly<Record<string, string>> = {
+  'RETE SICURA 2 0': 'rete-sicura-mobile',
+  'RETE SICURA 2 0 CB': 'rete-sicura-mobile',
+  'RETE SICURA FAMILY': 'rete-sicura-family',
+  'RETE SICURA FAMILY CB': 'rete-sicura-family',
+  'FASTWEB PROTECT': 'fastweb-protect',
+  'VODAFONE CLUB GA': 'vodafone-club',
+  'VODAFONE CLUB CB': 'vodafone-club',
+  'FASTWEB UP PLUS': 'fastweb-up-plus',
+  'ONE NUMBER': 'one-number',
+  'VODAFONE ONE NUMBER GA E CB': 'one-number',
+  'KASKO SMARTPHONE FACILE GA': 'kasko',
+  'KASKO SMARTPHONE FACILE CB': 'kasko',
+  'KASKO GA': 'kasko',
+  'KASKO CB': 'kasko',
+  'VODAFONE CLUB ABBINATE ALLA VENDITA DI UN TNP': 'vodafone-club-tnp',
+  'VODAFONE CLUB PLUS GA': 'vodafone-club-plus',
+  'VODAFONE CLUB PLUS CB': 'vodafone-club-plus',
+  'TRADE IN DIGITALE': 'trade-in-digitale',
+  'FORWARD TRADE IN': 'trade-in-digitale',
+  'EXTENDER': 'wifi-extender',
+  'SUPER WI FI EXTENDER 6 GA': 'wifi-extender',
+  'SUPER WI FI EXTENDER 6 CB': 'wifi-extender',
+  'VODAFONE SEVEN BOOSTER WI FI 7 GA': 'seven-booster',
+  'VODAFONE SEVEN BOOSTER WI FI 7 CB': 'seven-booster',
+  'FASTWEB SEVEN BOOSTER': 'seven-booster',
+  'TRADE IN': 'trade-in',
+  'TRADE IN CB': 'trade-in',
+};
+
+const VF_UPSELLING_OFFER_KEYS: Readonly<Record<string, string>> = {
+  'RETE SICURA 2 0 GA': 'rete-sicura-mobile',
+  'RETE SICURA 2 0 CB': 'rete-sicura-mobile',
+  'RETE SICURA FAMILY GA': 'rete-sicura-family',
+  'RETE SICURA FAMILY CB': 'rete-sicura-family',
+  'FASTWEB PROTECT': 'fastweb-protect',
+  'VODAFONE CLUB': 'vodafone-club',
+  'VODAFONE CLUB GA': 'vodafone-club',
+  'VODAFONE CLUB CB': 'vodafone-club',
+  'FASTWEB UP PLUS': 'fastweb-up-plus',
+  'ONE NUMBER GA CB': 'one-number',
+  'VODAFONE ONE NUMBER GA E CB': 'one-number',
+  'VODAFONE MOBILE START SPECIAL': 'mm4m-mobile-start',
+  'VODAFONE MOBILE PRO SPECIAL': 'mm4m-mobile-pro',
+  'VODAFONE MOBILE POWER SPECIAL': 'mm4m-mobile-power',
+  'VODAFONE MOBILE ULTRA SPECIAL': 'mm4m-mobile-ultra',
+  'VODAFONE MOBILE ULTRA PLUS': 'mm4m-mobile-ultra-plus',
+  'CHANGE ORDER FASTWEB IN UPGRADE MOBILE START': 'change-order-mobile-start',
+  'CHANGE ORDER FASTWEB IN UPGRADE MOBILE PRO': 'change-order-mobile-pro',
+  'CHANGE ORDER FASTWEB IN UPGRADE POWER': 'change-order-power',
+  'CHANGE ORDER FASTWEB IN UPGRADE ULTRA': 'change-order-ultra',
+  'KASKO GA': 'kasko',
+  'KASKO CB': 'kasko',
+  'VODAFONE CLUB PLUS GA': 'vodafone-club-plus',
+  'VODAFONE CLUB PLUS': 'vodafone-club-plus',
+  'TRADE IN DIGITALE': 'trade-in-digitale',
+  'SUPER WIFI EXTENDER IN CB': 'wifi-extender',
+  'SUPER WI FI EXTENDER 6 GA': 'wifi-extender',
+  'SUPER WI FI EXTENDER 6 CB': 'wifi-extender',
+  'VODAFONE SEVEN BOOSTER WI FI 7 GA': 'seven-booster',
+  'VODAFONE SEVEN BOOSTER WI FI 7 CB': 'seven-booster',
+  'FASTWEB SEVEN BOOSTER': 'seven-booster',
+  'TRADE IN': 'trade-in',
+};
+
+function vfUpsellingOfferKey(label: string): string | undefined {
+  const normalized = normalizeVfUpsellingText(label);
+  return VF_UPSELLING_OFFER_KEYS[normalized];
+}
+
+function isAffirmativeVfUpsellingAnswer(value: unknown): boolean {
+  const normalized = normalizeVfUpsellingText(value);
+  return normalized === 'SI' || normalized === 'YES' || normalized === 'TRUE' || normalized === '1';
+}
+
+/**
+ * Volumi Upselling Vodafone/Fastweb: esclusivamente le voci del prospetto
+ * commerciale. Ogni risposta affermativa ammessa vale un volume; la stessa
+ * voce presente sia nell'etichetta dell'offerta sia nelle domande è deduplicata.
+ */
+export function countVfUpsellingVolumes(
+  article: ClassifiableArticle,
+  match?: CanvassMatchLike | null,
+): number {
+  const signals = new Set<string>();
+  const offerKey = vfUpsellingOfferKey(match?.nomeEtichetta ?? '');
+  if (offerKey) signals.add(offerKey);
+  for (const dr of article.dettaglio?.domandeRisposte ?? []) {
+    if (!isAffirmativeVfUpsellingAnswer(dr.risposta)) continue;
+    const question = normalizeVfUpsellingText(dr.domandaTesto ?? dr.domanda);
+    const key = VF_UPSELLING_QUESTION_KEYS[question];
+    if (key) signals.add(key);
+  }
+  return signals.size;
 }
 
 /**
@@ -267,22 +374,26 @@ export function classifyArticle(
   kpiRules?: CanvassKpiRule[] | null,
 ): CategoryClassification | null {
   if (canvassIndex) {
+    const match = categorizeCanvassArticle(article, canvassIndex);
+    const upsellingVolumes = countVfUpsellingVolumes(article, match);
     // Regole KPI per-org (solo org VF, dove esiste il canvassIndex): la prima
     // regola abilitata che matcha vince SULLA classificazione automatica.
     // Target 'escludi' = l'articolo non conta in nessuna pista KPI.
     const target = resolveCanvassKpiTarget(article, kpiRules);
     if (target === 'escludi') {
-      const match = categorizeCanvassArticle(article, canvassIndex);
-      if (match) return { type: 'canvass' };
+      if (match) return { type: 'canvass', excludedFromPiste: true };
       const fallback = classifyCategory(String(article.categoria?.nome ?? '').trim());
-      return fallback ? { type: fallback.type } : null;
+      return fallback ? { type: fallback.type, excludedFromPiste: true } : null;
     }
     if (target) {
+      if (target === 'cb' && upsellingVolumes === 0) {
+        return match ? { type: 'canvass' } : { type: classifyCategory(String(article.categoria?.nome ?? '').trim())?.type ?? 'canvass' };
+      }
       return { type: 'canvass', pista: target };
     }
-    const match = categorizeCanvassArticle(article, canvassIndex);
     if (match) {
-      return { type: 'canvass', pista: pistaFromCanvassMatch(match) };
+      const pista = pistaFromCanvassMatch(match);
+      return { type: 'canvass', pista: pista === 'cb' && upsellingVolumes === 0 ? undefined : pista };
     }
   }
   return classifyCategory(String(article.categoria?.nome ?? '').trim());
@@ -309,6 +420,7 @@ export const PISTA_CANVASS_LABELS: Record<PistaCanvass, string> = {
  */
 export const PISTA_CANVASS_LABELS_VF: Record<PistaCanvass, string> = {
   ...PISTA_CANVASS_LABELS,
+  cb: 'Upselling',
   protecta: 'Verisure',
 };
 
@@ -350,6 +462,9 @@ export interface ClassifiedArticle {
   descrizione: string;
   type: ArticleType;
   pista?: PistaCanvass;
+  /** Contributi volumetrici per pista. Nel modello VF un'offerta base può
+   * contribuire alla propria pista e a più voci Upselling selezionate. */
+  pistaCounts?: Partial<Record<PistaCanvass, number>>;
   prezzo: number;
   /** Importo imponibile BiSuite (`dettaglio.importoImponibile`), 0 se assente.
    * Usato per gli importi Accessori/Servizi (parità con la Dashboard Gara). */
@@ -381,6 +496,33 @@ export interface SaleClassification {
   primaryPista: PistaCanvass | null;
   /** Coupon Caring: pezzi e importo (esclusi dai pezzi/importi pista CB). */
   couponCaring: { pezzi: number; importo: number };
+}
+
+export function classifiedArticlePistaCounts(
+  article: Pick<ClassifiedArticle, 'pista' | 'pistaCounts'>,
+): Partial<Record<PistaCanvass, number>> {
+  if (article.pistaCounts) return article.pistaCounts;
+  return article.pista ? { [article.pista]: 1 } : {};
+}
+
+export function classificationPistaCounts(
+  article: ClassifiableArticle,
+  classification: CategoryClassification,
+  canvassIndex?: CanvassIndex | null,
+): Partial<Record<PistaCanvass, number>> {
+  const counts: Partial<Record<PistaCanvass, number>> = {};
+  if (classification.excludedFromPiste) return counts;
+  if (classification.pista && (!canvassIndex || classification.pista !== 'cb')) {
+    counts[classification.pista] = 1;
+  }
+  if (canvassIndex) {
+    const match = categorizeCanvassArticle(article, canvassIndex);
+    const upselling = countVfUpsellingVolumes(article, match);
+    if (upselling > 0) counts.cb = upselling;
+  } else if (classification.pista === 'cb') {
+    counts.cb = 1;
+  }
+  return counts;
 }
 
 /**
@@ -487,12 +629,14 @@ export function classifySaleArticles(
       // la classificazione da listino VF non produce queste categorie).
       const coupon = classification.type === 'canvass' && isCouponCaring(catNome, tipNome);
       const pista = coupon ? undefined : classification.pista;
+      const pistaCounts = coupon ? {} : classificationPistaCounts(art, classification, canvassIndex);
       const classified: ClassifiedArticle = {
         categoriaNome: catNome,
         tipologiaNome: tipNome,
         descrizione: desc,
         type: classification.type,
         pista,
+        pistaCounts,
         couponCaring: coupon || undefined,
         prezzo,
         importoImponibile,
@@ -508,9 +652,11 @@ export function classifySaleArticles(
         couponCaring.pezzi++;
         couponCaring.importo += prezzo;
       }
-      if (pista) {
-        countByPista[pista] = (countByPista[pista] || 0) + 1;
-        amountByPista[pista] = (amountByPista[pista] || 0) + prezzo;
+      for (const [pistaKey, volume] of Object.entries(pistaCounts) as [PistaCanvass, number][]) {
+        countByPista[pistaKey] = (countByPista[pistaKey] || 0) + volume;
+        if (pistaKey === pista) {
+          amountByPista[pistaKey] = (amountByPista[pistaKey] || 0) + prezzo;
+        }
       }
     } else if (catNome) {
       if (typeof window !== 'undefined' && !_warnedCategories.has(catNome)) {
