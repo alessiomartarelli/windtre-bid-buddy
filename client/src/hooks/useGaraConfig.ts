@@ -371,12 +371,11 @@ export function useGaraConfig() {
   const [config, setConfig] = useState<GaraConfigRecord | null>(null);
   const [configList, setConfigList] = useState<GaraConfigListItem[]>([]);
   const [history, setHistory] = useState<GaraConfigHistoryEntry[]>([]);
-  const abortRef = useRef<AbortController | null>(null);
+  const fetchSequenceRef = useRef(0);
+  const listSequenceRef = useRef(0);
 
   const fetchConfig = useCallback(async (month: number, year: number, id?: string) => {
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+    const sequence = ++fetchSequenceRef.current;
     setLoading(true);
     try {
       const url = id
@@ -384,48 +383,47 @@ export function useGaraConfig() {
         : apiUrl(`/api/gara-config?month=${month}&year=${year}`);
       const res = await fetch(url, {
         credentials: 'include',
-        signal: controller.signal,
       });
       if (!res.ok) throw new Error('Failed to fetch config');
       const data = await res.json();
-      if (!controller.signal.aborted) {
-        setConfig(data);
-      }
+      if (sequence !== fetchSequenceRef.current) return null;
+      setConfig(data);
       return data as GaraConfigRecord | null;
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === 'AbortError') return null;
       console.error('[GaraConfig] Error fetching:', err);
-      if (!controller.signal.aborted) setConfig(null);
+      if (sequence === fetchSequenceRef.current) setConfig(null);
       return null;
     } finally {
-      if (!controller.signal.aborted) setLoading(false);
+      if (sequence === fetchSequenceRef.current) setLoading(false);
     }
   }, []);
 
   const fetchConfigList = useCallback(async (month: number, year: number) => {
+    const sequence = ++listSequenceRef.current;
     try {
       const res = await fetch(apiUrl(`/api/gara-config/list?month=${month}&year=${year}`), {
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch config list');
       const data = await res.json();
+      if (sequence !== listSequenceRef.current) return null;
       setConfigList(data);
       return data as GaraConfigListItem[];
     } catch (err) {
       console.error('[GaraConfig] Error fetching list:', err);
-      setConfigList([]);
-      return [];
+      if (sequence === listSequenceRef.current) setConfigList([]);
+      return null;
     }
   }, []);
 
-  const saveConfig = useCallback(async (month: number, year: number, configData: GaraConfigData, name: string, existingId?: string) => {
+  const saveConfig = useCallback(async (month: number, year: number, configData: GaraConfigData, name: string, existingId?: string, expectedUpdatedAt?: string) => {
     setSaving(true);
     try {
       const res = await fetch(apiUrl('/api/gara-config'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ month, year, config: configData, name, id: existingId }),
+        body: JSON.stringify({ month, year, config: configData, name, id: existingId, expectedUpdatedAt }),
       });
       if (!res.ok) throw new Error('Failed to save config');
       const data = await res.json();
@@ -539,7 +537,8 @@ export function useGaraConfig() {
 
   useEffect(() => {
     return () => {
-      if (abortRef.current) abortRef.current.abort();
+      fetchSequenceRef.current += 1;
+      listSequenceRef.current += 1;
     };
   }, []);
 

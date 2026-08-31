@@ -111,7 +111,7 @@ export interface IStorage {
   getGaraConfig(orgId: string, month: number, year: number): Promise<GaraConfig | undefined>;
   getGaraConfigById(id: string): Promise<GaraConfig | undefined>;
   createGaraConfig(orgId: string, month: number, year: number, name: string, config: Record<string, unknown>): Promise<GaraConfig>;
-  updateGaraConfig(id: string, config: Record<string, unknown>, name?: string): Promise<GaraConfig>;
+  updateGaraConfig(id: string, config: Record<string, unknown>, name?: string, changedBy?: string | null, expectedUpdatedAt?: Date): Promise<GaraConfig | undefined>;
   deleteGaraConfig(id: string): Promise<void>;
   listGaraConfigs(orgId: string, month: number, year: number): Promise<{ id: string; name: string | null; month: number; year: number; updatedAt: Date | null; createdAt: Date | null }[]>;
   listGaraConfigHistory(orgId: string): Promise<{ month: number; year: number; updatedAt: Date | null }[]>;
@@ -758,49 +758,52 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateGaraConfig(id: string, config: Record<string, unknown>, name?: string, changedBy?: string | null): Promise<GaraConfig> {
-    // Archivia la revisione PRECEDENTE prima di sovrascrivere, così le
-    // configurazioni gara restano recuperabili dopo salvataggi/propagazioni.
-    try {
-      const [cur] = await db.select().from(garaConfig).where(eq(garaConfig.id, id));
-      if (cur) {
-        const changed =
-          this.stableSerGara(cur.config) !== this.stableSerGara(config) ||
-          (name !== undefined && name !== cur.name);
-        if (changed) {
-          await db.insert(garaConfigHistory).values({
-            organizationId: cur.organizationId,
-            garaConfigId: cur.id,
-            name: cur.name,
-            month: cur.month,
-            year: cur.year,
-            config: cur.config,
-            changedBy: changedBy ?? null,
-          });
-          // Retention: tieni solo le ultime N revisioni per configurazione.
-          await db.execute(sql`
-            DELETE FROM gara_config_history
-             WHERE gara_config_id = ${id}
-               AND id NOT IN (
-                 SELECT id FROM gara_config_history
-                  WHERE gara_config_id = ${id}
-                  ORDER BY created_at DESC, id DESC
-                  LIMIT ${GARA_CONFIG_HISTORY_RETENTION}
-               )
-          `);
-        }
+  async updateGaraConfig(id: string, config: Record<string, unknown>, name?: string, changedBy?: string | null, expectedUpdatedAt?: Date): Promise<GaraConfig | undefined> {
+    return db.transaction(async (tx) => {
+      const [cur] = await tx.select().from(garaConfig).where(eq(garaConfig.id, id));
+      if (!cur) return undefined;
+
+      const nextUpdatedAt = new Date(Math.max(Date.now(), (cur.updatedAt?.getTime() ?? 0) + 1));
+      const updates: Record<string, unknown> = { config, updatedAt: nextUpdatedAt };
+      if (name !== undefined) updates.name = name;
+      const predicate = expectedUpdatedAt
+        ? and(
+            eq(garaConfig.id, id),
+            sql`date_trunc('milliseconds', ${garaConfig.updatedAt}) = date_trunc('milliseconds', ${expectedUpdatedAt}::timestamp)`,
+          )
+        : eq(garaConfig.id, id);
+      const [result] = await tx.update(garaConfig)
+        .set(updates)
+        .where(predicate)
+        .returning();
+      if (!result) return undefined;
+
+      const changed =
+        this.stableSerGara(cur.config) !== this.stableSerGara(config) ||
+        (name !== undefined && name !== cur.name);
+      if (changed) {
+        await tx.insert(garaConfigHistory).values({
+          organizationId: cur.organizationId,
+          garaConfigId: cur.id,
+          name: cur.name,
+          month: cur.month,
+          year: cur.year,
+          config: cur.config,
+          changedBy: changedBy ?? null,
+        });
+        await tx.execute(sql`
+          DELETE FROM gara_config_history
+           WHERE gara_config_id = ${id}
+             AND id NOT IN (
+               SELECT id FROM gara_config_history
+                WHERE gara_config_id = ${id}
+                ORDER BY created_at DESC, id DESC
+                LIMIT ${GARA_CONFIG_HISTORY_RETENTION}
+             )
+        `);
       }
-    } catch (e) {
-      // Il backup non deve mai bloccare il salvataggio, ma l'errore va loggato.
-      console.error(`[gara-config-history] archive failed (config=${id}):`, e);
-    }
-    const updates: Record<string, unknown> = { config, updatedAt: new Date() };
-    if (name !== undefined) updates.name = name;
-    const [result] = await db.update(garaConfig)
-      .set(updates)
-      .where(eq(garaConfig.id, id))
-      .returning();
-    return result;
+      return result;
+    });
   }
 
   async listGaraConfigRevisions(orgId: string, garaConfigId: string): Promise<{ id: string; name: string | null; month: number; year: number; createdAt: Date; changedBy: string | null; changedByName: string | null }[]> {

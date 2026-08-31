@@ -605,6 +605,8 @@ export default function ConfigurazioneGara() {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const pendingConfigSelectionRef = useRef<{ id: string; month: number; year: number } | null>(null);
+  const configLoadGenerationRef = useRef(0);
   const [pdvList, setPdvList] = useState<GaraConfigPdv[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -951,9 +953,11 @@ export default function ConfigurazioneGara() {
     setAssicurazioniConfig(prev => ({ ...prev, pdvInGara: pdvAssicurazioni, targetNoMalus: 15 * pdvAssicurazioni, targetS1: 20 * pdvAssicurazioni, targetS2: 25 * pdvAssicurazioni, premioS1: prev.premioS1 ?? 500, premioS2: prev.premioS2 ?? 750 }));
   }, [initializeRSConfigsFromPdvList]);
 
-  const loadConfigById = useCallback(async (id: string, month: number, year: number) => {
+  const loadConfigById = useCallback(async (id: string, month: number, year: number, requestedGeneration?: number) => {
+    const generation = requestedGeneration ?? ++configLoadGenerationRef.current;
     setInitialLoaded(false);
     const result = await fetchConfig(month, year, id);
+    if (generation !== configLoadGenerationRef.current) return;
     if (result?.config) {
       const cfg = result.config as unknown as GaraConfigData;
       const pdvs = cfg.pdvList || [];
@@ -963,35 +967,34 @@ export default function ConfigurazioneGara() {
       else setTipologiaGara('gara_operatore');
       if (cfg.modalitaInserimentoRS) setModalitaRS(cfg.modalitaInserimentoRS as 'per_pdv' | 'per_rs');
       else setModalitaRS('per_pdv');
-      if (cfg.pistaMobileConfig?.sogliePerPos?.length) {
+      if (Array.isArray(cfg.pistaMobileConfig?.sogliePerPos)) {
         setMobileConfig(cfg.pistaMobileConfig.sogliePerPos);
       } else {
         setMobileConfig(pdvs.map(p => initMobileConfigForPdv(p)));
       }
-      if (cfg.pistaFissoConfig?.sogliePerPos?.length) {
+      if (Array.isArray(cfg.pistaFissoConfig?.sogliePerPos)) {
         setFissoConfig(cfg.pistaFissoConfig.sogliePerPos);
       } else {
         setFissoConfig(pdvs.map(p => initFissoConfigForPdv(p)));
       }
-      if (cfg.partnershipRewardConfig?.configPerPos?.length) {
+      if (Array.isArray(cfg.partnershipRewardConfig?.configPerPos)) {
         setPartnershipConfig(cfg.partnershipRewardConfig.configPerPos);
       } else {
         setPartnershipConfig(pdvs.map(p => initPartnershipConfigForPdv(p)));
       }
       initializeRSConfigsFromPdvList(pdvs);
-      if (cfg.pistaMobileRSConfig?.sogliePerRS?.length) setMobileRSConfig(cfg.pistaMobileRSConfig.sogliePerRS);
-      if (cfg.pistaFissoRSConfig?.sogliePerRS?.length) setFissoRSConfig(cfg.pistaFissoRSConfig.sogliePerRS);
-      if (cfg.partnershipRewardRSConfig?.configPerRS?.length) setPartnershipRSConfig(cfg.partnershipRewardRSConfig.configPerRS);
+      if (Array.isArray(cfg.pistaMobileRSConfig?.sogliePerRS)) setMobileRSConfig(cfg.pistaMobileRSConfig.sogliePerRS);
+      if (Array.isArray(cfg.pistaFissoRSConfig?.sogliePerRS)) setFissoRSConfig(cfg.pistaFissoRSConfig.sogliePerRS);
+      if (Array.isArray(cfg.partnershipRewardRSConfig?.configPerRS)) setPartnershipRSConfig(cfg.partnershipRewardRSConfig.configPerRS);
       if (cfg.energiaConfig) setEnergiaConfig(cfg.energiaConfig);
       if (cfg.assicurazioniConfig) setAssicurazioniConfig(cfg.assicurazioniConfig);
-      if (cfg.energiaRSConfig?.configPerRS?.length) setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
-      if (cfg.assicurazioniRSConfig?.configPerRS?.length) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
+      if (Array.isArray(cfg.energiaRSConfig?.configPerRS)) setEnergiaRSConfig(cfg.energiaRSConfig.configPerRS);
+      if (Array.isArray(cfg.assicurazioniRSConfig?.configPerRS)) setAssicurazioniRSConfig(cfg.assicurazioniRSConfig.configPerRS);
       setVfPisteConfig(cfg.vfPisteConfig?.configPerPista ?? {});
       setVfPisteRSConfig(cfg.vfPisteRSConfig?.configPerRS ?? []);
-      if (cfg.protectaRSConfig?.configPerRS?.length) setProtectaRSConfig(cfg.protectaRSConfig.configPerRS);
-      if (cfg.decurtazioneRSConfig?.configPerRS?.length) setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
-      if (cfg.importedFiles?.length) setImportedFiles(cfg.importedFiles as Array<{ label: string; type: PdfType; fileName: string }>);
-      else setImportedFiles([]);
+      if (Array.isArray(cfg.protectaRSConfig?.configPerRS)) setProtectaRSConfig(cfg.protectaRSConfig.configPerRS);
+      if (Array.isArray(cfg.decurtazioneRSConfig?.configPerRS)) setDecurtazioneRSConfig(cfg.decurtazioneRSConfig.configPerRS);
+      setImportedFiles(Array.isArray(cfg.importedFiles) ? cfg.importedFiles as Array<{ label: string; type: PdfType; fileName: string }> : []);
       setTabelleCalcolo(cfg.tabelleCalcolo ? deepMergeTabelleCalcolo(tabelleCalcoloDefaults, cfg.tabelleCalcolo) : JSON.parse(JSON.stringify(tabelleCalcoloDefaults)));
       setExtraGaraIvaSogliePerRS((cfg.extraGaraIvaSogliePerRS || {}) as ExtraGaraSogliePerRS);
       setVenditeForecast(forecastToForm(cfg.venditeForecast));
@@ -1000,14 +1003,32 @@ export default function ConfigurazioneGara() {
       setTelegramContentPerBrand(telegramContentPerBrandToForm(cfg.telegramReportContent, organizationBrands ?? []));
       setSosCaring(cfg.sosCaring || null);
     }
-    setIsDirty(false);
-    setInitialLoaded(true);
+    if (generation === configLoadGenerationRef.current) {
+      setIsDirty(false);
+      setInitialLoaded(true);
+    }
   }, [fetchConfig, initializeRSConfigsFromPdvList, tabelleCalcoloDefaults, organizationBrands]);
 
   const loadMonthConfig = useCallback(async (month: number, year: number) => {
+    const generation = ++configLoadGenerationRef.current;
     setInitialLoaded(false);
-    fetchConfigList(month, year);
+    const configs = await fetchConfigList(month, year);
+    if (generation !== configLoadGenerationRef.current) return;
+    if (configs === null) {
+      setInitialLoaded(true);
+      toast({ title: 'Errore', description: 'Impossibile caricare le configurazioni del mese.', variant: 'destructive' });
+      return;
+    }
+    if (configs[0]?.id) {
+      await loadConfigById(configs[0].id, month, year, generation);
+      return;
+    }
     const result = await fetchConfig(month, year);
+    if (generation !== configLoadGenerationRef.current) return;
+    if (result?.id) {
+      await loadConfigById(result.id, month, year, generation);
+      return;
+    }
     if (result?.config) {
       setConfigName(result.name || '');
       const cfg = result.config as unknown as GaraConfigData;
@@ -1109,6 +1130,7 @@ export default function ConfigurazioneGara() {
       setSosCaring(null);
 
       const salesPdvs = await fetchPdvFromSales(month, year);
+      if (generation !== configLoadGenerationRef.current) return;
       if (salesPdvs.length > 0) {
         const autoPdvList = salesPdvs.map(sp => createEmptyGaraPdv(sp.codicePos, sp.nomeNegozio, sp.ragioneSociale));
         setPdvList(autoPdvList);
@@ -1123,12 +1145,29 @@ export default function ConfigurazioneGara() {
     }
     setIsDirty(false);
     setInitialLoaded(true);
-  }, [fetchConfig, fetchPdvFromSales, toast, initializeConfigsFromPdvList, tabelleCalcoloDefaults]);
+  }, [fetchConfig, fetchConfigList, fetchPdvFromSales, toast, initializeConfigsFromPdvList, loadConfigById, tabelleCalcoloDefaults]);
+
+  const selectConfigById = useCallback((id: string, month: number, year: number) => {
+    if (month === selectedMonth && year === selectedYear) {
+      pendingConfigSelectionRef.current = null;
+      void loadConfigById(id, month, year);
+      return;
+    }
+    pendingConfigSelectionRef.current = { id, month, year };
+    setSelectedMonth(month);
+    setSelectedYear(year);
+  }, [loadConfigById, selectedMonth, selectedYear]);
 
   useEffect(() => {
-    loadMonthConfig(selectedMonth, selectedYear);
+    const pending = pendingConfigSelectionRef.current;
+    if (pending && pending.month === selectedMonth && pending.year === selectedYear) {
+      pendingConfigSelectionRef.current = null;
+      void loadConfigById(pending.id, pending.month, pending.year);
+    } else {
+      void loadMonthConfig(selectedMonth, selectedYear);
+    }
     fetchHistory();
-  }, [selectedMonth, selectedYear, loadMonthConfig, fetchHistory]);
+  }, [selectedMonth, selectedYear, loadMonthConfig, loadConfigById, fetchHistory]);
 
   const buildConfigData = useCallback((): GaraConfigData => ({
     pdvList,
@@ -1229,7 +1268,8 @@ export default function ConfigurazioneGara() {
       return;
     }
     const configData = buildConfigData();
-    const result = await saveConfig(selectedMonth, selectedYear, configData, garaConfigRecord.name || 'Configurazione', garaConfigRecord.id);
+    if (!initialLoaded || loading) return;
+    const result = await saveConfig(selectedMonth, selectedYear, configData, garaConfigRecord.name || 'Configurazione', garaConfigRecord.id, garaConfigRecord.updatedAt);
     if (result) {
       setIsDirty(false);
       fetchHistory();
@@ -1238,7 +1278,7 @@ export default function ConfigurazioneGara() {
     } else {
       toast({ title: 'Errore', description: 'Impossibile salvare la configurazione.', variant: 'destructive' });
     }
-  }, [garaConfigRecord, buildConfigData, saveConfig, selectedMonth, selectedYear, fetchHistory, fetchConfigList, toast]);
+  }, [garaConfigRecord, buildConfigData, saveConfig, selectedMonth, selectedYear, fetchHistory, fetchConfigList, toast, initialLoaded, loading]);
 
   const handleSaveClick = () => {
     if (garaConfigRecord?.id && !saveAsNew) {
@@ -1260,7 +1300,8 @@ export default function ConfigurazioneGara() {
     const nameToUse = configName.trim() || 'Configurazione';
     const configData = buildConfigData();
     const existingId = (!saveAsNew && garaConfigRecord?.id) ? garaConfigRecord.id : undefined;
-    const result = await saveConfig(selectedMonth, selectedYear, configData, nameToUse, existingId);
+    if (!initialLoaded || loading) return;
+    const result = await saveConfig(selectedMonth, selectedYear, configData, nameToUse, existingId, existingId ? garaConfigRecord?.updatedAt : undefined);
     if (result) {
       setIsDirty(false);
       setConfigName(nameToUse);
@@ -1724,6 +1765,7 @@ export default function ConfigurazioneGara() {
   };
 
   const handleMonthChange = (month: number, year: number) => {
+    pendingConfigSelectionRef.current = null;
     setSelectedMonth(month);
     setSelectedYear(year);
   };
@@ -1757,8 +1799,7 @@ export default function ConfigurazioneGara() {
       return;
     }
     // Carica la configurazione ripristinata nello stato corrente della pagina.
-    handleMonthChange(restored.month, restored.year);
-    await loadConfigById(restored.id, restored.month, restored.year);
+    selectConfigById(restored.id, restored.month, restored.year);
     setRevisionsFor(null);
     setRevisionsList(null);
     setHistoryDialogOpen(false);
@@ -1909,11 +1950,11 @@ export default function ConfigurazioneGara() {
               <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />PDV
             </Button>
             {garaConfigRecord?.id && (
-              <Button variant="outline" size="sm" className="h-8 text-xs sm:text-sm" onClick={handleSaveAsNewClick} disabled={saving} data-testid="button-save-as-new">
+              <Button variant="outline" size="sm" className="h-8 text-xs sm:text-sm" onClick={handleSaveAsNewClick} disabled={saving || loading || !initialLoaded} data-testid="button-save-as-new">
                 <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" /><span className="hidden sm:inline">Salva come nuova</span><span className="sm:hidden">Nuova</span>
               </Button>
             )}
-            <Button size="sm" className="h-8 text-xs sm:text-sm" onClick={handleSaveClick} disabled={saving} data-testid="button-save">
+            <Button size="sm" className="h-8 text-xs sm:text-sm" onClick={handleSaveClick} disabled={saving || loading || !initialLoaded} data-testid="button-save">
               {saving ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 animate-spin" /> : <Save className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />}
               {garaConfigRecord?.id ? 'Salva' : 'Salva nuova'}
             </Button>
@@ -3591,8 +3632,7 @@ export default function ConfigurazioneGara() {
                         onClick={() => {
                           // Ogni record salvato è distinguibile e recuperabile:
                           // seleziona mese E carica la configurazione specifica.
-                          handleMonthChange(h.month, h.year);
-                          loadConfigById(h.id, h.month, h.year);
+                          selectConfigById(h.id, h.month, h.year);
                           setHistoryDialogOpen(false);
                         }}
                         data-testid={`button-history-${h.id}`}
@@ -3780,7 +3820,7 @@ export default function ConfigurazioneGara() {
                     <Button
                       variant={garaConfigRecord?.id === c.id ? 'secondary' : 'ghost'}
                       className="flex-1 justify-between h-auto py-2"
-                      onClick={() => { loadConfigById(c.id, selectedMonth, selectedYear); setConfigListDialogOpen(false); }}
+                      onClick={() => { selectConfigById(c.id, selectedMonth, selectedYear); setConfigListDialogOpen(false); }}
                       data-testid={`button-config-${c.id}`}
                     >
                       <span className="font-medium">{c.name || 'Senza nome'}</span>

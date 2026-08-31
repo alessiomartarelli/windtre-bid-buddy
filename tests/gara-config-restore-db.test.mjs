@@ -55,7 +55,7 @@ test('gara config: ripristino revisione dalla cronologia', async (t) => {
 
   const updated = await jsonReq(`${BASE}/api/gara-config`, authed(session, {
     method: 'PUT',
-    body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Versione 2', id: configId, config: configV2 }),
+    body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Versione 2', id: configId, expectedUpdatedAt: created.body.updatedAt, config: configV2 }),
   }));
   assert.equal(updated.status, 200);
 

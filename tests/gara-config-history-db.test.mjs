@@ -74,7 +74,7 @@ test('gara config: storico, revisioni, propagazione e soglie Extra P.IVA', async
   // --- 1a. PUT identico (stesso contenuto) NON archivia revisioni ----------
   const noop = await jsonReq(`${BASE}/api/gara-config`, authed(session, {
     method: 'PUT',
-    body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Gara Originale', id: configId, config: reloaded.body.config }),
+    body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Gara Originale', id: configId, expectedUpdatedAt: reloaded.body.updatedAt, config: reloaded.body.config }),
   }));
   assert.equal(noop.status, 200);
   let revs = await pool.query('SELECT * FROM gara_config_history WHERE gara_config_id = $1', [configId]);
@@ -84,7 +84,7 @@ test('gara config: storico, revisioni, propagazione e soglie Extra P.IVA', async
   const configV2 = { ...configV1, venditeForecast: { target: 9999 } };
   const updated = await jsonReq(`${BASE}/api/gara-config`, authed(session, {
     method: 'PUT',
-    body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Gara Aggiornata', id: configId, config: configV2 }),
+    body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Gara Aggiornata', id: configId, expectedUpdatedAt: noop.body.updatedAt, config: configV2 }),
   }));
   assert.equal(updated.status, 200);
   revs = await pool.query('SELECT * FROM gara_config_history WHERE gara_config_id = $1', [configId]);
@@ -107,6 +107,26 @@ test('gara config: storico, revisioni, propagazione e soglie Extra P.IVA', async
     body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Gara Parallela', config: { pdvList: basePdvList } }),
   }));
   assert.equal(second.status, 200);
+
+  const missingVersion = await jsonReq(`${BASE}/api/gara-config`, authed(session, {
+    method: 'PUT',
+    body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Senza versione', id: second.body.id, config: { pdvList: basePdvList } }),
+  }));
+  assert.equal(missingVersion.status, 428, 'un update esistente deve dichiarare la versione caricata');
+
+  const [casA, casB] = await Promise.all([
+    jsonReq(`${BASE}/api/gara-config`, authed(session, {
+      method: 'PUT',
+      body: JSON.stringify({ month: MONTH, year: YEAR, name: 'CAS A', id: second.body.id, expectedUpdatedAt: second.body.updatedAt, config: { pdvList: basePdvList, venditeForecast: { target: 1 } } }),
+    })),
+    jsonReq(`${BASE}/api/gara-config`, authed(session, {
+      method: 'PUT',
+      body: JSON.stringify({ month: MONTH, year: YEAR, name: 'CAS B', id: second.body.id, expectedUpdatedAt: second.body.updatedAt, config: { pdvList: basePdvList, venditeForecast: { target: 2 } } }),
+    })),
+  ]);
+  assert.deepEqual([casA.status, casB.status].sort(), [200, 409], 'solo uno di due salvataggi concorrenti può vincere');
+  const casWinner = casA.status === 200 ? casA : casB;
+
   const history = await jsonReq(`${BASE}/api/gara-config/history`, authed(session));
   assert.equal(history.status, 200);
   const sameMonth = history.body.filter((h) => h.month === MONTH && h.year === YEAR);
@@ -116,14 +136,14 @@ test('gara config: storico, revisioni, propagazione e soglie Extra P.IVA', async
     assert.ok(h.name, 'ogni voce di storico deve avere un nome');
   }
   const names = sameMonth.map((h) => h.name).sort();
-  assert.deepEqual(names, ['Gara Aggiornata', 'Gara Parallela']);
+  assert.deepEqual(names, ['Gara Aggiornata', casWinner.body.name].sort());
 
   // --- 3. import/propagazione preserva le impostazioni non sostituite ------
   // La config più recente del mese è "Gara Parallela" (senza tabelle/soglie):
   // riallineala ai valori ricchi, così l'ultima config del mese li contiene.
   await jsonReq(`${BASE}/api/gara-config`, authed(session, {
     method: 'PUT',
-    body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Gara Parallela', id: second.body.id, config: configV2 }),
+    body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Gara Parallela', id: second.body.id, expectedUpdatedAt: casWinner.body.updatedAt, config: configV2 }),
   }));
 
   // Semina una organization_config con una pdvList DIVERSA da propagare.

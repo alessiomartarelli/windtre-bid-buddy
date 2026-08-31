@@ -88,7 +88,7 @@ test('restore revision from Cronologia updates the values shown on the page', as
 
     const updated = await jsonReq(`${BASE}/api/gara-config`, authed(session, {
       method: 'PUT',
-      body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Versione 2', id: configId, config: { telegramReportContent: contentV2 } }),
+      body: JSON.stringify({ month: MONTH, year: YEAR, name: 'Versione 2', id: configId, expectedUpdatedAt: created.body.updatedAt, config: { telegramReportContent: contentV2 } }),
     }));
     assert.equal(updated.status, 200, JSON.stringify(updated.body));
 

@@ -20,6 +20,7 @@ import {
   wouldChangeRagioniSociali,
   wouldMassBlankPuntiVendita,
 } from "@shared/strutturaGuard";
+import { broadGaraConfigResetBlocks } from "@shared/garaConfigSafety";
 import { registerCdgRoutes } from "./cdgRoutes";
 import { cdgStorage } from "./cdgStorage";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
@@ -1099,9 +1100,12 @@ export async function registerRoutes(
     try {
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
-      const { month, year, config, name, id } = req.body;
+      const { month, year, config, name, id, expectedUpdatedAt } = req.body;
       if (!month || !year || month < 1 || month > 12) {
         return res.status(400).json({ message: "Parametri month/year non validi" });
+      }
+      if (!config || typeof config !== "object" || Array.isArray(config)) {
+        return res.status(400).json({ message: "Configurazione non valida" });
       }
       const configName = name || 'Configurazione';
       let result;
@@ -1110,7 +1114,33 @@ export async function registerRoutes(
         if (!existing || existing.organizationId !== profile.organizationId) {
           return res.status(404).json({ message: "Configurazione non trovata" });
         }
-        result = await storage.updateGaraConfig(id, config, configName, profile.id ?? null);
+        if (typeof expectedUpdatedAt !== "string" || !Number.isFinite(Date.parse(expectedUpdatedAt))) {
+          return res.status(428).json({
+            code: "GARA_CONFIG_VERSION_REQUIRED",
+            message: "Ricarica la configurazione prima di salvarla.",
+          });
+        }
+        const resetBlocks = broadGaraConfigResetBlocks(existing.config, config);
+        if (resetBlocks.length >= 2) {
+          return res.status(409).json({
+            code: "GARA_CONFIG_MASS_RESET",
+            message: "Salvataggio bloccato: azzeramento anomalo di più sezioni della configurazione.",
+            blocks: resetBlocks,
+          });
+        }
+        result = await storage.updateGaraConfig(
+          id,
+          config,
+          configName,
+          profile.id ?? null,
+          new Date(expectedUpdatedAt),
+        );
+        if (!result) {
+          return res.status(409).json({
+            code: "GARA_CONFIG_STALE",
+            message: "La configurazione è stata modificata dopo il caricamento. Ricarica prima di salvare.",
+          });
+        }
       } else {
         result = await storage.createGaraConfig(profile.organizationId!, month, year, configName, config);
       }
@@ -1199,7 +1229,14 @@ export async function registerRoutes(
         rev.config as Record<string, unknown>,
         rev.name ?? existing.name ?? "Configurazione",
         profile.id ?? null,
+        new Date(existing.updatedAt ?? existing.createdAt ?? 0),
       );
+      if (!result) {
+        return res.status(409).json({
+          code: "GARA_CONFIG_STALE",
+          message: "La configurazione è cambiata durante il ripristino. Riprova dalla cronologia aggiornata.",
+        });
+      }
       res.json(result);
     } catch (error) {
       console.error("Error restoring gara config revision:", error);

@@ -908,7 +908,7 @@ test('restoring a revision containing removals keeps rimosso/livelliRimossi and 
     const updated = await jsonReq(`${BASE}/api/gara-config`, authed(session, {
       method: 'PUT',
       body: JSON.stringify({
-        month: MONTH, year: YEAR, name: 'V2 senza rimozioni', id: configId,
+        month: MONTH, year: YEAR, name: 'V2 senza rimozioni', id: configId, expectedUpdatedAt: created.body.updatedAt,
         config: {
           ...baseConfig,
           energiaRSConfig: { configPerRS: [{ ...ENERGIA_RS }] },
