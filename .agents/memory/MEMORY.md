@@ -61,3 +61,4 @@
 - [Phone&Phone PDV Telegram](phone-phone-pdv-report.md) — codice POS BiSuite vuoto: raggruppa per nome; escludi solo BANCHETTO, conserva Back Office e store.
 - [Provenienza punti per RS](dashboard-provenance-rs.md) — con “Tutti i PDV” aggrega per RS; totale e componenti mostrano entrambi pezzi+punti, senza elenco negozi.
 - [VF Upselling allowlist](vf-upselling-allowlist.md) — la pista cb VF si chiama Upselling e conta solo segnali commerciali ammessi, fail-closed e multi-volume; WindTre resta CB.
+- [Sicurezza salvataggi Gara](gara-config-save-safety.md) — config nominate sempre per ID; hydration versionata, CAS atomico e guard multi-sezione; restore soggetto allo stesso CAS.
