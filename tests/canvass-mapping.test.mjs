@@ -505,6 +505,29 @@ test('Upselling VF: i change order accettano solo le etichette esatte', () => {
   assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (MOBILE START TEST)')), 0);
 });
 
+test('Upselling VF: TNP IN CB e SOLO TNP IN CB sono sempre esclusi', () => {
+  const positiveAnswers = {
+    domandeRisposte: [
+      { domanda: 'RETE SICURA 2.0', risposta: 'SI' },
+      { domanda: 'KASKO SMARTPHONE FACILE CB', risposta: 'SI' },
+    ],
+  };
+  assert.equal(countVfUpsellingVolumes(
+    { categoria: { nome: 'SOLO TNP / IOT / SMART DEVICE IN CB' }, dettaglio: positiveAnswers },
+  ), 0);
+  assert.equal(countVfUpsellingVolumes(
+    { tipologia: { nome: 'SOLO TNP IN CB' }, dettaglio: positiveAnswers },
+  ), 0);
+  assert.equal(countVfUpsellingVolumes(
+    { dettaglio: positiveAnswers },
+    { pista: 'PISTA CB', categoria: 'CANVASS', tipologia: 'TNP IN CB', nomeEtichetta: 'SOLO TNP IN CB' },
+  ), 0);
+  assert.equal(countVfUpsellingVolumes(
+    { dettaglio: positiveAnswers },
+    { pista: 'PISTA CB', categoria: 'CANVASS', tipologia: 'TNP', nomeEtichetta: 'OFFERTA SEMPRE CONNESSI VIK TNP IN CB' },
+  ), 0);
+});
+
 // === Regole KPI configurabili (canvassKpiRules) ===
 
 const {
@@ -770,4 +793,18 @@ test('aggregateMappedSales: segnali Upselling su prodotti e regola escludi resta
     canvassKpiRules: [{ id: 'exclude', target: 'escludi', conditions: { categoria: 'ACCESSORI' }, enabled: true }],
   });
   assert.deepEqual(excluded.totaliPistaCanvass, {});
+});
+
+test('aggregateMappedSales: TNP in CB non entra nei totali Upselling dashboard', () => {
+  const tnp = {
+    codice: 'TNP1',
+    categoria: { nome: 'SOLO TNP / IOT / SMART DEVICE IN CB' },
+    tipologia: { nome: 'SOLO TNP IN CB' },
+    descrizione: 'SOLO TNP IN CB',
+    dettaglio: {
+      domandeRisposte: [{ domanda: 'RETE SICURA 2.0', risposta: 'SI' }],
+    },
+  };
+  const agg = aggregateMappedSales([saleWith([tnp])], [], { canvassIndex: vfIndex });
+  assert.deepEqual(agg.totaliPistaCanvass, {});
 });

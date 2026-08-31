@@ -339,6 +339,26 @@ function isAffirmativeVfUpsellingAnswer(value: unknown): boolean {
   return normalized === 'SI' || normalized === 'YES' || normalized === 'TRUE' || normalized === '1';
 }
 
+function isVfTnpInCbArticle(
+  article: ClassifiableArticle,
+  match?: CanvassMatchLike | null,
+): boolean {
+  const identityFields = [
+    match?.nomeEtichetta,
+    match?.categoria,
+    match?.tipologia,
+    article.categoria?.nome,
+    article.tipologia?.nome,
+  ];
+  return identityFields.some((value) => {
+    const normalized = normalizeVfUpsellingText(value);
+    return normalized === 'TNP IN CB'
+      || normalized.startsWith('SOLO TNP IN CB')
+      || (normalized.startsWith('SOLO TNP ') && normalized.endsWith(' IN CB'))
+      || normalized.endsWith(' TNP IN CB');
+  });
+}
+
 /**
  * Volumi Upselling Vodafone/Fastweb: esclusivamente le voci del prospetto
  * commerciale. Ogni risposta affermativa ammessa vale un volume; la stessa
@@ -348,6 +368,10 @@ export function countVfUpsellingVolumes(
   article: ClassifiableArticle,
   match?: CanvassMatchLike | null,
 ): number {
+  // I TNP venduti in CB sono prodotti, non Upselling. L'esclusione vale per
+  // l'intero articolo, anche se contiene risposte normalmente ammesse.
+  if (isVfTnpInCbArticle(article, match)) return 0;
+
   const signals = new Set<string>();
   const offerKey = vfUpsellingOfferKey(match?.nomeEtichetta ?? '');
   if (offerKey) signals.add(offerKey);
