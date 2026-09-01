@@ -3659,6 +3659,255 @@ export async function registerRoutes(
     }
   });
 
+  // ── Plafond ricariche per Ragione Sociale (Task #537) ─────────────
+  // Il saldo NON è un contatore: è sempre DERIVATO da (operazioni append-only
+  // aggiungi/imposta) + (consumo = articoli RICARICHE su vendite non annullate,
+  // canonicalizzati per RS). L'ultima 'imposta' fissa il saldo assoluto a un
+  // cutoff wall-time italiano: il consumo riparte da lì; le 'aggiungi'
+  // successive si sommano. Sync ripetute/riallineamenti non possono produrre
+  // doppie sottrazioni perché il consumo è ricalcolato dai dati, mai scalato.
+  const resolveBisuiteOrg = async (req: any): Promise<{ profile: any; orgId: string } | null> => {
+    const profile = await storage.getProfile(req.session.userId);
+    if (!profile?.organizationId) return null;
+    const orgId = (req.query.organization_id as string) || profile.organizationId;
+    if (profile.role !== "super_admin" && orgId !== profile.organizationId) return null;
+    return { profile, orgId };
+  };
+
+  type PlafondSaldo = {
+    ragioneSocialeId: string;
+    ragioneSociale: string;
+    saldo: number | null;          // null = plafond mai configurato per la RS
+    consumoTotale: number;         // consumo ricariche complessivo (info)
+    consumoDaCutoff: number;       // consumo conteggiato nel saldo corrente
+    lastOpAt: string | null;
+  };
+
+  const computePlafondSaldi = async (orgId: string): Promise<PlafondSaldo[]> => {
+    const [ops, registry, resolveRs, consumoRaw] = await Promise.all([
+      storage.listPlafondRicaricheOps(orgId),
+      cdgStorage.listRagioniSociali(orgId, { includeAuto: true }),
+      cdgStorage.getRsResolver(orgId),
+      storage.getRicaricheConsumoByRawRs(orgId),
+    ]);
+    const nameById = new Map(registry.map((r) => [r.id, r.nome]));
+    // Consumo totale per RS canonica (somma delle varianti di nome grezze).
+    const consumoTotByCanon = new Map<string, number>();
+    for (const row of consumoRaw) {
+      const canon = resolveRs(row.rs) || "N/D";
+      consumoTotByCanon.set(canon, (consumoTotByCanon.get(canon) ?? 0) + row.consumo);
+    }
+    // Raggruppa le operazioni per RS (già ordinate per createdAt asc).
+    const opsByRs = new Map<string, typeof ops>();
+    for (const op of ops) {
+      if (!opsByRs.has(op.ragioneSocialeId)) opsByRs.set(op.ragioneSocialeId, []);
+      opsByRs.get(op.ragioneSocialeId)!.push(op);
+    }
+    const out: PlafondSaldo[] = [];
+    const seenCanon = new Set<string>();
+    for (const [rsId, rsOps] of opsByRs) {
+      const nome = nameById.get(rsId) ?? "N/D";
+      const canon = resolveRs(nome) || nome;
+      seenCanon.add(canon);
+      // Base = ultima 'imposta' (saldo assoluto + cutoff); poi somma le
+      // 'aggiungi' successive e sottrae il consumo dopo il cutoff.
+      let base = 0;
+      let cutoff: Date | null = null;
+      let baseIdx = -1;
+      for (let i = rsOps.length - 1; i >= 0; i--) {
+        if (rsOps[i].tipo === "imposta") {
+          base = Number(rsOps[i].saldoDopo);
+          cutoff = rsOps[i].consumoCutoff ? new Date(rsOps[i].consumoCutoff as any) : null;
+          baseIdx = i;
+          break;
+        }
+      }
+      let aggiunte = 0;
+      for (let i = baseIdx + 1; i < rsOps.length; i++) {
+        if (rsOps[i].tipo === "aggiungi") aggiunte += Number(rsOps[i].importo);
+      }
+      const consumoTotale = consumoTotByCanon.get(canon) ?? 0;
+      let consumoDaCutoff = consumoTotale;
+      if (cutoff) {
+        const after = await storage.getRicaricheConsumoByRawRs(orgId, cutoff);
+        consumoDaCutoff = after
+          .filter((r) => (resolveRs(r.rs) || "N/D") === canon)
+          .reduce((s, r) => s + r.consumo, 0);
+      }
+      const saldo = Math.round((base + aggiunte - consumoDaCutoff) * 100) / 100;
+      out.push({
+        ragioneSocialeId: rsId,
+        ragioneSociale: canon,
+        saldo,
+        consumoTotale: Math.round(consumoTotale * 100) / 100,
+        consumoDaCutoff: Math.round(consumoDaCutoff * 100) / 100,
+        lastOpAt: rsOps[rsOps.length - 1].createdAt?.toISOString?.() ?? null,
+      });
+    }
+    // RS con consumo ricariche ma senza plafond configurato: visibili con
+    // saldo null, così la pagina può mostrare "plafond non configurato".
+    for (const [canon, consumo] of consumoTotByCanon) {
+      if (seenCanon.has(canon) || consumo <= 0) continue;
+      seenCanon.add(canon);
+      out.push({
+        ragioneSocialeId: "",
+        ragioneSociale: canon,
+        saldo: null,
+        consumoTotale: Math.round(consumo * 100) / 100,
+        consumoDaCutoff: Math.round(consumo * 100) / 100,
+        lastOpAt: null,
+      });
+    }
+    // Ogni RS del registro compare comunque (anche senza vendite RICARICHE e
+    // senza operazioni): consente all'admin di impostare il plafond in via
+    // preventiva su una RS appena creata, prima che venda la prima ricarica.
+    for (const r of registry) {
+      const canon = resolveRs(r.nome) || r.nome;
+      if (seenCanon.has(canon)) continue;
+      seenCanon.add(canon);
+      out.push({
+        ragioneSocialeId: r.id,
+        ragioneSociale: canon,
+        saldo: null,
+        consumoTotale: 0,
+        consumoDaCutoff: 0,
+        lastOpAt: null,
+      });
+    }
+    return out.sort((a, b) => a.ragioneSociale.localeCompare(b.ragioneSociale, "it"));
+  };
+
+  // Saldi plafond per RS + timestamp dell'ultima sincronizzazione BiSuite.
+  // Lettura consentita a chiunque acceda alla pagina Vendite BiSuite.
+  // Scoping per-operatore (coerente con /api/bisuite-sales, Task #158): un
+  // operatore vede solo le RS su cui i suoi nominativi addetti hanno vendite;
+  // senza addetti associati non vede alcun saldo/storico. Admin e super_admin
+  // (ritorno null) vedono tutto. Le RS sono confrontate in forma canonica.
+  const operatorAllowedRs = async (profile: any, orgId: string): Promise<Set<string> | null> => {
+    if (profile.role !== "operatore") return null;
+    const addetti = (profile.bisuiteAddetti ?? []).map((a: string) => a.toLowerCase().trim()).filter(Boolean);
+    if (addetti.length === 0) return new Set();
+    const [rawRs, resolveRs] = await Promise.all([
+      storage.getRsForAddetti(orgId, addetti),
+      cdgStorage.getRsResolver(orgId),
+    ]);
+    return new Set(rawRs.map((rs) => resolveRs(rs) || rs));
+  };
+
+  app.get("/api/ricariche-plafond", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+    try {
+      const ctx = await resolveBisuiteOrg(req);
+      if (!ctx) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const [saldi, lastSync, allowedRs] = await Promise.all([
+        computePlafondSaldi(ctx.orgId),
+        storage.getLastBisuiteSync(ctx.orgId),
+        operatorAllowedRs(ctx.profile, ctx.orgId),
+      ]);
+      const visible = allowedRs ? saldi.filter((s) => allowedRs.has(s.ragioneSociale)) : saldi;
+      res.json({ saldi: visible, lastSync: lastSync ? lastSync.toISOString() : null });
+    } catch (error: unknown) {
+      console.error("Plafond ricariche read error:", error);
+      res.status(500).json({ error: "Errore nel recupero del plafond ricariche" });
+    }
+  });
+
+  // Storico append-only delle operazioni amministrative (consultabile da
+  // tutti gli utenti autorizzati alla pagina; nessuna modifica/cancellazione).
+  app.get("/api/ricariche-plafond/storico", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+    try {
+      const ctx = await resolveBisuiteOrg(req);
+      if (!ctx) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const [ops, registry, allowedRs] = await Promise.all([
+        storage.listPlafondRicaricheOps(ctx.orgId),
+        cdgStorage.listRagioniSociali(ctx.orgId, { includeAuto: true }),
+        operatorAllowedRs(ctx.profile, ctx.orgId),
+      ]);
+      const nameById = new Map(registry.map((r) => [r.id, r.nome]));
+      // Gli operatori vedono solo le operazioni delle RS di loro pertinenza.
+      const visibleOps = allowedRs
+        ? ops.filter((op) => allowedRs.has(nameById.get(op.ragioneSocialeId) ?? ""))
+        : ops;
+      res.json({
+        storico: visibleOps
+          .slice()
+          .reverse()
+          .map((op) => ({
+            id: op.id,
+            ragioneSocialeId: op.ragioneSocialeId,
+            ragioneSociale: nameById.get(op.ragioneSocialeId) ?? "N/D",
+            tipo: op.tipo,
+            importo: Number(op.importo),
+            saldoPrima: Number(op.saldoPrima),
+            saldoDopo: Number(op.saldoDopo),
+            utente: op.createdByName || op.createdBy || "N/D",
+            createdAt: op.createdAt?.toISOString?.() ?? null,
+          })),
+      });
+    } catch (error: unknown) {
+      console.error("Plafond ricariche storico error:", error);
+      res.status(500).json({ error: "Errore nel recupero dello storico plafond" });
+    }
+  });
+
+  // Operazione amministrativa sul plafond: SOLO admin e super_admin.
+  // body: { ragioneSociale: string, tipo: 'aggiungi'|'imposta', importo: number }
+  app.post("/api/ricariche-plafond", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+    try {
+      const ctx = await resolveBisuiteOrg(req);
+      if (!ctx) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const { profile, orgId } = ctx;
+      if (profile.role !== "admin" && profile.role !== "super_admin") {
+        return res.status(403).json({ error: "Solo gli amministratori possono modificare il plafond" });
+      }
+      const rawNome = typeof req.body?.ragioneSociale === "string" ? req.body.ragioneSociale.trim() : "";
+      const tipo = req.body?.tipo;
+      const importo = Number(req.body?.importo);
+      if (!rawNome) return res.status(400).json({ error: "ragioneSociale obbligatoria" });
+      if (tipo !== "aggiungi" && tipo !== "imposta") {
+        return res.status(400).json({ error: "tipo non valido (atteso 'aggiungi' o 'imposta')" });
+      }
+      if (!Number.isFinite(importo) || (tipo === "aggiungi" ? importo <= 0 : importo < 0)) {
+        return res.status(400).json({ error: tipo === "aggiungi" ? "importo deve essere positivo" : "importo non valido" });
+      }
+
+      // Canonicalizza la RS e assicura l'anchor con id stabile nel registro.
+      const resolveRs = await cdgStorage.getRsResolver(orgId);
+      const canon = resolveRs(rawNome) || rawNome;
+      const rsId = await cdgStorage.ensureRsId(orgId, canon, "auto");
+
+      const saldi = await computePlafondSaldi(orgId);
+      const current = saldi.find((s) => s.ragioneSocialeId === rsId || s.ragioneSociale === canon);
+      const saldoPrima = current?.saldo ?? (current ? -current.consumoDaCutoff : 0);
+      const saldoDopo = tipo === "imposta"
+        ? Math.round(importo * 100) / 100
+        : Math.round((saldoPrima + importo) * 100) / 100;
+
+      const op = await storage.insertPlafondRicaricheOp({
+        organizationId: orgId,
+        ragioneSocialeId: rsId,
+        tipo,
+        importo: importo.toFixed(2),
+        saldoPrima: (Math.round(saldoPrima * 100) / 100).toFixed(2),
+        saldoDopo: saldoDopo.toFixed(2),
+        // Cutoff wall-time italiano (stessa convenzione di data_vendita):
+        // per 'imposta' il consumo precedente è assorbito nel nuovo saldo.
+        consumoCutoff: tipo === "imposta" ? toItalianWallTime(new Date()) : null,
+        createdBy: profile.id,
+        createdByName: profile.fullName || profile.email || null,
+      });
+
+      res.status(201).json({
+        success: true,
+        op: { id: op.id, tipo: op.tipo, importo: Number(op.importo), saldoPrima: Number(op.saldoPrima), saldoDopo: Number(op.saldoDopo) },
+        ragioneSociale: canon,
+        saldo: saldoDopo,
+      });
+    } catch (error: unknown) {
+      console.error("Plafond ricariche op error:", error);
+      res.status(500).json({ error: "Errore nel salvataggio dell'operazione plafond" });
+    }
+  });
+
   app.get("/api/admin/bisuite-mapping", isAuthenticated, requireModule("mappatura_bisuite"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);

@@ -110,6 +110,7 @@ import {
   TYPE_COLORS,
 } from "@/lib/bisuiteClassification";
 import { TabellaPdvPistaPezzi } from "@/components/TabellaPdvPistaPezzi";
+import PlafondRicariche, { usePlafondRicariche, formatLastSync } from "@/components/PlafondRicariche";
 import { GraficoAndamentoPezzi, type PezziTrendPoint } from "@/components/GraficoAndamentoPezzi";
 import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
 import { accumulaPezziExtra, emptyPezziExtra, type PezziExtraCounters } from "@shared/pdvPezziExtra";
@@ -398,6 +399,11 @@ export default function VenditeBiSuite() {
   const [reconcileFrom, setReconcileFrom] = useState(defaults.from);
   const [reconcileTo, setReconcileTo] = useState(defaults.to);
 
+  // Task #537 — saldi plafond ricariche + timestamp dell'ultima sync BiSuite
+  // riuscita (mostrato vicino ai comandi di sincronizzazione, ora italiana).
+  const { data: plafondData } = usePlafondRicariche(orgId);
+  const lastSyncLabel = formatLastSync(plafondData?.lastSync);
+
   const { data: credStatus } = useQuery<{ configured: boolean }>({
     queryKey: ["/api/bisuite-credentials-status"],
     queryFn: async () => {
@@ -430,6 +436,7 @@ export default function VenditeBiSuite() {
         failedMonths: Array.isArray(data.failedMonths) ? data.failedMonths : [],
       });
       queryClient.invalidateQueries({ queryKey: ["/api/bisuite-sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ricariche-plafond"] });
       setTimeout(() => setFetchResult(null), partial ? 12000 : 5000);
     },
     onError: (error: Error) => {
@@ -464,6 +471,7 @@ export default function VenditeBiSuite() {
             : `Allineamento BiSuite parziale: ${data.totalFromApi} vendite scaricate ma reconcile saltato per chunk falliti`),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/bisuite-sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ricariche-plafond"] });
       setTimeout(() => setFetchResult(null), partial ? 12000 : 6000);
     },
     onError: (error: Error) => {
@@ -1326,6 +1334,14 @@ export default function VenditeBiSuite() {
           actions={
             credStatus?.configured ? (
               <div className="flex items-center gap-2 flex-wrap">
+                {lastSyncLabel && (
+                  <span
+                    className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap"
+                    data-testid="text-last-bisuite-sync"
+                  >
+                    Ultimo aggiornamento: {lastSyncLabel}
+                  </span>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -1364,7 +1380,22 @@ export default function VenditeBiSuite() {
               <div className="flex items-center gap-1.5 text-xs text-amber-600">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 <span>Credenziali BiSuite non configurate</span>
+                {lastSyncLabel && (
+                  <span
+                    className="hidden sm:inline text-muted-foreground whitespace-nowrap"
+                    data-testid="text-last-bisuite-sync"
+                  >
+                    · Ultimo aggiornamento: {lastSyncLabel}
+                  </span>
+                )}
               </div>
+            ) : lastSyncLabel ? (
+              <span
+                className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap"
+                data-testid="text-last-bisuite-sync"
+              >
+                Ultimo aggiornamento: {lastSyncLabel}
+              </span>
             ) : null
           }
         >
@@ -1911,6 +1942,9 @@ export default function VenditeBiSuite() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Task #537 — Plafond ricariche per RS (saldi, comandi admin, storico) */}
+            <PlafondRicariche orgId={orgId} isAdmin={isAdmin} />
 
             <div className="flex items-center gap-2">
                 <Button

@@ -1,0 +1,298 @@
+// Task #537 — Plafond ricariche per Ragione Sociale.
+//
+// Mostra il saldo ricariche corrente per ogni RS (derivato server-side dalle
+// operazioni amministrative append-only + il consumo degli articoli RICARICHE
+// non annullati). Gli admin possono "Aggiungi" (somma un importo) o "Imposta
+// saldo" (fissa un nuovo saldo assoluto); tutti gli utenti autorizzati alla
+// pagina consultano saldi e storico, senza controlli di modifica.
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiUrl } from "@/lib/basePath";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Loader2, Wallet, Plus, Equal, History } from "lucide-react";
+
+export type PlafondSaldo = {
+  ragioneSocialeId: string;
+  ragioneSociale: string;
+  saldo: number | null;
+  consumoTotale: number;
+  consumoDaCutoff: number;
+  lastOpAt: string | null;
+};
+
+type StoricoRow = {
+  id: string;
+  ragioneSociale: string;
+  tipo: "aggiungi" | "imposta";
+  importo: number;
+  saldoPrima: number;
+  saldoDopo: number;
+  utente: string;
+  createdAt: string | null;
+};
+
+const fmtEur = (n: number) =>
+  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n);
+
+const fmtDateTime = (iso: string | null) =>
+  iso
+    ? new Intl.DateTimeFormat("it-IT", {
+        timeZone: "Europe/Rome",
+        day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      }).format(new Date(iso))
+    : "—";
+
+// Slug stabile per i data-testid (RS con spazi/punteggiatura).
+const slug = (s: string) => s.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
+
+export function usePlafondRicariche(orgId: string) {
+  return useQuery<{ saldi: PlafondSaldo[]; lastSync: string | null }>({
+    queryKey: ["/api/ricariche-plafond", orgId],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/ricariche-plafond"), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore nel caricamento del plafond ricariche");
+      return res.json();
+    },
+    enabled: !!orgId,
+  });
+}
+
+export function formatLastSync(iso: string | null | undefined): string | null {
+  return iso ? fmtDateTime(iso) : null;
+}
+
+export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; isAdmin: boolean }) {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = usePlafondRicariche(orgId);
+  const [opDialog, setOpDialog] = useState<{ rs: string; tipo: "aggiungi" | "imposta" } | null>(null);
+  const [importo, setImporto] = useState("");
+  const [opError, setOpError] = useState<string | null>(null);
+  const [storicoOpen, setStoricoOpen] = useState(false);
+
+  const { data: storicoData, isLoading: storicoLoading } = useQuery<{ storico: StoricoRow[] }>({
+    queryKey: ["/api/ricariche-plafond/storico", orgId],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/ricariche-plafond/storico"), { credentials: "include" });
+      if (!res.ok) throw new Error("Errore nel caricamento dello storico");
+      return res.json();
+    },
+    enabled: !!orgId && storicoOpen,
+  });
+
+  const opMutation = useMutation({
+    mutationFn: async ({ rs, tipo, value }: { rs: string; tipo: "aggiungi" | "imposta"; value: number }) => {
+      const res = await fetch(apiUrl("/api/ricariche-plafond"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ragioneSociale: rs, tipo, importo: value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Errore nel salvataggio");
+      return data;
+    },
+    onSuccess: () => {
+      setOpDialog(null);
+      setImporto("");
+      setOpError(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/ricariche-plafond", orgId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ricariche-plafond/storico", orgId] });
+    },
+    onError: (e: Error) => setOpError(e.message),
+  });
+
+  const saldi = data?.saldi ?? [];
+  if (!isLoading && saldi.length === 0) return null;
+
+  const confirmDisabled =
+    opMutation.isPending ||
+    !importo.trim() ||
+    !Number.isFinite(Number(importo.replace(",", "."))) ||
+    (opDialog?.tipo === "aggiungi"
+      ? Number(importo.replace(",", ".")) <= 0
+      : Number(importo.replace(",", ".")) < 0);
+
+  return (
+    <Card data-testid="card-plafond-ricariche">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Wallet className="h-5 w-5 text-primary" />
+            Plafond Ricariche per Ragione Sociale
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setStoricoOpen(true)}
+            data-testid="button-plafond-storico"
+          >
+            <History className="h-3.5 w-3.5 mr-1" /> Storico
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Saldo già decurtato delle ricariche vendute (escluse le annullate).
+        </p>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Caricamento plafond...
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {saldi.map((s) => {
+              const id = slug(s.ragioneSociale);
+              return (
+                <div
+                  key={s.ragioneSociale}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border rounded-lg px-3 py-2"
+                  data-testid={`row-plafond-${id}`}
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm truncate">{s.ragioneSociale}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Ricariche vendute: {fmtEur(s.consumoTotale)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {s.saldo === null ? (
+                      <Badge variant="outline" className="text-xs" data-testid={`text-plafond-saldo-${id}`}>
+                        Plafond non configurato
+                      </Badge>
+                    ) : (
+                      <Badge
+                        className={`text-sm font-bold tabular-nums py-1 ${
+                          s.saldo < 0
+                            ? "bg-red-500/10 text-red-600 border-red-500/20"
+                            : "bg-green-500/10 text-green-600 border-green-500/20"
+                        }`}
+                        data-testid={`text-plafond-saldo-${id}`}
+                      >
+                        {fmtEur(s.saldo)}
+                      </Badge>
+                    )}
+                    {isAdmin && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => { setOpDialog({ rs: s.ragioneSociale, tipo: "aggiungi" }); setImporto(""); setOpError(null); }}
+                          data-testid={`button-plafond-aggiungi-${id}`}
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" /> Aggiungi
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => { setOpDialog({ rs: s.ragioneSociale, tipo: "imposta" }); setImporto(""); setOpError(null); }}
+                          data-testid={`button-plafond-imposta-${id}`}
+                        >
+                          <Equal className="h-3.5 w-3.5 mr-1" /> Imposta saldo
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+
+      {/* Dialog operazione admin (aggiungi/imposta) con conferma esplicita */}
+      <Dialog open={!!opDialog} onOpenChange={(o) => { if (!o) setOpDialog(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {opDialog?.tipo === "aggiungi" ? "Aggiungi credito al plafond" : "Imposta nuovo saldo"}
+            </DialogTitle>
+            <DialogDescription>
+              {opDialog?.tipo === "aggiungi"
+                ? `L'importo verrà sommato al saldo corrente di ${opDialog?.rs}.`
+                : `Il saldo di ${opDialog?.rs} verrà impostato a questo valore; il consumo riparte da ora.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              placeholder="Importo in €"
+              value={importo}
+              onChange={(e) => setImporto(e.target.value)}
+              data-testid="input-plafond-importo"
+            />
+            {opError && <p className="text-xs text-red-600" data-testid="text-plafond-error">{opError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpDialog(null)} data-testid="button-plafond-cancel">
+              Annulla
+            </Button>
+            <Button
+              disabled={confirmDisabled}
+              onClick={() => {
+                if (!opDialog) return;
+                opMutation.mutate({ rs: opDialog.rs, tipo: opDialog.tipo, value: Number(importo.replace(",", ".")) });
+              }}
+              data-testid="button-plafond-confirm"
+            >
+              {opMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Conferma
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Storico consultabile (append-only, nessuna modifica) */}
+      <Dialog open={storicoOpen} onOpenChange={setStoricoOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Storico operazioni plafond</DialogTitle>
+            <DialogDescription>
+              Registro non modificabile delle aggiunte e impostazioni di saldo.
+            </DialogDescription>
+          </DialogHeader>
+          {storicoLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Caricamento...
+            </div>
+          ) : (storicoData?.storico?.length ?? 0) === 0 ? (
+            <p className="text-sm text-muted-foreground py-2" data-testid="text-plafond-storico-empty">
+              Nessuna operazione registrata.
+            </p>
+          ) : (
+            <div className="space-y-2" data-testid="list-plafond-storico">
+              {storicoData!.storico.map((op) => (
+                <div key={op.id} className="border rounded-lg px-3 py-2 text-sm" data-testid={`row-storico-${op.id}`}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="font-semibold truncate">{op.ragioneSociale}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {op.tipo === "aggiungi" ? "Aggiunta" : "Imposta saldo"}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {op.tipo === "aggiungi" ? "+" : "="} {fmtEur(op.importo)} · saldo {fmtEur(op.saldoPrima)} → {fmtEur(op.saldoDopo)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {op.utente} · {fmtDateTime(op.createdAt)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}

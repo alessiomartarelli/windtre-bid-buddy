@@ -192,6 +192,13 @@ export const cdgStorage = {
       `);
       const dup = rowsOf<{ id: string }>(dupRes)[0];
       if (dup) {
+        // Task #537: le operazioni plafond ricariche puntano alla RS per id
+        // (storico append-only): nel merge vanno ripuntate sull'anchor
+        // superstite prima di eliminare quello sorgente (FK).
+        await tx.execute(sql`
+          UPDATE plafond_ricariche_ops SET ragione_sociale_id = ${dup.id}
+           WHERE organization_id = ${orgId} AND ragione_sociale_id = ${rsId}
+        `);
         await tx.execute(sql`
           UPDATE cdg_spese SET ragione_sociale_id = ${dup.id}
            WHERE organization_id = ${orgId} AND ragione_sociale_id = ${rsId}
@@ -210,12 +217,30 @@ export const cdgStorage = {
         await tx.execute(sql`
           DELETE FROM cdg_ragioni_sociali WHERE id = ${rsId} AND organization_id = ${orgId}
         `);
+        // Conserva il vecchio nome come alias del superstite: le vendite
+        // BiSuite storiche (nome grezzo) devono continuare a risolvere sulla
+        // RS canonica (consumo plafond incluso).
+        await tx.execute(sql`
+          UPDATE cdg_ragioni_sociali
+             SET alias = array_append(coalesce(alias, ARRAY[]::text[]), ${oldName})
+           WHERE id = ${dup.id} AND organization_id = ${orgId}
+             AND nome <> ${oldName}
+             AND NOT (${oldName} = ANY(coalesce(alias, ARRAY[]::text[])))
+        `);
         await syncRsDenorm(tx, orgId, dup.id, oldName, newName);
         return dup.id;
       }
       await tx.execute(sql`
         UPDATE cdg_ragioni_sociali SET nome = ${newName}
          WHERE id = ${rsId} AND organization_id = ${orgId}
+      `);
+      // Come sopra: il vecchio nome resta risolvibile come alias.
+      await tx.execute(sql`
+        UPDATE cdg_ragioni_sociali
+           SET alias = array_append(coalesce(alias, ARRAY[]::text[]), ${oldName})
+         WHERE id = ${rsId} AND organization_id = ${orgId}
+           AND nome <> ${oldName}
+           AND NOT (${oldName} = ANY(coalesce(alias, ARRAY[]::text[])))
       `);
       await syncRsDenorm(tx, orgId, rsId, oldName, newName);
       return rsId;
@@ -270,6 +295,15 @@ export const cdgStorage = {
         .where(and(eq(cdgRagioniSociali.id, id), eq(cdgRagioniSociali.organizationId, orgId)))
         .returning();
       if (r && updates.nome && updates.nome !== existing.nome) {
+        // Task #537: mantieni il vecchio nome come alias, così le vendite
+        // BiSuite storiche restano associate alla RS rinominata (consumo
+        // plafond incluso) senza interventi manuali.
+        await tx.execute(sql`
+          UPDATE cdg_ragioni_sociali
+             SET alias = array_append(coalesce(alias, ARRAY[]::text[]), ${existing.nome})
+           WHERE id = ${id} AND organization_id = ${orgId}
+             AND NOT (${existing.nome} = ANY(coalesce(alias, ARRAY[]::text[])))
+        `);
         await syncRsDenorm(tx, orgId, id, existing.nome, updates.nome);
       }
       return r || null;
@@ -287,6 +321,13 @@ export const cdgStorage = {
     const [rs] = await db.select().from(cdgRagioniSociali)
       .where(and(eq(cdgRagioniSociali.id, id), eq(cdgRagioniSociali.organizationId, orgId)));
     if (!rs) return;
+    // Task #537: la RS eliminata porta con sé il proprio storico plafond
+    // (le operazioni sono append-only finché la RS esiste; senza questa
+    // pulizia la FK bloccherebbe la cancellazione).
+    await db.execute(sql`
+      DELETE FROM plafond_ricariche_ops
+       WHERE organization_id = ${orgId} AND ragione_sociale_id = ${id}
+    `);
     await db.execute(sql`
       DELETE FROM cdg_spese
        WHERE organization_id = ${orgId}

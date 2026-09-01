@@ -322,6 +322,7 @@ export async function cleanupOrg(pool, session) {
     'cdg_pdv_manuali',
     'cdg_categorie',
     'cdg_fornitori',
+    'plafond_ricariche_ops',
     'cdg_ragioni_sociali',
     'bisuite_sales',
     'dts_leads',

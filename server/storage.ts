@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
+import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets } from "@shared/customerJourney";
 
@@ -142,6 +142,12 @@ export interface IStorage {
   deleteIncentivazioneValenze(orgId: string, month: number, year: number, sectionId: string): Promise<void>;
   aggregateAccessoriServizi(orgId: string, fromYMD: string, toYMD: string, accCats: number[], servCats: number[]): Promise<Array<{ name: string; acc: number; serv: number }>>;
   getLastBisuiteSync(orgId: string): Promise<Date | null>;
+
+  // Plafond ricariche per RS (Task #537)
+  getRicaricheConsumoByRawRs(orgId: string, afterWallTime?: Date | null): Promise<Array<{ rs: string; consumo: number }>>;
+  getRsForAddetti(orgId: string, addetti: string[]): Promise<string[]>;
+  listPlafondRicaricheOps(orgId: string): Promise<PlafondRicaricheOp[]>;
+  insertPlafondRicaricheOp(op: InsertPlafondRicaricheOp): Promise<PlafondRicaricheOp>;
 
   // Password Reset Tokens
   createPasswordResetToken(email: string, token: string, expiresAt: Date): Promise<PasswordResetToken>;
@@ -1110,6 +1116,61 @@ export class DatabaseStorage implements IStorage {
       .from(bisuiteSales)
       .where(eq(bisuiteSales.organizationId, orgId));
     return row?.last ? new Date(row.last) : null;
+  }
+
+  // === Plafond ricariche per RS (Task #537) ===
+  // Consumo ricariche per ragione sociale GREZZA (non canonicalizzata):
+  // somma dei prezzi degli articoli di categoria RICARICHE sulle vendite
+  // non annullate. La canonicalizzazione raw→canonica avviene nel chiamante
+  // (via cdgStorage.getRsResolver) per sommare le varianti di nome.
+  // `afterWallTime` (wall-time italiano, come data_vendita) limita il consumo
+  // alle vendite con data_vendita successiva: usato per ripartire dal cutoff
+  // dell'ultima operazione 'imposta'. Il calcolo è derivato (mai un contatore
+  // decrementato), quindi sync ripetute non producono doppie sottrazioni.
+  async getRicaricheConsumoByRawRs(orgId: string, afterWallTime?: Date | null): Promise<Array<{ rs: string; consumo: number }>> {
+    const cutoffClause = afterWallTime
+      ? sql` AND s.data_vendita > ${afterWallTime}`
+      : sql``;
+    const rows = await db.execute(sql`
+      SELECT coalesce(s.ragione_sociale, '') AS rs,
+             coalesce(sum((a->'dettaglio'->>'prezzo')::numeric), 0) AS consumo
+        FROM ${bisuiteSales} s,
+             jsonb_array_elements(s.raw_data->'articoli') a
+       WHERE s.organization_id = ${orgId}
+         AND upper(coalesce(trim(s.stato), '')) <> 'ANNULLATA'
+         AND upper(coalesce(trim(a->'categoria'->>'nome'), '')) = 'RICARICHE'
+         ${cutoffClause}
+       GROUP BY coalesce(s.ragione_sociale, '')
+    `);
+    const out = (rows as unknown as { rows?: any[] }).rows ?? (rows as unknown as any[]);
+    return (out as any[]).map((r) => ({ rs: String(r.rs ?? ""), consumo: Number(r.consumo ?? 0) }));
+  }
+
+  // Task #537 — RS (raw) su cui i nominativi addetti indicati hanno vendite:
+  // usato per scopare la lettura del plafond degli operatori alle sole RS di
+  // loro pertinenza (stessa semantica del filtro addetti di /api/bisuite-sales).
+  async getRsForAddetti(orgId: string, addetti: string[]): Promise<string[]> {
+    if (addetti.length === 0) return [];
+    const arr = sql`ARRAY[${sql.join(addetti.map((a) => sql`${a}`), sql`, `)}]::text[]`;
+    const rows = await db.execute(sql`
+      SELECT DISTINCT coalesce(s.ragione_sociale, '') AS rs
+        FROM ${bisuiteSales} s
+       WHERE s.organization_id = ${orgId}
+         AND lower(trim(coalesce(s.nome_addetto, ''))) = ANY(${arr})
+    `);
+    const out = (rows as unknown as { rows?: any[] }).rows ?? (rows as unknown as any[]);
+    return (out as any[]).map((r) => String(r.rs ?? "")).filter(Boolean);
+  }
+
+  async listPlafondRicaricheOps(orgId: string): Promise<PlafondRicaricheOp[]> {
+    return db.select().from(plafondRicaricheOps)
+      .where(eq(plafondRicaricheOps.organizationId, orgId))
+      .orderBy(asc(plafondRicaricheOps.createdAt), asc(plafondRicaricheOps.id));
+  }
+
+  async insertPlafondRicaricheOp(op: InsertPlafondRicaricheOp): Promise<PlafondRicaricheOp> {
+    const [row] = await db.insert(plafondRicaricheOps).values(op).returning();
+    return row;
   }
 
   // Password Reset Tokens

@@ -444,6 +444,41 @@ export const cdgRagioniSociali = pgTable("cdg_ragioni_sociali", {
   uniqueIndex("UQ_cdg_rs_org_nome").on(t.organizationId, t.nome),
 ]);
 
+// === Plafond ricariche per Ragione Sociale (Task #537) ===
+// Registro APPEND-ONLY delle operazioni amministrative sul plafond ricariche:
+//   'aggiungi' = somma un importo al saldo corrente;
+//   'imposta'  = fissa un nuovo saldo assoluto in quell'istante.
+// Il saldo NON è un contatore decrementato: viene sempre DERIVATO in lettura da
+// queste operazioni + il consumo (articoli RICARICHE non annullati) calcolato
+// dalle vendite BiSuite. Così le risincronizzazioni ripetute, gli annullamenti
+// e i riallineamenti non possono mai produrre doppie sottrazioni.
+// `consumoCutoff` (solo per 'imposta') è l'istante in wall-time italiano — la
+// stessa convenzione di bisuite_sales.data_vendita — da cui ripartire a
+// contare il consumo: le vendite precedenti sono già "assorbite" nel saldo
+// impostato.
+export const plafondRicaricheOps = pgTable("plafond_ricariche_ops", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
+  // Anchor stabile della RS nel registro canonico (cdg_ragioni_sociali).
+  ragioneSocialeId: varchar("ragione_sociale_id").references(() => cdgRagioniSociali.id).notNull(),
+  // 'aggiungi' | 'imposta'
+  tipo: varchar("tipo").notNull(),
+  importo: numeric("importo", { precision: 14, scale: 2 }).notNull(),
+  saldoPrima: numeric("saldo_prima", { precision: 14, scale: 2 }).notNull(),
+  saldoDopo: numeric("saldo_dopo", { precision: 14, scale: 2 }).notNull(),
+  // Wall-time italiano (come data_vendita); valorizzato solo per 'imposta'.
+  consumoCutoff: timestamp("consumo_cutoff"),
+  createdBy: varchar("created_by"),
+  createdByName: varchar("created_by_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("IDX_plafond_ric_org").on(t.organizationId),
+  index("IDX_plafond_ric_org_rs").on(t.organizationId, t.ragioneSocialeId),
+]);
+
+export type PlafondRicaricheOp = typeof plafondRicaricheOps.$inferSelect;
+export type InsertPlafondRicaricheOp = typeof plafondRicaricheOps.$inferInsert;
+
 // Categorie multi-RS: una categoria può essere associata a più Ragioni Sociali.
 // `ragioneSociale` è la colonna legacy (back-compat), `ragioniSociali` è la
 // lista canonica (validata server-side: min 1 elemento per insert).
