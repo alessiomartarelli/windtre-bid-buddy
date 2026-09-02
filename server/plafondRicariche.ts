@@ -86,7 +86,9 @@ export async function getDealerMaps(orgId: string, resolveRs: (rs: string) => st
     // Perimetro RS visibili (Task #548): ogni riga PDV della Struttura con una
     // RS conta, anche se (ancora) senza codice POS.
     if (rsNamePre) rsConPdv.add(resolveRs(rsNamePre) || rsNamePre);
-    if (!codicePos) continue;
+    // Il POS vuoto è una chiave configurabile intenzionale: BiSuite può
+    // restituire vendite prive di codice POS e l'admin può censire una riga
+    // con codice vuoto per attribuirle esplicitamente a un dealer.
     const posKey = normKey(codicePos);
     const nome = String(p?.nome ?? "").trim();
     const rsName = rsNamePre;

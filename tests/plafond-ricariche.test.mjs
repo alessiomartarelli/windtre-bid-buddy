@@ -666,6 +666,7 @@ test('plafond ricariche per RS', async (t) => {
 //  - op legacy per RS: auto-attribuzione con dealer unico, "da assegnare"
 //    con più dealer + endpoint /assegna senza duplicazioni;
 //  - import bulk Struttura: aggiorna il codiceDealer dei POS esistenti;
+//  - codice POS vuoto configurato: vendite BiSuite senza POS attribuite al dealer;
 //  - operatore scoped ai dealer dei propri addetti;
 //  - UI: righe dealer, badge senza-dealer/da-assegnare.
 test('plafond ricariche per codice dealer', async (t) => {
@@ -834,6 +835,60 @@ test('plafond ricariche per codice dealer', async (t) => {
       assert.equal(d4.consumoTotale, 7, 'il consumo del POS ex-senza-dealer segue il dealer assegnato');
       assert.equal(r.body.saldi.find((s) => !s.codiceDealer && s.senzaDealer && s.ragioneSociale === RS), undefined,
         'nessuna riga senza-dealer residua dopo l\'assegnazione');
+    });
+
+    await t.test('codice POS vuoto configurato attribuisce le vendite senza POS al dealer', async () => {
+      const RS_BLANK = uniq('RS POS VUOTO').toUpperCase().replace(/_/g, ' ');
+      const D_BLANK = '8000111099';
+      await pool.query(
+        `INSERT INTO organization_config (organization_id, config, config_version)
+         VALUES (
+           $1,
+           jsonb_build_object(
+             'puntiVendita',
+             jsonb_build_array(jsonb_build_object(
+               'codicePos', '',
+               'nome', 'Banchetto senza POS',
+               'ragioneSociale', $2::text,
+               'codiceDealer', $3::text
+             ))
+           ),
+           '2.0'
+         )
+         ON CONFLICT (organization_id) DO UPDATE
+         SET config = jsonb_set(
+           COALESCE(organization_config.config, '{}'::jsonb),
+           '{puntiVendita}',
+           COALESCE(organization_config.config->'puntiVendita', '[]'::jsonb)
+             || jsonb_build_array(jsonb_build_object(
+               'codicePos', '',
+               'nome', 'Banchetto senza POS',
+               'ragioneSociale', $2::text,
+               'codiceDealer', $3::text
+             )),
+           true
+         )`,
+        [admin.orgId, RS_BLANK, D_BLANK],
+      );
+      await insertSale(pool, admin.orgId, {
+        ragioneSociale: RS_BLANK,
+        articoli: [artRicarica('11.00')],
+        codicePos: '',
+        addetto: 'ADDETTO POS VUOTO',
+      });
+
+      const r = await get('/api/ricariche-plafond');
+      assert.equal(r.status, 200);
+      const mapped = dealerRow(r.body.saldi, D_BLANK);
+      assert.ok(mapped, JSON.stringify(r.body.saldi));
+      assert.equal(mapped.consumoTotale, 11);
+      assert.equal(mapped.pdv.length, 1);
+      assert.equal(mapped.pdv[0].codicePos, '');
+      assert.equal(
+        r.body.saldi.find((s) => !s.codiceDealer && s.ragioneSociale === RS_BLANK),
+        undefined,
+        'la vendita senza POS configurata non deve generare una riga senza dealer',
+      );
     });
 
     await t.test('org con dealer: RS del registro senza PDV nascosta, storico consultabile (Task #548)', async () => {
