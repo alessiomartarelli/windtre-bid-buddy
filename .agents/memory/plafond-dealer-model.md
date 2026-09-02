@@ -6,6 +6,7 @@ Il plafond ricariche è per CODICE DEALER (campo codiceDealer nei puntiVendita d
 
 **Regole:**
 - Consumo aggregato per POS → risolto a dealer via Struttura; PDV senza dealer = riga RS segnalata `senzaDealer`, MAI attribuito implicitamente.
+- Ogni modifica del saldo (`imposta` o `aggiungi`) fotografa `saldoDopo` e apre un nuovo cutoff: vengono scalate solo le vendite ricariche successive, senza ricontare quelle già assorbite.
 - Op storiche per RS (codice_dealer NULL): auto-migrate al POST solo se la RS ha UN dealer; altrimenti `daAssegnare` + endpoint di assegnazione che ripunta le righe (append-only, mai duplicare) e rifiuta dealer di un'altra RS (guard rsCanon).
 - Org senza alcun dealer configurato: comportamento legacy per RS preservato.
 - Operatori: vedono i dealer derivati dai POS con vendite dei propri addetti, non tutti i dealer della RS.

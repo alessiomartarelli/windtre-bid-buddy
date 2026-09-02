@@ -260,12 +260,30 @@ export async function computePlafondSaldi(orgId: string): Promise<PlafondSaldo[]
     let base = 0;
     let cutoff: Date | null = null;
     let baseIdx = -1;
+    // Le operazioni nuove di saldo ('imposta' e 'aggiungi') contengono una
+    // fotografia saldoDopo + cutoff. L'ultima modifica diventa quindi la base
+    // e assorbe tutte le vendite precedenti. Le vecchie operazioni 'aggiungi'
+    // senza cutoff restano compatibili col calcolo storico sotto.
     for (let i = bOps.length - 1; i >= 0; i--) {
-      if (bOps[i].tipo === "imposta") {
-        base = Number(bOps[i].saldoDopo);
-        cutoff = bOps[i].consumoCutoff ? new Date(bOps[i].consumoCutoff as any) : null;
+      const op = bOps[i];
+      if ((op.tipo === "imposta" || op.tipo === "aggiungi") && op.consumoCutoff) {
+        base = Number(op.saldoDopo);
+        cutoff = new Date(op.consumoCutoff as any);
         baseIdx = i;
         break;
+      }
+    }
+    // Compatibilità con il ledger precedente: se nessuna op dispone della
+    // fotografia, l'ultima 'imposta' resta la base e le aggiunte successive
+    // vengono sommate come prima.
+    if (baseIdx < 0) {
+      for (let i = bOps.length - 1; i >= 0; i--) {
+        if (bOps[i].tipo === "imposta") {
+          base = Number(bOps[i].saldoDopo);
+          cutoff = bOps[i].consumoCutoff ? new Date(bOps[i].consumoCutoff as any) : null;
+          baseIdx = i;
+          break;
+        }
       }
     }
     let aggiunte = 0;

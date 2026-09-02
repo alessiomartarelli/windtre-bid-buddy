@@ -3865,9 +3865,13 @@ export async function registerRoutes(
         importo: importo.toFixed(2),
         saldoPrima: (Math.round(saldoPrima * 100) / 100).toFixed(2),
         saldoDopo: saldoDopo.toFixed(2),
-        // Cutoff wall-time italiano (stessa convenzione di data_vendita):
-        // per 'imposta' il consumo precedente è assorbito nel nuovo saldo.
-        consumoCutoff: tipo === "imposta" ? toItalianWallTime(new Date()) : null,
+        // Cutoff wall-time italiano (stessa convenzione di data_vendita).
+        // Ogni modifica del saldo ('imposta' o 'aggiungi') salva saldoDopo come
+        // nuova base: le vendite già conteggiate sono assorbite e da questo
+        // momento si scalano soltanto le ricariche successive.
+        consumoCutoff: tipo === "imposta" || tipo === "aggiungi"
+          ? toItalianWallTime(new Date())
+          : null,
         createdBy: profile.id,
         createdByName: profile.fullName || profile.email || null,
       });

@@ -32,6 +32,13 @@ function italianWallNow(offsetMs = 0) {
   return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
 }
 
+// data_vendita nei fixture ha precisione al secondo, mentre consumo_cutoff
+// conserva i millisecondi. Aspettare il secondo successivo evita che una
+// vendita realmente successiva venga troncata a un istante precedente.
+async function waitNextWallSecond() {
+  await new Promise((resolve) => setTimeout(resolve, 1050 - (Date.now() % 1000)));
+}
+
 const artRicarica = (prezzo) => ({
   tipo: 'P',
   categoria: { nome: 'RICARICHE' },
@@ -105,10 +112,13 @@ test('plafond ricariche per RS', async (t) => {
       assert.equal(r.body.saldo, 100);
 
       // Nuova ricarica DOPO il cutoff: decurtata dal saldo impostato.
+      await waitNextWallSecond();
       consumedSaleId = await insertSale(pool, admin.orgId, {
         ragioneSociale: RS_A,
         articoli: [artRicarica('25.00')],
-        dataVendita: italianWallNow(120_000),
+        // La POST precedente è completata: il timestamp corrente è quindi
+        // successivo al cutoff senza creare artificialmente una vendita futura.
+        dataVendita: italianWallNow(),
       });
       const r2 = await get('/api/ricariche-plafond');
       const row = r2.body.saldi.find((s) => s.ragioneSociale === RS_A);
@@ -713,9 +723,10 @@ test('plafond ricariche per codice dealer', async (t) => {
       assert.equal(w.status, 201, JSON.stringify(w.body));
       assert.equal(w.body.codiceDealer, D1);
       // Vendita post-cutoff su ALTRO POS dello stesso dealer: decurta lo stesso saldo.
+      await waitNextWallSecond();
       await insertSale(pool, admin.orgId, {
         ragioneSociale: RS, articoli: [artRicarica('25.00')], codicePos: P_A2,
-        dataVendita: italianWallNow(120_000), addetto: 'ADDETTO A',
+        dataVendita: italianWallNow(), addetto: 'ADDETTO A',
       });
       let r = await get('/api/ricariche-plafond');
       assert.equal(dealerRow(r.body.saldi, D1).saldo, 75);
@@ -726,6 +737,18 @@ test('plafond ricariche per codice dealer', async (t) => {
       r = await get('/api/ricariche-plafond');
       assert.equal(dealerRow(r.body.saldi, D1).saldo, 85);
       assert.equal(dealerRow(r.body.saldi, D2).saldo, 40);
+
+      // "Aggiungi" modifica il plafond e crea un nuovo cutoff: le vendite già
+      // assorbite non vengono sottratte di nuovo; solo quelle successive
+      // scalano dalla nuova base di 85€.
+      await waitNextWallSecond();
+      await insertSale(pool, admin.orgId, {
+        ragioneSociale: RS, articoli: [artRicarica('6.00')], codicePos: P_A1,
+        dataVendita: italianWallNow(), addetto: 'ADDETTO A',
+      });
+      r = await get('/api/ricariche-plafond');
+      assert.equal(dealerRow(r.body.saldi, D1).saldo, 79);
+      assert.equal(dealerRow(r.body.saldi, D1).consumoDaCutoff, 6);
 
       // Dealer sconosciuto rifiutato.
       assert.equal((await post('/api/ricariche-plafond', { codiceDealer: '8999999999', tipo: 'imposta', importo: 1 })).status, 400);
