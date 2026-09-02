@@ -578,7 +578,9 @@ test('plafond ricariche per RS', async (t) => {
     await t.test('UI: card plafond, controlli admin-only, ultimo aggiornamento', async () => {
       const browser = await launchBrowser();
       try {
-        // Admin: card visibile con saldo e pulsanti Aggiungi/Imposta.
+        // Admin: card visibile con saldo e i controlli semplificati (Task
+        // #551): solo "Modifica saldo" + "Soglia avviso" — niente "Aggiungi"
+        // né "Operazione per RS".
         const ctxAdmin = await newAuthedContext(browser, admin);
         const page = await ctxAdmin.newPage();
         await page.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'domcontentloaded' });
@@ -586,8 +588,11 @@ test('plafond ricariche per RS', async (t) => {
         await page.waitForSelector(`[data-testid="text-plafond-saldo-${idA}"]`, { timeout: 15000 });
         const saldoText = await page.textContent(`[data-testid="text-plafond-saldo-${idA}"]`);
         assert.ok(saldoText.replace(/[\s\u00a0]/g, '').includes('125'), `saldo UI inatteso: ${saldoText}`);
-        assert.ok(await page.$(`[data-testid="button-plafond-aggiungi-${idA}"]`), 'admin deve vedere Aggiungi');
-        assert.ok(await page.$(`[data-testid="button-plafond-imposta-${idA}"]`), 'admin deve vedere Imposta');
+        assert.equal(await page.$(`[data-testid="button-plafond-aggiungi-${idA}"]`), null, 'Aggiungi rimosso dalla UI (Task #551)');
+        assert.equal(await page.$('[data-testid="button-plafond-op-rs"]'), null, 'Operazione per RS rimossa dalla UI (Task #551)');
+        const impostaBtn = await page.$(`[data-testid="button-plafond-imposta-${idA}"]`);
+        assert.ok(impostaBtn, 'admin deve vedere Modifica saldo');
+        assert.ok((await impostaBtn.textContent()).includes('Modifica saldo'), 'il pulsante si chiama "Modifica saldo" (Task #551)');
         assert.ok(await page.$(`[data-testid="button-plafond-soglia-${idA}"]`), 'admin deve vedere Soglia avviso (Task #538)');
         const lastSyncEl = await page.waitForSelector('[data-testid="text-last-bisuite-sync"]', { timeout: 15000 });
         const lastSyncText = await lastSyncEl.textContent();
@@ -606,8 +611,7 @@ test('plafond ricariche per RS', async (t) => {
           const pageOp = await ctxOp.newPage();
           await pageOp.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'domcontentloaded' });
           await pageOp.waitForSelector(`[data-testid="text-plafond-saldo-${idA}"]`, { timeout: 30000 });
-          assert.equal(await pageOp.$(`[data-testid="button-plafond-aggiungi-${idA}"]`), null, 'operatore NON deve vedere Aggiungi');
-          assert.equal(await pageOp.$(`[data-testid="button-plafond-imposta-${idA}"]`), null, 'operatore NON deve vedere Imposta');
+          assert.equal(await pageOp.$(`[data-testid="button-plafond-imposta-${idA}"]`), null, 'operatore NON deve vedere Modifica saldo');
           assert.equal(await pageOp.$(`[data-testid="button-plafond-soglia-${idA}"]`), null, 'operatore NON deve vedere Soglia avviso');
           await ctxOp.close();
         } finally {
@@ -618,10 +622,11 @@ test('plafond ricariche per RS', async (t) => {
       }
     });
 
-    await t.test('UI: operazione per RS senza PDV → avviso esplicito (Task #549)', async () => {
-      // Org NUOVA: zero saldi (nessun PDV, nessun consumo) — la card deve
-      // comunque comparire per l'admin con il punto d'ingresso "Operazione
-      // per RS", altrimenti la prima operazione non sarebbe registrabile.
+    await t.test('UI: card vuota admin senza "Operazione per RS" (Task #551)', async () => {
+      // Org NUOVA: zero saldi. La card resta visibile per l'admin con l'empty
+      // state, ma il punto d'ingresso "Operazione per RS" è stato rimosso
+      // dalla UI (Task #551); l'API per RS resta disponibile e continua a
+      // rispondere con l'avviso esplicito per RS senza PDV.
       const fresh = await signup({ prefix: 'plafond_empty', fullName: 'Plafond Empty Admin' });
       const RS_UI = uniq('RS PLAFOND UI').toUpperCase().replace(/_/g, ' ');
       const browser = await launchBrowser();
@@ -631,19 +636,18 @@ test('plafond ricariche per RS', async (t) => {
         await page.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'domcontentloaded' });
         await page.waitForSelector('[data-testid="card-plafond-ricariche"]', { timeout: 30000 });
         await page.waitForSelector('[data-testid="text-plafond-empty"]', { timeout: 15000 });
-        // Flusso admin: "Operazione per RS" con RS digitata a mano libera.
-        await page.click('[data-testid="button-plafond-op-rs"]');
-        await page.waitForSelector('[data-testid="input-plafond-rs"]', { timeout: 15000 });
-        await page.fill('[data-testid="input-plafond-rs"]', RS_UI);
-        await page.fill('[data-testid="input-plafond-importo"]', '40');
-        await page.click('[data-testid="button-plafond-confirm"]');
-        // La RS non ha PDV in Struttura: l'operazione è registrata ma la card
-        // non comparirà — l'avviso esplicito deve essere visibile all'admin.
-        await page.waitForSelector('text=non ha alcun PDV in Struttura', { timeout: 15000 });
-        // L'operazione è comunque nello storico.
+        assert.equal(await page.$('[data-testid="button-plafond-op-rs"]'), null, 'nessun pulsante "Operazione per RS" (Task #551)');
+        await ctxAdmin.close();
+        // L'API per RS (fuori scope UI) resta funzionante con avviso esplicito.
+        const op = await jsonReq(`${BASE}/api/ricariche-plafond`, {
+          method: 'POST',
+          headers: { Cookie: fresh.cookieHeader },
+          body: JSON.stringify({ ragioneSociale: RS_UI, tipo: 'imposta', importo: 40 }),
+        });
+        assert.equal(op.status, 201, JSON.stringify(op.body));
+        assert.ok(op.body.warning && /PDV in Struttura/.test(op.body.warning), `warning atteso: ${JSON.stringify(op.body)}`);
         const st = await jsonReq(`${BASE}/api/ricariche-plafond/storico`, { headers: { Cookie: fresh.cookieHeader } });
         assert.ok(st.body.storico.find((o) => o.ragioneSociale === RS_UI), 'operazione registrata nello storico');
-        await ctxAdmin.close();
       } finally {
         await browser.close();
         await cleanupOrg(pool, fresh);
@@ -946,8 +950,8 @@ test('plafond ricariche per codice dealer', async (t) => {
         const rowText = await page.textContent(`[data-testid="row-plafond-${idD1}"]`);
         assert.ok(rowText.includes(`Dealer ${D1}`), `riga dealer mancante: ${rowText}`);
         assert.ok(rowText.includes(RS), 'la riga dealer mostra la RS descrittiva');
-        assert.ok(await page.$(`[data-testid="button-plafond-aggiungi-${idD1}"]`), 'admin vede Aggiungi sul dealer');
-        assert.ok(await page.$(`[data-testid="button-plafond-imposta-${idD1}"]`), 'admin vede Imposta sul dealer');
+        assert.equal(await page.$(`[data-testid="button-plafond-aggiungi-${idD1}"]`), null, 'Aggiungi rimosso anche sulle righe dealer (Task #551)');
+        assert.ok(await page.$(`[data-testid="button-plafond-imposta-${idD1}"]`), 'admin vede Modifica saldo sul dealer');
         await ctx.close();
       } finally {
         await browser.close();
