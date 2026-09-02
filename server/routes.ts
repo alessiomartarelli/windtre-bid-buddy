@@ -3808,11 +3808,13 @@ export async function registerRoutes(
 
       const resolveRs = await cdgStorage.getRsResolver(orgId);
       const { getDealerMaps } = await import("./plafondRicariche");
-      const { dealers } = await getDealerMaps(orgId, resolveRs);
+      const { dealers, rsConPdv } = await getDealerMaps(orgId, resolveRs);
 
       let codiceDealer: string | null = null;
       let rsId: string | null = null;
       let canon = "";
+      let saldi: Awaited<ReturnType<typeof computePlafondSaldi>> | null = null;
+      let warning: string | null = null; // Task #549
       if (rawDealer) {
         const info = dealers.get(rawDealer.toUpperCase());
         if (!info) return res.status(400).json({ error: `Codice dealer "${rawDealer}" non presente nella Struttura PDV` });
@@ -3825,13 +3827,26 @@ export async function registerRoutes(
       } else {
         // Percorso legacy per RS: canonicalizza e assicura l'anchor.
         canon = resolveRs(rawNome) || rawNome;
+        // Task #549 — una RS senza PDV in Struttura non compare nel riepilogo
+        // (Task #548): senza avviso l'operazione finirebbe solo nello storico,
+        // invisibile. Non rifiutiamo (impostare il plafond PRIMA di censire il
+        // PDV o di una rinomina/merge è un flusso legittimo), ma la risposta
+        // include un avviso esplicito quando la RS non ha né PDV né una card
+        // già visibile (consumo storico / operazioni pregresse).
+        if (!rsConPdv.has(canon)) {
+          saldi = await computePlafondSaldi(orgId);
+          const visibile = saldi.some((s) => !s.codiceDealer && s.ragioneSociale === canon);
+          if (!visibile) {
+            warning = `La Ragione Sociale "${canon}" non ha alcun PDV in Struttura: l'operazione è registrata nello storico ma NON comparirà nel riepilogo plafond finché non aggiungi un PDV con questa Ragione Sociale (o non usi il codice dealer).`;
+          }
+        }
         rsId = await cdgStorage.ensureRsId(orgId, canon, "auto");
         // Se la RS mappa su UN solo dealer, registra direttamente sul dealer.
         const matches = Array.from(dealers.values()).filter((d) => d.rsCanon.has(canon));
         if (matches.length === 1) codiceDealer = matches[0].codice;
       }
 
-      const saldi = await computePlafondSaldi(orgId);
+      saldi ??= await computePlafondSaldi(orgId);
       const current = codiceDealer
         ? saldi.find((s) => s.codiceDealer.trim().toUpperCase() === codiceDealer!.trim().toUpperCase())
         : saldi.find((s) => !s.codiceDealer && (s.ragioneSocialeId === rsId || s.ragioneSociale === canon));
@@ -3863,6 +3878,7 @@ export async function registerRoutes(
         codiceDealer: codiceDealer ?? "",
         ragioneSociale: canon,
         saldo: saldoDopo,
+        ...(warning ? { warning } : {}),
       });
     } catch (error: unknown) {
       console.error("Plafond ricariche op error:", error);

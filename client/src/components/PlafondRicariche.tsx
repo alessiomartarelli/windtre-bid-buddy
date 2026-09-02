@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiUrl } from "@/lib/basePath";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,13 +88,18 @@ export function formatLastSync(iso: string | null | undefined): string | null {
   return iso ? fmtDateTime(iso) : null;
 }
 
-type OpTarget = { codiceDealer: string; ragioneSociale: string; tipo: "aggiungi" | "imposta" | "soglia" };
+// freeRs (Task #549): dialog con RS digitata a mano libera — serve per RS non
+// ancora presenti nel riepilogo (es. senza PDV in Struttura): il server
+// accetta ma risponde con un avviso esplicito.
+type OpTarget = { codiceDealer: string; ragioneSociale: string; tipo: "aggiungi" | "imposta" | "soglia"; freeRs?: boolean };
 
 export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; isAdmin: boolean }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data, isLoading } = usePlafondRicariche(orgId);
   const [opDialog, setOpDialog] = useState<OpTarget | null>(null);
   const [importo, setImporto] = useState("");
+  const [rsLibera, setRsLibera] = useState(""); // Task #549
   const [opError, setOpError] = useState<string | null>(null);
   const [storicoOpen, setStoricoOpen] = useState(false);
   // Assegnazione op storiche per RS → dealer (Task #544).
@@ -120,7 +126,7 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
     mutationFn: async ({ target, value }: { target: OpTarget; value: number }) => {
       const body: Record<string, unknown> = { tipo: target.tipo, importo: value };
       if (target.codiceDealer) body.codiceDealer = target.codiceDealer;
-      else body.ragioneSociale = target.ragioneSociale;
+      else body.ragioneSociale = target.freeRs ? rsLibera.trim() : target.ragioneSociale;
       const res = await fetch(apiUrl("/api/ricariche-plafond"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,10 +137,15 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
       if (!res.ok) throw new Error(data.error || "Errore nel salvataggio");
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data: { warning?: string }) => {
       setOpDialog(null);
       setImporto("");
       setOpError(null);
+      // Task #549 — RS senza PDV in Struttura: l'operazione è registrata ma
+      // non comparirà nel riepilogo; avvisa esplicitamente l'admin.
+      if (data?.warning) {
+        toast({ title: "Operazione registrata con avviso", description: data.warning, variant: "destructive" });
+      }
       invalidate();
     },
     onError: (e: Error) => setOpError(e.message),
@@ -166,10 +177,13 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
   // (il server rifiuta comunque i dealer di altre RS).
   const dealerOptionsForRs = (rs: string) =>
     saldi.filter((s) => s.codiceDealer && s.ragioneSociale.split(" / ").includes(rs));
-  if (!isLoading && saldi.length === 0) return null;
+  // Task #549 — per gli admin la card resta visibile anche senza saldi: serve
+  // il punto d'ingresso "Operazione per RS" (prima operazione, RS senza PDV).
+  if (!isLoading && saldi.length === 0 && !isAdmin) return null;
 
   const confirmDisabled =
     opMutation.isPending ||
+    (opDialog?.freeRs && !rsLibera.trim()) ||
     !importo.trim() ||
     !Number.isFinite(Number(importo.replace(",", "."))) ||
     (opDialog?.tipo === "aggiungi"
@@ -177,7 +191,7 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
       : Number(importo.replace(",", ".")) < 0);
 
   const opLabel = (t: OpTarget | null) =>
-    t ? (t.codiceDealer ? `dealer ${t.codiceDealer}` : t.ragioneSociale) : "";
+    t ? (t.codiceDealer ? `dealer ${t.codiceDealer}` : t.freeRs ? (rsLibera.trim() || "la Ragione Sociale indicata") : t.ragioneSociale) : "";
 
   return (
     <Card data-testid="card-plafond-ricariche">
@@ -187,15 +201,28 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
             <Wallet className="h-5 w-5 text-primary" />
             Plafond Ricariche per Codice Dealer
           </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setStoricoOpen(true)}
-            data-testid="button-plafond-storico"
-          >
-            <History className="h-3.5 w-3.5 mr-1" /> Storico
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => { setOpDialog({ codiceDealer: "", ragioneSociale: "", tipo: "imposta", freeRs: true }); setRsLibera(""); setImporto(""); setOpError(null); }}
+                data-testid="button-plafond-op-rs"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Operazione per RS
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setStoricoOpen(true)}
+              data-testid="button-plafond-storico"
+            >
+              <History className="h-3.5 w-3.5 mr-1" /> Storico
+            </Button>
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           Saldo già decurtato delle ricariche vendute (escluse le annullate). Più
@@ -207,6 +234,12 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
             <Loader2 className="h-4 w-4 animate-spin" /> Caricamento plafond...
           </div>
+        ) : saldi.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2" data-testid="text-plafond-empty">
+            Nessun plafond configurato. Usa "Operazione per RS" per registrare la
+            prima operazione: la card comparirà quando la Ragione Sociale avrà un
+            PDV in Struttura (o un consumo ricariche).
+          </p>
         ) : (
           <div className="space-y-2">
             {saldi.map((s) => {
@@ -364,6 +397,14 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
+            {opDialog?.freeRs && (
+              <Input
+                placeholder="Ragione Sociale"
+                value={rsLibera}
+                onChange={(e) => setRsLibera(e.target.value)}
+                data-testid="input-plafond-rs"
+              />
+            )}
             <Input
               type="number"
               inputMode="decimal"

@@ -232,6 +232,27 @@ test('plafond ricariche per RS', async (t) => {
       assert.equal((await post('/api/ricariche-plafond', { ragioneSociale: '', tipo: 'imposta', importo: 5 })).status, 400);
     });
 
+    await t.test('RS senza PDV in Struttura: avviso esplicito nella risposta (Task #549)', async () => {
+      // RS mai vista: nessun PDV, nessun consumo → la card non comparirebbe
+      // (Task #548). L'operazione è accettata ma con warning esplicito.
+      const RS_X = uniq('RS PLAFOND X').toUpperCase().replace(/_/g, ' ');
+      const w = await post('/api/ricariche-plafond', { ragioneSociale: RS_X, tipo: 'imposta', importo: 25 });
+      assert.equal(w.status, 201, JSON.stringify(w.body));
+      assert.ok(typeof w.body.warning === 'string' && w.body.warning.includes('PDV'),
+        `atteso warning esplicito, got: ${JSON.stringify(w.body)}`);
+      // La card infatti NON compare nel riepilogo…
+      const r = await get('/api/ricariche-plafond');
+      assert.equal(r.body.saldi.find((s) => s.ragioneSociale === RS_X), undefined);
+      // …ma l'operazione resta visibile nello storico.
+      const st = await get('/api/ricariche-plafond/storico');
+      assert.ok(st.body.storico.find((o) => o.ragioneSociale === RS_X));
+      // RS con card visibile (consumo storico, anche senza PDV): nessun
+      // warning. Op 'soglia' (stesso valore già attivo): saldo invariato.
+      const ok = await post('/api/ricariche-plafond', { ragioneSociale: RS_A, tipo: 'soglia', importo: 50 });
+      assert.equal(ok.status, 201, JSON.stringify(ok.body));
+      assert.equal(ok.body.warning, undefined, 'nessun warning per RS già visibile');
+    });
+
     await t.test('operatore: lettura scoped ai propri addetti, modifica 403', async () => {
       await setRole(pool, admin.profileId, 'operatore');
       try {
@@ -249,8 +270,9 @@ test('plafond ricariche per RS', async (t) => {
         r = await get('/api/ricariche-plafond');
         assert.ok(r.body.saldi.find((s) => s.ragioneSociale === RS_A), 'operatore con addetto pertinente vede la sua RS');
         st = await get('/api/ricariche-plafond/storico');
-        // 2 op saldo (imposta+aggiungi) + 3 op soglia del test precedente.
-        assert.equal(st.body.storico.length, 5);
+        // 2 op saldo (imposta+aggiungi) + 4 op soglia dei test precedenti
+        // (3 del test soglia + 1 del test warning Task #549).
+        assert.equal(st.body.storico.length, 6);
         assert.ok(st.body.storico.every((o) => o.ragioneSociale === RS_A));
 
         // Addetto estraneo → di nuovo nulla.
@@ -583,6 +605,38 @@ test('plafond ricariche per RS', async (t) => {
         }
       } finally {
         await browser.close();
+      }
+    });
+
+    await t.test('UI: operazione per RS senza PDV → avviso esplicito (Task #549)', async () => {
+      // Org NUOVA: zero saldi (nessun PDV, nessun consumo) — la card deve
+      // comunque comparire per l'admin con il punto d'ingresso "Operazione
+      // per RS", altrimenti la prima operazione non sarebbe registrabile.
+      const fresh = await signup({ prefix: 'plafond_empty', fullName: 'Plafond Empty Admin' });
+      const RS_UI = uniq('RS PLAFOND UI').toUpperCase().replace(/_/g, ' ');
+      const browser = await launchBrowser();
+      try {
+        const ctxAdmin = await newAuthedContext(browser, fresh);
+        const page = await ctxAdmin.newPage();
+        await page.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('[data-testid="card-plafond-ricariche"]', { timeout: 30000 });
+        await page.waitForSelector('[data-testid="text-plafond-empty"]', { timeout: 15000 });
+        // Flusso admin: "Operazione per RS" con RS digitata a mano libera.
+        await page.click('[data-testid="button-plafond-op-rs"]');
+        await page.waitForSelector('[data-testid="input-plafond-rs"]', { timeout: 15000 });
+        await page.fill('[data-testid="input-plafond-rs"]', RS_UI);
+        await page.fill('[data-testid="input-plafond-importo"]', '40');
+        await page.click('[data-testid="button-plafond-confirm"]');
+        // La RS non ha PDV in Struttura: l'operazione è registrata ma la card
+        // non comparirà — l'avviso esplicito deve essere visibile all'admin.
+        await page.waitForSelector('text=non ha alcun PDV in Struttura', { timeout: 15000 });
+        // L'operazione è comunque nello storico.
+        const st = await jsonReq(`${BASE}/api/ricariche-plafond/storico`, { headers: { Cookie: fresh.cookieHeader } });
+        assert.ok(st.body.storico.find((o) => o.ragioneSociale === RS_UI), 'operazione registrata nello storico');
+        await ctxAdmin.close();
+      } finally {
+        await browser.close();
+        await cleanupOrg(pool, fresh);
       }
     });
   } finally {
