@@ -190,6 +190,7 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     const context = await newAuthedContext(browser, session);
     const page = await context.newPage();
     await page.goto(`${BASE}/dashboard-gara-reale`, { waitUntil: 'networkidle' });
+    await page.getByTestId('text-dashboard-last-updated').waitFor({ state: 'attached', timeout: 15000 });
 
     // Card + toggle Pezzi.
     await page.getByTestId('card-tabella-pdv-pista').waitFor({ timeout: 30000 });
@@ -247,6 +248,14 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     assert.equal(await cellNum(page, `cell-pezzi-${POS_A}-totale-attuale`), 3, 'PDV A totale riga = 3 (2 mobile + 1 fisso)');
     assert.equal(await cellNum(page, `cell-pezzi-${POS_B}-energia-attuale`), 3, 'PDV B energia attuale = 3');
     assert.equal(await cellNum(page, `cell-pezzi-${POS_B}-totale-attuale`), 3, 'PDV B totale riga = 3');
+
+    // Il secondo click, sul PDV, apre le vendite reali che compongono il
+    // totale attuale; la vendita annullata non è nel perimetro della dashboard.
+    await page.getByTestId(`btn-table-pezzi-pdv-toggle-${POS_A}`).click();
+    const saleDrilldown = page.getByTestId('pdv-sales-drilldown');
+    await saleDrilldown.waitFor({ state: 'visible', timeout: 5000 });
+    assert.match(await saleDrilldown.innerText(), /Vendite che compongono il totale attuale/i);
+    assert.match(await saleDrilldown.innerText(), /1 vendite/i);
 
     // ── Riga totale complessivo: totali di colonna + totale generale ──
     await page.getByTestId('row-table-pezzi-totale').waitFor({ timeout: 5000 });

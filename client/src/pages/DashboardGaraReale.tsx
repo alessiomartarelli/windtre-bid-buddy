@@ -35,6 +35,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { PdvSalesDrilldown, type PdvSaleDetail } from "@/components/PdvSalesDrilldown";
 import {
   TrendingUp,
   Target,
@@ -341,6 +342,8 @@ interface MappedSalesResponse {
   totaliPerPista: Record<string, Record<string, { targetCategory: string; targetLabel: string; pezzi: number }>>;
   totaliAddonsPerPista?: Record<string, Record<string, { targetCategory: string; targetLabel: string; occorrenze: number; canone: number }>>;
   latestSaleDate: string | null;
+  /** Ultima importazione delle vendite BiSuite del mese selezionato. */
+  lastUpdatedAt?: string | null;
   inGaraOnly?: boolean;
   totalSalesUnfiltered?: number;
   salesExcludedOutOfGara?: number;
@@ -357,6 +360,8 @@ interface MappedSalesResponse {
   /** Task #527 — totale pezzi per pista canvass VF (luce, gas, iva_mobile,
    *  iva_wireline, vas, …); null/assente per org senza brand VF. */
   totaliPistaCanvass?: Partial<Record<string, number>> | null;
+  /** Dettaglio compatto delle vendite reali, richiesto solo dalla dashboard. */
+  saleDetails?: PdvSaleDetail[];
 }
 
 // Task #528 — config obiettivi/soglie/premi per una pista Vodafone/Fastweb.
@@ -2287,8 +2292,9 @@ type PezziColumn = { key: string; label: string; icon?: LucideIcon; color?: stri
 const fmtPezziVal = (v: number, euro: boolean) =>
   euro ? `${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : String(v);
 
-function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv }: { pistaStats: any[]; orgId?: string | null; mese?: number; anno?: number; pezziExtraByPdv?: Map<string, PezziExtraPdvEntry> }) {
+function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv, saleDetails = [] }: { pistaStats: any[]; orgId?: string | null; mese?: number; anno?: number; pezziExtraByPdv?: Map<string, PezziExtraPdvEntry>; saleDetails?: PdvSaleDetail[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expandedPdv, setExpandedPdv] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'punti' | 'pezzi'>('punti');
   const [hydratedOrgId, setHydratedOrgId] = useState<string | null>(null);
   const [viewModeHydratedOrg, setViewModeHydratedOrg] = useState<string | null>(null);
@@ -2594,6 +2600,18 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv }: { p
 
   const isPezzi = viewMode === 'pezzi';
   const activeRows: Array<{ rsKey: string }> = isPezzi ? pezziRsRows : rsRows;
+  const salesByPdv = useMemo(() => {
+    const map = new Map<string, PdvSaleDetail[]>();
+    for (const sale of saleDetails) {
+      const key = sale.codicePos?.trim() || sale.nomeNegozio?.trim() || "N/D";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(sale);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => String(b.dataVendita || "").localeCompare(String(a.dataVendita || "")));
+    }
+    return map;
+  }, [saleDetails]);
 
   // Colonne della vista Pezzi: 4 piste + colonne extra Task #392.
   const pezziColumns: PezziColumn[] = [
@@ -2651,6 +2669,13 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv }: { p
   const noneExpanded = expanded.size === 0;
   const expandAll = () => setExpanded(new Set(allKeys));
   const collapseAll = () => setExpanded(new Set());
+  const togglePdvDetails = (key: string) => {
+    setExpandedPdv(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   const buildExportRowsPezzi = (filterPiste?: string[] | null) => {
     const cols = (filterPiste && filterPiste.length > 0)
@@ -2964,30 +2989,54 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv }: { p
                         {isExpanded && rs.pdvList.map(pdv => {
                           const cells = rs.perPdv.get(pdv.codicePos);
                           const pdvTot = sumPezziRow(cells, pezziColumns);
+                          const detailKey = `${rs.rsKey}|${pdv.codicePos}`;
+                          const detailExpanded = expandedPdv.has(detailKey);
                           return (
-                            <tr key={pdv.codicePos} className="border-b bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800/40" data-testid={`row-table-pezzi-pdv-${pdv.codicePos}`}>
-                              <td className="px-3 py-2 sticky left-0 bg-white dark:bg-gray-950 border-r z-[5]">
-                                <div className="pl-6">
-                                  <div className="font-medium text-gray-700 dark:text-gray-200 truncate text-xs" title={pdv.nomeNegozio}>{pdv.nomeNegozio}</div>
-                                  <div className="text-gray-500 dark:text-slate-400 text-[10px]">{pdv.codicePos}</div>
-                                </div>
-                              </td>
-                              {pezziColumns.map(col => {
-                                const c = cells?.get(col.key);
-                                return (
-                                  <Fragment key={col.key}>
-                                    <td className="px-2 py-2 text-center border-r text-[11px]" data-testid={`cell-pezzi-${pdv.codicePos}-${col.key}-attuale`}>
-                                      {c ? fmtPezziVal(c.att, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
-                                    </td>
-                                    <td className="px-2 py-2 text-center border-r text-[11px] text-blue-600 dark:text-blue-400" data-testid={`cell-pezzi-${pdv.codicePos}-${col.key}-proiezione`}>
-                                      {c ? fmtPezziVal(c.proi, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
-                                    </td>
-                                  </Fragment>
-                                );
-                              })}
-                              <td className="px-2 py-2 text-center border-r text-[11px] font-semibold bg-gray-50 dark:bg-gray-900/40" data-testid={`cell-pezzi-${pdv.codicePos}-totale-attuale`}>{pdvTot.att}</td>
-                              <td className="px-2 py-2 text-center text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-gray-50 dark:bg-gray-900/40" data-testid={`cell-pezzi-${pdv.codicePos}-totale-proiezione`}>{pdvTot.proi}</td>
-                            </tr>
+                            <Fragment key={pdv.codicePos}>
+                              <tr
+                                className="border-b bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800/40"
+                                data-testid={`row-table-pezzi-pdv-${pdv.codicePos}`}
+                              >
+                                <td className="px-3 py-2 sticky left-0 bg-white dark:bg-gray-950 border-r z-[5]">
+                                  <button
+                                    type="button"
+                                    className="pl-6 flex items-center gap-1.5 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    onClick={() => togglePdvDetails(detailKey)}
+                                    aria-expanded={detailExpanded}
+                                    aria-controls={`dashboard-pezzi-details-${pdv.codicePos}`}
+                                    data-testid={`btn-table-pezzi-pdv-toggle-${pdv.codicePos}`}
+                                  >
+                                    {detailExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                                    <div>
+                                      <div className="font-medium text-gray-700 dark:text-gray-200 truncate text-xs" title={pdv.nomeNegozio}>{pdv.nomeNegozio}</div>
+                                      <div className="text-gray-500 dark:text-slate-400 text-[10px]">{pdv.codicePos}</div>
+                                    </div>
+                                  </button>
+                                </td>
+                                {pezziColumns.map(col => {
+                                  const c = cells?.get(col.key);
+                                  return (
+                                    <Fragment key={col.key}>
+                                      <td className="px-2 py-2 text-center border-r text-[11px]" data-testid={`cell-pezzi-${pdv.codicePos}-${col.key}-attuale`}>
+                                        {c ? fmtPezziVal(c.att, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                                      </td>
+                                      <td className="px-2 py-2 text-center border-r text-[11px] text-blue-600 dark:text-blue-400" data-testid={`cell-pezzi-${pdv.codicePos}-${col.key}-proiezione`}>
+                                        {c ? fmtPezziVal(c.proi, col.euro) : <span className="text-gray-300 dark:text-gray-700">—</span>}
+                                      </td>
+                                    </Fragment>
+                                  );
+                                })}
+                                <td className="px-2 py-2 text-center border-r text-[11px] font-semibold bg-gray-50 dark:bg-gray-900/40" data-testid={`cell-pezzi-${pdv.codicePos}-totale-attuale`}>{pdvTot.att}</td>
+                                <td className="px-2 py-2 text-center text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-gray-50 dark:bg-gray-900/40" data-testid={`cell-pezzi-${pdv.codicePos}-totale-proiezione`}>{pdvTot.proi}</td>
+                              </tr>
+                              {detailExpanded && (
+                                <tr id={`dashboard-pezzi-details-${pdv.codicePos}`} className="border-b">
+                                  <td colSpan={1 + pezziColumns.length * 2 + 2} className="p-0">
+                                    <PdvSalesDrilldown sales={salesByPdv.get(pdv.codicePos) || []} />
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
                           );
                         })}
                       </Fragment>
@@ -3081,29 +3130,55 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv }: { p
                         );
                       })}
                     </tr>
-                    {isExpanded && rs.pdvList.map(pdv => (
-                      <tr key={pdv.codicePos} className="border-b bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800/40" data-testid={`row-table-pdv-${pdv.codicePos}`}>
-                        <td className="px-3 py-2 sticky left-0 bg-white dark:bg-gray-950 border-r z-[5]">
-                          <div className="pl-6">
-                            <div className="font-medium text-gray-700 dark:text-gray-200 truncate text-xs" title={pdv.nomeNegozio}>{pdv.nomeNegozio}</div>
-                            <div className="text-gray-500 dark:text-slate-400 text-[10px]">{pdv.codicePos}</div>
-                          </div>
-                        </td>
-                        {pisteAttive.map(p => {
-                          const m = rs.perPdv.get(pdv.codicePos)?.get(p.pista);
-                          return (
-                            <Fragment key={p.pista}>
-                              <td className="px-2 py-2 text-center border-r" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-attuale`}>
-                                <TabellaCellSingolo valore={m?.valoreAttUi ?? m?.valoreAtt} soglia={m?.sogliaAtt} variant="attuale" dim quotaRs={m?.quotaRs} quotaRsTotal={m?.quotaRsTotalAtt} />
+                    {isExpanded && rs.pdvList.map(pdv => {
+                      const detailKey = `${rs.rsKey}|${pdv.codicePos}`;
+                      const detailExpanded = expandedPdv.has(detailKey);
+                      return (
+                        <Fragment key={pdv.codicePos}>
+                          <tr
+                            className="border-b bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800/40"
+                            data-testid={`row-table-pdv-${pdv.codicePos}`}
+                          >
+                            <td className="px-3 py-2 sticky left-0 bg-white dark:bg-gray-950 border-r z-[5]">
+                              <button
+                                type="button"
+                                className="pl-6 flex items-center gap-1.5 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                onClick={() => togglePdvDetails(detailKey)}
+                                aria-expanded={detailExpanded}
+                                aria-controls={`dashboard-punti-details-${pdv.codicePos}`}
+                                data-testid={`btn-table-pdv-toggle-${pdv.codicePos}`}
+                              >
+                                {detailExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                                <div>
+                                  <div className="font-medium text-gray-700 dark:text-gray-200 truncate text-xs" title={pdv.nomeNegozio}>{pdv.nomeNegozio}</div>
+                                  <div className="text-gray-500 dark:text-slate-400 text-[10px]">{pdv.codicePos}</div>
+                                </div>
+                              </button>
+                            </td>
+                            {pisteAttive.map(p => {
+                              const m = rs.perPdv.get(pdv.codicePos)?.get(p.pista);
+                              return (
+                                <Fragment key={p.pista}>
+                                  <td className="px-2 py-2 text-center border-r" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-attuale`}>
+                                    <TabellaCellSingolo valore={m?.valoreAttUi ?? m?.valoreAtt} soglia={m?.sogliaAtt} variant="attuale" dim quotaRs={m?.quotaRs} quotaRsTotal={m?.quotaRsTotalAtt} />
+                                  </td>
+                                  <td className="px-2 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-proiezione`}>
+                                    <TabellaCellSingolo valore={m?.valoreProiUi ?? m?.valoreProi} soglia={m?.sogliaProi} variant="proiezione" stimata={m?.proiStimata} dim quotaRs={m?.quotaRs} quotaRsTotal={m?.quotaRsTotalProi} />
+                                  </td>
+                                </Fragment>
+                              );
+                            })}
+                          </tr>
+                          {detailExpanded && (
+                            <tr id={`dashboard-punti-details-${pdv.codicePos}`} className="border-b">
+                              <td colSpan={1 + pisteAttive.length * 2} className="p-0">
+                                <PdvSalesDrilldown sales={salesByPdv.get(pdv.codicePos) || []} />
                               </td>
-                              <td className="px-2 py-2 text-center border-r last:border-r-0" data-testid={`cell-table-${pdv.codicePos}-${p.pista}-proiezione`}>
-                                <TabellaCellSingolo valore={m?.valoreProiUi ?? m?.valoreProi} soglia={m?.sogliaProi} variant="proiezione" stimata={m?.proiStimata} dim quotaRs={m?.quotaRs} quotaRsTotal={m?.quotaRsTotalProi} />
-                              </td>
-                            </Fragment>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </Fragment>
                 );
               })}
@@ -3516,6 +3591,7 @@ export default function DashboardGaraReale() {
         month: String(selMonth),
         year: String(selYear),
         inGaraOnly: "true",
+        includeDetails: "true",
       });
       if (effectiveConfigId) params.set("garaConfigId", effectiveConfigId);
       if (pdvView !== "origine") params.set("pdvView", pdvView);
@@ -5234,6 +5310,16 @@ export default function DashboardGaraReale() {
   }, [pistaStats, garaCalcConfig, garaConfigMissing]);
 
   const isLoading = loadingMapped || loadingConfig;
+  const lastUpdatedLabel = mappedData?.lastUpdatedAt
+    ? new Intl.DateTimeFormat("it-IT", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Europe/Rome",
+      }).format(new Date(mappedData.lastUpdatedAt))
+    : null;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-transparent" data-testid="dashboard-gara-reale">
@@ -5318,6 +5404,11 @@ export default function DashboardGaraReale() {
               ))}
             </SelectContent>
           </Select>
+        )}
+        {lastUpdatedLabel && (
+          <span className="hidden lg:inline text-xs text-muted-foreground whitespace-nowrap" data-testid="text-dashboard-last-updated">
+            Ultimo aggiornamento: {lastUpdatedLabel}
+          </span>
         )}
         <Button
           variant="outline"
@@ -7294,7 +7385,7 @@ export default function DashboardGaraReale() {
               );
             })()}
 
-            <TabellaPdvPista pistaStats={pistaStats} orgId={orgId} mese={selMonth} anno={selYear} pezziExtraByPdv={pezziExtraByPdv} />
+            <TabellaPdvPista pistaStats={pistaStats} orgId={orgId} mese={selMonth} anno={selYear} pezziExtraByPdv={pezziExtraByPdv} saleDetails={mappedData.saleDetails} />
 
             {sosCaringAllowed && garaCalcConfig.sosCaring && garaCalcConfig.sosCaring.rows.length > 0 && (
               <SosCaringSection

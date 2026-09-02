@@ -3580,7 +3580,7 @@ export async function registerRoutes(
       // chiamante può passare includeAnnullate=true per includerle (usato dalla
       // pagina VenditeBiSuite che mostra anche le righe annullate con badge).
       const includeAnnullate = req.query.includeAnnullate === "true";
-      const { normalizePdvView } = await import("../shared/pdvView");
+      const { normalizePdvView, resolveSalePdvForView } = await import("../shared/pdvView");
       const pdvView = normalizePdvView(req.query.pdvView);
 
       const buildPdvDirectory = async (months: Array<{ year: number; month: number }>) => {
@@ -4242,7 +4242,7 @@ export async function registerRoutes(
       // prospetto attribuendo le vendite al PDV scelto. Default 'origine'
       // (comportamento invariato). Solo questa route la supporta: tutti gli
       // altri consumer restano ancorati al PDV di origine.
-      const { normalizePdvView } = await import("../shared/pdvView");
+      const { normalizePdvView, resolveSalePdvForView } = await import("../shared/pdvView");
       const pdvView = normalizePdvView(req.query.pdvView);
 
       // Task #367: canonicalizza le RS (alias + normalizzazione dal registro)
@@ -4252,6 +4252,14 @@ export async function registerRoutes(
         const canon = s.ragioneSociale ? resolveRsMapped(s.ragioneSociale) : s.ragioneSociale;
         return canon !== s.ragioneSociale ? { ...s, ragioneSociale: canon } : s;
       });
+      const lastUpdatedAt = allSales.reduce<Date | null>((latest, sale) => {
+        if (!sale.fetchedAt) return latest;
+        const current = new Date(sale.fetchedAt);
+        return !latest || current.getTime() > latest.getTime() ? current : latest;
+      }, null);
+      const operatorAddetti = profile.role === "operatore" ? (profile.bisuiteAddetti ?? []) : null;
+      const { filterSalesByAssignedAddetti } = await import("./bisuiteMappedSales");
+      const scopedAllSales = filterSalesByAssignedAddetti(allSales, operatorAddetti);
 
       let garaCfg = undefined as Awaited<ReturnType<typeof storage.getGaraConfigById>> | undefined;
       if (inGaraOnly) {
@@ -4282,7 +4290,7 @@ export async function registerRoutes(
 
       const { selectInGaraSales } = await import("./bisuiteGaraFilter");
       const { sales: salesInGara, calendarsAvailable, totalSalesUnfiltered, salesExcludedOutOfGara } =
-        selectInGaraSales(allSales, inGaraOnly, garaCfg, pdvView);
+        selectInGaraSales(scopedAllSales, inGaraOnly, garaCfg, pdvView);
 
       // Task #478 — perimetro opzionale RS/PDV: liste separate da virgola.
       // Con perimetro attivo daily/totalSales/totalImporto (e tutto il resto)
@@ -4341,6 +4349,58 @@ export async function registerRoutes(
         salesSenzaDestinazione,
         totaliPistaCanvass,
       } = aggregateMappedSales(sales, rules, { pdvView, pdvDirectory, canvassIndex, canvassKpiRules });
+      const includeDetails = req.query.includeDetails === "true" || req.query.includeDetails === "1";
+      const saleDetails = includeDetails
+        ? sales.flatMap((sale) => {
+            const effectivePdv = resolveSalePdvForView(sale, pdvView);
+            // Riusa l'aggregatore canonico su una singola vendita: nel
+            // drill-down entrano solo vendite con almeno un contributo reale
+            // alle colonne della tabella, con la stessa mappatura dei totali.
+            const single = aggregateMappedSales([sale], rules, { pdvView, pdvDirectory, canvassIndex, canvassKpiRules });
+            const pdv = single.pdvList.find((entry) => entry.codicePos === effectivePdv.codicePos);
+            if (!pdv) return [];
+            const contributions: Array<{ key: string; label: string; value: number; unit?: "pezzi" | "euro" }> = [];
+            for (const item of pdv.items) {
+              contributions.push({
+                key: `item:${item.pista}:${item.targetCategory}`,
+                label: `${item.pista} · ${item.targetLabel}`,
+                value: item.pezzi,
+                unit: "pezzi",
+              });
+            }
+            for (const addon of pdv.addons ?? []) {
+              contributions.push({
+                key: `addon:${addon.pista}:${addon.targetCategory}`,
+                label: `${addon.pista} · ${addon.targetLabel}`,
+                value: addon.occorrenze,
+                unit: "pezzi",
+              });
+            }
+            for (const [pista, value] of Object.entries(pdv.countByPistaCanvass ?? {})) {
+              if (!value) continue;
+              contributions.push({ key: `vf:${pista}`, label: pista, value, unit: "pezzi" });
+            }
+            if (pdv.pezziIva) contributions.push({ key: "extra:iva", label: "IVA", value: pdv.pezziIva, unit: "pezzi" });
+            if (pdv.cbCambiPiano) contributions.push({ key: "extra:cb", label: "CB", value: pdv.cbCambiPiano, unit: "pezzi" });
+            if (pdv.telefoni) contributions.push({ key: "extra:telefoni", label: "Telefoni", value: pdv.telefoni, unit: "pezzi" });
+            if (pdv.accessori?.importo) contributions.push({ key: "extra:accessori", label: "Accessori netto IVA", value: pdv.accessori.importo / 1.22, unit: "euro" });
+            if (pdv.servizi?.importo) contributions.push({ key: "extra:servizi", label: "Servizi netto IVA", value: pdv.servizi.importo / 1.22, unit: "euro" });
+            if (contributions.length === 0) return [];
+            return [{
+              id: sale.id,
+              bisuiteId: sale.bisuiteId,
+              dataVendita: sale.dataVendita,
+              codicePos: effectivePdv.codicePos,
+              nomeNegozio: effectivePdv.nomeNegozio,
+              nomeAddetto: sale.nomeAddetto,
+              nomeCliente: sale.nomeCliente,
+              totale: sale.totale,
+              stato: sale.stato,
+              categorieArticoli: sale.categorieArticoli,
+              contributions,
+            }];
+          })
+        : undefined;
 
       res.json({
         month,
@@ -4358,6 +4418,7 @@ export async function registerRoutes(
         hasCanvassBrand,
         totaliPistaCanvass: totaliPistaCanvass ?? null,
         latestSaleDate: latestSaleDate ? latestSaleDate.toISOString() : null,
+        lastUpdatedAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
         inGaraOnly,
         totalSalesUnfiltered,
         salesExcludedOutOfGara,
@@ -4366,6 +4427,7 @@ export async function registerRoutes(
         daily,
         pdvView,
         salesSenzaDestinazione,
+        ...(saleDetails ? { saleDetails } : {}),
       });
     } catch (error: unknown) {
       console.error("BiSuite mapped sales error:", error);

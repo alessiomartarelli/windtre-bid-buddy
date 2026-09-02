@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -9,6 +9,7 @@ import { ScrollableTable } from "@/components/ui/scrollable-table";
 import { normalizeRsName } from "@shared/ragioneSociale";
 import type { PezziExtraColKey, PistaCanvass } from "@/lib/bisuiteClassification";
 import { emptyPezziExtra, sommaPezziExtra, type PezziExtraCounters } from "@shared/pdvPezziExtra";
+import { PdvSalesDrilldown, type PdvSaleDetail } from "@/components/PdvSalesDrilldown";
 
 // Tabella PDV × Pista (solo Pezzi) per la pagina Vendite BiSuite.
 // Stessa struttura della tabella della Dashboard Gara Reale (RS espandibili
@@ -65,6 +66,7 @@ export interface PdvPezziRow {
   countByPista: Partial<Record<PistaCanvass, number>>;
   /** Contatori extra Task #398 (IVA, CB, Telefoni, € Accessori/Servizi). */
   pezziExtra?: PezziExtraCounters;
+  vendite?: PdvSaleDetail[];
 }
 
 interface Props {
@@ -84,6 +86,7 @@ type PdvEntry = {
   nomeNegozio: string;
   perPista: Map<PistaCanvass, Cell>;
   extra: PezziExtraCounters;
+  vendite: PdvSaleDetail[];
 };
 
 type RsEntry = {
@@ -110,6 +113,7 @@ const sortedPdvList = (pdvList: PdvEntry[], sort: PdvSort) => {
 
 export function TabellaPdvPistaPezzi({ rows, pistaLabels, piste, extraColKeys }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expandedPdv, setExpandedPdv] = useState<Set<string>>(new Set());
   const [pdvSort, setPdvSort] = useState<PdvSort>(null);
   const extraCols = useMemo(
     () => extraColKeys
@@ -131,9 +135,10 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels, piste, extraColKeys }:
       }
       const entry = rsMap.get(rsKey)!;
       if (!entry.pdvs.has(pdv.codicePos)) {
-        entry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio, perPista: new Map(), extra: emptyPezziExtra() });
+        entry.pdvs.set(pdv.codicePos, { codicePos: pdv.codicePos, nomeNegozio: pdv.nomeNegozio, perPista: new Map(), extra: emptyPezziExtra(), vendite: [] });
       }
       const pdvEntry = entry.pdvs.get(pdv.codicePos)!;
+      if (pdv.vendite?.length) pdvEntry.vendite.push(...pdv.vendite);
       for (const pista of piste) {
         const n = pdv.countByPista[pista] || 0;
         if (n === 0) continue;
@@ -187,6 +192,13 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels, piste, extraColKeys }:
         ? { pista, direction: current.direction === "asc" ? "desc" : "asc" }
         : { pista, direction: "asc" }
     ));
+  };
+  const togglePdv = (key: string) => {
+    setExpandedPdv(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
   };
   const allKeys = rsRows.map(r => r.rsKey);
   const allExpanded = allKeys.length > 0 && allKeys.every(k => expanded.has(k));
@@ -372,6 +384,8 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels, piste, extraColKeys }:
                   pdvSort={pdvSort}
                   piste={piste}
                   extraCols={extraCols}
+                  expandedPdv={expandedPdv}
+                  onTogglePdv={togglePdv}
                 />
               ))}
               <tr className="border-t-2 font-bold bg-primary/5" data-testid="row-pezzi-totale">
@@ -402,6 +416,8 @@ function RsGroup({
   pdvSort,
   piste,
   extraCols,
+  expandedPdv,
+  onTogglePdv,
 }: {
   rs: RsEntry;
   expanded: boolean;
@@ -411,6 +427,8 @@ function RsGroup({
   pdvSort: PdvSort;
   piste: readonly PistaCanvass[];
   extraCols: ReadonlyArray<typeof ALL_PEZZI_EXTRA_COLS[number]>;
+  expandedPdv: Set<string>;
+  onTogglePdv: (key: string) => void;
 }) {
   const pdvList = useMemo(() => sortedPdvList(rs.pdvList, pdvSort), [rs.pdvList, pdvSort]);
   // Id sicuri per aria-controls (niente spazi: lista separata da spazi).
@@ -449,21 +467,50 @@ function RsGroup({
         ))}
         <td className="text-right px-3 py-2 tabular-nums font-bold">{sumRow(rs.perPista)}</td>
       </tr>
-      {expanded && pdvList.map(pdv => (
-        <tr key={pdv.codicePos} id={pdvRowId(pdv.codicePos)} className="border-b" data-testid={`row-pezzi-pdv-${pdv.codicePos}`}>
-          <td className="px-3 py-1.5 pl-8 sticky left-0 bg-card z-10">
-            <div className="truncate max-w-[220px]">{pdv.nomeNegozio}</div>
-            <div className="text-[10px] font-mono text-muted-foreground">{pdv.codicePos}</div>
-          </td>
-          {piste.map(p => (
-            <td key={p} className="text-right px-3 py-1.5 tabular-nums">{pdv.perPista.get(p) || 0}</td>
-          ))}
-          {hasExtra && extraCols.map(c => (
-            <td key={c.key} className="text-right px-3 py-1.5 tabular-nums" data-testid={`cell-pezzi-pdv-${pdv.codicePos}-${c.key}`}>{fmtVal(pdv.extra[c.key], c.euro)}</td>
-          ))}
-          <td className="text-right px-3 py-1.5 tabular-nums font-medium">{sumRow(pdv.perPista)}</td>
-        </tr>
-      ))}
+      {expanded && pdvList.map(pdv => {
+        const detailKey = `${rs.rsKey}|${pdv.codicePos}`;
+        const detailExpanded = expandedPdv.has(detailKey);
+        return (
+          <Fragment key={pdv.codicePos}>
+            <tr
+              id={pdvRowId(pdv.codicePos)}
+              className="border-b hover:bg-muted/30"
+              data-testid={`row-pezzi-pdv-${pdv.codicePos}`}
+            >
+              <td className="px-3 py-1.5 pl-8 sticky left-0 bg-card z-10">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => onTogglePdv(detailKey)}
+                  aria-expanded={detailExpanded}
+                  aria-controls={`${pdvRowId(pdv.codicePos)}-details`}
+                  data-testid={`btn-pezzi-pdv-toggle-${pdv.codicePos}`}
+                >
+                  {detailExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                  <div>
+                    <div className="truncate max-w-[220px] font-medium">{pdv.nomeNegozio}</div>
+                    <div className="text-[10px] font-mono text-muted-foreground">{pdv.codicePos}</div>
+                  </div>
+                </button>
+              </td>
+              {piste.map(p => (
+                <td key={p} className="text-right px-3 py-1.5 tabular-nums">{pdv.perPista.get(p) || 0}</td>
+              ))}
+              {hasExtra && extraCols.map(c => (
+                <td key={c.key} className="text-right px-3 py-1.5 tabular-nums" data-testid={`cell-pezzi-pdv-${pdv.codicePos}-${c.key}`}>{fmtVal(pdv.extra[c.key], c.euro)}</td>
+              ))}
+              <td className="text-right px-3 py-1.5 tabular-nums font-medium">{sumRow(pdv.perPista)}</td>
+            </tr>
+            {detailExpanded && (
+              <tr id={`${pdvRowId(pdv.codicePos)}-details`} className="border-b">
+                <td colSpan={1 + piste.length + (hasExtra ? extraCols.length : 0) + 1} className="p-0">
+                  <PdvSalesDrilldown sales={pdv.vendite} />
+                </td>
+              </tr>
+            )}
+          </Fragment>
+        );
+      })}
     </>
   );
 }

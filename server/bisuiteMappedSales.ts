@@ -127,6 +127,18 @@ export type SalesPerimeter = {
   ragioniSociali?: string[];
 };
 
+/** Applica il perimetro addetti dell'operatore prima di qualsiasi totale.
+ * null = ruolo non operatore; [] = operatore senza addetti, quindi nessun dato. */
+export function filterSalesByAssignedAddetti<T extends { nomeAddetto?: string | null }>(
+  sales: T[],
+  assignedAddetti: string[] | null,
+): T[] {
+  if (assignedAddetti === null) return sales;
+  const allowed = new Set(assignedAddetti.map((name) => name.toLowerCase().trim()).filter(Boolean));
+  if (allowed.size === 0) return [];
+  return sales.filter((sale) => allowed.has(String(sale.nomeAddetto || "").toLowerCase().trim()));
+}
+
 export function filterSalesByPerimeter<T extends MappableSale>(
   sales: T[],
   perimeter: SalesPerimeter | undefined,

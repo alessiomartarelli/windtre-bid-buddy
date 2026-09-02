@@ -93,6 +93,7 @@ import { it } from "date-fns/locale";
 import { AppNavbar } from "@/components/AppNavbar";
 import {
   type ArticleType,
+  type PezziExtraColKey,
   type PistaCanvass,
   type SaleClassification,
   classifySaleArticles,
@@ -110,6 +111,7 @@ import {
   TYPE_COLORS,
 } from "@/lib/bisuiteClassification";
 import { TabellaPdvPistaPezzi } from "@/components/TabellaPdvPistaPezzi";
+import type { PdvSaleContribution } from "@/components/PdvSalesDrilldown";
 import PlafondRicariche, { usePlafondRicariche, formatLastSync } from "@/components/PlafondRicariche";
 import { GraficoAndamentoPezzi, type PezziTrendPoint } from "@/components/GraficoAndamentoPezzi";
 import { buildCanvassIndex, type CanvassOffer } from "@shared/canvassMapping";
@@ -140,6 +142,7 @@ interface BisuiteSale {
   categorieArticoli: string | null;
   rawData: any;
   fetchedAt: string | null;
+  contributions?: PdvSaleContribution[];
 }
 
 /** Chiave PDV coerente per filtri, KPI, riepiloghi ed export.
@@ -402,7 +405,6 @@ export default function VenditeBiSuite() {
   // Task #537 — saldi plafond ricariche + timestamp dell'ultima sync BiSuite
   // riuscita (mostrato vicino ai comandi di sincronizzazione, ora italiana).
   const { data: plafondData } = usePlafondRicariche(orgId);
-  const lastSyncLabel = formatLastSync(plafondData?.lastSync);
 
   const { data: credStatus } = useQuery<{ configured: boolean }>({
     queryKey: ["/api/bisuite-credentials-status"],
@@ -560,6 +562,16 @@ export default function VenditeBiSuite() {
   // rawSales include anche le ANNULLATA (visibili nella tabella grezza con badge),
   // mentre `sales` viene usato per tutti i conteggi/aggregati e le esclude.
   const fetchedSales = data?.sales || [];
+  const latestSalesFetch = useMemo(() => {
+    let latest: string | null = null;
+    for (const sale of fetchedSales) {
+      if (sale.fetchedAt && (!latest || new Date(sale.fetchedAt).getTime() > new Date(latest).getTime())) {
+        latest = sale.fetchedAt;
+      }
+    }
+    return latest;
+  }, [fetchedSales]);
+  const lastSyncLabel = formatLastSync(latestSalesFetch ?? plafondData?.lastSync);
   const pdvDirectory = data?.pdvDirectory;
   // Task #462 — in vista Destinazione riscriviamo (solo in memoria) i campi
   // PDV della vendita con il PDV di destinazione risolto dal raw: tutti i
@@ -856,11 +868,16 @@ export default function VenditeBiSuite() {
         };
       }
       const entry = map[code];
-      entry.vendite.push(sale);
-
       const sc = saleClassifications.get(sale.id);
       let saleMatchesFilter = !componentFilterActive;
       let saleFilteredAmount = 0;
+      const saleExtra = emptyPezziExtra();
+      const saleContributionMap = new Map<string, PdvSaleContribution>();
+      const addContribution = (contribution: PdvSaleContribution) => {
+        const existing = saleContributionMap.get(contribution.key);
+        if (existing) existing.value += contribution.value;
+        else saleContributionMap.set(contribution.key, { ...contribution });
+      };
       if (sc) {
         for (const art of sc.articles) {
           if (!articleMatchesFilter(art)) continue;
@@ -878,6 +895,14 @@ export default function VenditeBiSuite() {
           for (const [pista, volume] of Object.entries(classifiedArticlePistaCounts(art)) as [PistaCanvass, number][]) {
             if (filterPista !== "all" && pista !== filterPista) continue;
             entry.countByPista[pista] = (entry.countByPista[pista] || 0) + volume;
+            if (vfPisteSet.has(pista)) {
+              addContribution({
+                key: `pista:${pista}`,
+                label: pistaLabels[pista],
+                value: volume,
+                unit: "pezzi",
+              });
+            }
             if (pista === art.pista) {
               entry.amountByPista[pista] = (entry.amountByPista[pista] || 0) + art.prezzo;
               accumulaCategoriaCanvass(entry.categorieByPista, entry.ivaByPista, art);
@@ -887,7 +912,23 @@ export default function VenditeBiSuite() {
           // per la Tabella PDV × Pista (Pezzi): stessi filtri e stessa
           // esclusione annullate degli altri aggregati.
           accumulaPezziExtra(entry.pezziExtra, art);
+          accumulaPezziExtra(saleExtra, art);
         }
+      }
+      const extraLabels: Record<PezziExtraColKey, { label: string; unit: "pezzi" | "euro" }> = {
+        iva: { label: "IVA", unit: "pezzi" },
+        cb: { label: "CB", unit: "pezzi" },
+        telefoni: { label: "Telefoni", unit: "pezzi" },
+        accEuro: { label: "Accessori netto IVA", unit: "euro" },
+        srvEuro: { label: "Servizi netto IVA", unit: "euro" },
+      };
+      for (const key of pezziExtraColKeys) {
+        const value = saleExtra[key];
+        if (!value) continue;
+        addContribution({ key: `extra:${key}`, label: extraLabels[key].label, value, unit: extraLabels[key].unit });
+      }
+      if (saleContributionMap.size > 0) {
+        entry.vendite.push({ ...sale, contributions: Array.from(saleContributionMap.values()) });
       }
       if (saleMatchesFilter) {
         entry.totaleVendite++;
@@ -900,7 +941,7 @@ export default function VenditeBiSuite() {
     return Object.values(map)
       .filter((p) => p.totaleVendite > 0 || p.vendite.length > 0)
       .sort((a, b) => b.totaleVendite - a.totaleVendite);
-  }, [aggregateSales, saleClassifications, articleMatchesFilter, componentFilterActive]);
+  }, [aggregateSales, saleClassifications, articleMatchesFilter, componentFilterActive, filterPista, pezziExtraColKeys, pistaLabels, vfPisteSet]);
 
   // Andamento giornaliero dei KPI della Tabella PDV × Pista (Pezzi): stessi
   // conteggi classificati e stessi filtri attivi di pdvSummaries, ma

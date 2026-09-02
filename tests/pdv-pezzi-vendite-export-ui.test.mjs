@@ -172,6 +172,7 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     const context = await newAuthedContext(browser, session);
     const page = await context.newPage();
     await page.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'networkidle' });
+    await page.getByTestId('text-last-bisuite-sync').waitFor({ state: 'attached', timeout: 15000 });
 
     const card = page.locator('[data-testid="card-tabella-pdv-pista-pezzi"]');
     await card.waitFor({ state: 'visible', timeout: 20000 });
@@ -252,6 +253,14 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     await deltaRs.locator('td').last().click();
     assert.equal(await deltaToggle.getAttribute('aria-expanded'), 'true', 'click riga: espande come prima');
     await deltaPdvRow.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Secondo livello come nel riferimento: click sul PDV → dettaglio delle
+    // singole vendite che alimentano i volumi della riga.
+    await page.getByTestId('btn-pezzi-pdv-toggle-POSD1').click();
+    const saleDrilldown = page.getByTestId('pdv-sales-drilldown');
+    await saleDrilldown.waitFor({ state: 'visible', timeout: 5000 });
+    assert.match(await saleDrilldown.innerText(), /Vendite che compongono il totale attuale/i);
+    assert.match(await saleDrilldown.innerText(), /3 vendite/i);
 
     // Mouse: click sul bottone richiude una volta sola (niente doppio toggle da bubbling).
     await deltaToggle.click();

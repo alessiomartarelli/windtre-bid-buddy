@@ -23,7 +23,7 @@ import crypto from 'node:crypto';
 
 const { storage } = await import('../server/storage.ts');
 const { pool } = await import('../server/db.ts');
-const { aggregateMappedSales } = await import('../server/bisuiteMappedSales.ts');
+const { aggregateMappedSales, filterSalesByAssignedAddetti } = await import('../server/bisuiteMappedSales.ts');
 const { selectInGaraSales } = await import('../server/bisuiteGaraFilter.ts');
 const {
   getDefaultMappingRules,
@@ -97,6 +97,21 @@ function weekdaysCalendar(specialDays) {
     ...(specialDays ? { specialDays } : {}),
   };
 }
+
+test('perimetro operatore: totali e dettagli partono dagli stessi addetti assegnati', () => {
+  const sales = [
+    { id: 'mine', nomeAddetto: ' Mario Rossi ' },
+    { id: 'other', nomeAddetto: 'Luigi Bianchi' },
+    { id: 'missing', nomeAddetto: null },
+  ];
+  assert.deepEqual(
+    filterSalesByAssignedAddetti(sales, ['mario rossi']).map((sale) => sale.id),
+    ['mine'],
+    'match addetto case-insensitive e trim',
+  );
+  assert.deepEqual(filterSalesByAssignedAddetti(sales, []), [], 'operatore senza addetti non vede l’intera organizzazione');
+  assert.equal(filterSalesByAssignedAddetti(sales, null), sales, 'admin/super admin mantengono il perimetro organizzazione');
+});
 
 // Ripete il percorso della route: legge le vendite del mese e applica il
 // filtro in-gara con la gara config del mese.
