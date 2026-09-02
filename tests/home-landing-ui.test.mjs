@@ -172,6 +172,18 @@ async function seedPlafond(pool, orgId, { rsNome, saldo }) {
     [orgId, rsNome],
   );
   const rsId = rs.rows[0].id;
+  // Task #548: una RS senza PDV in Struttura non compare più nei saldi —
+  // il seed le associa un PDV (senza dealer) in organization_config.
+  const pdv = JSON.stringify([{ codicePos: `POS ${rsNome}`.toUpperCase(), nome: `PDV ${rsNome}`, ragioneSociale: rsNome, codiceDealer: '' }]);
+  await pool.query(
+    `INSERT INTO organization_config (organization_id, config)
+       VALUES ($1, jsonb_build_object('puntiVendita', $2::jsonb))
+     ON CONFLICT (organization_id) DO UPDATE SET
+       config = organization_config.config || jsonb_build_object(
+         'puntiVendita', COALESCE(organization_config.config->'puntiVendita', '[]'::jsonb) || $2::jsonb),
+       updated_at = now()`,
+    [orgId, pdv],
+  );
   await pool.query(
     `INSERT INTO plafond_ricariche_ops
        (organization_id, ragione_sociale_id, tipo, importo, saldo_prima, saldo_dopo, consumo_cutoff, created_by_name)

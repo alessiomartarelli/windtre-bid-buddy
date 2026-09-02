@@ -71,19 +71,25 @@ export async function getDealerMaps(orgId: string, resolveRs: (rs: string) => st
   posToDealer: Map<string, string>;      // posKey → dealerKey
   dealers: Map<string, DealerInfo>;      // dealerKey → info
   posSenzaDealer: Map<string, { rsCanon: string; pdv: PlafondPdvRef }>; // posKey → RS canonica
+  rsConPdv: Set<string>;                 // RS canoniche con ≥1 PDV in Struttura (Task #548)
 }> {
   const cfg = await storage.getOrgConfig(orgId);
   const pv = (((cfg?.config as Record<string, unknown> | null)?.puntiVendita || []) as StructPdvCfg[]);
   const posToDealer = new Map<string, string>();
   const dealers = new Map<string, DealerInfo>();
   const posSenzaDealer = new Map<string, { rsCanon: string; pdv: PlafondPdvRef }>();
-  if (!Array.isArray(pv)) return { posToDealer, dealers, posSenzaDealer };
+  const rsConPdv = new Set<string>();
+  if (!Array.isArray(pv)) return { posToDealer, dealers, posSenzaDealer, rsConPdv };
   for (const p of pv) {
     const codicePos = String(p?.codicePos ?? "").trim();
+    const rsNamePre = String(p?.ragioneSociale ?? "").trim();
+    // Perimetro RS visibili (Task #548): ogni riga PDV della Struttura con una
+    // RS conta, anche se (ancora) senza codice POS.
+    if (rsNamePre) rsConPdv.add(resolveRs(rsNamePre) || rsNamePre);
     if (!codicePos) continue;
     const posKey = normKey(codicePos);
     const nome = String(p?.nome ?? "").trim();
-    const rsName = String(p?.ragioneSociale ?? "").trim();
+    const rsName = rsNamePre;
     const rsCanon = rsName ? (resolveRs(rsName) || rsName) : "N/D";
     const dealer = String(p?.codiceDealer ?? "").trim();
     if (!dealer) {
@@ -97,7 +103,7 @@ export async function getDealerMaps(orgId: string, resolveRs: (rs: string) => st
     d.pdv.push({ codicePos, nome });
     d.rsCanon.add(rsCanon);
   }
-  return { posToDealer, dealers, posSenzaDealer };
+  return { posToDealer, dealers, posSenzaDealer, rsConPdv };
 }
 
 type Bucket = {
@@ -122,7 +128,7 @@ export async function computePlafondSaldi(orgId: string): Promise<PlafondSaldo[]
     storage.getRicaricheConsumoByPos(orgId),
     getDealerMaps(orgId, resolveRs),
   ]);
-  const { posToDealer, dealers, posSenzaDealer } = maps;
+  const { posToDealer, dealers, posSenzaDealer, rsConPdv } = maps;
   const hasDealers = dealers.size > 0;
   const nameById = new Map(registry.map((r) => [r.id, r.nome]));
   const idByCanon = new Map<string, string>();
@@ -230,10 +236,14 @@ export async function computePlafondSaldi(orgId: string): Promise<PlafondSaldo[]
   // --- Dealer configurati senza op/consumo: compaiono comunque (preventivo) ---
   for (const dk of dealers.keys()) dealerBucket(dk);
 
-  // --- Org SENZA dealer: parità storica — ogni RS del registro compare ---
+  // --- Org SENZA dealer: compaiono le RS con almeno un PDV in Struttura ---
+  // (Task #548: le anagrafiche del registro SENZA PDV non materializzano più
+  // una card "Plafond non configurato"; il registro serve solo per l'anchor.)
   if (!hasDealers) {
+    for (const canon of rsConPdv) rsBucket(canon);
     for (const r of registry) {
       const canon = resolveRs(r.nome) || r.nome;
+      if (!rsConPdv.has(canon)) continue;
       const b = rsBucket(canon);
       if (!b.ragioneSocialeId) b.ragioneSocialeId = r.id;
     }
@@ -241,6 +251,11 @@ export async function computePlafondSaldi(orgId: string): Promise<PlafondSaldo[]
 
   const out: PlafondSaldo[] = [];
   for (const b of buckets.values()) {
+    // Task #548 — una riga legacy per RS compare solo se la RS ha almeno un
+    // PDV in Struttura oppure consumo reale (vendite su POS non in Struttura:
+    // dati contabili da non nascondere). Le sole operazioni storiche NON
+    // fanno ricomparire la card: restano consultabili nello storico.
+    if (b.rsCanon !== null && !rsConPdv.has(b.rsCanon) && b.consumoTotale === 0) continue;
     const bOps = b.ops;
     let base = 0;
     let cutoff: Date | null = null;

@@ -211,7 +211,9 @@ test('plafond ricariche per RS', async (t) => {
       assert.equal(row.inAllerta, false);
 
       // Una RS con SOLA op soglia resta "plafond non configurato".
+      // (Task #548: serve un PDV in Struttura perché la riga compaia.)
       const RS_S = uniq('RS PLAFOND SOGLIA').toUpperCase().replace(/_/g, ' ');
+      assert.equal((await post('/api/admin/struttura/pdv', { codicePos: uniq('9S1').toUpperCase(), nome: 'PDV S', ragioneSociale: RS_S, codiceDealer: '' })).status, 201);
       assert.equal((await post('/api/ricariche-plafond', { ragioneSociale: RS_S, tipo: 'soglia', importo: 30 })).status, 201);
       r = await get('/api/ricariche-plafond');
       row = r.body.saldi.find((s) => s.ragioneSociale === RS_S);
@@ -287,17 +289,18 @@ test('plafond ricariche per RS', async (t) => {
       assert.equal(x.status, 403);
     });
 
-    await t.test('RS del registro senza vendite: plafond impostabile in via preventiva', async () => {
-      // RS appena creata nel registro, nessuna vendita RICARICHE.
+    await t.test('RS con PDV ma senza vendite: plafond impostabile in via preventiva (Task #548)', async () => {
+      // RS nel registro CON un PDV in Struttura, nessuna vendita RICARICHE.
       const RS_NEW = uniq('RS PLAFOND NUOVA').toUpperCase().replace(/_/g, ' ');
       await pool.query(
-        `INSERT INTO cdg_ragioni_sociali (organization_id, nome, origine) VALUES ($1, $2, 'manuale')`,
+        `INSERT INTO cdg_ragioni_sociali (organization_id, nome, origine) VALUES ($1, $2, 'manuale') ON CONFLICT DO NOTHING`,
         [admin.orgId, RS_NEW],
       );
+      assert.equal((await post('/api/admin/struttura/pdv', { codicePos: uniq('9N0').toUpperCase(), nome: 'PDV NUOVA', ragioneSociale: RS_NEW, codiceDealer: '' })).status, 201);
       // Compare nell'elenco con plafond non configurato e consumo 0.
       const r0 = await get('/api/ricariche-plafond');
       const row0 = r0.body.saldi.find((s) => s.ragioneSociale === RS_NEW);
-      assert.ok(row0, 'la RS del registro senza vendite deve comparire nei saldi');
+      assert.ok(row0, 'la RS con PDV senza vendite deve comparire nei saldi');
       assert.equal(row0.saldo, null);
       assert.equal(row0.consumoTotale, 0);
       // L'admin può impostare il saldo prima della prima ricarica venduta.
@@ -310,6 +313,32 @@ test('plafond ricariche per RS', async (t) => {
       assert.ok(op, 'operazione della nuova RS presente nello storico');
       assert.equal(op.saldoPrima, 0);
       assert.equal(op.saldoDopo, 200);
+    });
+
+    await t.test('RS senza PDV: nascosta dai saldi, storico consultabile (Task #548)', async () => {
+      // Anagrafica del registro SENZA alcun PDV in Struttura: nessuna card.
+      const RS_EMPTY = uniq('RS PLAFOND VUOTA').toUpperCase().replace(/_/g, ' ');
+      const ins = await pool.query(
+        `INSERT INTO cdg_ragioni_sociali (organization_id, nome, origine) VALUES ($1, $2, 'manuale') RETURNING id`,
+        [admin.orgId, RS_EMPTY],
+      );
+      let r = await get('/api/ricariche-plafond');
+      assert.equal(r.body.saldi.find((s) => s.ragioneSociale === RS_EMPTY), undefined,
+        'la RS del registro senza PDV NON deve comparire nei saldi');
+      // Nemmeno un'operazione storica la fa ricomparire...
+      await pool.query(
+        `INSERT INTO plafond_ricariche_ops (organization_id, ragione_sociale_id, tipo, importo, saldo_prima, saldo_dopo)
+         VALUES ($1, $2, 'imposta', 90, 0, 90)`,
+        [admin.orgId, ins.rows[0].id],
+      );
+      r = await get('/api/ricariche-plafond');
+      assert.equal(r.body.saldi.find((s) => s.ragioneSociale === RS_EMPTY), undefined,
+        'le sole operazioni storiche non materializzano una card per una RS senza PDV');
+      // ...ma resta consultabile nello storico amministrativo.
+      const st = await get('/api/ricariche-plafond/storico');
+      const op = st.body.storico.find((o) => o.ragioneSociale === RS_EMPTY);
+      assert.ok(op, 'operazione della RS senza PDV presente nello storico');
+      assert.equal(op.importo, 90);
     });
 
     await t.test('modulo vendite_bisuite disabilitato: tutte le route rispondono 403', async () => {
@@ -375,6 +404,11 @@ test('plafond ricariche per RS', async (t) => {
       assert.equal((await jsonReq(`${BASE}/api/admin/struttura/ragione-sociale`, {
         method: 'POST', headers: { Cookie: admin.cookieHeader }, body: JSON.stringify({ nome: RS_M1 }),
       })).status, 201);
+      // Task #548: RS_M1 ha un PDV (altrimenti niente card); il PDV segue la
+      // rinomina, quindi dopo il merge copre anche RS_M2. RS_M2 non entra in
+      // struttura prima del merge (la route di rinomina rifiuterebbe con 409).
+      const P_M1 = uniq('9M1').toUpperCase();
+      assert.equal((await post('/api/admin/struttura/pdv', { codicePos: P_M1, nome: 'PDV M1', ragioneSociale: RS_M1, codiceDealer: '' })).status, 201);
       assert.equal((await post('/api/ricariche-plafond', { ragioneSociale: RS_M1, tipo: 'imposta', importo: 10 })).status, 201);
       assert.equal((await post('/api/ricariche-plafond', { ragioneSociale: RS_M2, tipo: 'imposta', importo: 20 })).status, 201);
       const m1Id = await rsIdByName(RS_M1);
@@ -400,6 +434,16 @@ test('plafond ricariche per RS', async (t) => {
         [admin.orgId, m2Id],
       );
       assert.equal(opsLeft.rows.length, 0, 'le operazioni della RS eliminata non restano orfane');
+      // Task #548: finché i PDV restano in Struttura la riga (vuota) resta
+      // disponibile per la configurazione preventiva...
+      const r3a = await get('/api/ricariche-plafond');
+      const rowAfterDel = r3a.body.saldi.find((s) => s.ragioneSociale === RS_M2);
+      assert.ok(rowAfterDel, 'RS con PDV in Struttura resta visibile anche senza anchor/operazioni');
+      assert.equal(rowAfterDel.saldo, null);
+      // ...e sparisce solo quando anche il PDV viene rimosso dalla Struttura.
+      await jsonReq(`${BASE}/api/admin/struttura/pdv?ragioneSociale=${encodeURIComponent(RS_M2)}&codicePos=${encodeURIComponent(P_M1)}`, {
+        method: 'DELETE', headers: { Cookie: admin.cookieHeader },
+      });
       const r3 = await get('/api/ricariche-plafond');
       assert.equal(r3.body.saldi.find((s) => s.ragioneSociale === RS_M2), undefined);
     });
@@ -713,6 +757,30 @@ test('plafond ricariche per codice dealer', async (t) => {
       assert.equal(d4.consumoTotale, 7, 'il consumo del POS ex-senza-dealer segue il dealer assegnato');
       assert.equal(r.body.saldi.find((s) => !s.codiceDealer && s.senzaDealer && s.ragioneSociale === RS), undefined,
         'nessuna riga senza-dealer residua dopo l\'assegnazione');
+    });
+
+    await t.test('org con dealer: RS del registro senza PDV nascosta, storico consultabile (Task #548)', async () => {
+      const RS_EMPTY = uniq('RS DEALER VUOTA').toUpperCase().replace(/_/g, ' ');
+      const ins = await pool.query(
+        `INSERT INTO cdg_ragioni_sociali (organization_id, nome, origine) VALUES ($1, $2, 'manuale') RETURNING id`,
+        [admin.orgId, RS_EMPTY],
+      );
+      // Op legacy (codice_dealer NULL) su RS senza PDV: niente riga "da
+      // assegnare" nel riepilogo corrente, ma lo storico resta consultabile.
+      await pool.query(
+        `INSERT INTO plafond_ricariche_ops (organization_id, ragione_sociale_id, tipo, importo, saldo_prima, saldo_dopo)
+         VALUES ($1, $2, 'aggiungi', 33, 0, 33)`,
+        [admin.orgId, ins.rows[0].id],
+      );
+      const r = await get('/api/ricariche-plafond');
+      assert.equal(r.body.saldi.find((s) => s.ragioneSociale === RS_EMPTY), undefined,
+        'RS senza PDV non compare nemmeno con operazioni legacy pendenti');
+      const st = await get('/api/ricariche-plafond/storico');
+      assert.ok(st.body.storico.some((o) => o.ragioneSociale === RS_EMPTY && o.importo === 33),
+        'operazione della RS senza PDV consultabile nello storico');
+      // Pulizia: evita interferenze con i test successivi (operatore/UI).
+      await pool.query(`DELETE FROM plafond_ricariche_ops WHERE organization_id = $1 AND ragione_sociale_id = $2`, [admin.orgId, ins.rows[0].id]);
+      await pool.query(`DELETE FROM cdg_ragioni_sociali WHERE id = $1`, [ins.rows[0].id]);
     });
 
     await t.test('operatore: vede solo i dealer dei propri addetti', async () => {
