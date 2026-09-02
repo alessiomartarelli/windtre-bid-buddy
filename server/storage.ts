@@ -1146,6 +1146,59 @@ export class DatabaseStorage implements IStorage {
     return (out as any[]).map((r) => ({ rs: String(r.rs ?? ""), consumo: Number(r.consumo ?? 0) }));
   }
 
+  // Task #544 — consumo ricariche per CODICE POS (grezzo): la chiave contabile
+  // del plafond è il codice dealer, risolto dal chiamante via mappa POS→dealer
+  // della Struttura. `rs` resta come informazione di fallback per i POS non
+  // presenti in Struttura (righe legacy per RS).
+  async getRicaricheConsumoByPos(orgId: string, afterWallTime?: Date | null): Promise<Array<{ pos: string; rs: string; consumo: number }>> {
+    const cutoffClause = afterWallTime
+      ? sql` AND s.data_vendita > ${afterWallTime}`
+      : sql``;
+    const rows = await db.execute(sql`
+      SELECT coalesce(s.codice_pos, '') AS pos,
+             coalesce(s.ragione_sociale, '') AS rs,
+             coalesce(sum((a->'dettaglio'->>'prezzo')::numeric), 0) AS consumo
+        FROM ${bisuiteSales} s,
+             jsonb_array_elements(s.raw_data->'articoli') a
+       WHERE s.organization_id = ${orgId}
+         AND upper(coalesce(trim(s.stato), '')) <> 'ANNULLATA'
+         AND upper(coalesce(trim(a->'categoria'->>'nome'), '')) = 'RICARICHE'
+         ${cutoffClause}
+       GROUP BY coalesce(s.codice_pos, ''), coalesce(s.ragione_sociale, '')
+    `);
+    const out = (rows as unknown as { rows?: any[] }).rows ?? (rows as unknown as any[]);
+    return (out as any[]).map((r) => ({ pos: String(r.pos ?? ""), rs: String(r.rs ?? ""), consumo: Number(r.consumo ?? 0) }));
+  }
+
+  // Task #544 — codici POS (raw) su cui gli addetti indicati hanno vendite:
+  // scopa la lettura plafond degli operatori ai soli dealer di pertinenza.
+  async getPosForAddetti(orgId: string, addetti: string[]): Promise<string[]> {
+    if (addetti.length === 0) return [];
+    const arr = sql`ARRAY[${sql.join(addetti.map((a) => sql`${a}`), sql`, `)}]::text[]`;
+    const rows = await db.execute(sql`
+      SELECT DISTINCT coalesce(s.codice_pos, '') AS pos
+        FROM ${bisuiteSales} s
+       WHERE s.organization_id = ${orgId}
+         AND lower(trim(coalesce(s.nome_addetto, ''))) = ANY(${arr})
+    `);
+    const out = (rows as unknown as { rows?: any[] }).rows ?? (rows as unknown as any[]);
+    return (out as any[]).map((r) => String(r.pos ?? "")).filter(Boolean);
+  }
+
+  // Task #544 — assegna a un dealer le operazioni plafond storiche registrate
+  // per RS (codice_dealer NULL). Nessuna duplicazione: le stesse righe vengono
+  // ripuntate, il registro resta append-only per importi e saldi.
+  async assignPlafondOpsDealer(orgId: string, ragioneSocialeId: string, codiceDealer: string): Promise<number> {
+    const rows = await db.execute(sql`
+      UPDATE ${plafondRicaricheOps}
+         SET codice_dealer = ${codiceDealer}
+       WHERE organization_id = ${orgId}
+         AND ragione_sociale_id = ${ragioneSocialeId}
+         AND codice_dealer IS NULL
+    `);
+    return Number((rows as unknown as { rowCount?: number }).rowCount ?? 0);
+  }
+
   // Task #537 — RS (raw) su cui i nominativi addetti indicati hanno vendite:
   // usato per scopare la lettura del plafond degli operatori alle sole RS di
   // loro pertinenza (stessa semantica del filtro addetti di /api/bisuite-sales).

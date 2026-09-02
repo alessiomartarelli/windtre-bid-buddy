@@ -1,104 +1,288 @@
-// Task #537/#538 — Plafond ricariche per Ragione Sociale.
+// Task #537/#538/#544 — Plafond ricariche.
 //
 // Calcolo condiviso dei saldi plafond (routes + report Telegram). Il saldo è
 // sempre DERIVATO dalle operazioni admin append-only + il consumo RICARICHE
 // (vendite non annullate), mai un contatore decrementato.
 //
-// Task #538 — soglia di avviso per RS: operazione append-only 'soglia'
-// (vince l'ultima registrata; importo 0 = soglia disattivata). Una RS è
-// "in allerta" quando il saldo è negativo oppure sotto la soglia configurata.
+// Task #544 — la chiave contabile del plafond è il CODICE DEALER ("8 miliardi")
+// configurato sui PDV della Struttura (organization_config.puntiVendita):
+//   - più codici POS possono condividere lo stesso dealer ⇒ stesso plafond;
+//   - la stessa Ragione Sociale può contenere dealer diversi ⇒ saldi separati;
+//   - un PDV senza dealer viene SEGNALATO (riga per RS flag senzaDealer), mai
+//     attribuito silenziosamente alla RS di un dealer;
+//   - operazioni storiche per RS (codice_dealer NULL) sono attribuite in
+//     lettura al dealer quando la RS mappa su UN solo dealer; con più dealer
+//     restano su una riga RS "da assegnare" finché l'admin non le assegna
+//     esplicitamente (nessuna duplicazione: l'assegnazione ripunta le stesse
+//     operazioni, non ne crea di nuove).
+// Le org che non hanno ancora configurato alcun dealer mantengono il
+// comportamento storico per Ragione Sociale.
 import { storage } from "./storage";
 import { cdgStorage } from "./cdgStorage";
 
 // Soglia di avviso di default (in €) quando l'admin non ne ha configurata
-// una per la RS: il plafond è configurato ma la soglia no ⇒ avvisa comunque
-// quando il saldo scende sotto questo valore (oltre che quando è negativo).
+// una: il plafond è configurato ma la soglia no ⇒ avvisa comunque quando il
+// saldo scende sotto questo valore (oltre che quando è negativo).
 export const PLAFOND_SOGLIA_DEFAULT = 50;
 
+export type PlafondPdvRef = { codicePos: string; nome: string };
+
 export type PlafondSaldo = {
-  ragioneSocialeId: string;
+  // Chiave contabile (Task #544). "" per le righe legacy per RS (org senza
+  // dealer configurati, oppure operazioni storiche non ancora assegnate).
+  codiceDealer: string;
+  // Descrittiva: RS dei PDV del dealer (unione, separate da " / ") oppure la
+  // RS canonica per le righe legacy.
   ragioneSociale: string;
-  saldo: number | null;          // null = plafond mai configurato per la RS
+  // Anchor RS canonica per le righe legacy per RS ("" per le righe dealer).
+  ragioneSocialeId: string;
+  // PDV della Struttura che consumano questo plafond.
+  pdv: PlafondPdvRef[];
+  // true: operazioni storiche per RS in un'org con dealer configurati, da
+  // assegnare esplicitamente a un dealer (RS con più dealer o RS non mappata).
+  daAssegnare: boolean;
+  // true: consumo da PDV SENZA codice dealer in un'org che ha dealer
+  // configurati — va segnalato, non attribuito a un dealer.
+  senzaDealer: boolean;
+  saldo: number | null;          // null = plafond mai configurato
   consumoTotale: number;         // consumo ricariche complessivo (info)
   consumoDaCutoff: number;       // consumo conteggiato nel saldo corrente
-  // Soglia di avviso effettiva: quella configurata per la RS, altrimenti il
-  // default di sistema (solo se il plafond è configurato). null = nessun
-  // avviso sotto-soglia possibile (plafond non configurato o soglia a 0
-  // esplicita, dove resta solo l'allerta per saldo negativo).
   soglia: number | null;
-  sogliaCustom: boolean;         // true se la soglia viene da un'op 'soglia'
-  // true quando saldo < 0 oppure saldo < soglia: la UI e il report Telegram
-  // usano SOLO questo flag, così la regola resta in un posto solo.
+  sogliaCustom: boolean;
   inAllerta: boolean;
   lastOpAt: string | null;
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const normKey = (s: unknown) => String(s ?? "").trim().toUpperCase();
+
+type StructPdvCfg = {
+  codicePos?: string; nome?: string; ragioneSociale?: string; codiceDealer?: string;
+};
+
+export type DealerInfo = {
+  codice: string;                 // codice dealer come configurato (trim)
+  pdv: PlafondPdvRef[];
+  rsCanon: Set<string>;           // RS canoniche dei suoi PDV
+};
+
+// Mappa POS→dealer e registro dealer dalla Struttura PDV dell'org.
+export async function getDealerMaps(orgId: string, resolveRs: (rs: string) => string | null): Promise<{
+  posToDealer: Map<string, string>;      // posKey → dealerKey
+  dealers: Map<string, DealerInfo>;      // dealerKey → info
+  posSenzaDealer: Map<string, { rsCanon: string; pdv: PlafondPdvRef }>; // posKey → RS canonica
+}> {
+  const cfg = await storage.getOrgConfig(orgId);
+  const pv = (((cfg?.config as Record<string, unknown> | null)?.puntiVendita || []) as StructPdvCfg[]);
+  const posToDealer = new Map<string, string>();
+  const dealers = new Map<string, DealerInfo>();
+  const posSenzaDealer = new Map<string, { rsCanon: string; pdv: PlafondPdvRef }>();
+  if (!Array.isArray(pv)) return { posToDealer, dealers, posSenzaDealer };
+  for (const p of pv) {
+    const codicePos = String(p?.codicePos ?? "").trim();
+    if (!codicePos) continue;
+    const posKey = normKey(codicePos);
+    const nome = String(p?.nome ?? "").trim();
+    const rsName = String(p?.ragioneSociale ?? "").trim();
+    const rsCanon = rsName ? (resolveRs(rsName) || rsName) : "N/D";
+    const dealer = String(p?.codiceDealer ?? "").trim();
+    if (!dealer) {
+      posSenzaDealer.set(posKey, { rsCanon, pdv: { codicePos, nome } });
+      continue;
+    }
+    const dealerKey = normKey(dealer);
+    posToDealer.set(posKey, dealerKey);
+    let d = dealers.get(dealerKey);
+    if (!d) { d = { codice: dealer, pdv: [], rsCanon: new Set() }; dealers.set(dealerKey, d); }
+    d.pdv.push({ codicePos, nome });
+    d.rsCanon.add(rsCanon);
+  }
+  return { posToDealer, dealers, posSenzaDealer };
+}
+
+type Bucket = {
+  key: string;
+  codiceDealer: string;
+  ragioneSocialeId: string;
+  label: string;                 // RS descrittiva
+  pdv: PlafondPdvRef[];
+  posKeys: Set<string>;          // POS del bucket (per il consumo dal cutoff)
+  rsCanon: string | null;        // per le righe RS legacy (match consumo)
+  daAssegnare: boolean;
+  senzaDealer: boolean;
+  ops: Awaited<ReturnType<typeof storage.listPlafondRicaricheOps>>;
+  consumoTotale: number;
+};
 
 export async function computePlafondSaldi(orgId: string): Promise<PlafondSaldo[]> {
-  const [ops, registry, resolveRs, consumoRaw] = await Promise.all([
+  const resolveRs = await cdgStorage.getRsResolver(orgId);
+  const [ops, registry, consumoRaw, maps] = await Promise.all([
     storage.listPlafondRicaricheOps(orgId),
     cdgStorage.listRagioniSociali(orgId, { includeAuto: true }),
-    cdgStorage.getRsResolver(orgId),
-    storage.getRicaricheConsumoByRawRs(orgId),
+    storage.getRicaricheConsumoByPos(orgId),
+    getDealerMaps(orgId, resolveRs),
   ]);
+  const { posToDealer, dealers, posSenzaDealer } = maps;
+  const hasDealers = dealers.size > 0;
   const nameById = new Map(registry.map((r) => [r.id, r.nome]));
-  // Consumo totale per RS canonica (somma delle varianti di nome grezze).
-  const consumoTotByCanon = new Map<string, number>();
+  const idByCanon = new Map<string, string>();
+  for (const r of registry) {
+    const canon = resolveRs(r.nome) || r.nome;
+    if (!idByCanon.has(canon)) idByCanon.set(canon, r.id);
+  }
+
+  const buckets = new Map<string, Bucket>();
+  const dealerBucket = (dealerKey: string): Bucket => {
+    const k = `dealer:${dealerKey}`;
+    let b = buckets.get(k);
+    if (!b) {
+      const info = dealers.get(dealerKey);
+      const rsNames = info ? Array.from(info.rsCanon).sort((a, z) => a.localeCompare(z, "it")) : [];
+      b = {
+        key: k,
+        codiceDealer: info?.codice ?? dealerKey,
+        ragioneSocialeId: "",
+        label: rsNames.join(" / ") || "N/D",
+        pdv: info?.pdv ?? [],
+        posKeys: new Set(info ? info.pdv.map((p) => normKey(p.codicePos)) : []),
+        rsCanon: null,
+        daAssegnare: false,
+        senzaDealer: false,
+        ops: [],
+        consumoTotale: 0,
+      };
+      buckets.set(k, b);
+    }
+    return b;
+  };
+  const rsBucket = (canon: string): Bucket => {
+    const k = `rs:${canon}`;
+    let b = buckets.get(k);
+    if (!b) {
+      b = {
+        key: k,
+        codiceDealer: "",
+        ragioneSocialeId: idByCanon.get(canon) ?? "",
+        label: canon,
+        pdv: [],
+        posKeys: new Set(),
+        rsCanon: canon,
+        daAssegnare: false,
+        senzaDealer: false,
+        ops: [],
+        consumoTotale: 0,
+      };
+      buckets.set(k, b);
+    }
+    return b;
+  };
+
+  // --- Consumo per POS: dealer se mappato, altrimenti riga RS (segnalata) ---
   for (const row of consumoRaw) {
-    const canon = resolveRs(row.rs) || "N/D";
-    consumoTotByCanon.set(canon, (consumoTotByCanon.get(canon) ?? 0) + row.consumo);
+    const posKey = normKey(row.pos);
+    const dealerKey = posToDealer.get(posKey);
+    if (dealerKey) {
+      dealerBucket(dealerKey).consumoTotale += row.consumo;
+    } else {
+      const canon = posSenzaDealer.get(posKey)?.rsCanon ?? (resolveRs(row.rs) || row.rs || "N/D");
+      const b = rsBucket(canon);
+      b.consumoTotale += row.consumo;
+      b.posKeys.add(posKey);
+      if (hasDealers) b.senzaDealer = true;
+      const ref = posSenzaDealer.get(posKey)?.pdv;
+      if (ref && !b.pdv.some((p) => normKey(p.codicePos) === posKey)) b.pdv.push(ref);
+    }
   }
-  // Raggruppa le operazioni per RS (già ordinate per createdAt asc).
-  const opsByRs = new Map<string, typeof ops>();
+  // Anche i PDV senza dealer SENZA consumo vanno segnalati (org con dealer).
+  if (hasDealers) {
+    for (const [posKey, info] of posSenzaDealer) {
+      const b = rsBucket(info.rsCanon);
+      b.senzaDealer = true;
+      b.posKeys.add(posKey);
+      if (!b.pdv.some((p) => normKey(p.codicePos) === posKey)) b.pdv.push(info.pdv);
+    }
+  }
+
+  // --- Operazioni: per dealer, oppure legacy per RS (attribuzione in lettura) ---
   for (const op of ops) {
-    if (!opsByRs.has(op.ragioneSocialeId)) opsByRs.set(op.ragioneSocialeId, []);
-    opsByRs.get(op.ragioneSocialeId)!.push(op);
+    const opDealer = String((op as { codiceDealer?: string | null }).codiceDealer ?? "").trim();
+    if (opDealer) {
+      dealerBucket(normKey(opDealer)).ops.push(op);
+      continue;
+    }
+    const rsName = op.ragioneSocialeId ? (nameById.get(op.ragioneSocialeId) ?? "N/D") : "N/D";
+    const canon = resolveRs(rsName) || rsName;
+    // Dealer candidati: quelli i cui PDV appartengono a questa RS canonica.
+    const matches: string[] = [];
+    for (const [dk, info] of dealers) if (info.rsCanon.has(canon)) matches.push(dk);
+    if (matches.length === 1) {
+      dealerBucket(matches[0]).ops.push(op);
+    } else {
+      const b = rsBucket(canon);
+      if (op.ragioneSocialeId) b.ragioneSocialeId = op.ragioneSocialeId;
+      b.ops.push(op);
+      // In un'org con dealer configurati le op legacy vanno assegnate
+      // esplicitamente (RS con più dealer, o RS non presente in Struttura).
+      if (hasDealers) b.daAssegnare = true;
+    }
   }
+
+  // --- Dealer configurati senza op/consumo: compaiono comunque (preventivo) ---
+  for (const dk of dealers.keys()) dealerBucket(dk);
+
+  // --- Org SENZA dealer: parità storica — ogni RS del registro compare ---
+  if (!hasDealers) {
+    for (const r of registry) {
+      const canon = resolveRs(r.nome) || r.nome;
+      const b = rsBucket(canon);
+      if (!b.ragioneSocialeId) b.ragioneSocialeId = r.id;
+    }
+  }
+
   const out: PlafondSaldo[] = [];
-  const seenCanon = new Set<string>();
-  for (const [rsId, rsOps] of opsByRs) {
-    const nome = nameById.get(rsId) ?? "N/D";
-    const canon = resolveRs(nome) || nome;
-    seenCanon.add(canon);
-    // Base = ultima 'imposta' (saldo assoluto + cutoff); poi somma le
-    // 'aggiungi' successive e sottrae il consumo dopo il cutoff.
+  for (const b of buckets.values()) {
+    const bOps = b.ops;
     let base = 0;
     let cutoff: Date | null = null;
     let baseIdx = -1;
-    for (let i = rsOps.length - 1; i >= 0; i--) {
-      if (rsOps[i].tipo === "imposta") {
-        base = Number(rsOps[i].saldoDopo);
-        cutoff = rsOps[i].consumoCutoff ? new Date(rsOps[i].consumoCutoff as any) : null;
+    for (let i = bOps.length - 1; i >= 0; i--) {
+      if (bOps[i].tipo === "imposta") {
+        base = Number(bOps[i].saldoDopo);
+        cutoff = bOps[i].consumoCutoff ? new Date(bOps[i].consumoCutoff as any) : null;
         baseIdx = i;
         break;
       }
     }
     let aggiunte = 0;
-    for (let i = baseIdx + 1; i < rsOps.length; i++) {
-      if (rsOps[i].tipo === "aggiungi") aggiunte += Number(rsOps[i].importo);
+    for (let i = baseIdx + 1; i < bOps.length; i++) {
+      if (bOps[i].tipo === "aggiungi") aggiunte += Number(bOps[i].importo);
     }
     // Soglia di avviso (Task #538): vince l'ULTIMA op 'soglia' registrata;
     // importo 0 = soglia disattivata (resta solo l'allerta per negativo).
     let sogliaConf: number | null = null;
     let sogliaCustom = false;
-    for (let i = rsOps.length - 1; i >= 0; i--) {
-      if (rsOps[i].tipo === "soglia") {
-        const v = Number(rsOps[i].importo);
+    for (let i = bOps.length - 1; i >= 0; i--) {
+      if (bOps[i].tipo === "soglia") {
+        const v = Number(bOps[i].importo);
         sogliaConf = v > 0 ? v : null;
         sogliaCustom = true;
         break;
       }
     }
-    // Le op 'soglia' non configurano il plafond: il saldo esiste solo se c'è
-    // almeno un'op 'imposta' o 'aggiungi'.
-    const hasSaldoOps = rsOps.some((o) => o.tipo === "imposta" || o.tipo === "aggiungi");
-    const consumoTotale = consumoTotByCanon.get(canon) ?? 0;
+    const hasSaldoOps = bOps.some((o) => o.tipo === "imposta" || o.tipo === "aggiungi");
+    const consumoTotale = b.consumoTotale;
     let consumoDaCutoff = consumoTotale;
     if (cutoff) {
-      const after = await storage.getRicaricheConsumoByRawRs(orgId, cutoff);
+      const after = await storage.getRicaricheConsumoByPos(orgId, cutoff);
       consumoDaCutoff = after
-        .filter((r) => (resolveRs(r.rs) || "N/D") === canon)
+        .filter((r) => {
+          const posKey = normKey(r.pos);
+          if (b.rsCanon === null) return b.posKeys.has(posKey) || posToDealer.get(posKey) === normKey(b.codiceDealer);
+          // Riga RS legacy: solo POS non mappati a un dealer, stessa RS canonica.
+          if (posToDealer.has(posKey)) return false;
+          const canon = posSenzaDealer.get(posKey)?.rsCanon ?? (resolveRs(r.rs) || r.rs || "N/D");
+          return canon === b.rsCanon;
+        })
         .reduce((s, r) => s + r.consumo, 0);
     }
     const saldo = hasSaldoOps ? round2(base + aggiunte - consumoDaCutoff) : null;
@@ -106,52 +290,22 @@ export async function computePlafondSaldi(orgId: string): Promise<PlafondSaldo[]
       ? sogliaCustom ? sogliaConf : null
       : (sogliaCustom ? sogliaConf : PLAFOND_SOGLIA_DEFAULT);
     out.push({
-      ragioneSocialeId: rsId,
-      ragioneSociale: canon,
+      codiceDealer: b.codiceDealer,
+      ragioneSociale: b.label,
+      ragioneSocialeId: b.ragioneSocialeId,
+      pdv: b.pdv,
+      daAssegnare: b.daAssegnare,
+      senzaDealer: b.senzaDealer,
       saldo,
       consumoTotale: round2(consumoTotale),
       consumoDaCutoff: round2(consumoDaCutoff),
       soglia,
       sogliaCustom,
       inAllerta: saldo !== null && (saldo < 0 || (soglia !== null && saldo < soglia)),
-      lastOpAt: rsOps[rsOps.length - 1].createdAt?.toISOString?.() ?? null,
+      lastOpAt: bOps.length > 0 ? (bOps[bOps.length - 1].createdAt?.toISOString?.() ?? null) : null,
     });
   }
-  // RS con consumo ricariche ma senza plafond configurato: visibili con
-  // saldo null, così la pagina può mostrare "plafond non configurato".
-  for (const [canon, consumo] of consumoTotByCanon) {
-    if (seenCanon.has(canon) || consumo <= 0) continue;
-    seenCanon.add(canon);
-    out.push({
-      ragioneSocialeId: "",
-      ragioneSociale: canon,
-      saldo: null,
-      consumoTotale: round2(consumo),
-      consumoDaCutoff: round2(consumo),
-      soglia: null,
-      sogliaCustom: false,
-      inAllerta: false,
-      lastOpAt: null,
-    });
-  }
-  // Ogni RS del registro compare comunque (anche senza vendite RICARICHE e
-  // senza operazioni): consente all'admin di impostare il plafond in via
-  // preventiva su una RS appena creata, prima che venda la prima ricarica.
-  for (const r of registry) {
-    const canon = resolveRs(r.nome) || r.nome;
-    if (seenCanon.has(canon)) continue;
-    seenCanon.add(canon);
-    out.push({
-      ragioneSocialeId: r.id,
-      ragioneSociale: canon,
-      saldo: null,
-      consumoTotale: 0,
-      consumoDaCutoff: 0,
-      soglia: null,
-      sogliaCustom: false,
-      inAllerta: false,
-      lastOpAt: null,
-    });
-  }
-  return out.sort((a, b) => a.ragioneSociale.localeCompare(b.ragioneSociale, "it"));
+  return out.sort((a, z) =>
+    a.ragioneSociale.localeCompare(z.ragioneSociale, "it") ||
+    a.codiceDealer.localeCompare(z.codiceDealer, "it"));
 }

@@ -460,7 +460,15 @@ export const plafondRicaricheOps = pgTable("plafond_ricariche_ops", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").references(() => organizations.id).notNull(),
   // Anchor stabile della RS nel registro canonico (cdg_ragioni_sociali).
-  ragioneSocialeId: varchar("ragione_sociale_id").references(() => cdgRagioniSociali.id).notNull(),
+  // Task #544: nullable — per le operazioni per codice dealer la RS è solo
+  // descrittiva; resta valorizzata quando derivabile (o per le op legacy).
+  ragioneSocialeId: varchar("ragione_sociale_id").references(() => cdgRagioniSociali.id),
+  // Task #544 — chiave contabile del plafond: il codice dealer ("8 miliardi")
+  // a cui il plafond appartiene. Più codici POS possono condividere lo stesso
+  // dealer; la stessa RS può contenere dealer diversi con saldi separati.
+  // NULL = operazione legacy per RS (pre-dealer), attribuita in lettura al
+  // dealer quando la RS mappa su UN solo dealer, altrimenti "da assegnare".
+  codiceDealer: varchar("codice_dealer"),
   // 'aggiungi' | 'imposta'
   tipo: varchar("tipo").notNull(),
   importo: numeric("importo", { precision: 14, scale: 2 }).notNull(),

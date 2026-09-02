@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
 import { apiUrl } from "@/lib/basePath";
@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, Store, Building2, ChevronRight, UserCheck, Edit2, Image as ImageIcon, UserCog, Link2 } from 'lucide-react';
+import { Loader2, Plus, Users, Trash2, Pencil, Eye, EyeOff, KeyRound, Store, Building2, ChevronRight, UserCheck, Edit2, Image as ImageIcon, UserCog, Link2, Upload } from 'lucide-react';
 import { AppNavbar } from '@/components/AppNavbar';
 import { BiSuiteConnectionForm } from '@/components/BiSuiteConnectionForm';
 import { TelegramReportForm } from '@/components/TelegramReportForm';
@@ -66,6 +66,8 @@ interface ConfigPdv {
   clusterFisso?: string;
   clusterCB?: string;
   tipoPosizione?: string;
+  /** Codice dealer "8 miliardi" (Task #544): chiave contabile del plafond ricariche. */
+  codiceDealer?: string;
   /** Brand associati al PDV (report Telegram separati per brand). */
   brandIds?: string[];
 }
@@ -188,7 +190,7 @@ export default function AdminPanel() {
   };
 
   // === Struttura: dialogs CRUD ===
-  const emptyPdvForm: ConfigPdv = { codicePos: '', nome: '', ragioneSociale: '', canale: '', clusterMobile: '', clusterFisso: '', clusterCB: '', tipoPosizione: '', brandIds: [] };
+  const emptyPdvForm: ConfigPdv = { codicePos: '', nome: '', ragioneSociale: '', canale: '', clusterMobile: '', clusterFisso: '', clusterCB: '', tipoPosizione: '', codiceDealer: '', brandIds: [] };
   const togglePdvBrand = (brandId: string) => {
     setPdvForm((prev) => {
       const cur = prev.brandIds ?? [];
@@ -211,6 +213,79 @@ export default function AdminPanel() {
     setPdvOrigKey(null);
     setPdvDialogOpen(true);
   };
+  // === Import Excel Struttura (Task #544) ===
+  // Colonne riconosciute (header case-insensitive): CODICE POS, CODICE DEALER,
+  // NOME/PUNTO VENDITA/NEGOZIO, RAGIONE SOCIALE, CANALE. Per i POS già
+  // esistenti aggiorna SOLO il codice dealer; i nuovi PDV vengono creati se
+  // il file contiene anche nome e ragione sociale. I codici restano stringhe.
+  const structFileRef = useRef<HTMLInputElement | null>(null);
+  const [structImporting, setStructImporting] = useState(false);
+  const handleStructExcel = async (file: File) => {
+    setStructImporting(true);
+    try {
+      const XLSX = await import('xlsx');
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' });
+      if (rows.length < 2) throw new Error('Il file non contiene righe di dati');
+      const header = rows[0].map((h) => String(h ?? '').trim().toUpperCase());
+      const findCol = (...names: string[]) => header.findIndex((h) => names.some((n) => h === n || h.includes(n)));
+      const colPos = findCol('CODICE POS', 'COD POS', 'POS');
+      const colDealer = findCol('CODICE DEALER', 'COD DEALER', 'DEALER');
+      const colNome = findCol('NOME', 'PUNTO VENDITA', 'NEGOZIO');
+      const colRs = findCol('RAGIONE SOCIALE', 'RAG. SOCIALE', 'RAG SOCIALE');
+      const colCanale = findCol('CANALE');
+      if (colPos < 0 || colDealer < 0) {
+        throw new Error('Colonne obbligatorie mancanti: servono almeno "CODICE POS" e "CODICE DEALER"');
+      }
+      // I codici vanno preservati come stringhe (niente notazione scientifica).
+      const cellStr = (row: unknown[], idx: number) =>
+        idx >= 0 ? String(row[idx] ?? '').trim().replace(/\.0+$/, '') : '';
+      const existing = new Map(puntiVendita.map((p) => [p.codicePos.trim().toUpperCase(), p]));
+      const pdvs: Array<Record<string, string>> = [];
+      let senzaAnagrafica = 0;
+      for (const row of rows.slice(1)) {
+        const codicePos = cellStr(row, colPos);
+        const codiceDealer = cellStr(row, colDealer);
+        if (!codicePos) continue;
+        const known = existing.get(codicePos.toUpperCase());
+        const nome = cellStr(row, colNome) || known?.nome || '';
+        const ragioneSociale = cellStr(row, colRs) || known?.ragioneSociale || '';
+        if (!known && (!nome || !ragioneSociale)) { senzaAnagrafica++; continue; }
+        pdvs.push({
+          codicePos,
+          nome,
+          ragioneSociale,
+          canale: cellStr(row, colCanale) || known?.canale || '',
+          codiceDealer,
+        });
+      }
+      if (pdvs.length === 0) throw new Error('Nessuna riga valida trovata nel file');
+      const res = await fetch(apiUrl('/api/admin/struttura/pdv/bulk'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ pdvs }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Errore nell'import della struttura");
+      const parts = [
+        `${data.added?.length ?? 0} PDV creati`,
+        `${data.updated?.length ?? 0} codici dealer aggiornati`,
+        `${data.skipped?.length ?? 0} invariati`,
+      ];
+      if (senzaAnagrafica > 0) parts.push(`${senzaAnagrafica} righe ignorate (POS nuovo senza nome/RS)`);
+      toast({ title: 'Import completato', description: parts.join(', ') });
+      await fetchOrgConfig();
+    } catch (err) {
+      toast({ title: 'Import fallito', description: err instanceof Error ? err.message : String(err), variant: 'destructive' });
+    } finally {
+      setStructImporting(false);
+      if (structFileRef.current) structFileRef.current.value = '';
+    }
+  };
+
   const openEditPdv = (pdv: ConfigPdv) => {
     setPdvDialogMode('edit');
     setPdvForm({ ...pdv, brandIds: Array.isArray(pdv.brandIds) ? [...pdv.brandIds] : [] });
@@ -423,6 +498,7 @@ export default function AdminPanel() {
             clusterFisso: String(p.clusterFisso || ''),
             clusterCB: String(p.clusterCB || ''),
             tipoPosizione: String(p.tipoPosizione || ''),
+            codiceDealer: String(p.codiceDealer || ''),
             // brandIds vanno preservati: perderli qui farebbe sì che un
             // normale edit del PDV li azzeri silenziosamente (PUT con []).
             brandIds: Array.isArray(p.brandIds) ? p.brandIds.map((b) => String(b)).filter(Boolean) : [],
@@ -920,7 +996,18 @@ export default function AdminPanel() {
                     {rsGrouped.length} ragion{rsGrouped.length === 1 ? 'e sociale' : 'i sociali'}, {puntiVendita.length} punt{puntiVendita.length === 1 ? 'o' : 'i'} vendita
                   </CardDescription>
                 </div>
-                <div className="flex gap-2 shrink-0">
+                <div className="flex gap-2 shrink-0 flex-wrap">
+                  <input
+                    ref={structFileRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    data-testid="input-struttura-import-file"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleStructExcel(f); }}
+                  />
+                  <Button size="sm" variant="outline" disabled={structImporting} onClick={() => structFileRef.current?.click()} data-testid="button-import-struttura" title='Importa/aggiorna i codici dealer da Excel (colonne "CODICE POS" e "CODICE DEALER")'>
+                    {structImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />} Importa Excel
+                  </Button>
                   <Button size="sm" variant="outline" onClick={handleCreateRs} data-testid="button-add-rs">
                     <Plus className="mr-2 h-4 w-4" /> Nuova RS
                   </Button>
@@ -995,6 +1082,7 @@ export default function AdminPanel() {
                                   <TableRow>
                                     <TableHead className="text-xs">Codice POS</TableHead>
                                     <TableHead className="text-xs">Nome</TableHead>
+                                    <TableHead className="text-xs">Codice Dealer</TableHead>
                                     <TableHead className="text-xs hidden md:table-cell">Canale</TableHead>
                                     <TableHead className="text-xs hidden md:table-cell">Posizione</TableHead>
                                     <TableHead className="text-xs hidden lg:table-cell">Cluster Mobile</TableHead>
@@ -1007,6 +1095,7 @@ export default function AdminPanel() {
                                     <TableRow key={pdv.codicePos} data-testid={`row-pdv-${pdv.codicePos}`}>
                                       <TableCell className="font-mono text-xs">{pdv.codicePos}</TableCell>
                                       <TableCell className="text-sm font-medium">{pdv.nome}</TableCell>
+                                      <TableCell className="font-mono text-xs" data-testid={`text-pdv-dealer-${pdv.codicePos}`}>{pdv.codiceDealer || '-'}</TableCell>
                                       <TableCell className="text-xs hidden md:table-cell capitalize">{pdv.canale || '-'}</TableCell>
                                       <TableCell className="text-xs hidden md:table-cell">{pdv.tipoPosizione?.replace(/_/g, ' ') || '-'}</TableCell>
                                       <TableCell className="text-xs hidden lg:table-cell">{pdv.clusterMobile || '-'}</TableCell>
@@ -1119,6 +1208,13 @@ export default function AdminPanel() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Codice Dealer</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Codice contabile "8 miliardi" del dealer: più PDV con lo stesso codice condividono lo stesso plafond ricariche.
+                    </p>
+                    <Input data-testid="input-pdv-codiceDealer" value={pdvForm.codiceDealer || ''} onChange={(e) => setPdvForm(f => ({ ...f, codiceDealer: e.target.value }))} placeholder="8001xxxxx" />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1.5">

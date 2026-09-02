@@ -1,10 +1,13 @@
-// Task #537 — Plafond ricariche per Ragione Sociale.
+// Task #537/#538/#544 — Plafond ricariche per codice dealer.
 //
-// Mostra il saldo ricariche corrente per ogni RS (derivato server-side dalle
+// Mostra il saldo ricariche corrente per ogni CODICE DEALER ("8 miliardi")
+// configurato sui PDV della Struttura: più codici POS possono condividere lo
+// stesso dealer (stesso plafond), la stessa Ragione Sociale può contenere
+// dealer diversi (saldi separati). Il saldo è derivato server-side dalle
 // operazioni amministrative append-only + il consumo degli articoli RICARICHE
-// non annullati). Gli admin possono "Aggiungi" (somma un importo) o "Imposta
-// saldo" (fissa un nuovo saldo assoluto); tutti gli utenti autorizzati alla
-// pagina consultano saldi e storico, senza controlli di modifica.
+// non annullati. Le org senza dealer configurati mantengono le righe per RS.
+// Gli admin possono "Aggiungi", "Imposta saldo", "Soglia avviso" e assegnare
+// a un dealer le operazioni storiche registrate per RS ambigua.
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiUrl } from "@/lib/basePath";
@@ -15,16 +18,21 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, Wallet, Plus, Equal, History, Bell, AlertTriangle } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Loader2, Wallet, Plus, Equal, History, Bell, AlertTriangle, Link2 } from "lucide-react";
 
 export type PlafondSaldo = {
-  ragioneSocialeId: string;
+  codiceDealer: string;          // "" = riga legacy per RS
   ragioneSociale: string;
+  ragioneSocialeId: string;
+  pdv: Array<{ codicePos: string; nome: string }>;
+  daAssegnare: boolean;          // op storiche per RS da assegnare a un dealer
+  senzaDealer: boolean;          // consumo da PDV senza codice dealer
   saldo: number | null;
   consumoTotale: number;
   consumoDaCutoff: number;
-  // Task #538 — soglia di avviso effettiva (custom per RS o default) e flag
-  // di allerta calcolato server-side (saldo negativo o sotto soglia).
   soglia: number | null;
   sogliaCustom: boolean;
   inAllerta: boolean;
@@ -34,6 +42,7 @@ export type PlafondSaldo = {
 type StoricoRow = {
   id: string;
   ragioneSociale: string;
+  codiceDealer: string;
   tipo: "aggiungi" | "imposta" | "soglia";
   importo: number;
   saldoPrima: number;
@@ -54,8 +63,13 @@ const fmtDateTime = (iso: string | null) =>
       }).format(new Date(iso))
     : "—";
 
-// Slug stabile per i data-testid (RS con spazi/punteggiatura).
+// Slug stabile per i data-testid (dealer/RS con spazi/punteggiatura).
 const slug = (s: string) => s.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
+
+// Id riga per i testid: le righe dealer usano il codice dealer, quelle legacy
+// per RS mantengono lo slug della RS (compatibilità test/consumatori).
+const rowId = (s: Pick<PlafondSaldo, "codiceDealer" | "ragioneSociale">) =>
+  s.codiceDealer ? slug(s.codiceDealer) : slug(s.ragioneSociale);
 
 export function usePlafondRicariche(orgId: string) {
   return useQuery<{ saldi: PlafondSaldo[]; lastSync: string | null }>({
@@ -73,13 +87,19 @@ export function formatLastSync(iso: string | null | undefined): string | null {
   return iso ? fmtDateTime(iso) : null;
 }
 
+type OpTarget = { codiceDealer: string; ragioneSociale: string; tipo: "aggiungi" | "imposta" | "soglia" };
+
 export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; isAdmin: boolean }) {
   const queryClient = useQueryClient();
   const { data, isLoading } = usePlafondRicariche(orgId);
-  const [opDialog, setOpDialog] = useState<{ rs: string; tipo: "aggiungi" | "imposta" | "soglia" } | null>(null);
+  const [opDialog, setOpDialog] = useState<OpTarget | null>(null);
   const [importo, setImporto] = useState("");
   const [opError, setOpError] = useState<string | null>(null);
   const [storicoOpen, setStoricoOpen] = useState(false);
+  // Assegnazione op storiche per RS → dealer (Task #544).
+  const [assegnaDialog, setAssegnaDialog] = useState<{ rs: string } | null>(null);
+  const [assegnaDealer, setAssegnaDealer] = useState("");
+  const [assegnaError, setAssegnaError] = useState<string | null>(null);
 
   const { data: storicoData, isLoading: storicoLoading } = useQuery<{ storico: StoricoRow[] }>({
     queryKey: ["/api/ricariche-plafond/storico", orgId],
@@ -91,13 +111,21 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
     enabled: !!orgId && storicoOpen,
   });
 
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/ricariche-plafond", orgId] });
+    queryClient.invalidateQueries({ queryKey: ["/api/ricariche-plafond/storico", orgId] });
+  };
+
   const opMutation = useMutation({
-    mutationFn: async ({ rs, tipo, value }: { rs: string; tipo: "aggiungi" | "imposta" | "soglia"; value: number }) => {
+    mutationFn: async ({ target, value }: { target: OpTarget; value: number }) => {
+      const body: Record<string, unknown> = { tipo: target.tipo, importo: value };
+      if (target.codiceDealer) body.codiceDealer = target.codiceDealer;
+      else body.ragioneSociale = target.ragioneSociale;
       const res = await fetch(apiUrl("/api/ricariche-plafond"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ ragioneSociale: rs, tipo, importo: value }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Errore nel salvataggio");
@@ -107,13 +135,37 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
       setOpDialog(null);
       setImporto("");
       setOpError(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/ricariche-plafond", orgId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/ricariche-plafond/storico", orgId] });
+      invalidate();
     },
     onError: (e: Error) => setOpError(e.message),
   });
 
+  const assegnaMutation = useMutation({
+    mutationFn: async ({ rs, codiceDealer }: { rs: string; codiceDealer: string }) => {
+      const res = await fetch(apiUrl("/api/ricariche-plafond/assegna"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ragioneSociale: rs, codiceDealer }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Errore nell'assegnazione");
+      return data;
+    },
+    onSuccess: () => {
+      setAssegnaDialog(null);
+      setAssegnaDealer("");
+      setAssegnaError(null);
+      invalidate();
+    },
+    onError: (e: Error) => setAssegnaError(e.message),
+  });
+
   const saldi = data?.saldi ?? [];
+  // Un'op storica può essere assegnata SOLO a un dealer della stessa RS
+  // (il server rifiuta comunque i dealer di altre RS).
+  const dealerOptionsForRs = (rs: string) =>
+    saldi.filter((s) => s.codiceDealer && s.ragioneSociale.split(" / ").includes(rs));
   if (!isLoading && saldi.length === 0) return null;
 
   const confirmDisabled =
@@ -124,13 +176,16 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
       ? Number(importo.replace(",", ".")) <= 0
       : Number(importo.replace(",", ".")) < 0);
 
+  const opLabel = (t: OpTarget | null) =>
+    t ? (t.codiceDealer ? `dealer ${t.codiceDealer}` : t.ragioneSociale) : "";
+
   return (
     <Card data-testid="card-plafond-ricariche">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="flex items-center gap-2 text-base">
             <Wallet className="h-5 w-5 text-primary" />
-            Plafond Ricariche per Ragione Sociale
+            Plafond Ricariche per Codice Dealer
           </CardTitle>
           <Button
             variant="outline"
@@ -143,7 +198,8 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Saldo già decurtato delle ricariche vendute (escluse le annullate).
+          Saldo già decurtato delle ricariche vendute (escluse le annullate). Più
+          punti vendita con lo stesso codice dealer condividono lo stesso plafond.
         </p>
       </CardHeader>
       <CardContent className="pt-0">
@@ -154,16 +210,24 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
         ) : (
           <div className="space-y-2">
             {saldi.map((s) => {
-              const id = slug(s.ragioneSociale);
+              const id = rowId(s);
+              const pdvLabel = s.pdv.map((p) => p.nome || p.codicePos).filter(Boolean).join(", ");
               return (
                 <div
-                  key={s.ragioneSociale}
+                  key={s.codiceDealer || `rs:${s.ragioneSociale}`}
                   className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border rounded-lg px-3 py-2"
                   data-testid={`row-plafond-${id}`}
                 >
                   <div className="min-w-0">
-                    <div className="font-semibold text-sm truncate">{s.ragioneSociale}</div>
+                    <div className="font-semibold text-sm truncate">
+                      {s.codiceDealer ? (
+                        <>Dealer {s.codiceDealer}<span className="font-normal text-muted-foreground"> · {s.ragioneSociale}</span></>
+                      ) : (
+                        s.ragioneSociale
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground">
+                      {pdvLabel && <>PDV: {pdvLabel} · </>}
                       Ricariche vendute: {fmtEur(s.consumoTotale)}
                       {s.saldo !== null && s.soglia !== null && (
                         <> · Soglia avviso: {fmtEur(s.soglia)}{s.sogliaCustom ? "" : " (default)"}</>
@@ -171,6 +235,24 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
+                    {s.senzaDealer && (
+                      <Badge
+                        className="text-xs bg-amber-500/10 text-amber-600 border-amber-500/20"
+                        data-testid={`badge-plafond-senza-dealer-${id}`}
+                      >
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        PDV senza codice dealer
+                      </Badge>
+                    )}
+                    {s.daAssegnare && (
+                      <Badge
+                        className="text-xs bg-amber-500/10 text-amber-600 border-amber-500/20"
+                        data-testid={`badge-plafond-da-assegnare-${id}`}
+                      >
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        Operazioni da assegnare
+                      </Badge>
+                    )}
                     {s.saldo === null ? (
                       <Badge variant="outline" className="text-xs" data-testid={`text-plafond-saldo-${id}`}>
                         Plafond non configurato
@@ -210,13 +292,26 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
                         </Badge>
                       </>
                     )}
-                    {isAdmin && (
+                    {isAdmin && s.daAssegnare && dealerOptionsForRs(s.ragioneSociale).length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => { setAssegnaDialog({ rs: s.ragioneSociale }); setAssegnaDealer(""); setAssegnaError(null); }}
+                        data-testid={`button-plafond-assegna-${id}`}
+                      >
+                        <Link2 className="h-3.5 w-3.5 mr-1" /> Assegna a dealer
+                      </Button>
+                    )}
+                    {/* Le op vanno registrate sulla chiave contabile: sulle
+                        righe "da assegnare" prima si assegnano le storiche. */}
+                    {isAdmin && !s.daAssegnare && !(s.senzaDealer && s.saldo === null) && (
                       <>
                         <Button
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={() => { setOpDialog({ rs: s.ragioneSociale, tipo: "aggiungi" }); setImporto(""); setOpError(null); }}
+                          onClick={() => { setOpDialog({ codiceDealer: s.codiceDealer, ragioneSociale: s.ragioneSociale, tipo: "aggiungi" }); setImporto(""); setOpError(null); }}
                           data-testid={`button-plafond-aggiungi-${id}`}
                         >
                           <Plus className="h-3.5 w-3.5 mr-1" /> Aggiungi
@@ -225,7 +320,7 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={() => { setOpDialog({ rs: s.ragioneSociale, tipo: "imposta" }); setImporto(""); setOpError(null); }}
+                          onClick={() => { setOpDialog({ codiceDealer: s.codiceDealer, ragioneSociale: s.ragioneSociale, tipo: "imposta" }); setImporto(""); setOpError(null); }}
                           data-testid={`button-plafond-imposta-${id}`}
                         >
                           <Equal className="h-3.5 w-3.5 mr-1" /> Imposta saldo
@@ -234,7 +329,7 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs"
-                          onClick={() => { setOpDialog({ rs: s.ragioneSociale, tipo: "soglia" }); setImporto(""); setOpError(null); }}
+                          onClick={() => { setOpDialog({ codiceDealer: s.codiceDealer, ragioneSociale: s.ragioneSociale, tipo: "soglia" }); setImporto(""); setOpError(null); }}
                           data-testid={`button-plafond-soglia-${id}`}
                         >
                           <Bell className="h-3.5 w-3.5 mr-1" /> Soglia avviso
@@ -249,7 +344,7 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
         )}
       </CardContent>
 
-      {/* Dialog operazione admin (aggiungi/imposta) con conferma esplicita */}
+      {/* Dialog operazione admin (aggiungi/imposta/soglia) con conferma esplicita */}
       <Dialog open={!!opDialog} onOpenChange={(o) => { if (!o) setOpDialog(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -262,10 +357,10 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
             </DialogTitle>
             <DialogDescription>
               {opDialog?.tipo === "aggiungi"
-                ? `L'importo verrà sommato al saldo corrente di ${opDialog?.rs}.`
+                ? `L'importo verrà sommato al saldo corrente di ${opLabel(opDialog)}.`
                 : opDialog?.tipo === "soglia"
-                  ? `Quando il saldo di ${opDialog?.rs} scende sotto questa soglia compare un avviso (0 = disattiva la soglia, resta l'avviso per saldo negativo).`
-                  : `Il saldo di ${opDialog?.rs} verrà impostato a questo valore; il consumo riparte da ora.`}
+                  ? `Quando il saldo di ${opLabel(opDialog)} scende sotto questa soglia compare un avviso (0 = disattiva la soglia, resta l'avviso per saldo negativo).`
+                  : `Il saldo di ${opLabel(opDialog)} verrà impostato a questo valore; il consumo riparte da ora.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -289,12 +384,56 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
               disabled={confirmDisabled}
               onClick={() => {
                 if (!opDialog) return;
-                opMutation.mutate({ rs: opDialog.rs, tipo: opDialog.tipo, value: Number(importo.replace(",", ".")) });
+                opMutation.mutate({ target: opDialog, value: Number(importo.replace(",", ".")) });
               }}
               data-testid="button-plafond-confirm"
             >
               {opMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
               Conferma
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assegnazione op storiche per RS → dealer (Task #544) */}
+      <Dialog open={!!assegnaDialog} onOpenChange={(o) => { if (!o) setAssegnaDialog(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assegna le operazioni a un dealer</DialogTitle>
+            <DialogDescription>
+              Le operazioni plafond registrate per {assegnaDialog?.rs} verranno
+              attribuite al codice dealer scelto (nessun importo viene duplicato).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Select value={assegnaDealer} onValueChange={setAssegnaDealer}>
+              <SelectTrigger data-testid="select-plafond-assegna-dealer">
+                <SelectValue placeholder="Scegli il codice dealer" />
+              </SelectTrigger>
+              <SelectContent>
+                {(assegnaDialog ? dealerOptionsForRs(assegnaDialog.rs) : []).map((d) => (
+                  <SelectItem key={d.codiceDealer} value={d.codiceDealer} data-testid={`option-plafond-dealer-${slug(d.codiceDealer)}`}>
+                    {d.codiceDealer} · {d.ragioneSociale}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {assegnaError && <p className="text-xs text-red-600" data-testid="text-plafond-assegna-error">{assegnaError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssegnaDialog(null)} data-testid="button-plafond-assegna-cancel">
+              Annulla
+            </Button>
+            <Button
+              disabled={assegnaMutation.isPending || !assegnaDealer}
+              onClick={() => {
+                if (!assegnaDialog || !assegnaDealer) return;
+                assegnaMutation.mutate({ rs: assegnaDialog.rs, codiceDealer: assegnaDealer });
+              }}
+              data-testid="button-plafond-assegna-confirm"
+            >
+              {assegnaMutation.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Assegna
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -322,7 +461,11 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
               {storicoData!.storico.map((op) => (
                 <div key={op.id} className="border rounded-lg px-3 py-2 text-sm" data-testid={`row-storico-${op.id}`}>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="font-semibold truncate">{op.ragioneSociale}</span>
+                    <span className="font-semibold truncate">
+                      {op.codiceDealer
+                        ? <>Dealer {op.codiceDealer}{op.ragioneSociale ? <span className="font-normal text-muted-foreground"> · {op.ragioneSociale}</span> : null}</>
+                        : (op.ragioneSociale || "N/D")}
+                    </span>
                     <Badge variant="outline" className="text-xs">
                       {op.tipo === "aggiungi" ? "Aggiunta" : op.tipo === "soglia" ? "Soglia avviso" : "Imposta saldo"}
                     </Badge>

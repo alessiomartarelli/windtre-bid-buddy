@@ -495,10 +495,14 @@ export async function sendDailyReportForOrg(params: {
         // un "&"/"<" nel nome fa rifiutare a Telegram l'INTERO report.
         const esc = (s: string) =>
           s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        // Task #544: la chiave contabile è il codice dealer; la RS resta come
+        // descrizione. Le righe legacy (senza dealer) mostrano la sola RS.
+        const label = (s: (typeof inAllerta)[number]) =>
+          s.codiceDealer ? `Dealer ${s.codiceDealer} (${s.ragioneSociale})` : s.ragioneSociale;
         const lines = inAllerta.map((s) =>
           s.saldo! < 0
-            ? `• ${esc(s.ragioneSociale)}: plafond ESAURITO (${fmt(s.saldo!)})`
-            : `• ${esc(s.ragioneSociale)}: saldo ${fmt(s.saldo!)} sotto la soglia di ${fmt(s.soglia!)}`,
+            ? `• ${esc(label(s))}: plafond ESAURITO (${fmt(s.saldo!)})`
+            : `• ${esc(label(s))}: saldo ${fmt(s.saldo!)} sotto la soglia di ${fmt(s.soglia!)}`,
         );
         plafondWarning = `\n\n⚠️ PLAFOND RICARICHE IN ESAURIMENTO\n${lines.join("\n")}`;
       }

@@ -48,16 +48,16 @@ const artAccessorio = (prezzo) => ({
   dettaglio: { prezzo: String(prezzo) },
 });
 
-async function insertSale(pool, orgId, { ragioneSociale, articoli, stato = 'Completata', dataVendita }) {
+async function insertSale(pool, orgId, { ragioneSociale, articoli, stato = 'Completata', dataVendita, codicePos = 'POS1', addetto = 'ADDETTO TEST' }) {
   const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
   const r = await pool.query(
     `INSERT INTO bisuite_sales
        (organization_id, bisuite_id, data_vendita, codice_pos, nome_negozio,
         ragione_sociale, nome_addetto, stato, totale, raw_data)
-     VALUES ($1, $2, $3::timestamp, 'POS1', 'NEGOZIO TEST', $4, 'ADDETTO TEST', $5, '0', $6::jsonb)
+     VALUES ($1, $2, $3::timestamp, $7, 'NEGOZIO TEST', $4, $8, $5, '0', $6::jsonb)
      RETURNING id`,
     [orgId, bisuiteId, dataVendita ?? italianWallNow(-3_600_000), ragioneSociale, stato,
-      JSON.stringify({ articoli, pagamento: {} })],
+      JSON.stringify({ articoli, pagamento: {} }), codicePos, addetto],
   );
   return r.rows[0].id;
 }
@@ -544,6 +544,217 @@ test('plafond ricariche per RS', async (t) => {
   } finally {
     await cleanupOrg(pool, admin);
     await cleanupOrg(pool, other);
+    await pool.end();
+  }
+});
+
+// Task #544 — Plafond per CODICE DEALER ("8 miliardi").
+//
+// Copre:
+//  - più POS dello stesso dealer consumano lo stesso plafond;
+//  - dealer diversi della stessa RS hanno saldi e soglie separati;
+//  - PDV senza dealer segnalato (senzaDealer), mai attribuito a un dealer;
+//  - operazioni per codiceDealer (imposta/aggiungi/cutoff);
+//  - op legacy per RS: auto-attribuzione con dealer unico, "da assegnare"
+//    con più dealer + endpoint /assegna senza duplicazioni;
+//  - import bulk Struttura: aggiorna il codiceDealer dei POS esistenti;
+//  - operatore scoped ai dealer dei propri addetti;
+//  - UI: righe dealer, badge senza-dealer/da-assegnare.
+test('plafond ricariche per codice dealer', async (t) => {
+  const pool = await newPool();
+  const admin = await signup({ prefix: 'dealer_admin', fullName: 'Dealer Admin' });
+  const RS = uniq('RS CMS').toUpperCase().replace(/_/g, ' ');
+  const D1 = '8000111001';
+  const D2 = '8000111002';
+  const P_A1 = uniq('9A1').toUpperCase();
+  const P_A2 = uniq('9A2').toUpperCase();
+  const P_B1 = uniq('9B1').toUpperCase();
+  const P_C1 = uniq('9C1').toUpperCase();
+
+  const get = (path) => jsonReq(`${BASE}${path}`, { headers: { Cookie: admin.cookieHeader } });
+  const post = (path, body) =>
+    jsonReq(`${BASE}${path}`, { method: 'POST', headers: { Cookie: admin.cookieHeader }, body: JSON.stringify(body) });
+
+  const dealerRow = (saldi, codice) => saldi.find((s) => s.codiceDealer === codice);
+
+  try {
+    // Struttura: A1+A2 → D1, B1 → D2 (stessa RS), C1 senza dealer.
+    for (const [codicePos, nome, codiceDealer] of [
+      [P_A1, 'PDV A1', D1], [P_A2, 'PDV A2', D1], [P_B1, 'PDV B1', D2], [P_C1, 'PDV C1', ''],
+    ]) {
+      const r = await post('/api/admin/struttura/pdv', { codicePos, nome, ragioneSociale: RS, codiceDealer });
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+    }
+
+    // Vendite ricariche: D1 = 10+20 (due POS), D2 = 5, C1 (senza dealer) = 7.
+    await insertSale(pool, admin.orgId, { ragioneSociale: RS, articoli: [artRicarica('10.00')], codicePos: P_A1, addetto: 'ADDETTO A' });
+    await insertSale(pool, admin.orgId, { ragioneSociale: RS, articoli: [artRicarica('20.00')], codicePos: P_A2, addetto: 'ADDETTO A' });
+    await insertSale(pool, admin.orgId, { ragioneSociale: RS, articoli: [artRicarica('5.00')], codicePos: P_B1, addetto: 'ADDETTO B' });
+    await insertSale(pool, admin.orgId, { ragioneSociale: RS, articoli: [artRicarica('7.00')], codicePos: P_C1, addetto: 'ADDETTO C' });
+
+    await t.test('consumo raggruppato per dealer; PDV senza dealer segnalato', async () => {
+      const r = await get('/api/ricariche-plafond');
+      assert.equal(r.status, 200);
+      const d1 = dealerRow(r.body.saldi, D1);
+      const d2 = dealerRow(r.body.saldi, D2);
+      assert.ok(d1 && d2, JSON.stringify(r.body.saldi));
+      assert.equal(d1.consumoTotale, 30, 'due POS dello stesso dealer sommano sullo stesso plafond');
+      assert.equal(d1.pdv.length, 2);
+      assert.equal(d2.consumoTotale, 5, 'dealer diverso della stessa RS resta separato');
+      assert.equal(d1.saldo, null);
+      // Il PDV senza dealer NON confluisce in nessun dealer: riga RS segnalata.
+      const senza = r.body.saldi.find((s) => !s.codiceDealer && s.ragioneSociale === RS);
+      assert.ok(senza, 'riga per il consumo dei PDV senza dealer');
+      assert.equal(senza.senzaDealer, true);
+      assert.equal(senza.consumoTotale, 7);
+      assert.equal(d1.consumoTotale + d2.consumoTotale + senza.consumoTotale, 42, 'nessun consumo perso o duplicato');
+    });
+
+    await t.test('operazioni per codiceDealer: imposta con cutoff, aggiungi, saldi separati', async () => {
+      const w = await post('/api/ricariche-plafond', { codiceDealer: D1, tipo: 'imposta', importo: 100 });
+      assert.equal(w.status, 201, JSON.stringify(w.body));
+      assert.equal(w.body.codiceDealer, D1);
+      // Vendita post-cutoff su ALTRO POS dello stesso dealer: decurta lo stesso saldo.
+      await insertSale(pool, admin.orgId, {
+        ragioneSociale: RS, articoli: [artRicarica('25.00')], codicePos: P_A2,
+        dataVendita: italianWallNow(120_000), addetto: 'ADDETTO A',
+      });
+      let r = await get('/api/ricariche-plafond');
+      assert.equal(dealerRow(r.body.saldi, D1).saldo, 75);
+      assert.equal(dealerRow(r.body.saldi, D2).saldo, null, "l'operazione su D1 non configura D2");
+
+      assert.equal((await post('/api/ricariche-plafond', { codiceDealer: D2, tipo: 'imposta', importo: 40 })).status, 201);
+      assert.equal((await post('/api/ricariche-plafond', { codiceDealer: D1, tipo: 'aggiungi', importo: 10 })).status, 201);
+      r = await get('/api/ricariche-plafond');
+      assert.equal(dealerRow(r.body.saldi, D1).saldo, 85);
+      assert.equal(dealerRow(r.body.saldi, D2).saldo, 40);
+
+      // Dealer sconosciuto rifiutato.
+      assert.equal((await post('/api/ricariche-plafond', { codiceDealer: '8999999999', tipo: 'imposta', importo: 1 })).status, 400);
+
+      // Lo storico espone il codice dealer.
+      const st = await get('/api/ricariche-plafond/storico');
+      assert.ok(st.body.storico.some((o) => o.codiceDealer === D1 && o.tipo === 'imposta'));
+    });
+
+    await t.test('op legacy per RS: con più dealer è "da assegnare", /assegna ripunta senza duplicare', async () => {
+      // Op storica per RS (codice_dealer NULL) su una RS che ha DUE dealer.
+      const anchor = await pool.query(
+        `INSERT INTO cdg_ragioni_sociali (organization_id, nome, origine) VALUES ($1, $2, 'auto')
+         ON CONFLICT (organization_id, nome) DO UPDATE SET nome = EXCLUDED.nome RETURNING id`,
+        [admin.orgId, RS],
+      );
+      const rsId = anchor.rows[0].id;
+      await pool.query(
+        `INSERT INTO plafond_ricariche_ops (organization_id, ragione_sociale_id, tipo, importo, saldo_prima, saldo_dopo)
+         VALUES ($1, $2, 'aggiungi', 15, 0, 15)`,
+        [admin.orgId, rsId],
+      );
+      let r = await get('/api/ricariche-plafond');
+      const pending = r.body.saldi.find((s) => !s.codiceDealer && s.ragioneSociale === RS);
+      assert.ok(pending, 'riga RS legacy presente');
+      assert.equal(pending.daAssegnare, true, 'RS con più dealer: operazione da assegnare');
+      const saldoD1Prima = dealerRow(r.body.saldi, D1).saldo;
+
+      // Assegnazione esplicita a D1: stesse righe ripuntate, nessuna duplicazione.
+      const a = await post('/api/ricariche-plafond/assegna', { ragioneSociale: RS, codiceDealer: D1 });
+      assert.equal(a.status, 200, JSON.stringify(a.body));
+      assert.equal(a.body.assegnate, 1);
+      r = await get('/api/ricariche-plafond');
+      assert.equal(dealerRow(r.body.saldi, D1).saldo, saldoD1Prima + 15, "l'importo confluisce UNA volta nel dealer");
+      const stillPending = r.body.saldi.find((s) => !s.codiceDealer && s.ragioneSociale === RS && s.daAssegnare);
+      assert.equal(stillPending, undefined, 'nessuna riga residua da assegnare');
+      // Le op registrate col dealer conservano comunque la RS descrittiva:
+      // per verificare la non-duplicazione contiamo la SOLA op legacy (15€).
+      const cnt = await pool.query(
+        `SELECT count(*)::int AS c, count(*) FILTER (WHERE codice_dealer IS NULL)::int AS pending
+         FROM plafond_ricariche_ops
+         WHERE organization_id = $1 AND ragione_sociale_id = $2 AND tipo = 'aggiungi' AND importo = 15`,
+        [admin.orgId, rsId],
+      );
+      assert.equal(cnt.rows[0].c, 1, 'nessuna operazione duplicata');
+      assert.equal(cnt.rows[0].pending, 0, 'la riga legacy è stata ripuntata, non copiata');
+      // Ri-assegnare senza op pendenti fallisce (404), non duplica.
+      assert.equal((await post('/api/ricariche-plafond/assegna', { ragioneSociale: RS, codiceDealer: D2 })).status, 404);
+    });
+
+    await t.test('op legacy per RS con dealer UNICO: registrata direttamente sul dealer', async () => {
+      const RS_U = uniq('RS UNICO').toUpperCase().replace(/_/g, ' ');
+      const D3 = '8000111003';
+      const P_U = uniq('9U1').toUpperCase();
+      assert.equal((await post('/api/admin/struttura/pdv', { codicePos: P_U, nome: 'PDV U', ragioneSociale: RS_U, codiceDealer: D3 })).status, 201);
+      // Guard contabile: un'op storica di RS_U NON può essere assegnata a un
+      // dealer di un'altra RS (D1 appartiene a RS, non a RS_U).
+      const cross = await post('/api/ricariche-plafond/assegna', { ragioneSociale: RS_U, codiceDealer: D1 });
+      assert.equal(cross.status, 400, JSON.stringify(cross.body));
+      const w = await post('/api/ricariche-plafond', { ragioneSociale: RS_U, tipo: 'imposta', importo: 60 });
+      assert.equal(w.status, 201, JSON.stringify(w.body));
+      assert.equal(w.body.codiceDealer, D3, 'RS con un solo dealer: op migrata sul dealer');
+      const r = await get('/api/ricariche-plafond');
+      assert.equal(dealerRow(r.body.saldi, D3).saldo, 60);
+    });
+
+    await t.test('bulk Struttura: aggiorna il codiceDealer dei POS esistenti', async () => {
+      const D4 = '8000111004';
+      const b = await post('/api/admin/struttura/pdv/bulk', {
+        pdvs: [
+          { codicePos: P_C1, nome: 'PDV C1', ragioneSociale: RS, codiceDealer: D4 },   // esistente: update dealer
+          { codicePos: P_B1, nome: 'PDV B1', ragioneSociale: RS, codiceDealer: D2 },   // esistente: dealer invariato
+          { codicePos: uniq('9N1').toUpperCase(), nome: 'PDV N1', ragioneSociale: RS, codiceDealer: D4 }, // nuovo
+        ],
+      });
+      assert.equal(b.status, 200, JSON.stringify(b.body));
+      assert.equal(b.body.updated.length, 1);
+      assert.equal(b.body.added.length, 1);
+      assert.equal(b.body.skipped.length, 1);
+      const r = await get('/api/ricariche-plafond');
+      const d4 = dealerRow(r.body.saldi, D4);
+      assert.ok(d4, 'il nuovo dealer compare nei saldi');
+      assert.equal(d4.consumoTotale, 7, 'il consumo del POS ex-senza-dealer segue il dealer assegnato');
+      assert.equal(r.body.saldi.find((s) => !s.codiceDealer && s.senzaDealer && s.ragioneSociale === RS), undefined,
+        'nessuna riga senza-dealer residua dopo l\'assegnazione');
+    });
+
+    await t.test('operatore: vede solo i dealer dei propri addetti', async () => {
+      await setRole(pool, admin.profileId, 'operatore');
+      try {
+        await pool.query(`UPDATE profiles SET bisuite_addetti = ARRAY['ADDETTO A'] WHERE id = $1`, [admin.profileId]);
+        const r = await get('/api/ricariche-plafond');
+        assert.ok(dealerRow(r.body.saldi, D1), 'vede il dealer dei suoi POS');
+        assert.equal(dealerRow(r.body.saldi, D2), undefined, 'NON vede il dealer di altri addetti');
+        const st = await get('/api/ricariche-plafond/storico');
+        assert.ok(st.body.storico.length > 0);
+        assert.ok(st.body.storico.every((o) => o.codiceDealer === D1), `storico fuori perimetro: ${JSON.stringify(st.body.storico)}`);
+        // Modifica sempre vietata.
+        assert.equal((await post('/api/ricariche-plafond', { codiceDealer: D1, tipo: 'aggiungi', importo: 1 })).status, 403);
+        assert.equal((await post('/api/ricariche-plafond/assegna', { ragioneSociale: RS, codiceDealer: D1 })).status, 403);
+      } finally {
+        await pool.query(`UPDATE profiles SET bisuite_addetti = ARRAY[]::text[] WHERE id = $1`, [admin.profileId]);
+        await setRole(pool, admin.profileId, 'admin');
+      }
+    });
+
+    await t.test('UI: righe per dealer con saldo e controlli admin', async () => {
+      const browser = await launchBrowser();
+      try {
+        const ctx = await newAuthedContext(browser, admin);
+        const page = await ctx.newPage();
+        await page.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('[data-testid="card-plafond-ricariche"]', { timeout: 30000 });
+        const idD1 = slug(D1);
+        await page.waitForSelector(`[data-testid="text-plafond-saldo-${idD1}"]`, { timeout: 15000 });
+        const rowText = await page.textContent(`[data-testid="row-plafond-${idD1}"]`);
+        assert.ok(rowText.includes(`Dealer ${D1}`), `riga dealer mancante: ${rowText}`);
+        assert.ok(rowText.includes(RS), 'la riga dealer mostra la RS descrittiva');
+        assert.ok(await page.$(`[data-testid="button-plafond-aggiungi-${idD1}"]`), 'admin vede Aggiungi sul dealer');
+        assert.ok(await page.$(`[data-testid="button-plafond-imposta-${idD1}"]`), 'admin vede Imposta sul dealer');
+        await ctx.close();
+      } finally {
+        await browser.close();
+      }
+    });
+  } finally {
+    await cleanupOrg(pool, admin);
     await pool.end();
   }
 });

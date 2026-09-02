@@ -63,4 +63,5 @@
 - [VF Upselling allowlist](vf-upselling-allowlist.md) — la pista cb VF si chiama Upselling e conta solo segnali commerciali ammessi, fail-closed e multi-volume; WindTre resta CB.
 - [Sicurezza salvataggi Gara](gara-config-save-safety.md) — config nominate sempre per ID; hydration versionata, CAS atomico e guard multi-sezione; restore soggetto allo stesso CAS.
 - [Vendite mobile overflow](vendite-mobile-overflow.md) — le suite mobile-align falliscono a 375px se aggiungi testi nowrap alla FilterBar di Vendite BiSuite: usa hidden sm:inline.
+- [Plafond per codice dealer](plafond-dealer-model.md) — chiave contabile = dealer, non RS; senza-dealer segnalato mai attribuito; assegnazioni legacy solo intra-RS, append-only.
 - [Drill-down vendite riconciliato](sales-drilldown-reconciliation.md) — dettagli PDV e totali devono partire dallo stesso perimetro autorizzativo e dalla stessa pipeline contributiva.

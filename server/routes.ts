@@ -3684,27 +3684,40 @@ export async function registerRoutes(
   // operatore vede solo le RS su cui i suoi nominativi addetti hanno vendite;
   // senza addetti associati non vede alcun saldo/storico. Admin e super_admin
   // (ritorno null) vedono tutto. Le RS sono confrontate in forma canonica.
-  const operatorAllowedRs = async (profile: any, orgId: string): Promise<Set<string> | null> => {
+  // Task #544: il perimetro operatore copre sia le RS canoniche (righe legacy)
+  // sia i codici POS (righe per dealer) su cui i suoi addetti hanno vendite.
+  const operatorAllowedScope = async (profile: any, orgId: string): Promise<{ rs: Set<string>; pos: Set<string> } | null> => {
     if (profile.role !== "operatore") return null;
     const addetti = (profile.bisuiteAddetti ?? []).map((a: string) => a.toLowerCase().trim()).filter(Boolean);
-    if (addetti.length === 0) return new Set();
-    const [rawRs, resolveRs] = await Promise.all([
+    if (addetti.length === 0) return { rs: new Set(), pos: new Set() };
+    const [rawRs, rawPos, resolveRs] = await Promise.all([
       storage.getRsForAddetti(orgId, addetti),
+      storage.getPosForAddetti(orgId, addetti),
       cdgStorage.getRsResolver(orgId),
     ]);
-    return new Set(rawRs.map((rs) => resolveRs(rs) || rs));
+    return {
+      rs: new Set(rawRs.map((rs) => resolveRs(rs) || rs)),
+      pos: new Set(rawPos.map((p) => p.trim().toUpperCase())),
+    };
+  };
+  // Un saldo è visibile all'operatore se un suo PDV rientra nei POS degli
+  // addetti (righe dealer / senza-dealer) o se la RS coincide (righe legacy).
+  const saldoVisibleToOperator = (s: import("./plafondRicariche").PlafondSaldo, scope: { rs: Set<string>; pos: Set<string> }) => {
+    if (s.pdv.some((p) => scope.pos.has(p.codicePos.trim().toUpperCase()))) return true;
+    if (!s.codiceDealer) return scope.rs.has(s.ragioneSociale);
+    return false;
   };
 
   app.get("/api/ricariche-plafond", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const ctx = await resolveBisuiteOrg(req);
       if (!ctx) return res.status(403).json({ error: "Accesso non autorizzato" });
-      const [saldi, lastSync, allowedRs] = await Promise.all([
+      const [saldi, lastSync, scope] = await Promise.all([
         computePlafondSaldi(ctx.orgId),
         storage.getLastBisuiteSync(ctx.orgId),
-        operatorAllowedRs(ctx.profile, ctx.orgId),
+        operatorAllowedScope(ctx.profile, ctx.orgId),
       ]);
-      const visible = allowedRs ? saldi.filter((s) => allowedRs.has(s.ragioneSociale)) : saldi;
+      const visible = scope ? saldi.filter((s) => saldoVisibleToOperator(s, scope)) : saldi;
       res.json({ saldi: visible, lastSync: lastSync ? lastSync.toISOString() : null });
     } catch (error: unknown) {
       console.error("Plafond ricariche read error:", error);
@@ -3718,24 +3731,38 @@ export async function registerRoutes(
     try {
       const ctx = await resolveBisuiteOrg(req);
       if (!ctx) return res.status(403).json({ error: "Accesso non autorizzato" });
-      const [ops, registry, allowedRs] = await Promise.all([
+      const [ops, registry, scope, saldi] = await Promise.all([
         storage.listPlafondRicaricheOps(ctx.orgId),
         cdgStorage.listRagioniSociali(ctx.orgId, { includeAuto: true }),
-        operatorAllowedRs(ctx.profile, ctx.orgId),
+        operatorAllowedScope(ctx.profile, ctx.orgId),
+        // Serve solo agli operatori per derivare i dealer visibili.
+        ctx.profile.role === "operatore" ? computePlafondSaldi(ctx.orgId) : Promise.resolve(null),
       ]);
       const nameById = new Map(registry.map((r) => [r.id, r.nome]));
-      // Gli operatori vedono solo le operazioni delle RS di loro pertinenza.
-      const visibleOps = allowedRs
-        ? ops.filter((op) => allowedRs.has(nameById.get(op.ragioneSocialeId) ?? ""))
-        : ops;
+      // Gli operatori vedono solo le operazioni dei dealer/RS di pertinenza:
+      // stessa regola di visibilità dei saldi, applicata alle operazioni.
+      let visibleOps = ops;
+      if (scope) {
+        const visibleDealers = new Set(
+          (saldi ?? [])
+            .filter((s) => s.codiceDealer && saldoVisibleToOperator(s, scope))
+            .map((s) => s.codiceDealer.trim().toUpperCase()),
+        );
+        visibleOps = ops.filter((op) => {
+          const dealer = String(op.codiceDealer ?? "").trim().toUpperCase();
+          if (dealer) return visibleDealers.has(dealer);
+          return scope.rs.has(nameById.get(op.ragioneSocialeId ?? "") ?? "");
+        });
+      }
       res.json({
         storico: visibleOps
           .slice()
           .reverse()
           .map((op) => ({
             id: op.id,
-            ragioneSocialeId: op.ragioneSocialeId,
-            ragioneSociale: nameById.get(op.ragioneSocialeId) ?? "N/D",
+            ragioneSocialeId: op.ragioneSocialeId ?? "",
+            codiceDealer: op.codiceDealer ?? "",
+            ragioneSociale: nameById.get(op.ragioneSocialeId ?? "") ?? "",
             tipo: op.tipo,
             importo: Number(op.importo),
             saldoPrima: Number(op.saldoPrima),
@@ -3751,7 +3778,12 @@ export async function registerRoutes(
   });
 
   // Operazione amministrativa sul plafond: SOLO admin e super_admin.
-  // body: { ragioneSociale: string, tipo: 'aggiungi'|'imposta', importo: number }
+  // body: { codiceDealer?: string, ragioneSociale?: string,
+  //         tipo: 'aggiungi'|'imposta'|'soglia', importo: number }
+  // Task #544: la chiave contabile è il codice dealer. `ragioneSociale` resta
+  // accettata per compatibilità (org senza dealer configurati / righe legacy);
+  // se la RS mappa su UN solo dealer l'operazione viene registrata su quel
+  // dealer, così i nuovi inserimenti migrano naturalmente al modello dealer.
   app.post("/api/ricariche-plafond", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
     try {
       const ctx = await resolveBisuiteOrg(req);
@@ -3760,12 +3792,13 @@ export async function registerRoutes(
       if (profile.role !== "admin" && profile.role !== "super_admin") {
         return res.status(403).json({ error: "Solo gli amministratori possono modificare il plafond" });
       }
+      const rawDealer = typeof req.body?.codiceDealer === "string" ? req.body.codiceDealer.trim() : "";
       const rawNome = typeof req.body?.ragioneSociale === "string" ? req.body.ragioneSociale.trim() : "";
       const tipo = req.body?.tipo;
       const importo = Number(req.body?.importo);
-      if (!rawNome) return res.status(400).json({ error: "ragioneSociale obbligatoria" });
-      // Task #538: 'soglia' registra (append-only) la soglia di avviso della
-      // RS; importo 0 = soglia disattivata. Il saldo NON cambia.
+      if (!rawDealer && !rawNome) return res.status(400).json({ error: "codiceDealer o ragioneSociale obbligatorio" });
+      // Task #538: 'soglia' registra (append-only) la soglia di avviso;
+      // importo 0 = soglia disattivata. Il saldo NON cambia.
       if (tipo !== "aggiungi" && tipo !== "imposta" && tipo !== "soglia") {
         return res.status(400).json({ error: "tipo non valido (atteso 'aggiungi', 'imposta' o 'soglia')" });
       }
@@ -3773,13 +3806,35 @@ export async function registerRoutes(
         return res.status(400).json({ error: tipo === "aggiungi" ? "importo deve essere positivo" : "importo non valido" });
       }
 
-      // Canonicalizza la RS e assicura l'anchor con id stabile nel registro.
       const resolveRs = await cdgStorage.getRsResolver(orgId);
-      const canon = resolveRs(rawNome) || rawNome;
-      const rsId = await cdgStorage.ensureRsId(orgId, canon, "auto");
+      const { getDealerMaps } = await import("./plafondRicariche");
+      const { dealers } = await getDealerMaps(orgId, resolveRs);
+
+      let codiceDealer: string | null = null;
+      let rsId: string | null = null;
+      let canon = "";
+      if (rawDealer) {
+        const info = dealers.get(rawDealer.toUpperCase());
+        if (!info) return res.status(400).json({ error: `Codice dealer "${rawDealer}" non presente nella Struttura PDV` });
+        codiceDealer = info.codice;
+        // RS descrittiva: valorizzata solo se il dealer appartiene a una sola RS.
+        if (info.rsCanon.size === 1) {
+          canon = Array.from(info.rsCanon)[0];
+          if (canon && canon !== "N/D") rsId = await cdgStorage.ensureRsId(orgId, canon, "auto");
+        }
+      } else {
+        // Percorso legacy per RS: canonicalizza e assicura l'anchor.
+        canon = resolveRs(rawNome) || rawNome;
+        rsId = await cdgStorage.ensureRsId(orgId, canon, "auto");
+        // Se la RS mappa su UN solo dealer, registra direttamente sul dealer.
+        const matches = Array.from(dealers.values()).filter((d) => d.rsCanon.has(canon));
+        if (matches.length === 1) codiceDealer = matches[0].codice;
+      }
 
       const saldi = await computePlafondSaldi(orgId);
-      const current = saldi.find((s) => s.ragioneSocialeId === rsId || s.ragioneSociale === canon);
+      const current = codiceDealer
+        ? saldi.find((s) => s.codiceDealer.trim().toUpperCase() === codiceDealer!.trim().toUpperCase())
+        : saldi.find((s) => !s.codiceDealer && (s.ragioneSocialeId === rsId || s.ragioneSociale === canon));
       const saldoPrima = current?.saldo ?? (current ? -current.consumoDaCutoff : 0);
       const saldoDopo = tipo === "imposta"
         ? Math.round(importo * 100) / 100
@@ -3790,6 +3845,7 @@ export async function registerRoutes(
       const op = await storage.insertPlafondRicaricheOp({
         organizationId: orgId,
         ragioneSocialeId: rsId,
+        codiceDealer,
         tipo,
         importo: importo.toFixed(2),
         saldoPrima: (Math.round(saldoPrima * 100) / 100).toFixed(2),
@@ -3804,12 +3860,52 @@ export async function registerRoutes(
       res.status(201).json({
         success: true,
         op: { id: op.id, tipo: op.tipo, importo: Number(op.importo), saldoPrima: Number(op.saldoPrima), saldoDopo: Number(op.saldoDopo) },
+        codiceDealer: codiceDealer ?? "",
         ragioneSociale: canon,
         saldo: saldoDopo,
       });
     } catch (error: unknown) {
       console.error("Plafond ricariche op error:", error);
       res.status(500).json({ error: "Errore nel salvataggio dell'operazione plafond" });
+    }
+  });
+
+  // Task #544 — assegna a un dealer le operazioni plafond storiche registrate
+  // per RS (codice_dealer NULL). Serve per le RS con PIÙ dealer, dove
+  // l'attribuzione automatica in lettura sarebbe ambigua. Le stesse righe
+  // vengono ripuntate (nessuna duplicazione di importi o saldi).
+  app.post("/api/ricariche-plafond/assegna", isAuthenticated, requireModule("vendite_bisuite"), async (req: any, res) => {
+    try {
+      const ctx = await resolveBisuiteOrg(req);
+      if (!ctx) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const { profile, orgId } = ctx;
+      if (profile.role !== "admin" && profile.role !== "super_admin") {
+        return res.status(403).json({ error: "Solo gli amministratori possono modificare il plafond" });
+      }
+      const rawNome = typeof req.body?.ragioneSociale === "string" ? req.body.ragioneSociale.trim() : "";
+      const rawDealer = typeof req.body?.codiceDealer === "string" ? req.body.codiceDealer.trim() : "";
+      if (!rawNome || !rawDealer) return res.status(400).json({ error: "ragioneSociale e codiceDealer obbligatori" });
+      const resolveRs = await cdgStorage.getRsResolver(orgId);
+      const { getDealerMaps } = await import("./plafondRicariche");
+      const { dealers } = await getDealerMaps(orgId, resolveRs);
+      const info = dealers.get(rawDealer.toUpperCase());
+      if (!info) return res.status(400).json({ error: `Codice dealer "${rawDealer}" non presente nella Struttura PDV` });
+      const canon = resolveRs(rawNome) || rawNome;
+      // Guard contabile: il dealer di destinazione deve appartenere alla
+      // stessa RS delle operazioni storiche, altrimenti si sposterebbe il
+      // plafond di una RS su un dealer di un'altra.
+      if (!info.rsCanon.has(canon)) {
+        return res.status(400).json({ error: `Il dealer "${info.codice}" non appartiene alla Ragione Sociale "${rawNome}"` });
+      }
+      const registry = await cdgStorage.listRagioniSociali(orgId, { includeAuto: true });
+      const anchor = registry.find((r) => (resolveRs(r.nome) || r.nome) === canon);
+      if (!anchor) return res.status(404).json({ error: `Ragione Sociale "${rawNome}" non trovata` });
+      const updated = await storage.assignPlafondOpsDealer(orgId, anchor.id, info.codice);
+      if (updated === 0) return res.status(404).json({ error: "Nessuna operazione da assegnare per questa Ragione Sociale" });
+      res.json({ success: true, assegnate: updated, codiceDealer: info.codice });
+    } catch (error: unknown) {
+      console.error("Plafond ricariche assegna error:", error);
+      res.status(500).json({ error: "Errore nell'assegnazione delle operazioni plafond" });
     }
   });
 
@@ -4847,6 +4943,10 @@ export async function registerRoutes(
     id?: string; codicePos: string; nome: string; ragioneSociale: string;
     canale?: string; tipoPosizione?: string;
     clusterMobile?: string; clusterFisso?: string; clusterCB?: string;
+    // Codice dealer "8 miliardi" (Task #544): chiave contabile del plafond
+    // ricariche. Più POS possono condividere lo stesso dealer; la stessa RS
+    // può contenere dealer diversi.
+    codiceDealer?: string;
     // Brand associati al PDV (Task #519, report Telegram separati per brand).
     // Id dal catalogo brands, validati contro i brand dell'organizzazione.
     brandIds?: string[];
@@ -4860,6 +4960,7 @@ export async function registerRoutes(
     clusterMobile: z.string().trim().optional().default(""),
     clusterFisso: z.string().trim().optional().default(""),
     clusterCB: z.string().trim().optional().default(""),
+    codiceDealer: z.string().trim().max(40).optional().default(""),
     brandIds: z.array(z.string().trim().min(1)).max(20).optional(),
   });
   // Valida i brandIds contro i brand associati all'organizzazione: id
@@ -4928,7 +5029,10 @@ export async function registerRoutes(
     res.status(201).json({ success: true, id: newId });
   });
 
-  // POST /api/admin/struttura/pdv/bulk → crea N PDV (skip duplicati)
+  // POST /api/admin/struttura/pdv/bulk → crea N PDV (skip duplicati).
+  // Task #544: per i POS GIÀ esistenti aggiorna il codiceDealer quando il
+  // payload ne fornisce uno diverso (import Excel della Struttura): il resto
+  // dei campi esistenti non viene toccato.
   app.post("/api/admin/struttura/pdv/bulk", isAuthenticated, async (req: any, res) => {
     const profile = await requireAdminRole(req, res);
     if (!profile) return;
@@ -4942,18 +5046,36 @@ export async function registerRoutes(
     const existing = new Set(cur.map(p => normLow(p.codicePos || p.nome)));
     const added: string[] = [];
     const skipped: string[] = [];
+    const updated: string[] = [];
     const toAdd: StructPdv[] = [];
+    const dealerByPos = new Map<string, string>();
     for (const p of parsed.data.pdvs) {
       const k = normLow(p.codicePos);
-      if (existing.has(k)) { skipped.push(p.codicePos); continue; }
+      if (existing.has(k)) {
+        const curEntry = cur.find((c) => normLow(c.codicePos || c.nome) === k);
+        const newDealer = norm(p.codiceDealer);
+        if (newDealer && norm(curEntry?.codiceDealer) !== newDealer) {
+          dealerByPos.set(k, newDealer);
+          updated.push(p.codicePos);
+        } else {
+          skipped.push(p.codicePos);
+        }
+        continue;
+      }
       existing.add(k);
       toAdd.push({ id: `pdv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ...p, brandIds: dedupBrandIds(p.brandIds) ?? [] });
       added.push(p.codicePos);
     }
-    if (toAdd.length > 0) {
-      await writePv(orgId, (pv) => [...pv, ...toAdd], profile.id);
+    if (toAdd.length > 0 || dealerByPos.size > 0) {
+      await writePv(orgId, (pv) => [
+        ...pv.map((p) => {
+          const d = dealerByPos.get(normLow(p.codicePos || p.nome));
+          return d !== undefined ? { ...p, codiceDealer: d } : p;
+        }),
+        ...toAdd,
+      ], profile.id);
     }
-    res.json({ success: true, added, skipped });
+    res.json({ success: true, added, skipped, updated });
   });
 
   // PUT /api/admin/struttura/pdv → modifica per (oldRagioneSociale, oldCodicePos)
@@ -4972,6 +5094,7 @@ export async function registerRoutes(
       clusterMobile: z.string().trim().optional(),
       clusterFisso: z.string().trim().optional(),
       clusterCB: z.string().trim().optional(),
+      codiceDealer: z.string().trim().max(40).optional(),
       brandIds: z.array(z.string().trim().min(1)).max(20).optional(),
     });
     const parsed = schema.safeParse(req.body);
@@ -5003,6 +5126,7 @@ export async function registerRoutes(
       clusterMobile: parsed.data.clusterMobile ?? p.clusterMobile,
       clusterFisso: parsed.data.clusterFisso ?? p.clusterFisso,
       clusterCB: parsed.data.clusterCB ?? p.clusterCB,
+      codiceDealer: parsed.data.codiceDealer ?? p.codiceDealer,
       brandIds: dedupBrandIds(parsed.data.brandIds) ?? p.brandIds ?? [],
     } : p), profile.id);
     // Propagazione su CdG: rename codicePos e/o ragioneSociale
