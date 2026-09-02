@@ -10,7 +10,10 @@
 #     moduli attivi;
 #   - un'org senza moduli WindTre (operatore + brand non-WindTre) veda la Home
 #     e il messaggio "Nessun modulo attivo" senza restare bloccata;
-#   - un super_admin sia reindirizzato a `/super-admin`.
+#   - un super_admin sia reindirizzato a `/super-admin`;
+#   - (Task #542) il badge "Plafond" compaia sulla scorciatoia Vendite BiSuite
+#     con una RS in allerta, sparisca con saldo sopra soglia, e nessuna
+#     richiesta a /api/ricariche-plafond parta senza il modulo vendite_bisuite.
 # Richiede:
 #   - il workflow "Start application" attivo (app su localhost:5000);
 #   - DATABASE_URL (signup/cleanup + brand di test nel dev DB);

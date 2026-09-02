@@ -159,6 +159,167 @@ test('scenario 2: org without WindTre modules sees Home with "Nessun modulo atti
   }
 });
 
+// ---------------------------------------------------------------------------
+// Helper Task #542 — semina una RS nel registro canonico + un'operazione
+// plafond 'imposta' con saldo assoluto `saldo`. Il saldo viene DERIVATO in
+// lettura (op 'imposta' + consumo ricariche = 0 per un'org appena creata),
+// quindi basta l'op per pilotare inAllerta: saldo sotto la soglia default
+// (50€) o negativo => allerta; saldo alto => nessuna allerta.
+async function seedPlafond(pool, orgId, { rsNome, saldo }) {
+  const rs = await pool.query(
+    `INSERT INTO cdg_ragioni_sociali (organization_id, nome, origine)
+       VALUES ($1, $2, 'manuale') RETURNING id`,
+    [orgId, rsNome],
+  );
+  const rsId = rs.rows[0].id;
+  await pool.query(
+    `INSERT INTO plafond_ricariche_ops
+       (organization_id, ragione_sociale_id, tipo, importo, saldo_prima, saldo_dopo, consumo_cutoff, created_by_name)
+     VALUES ($1, $2, 'imposta', $3, 0, $3, now(), 'seed test')`,
+    [orgId, rsId, saldo],
+  );
+  return rsId;
+}
+
+// ===========================================================================
+// SCENARIO 4 (Task #542): con una RS in allerta plafond (saldo sotto la
+// soglia default), la scorciatoia Vendite BiSuite mostra il badge "Plafond".
+// ===========================================================================
+test('scenario 4: plafond badge appears on Vendite BiSuite shortcut when an RS is in allerta', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'home_ui', fullName: 'Home UI Test', organizationName: uniq('HomeUI') });
+  const browser = await launchBrowser();
+  try {
+    // Saldo 10€ < soglia default 50€ => inAllerta true.
+    await seedPlafond(pool, session.orgId, { rsNome: uniq('RS Allerta'), saldo: 10 });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    // Aspetta la risposta del plafond (parte solo se il modulo è visibile).
+    const plafondResp = page.waitForResponse(
+      (r) => r.url().includes('/api/ricariche-plafond') && r.request().method() === 'GET',
+      { timeout: 20000 },
+    );
+    await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+
+    await page.getByTestId('text-home-title').waitFor({ state: 'visible', timeout: 20000 });
+    const keys = await shortcutKeys(page);
+    assert.ok(keys.includes('vendite_bisuite'), `expected vendite_bisuite shortcut, got: ${keys.join(', ')}`);
+
+    const resp = await plafondResp;
+    assert.equal(resp.status(), 200, 'plafond endpoint must respond 200 for an admin with the module');
+
+    await page.getByTestId('badge-home-plafond-allerta').waitFor({ state: 'visible', timeout: 10000 });
+    const badge = await page.getByTestId('badge-home-plafond-allerta').innerText();
+    assert.match(badge, /Plafond/i, 'badge must mention "Plafond"');
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 5 (Task #542): saldo sopra soglia => NESSUN badge plafond.
+// ===========================================================================
+test('scenario 5: no plafond badge when the saldo is above the alert threshold', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'home_ui', fullName: 'Home UI Test', organizationName: uniq('HomeUI') });
+  const browser = await launchBrowser();
+  try {
+    // Saldo 500€ >> soglia default 50€ => inAllerta false.
+    await seedPlafond(pool, session.orgId, { rsNome: uniq('RS Serena'), saldo: 500 });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    const plafondResp = page.waitForResponse(
+      (r) => r.url().includes('/api/ricariche-plafond') && r.request().method() === 'GET',
+      { timeout: 20000 },
+    );
+    await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+
+    await page.getByTestId('text-home-title').waitFor({ state: 'visible', timeout: 20000 });
+    const keys = await shortcutKeys(page);
+    assert.ok(keys.includes('vendite_bisuite'), `expected vendite_bisuite shortcut, got: ${keys.join(', ')}`);
+
+    // Asserzione di assenza SOLO dopo che i dati plafond sono arrivati:
+    // altrimenti un badge in ritardo passerebbe inosservato.
+    const resp = await plafondResp;
+    assert.equal(resp.status(), 200, 'plafond endpoint must respond 200');
+    const body = await resp.json();
+    assert.ok(Array.isArray(body?.saldi) && body.saldi.length > 0, 'seeded RS must be in the saldi response');
+    assert.ok(body.saldi.every((s) => !s.inAllerta), 'no RS must be in allerta with saldo above threshold');
+
+    assert.equal(
+      await page.getByTestId('badge-home-plafond-allerta').count(),
+      0, 'plafond badge must NOT appear when no RS is in allerta',
+    );
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 6 (Task #542): utente senza modulo vendite_bisuite => la Home non
+// chiama MAI /api/ricariche-plafond (hook disabilitato) e niente badge.
+// ===========================================================================
+test('scenario 6: no /api/ricariche-plafond request without the vendite_bisuite module', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'home_ui', fullName: 'Home UI Test', organizationName: uniq('HomeUI') });
+  const browser = await launchBrowser();
+  try {
+    // Semina comunque una RS in allerta: se il gating regredisse, il badge
+    // comparirebbe e la richiesta partirebbe.
+    await seedPlafond(pool, session.orgId, { rsNome: uniq('RS Gated'), saldo: -20 });
+    // Disabilita SOLO il modulo Vendite BiSuite per l'org.
+    await pool.query(
+      `UPDATE organizations SET enabled_modules = $2 WHERE id = $1`,
+      [session.orgId, JSON.stringify({ vendite_bisuite: false })],
+    );
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    // Intercetta TUTTE le richieste verso il plafond fatte dalla pagina.
+    const plafondRequests = [];
+    page.on('request', (req) => {
+      if (req.url().includes('/api/ricariche-plafond')) plafondRequests.push(req.url());
+    });
+    await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+
+    await page.getByTestId('text-home-title').waitFor({ state: 'visible', timeout: 20000 });
+    const keys = await shortcutKeys(page);
+    assert.ok(!keys.includes('vendite_bisuite'), 'vendite_bisuite shortcut must be hidden when the module is disabled');
+    assert.ok(keys.length > 0, 'other module shortcuts must still be visible');
+
+    // Margine extra: eventuali query in ritardo dopo il networkidle.
+    await page.waitForTimeout(1500);
+
+    assert.equal(
+      plafondRequests.length,
+      0, `no request to /api/ricariche-plafond must be made, got: ${plafondRequests.join(', ')}`,
+    );
+    assert.equal(
+      await page.getByTestId('badge-home-plafond-allerta').count(),
+      0, 'plafond badge must NOT appear without the vendite_bisuite module',
+    );
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
 // ===========================================================================
 // SCENARIO 3: super_admin continua a essere reindirizzato a /super-admin.
 // ===========================================================================
