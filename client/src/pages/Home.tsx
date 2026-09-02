@@ -3,7 +3,9 @@ import { useEnabledModules } from "@/hooks/useEnabledModules";
 import { useLocation } from "wouter";
 import { AppNavbar } from "@/components/AppNavbar";
 import { Card, CardContent } from "@/components/ui/card";
+import { usePlafondRicariche } from "@/components/PlafondRicariche";
 import {
+  AlertTriangle,
   Building2,
   Sparkles,
   BookOpen,
@@ -151,6 +153,18 @@ export default function Home() {
     return s.enabledWhen ? s.enabledWhen(isEnabled) : isEnabled(s.key);
   });
 
+  // Task #541 — avviso plafond ricariche in Home. La query parte SOLO se il
+  // modulo Vendite BiSuite è attivo per l'utente (hook disabilitato con orgId
+  // vuoto): nessuna chiamata per chi non ha il modulo. Il flag inAllerta
+  // arriva già calcolato (e scopato per operatore) da GET /api/ricariche-plafond.
+  const bisuiteVisible = shortcuts.some((s) => s.key === "vendite_bisuite");
+  const { data: plafondData } = usePlafondRicariche(
+    bisuiteVisible ? organization?.id || "" : "",
+  );
+  const plafondInAllerta =
+    bisuiteVisible &&
+    (plafondData?.saldi ?? []).some((s) => s.inAllerta);
+
   return (
     <div className="min-h-screen">
       <AppNavbar title="MyStoreDesk" />
@@ -226,7 +240,18 @@ export default function Home() {
                           <s.icon className="h-5 w-5" />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-sm truncate">{s.label}</p>
+                          <p className="font-semibold text-sm truncate flex items-center gap-2">
+                            <span className="truncate">{s.label}</span>
+                            {s.key === "vendite_bisuite" && plafondInAllerta && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full bg-destructive/10 text-destructive px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shrink-0"
+                                data-testid="badge-home-plafond-allerta"
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                Plafond
+                              </span>
+                            )}
+                          </p>
                           <p className="text-xs text-muted-foreground line-clamp-2">
                             {s.description}
                           </p>
