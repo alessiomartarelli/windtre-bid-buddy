@@ -404,6 +404,92 @@ test('plafond ricariche per RS', async (t) => {
       assert.equal(r3.body.saldi.find((s) => s.ragioneSociale === RS_M2), undefined);
     });
 
+    await t.test('rinomina/alias: saldo agganciato e consumo delle varianti sommato', async () => {
+      // Task #539: dopo una rinomina (e con alias espliciti) saldo e storico
+      // devono seguire la RS canonica, e il consumo delle vendite registrate
+      // con QUALSIASI variante del nome deve essere sommato sulla stessa riga.
+      const put = (path, body) =>
+        jsonReq(`${BASE}${path}`, {
+          method: 'PUT',
+          headers: { Cookie: admin.cookieHeader },
+          body: JSON.stringify(body),
+        });
+      const rsIdByName = async (nome) => {
+        const r = await pool.query(
+          `SELECT id FROM cdg_ragioni_sociali WHERE organization_id = $1 AND nome = $2`,
+          [admin.orgId, nome],
+        );
+        return r.rows[0]?.id ?? null;
+      };
+
+      const RS_V = uniq('RS PLAFOND VAR').toUpperCase().replace(/_/g, ' ');
+      const RS_V2 = `${RS_V} SPA`;      // nuovo nome dopo la rinomina
+      const RS_V3 = `${RS_V} EVO`;      // variante unificata via alias esplicito
+
+      // Plafond impostato PRIMA della rinomina, sul nome originale.
+      const w = await post('/api/ricariche-plafond', { ragioneSociale: RS_V, tipo: 'imposta', importo: 100 });
+      assert.equal(w.status, 201, JSON.stringify(w.body));
+      const rsId = await rsIdByName(RS_V);
+      assert.ok(rsId, 'anchor creato dalla imposta');
+
+      // Consumo col nome originale (dopo il cutoff), poi rinomina.
+      await insertSale(pool, admin.orgId, {
+        ragioneSociale: RS_V, articoli: [artRicarica('10.00')], dataVendita: italianWallNow(120_000),
+      });
+      const ren = await put(`/api/cdg/ragioni-sociali/${rsId}`, { nome: RS_V2 });
+      assert.equal(ren.status, 200, JSON.stringify(ren.body));
+
+      // DOPO la rinomina arrivano vendite sia col vecchio nome grezzo (sync
+      // BiSuite storiche/ritardatarie) sia col nuovo nome.
+      await insertSale(pool, admin.orgId, {
+        ragioneSociale: RS_V, articoli: [artRicarica('5.00')], dataVendita: italianWallNow(180_000),
+      });
+      await insertSale(pool, admin.orgId, {
+        ragioneSociale: RS_V2, articoli: [artRicarica('7.00')], dataVendita: italianWallNow(180_000),
+      });
+
+      let r = await get('/api/ricariche-plafond');
+      let row = r.body.saldi.find((s) => s.ragioneSociale === RS_V2);
+      assert.ok(row, 'riga canonica presente dopo la rinomina');
+      assert.equal(row.ragioneSocialeId, rsId, 'il saldo resta agganciato allo stesso id RS');
+      assert.equal(row.consumoDaCutoff, 22, 'consumo = somma varianti vecchio+nuovo nome');
+      assert.equal(row.saldo, 78);
+      assert.equal(r.body.saldi.find((s) => s.ragioneSociale === RS_V), undefined,
+        'nessuna riga separata per la variante vecchio nome');
+
+      // Alias esplicito per una variante semantica: la rinomina ha già messo
+      // il vecchio nome tra gli alias, la PUT li sostituisce quindi li
+      // preserviamo entrambi.
+      const al = await put(`/api/cdg/ragioni-sociali/${rsId}`, { alias: [RS_V, RS_V3] });
+      assert.equal(al.status, 200, JSON.stringify(al.body));
+      await insertSale(pool, admin.orgId, {
+        ragioneSociale: RS_V3, articoli: [artRicarica('9.00')], dataVendita: italianWallNow(240_000),
+      });
+
+      r = await get('/api/ricariche-plafond');
+      row = r.body.saldi.find((s) => s.ragioneSociale === RS_V2);
+      assert.equal(row.consumoDaCutoff, 31, 'anche la variante alias somma sul canonico');
+      assert.equal(row.saldo, 69);
+      assert.equal(r.body.saldi.find((s) => s.ragioneSociale === RS_V3), undefined,
+        'nessuna riga separata per la variante alias');
+
+      // Lo storico segue il nome canonico corrente, e una nuova operazione
+      // post-rinomina si aggancia allo stesso id.
+      const st = await get('/api/ricariche-plafond/storico');
+      const opsV = st.body.storico.filter((o) => o.ragioneSocialeId === rsId);
+      assert.equal(opsV.length, 1);
+      assert.equal(opsV[0].ragioneSociale, RS_V2, 'lo storico mostra il nome canonico post-rinomina');
+      const w2 = await post('/api/ricariche-plafond', { ragioneSociale: RS_V2, tipo: 'aggiungi', importo: 11 });
+      assert.equal(w2.status, 201, JSON.stringify(w2.body));
+      assert.equal(w2.body.op.saldoPrima, 69, "l'aggiunta parte dal saldo canonico (varianti incluse)");
+      assert.equal(w2.body.op.saldoDopo, 80);
+      const opsDb = await pool.query(
+        `SELECT count(*)::int AS c FROM plafond_ricariche_ops WHERE organization_id = $1 AND ragione_sociale_id = $2`,
+        [admin.orgId, rsId],
+      );
+      assert.equal(opsDb.rows[0].c, 2, 'tutte le operazioni restano sullo stesso id RS');
+    });
+
     await t.test('lastSync coerente con max(last_seen_at)', async () => {
       const db = await pool.query(
         `SELECT max(last_seen_at) AS m FROM bisuite_sales WHERE organization_id = $1`,
