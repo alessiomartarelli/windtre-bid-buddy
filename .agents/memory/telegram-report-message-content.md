@@ -85,3 +85,5 @@ raggruppato per `tipologiaNome — descrizione`; energia = `CF`/`IVA` da
 `MICROBUSINESS` ⇒ IVA — non il tipo cliente registrato, spesso incoerente sui
 dati WindTre). `saleCustomerKind` resta esportato (usato dai test) ma non
 governa lo split energia.
+
+**Lezione (Task #538):** qualsiasi testo dinamico (nomi RS, ecc.) appeso al messaggio Telegram va escapato per l'HTML (`& < >`): il messaggio parte con parse_mode HTML e un carattere speciale non escapato fa rifiutare a Telegram l'INTERO report.

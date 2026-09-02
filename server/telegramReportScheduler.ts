@@ -477,6 +477,35 @@ export async function sendDailyReportForOrg(params: {
     forecast,
     { model: isVfReport ? "vf" : "windtre" },
   ) ?? undefined;
+  // Avviso plafond ricariche (Task #538): RS con saldo negativo o sotto la
+  // soglia di avviso. Il plafond è a livello org (non per brand): l'avviso
+  // compare UNA volta per org, sul primo report della run (syncFirst), così
+  // le org con report per-brand non lo ricevono duplicato nella stessa chat.
+  // Best-effort: un errore nel calcolo non blocca mai l'invio del report.
+  let plafondWarning = "";
+  if (params.syncFirst !== false) {
+    try {
+      const { computePlafondSaldi } = await import("./plafondRicariche");
+      const saldi = await computePlafondSaldi(params.orgId);
+      const inAllerta = saldi.filter((s) => s.inAllerta && s.saldo !== null);
+      if (inAllerta.length > 0) {
+        const fmt = (n: number) =>
+          new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n);
+        // Il messaggio parte con parse_mode HTML: i nomi RS vanno escapati o
+        // un "&"/"<" nel nome fa rifiutare a Telegram l'INTERO report.
+        const esc = (s: string) =>
+          s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const lines = inAllerta.map((s) =>
+          s.saldo! < 0
+            ? `• ${esc(s.ragioneSociale)}: plafond ESAURITO (${fmt(s.saldo!)})`
+            : `• ${esc(s.ragioneSociale)}: saldo ${fmt(s.saldo!)} sotto la soglia di ${fmt(s.soglia!)}`,
+        );
+        plafondWarning = `\n\n⚠️ PLAFOND RICARICHE IN ESAURIMENTO\n${lines.join("\n")}`;
+      }
+    } catch (e) {
+      console.warn(`[telegram-report] avviso plafond ricariche non calcolato org=${params.orgId}:`, e);
+    }
+  }
   const message = buildTelegramReportMessage({
     orgName: reportName,
     dateYMD: ymd,
@@ -487,7 +516,7 @@ export async function sendDailyReportForOrg(params: {
     fascia: params.fascia ?? fasciaFromTimeLabel(params.timeLabel),
     content: reportContent,
   });
-  const result = await sendTelegramMessage(params.botToken, params.chatId, message);
+  const result = await sendTelegramMessage(params.botToken, params.chatId, message + plafondWarning);
   if (!result.ok) {
     return { ok: false, error: result.error };
   }

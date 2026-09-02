@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, Wallet, Plus, Equal, History } from "lucide-react";
+import { Loader2, Wallet, Plus, Equal, History, Bell, AlertTriangle } from "lucide-react";
 
 export type PlafondSaldo = {
   ragioneSocialeId: string;
@@ -23,13 +23,18 @@ export type PlafondSaldo = {
   saldo: number | null;
   consumoTotale: number;
   consumoDaCutoff: number;
+  // Task #538 — soglia di avviso effettiva (custom per RS o default) e flag
+  // di allerta calcolato server-side (saldo negativo o sotto soglia).
+  soglia: number | null;
+  sogliaCustom: boolean;
+  inAllerta: boolean;
   lastOpAt: string | null;
 };
 
 type StoricoRow = {
   id: string;
   ragioneSociale: string;
-  tipo: "aggiungi" | "imposta";
+  tipo: "aggiungi" | "imposta" | "soglia";
   importo: number;
   saldoPrima: number;
   saldoDopo: number;
@@ -71,7 +76,7 @@ export function formatLastSync(iso: string | null | undefined): string | null {
 export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; isAdmin: boolean }) {
   const queryClient = useQueryClient();
   const { data, isLoading } = usePlafondRicariche(orgId);
-  const [opDialog, setOpDialog] = useState<{ rs: string; tipo: "aggiungi" | "imposta" } | null>(null);
+  const [opDialog, setOpDialog] = useState<{ rs: string; tipo: "aggiungi" | "imposta" | "soglia" } | null>(null);
   const [importo, setImporto] = useState("");
   const [opError, setOpError] = useState<string | null>(null);
   const [storicoOpen, setStoricoOpen] = useState(false);
@@ -87,7 +92,7 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
   });
 
   const opMutation = useMutation({
-    mutationFn: async ({ rs, tipo, value }: { rs: string; tipo: "aggiungi" | "imposta"; value: number }) => {
+    mutationFn: async ({ rs, tipo, value }: { rs: string; tipo: "aggiungi" | "imposta" | "soglia"; value: number }) => {
       const res = await fetch(apiUrl("/api/ricariche-plafond"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -160,6 +165,9 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
                     <div className="font-semibold text-sm truncate">{s.ragioneSociale}</div>
                     <div className="text-xs text-muted-foreground">
                       Ricariche vendute: {fmtEur(s.consumoTotale)}
+                      {s.saldo !== null && s.soglia !== null && (
+                        <> · Soglia avviso: {fmtEur(s.soglia)}{s.sogliaCustom ? "" : " (default)"}</>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -168,16 +176,39 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
                         Plafond non configurato
                       </Badge>
                     ) : (
-                      <Badge
-                        className={`text-sm font-bold tabular-nums py-1 ${
-                          s.saldo < 0
-                            ? "bg-red-500/10 text-red-600 border-red-500/20"
-                            : "bg-green-500/10 text-green-600 border-green-500/20"
-                        }`}
-                        data-testid={`text-plafond-saldo-${id}`}
-                      >
-                        {fmtEur(s.saldo)}
-                      </Badge>
+                      <>
+                        {/* Task #538 — avviso sotto-soglia (saldo ancora positivo) */}
+                        {s.inAllerta && s.saldo >= 0 && (
+                          <Badge
+                            className="text-xs bg-amber-500/10 text-amber-600 border-amber-500/20"
+                            data-testid={`badge-plafond-allerta-${id}`}
+                          >
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Sotto soglia{s.soglia !== null ? ` (${fmtEur(s.soglia)})` : ""}
+                          </Badge>
+                        )}
+                        {s.inAllerta && s.saldo < 0 && (
+                          <Badge
+                            className="text-xs bg-red-500/10 text-red-600 border-red-500/20"
+                            data-testid={`badge-plafond-allerta-${id}`}
+                          >
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Plafond esaurito
+                          </Badge>
+                        )}
+                        <Badge
+                          className={`text-sm font-bold tabular-nums py-1 ${
+                            s.saldo < 0
+                              ? "bg-red-500/10 text-red-600 border-red-500/20"
+                              : s.inAllerta
+                                ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                : "bg-green-500/10 text-green-600 border-green-500/20"
+                          }`}
+                          data-testid={`text-plafond-saldo-${id}`}
+                        >
+                          {fmtEur(s.saldo)}
+                        </Badge>
+                      </>
                     )}
                     {isAdmin && (
                       <>
@@ -199,6 +230,15 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
                         >
                           <Equal className="h-3.5 w-3.5 mr-1" /> Imposta saldo
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => { setOpDialog({ rs: s.ragioneSociale, tipo: "soglia" }); setImporto(""); setOpError(null); }}
+                          data-testid={`button-plafond-soglia-${id}`}
+                        >
+                          <Bell className="h-3.5 w-3.5 mr-1" /> Soglia avviso
+                        </Button>
                       </>
                     )}
                   </div>
@@ -214,12 +254,18 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {opDialog?.tipo === "aggiungi" ? "Aggiungi credito al plafond" : "Imposta nuovo saldo"}
+              {opDialog?.tipo === "aggiungi"
+                ? "Aggiungi credito al plafond"
+                : opDialog?.tipo === "soglia"
+                  ? "Imposta soglia di avviso"
+                  : "Imposta nuovo saldo"}
             </DialogTitle>
             <DialogDescription>
               {opDialog?.tipo === "aggiungi"
                 ? `L'importo verrà sommato al saldo corrente di ${opDialog?.rs}.`
-                : `Il saldo di ${opDialog?.rs} verrà impostato a questo valore; il consumo riparte da ora.`}
+                : opDialog?.tipo === "soglia"
+                  ? `Quando il saldo di ${opDialog?.rs} scende sotto questa soglia compare un avviso (0 = disattiva la soglia, resta l'avviso per saldo negativo).`
+                  : `Il saldo di ${opDialog?.rs} verrà impostato a questo valore; il consumo riparte da ora.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -278,11 +324,12 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="font-semibold truncate">{op.ragioneSociale}</span>
                     <Badge variant="outline" className="text-xs">
-                      {op.tipo === "aggiungi" ? "Aggiunta" : "Imposta saldo"}
+                      {op.tipo === "aggiungi" ? "Aggiunta" : op.tipo === "soglia" ? "Soglia avviso" : "Imposta saldo"}
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    {op.tipo === "aggiungi" ? "+" : "="} {fmtEur(op.importo)} · saldo {fmtEur(op.saldoPrima)} → {fmtEur(op.saldoDopo)}
+                    {op.tipo === "aggiungi" ? "+" : op.tipo === "soglia" ? "⚑" : "="} {fmtEur(op.importo)}
+                    {op.tipo === "soglia" ? " (soglia di avviso, saldo invariato)" : <> · saldo {fmtEur(op.saldoPrima)} → {fmtEur(op.saldoDopo)}</>}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {op.utente} · {fmtDateTime(op.createdAt)}

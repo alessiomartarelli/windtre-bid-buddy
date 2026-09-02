@@ -158,6 +158,71 @@ test('plafond ricariche per RS', async (t) => {
       assert.equal(first.importo, 100);
     });
 
+    await t.test('soglia di avviso: default, custom, allerta e disattivazione (Task #538)', async () => {
+      // Saldo attuale RS_A = 125, soglia default 50 ⇒ nessuna allerta.
+      let r = await get('/api/ricariche-plafond');
+      let row = r.body.saldi.find((s) => s.ragioneSociale === RS_A);
+      assert.equal(row.soglia, 50, 'senza op soglia vale il default di sistema');
+      assert.equal(row.sogliaCustom, false);
+      assert.equal(row.inAllerta, false);
+
+      // Soglia custom sopra il saldo ⇒ in allerta (saldo positivo).
+      const w = await post('/api/ricariche-plafond', { ragioneSociale: RS_A, tipo: 'soglia', importo: 200 });
+      assert.equal(w.status, 201, JSON.stringify(w.body));
+      assert.equal(w.body.saldo, 125, "l'op soglia non deve toccare il saldo");
+      r = await get('/api/ricariche-plafond');
+      row = r.body.saldi.find((s) => s.ragioneSociale === RS_A);
+      assert.equal(row.saldo, 125);
+      assert.equal(row.soglia, 200);
+      assert.equal(row.sogliaCustom, true);
+      assert.equal(row.inAllerta, true);
+
+      // Lo storico registra l'operazione con saldo invariato.
+      const st = await get('/api/ricariche-plafond/storico');
+      const opSoglia = st.body.storico[0];
+      assert.equal(opSoglia.tipo, 'soglia');
+      assert.equal(opSoglia.importo, 200);
+      assert.equal(opSoglia.saldoPrima, 125);
+      assert.equal(opSoglia.saldoDopo, 125);
+
+      // Soglia 0 = disattivata: niente allerta finché il saldo è >= 0.
+      assert.equal((await post('/api/ricariche-plafond', { ragioneSociale: RS_A, tipo: 'soglia', importo: 0 })).status, 201);
+      r = await get('/api/ricariche-plafond');
+      row = r.body.saldi.find((s) => s.ragioneSociale === RS_A);
+      assert.equal(row.soglia, null);
+      assert.equal(row.inAllerta, false);
+
+      // Saldo negativo ⇒ sempre in allerta, anche con soglia disattivata.
+      const bigSaleId = await insertSale(pool, admin.orgId, {
+        ragioneSociale: RS_A,
+        articoli: [artRicarica('500.00')],
+        dataVendita: italianWallNow(180_000),
+      });
+      r = await get('/api/ricariche-plafond');
+      row = r.body.saldi.find((s) => s.ragioneSociale === RS_A);
+      assert.ok(row.saldo < 0);
+      assert.equal(row.inAllerta, true);
+      // Ripristina: annulla la vendita e riporta la soglia al default.
+      await pool.query(`UPDATE bisuite_sales SET stato = 'Annullata' WHERE id = $1`, [bigSaleId]);
+      assert.equal((await post('/api/ricariche-plafond', { ragioneSociale: RS_A, tipo: 'soglia', importo: 50 })).status, 201);
+      r = await get('/api/ricariche-plafond');
+      row = r.body.saldi.find((s) => s.ragioneSociale === RS_A);
+      assert.equal(row.saldo, 125);
+      assert.equal(row.inAllerta, false);
+
+      // Una RS con SOLA op soglia resta "plafond non configurato".
+      const RS_S = uniq('RS PLAFOND SOGLIA').toUpperCase().replace(/_/g, ' ');
+      assert.equal((await post('/api/ricariche-plafond', { ragioneSociale: RS_S, tipo: 'soglia', importo: 30 })).status, 201);
+      r = await get('/api/ricariche-plafond');
+      row = r.body.saldi.find((s) => s.ragioneSociale === RS_S);
+      assert.ok(row);
+      assert.equal(row.saldo, null);
+      assert.equal(row.inAllerta, false);
+
+      // Soglia negativa rifiutata.
+      assert.equal((await post('/api/ricariche-plafond', { ragioneSociale: RS_A, tipo: 'soglia', importo: -1 })).status, 400);
+    });
+
     await t.test('input non validi rifiutati', async () => {
       assert.equal((await post('/api/ricariche-plafond', { ragioneSociale: RS_A, tipo: 'aggiungi', importo: -5 })).status, 400);
       assert.equal((await post('/api/ricariche-plafond', { ragioneSociale: RS_A, tipo: 'aggiungi', importo: 0 })).status, 400);
@@ -182,7 +247,8 @@ test('plafond ricariche per RS', async (t) => {
         r = await get('/api/ricariche-plafond');
         assert.ok(r.body.saldi.find((s) => s.ragioneSociale === RS_A), 'operatore con addetto pertinente vede la sua RS');
         st = await get('/api/ricariche-plafond/storico');
-        assert.equal(st.body.storico.length, 2);
+        // 2 op saldo (imposta+aggiungi) + 3 op soglia del test precedente.
+        assert.equal(st.body.storico.length, 5);
         assert.ok(st.body.storico.every((o) => o.ragioneSociale === RS_A));
 
         // Addetto estraneo → di nuovo nulla.
@@ -360,6 +426,7 @@ test('plafond ricariche per RS', async (t) => {
         assert.ok(saldoText.replace(/[\s\u00a0]/g, '').includes('125'), `saldo UI inatteso: ${saldoText}`);
         assert.ok(await page.$(`[data-testid="button-plafond-aggiungi-${idA}"]`), 'admin deve vedere Aggiungi');
         assert.ok(await page.$(`[data-testid="button-plafond-imposta-${idA}"]`), 'admin deve vedere Imposta');
+        assert.ok(await page.$(`[data-testid="button-plafond-soglia-${idA}"]`), 'admin deve vedere Soglia avviso (Task #538)');
         const lastSyncEl = await page.waitForSelector('[data-testid="text-last-bisuite-sync"]', { timeout: 15000 });
         const lastSyncText = await lastSyncEl.textContent();
         assert.ok(/Ultimo aggiornamento: \d{2}\/\d{2}\/\d{4},? \d{2}:\d{2}/.test(lastSyncText), `testo last sync inatteso: ${lastSyncText}`);
@@ -379,6 +446,7 @@ test('plafond ricariche per RS', async (t) => {
           await pageOp.waitForSelector(`[data-testid="text-plafond-saldo-${idA}"]`, { timeout: 30000 });
           assert.equal(await pageOp.$(`[data-testid="button-plafond-aggiungi-${idA}"]`), null, 'operatore NON deve vedere Aggiungi');
           assert.equal(await pageOp.$(`[data-testid="button-plafond-imposta-${idA}"]`), null, 'operatore NON deve vedere Imposta');
+          assert.equal(await pageOp.$(`[data-testid="button-plafond-soglia-${idA}"]`), null, 'operatore NON deve vedere Soglia avviso');
           await ctxOp.close();
         } finally {
           await setRole(pool, admin.profileId, 'admin');

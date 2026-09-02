@@ -2215,6 +2215,11 @@ if (schedMod.runScheduledSend && storageMod.storage) {
   let telegramCalls = []; // URL delle chiamate api.telegram.org intercettate
   let telegramDocs = []; // FormData dei sendDocument (allegati HTML)
   let mockDtsLeads = []; // lead DTS restituiti dal mock (Task #519)
+  // Plafond ricariche (Task #538): stato per computePlafondSaldi.
+  let mockPlafondOps = []; // righe plafond_ricariche_ops (asc per createdAt)
+  let mockPlafondRegistry = []; // [{ id, nome }] registro RS
+  let mockPlafondConsumo = []; // [{ rs, consumo }]
+  let telegramMessages = []; // testi dei sendMessage intercettati
   // Listino canvass VF (Task #529): valore restituito da getSystemConfig
   // ("canvass_reference"); la stringa "throw" simula il DB irraggiungibile.
   let mockCanvassRef;
@@ -2253,6 +2258,20 @@ if (schedMod.runScheduledSend && storageMod.storage) {
     if (mockCanvassRef === "throw") throw new Error("DB non raggiungibile (test)");
     return key === "canvass_reference" ? mockCanvassRef : undefined;
   });
+  // Plafond ricariche (Task #538): senza questi patch computePlafondSaldi
+  // tenterebbe il DB reale (best-effort: warning saltato, ma test sporchi).
+  patch("listPlafondRicaricheOps", async () => mockPlafondOps);
+  patch("getRicaricheConsumoByRawRs", async () => mockPlafondConsumo);
+  const cdgMod = await import("../server/cdgStorage.ts").catch(() => ({}));
+  const cdgOriginals = {};
+  if (cdgMod.cdgStorage) {
+    const patchCdg = (name, fn) => {
+      if (!(name in cdgOriginals)) cdgOriginals[name] = cdgMod.cdgStorage[name];
+      cdgMod.cdgStorage[name] = fn;
+    };
+    patchCdg("listRagioniSociali", async () => mockPlafondRegistry);
+    patchCdg("getRsResolver", async () => (s) => s);
+  }
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
@@ -2261,6 +2280,9 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       telegramCalls.push(u);
       if (u.includes("sendDocument") && options?.body instanceof FormData) {
         telegramDocs.push(options.body);
+      }
+      if (u.includes("sendMessage") && typeof options?.body === "string") {
+        try { telegramMessages.push(JSON.parse(options.body).text); } catch {}
       }
       return {
         ok: true,
@@ -2280,9 +2302,13 @@ if (schedMod.runScheduledSend && storageMod.storage) {
     },
   });
 
-  const setupScenario = ({ orgs, sent = {}, sales = [], dtsLeads = [], canvassRef } = {}) => {
+  const setupScenario = ({ orgs, sent = {}, sales = [], dtsLeads = [], canvassRef, plafond } = {}) => {
     mockDtsLeads = dtsLeads;
     mockCanvassRef = canvassRef;
+    mockPlafondOps = plafond?.ops ?? [];
+    mockPlafondRegistry = plafond?.registry ?? [];
+    mockPlafondConsumo = plafond?.consumo ?? [];
+    telegramMessages = [];
     telegramDocs = [];
     mockOrgs = orgs.map((o) => ({ id: o.id, name: o.name ?? o.id }));
     mockConfigs = new Map(orgs.map((o) => [o.id, {
@@ -2773,6 +2799,98 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       assert.equal(telegramCalls.length, 2);
     });
 
+    // ── Avviso plafond ricariche nel messaggio (Task #538) ──────────────
+    const plafondScenario = (nomeRs, { saldo, sogliaOp } = {}) => {
+      const rsId = "rs-1";
+      const ops = [{
+        ragioneSocialeId: rsId,
+        tipo: "imposta",
+        importo: String(saldo),
+        saldoPrima: "0",
+        saldoDopo: String(saldo),
+        consumoCutoff: null,
+        createdAt: new Date("2026-01-01T10:00:00Z"),
+      }];
+      if (sogliaOp !== undefined) {
+        ops.push({
+          ragioneSocialeId: rsId,
+          tipo: "soglia",
+          importo: String(sogliaOp),
+          saldoPrima: String(saldo),
+          saldoDopo: String(saldo),
+          consumoCutoff: null,
+          createdAt: new Date("2026-01-01T11:00:00Z"),
+        });
+      }
+      return { ops, registry: [{ id: rsId, nome: nomeRs }], consumo: [] };
+    };
+
+    await test("plafond sotto soglia ⇒ avviso nel messaggio, con nome RS escapato per l'HTML Telegram (Task #538)", async () => {
+      // Nome RS con caratteri speciali HTML: '&' e '<' devono arrivare
+      // escapati o Telegram rifiuta l'INTERO messaggio (parse_mode HTML).
+      const nome = "ROSSI & FIGLI <SRL>";
+      setupScenario({
+        orgs: [{ id: "org-p" }],
+        plafond: plafondScenario(nome, { saldo: 20 }), // sotto default 50
+      });
+      await runScheduledSend("13:30");
+      assert.equal(telegramMessages.length, 1);
+      const msg = telegramMessages[0];
+      assert.ok(msg.includes("PLAFOND RICARICHE IN ESAURIMENTO"), "blocco avviso presente");
+      assert.ok(msg.includes("ROSSI &amp; FIGLI &lt;SRL&gt;"), `nome RS escapato nel messaggio: ${msg.slice(-200)}`);
+      assert.ok(!msg.includes(nome), "il nome RS grezzo (non escapato) non deve comparire");
+      assert.ok(msg.includes("sotto la soglia"), "testo sotto-soglia presente");
+    });
+
+    await test("plafond negativo ⇒ avviso ESAURITO; saldo sopra soglia ⇒ nessun avviso", async () => {
+      setupScenario({
+        orgs: [{ id: "org-p" }],
+        plafond: plafondScenario("RS NEGATIVA", { saldo: -12.5 }),
+      });
+      await runScheduledSend("13:30");
+      assert.ok(telegramMessages[0].includes("plafond ESAURITO"), "avviso esaurito per saldo negativo");
+
+      setupScenario({
+        orgs: [{ id: "org-p2" }],
+        plafond: plafondScenario("RS OK", { saldo: 500 }),
+      });
+      await runScheduledSend("13:30");
+      assert.equal(telegramMessages.length, 1);
+      assert.ok(!telegramMessages[0].includes("PLAFOND RICARICHE"), "nessun avviso con saldo sopra soglia");
+    });
+
+    await test("report per brand: l'avviso plafond compare UNA sola volta per org (solo primo invio)", async () => {
+      setupScenario({
+        orgs: [{
+          id: "org-pb",
+          brands: [{ id: "b-w3", name: "WindTre" }, { id: "b-vf", name: "Vodafone" }],
+          puntiVendita: [
+            { codicePos: "P100", nome: "Neg P100", brandIds: ["b-w3"] },
+            { codicePos: "P200", nome: "Neg P200", brandIds: ["b-vf"] },
+          ],
+        }],
+        plafond: plafondScenario("RS SOTTO", { saldo: 5 }),
+      });
+      await runScheduledSend("13:30");
+      assert.equal(telegramMessages.length, 2, "un messaggio per brand");
+      const withWarning = telegramMessages.filter((m) => m.includes("PLAFOND RICARICHE IN ESAURIMENTO"));
+      assert.equal(withWarning.length, 1, "avviso solo nel primo report dell'org, non duplicato per brand");
+      assert.ok(telegramMessages[0].includes("PLAFOND RICARICHE"), "l'avviso sta sul primo invio");
+    });
+
+    await test("errore nel calcolo plafond ⇒ il report parte comunque senza avviso (best-effort)", async () => {
+      setupScenario({ orgs: [{ id: "org-perr" }] });
+      const prevOps = storage.listPlafondRicaricheOps;
+      storage.listPlafondRicaricheOps = async () => { throw new Error("DB giù (test)"); };
+      try {
+        await runScheduledSend("13:30");
+      } finally {
+        storage.listPlafondRicaricheOps = prevOps;
+      }
+      assert.equal(telegramMessages.length, 1, "il report viene inviato comunque");
+      assert.ok(!telegramMessages[0].includes("PLAFOND RICARICHE"), "nessun avviso se il calcolo fallisce");
+    });
+
     // ── Integrazione timer: startTelegramReportScheduler + rescheduleTelegramReports ──
     // setTimeout/clearTimeout globali fintati: si verifica il percorso REALE
     // di salvataggio config ⇒ reschedule (timer vecchio cancellato, uno solo
@@ -2953,6 +3071,9 @@ if (schedMod.runScheduledSend && storageMod.storage) {
     }
   } finally {
     for (const [name, fn] of Object.entries(originals)) storage[name] = fn;
+    if (cdgMod.cdgStorage) {
+      for (const [name, fn] of Object.entries(cdgOriginals)) cdgMod.cdgStorage[name] = fn;
+    }
     globalThis.fetch = originalFetch;
   }
 } else {

@@ -23,6 +23,7 @@ import {
 import { broadGaraConfigResetBlocks } from "@shared/garaConfigSafety";
 import { registerCdgRoutes } from "./cdgRoutes";
 import { cdgStorage } from "./cdgStorage";
+import { computePlafondSaldi } from "./plafondRicariche";
 import { toItalianWallTime, runBisuiteFetchForOrg, formatFailedMonths } from "./bisuiteFetch";
 import {
   loadEmailConfig,
@@ -3674,108 +3675,8 @@ export async function registerRoutes(
     return { profile, orgId };
   };
 
-  type PlafondSaldo = {
-    ragioneSocialeId: string;
-    ragioneSociale: string;
-    saldo: number | null;          // null = plafond mai configurato per la RS
-    consumoTotale: number;         // consumo ricariche complessivo (info)
-    consumoDaCutoff: number;       // consumo conteggiato nel saldo corrente
-    lastOpAt: string | null;
-  };
-
-  const computePlafondSaldi = async (orgId: string): Promise<PlafondSaldo[]> => {
-    const [ops, registry, resolveRs, consumoRaw] = await Promise.all([
-      storage.listPlafondRicaricheOps(orgId),
-      cdgStorage.listRagioniSociali(orgId, { includeAuto: true }),
-      cdgStorage.getRsResolver(orgId),
-      storage.getRicaricheConsumoByRawRs(orgId),
-    ]);
-    const nameById = new Map(registry.map((r) => [r.id, r.nome]));
-    // Consumo totale per RS canonica (somma delle varianti di nome grezze).
-    const consumoTotByCanon = new Map<string, number>();
-    for (const row of consumoRaw) {
-      const canon = resolveRs(row.rs) || "N/D";
-      consumoTotByCanon.set(canon, (consumoTotByCanon.get(canon) ?? 0) + row.consumo);
-    }
-    // Raggruppa le operazioni per RS (già ordinate per createdAt asc).
-    const opsByRs = new Map<string, typeof ops>();
-    for (const op of ops) {
-      if (!opsByRs.has(op.ragioneSocialeId)) opsByRs.set(op.ragioneSocialeId, []);
-      opsByRs.get(op.ragioneSocialeId)!.push(op);
-    }
-    const out: PlafondSaldo[] = [];
-    const seenCanon = new Set<string>();
-    for (const [rsId, rsOps] of opsByRs) {
-      const nome = nameById.get(rsId) ?? "N/D";
-      const canon = resolveRs(nome) || nome;
-      seenCanon.add(canon);
-      // Base = ultima 'imposta' (saldo assoluto + cutoff); poi somma le
-      // 'aggiungi' successive e sottrae il consumo dopo il cutoff.
-      let base = 0;
-      let cutoff: Date | null = null;
-      let baseIdx = -1;
-      for (let i = rsOps.length - 1; i >= 0; i--) {
-        if (rsOps[i].tipo === "imposta") {
-          base = Number(rsOps[i].saldoDopo);
-          cutoff = rsOps[i].consumoCutoff ? new Date(rsOps[i].consumoCutoff as any) : null;
-          baseIdx = i;
-          break;
-        }
-      }
-      let aggiunte = 0;
-      for (let i = baseIdx + 1; i < rsOps.length; i++) {
-        if (rsOps[i].tipo === "aggiungi") aggiunte += Number(rsOps[i].importo);
-      }
-      const consumoTotale = consumoTotByCanon.get(canon) ?? 0;
-      let consumoDaCutoff = consumoTotale;
-      if (cutoff) {
-        const after = await storage.getRicaricheConsumoByRawRs(orgId, cutoff);
-        consumoDaCutoff = after
-          .filter((r) => (resolveRs(r.rs) || "N/D") === canon)
-          .reduce((s, r) => s + r.consumo, 0);
-      }
-      const saldo = Math.round((base + aggiunte - consumoDaCutoff) * 100) / 100;
-      out.push({
-        ragioneSocialeId: rsId,
-        ragioneSociale: canon,
-        saldo,
-        consumoTotale: Math.round(consumoTotale * 100) / 100,
-        consumoDaCutoff: Math.round(consumoDaCutoff * 100) / 100,
-        lastOpAt: rsOps[rsOps.length - 1].createdAt?.toISOString?.() ?? null,
-      });
-    }
-    // RS con consumo ricariche ma senza plafond configurato: visibili con
-    // saldo null, così la pagina può mostrare "plafond non configurato".
-    for (const [canon, consumo] of consumoTotByCanon) {
-      if (seenCanon.has(canon) || consumo <= 0) continue;
-      seenCanon.add(canon);
-      out.push({
-        ragioneSocialeId: "",
-        ragioneSociale: canon,
-        saldo: null,
-        consumoTotale: Math.round(consumo * 100) / 100,
-        consumoDaCutoff: Math.round(consumo * 100) / 100,
-        lastOpAt: null,
-      });
-    }
-    // Ogni RS del registro compare comunque (anche senza vendite RICARICHE e
-    // senza operazioni): consente all'admin di impostare il plafond in via
-    // preventiva su una RS appena creata, prima che venda la prima ricarica.
-    for (const r of registry) {
-      const canon = resolveRs(r.nome) || r.nome;
-      if (seenCanon.has(canon)) continue;
-      seenCanon.add(canon);
-      out.push({
-        ragioneSocialeId: r.id,
-        ragioneSociale: canon,
-        saldo: null,
-        consumoTotale: 0,
-        consumoDaCutoff: 0,
-        lastOpAt: null,
-      });
-    }
-    return out.sort((a, b) => a.ragioneSociale.localeCompare(b.ragioneSociale, "it"));
-  };
+  // Calcolo saldi condiviso con il report Telegram (Task #538):
+  // vedi server/plafondRicariche.ts (soglia di avviso inclusa).
 
   // Saldi plafond per RS + timestamp dell'ultima sincronizzazione BiSuite.
   // Lettura consentita a chiunque acceda alla pagina Vendite BiSuite.
@@ -3863,8 +3764,10 @@ export async function registerRoutes(
       const tipo = req.body?.tipo;
       const importo = Number(req.body?.importo);
       if (!rawNome) return res.status(400).json({ error: "ragioneSociale obbligatoria" });
-      if (tipo !== "aggiungi" && tipo !== "imposta") {
-        return res.status(400).json({ error: "tipo non valido (atteso 'aggiungi' o 'imposta')" });
+      // Task #538: 'soglia' registra (append-only) la soglia di avviso della
+      // RS; importo 0 = soglia disattivata. Il saldo NON cambia.
+      if (tipo !== "aggiungi" && tipo !== "imposta" && tipo !== "soglia") {
+        return res.status(400).json({ error: "tipo non valido (atteso 'aggiungi', 'imposta' o 'soglia')" });
       }
       if (!Number.isFinite(importo) || (tipo === "aggiungi" ? importo <= 0 : importo < 0)) {
         return res.status(400).json({ error: tipo === "aggiungi" ? "importo deve essere positivo" : "importo non valido" });
@@ -3880,7 +3783,9 @@ export async function registerRoutes(
       const saldoPrima = current?.saldo ?? (current ? -current.consumoDaCutoff : 0);
       const saldoDopo = tipo === "imposta"
         ? Math.round(importo * 100) / 100
-        : Math.round((saldoPrima + importo) * 100) / 100;
+        : tipo === "soglia"
+          ? Math.round(saldoPrima * 100) / 100 // la soglia non tocca il saldo
+          : Math.round((saldoPrima + importo) * 100) / 100;
 
       const op = await storage.insertPlafondRicaricheOp({
         organizationId: orgId,
