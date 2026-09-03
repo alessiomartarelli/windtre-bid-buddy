@@ -16,6 +16,7 @@ import {
   IVA_RATE,
 } from '../shared/pdvPezziExtra.ts';
 import { classifySaleArticles } from '../shared/bisuiteClassification.ts';
+import { derivePdvDrilldownMetrics } from '../shared/pdvDrilldownMetrics.ts';
 
 const approx = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} != ${b}`);
 
@@ -29,6 +30,65 @@ test('IVA: pezzi P.IVA per categoria di origine via isPezzoIva', () => {
   accumulaPezziExtra(c, { pista: 'assicurazioni', categoriaNome: 'ASSICURAZIONI BUSINESS PRO' });
   accumulaPezziExtra(c, { pista: 'assicurazioni', categoriaNome: 'ASSICURAZIONI' });
   assert.equal(c.iva, 4);
+});
+
+test('drill-down: IVA per pista esclude CB, accessori, servizi e telefoni', () => {
+  const result = derivePdvDrilldownMetrics({
+    articoli: [
+      { categoria: { nome: 'TIED IVA' }, descrizione: 'Professional World' },
+      { categoria: { nome: 'ADSL/FIBRA/FWA IVA' }, descrizione: 'FIBRA IVA' },
+      { categoria: { nome: 'ENERGIA W3' }, descrizione: 'OFFERTA MICROBUSINESS' },
+      { categoria: { nome: 'ASSICURAZIONI BUSINESS PRO' }, descrizione: 'PRO' },
+      { categoria: { nome: 'MIA TIED' }, descrizione: 'BUSINESS' },
+      { categoria: { nome: 'ACCESSORI' }, descrizione: 'Cover' },
+      { categoria: { nome: 'SPEDIZIONE' }, descrizione: 'Consegna' },
+      { categoria: { nome: 'TELEFONIA' }, descrizione: 'Phone' },
+    ],
+  });
+  assert.deepEqual(result.ivaByPista, { mobile: 1, fisso: 1, energia: 1, assicurazioni: 1 });
+});
+
+test('drill-down: telefoni separati tra finanziato/VAR e GA/CB', () => {
+  const result = derivePdvDrilldownMetrics({
+    articoli: [
+      {
+        categoria: { nome: 'TIED CF' },
+        dettaglio: { domandeRisposte: [{ domanda: 'TELEFONO INCLUSO COMPASS', risposta: 'SI' }] },
+      },
+      {
+        categoria: { nome: 'TIED IVA' },
+        dettaglio: { domandeRisposte: [{ domanda: 'TELEFONO INCLUSO VAR', risposta: 'SI' }] },
+      },
+      {
+        categoria: { nome: 'MIA TIED' },
+        dettaglio: { domandeRisposte: [{ domanda: 'MIA TELEFONO FINANZIAMENTO', risposta: '0' }] },
+      },
+      {
+        categoria: { nome: 'MIA UNTIED' },
+        dettaglio: { domandeRisposte: [{ domanda: 'MIA TELEFONO VAR', risposta: '24' }] },
+      },
+    ],
+  });
+  assert.deepEqual(result.telefoni, {
+    'telefono:finanziato-ga': 1,
+    'telefono:finanziato-cb': 1,
+    'telefono:var-ga': 1,
+    'telefono:var-cb': 1,
+  });
+});
+
+test('drill-down: domanda sul prodotto TELEFONIA eredita il solo canale della vendita', () => {
+  const result = derivePdvDrilldownMetrics({
+    articoli: [
+      { categoria: { nome: 'TIED CF' } },
+      {
+        categoria: { nome: 'TELEFONIA' },
+        dettaglio: { domandeRisposte: [{ domanda: 'TELEFONO INCLUSO FINDOMESTIC', risposta: 'SI' }] },
+      },
+    ],
+  });
+  assert.equal(result.telefoni['telefono:finanziato-ga'], 1);
+  assert.equal(result.telefoni['telefono:finanziato-cb'], 0);
 });
 
 test('CB: conta solo le categorie cambio piano (MIA TIED/UNTIED + RIVINCOLO)', () => {

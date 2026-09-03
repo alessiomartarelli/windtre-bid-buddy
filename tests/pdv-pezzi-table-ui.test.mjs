@@ -256,9 +256,18 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     await saleDrilldown.waitFor({ state: 'visible', timeout: 5000 });
     const drilldownText = await saleDrilldown.innerText();
     assert.match(drilldownText, /Dettaglio volumi del PDV/i);
-    assert.match(drilldownText, /Fisso FTTH/i);
-    assert.match(drilldownText, /Tied/i);
+    assert.match(drilldownText, /Mobile/i);
+    assert.match(drilldownText, /Fisso/i);
     assert.doesNotMatch(drilldownText, /Cliente|Addetto|Data e ora|Stato|Totale vendita/i);
+
+    // Il dettaglio del PDV Beta espone l'IVA accanto alla pista corretta,
+    // senza trasformare CB/accessori/servizi in righe IVA.
+    await page.getByTestId(`row-table-pezzi-rs-${betaKey}`).click();
+    await page.getByTestId(`btn-table-pezzi-pdv-toggle-${POS_C}`).click();
+    const betaDrilldown = page.getByTestId('pdv-sales-drilldown').last();
+    const betaDrilldownText = await betaDrilldown.innerText();
+    assert.match(betaDrilldownText, /Mobile[\s\S]*di cui 1 IVA/i);
+    assert.doesNotMatch(betaDrilldownText, /IVA CB|IVA Accessori|IVA Servizi/i);
 
     // ── Riga totale complessivo: totali di colonna + totale generale ──
     await page.getByTestId('row-table-pezzi-totale').waitFor({ timeout: 5000 });

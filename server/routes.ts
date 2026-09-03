@@ -4452,6 +4452,7 @@ export async function registerRoutes(
       }
 
       const { aggregateMappedSales } = await import("./bisuiteMappedSales");
+      const { derivePdvDrilldownMetrics } = await import("../shared/pdvDrilldownMetrics");
       const {
         pdvList,
         totalArticoli,
@@ -4496,9 +4497,27 @@ export async function registerRoutes(
               if (!value) continue;
               contributions.push({ key: `vf:${pista}`, label: pista, value, unit: "pezzi" });
             }
-            if (pdv.pezziIva) contributions.push({ key: "extra:iva", label: "IVA", value: pdv.pezziIva, unit: "pezzi" });
+            const drilldownDerived = derivePdvDrilldownMetrics(sale.rawData);
+            for (const [pista, value] of Object.entries(drilldownDerived.ivaByPista)) {
+              if (!value) continue;
+              contributions.push({ key: `iva-pista:${pista}`, label: `IVA ${pista}`, value, unit: "pezzi" });
+            }
             if (pdv.cbCambiPiano) contributions.push({ key: "extra:cb", label: "CB", value: pdv.cbCambiPiano, unit: "pezzi" });
-            if (pdv.telefoni) contributions.push({ key: "extra:telefoni", label: "Telefoni", value: pdv.telefoni, unit: "pezzi" });
+            const phoneLabels = {
+              "telefono:finanziato-ga": "Finanziato GA",
+              "telefono:finanziato-cb": "Finanziato CB",
+              "telefono:var-ga": "VAR GA",
+              "telefono:var-cb": "VAR CB",
+            } as const;
+            for (const [key, value] of Object.entries(drilldownDerived.telefoni)) {
+              if (!value) continue;
+              contributions.push({
+                key,
+                label: phoneLabels[key as keyof typeof phoneLabels],
+                value,
+                unit: "pezzi",
+              });
+            }
             if (pdv.accessori?.importo) contributions.push({ key: "extra:accessori", label: "Accessori netto IVA", value: pdv.accessori.importo / 1.22, unit: "euro" });
             if (pdv.servizi?.importo) contributions.push({ key: "extra:servizi", label: "Servizi netto IVA", value: pdv.servizi.importo / 1.22, unit: "euro" });
             if (contributions.length === 0) return [];

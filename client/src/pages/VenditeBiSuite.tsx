@@ -126,6 +126,7 @@ import {
   type PdvViewDirectory,
 } from "@shared/pdvView";
 import type { CanvassKpiRule } from "@shared/canvassKpiRules";
+import { derivePdvDrilldownMetrics } from "@shared/pdvDrilldownMetrics";
 
 interface BisuiteSale {
   id: string;
@@ -923,9 +924,30 @@ export default function VenditeBiSuite() {
         srvEuro: { label: "Servizi netto IVA", unit: "euro" },
       };
       for (const key of pezziExtraColKeys) {
+        if (key === "iva" || key === "telefoni") continue;
         const value = saleExtra[key];
         if (!value) continue;
         addContribution({ key: `extra:${key}`, label: extraLabels[key].label, value, unit: extraLabels[key].unit });
+      }
+      const drilldownDerived = derivePdvDrilldownMetrics(sale.rawData);
+      for (const [pista, value] of Object.entries(drilldownDerived.ivaByPista) as [PistaCanvass, number][]) {
+        if (!value) continue;
+        addContribution({
+          key: `iva-pista:${pista}`,
+          label: `IVA ${pistaLabels[pista]}`,
+          value,
+          unit: "pezzi",
+        });
+      }
+      const phoneLabels: Record<keyof typeof drilldownDerived.telefoni, string> = {
+        "telefono:finanziato-ga": "Finanziato GA",
+        "telefono:finanziato-cb": "Finanziato CB",
+        "telefono:var-ga": "VAR GA",
+        "telefono:var-cb": "VAR CB",
+      };
+      for (const [key, value] of Object.entries(drilldownDerived.telefoni) as [keyof typeof drilldownDerived.telefoni, number][]) {
+        if (!value) continue;
+        addContribution({ key, label: phoneLabels[key], value, unit: "pezzi" });
       }
       if (saleContributionMap.size > 0) {
         entry.vendite.push({ ...sale, contributions: Array.from(saleContributionMap.values()) });
