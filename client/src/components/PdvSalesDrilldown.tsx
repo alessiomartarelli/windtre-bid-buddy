@@ -37,6 +37,12 @@ export interface PdvSaleContribution {
   unit?: "pezzi" | "euro";
 }
 
+export interface PdvDrilldownColumn {
+  key: string;
+  label: string;
+  unit?: "pezzi" | "euro";
+}
+
 const formatMoney = (value: number) =>
   value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 
@@ -104,11 +110,18 @@ const canonicalMetric = (metric: PdvSaleContribution): DisplayMetric | null => {
   if (metric.key === "extra:cb") {
     return { ...metric, canonicalKey: "pista:cb", key: "pista:cb", label: "CB" };
   }
+  if (metric.key === "extra:accessori") {
+    return { ...metric, canonicalKey: "extra:accEuro", key: "extra:accEuro" };
+  }
+  if (metric.key === "extra:servizi") {
+    return { ...metric, canonicalKey: "extra:srvEuro", key: "extra:srvEuro" };
+  }
   return { ...metric, canonicalKey: metric.key };
 };
 
-export function PdvSalesDrilldown({ sales, emptyMessage = "Nessuna vendita disponibile per questo PDV." }: {
+export function PdvSalesDrilldown({ sales, columns = [], emptyMessage = "Nessuna vendita disponibile per questo PDV." }: {
   sales: PdvSaleDetail[];
+  columns?: readonly PdvDrilldownColumn[];
   emptyMessage?: string;
 }) {
   const rawMetrics = Array.from(
@@ -128,7 +141,7 @@ export function PdvSalesDrilldown({ sales, emptyMessage = "Nessuna vendita dispo
   );
   const hasVfMetrics = rawMetrics.some((metric) => metric.key.startsWith("vf:"));
   const hasExactCbColumn = rawMetrics.some((metric) => metric.key === "extra:cb");
-  const metrics = Array.from(
+  const aggregatedMetrics = Array.from(
     rawMetrics.reduce((totals, metric) => {
       if (hasVfMetrics && metric.key === "extra:cb") return totals;
       const normalized = canonicalMetric(metric);
@@ -146,6 +159,27 @@ export function PdvSalesDrilldown({ sales, emptyMessage = "Nessuna vendita dispo
       else totals.set(normalized.canonicalKey, normalized);
       return totals;
     }, new Map<string, DisplayMetric>()).values(),
+  );
+  const zeroMetrics = columns.flatMap((column): DisplayMetric[] => {
+    if (column.key === "iva") return [];
+    if (column.key === "telefoni") {
+      return [
+        { canonicalKey: "telefono:finanziato-ga", key: "telefono:finanziato-ga", label: "Finanziato GA", value: 0, unit: "pezzi" },
+        { canonicalKey: "telefono:finanziato-cb", key: "telefono:finanziato-cb", label: "Finanziato CB", value: 0, unit: "pezzi" },
+        { canonicalKey: "telefono:var-ga", key: "telefono:var-ga", label: "VAR GA", value: 0, unit: "pezzi" },
+        { canonicalKey: "telefono:var-cb", key: "telefono:var-cb", label: "VAR CB", value: 0, unit: "pezzi" },
+      ];
+    }
+    const isPista = Object.prototype.hasOwnProperty.call(PISTA_LABELS, column.key);
+    const key = isPista ? `pista:${column.key}` : `extra:${column.key}`;
+    return [{ canonicalKey: key, key, label: column.label, value: 0, unit: column.unit || "pezzi" }];
+  });
+  const metrics = Array.from(
+    [...zeroMetrics, ...aggregatedMetrics].reduce((totals, metric) => {
+      const existing = totals.get(metric.canonicalKey);
+      if (!existing || metric.value !== 0) totals.set(metric.canonicalKey, metric);
+      return totals;
+    }, new Map<string, DisplayMetric>()).values(),
   )
     .map((metric) => metric.key.startsWith("pista:")
       ? { ...metric, iva: ivaByPista.get(metric.key.slice("pista:".length)) || 0 }
@@ -153,15 +187,16 @@ export function PdvSalesDrilldown({ sales, emptyMessage = "Nessuna vendita dispo
     .sort((a, b) => metricRank(a.key) - metricRank(b.key) || a.label.localeCompare(b.label, "it"));
 
   return (
-    <div className="py-1.5 pl-8 pr-3 bg-muted/10" data-testid="pdv-sales-drilldown">
+    <div className="sticky left-0 w-[calc(100vw-2rem)] max-w-2xl bg-muted/10 px-2 py-1.5 sm:w-[min(42rem,calc(100vw-3rem))] sm:px-3" data-testid="pdv-sales-drilldown">
       {metrics.length === 0 ? (
         <p className="text-sm text-muted-foreground py-3">{emptyMessage}</p>
       ) : (
-        <div className="max-w-2xl overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-          <div className="flex items-center gap-2 border-b bg-muted/35 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm">
+          <div className="flex items-center gap-2 border-b bg-muted/35 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-3">
             <BarChart3 className="h-3.5 w-3.5 text-primary" />
             Dettaglio volumi del PDV
           </div>
+          <div className="sm:grid sm:grid-cols-2">
           {metrics.map((metric) => (
             (() => {
               const normalizedKey = metric.key.split(":").pop() || metric.key;
@@ -177,16 +212,16 @@ export function PdvSalesDrilldown({ sales, emptyMessage = "Nessuna vendita dispo
               return (
                 <div
                   key={metric.key}
-                  className="flex min-h-11 items-center justify-between gap-4 border-b border-border/60 px-3 py-2 last:border-0 hover:bg-muted/20"
+                  className="flex min-h-10 min-w-0 items-center justify-between gap-2 border-b border-border/60 px-2.5 py-1.5 hover:bg-muted/20 sm:px-3 sm:[&:nth-last-child(-n+2)]:border-b-0"
                   data-testid={`pdv-metric-${metric.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`}
                 >
-                  <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                    <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-white ${style.iconClass}`}>
-                      <Icon className="h-3.5 w-3.5" />
+                  <span className={`flex min-w-0 items-center gap-2 text-[13px] font-medium ${metric.value === 0 ? "text-muted-foreground" : ""}`}>
+                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded text-white ${style.iconClass} ${metric.value === 0 ? "opacity-55" : ""}`}>
+                      <Icon className="h-3 w-3" />
                     </span>
                     <span className="truncate">{metric.label}</span>
                   </span>
-                  <span className="flex shrink-0 items-center gap-2">
+                  <span className="flex shrink-0 items-center gap-1.5">
                     {!!metric.iva && (
                       <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-300">
                         di cui {metric.iva} IVA
@@ -194,7 +229,7 @@ export function PdvSalesDrilldown({ sales, emptyMessage = "Nessuna vendita dispo
                     )}
                     <Badge
                       variant="outline"
-                      className={`min-w-10 justify-center px-2.5 py-1 text-sm font-bold tabular-nums ${style.badgeClass}`}
+                      className={`min-w-9 justify-center px-2 py-0.5 text-[13px] font-bold tabular-nums ${style.badgeClass} ${metric.value === 0 ? "opacity-60" : ""}`}
                     >
                       {metric.unit === "euro" ? formatMoney(metric.value) : metric.value}
                     </Badge>
@@ -203,6 +238,7 @@ export function PdvSalesDrilldown({ sales, emptyMessage = "Nessuna vendita dispo
               );
             })()
           ))}
+          </div>
         </div>
       )}
     </div>

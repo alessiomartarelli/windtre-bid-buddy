@@ -383,6 +383,7 @@ export function TabellaPdvPistaPezzi({ rows, pistaLabels, piste, extraColKeys }:
                   hasExtra={hasExtra}
                   pdvSort={pdvSort}
                   piste={piste}
+                  pistaLabels={pistaLabels}
                   extraCols={extraCols}
                   expandedPdv={expandedPdv}
                   onTogglePdv={togglePdv}
@@ -415,6 +416,7 @@ function RsGroup({
   hasExtra,
   pdvSort,
   piste,
+  pistaLabels,
   extraCols,
   expandedPdv,
   onTogglePdv,
@@ -426,6 +428,7 @@ function RsGroup({
   hasExtra: boolean;
   pdvSort: PdvSort;
   piste: readonly PistaCanvass[];
+  pistaLabels: Record<PistaCanvass, string>;
   extraCols: ReadonlyArray<typeof ALL_PEZZI_EXTRA_COLS[number]>;
   expandedPdv: Set<string>;
   onTogglePdv: (key: string) => void;
@@ -504,7 +507,13 @@ function RsGroup({
             {detailExpanded && (
               <tr id={`${pdvRowId(pdv.codicePos)}-details`} className="border-b">
                 <td colSpan={1 + piste.length + (hasExtra ? extraCols.length : 0) + 1} className="p-0">
-                  <PdvSalesDrilldown sales={pdv.vendite} />
+                  <PdvSalesDrilldown
+                    sales={pdv.vendite}
+                    columns={[
+                      ...piste.map((pista) => ({ key: pista, label: pistaLabels[pista], unit: "pezzi" as const })),
+                      ...extraCols.map((col) => ({ key: col.key, label: col.label.replace(/^€\s*/, ""), unit: col.euro ? "euro" as const : "pezzi" as const })),
+                    ]}
+                  />
                 </td>
               </tr>
             )}

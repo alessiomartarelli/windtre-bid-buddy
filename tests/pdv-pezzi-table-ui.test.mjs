@@ -251,6 +251,7 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
 
     // Il secondo click, sul PDV, apre il riepilogo aggregato dei volumi che
     // compongono la riga; la vendita annullata non è nel perimetro.
+    await page.setViewportSize({ width: 440, height: 956 });
     await page.getByTestId(`btn-table-pezzi-pdv-toggle-${POS_A}`).click();
     const saleDrilldown = page.getByTestId('pdv-sales-drilldown');
     await saleDrilldown.waitFor({ state: 'visible', timeout: 5000 });
@@ -259,6 +260,13 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     assert.match(drilldownText, /Mobile/i);
     assert.match(drilldownText, /Fisso/i);
     assert.doesNotMatch(drilldownText, /Cliente|Addetto|Data e ora|Stato|Totale vendita/i);
+    const panelBox = await saleDrilldown.boundingBox();
+    assert.ok(panelBox && panelBox.x >= 0 && panelBox.x + panelBox.width <= 440.5, `drill-down mobile dentro viewport: ${JSON.stringify(panelBox)}`);
+    const zeroEnergia = saleDrilldown.getByTestId('pdv-metric-pista-energia');
+    assert.match(await zeroEnergia.innerText(), /Energia[\s\S]*0/i, 'mostra anche la colonna Energia a zero');
+    const zeroBadgeBox = await zeroEnergia.locator(':scope > span').last().boundingBox();
+    assert.ok(zeroBadgeBox && zeroBadgeBox.x + zeroBadgeBox.width <= 440.5, `badge zero visibile a destra: ${JSON.stringify(zeroBadgeBox)}`);
+    await page.setViewportSize({ width: 1280, height: 900 });
 
     // Il dettaglio del PDV Beta espone l'IVA accanto alla pista corretta,
     // senza trasformare CB/accessori/servizi in righe IVA.

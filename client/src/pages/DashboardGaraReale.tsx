@@ -3032,7 +3032,10 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv, saleD
                               {detailExpanded && (
                                 <tr id={`dashboard-pezzi-details-${pdv.codicePos}`} className="border-b">
                                   <td colSpan={1 + pezziColumns.length * 2 + 2} className="p-0">
-                                    <PdvSalesDrilldown sales={salesByPdv.get(pdv.codicePos) || []} />
+                                     <PdvSalesDrilldown
+                                       sales={salesByPdv.get(pdv.codicePos) || []}
+                                       columns={pezziColumns.map((col) => ({ key: col.key, label: col.label, unit: col.euro ? "euro" : "pezzi" }))}
+                                     />
                                   </td>
                                 </tr>
                               )}
@@ -3172,7 +3175,14 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv, saleD
                           {detailExpanded && (
                             <tr id={`dashboard-punti-details-${pdv.codicePos}`} className="border-b">
                               <td colSpan={1 + pisteAttive.length * 2} className="p-0">
-                                <PdvSalesDrilldown sales={salesByPdv.get(pdv.codicePos) || []} />
+                                 <PdvSalesDrilldown
+                                   sales={salesByPdv.get(pdv.codicePos) || []}
+                                   columns={pisteAttive.map((p) => ({
+                                     key: p.pista,
+                                     label: (PISTA_CONFIG as any)[p.pista]?.label || p.pista,
+                                     unit: "pezzi",
+                                   }))}
+                                 />
                               </td>
                             </tr>
                           )}
