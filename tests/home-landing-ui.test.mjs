@@ -332,6 +332,129 @@ test('scenario 6: no /api/ricariche-plafond request without the vendite_bisuite 
   }
 });
 
+// ---------------------------------------------------------------------------
+// Helper Task #547 — semina la Struttura PDV (organization_config.puntiVendita)
+// con righe arbitrarie. Sovrascrive la chiave puntiVendita (i test che lo
+// usano non condividono l'org con altri seed di struttura).
+async function seedStruttura(pool, orgId, puntiVendita) {
+  await pool.query(
+    `INSERT INTO organization_config (organization_id, config)
+       VALUES ($1, jsonb_build_object('puntiVendita', $2::jsonb))
+     ON CONFLICT (organization_id) DO UPDATE SET
+       config = organization_config.config || jsonb_build_object('puntiVendita', $2::jsonb),
+       updated_at = now()`,
+    [orgId, JSON.stringify(puntiVendita)],
+  );
+}
+
+// ===========================================================================
+// SCENARIO 7 (Task #547): org con dealer configurati + un PDV senza codice
+// dealer => l'admin vede in Home l'avviso con il PDV e il link alla Struttura.
+// ===========================================================================
+test('scenario 7: admin sees the "PDV senza codice dealer" alert with a link to Struttura', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'home_ui', fullName: 'Home UI Test', organizationName: uniq('HomeUI') });
+  const browser = await launchBrowser();
+  try {
+    // Un PDV con dealer (l'org è nel modello dealer) + uno SENZA dealer.
+    await seedStruttura(pool, session.orgId, [
+      { codicePos: 'POS OK', nome: 'PDV Con Dealer', ragioneSociale: 'RS Test', codiceDealer: '8000000001' },
+      { codicePos: 'POS KO', nome: 'PDV Orfano', ragioneSociale: 'RS Test', codiceDealer: '' },
+    ]);
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    const plafondResp = page.waitForResponse(
+      (r) => r.url().includes('/api/ricariche-plafond') && r.request().method() === 'GET',
+      { timeout: 20000 },
+    );
+    await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+
+    await page.getByTestId('text-home-title').waitFor({ state: 'visible', timeout: 20000 });
+    const resp = await plafondResp;
+    assert.equal(resp.status(), 200, 'plafond endpoint must respond 200 for an admin');
+
+    // L'avviso compare, elenca il PDV orfano e NON quello con dealer.
+    await page.getByTestId('alert-home-pdv-senza-dealer').waitFor({ state: 'visible', timeout: 10000 });
+    const listText = await page.getByTestId('list-home-pdv-senza-dealer').innerText();
+    assert.match(listText, /PDV Orfano/i, 'alert must list the PDV without dealer');
+    assert.ok(!/PDV Con Dealer/i.test(listText), 'alert must NOT list PDV that have a dealer');
+
+    // Il link porta alla Struttura (/admin, tab di default "struttura").
+    await page.getByTestId('link-home-struttura').click();
+    await page.waitForURL((url) => url.pathname === '/admin', { timeout: 20000 });
+    assert.equal(new URL(page.url()).pathname, '/admin', 'link must navigate to /admin (Struttura)');
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 8 (Task #547): niente avviso quando tutti i PDV hanno il dealer, e
+// niente avviso per l'operatore anche con un PDV orfano (solo admin).
+// ===========================================================================
+test('scenario 8: no PDV-senza-dealer alert when all PDV have a dealer, and never for operators', async () => {
+  const pool = await newPool();
+  const session = await signup({ prefix: 'home_ui', fullName: 'Home UI Test', organizationName: uniq('HomeUI') });
+  const browser = await launchBrowser();
+  try {
+    // Fase 1 (admin, tutti i PDV con dealer): nessun avviso.
+    await seedStruttura(pool, session.orgId, [
+      { codicePos: 'POS A', nome: 'PDV A', ragioneSociale: 'RS Test', codiceDealer: '8000000001' },
+      { codicePos: 'POS B', nome: 'PDV B', ragioneSociale: 'RS Test', codiceDealer: '8000000002' },
+    ]);
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    const plafondResp = page.waitForResponse(
+      (r) => r.url().includes('/api/ricariche-plafond') && r.request().method() === 'GET',
+      { timeout: 20000 },
+    );
+    await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+    await page.getByTestId('text-home-title').waitFor({ state: 'visible', timeout: 20000 });
+    const resp = await plafondResp;
+    assert.equal(resp.status(), 200, 'plafond endpoint must respond 200');
+    const body = await resp.json();
+    assert.ok((body?.saldi ?? []).every((s) => !s.senzaDealer), 'no saldo must be flagged senzaDealer');
+    assert.equal(
+      await page.getByTestId('alert-home-pdv-senza-dealer').count(),
+      0, 'alert must NOT appear when every PDV has a dealer',
+    );
+    await page.close();
+    await context.close();
+
+    // Fase 2 (operatore, con un PDV orfano): l'avviso resta solo-admin.
+    await seedStruttura(pool, session.orgId, [
+      { codicePos: 'POS A', nome: 'PDV A', ragioneSociale: 'RS Test', codiceDealer: '8000000001' },
+      { codicePos: 'POS KO', nome: 'PDV Orfano', ragioneSociale: 'RS Test', codiceDealer: '' },
+    ]);
+    await setRole(pool, session.profileId, 'operatore');
+
+    const context2 = await newAuthedContext(browser, session);
+    const page2 = await context2.newPage();
+    await page2.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+    await page2.getByTestId('text-home-title').waitFor({ state: 'visible', timeout: 20000 });
+    // Margine per eventuali render in ritardo dopo il networkidle.
+    await page2.waitForTimeout(1500);
+    assert.equal(
+      await page2.getByTestId('alert-home-pdv-senza-dealer').count(),
+      0, 'alert must NOT appear for operators even with a PDV without dealer',
+    );
+
+    await page2.close();
+    await context2.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
 // ===========================================================================
 // SCENARIO 3: super_admin continua a essere reindirizzato a /super-admin.
 // ===========================================================================

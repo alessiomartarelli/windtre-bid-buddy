@@ -165,6 +165,18 @@ export default function Home() {
     bisuiteVisible &&
     (plafondData?.saldi ?? []).some((s) => s.inAllerta);
 
+  // Task #547 — avviso Home per i PDV rimasti senza codice dealer. Il flag
+  // `senzaDealer` arriva dal server (computePlafondSaldi) e vale solo per le
+  // org che hanno GIÀ configurato dei dealer: finché nessun dealer esiste, la
+  // Struttura è nel modello legacy per RS e non c'è nulla da segnalare.
+  // Solo admin: è l'unico che può completare il dato in Struttura.
+  const pdvSenzaDealer =
+    bisuiteVisible && isAdminOrSuper
+      ? (plafondData?.saldi ?? [])
+          .filter((s) => s.senzaDealer)
+          .flatMap((s) => s.pdv)
+      : [];
+
   return (
     <div className="min-h-screen">
       <AppNavbar title="MyStoreDesk" />
@@ -215,6 +227,43 @@ export default function Home() {
               </div>
             </CardContent>
           </Card>
+
+          {pdvSenzaDealer.length > 0 && (
+            <Card className="glass-panel border-0" data-testid="alert-home-pdv-senza-dealer">
+              <CardContent className="flex items-start gap-3 p-4 sm:p-5">
+                <div className="flex items-center justify-center h-10 w-10 shrink-0 rounded-xl bg-destructive/10 text-destructive">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-sm">
+                    PDV senza codice dealer
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Questi punti vendita non hanno un codice dealer in Struttura:
+                    il loro consumo ricariche non decurta nessun plafond.
+                  </p>
+                  <ul className="mt-2 space-y-0.5 text-xs" data-testid="list-home-pdv-senza-dealer">
+                    {pdvSenzaDealer.map((p, i) => (
+                      <li key={`${p.codicePos}-${i}`} className="truncate">
+                        <span className="font-medium">{p.nome || "PDV senza nome"}</span>
+                        {p.codicePos ? (
+                          <span className="text-muted-foreground"> — POS {p.codicePos}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => setLocation("/admin")}
+                    className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                    data-testid="link-home-struttura"
+                  >
+                    Completa il dato in Struttura →
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <section aria-labelledby="home-shortcuts-title" data-testid="section-home-shortcuts">
             <h2
