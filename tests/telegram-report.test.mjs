@@ -2830,7 +2830,9 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       // escapati o Telegram rifiuta l'INTERO messaggio (parse_mode HTML).
       const nome = "ROSSI & FIGLI <SRL>";
       setupScenario({
-        orgs: [{ id: "org-p" }],
+        // Task #548: la RS deve avere almeno un PDV in Struttura o non
+        // materializza alcuna riga plafond (e quindi nessun avviso).
+        orgs: [{ id: "org-p", puntiVendita: [{ codicePos: "PP1", nome: "Neg PP1", ragioneSociale: nome }] }],
         plafond: plafondScenario(nome, { saldo: 20 }), // sotto default 50
       });
       await runScheduledSend("13:30");
@@ -2844,14 +2846,14 @@ if (schedMod.runScheduledSend && storageMod.storage) {
 
     await test("plafond negativo ⇒ avviso ESAURITO; saldo sopra soglia ⇒ nessun avviso", async () => {
       setupScenario({
-        orgs: [{ id: "org-p" }],
+        orgs: [{ id: "org-p", puntiVendita: [{ codicePos: "PN1", nome: "Neg PN1", ragioneSociale: "RS NEGATIVA" }] }],
         plafond: plafondScenario("RS NEGATIVA", { saldo: -12.5 }),
       });
       await runScheduledSend("13:30");
       assert.ok(telegramMessages[0].includes("plafond ESAURITO"), "avviso esaurito per saldo negativo");
 
       setupScenario({
-        orgs: [{ id: "org-p2" }],
+        orgs: [{ id: "org-p2", puntiVendita: [{ codicePos: "PO1", nome: "Neg PO1", ragioneSociale: "RS OK" }] }],
         plafond: plafondScenario("RS OK", { saldo: 500 }),
       });
       await runScheduledSend("13:30");
@@ -2866,6 +2868,10 @@ if (schedMod.runScheduledSend && storageMod.storage) {
           brands: [{ id: "b-w3", name: "WindTre" }, { id: "b-vf", name: "Vodafone" }],
           puntiVendita: [
             { codicePos: "P100", nome: "Neg P100", brandIds: ["b-w3"] },
+            { codicePos: "P200", nome: "Neg P200", brandIds: ["b-vf"] },
+          ],
+          puntiVendita: [
+            { codicePos: "P100", nome: "Neg P100", brandIds: ["b-w3"], ragioneSociale: "RS SOTTO" },
             { codicePos: "P200", nome: "Neg P200", brandIds: ["b-vf"] },
           ],
         }],
