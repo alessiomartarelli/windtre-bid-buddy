@@ -24,7 +24,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Wallet, Equal, History, Bell, AlertTriangle, Link2 } from "lucide-react";
+import { Loader2, Wallet, Equal, History, Bell, AlertTriangle, Link2, ChevronDown, Store } from "lucide-react";
 
 export type PlafondSaldo = {
   codiceDealer: string;          // "" = riga legacy per RS
@@ -102,6 +102,7 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
   const [importo, setImporto] = useState("");
   const [opError, setOpError] = useState<string | null>(null);
   const [storicoOpen, setStoricoOpen] = useState(false);
+  const [expandedPdv, setExpandedPdv] = useState<Set<string>>(() => new Set());
   // Assegnazione op storiche per RS → dealer (Task #544).
   const [assegnaDialog, setAssegnaDialog] = useState<{ rs: string } | null>(null);
   const [assegnaDealer, setAssegnaDealer] = useState("");
@@ -226,13 +227,14 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
           <div className="space-y-2">
             {saldi.map((s) => {
               const id = rowId(s);
-              const pdvLabel = s.pdv.map((p) => p.nome || p.codicePos).filter(Boolean).join(", ");
+              const isPdvExpanded = expandedPdv.has(id);
               return (
                 <div
                   key={s.codiceDealer || `rs:${s.ragioneSociale}`}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border rounded-lg px-3 py-2"
+                  className="border rounded-lg px-3 py-2"
                   data-testid={`row-plafond-${id}`}
                 >
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-semibold text-sm truncate">
                       {s.codiceDealer ? (
@@ -241,11 +243,30 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
                         s.ragioneSociale
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {pdvLabel && <>PDV: {pdvLabel} · </>}
-                      Ricariche vendute: {fmtEur(s.consumoTotale)}
-                      {s.saldo !== null && s.soglia !== null && (
-                        <> · Soglia avviso: {fmtEur(s.soglia)}{s.sogliaCustom ? "" : " (default)"}</>
+                    <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-muted-foreground">
+                      <span>
+                        Ricariche vendute: {fmtEur(s.consumoTotale)}
+                        {s.saldo !== null && s.soglia !== null && (
+                          <> · Soglia avviso: {fmtEur(s.soglia)}{s.sogliaCustom ? "" : " (default)"}</>
+                        )}
+                      </span>
+                      {s.pdv.length > 0 && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 font-medium text-foreground hover:text-primary transition-colors"
+                          onClick={() => setExpandedPdv((current) => {
+                            const next = new Set(current);
+                            if (next.has(id)) next.delete(id);
+                            else next.add(id);
+                            return next;
+                          })}
+                          aria-expanded={isPdvExpanded}
+                          data-testid={`button-plafond-pdv-${id}`}
+                        >
+                          <Store className="h-3.5 w-3.5" />
+                          {s.pdv.length} PDV
+                          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isPdvExpanded ? "rotate-180" : ""}`} />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -343,6 +364,24 @@ export default function PlafondRicariche({ orgId, isAdmin }: { orgId: string; is
                       </>
                     )}
                   </div>
+                  </div>
+                  {isPdvExpanded && s.pdv.length > 0 && (
+                    <div
+                      className="mt-2 grid gap-1 border-t pt-2 sm:grid-cols-2 lg:grid-cols-3"
+                      data-testid={`panel-plafond-pdv-${id}`}
+                    >
+                      {s.pdv.map((p, index) => (
+                        <div
+                          key={`${p.codicePos}:${p.nome}:${index}`}
+                          className="flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5 text-xs"
+                        >
+                          <Store className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span className="font-medium truncate">{p.nome || "PDV senza nome"}</span>
+                          <span className="ml-auto text-muted-foreground tabular-nums">{p.codicePos || "POS vuoto"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

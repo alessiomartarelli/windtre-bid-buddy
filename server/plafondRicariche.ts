@@ -56,6 +56,16 @@ export type PlafondSaldo = {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const normKey = (s: unknown) => String(s ?? "").trim().toUpperCase();
 
+// Gli import storici possono usare il segnaposto "vuoto" per indicare il POS
+// mancante che BiSuite restituisce come stringa vuota. La RS entra nella
+// chiave per evitare collisioni tra più PDV senza POS appartenenti a RS diverse.
+const posMappingKey = (pos: unknown, rsCanon: string) => {
+  const normalized = normKey(pos);
+  return !normalized || normalized === "VUOTO"
+    ? `@EMPTY:${normKey(rsCanon)}`
+    : `@POS:${normalized}`;
+};
+
 type StructPdvCfg = {
   codicePos?: string; nome?: string; ragioneSociale?: string; codiceDealer?: string;
 };
@@ -64,6 +74,7 @@ export type DealerInfo = {
   codice: string;                 // codice dealer come configurato (trim)
   pdv: PlafondPdvRef[];
   rsCanon: Set<string>;           // RS canoniche dei suoi PDV
+  posKeys: Set<string>;           // chiavi POS interne (namespace reale/vuoto)
 };
 
 // Mappa POS→dealer e registro dealer dalla Struttura PDV dell'org.
@@ -89,10 +100,10 @@ export async function getDealerMaps(orgId: string, resolveRs: (rs: string) => st
     // Il POS vuoto è una chiave configurabile intenzionale: BiSuite può
     // restituire vendite prive di codice POS e l'admin può censire una riga
     // con codice vuoto per attribuirle esplicitamente a un dealer.
-    const posKey = normKey(codicePos);
     const nome = String(p?.nome ?? "").trim();
     const rsName = rsNamePre;
     const rsCanon = rsName ? (resolveRs(rsName) || rsName) : "N/D";
+    const posKey = posMappingKey(codicePos, rsCanon);
     const dealer = String(p?.codiceDealer ?? "").trim();
     if (!dealer) {
       posSenzaDealer.set(posKey, { rsCanon, pdv: { codicePos, nome } });
@@ -101,9 +112,10 @@ export async function getDealerMaps(orgId: string, resolveRs: (rs: string) => st
     const dealerKey = normKey(dealer);
     posToDealer.set(posKey, dealerKey);
     let d = dealers.get(dealerKey);
-    if (!d) { d = { codice: dealer, pdv: [], rsCanon: new Set() }; dealers.set(dealerKey, d); }
+    if (!d) { d = { codice: dealer, pdv: [], rsCanon: new Set(), posKeys: new Set() }; dealers.set(dealerKey, d); }
     d.pdv.push({ codicePos, nome });
     d.rsCanon.add(rsCanon);
+    d.posKeys.add(posKey);
   }
   return { posToDealer, dealers, posSenzaDealer, rsConPdv };
 }
@@ -152,7 +164,7 @@ export async function computePlafondSaldi(orgId: string): Promise<PlafondSaldo[]
         ragioneSocialeId: "",
         label: rsNames.join(" / ") || "N/D",
         pdv: info?.pdv ?? [],
-        posKeys: new Set(info ? info.pdv.map((p) => normKey(p.codicePos)) : []),
+        posKeys: new Set(info?.posKeys ?? []),
         rsCanon: null,
         daAssegnare: false,
         senzaDealer: false,
@@ -187,12 +199,13 @@ export async function computePlafondSaldi(orgId: string): Promise<PlafondSaldo[]
 
   // --- Consumo per POS: dealer se mappato, altrimenti riga RS (segnalata) ---
   for (const row of consumoRaw) {
-    const posKey = normKey(row.pos);
+    const fallbackCanon = resolveRs(row.rs) || row.rs || "N/D";
+    const posKey = posMappingKey(row.pos, fallbackCanon);
     const dealerKey = posToDealer.get(posKey);
     if (dealerKey) {
       dealerBucket(dealerKey).consumoTotale += row.consumo;
     } else {
-      const canon = posSenzaDealer.get(posKey)?.rsCanon ?? (resolveRs(row.rs) || row.rs || "N/D");
+      const canon = posSenzaDealer.get(posKey)?.rsCanon ?? fallbackCanon;
       const b = rsBucket(canon);
       b.consumoTotale += row.consumo;
       b.posKeys.add(posKey);
@@ -311,11 +324,12 @@ export async function computePlafondSaldi(orgId: string): Promise<PlafondSaldo[]
       const after = await storage.getRicaricheConsumoByPos(orgId, cutoff);
       consumoDaCutoff = after
         .filter((r) => {
-          const posKey = normKey(r.pos);
+          const fallbackCanon = resolveRs(r.rs) || r.rs || "N/D";
+          const posKey = posMappingKey(r.pos, fallbackCanon);
           if (b.rsCanon === null) return b.posKeys.has(posKey) || posToDealer.get(posKey) === normKey(b.codiceDealer);
           // Riga RS legacy: solo POS non mappati a un dealer, stessa RS canonica.
           if (posToDealer.has(posKey)) return false;
-          const canon = posSenzaDealer.get(posKey)?.rsCanon ?? (resolveRs(r.rs) || r.rs || "N/D");
+          const canon = posSenzaDealer.get(posKey)?.rsCanon ?? fallbackCanon;
           return canon === b.rsCanon;
         })
         .reduce((s, r) => s + r.consumo, 0);

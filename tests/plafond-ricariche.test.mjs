@@ -911,7 +911,7 @@ test('plafond ricariche per codice dealer', async (t) => {
         'nessuna riga senza-dealer residua dopo l\'assegnazione');
     });
 
-    await t.test('codice POS vuoto configurato attribuisce le vendite senza POS al dealer', async () => {
+    await t.test('codice POS vuoto o segnaposto "vuoto" attribuisce le vendite senza POS al dealer', async () => {
       const RS_BLANK = uniq('RS POS VUOTO').toUpperCase().replace(/_/g, ' ');
       const D_BLANK = '8000111099';
       await pool.query(
@@ -921,7 +921,7 @@ test('plafond ricariche per codice dealer', async (t) => {
            jsonb_build_object(
              'puntiVendita',
              jsonb_build_array(jsonb_build_object(
-               'codicePos', '',
+                'codicePos', 'vuoto',
                'nome', 'Banchetto senza POS',
                'ragioneSociale', $2::text,
                'codiceDealer', $3::text
@@ -935,7 +935,7 @@ test('plafond ricariche per codice dealer', async (t) => {
            '{puntiVendita}',
            COALESCE(organization_config.config->'puntiVendita', '[]'::jsonb)
              || jsonb_build_array(jsonb_build_object(
-               'codicePos', '',
+                'codicePos', 'vuoto',
                'nome', 'Banchetto senza POS',
                'ragioneSociale', $2::text,
                'codiceDealer', $3::text
@@ -957,12 +957,47 @@ test('plafond ricariche per codice dealer', async (t) => {
       assert.ok(mapped, JSON.stringify(r.body.saldi));
       assert.equal(mapped.consumoTotale, 11);
       assert.equal(mapped.pdv.length, 1);
-      assert.equal(mapped.pdv[0].codicePos, '');
+      assert.equal(mapped.pdv[0].codicePos, 'vuoto');
       assert.equal(
         r.body.saldi.find((s) => !s.codiceDealer && s.ragioneSociale === RS_BLANK),
         undefined,
         'la vendita senza POS configurata non deve generare una riga senza dealer',
       );
+
+      // Il percorso dopo-cutoff deve usare la stessa riconciliazione: la
+      // vendita pregressa non viene sottratta, quella successiva sì.
+      assert.equal((await post('/api/ricariche-plafond', { codiceDealer: D_BLANK, tipo: 'imposta', importo: 100 })).status, 201);
+      await waitNextWallSecond();
+      await insertSale(pool, admin.orgId, {
+        ragioneSociale: RS_BLANK,
+        articoli: [artRicarica('3.00')],
+        codicePos: '',
+        addetto: 'ADDETTO POS VUOTO',
+        dataVendita: italianWallNow(),
+      });
+      const afterCutoff = await get('/api/ricariche-plafond');
+      assert.equal(dealerRow(afterCutoff.body.saldi, D_BLANK).saldo, 97);
+      assert.equal(dealerRow(afterCutoff.body.saldi, D_BLANK).consumoDaCutoff, 3);
+
+      // Un POS reale che somiglia alla chiave sintetica non deve collidere
+      // con il segnaposto vuoto della stessa RS.
+      const D_LITERAL = '8000111098';
+      const literalPos = `@EMPTY:${RS_BLANK}`;
+      assert.equal((await post('/api/admin/struttura/pdv', {
+        codicePos: literalPos,
+        nome: 'PDV chiave letterale',
+        ragioneSociale: RS_BLANK,
+        codiceDealer: D_LITERAL,
+      })).status, 201);
+      await insertSale(pool, admin.orgId, {
+        ragioneSociale: RS_BLANK,
+        articoli: [artRicarica('9.00')],
+        codicePos: literalPos,
+        addetto: 'ADDETTO POS LETTERALE',
+      });
+      const collision = await get('/api/ricariche-plafond');
+      assert.equal(dealerRow(collision.body.saldi, D_LITERAL).consumoTotale, 9);
+      assert.equal(dealerRow(collision.body.saldi, D_BLANK).consumoTotale, 14);
     });
 
     await t.test('org con dealer: RS del registro senza PDV nascosta, storico consultabile (Task #548)', async () => {
@@ -1020,6 +1055,13 @@ test('plafond ricariche per codice dealer', async (t) => {
         const rowText = await page.textContent(`[data-testid="row-plafond-${idD1}"]`);
         assert.ok(rowText.includes(`Dealer ${D1}`), `riga dealer mancante: ${rowText}`);
         assert.ok(rowText.includes(RS), 'la riga dealer mostra la RS descrittiva');
+        assert.ok(!rowText.includes('PDV A1'), 'elenco PDV chiuso di default');
+        assert.equal(await page.$(`[data-testid="panel-plafond-pdv-${idD1}"]`), null, 'drill-down non renderizzato prima del click');
+        await page.click(`[data-testid="button-plafond-pdv-${idD1}"]`);
+        await page.waitForSelector(`[data-testid="panel-plafond-pdv-${idD1}"]`);
+        const pdvText = await page.textContent(`[data-testid="panel-plafond-pdv-${idD1}"]`);
+        assert.ok(pdvText.includes('PDV A1') && pdvText.includes('PDV A2'), `drill-down incompleto: ${pdvText}`);
+        assert.ok(!pdvText.includes('PDV B1'), `drill-down contiene PDV di un altro dealer: ${pdvText}`);
         assert.equal(await page.$(`[data-testid="button-plafond-aggiungi-${idD1}"]`), null, 'Aggiungi rimosso anche sulle righe dealer (Task #551)');
         assert.ok(await page.$(`[data-testid="button-plafond-imposta-${idD1}"]`), 'admin vede Modifica saldo sul dealer');
         await ctx.close();
