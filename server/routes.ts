@@ -4498,9 +4498,17 @@ export async function registerRoutes(
               contributions.push({ key: `vf:${pista}`, label: pista, value, unit: "pezzi" });
             }
             const drilldownDerived = derivePdvDrilldownMetrics(sale.rawData);
-            for (const [pista, value] of Object.entries(drilldownDerived.ivaByPista)) {
+            for (const detail of drilldownDerived.breakdowns) {
+              contributions.push({
+                key: `breakdown:${detail.pista}:${detail.label}`,
+                label: detail.label,
+                value: detail.value,
+                unit: "pezzi",
+              });
+            }
+            for (const [pista, value] of Object.entries(drilldownDerived.businessByPista)) {
               if (!value) continue;
-              contributions.push({ key: `iva-pista:${pista}`, label: `IVA ${pista}`, value, unit: "pezzi" });
+              contributions.push({ key: `business-pista:${pista}`, label: `Business ${pista}`, value, unit: "pezzi" });
             }
             if (pdv.cbCambiPiano) contributions.push({ key: "extra:cb", label: "CB", value: pdv.cbCambiPiano, unit: "pezzi" });
             const phoneLabels = {

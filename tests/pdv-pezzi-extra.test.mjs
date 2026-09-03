@@ -32,20 +32,27 @@ test('IVA: pezzi P.IVA per categoria di origine via isPezzoIva', () => {
   assert.equal(c.iva, 4);
 });
 
-test('drill-down: IVA per pista esclude CB, accessori, servizi e telefoni', () => {
+test('drill-down: categorie per Mobile/Fisso/CB, tipologie Assicurazioni e Business solo Energia/Protetti', () => {
   const result = derivePdvDrilldownMetrics({
     articoli: [
       { categoria: { nome: 'TIED IVA' }, descrizione: 'Professional World' },
       { categoria: { nome: 'ADSL/FIBRA/FWA IVA' }, descrizione: 'FIBRA IVA' },
       { categoria: { nome: 'ENERGIA W3' }, descrizione: 'OFFERTA MICROBUSINESS' },
-      { categoria: { nome: 'ASSICURAZIONI BUSINESS PRO' }, descrizione: 'PRO' },
+      { categoria: { nome: 'ALLARMI' }, descrizione: 'PROTECTA BUSINESS' },
+      { categoria: { nome: 'ASSICURAZIONI BUSINESS PRO' }, tipologia: { nome: 'PROTEZIONE BUSINESS' }, descrizione: 'PRO' },
       { categoria: { nome: 'MIA TIED' }, descrizione: 'BUSINESS' },
       { categoria: { nome: 'ACCESSORI' }, descrizione: 'Cover' },
       { categoria: { nome: 'SPEDIZIONE' }, descrizione: 'Consegna' },
       { categoria: { nome: 'TELEFONIA' }, descrizione: 'Phone' },
     ],
   });
-  assert.deepEqual(result.ivaByPista, { mobile: 1, fisso: 1, energia: 1, assicurazioni: 1 });
+  assert.deepEqual(result.breakdowns, [
+    { pista: 'mobile', label: 'TIED IVA', value: 1 },
+    { pista: 'fisso', label: 'ADSL/FIBRA/FWA IVA', value: 1 },
+    { pista: 'assicurazioni', label: 'PROTEZIONE BUSINESS', value: 1 },
+    { pista: 'cb', label: 'MIA TIED', value: 1 },
+  ]);
+  assert.deepEqual(result.businessByPista, { energia: 1, protecta: 1 });
 });
 
 test('drill-down: telefoni separati tra finanziato/VAR e GA/CB', () => {
@@ -89,6 +96,33 @@ test('drill-down: domanda sul prodotto TELEFONIA eredita il solo canale della ve
   });
   assert.equal(result.telefoni['telefono:finanziato-ga'], 1);
   assert.equal(result.telefoni['telefono:finanziato-cb'], 0);
+});
+
+test('drill-down: domande standard nel Fisso W3 sono GA, domande MIA sono CB', () => {
+  const result = derivePdvDrilldownMetrics({
+    articoli: [
+      {
+        categoria: { nome: 'ADSL/FIBRA/FWA CF' },
+        dettaglio: { domandeRisposte: [
+          { domanda: 'TELEFONO INCLUSO COMPASS', risposta: 'SI' },
+          { domanda: 'TELEFONO INCLUSO VAR', risposta: 'SI' },
+        ] },
+      },
+      {
+        categoria: { nome: 'MIA TIED' },
+        dettaglio: { domandeRisposte: [
+          { domanda: 'MIA TELEFONO FINANZIAMENTO', risposta: '12' },
+          { domanda: 'MIA TELEFONO VAR', risposta: '0' },
+        ] },
+      },
+    ],
+  });
+  assert.deepEqual(result.telefoni, {
+    'telefono:finanziato-ga': 1,
+    'telefono:finanziato-cb': 1,
+    'telefono:var-ga': 1,
+    'telefono:var-cb': 1,
+  });
 });
 
 test('CB: conta solo le categorie cambio piano (MIA TIED/UNTIED + RIVINCOLO)', () => {

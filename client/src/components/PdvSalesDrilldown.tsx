@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   BarChart3,
@@ -92,10 +93,10 @@ const METRIC_STYLE: Record<string, { icon: LucideIcon; iconClass: string; badgeC
   default: { icon: Percent, iconClass: "bg-slate-500", badgeClass: "border-border bg-muted/40 text-foreground" },
 };
 
-type DisplayMetric = PdvSaleContribution & { canonicalKey: string; iva?: number };
+type DisplayMetric = PdvSaleContribution & { canonicalKey: string; business?: number };
 
 const canonicalMetric = (metric: PdvSaleContribution): DisplayMetric | null => {
-  if (metric.key.startsWith("iva-pista:")) return null;
+  if (metric.key.startsWith("business-pista:") || metric.key.startsWith("breakdown:")) return null;
   if (metric.key.startsWith("item:") || metric.key.startsWith("addon:")) {
     const pista = metric.key.split(":")[1];
     return { ...metric, canonicalKey: `pista:${pista}`, key: `pista:${pista}`, label: PISTA_LABELS[pista] || pista };
@@ -135,11 +136,22 @@ export function PdvSalesDrilldown({ sales, columns = [], emptyMessage = "Nessuna
       return totals;
     }, new Map<string, PdvSaleContribution>()).values(),
   );
-  const ivaByPista = new Map(
+  const businessByPista = new Map(
     rawMetrics
-      .filter((metric) => metric.key.startsWith("iva-pista:"))
-      .map((metric) => [metric.key.slice("iva-pista:".length), metric.value]),
+      .filter((metric) => metric.key.startsWith("business-pista:"))
+      .map((metric) => [metric.key.slice("business-pista:".length), metric.value]),
   );
+  const breakdownsByPista = rawMetrics
+    .filter((metric) => metric.key.startsWith("breakdown:"))
+    .reduce((map, metric) => {
+      const pista = metric.key.split(":")[1];
+      if (!map.has(pista)) map.set(pista, []);
+      map.get(pista)!.push({ ...metric, canonicalKey: metric.key });
+      return map;
+    }, new Map<string, DisplayMetric[]>());
+  for (const details of breakdownsByPista.values()) {
+    details.sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, "it"));
+  }
   const hasVfMetrics = rawMetrics.some((metric) => metric.key.startsWith("vf:"));
   const hasExactCbColumn = rawMetrics.some((metric) => metric.key === "extra:cb");
   const aggregatedMetrics = Array.from(
@@ -181,6 +193,7 @@ export function PdvSalesDrilldown({ sales, columns = [], emptyMessage = "Nessuna
     const key = isPista ? `pista:${column.key}` : `extra:${normalizedColumnKey}`;
     return [{ canonicalKey: key, key, label: column.label, value: column.value || 0, unit: column.unit || "pezzi" }];
   });
+  const visibleMetricKeys = new Set(zeroMetrics.map((metric) => metric.canonicalKey));
   const metrics = Array.from(
     [...zeroMetrics, ...aggregatedMetrics].reduce((totals, metric) => {
       const existing = totals.get(metric.canonicalKey);
@@ -188,8 +201,9 @@ export function PdvSalesDrilldown({ sales, columns = [], emptyMessage = "Nessuna
       return totals;
     }, new Map<string, DisplayMetric>()).values(),
   )
+    .filter((metric) => visibleMetricKeys.has(metric.canonicalKey))
     .map((metric) => metric.key.startsWith("pista:")
-      ? { ...metric, iva: ivaByPista.get(metric.key.slice("pista:".length)) || 0 }
+      ? { ...metric, business: businessByPista.get(metric.key.slice("pista:".length)) || 0 }
       : metric)
     .sort((a, b) => metricRank(a.key) - metricRank(b.key) || a.label.localeCompare(b.label, "it"));
   const canvassMetrics = metrics.filter((metric) =>
@@ -229,12 +243,14 @@ export function PdvSalesDrilldown({ sales, columns = [], emptyMessage = "Nessuna
           <span className={`grid h-5 w-5 shrink-0 place-items-center rounded text-white ${style.iconClass} ${metric.value === 0 ? "opacity-55" : ""}`}>
             <Icon className="h-3 w-3" />
           </span>
-          <span className="truncate">{child ? `di cui ${metric.label}` : metric.label}</span>
+          <span className="truncate">
+            {child && !metric.key.startsWith("breakdown:") ? `di cui ${metric.label}` : metric.label}
+          </span>
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
-          {!!metric.iva && (
+          {!!metric.business && (
             <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-300">
-              di cui {metric.iva} IVA
+              di cui {metric.business} Business
             </span>
           )}
           <Badge
@@ -254,7 +270,16 @@ export function PdvSalesDrilldown({ sales, columns = [], emptyMessage = "Nessuna
         <BarChart3 className="h-3.5 w-3.5 text-primary" />
         {title}
       </div>
-      {groupMetrics.map((metric) => renderMetric(metric, phone && metric.key.startsWith("telefono:")))}
+      {groupMetrics.map((metric) => {
+        const pista = metric.key.startsWith("pista:") ? metric.key.slice("pista:".length) : "";
+        const breakdowns = title === "Canvass" ? (breakdownsByPista.get(pista) || []) : [];
+        return (
+          <Fragment key={metric.key}>
+            {renderMetric(metric, phone && metric.key.startsWith("telefono:"))}
+            {breakdowns.map((detail) => renderMetric(detail, true))}
+          </Fragment>
+        );
+      })}
     </section>
   );
 

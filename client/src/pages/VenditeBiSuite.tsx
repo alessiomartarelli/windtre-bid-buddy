@@ -930,11 +930,19 @@ export default function VenditeBiSuite() {
         addContribution({ key: `extra:${key}`, label: extraLabels[key].label, value, unit: extraLabels[key].unit });
       }
       const drilldownDerived = derivePdvDrilldownMetrics(sale.rawData);
-      for (const [pista, value] of Object.entries(drilldownDerived.ivaByPista) as [PistaCanvass, number][]) {
+      for (const detail of drilldownDerived.breakdowns) {
+        addContribution({
+          key: `breakdown:${detail.pista}:${detail.label}`,
+          label: detail.label,
+          value: detail.value,
+          unit: "pezzi",
+        });
+      }
+      for (const [pista, value] of Object.entries(drilldownDerived.businessByPista) as [PistaCanvass, number][]) {
         if (!value) continue;
         addContribution({
-          key: `iva-pista:${pista}`,
-          label: `IVA ${pistaLabels[pista]}`,
+          key: `business-pista:${pista}`,
+          label: `Business ${pistaLabels[pista]}`,
           value,
           unit: "pezzi",
         });

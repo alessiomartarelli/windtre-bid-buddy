@@ -13,8 +13,6 @@ type RawArticle = {
   dettaglio?: { domandeRisposte?: RawQuestionAnswer[] };
 };
 
-export type TelefonoCanale = 'ga' | 'cb';
-export type TelefonoModalita = 'finanziato' | 'var';
 export type TelefonoDrilldownKey =
   | 'telefono:finanziato-ga'
   | 'telefono:finanziato-cb'
@@ -22,7 +20,8 @@ export type TelefonoDrilldownKey =
   | 'telefono:var-cb';
 
 export interface PdvDrilldownDerivedMetrics {
-  ivaByPista: Partial<Record<PistaCanvass, number>>;
+  breakdowns: Array<{ pista: PistaCanvass; label: string; value: number }>;
+  businessByPista: Partial<Record<PistaCanvass, number>>;
   telefoni: Record<TelefonoDrilldownKey, number>;
 }
 
@@ -33,82 +32,85 @@ const emptyTelefoni = (): Record<TelefonoDrilldownKey, number> => ({
   'telefono:var-cb': 0,
 });
 
-const articleChannel = (article: RawArticle): TelefonoCanale | null => {
-  const categoria = String(article.categoria?.nome || '').trim();
-  const tipologia = String(article.tipologia?.nome || '').trim();
-  if (isCouponCaring(categoria, tipologia)) return null;
-  const pista = classifyCategory(categoria)?.pista;
-  return pista === 'mobile' ? 'ga' : pista === 'cb' ? 'cb' : null;
-};
-
 const answerIsYes = (value: unknown) => /\bSI\b/.test(String(value ?? '').trim().toUpperCase());
 const answerIsNumeric = (value: unknown) => /^-?\d+(?:[.,]\d+)?$/.test(String(value ?? '').trim());
 
-const articlePhoneModes = (article: RawArticle): Set<TelefonoModalita> => {
-  const modes = new Set<TelefonoModalita>();
+const articlePhoneBuckets = (article: RawArticle): Set<TelefonoDrilldownKey> => {
+  const buckets = new Set<TelefonoDrilldownKey>();
+  const category = String(article.categoria?.nome || '').trim().toUpperCase();
+  const isCbArticle = category === 'MIA TIED' || category === 'MIA UNTIED';
   for (const row of article.dettaglio?.domandeRisposte || []) {
     const question = String(row.domanda || '').trim().toUpperCase();
     const answer = row.risposta;
     if (
       (
         question.includes('TELEFONO INCLUSO COMPASS') ||
-        question.includes('TELEFONO INCLUSO FINDOMESTIC') ||
-        question.includes('TELEFONO INCLUSO MULTI FINANZIAMENTO')
+        question.includes('TELEFONO INCLUSO FINDOMESTIC')
       ) && answerIsYes(answer)
     ) {
-      modes.add('finanziato');
+      buckets.add('telefono:finanziato-ga');
+    }
+    if (question.includes('TELEFONO INCLUSO MULTI FINANZIAMENTO') && answerIsYes(answer)) {
+      buckets.add(isCbArticle ? 'telefono:finanziato-cb' : 'telefono:finanziato-ga');
     }
     if (question.includes('MIA TELEFONO FINANZIAMENTO') && answerIsNumeric(answer)) {
-      modes.add('finanziato');
+      buckets.add('telefono:finanziato-cb');
     }
     if (question.includes('TELEFONO INCLUSO VAR') && answerIsYes(answer)) {
-      modes.add('var');
+      buckets.add('telefono:var-ga');
     }
     if (question.includes('MIA TELEFONO VAR') && answerIsNumeric(answer)) {
-      modes.add('var');
+      buckets.add('telefono:var-cb');
     }
   }
-  return modes;
+  return buckets;
 };
 
 export function derivePdvDrilldownMetrics(rawData: unknown): PdvDrilldownDerivedMetrics {
   const articles: RawArticle[] = Array.isArray((rawData as any)?.articoli)
     ? (rawData as any).articoli
     : [];
-  const ivaByPista: Partial<Record<PistaCanvass, number>> = {};
+  const breakdownMap = new Map<string, { pista: PistaCanvass; label: string; value: number }>();
+  const businessByPista: Partial<Record<PistaCanvass, number>> = {};
   const telefoni = emptyTelefoni();
-  const saleChannels = new Set<TelefonoCanale>();
 
   for (const article of articles) {
-    const channel = articleChannel(article);
-    if (channel) saleChannels.add(channel);
-
     const categoria = String(article.categoria?.nome || '').trim();
     const tipologia = String(article.tipologia?.nome || '').trim();
     if (isCouponCaring(categoria, tipologia)) continue;
     const sourcePista = classifyCategory(categoria)?.pista;
+    const breakdownLabel = sourcePista === 'assicurazioni'
+      ? (tipologia || categoria)
+      : sourcePista === 'mobile' || sourcePista === 'fisso' || sourcePista === 'cb'
+        ? categoria
+        : '';
+    if (sourcePista && breakdownLabel) {
+      const key = `${sourcePista}:${breakdownLabel.toUpperCase()}`;
+      const current = breakdownMap.get(key);
+      if (current) current.value += 1;
+      else breakdownMap.set(key, { pista: sourcePista, label: breakdownLabel, value: 1 });
+    }
     if (
-      sourcePista &&
+      (sourcePista === 'energia' || sourcePista === 'protecta') &&
       isPezzoIva({
         pista: sourcePista,
         categoriaNome: categoria,
         descrizione: String(article.descrizione || ''),
       })
     ) {
-      ivaByPista[sourcePista] = (ivaByPista[sourcePista] || 0) + 1;
+      businessByPista[sourcePista] = (businessByPista[sourcePista] || 0) + 1;
     }
   }
 
   for (const article of articles) {
-    const modes = articlePhoneModes(article);
-    if (modes.size === 0) continue;
-    const ownChannel = articleChannel(article);
-    const channel = ownChannel || (saleChannels.size === 1 ? Array.from(saleChannels)[0] : null);
-    if (!channel) continue;
-    for (const mode of modes) {
-      telefoni[`telefono:${mode}-${channel}`] += 1;
+    for (const bucket of articlePhoneBuckets(article)) {
+      telefoni[bucket] += 1;
     }
   }
 
-  return { ivaByPista, telefoni };
+  return {
+    breakdowns: Array.from(breakdownMap.values()),
+    businessByPista,
+    telefoni,
+  };
 }

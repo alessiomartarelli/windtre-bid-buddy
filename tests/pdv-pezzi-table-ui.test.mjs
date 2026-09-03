@@ -85,7 +85,11 @@ const artCbCouponCaring = {
 const artTelefono = {
   categoria: { nome: 'TELEFONIA' },
   descrizione: 'SMARTPHONE TEST 128GB',
-  dettaglio: { prezzo: '500', modalitaAcquisto: 'FINANZIATO' },
+  dettaglio: {
+    prezzo: '500',
+    modalitaAcquisto: 'FINANZIATO',
+    domandeRisposte: [{ domanda: 'TELEFONO INCLUSO COMPASS', risposta: 'SI' }],
+  },
 }; // → colonna Telefoni
 const artAccessorio = {
   categoria: { nome: 'ACCESSORI' },
@@ -284,9 +288,10 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     await page.getByTestId(`btn-table-pezzi-pdv-toggle-${POS_C}`).click();
     const betaDrilldown = page.getByTestId('pdv-sales-drilldown').last();
     const betaDrilldownText = await betaDrilldown.innerText();
-    assert.match(betaDrilldownText, /Mobile[\s\S]*di cui 1 IVA/i);
-    assert.doesNotMatch(betaDrilldownText, /IVA CB|IVA Accessori|IVA Servizi/i);
-    assert.match(await betaDrilldown.getByTestId('pdv-drilldown-telefoni').innerText(), /Telefoni[\s\S]*1/i, 'il riquadro Telefoni mostra il totale della colonna PDV');
+    assert.match(betaDrilldownText, /Mobile[\s\S]*TIED IVA/i);
+    assert.match(betaDrilldownText, /Assicurazioni[\s\S]*ASSICURAZIONI CASA/i);
+    assert.doesNotMatch(betaDrilldownText, /di cui .* IVA/i);
+    assert.match(await betaDrilldown.getByTestId('pdv-drilldown-telefoni').innerText(), /Telefoni[\s\S]*1[\s\S]*di cui Finanziato GA[\s\S]*1/i, 'il riquadro Telefoni mostra totale e Finanziato GA');
     assert.match(await betaDrilldown.getByTestId('pdv-drilldown-servizi').innerText(), /Accessori[\s\S]*100,00[\s\S]*Servizi[\s\S]*50,00/i);
 
     // ── Riga totale complessivo: totali di colonna + totale generale ──
