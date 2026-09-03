@@ -254,13 +254,17 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     assert.equal(await deltaToggle.getAttribute('aria-expanded'), 'true', 'click riga: espande come prima');
     await deltaPdvRow.waitFor({ state: 'visible', timeout: 5000 });
 
-    // Secondo livello come nel riferimento: click sul PDV → dettaglio delle
-    // singole vendite che alimentano i volumi della riga.
+    // Secondo livello come nel riferimento Canvass: click sul PDV → riepilogo
+    // aggregato delle colonne che alimentano i volumi della riga.
     await page.getByTestId('btn-pezzi-pdv-toggle-POSD1').click();
     const saleDrilldown = page.getByTestId('pdv-sales-drilldown');
     await saleDrilldown.waitFor({ state: 'visible', timeout: 5000 });
-    assert.match(await saleDrilldown.innerText(), /Vendite che compongono il totale attuale/i);
-    assert.match(await saleDrilldown.innerText(), /3 vendite/i);
+    const drilldownText = await saleDrilldown.innerText();
+    assert.match(drilldownText, /Dettaglio volumi del PDV/i);
+    assert.match(drilldownText, /Fisso/i);
+    assert.match(drilldownText, /Assicurazioni/i);
+    assert.match(drilldownText, /Windtre Protetti/i);
+    assert.doesNotMatch(drilldownText, /Cliente|Addetto|Data e ora|Stato|Totale vendita/i);
 
     // Mouse: click sul bottone richiude una volta sola (niente doppio toggle da bubbling).
     await deltaToggle.click();

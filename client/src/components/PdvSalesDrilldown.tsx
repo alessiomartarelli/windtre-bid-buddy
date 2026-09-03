@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { ReceiptText } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 
 export interface PdvSaleDetail {
   id: string;
@@ -22,81 +22,63 @@ export interface PdvSaleContribution {
   unit?: "pezzi" | "euro";
 }
 
-const formatSaleDate = (value?: string | null) => {
-  if (!value) return "Data non disponibile";
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
-  if (!match) return value;
-  const [, year, month, day, hour, minute] = match;
-  return `${day}/${month}/${year}${hour && minute ? ` ${hour}:${minute}` : ""}`;
-};
+const formatMoney = (value: number) =>
+  value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 
-const formatMoney = (value?: string | number | null) => {
-  const amount = typeof value === "number" ? value : Number.parseFloat(value || "0");
-  return Number.isFinite(amount)
-    ? amount.toLocaleString("it-IT", { style: "currency", currency: "EUR" })
-    : "—";
+const METRIC_ORDER = [
+  "mobile", "fisso", "energia", "luce", "gas", "assicurazioni", "protecta",
+  "iva_mobile", "iva_wireline", "vas", "iva", "cb", "telefoni", "accessori",
+  "accEuro", "servizi", "srvEuro",
+] as const;
+
+const metricRank = (key: string) => {
+  const normalized = key.split(":").pop() || key;
+  const index = METRIC_ORDER.indexOf(normalized as typeof METRIC_ORDER[number]);
+  return index === -1 ? METRIC_ORDER.length : index;
 };
 
 export function PdvSalesDrilldown({ sales, emptyMessage = "Nessuna vendita disponibile per questo PDV." }: {
   sales: PdvSaleDetail[];
   emptyMessage?: string;
 }) {
+  const metrics = Array.from(
+    sales.reduce((totals, sale) => {
+      for (const contribution of sale.contributions || []) {
+        const current = totals.get(contribution.key);
+        if (current) current.value += contribution.value;
+        else totals.set(contribution.key, { ...contribution });
+      }
+      return totals;
+    }, new Map<string, PdvSaleContribution>()).values(),
+  ).sort((a, b) => metricRank(a.key) - metricRank(b.key) || a.label.localeCompare(b.label, "it"));
+
   return (
     <div className="px-3 py-3 bg-muted/20" data-testid="pdv-sales-drilldown">
-      <div className="flex items-center justify-between gap-3 mb-2">
+      <div className="flex items-center gap-2 mb-2">
         <div className="flex items-center gap-2 font-semibold text-sm">
-          <ReceiptText className="h-4 w-4 text-primary" />
-          Vendite che compongono il totale attuale
+          <BarChart3 className="h-4 w-4 text-primary" />
+          Dettaglio volumi del PDV
         </div>
-        <Badge variant="secondary">{sales.length} vendite</Badge>
       </div>
-      {sales.length === 0 ? (
+      {metrics.length === 0 ? (
         <p className="text-sm text-muted-foreground py-3">{emptyMessage}</p>
       ) : (
-        <div className="overflow-x-auto rounded-md border bg-card max-h-72 overflow-y-auto">
-          <table className="w-full min-w-[760px] text-xs">
-            <thead className="sticky top-0 z-10 bg-muted">
-              <tr className="border-b">
-                <th className="text-left px-3 py-2 font-medium">Data e ora</th>
-                <th className="text-left px-3 py-2 font-medium">Cliente</th>
-                <th className="text-left px-3 py-2 font-medium">Addetto</th>
-                <th className="text-left px-3 py-2 font-medium">Contributi al totale</th>
-                <th className="text-left px-3 py-2 font-medium">Stato</th>
-                <th className="text-right px-3 py-2 font-medium">Totale vendita</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sales.map((sale) => (
-                <tr key={sale.id} className="border-b last:border-0 hover:bg-muted/30" data-testid={`pdv-sale-${sale.id}`}>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <div>{formatSaleDate(sale.dataVendita)}</div>
-                    {sale.bisuiteId != null && <div className="text-[10px] text-muted-foreground">BiSuite #{sale.bisuiteId}</div>}
-                  </td>
-                  <td className="px-3 py-2">{sale.nomeCliente || "—"}</td>
-                  <td className="px-3 py-2">{sale.nomeAddetto || "—"}</td>
-                  <td className="px-3 py-2 max-w-[360px]">
-                    {sale.contributions?.length ? (
-                      <div className="flex flex-wrap gap-1">
-                        {sale.contributions.map((contribution) => (
-                          <Badge key={contribution.key} variant="secondary" className="font-normal">
-                            {contribution.label}: {contribution.unit === "euro"
-                              ? formatMoney(contribution.value)
-                              : `+${contribution.value}`}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : (sale.categorieArticoli || "—")}
-                  </td>
-                  <td className="px-3 py-2">
-                    <Badge variant={(sale.stato || "").trim().toUpperCase() === "ANNULLATA" ? "destructive" : "outline"}>
-                      {sale.stato || "Registrata"}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums whitespace-nowrap">{formatMoney(sale.totale)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="rounded-md border bg-card px-3">
+          {metrics.map((metric) => (
+            <div
+              key={metric.key}
+              className="flex min-h-10 items-center justify-between gap-4 border-b py-2 last:border-0"
+              data-testid={`pdv-metric-${metric.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`}
+            >
+              <span className="min-w-0 truncate text-sm text-muted-foreground">{metric.label}</span>
+              <Badge
+                variant="outline"
+                className="shrink-0 px-2.5 py-1 text-sm font-bold tabular-nums"
+              >
+                {metric.unit === "euro" ? formatMoney(metric.value) : metric.value}
+              </Badge>
+            </div>
+          ))}
         </div>
       )}
       <p className="mt-2 text-[11px] text-muted-foreground">

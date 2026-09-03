@@ -249,13 +249,16 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     assert.equal(await cellNum(page, `cell-pezzi-${POS_B}-energia-attuale`), 3, 'PDV B energia attuale = 3');
     assert.equal(await cellNum(page, `cell-pezzi-${POS_B}-totale-attuale`), 3, 'PDV B totale riga = 3');
 
-    // Il secondo click, sul PDV, apre le vendite reali che compongono il
-    // totale attuale; la vendita annullata non è nel perimetro della dashboard.
+    // Il secondo click, sul PDV, apre il riepilogo aggregato dei volumi che
+    // compongono la riga; la vendita annullata non è nel perimetro.
     await page.getByTestId(`btn-table-pezzi-pdv-toggle-${POS_A}`).click();
     const saleDrilldown = page.getByTestId('pdv-sales-drilldown');
     await saleDrilldown.waitFor({ state: 'visible', timeout: 5000 });
-    assert.match(await saleDrilldown.innerText(), /Vendite che compongono il totale attuale/i);
-    assert.match(await saleDrilldown.innerText(), /1 vendite/i);
+    const drilldownText = await saleDrilldown.innerText();
+    assert.match(drilldownText, /Dettaglio volumi del PDV/i);
+    assert.match(drilldownText, /Fisso FTTH/i);
+    assert.match(drilldownText, /Tied/i);
+    assert.doesNotMatch(drilldownText, /Cliente|Addetto|Data e ora|Stato|Totale vendita/i);
 
     // ── Riga totale complessivo: totali di colonna + totale generale ──
     await page.getByTestId('row-table-pezzi-totale').waitFor({ timeout: 5000 });
