@@ -3034,7 +3034,7 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv, saleD
                                   <td colSpan={1 + pezziColumns.length * 2 + 2} className="p-0">
                                      <PdvSalesDrilldown
                                        sales={salesByPdv.get(pdv.codicePos) || []}
-                                       columns={pezziColumns.map((col) => ({ key: col.key, label: col.label, unit: col.euro ? "euro" : "pezzi" }))}
+                                       columns={pezziColumns.map((col) => ({ key: col.key, label: col.label, unit: col.euro ? "euro" : "pezzi", value: cells?.get(col.key)?.att || 0 }))}
                                      />
                                   </td>
                                 </tr>
@@ -3181,6 +3181,9 @@ function TabellaPdvPista({ pistaStats, orgId, mese, anno, pezziExtraByPdv, saleD
                                      key: p.pista,
                                      label: (PISTA_CONFIG as any)[p.pista]?.label || p.pista,
                                      unit: "pezzi",
+                                     value: rs.perPdv.get(pdv.codicePos)?.get(p.pista)?.valoreAttUi
+                                       ?? rs.perPdv.get(pdv.codicePos)?.get(p.pista)?.valoreAtt
+                                       ?? 0,
                                    }))}
                                  />
                               </td>

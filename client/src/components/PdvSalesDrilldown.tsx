@@ -41,6 +41,7 @@ export interface PdvDrilldownColumn {
   key: string;
   label: string;
   unit?: "pezzi" | "euro";
+  value?: number;
 }
 
 const formatMoney = (value: number) =>
@@ -164,6 +165,7 @@ export function PdvSalesDrilldown({ sales, columns = [], emptyMessage = "Nessuna
     if (column.key === "iva") return [];
     if (column.key === "telefoni") {
       return [
+        { canonicalKey: "extra:telefoni", key: "extra:telefoni", label: "Telefoni", value: column.value || 0, unit: "pezzi" },
         { canonicalKey: "telefono:finanziato-ga", key: "telefono:finanziato-ga", label: "Finanziato GA", value: 0, unit: "pezzi" },
         { canonicalKey: "telefono:finanziato-cb", key: "telefono:finanziato-cb", label: "Finanziato CB", value: 0, unit: "pezzi" },
         { canonicalKey: "telefono:var-ga", key: "telefono:var-ga", label: "VAR GA", value: 0, unit: "pezzi" },
@@ -171,8 +173,13 @@ export function PdvSalesDrilldown({ sales, columns = [], emptyMessage = "Nessuna
       ];
     }
     const isPista = Object.prototype.hasOwnProperty.call(PISTA_LABELS, column.key);
-    const key = isPista ? `pista:${column.key}` : `extra:${column.key}`;
-    return [{ canonicalKey: key, key, label: column.label, value: 0, unit: column.unit || "pezzi" }];
+    const normalizedColumnKey = column.key === "acc_euro"
+      ? "accEuro"
+      : column.key === "srv_euro"
+        ? "srvEuro"
+        : column.key;
+    const key = isPista ? `pista:${column.key}` : `extra:${normalizedColumnKey}`;
+    return [{ canonicalKey: key, key, label: column.label, value: column.value || 0, unit: column.unit || "pezzi" }];
   });
   const metrics = Array.from(
     [...zeroMetrics, ...aggregatedMetrics].reduce((totals, metric) => {
@@ -185,59 +192,86 @@ export function PdvSalesDrilldown({ sales, columns = [], emptyMessage = "Nessuna
       ? { ...metric, iva: ivaByPista.get(metric.key.slice("pista:".length)) || 0 }
       : metric)
     .sort((a, b) => metricRank(a.key) - metricRank(b.key) || a.label.localeCompare(b.label, "it"));
+  const canvassMetrics = metrics.filter((metric) =>
+    !metric.key.startsWith("telefono:") &&
+    metric.key !== "extra:telefoni" &&
+    !/extra:(accEuro|srvEuro|accessori|servizi)/.test(metric.key),
+  );
+  const phoneMetrics = metrics.filter((metric) =>
+    metric.key === "extra:telefoni" || metric.key.startsWith("telefono:"),
+  ).sort((a, b) => {
+    if (a.key === "extra:telefoni") return -1;
+    if (b.key === "extra:telefoni") return 1;
+    return metricRank(a.key) - metricRank(b.key);
+  });
+  const serviceMetrics = metrics.filter((metric) =>
+    /extra:(accEuro|srvEuro|accessori|servizi)/.test(metric.key),
+  );
+
+  const renderMetric = (metric: DisplayMetric, child = false) => {
+    const normalizedKey = metric.key.split(":").pop() || metric.key;
+    const styleKey = metric.key.startsWith("telefono:") || metric.key === "extra:telefoni"
+      ? "telefono"
+      : metric.key.includes("accessori") || metric.key.includes("accEuro")
+        ? "accessori"
+        : metric.key.includes("servizi") || metric.key.includes("srvEuro")
+          ? "servizi"
+          : normalizedKey;
+    const style = METRIC_STYLE[styleKey] || METRIC_STYLE.default;
+    const Icon = style.icon;
+    return (
+      <div
+        key={metric.key}
+        className={`flex min-h-10 min-w-0 items-center justify-between gap-2 border-b border-border/60 px-2.5 py-1.5 last:border-b-0 hover:bg-muted/20 sm:px-3 ${child ? "bg-muted/10 pl-6 sm:pl-7" : ""}`}
+        data-testid={`pdv-metric-${metric.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`}
+      >
+        <span className={`flex min-w-0 items-center gap-2 text-[13px] font-medium ${metric.value === 0 ? "text-muted-foreground" : ""}`}>
+          <span className={`grid h-5 w-5 shrink-0 place-items-center rounded text-white ${style.iconClass} ${metric.value === 0 ? "opacity-55" : ""}`}>
+            <Icon className="h-3 w-3" />
+          </span>
+          <span className="truncate">{child ? `di cui ${metric.label}` : metric.label}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {!!metric.iva && (
+            <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-300">
+              di cui {metric.iva} IVA
+            </span>
+          )}
+          <Badge
+            variant="outline"
+            className={`min-w-9 justify-center px-2 py-0.5 text-[13px] font-bold tabular-nums ${style.badgeClass} ${metric.value === 0 ? "opacity-60" : ""}`}
+          >
+            {metric.unit === "euro" ? formatMoney(metric.value) : metric.value}
+          </Badge>
+        </span>
+      </div>
+    );
+  };
+
+  const renderGroup = (title: string, groupMetrics: DisplayMetric[], testId: string, phone = false) => (
+    <section className="min-w-0 overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm" data-testid={testId}>
+      <div className="flex items-center gap-2 border-b bg-muted/35 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-3">
+        <BarChart3 className="h-3.5 w-3.5 text-primary" />
+        {title}
+      </div>
+      {groupMetrics.map((metric) => renderMetric(metric, phone && metric.key.startsWith("telefono:")))}
+    </section>
+  );
 
   return (
-    <div className="sticky left-0 w-[calc(100vw-2rem)] max-w-2xl bg-muted/10 px-2 py-1.5 sm:w-[min(42rem,calc(100vw-3rem))] sm:px-3" data-testid="pdv-sales-drilldown">
+    <div className="sticky left-0 w-[calc(100vw-2rem)] bg-muted/10 px-2 py-1.5 sm:w-[calc(100vw-3rem)] sm:px-3" data-testid="pdv-sales-drilldown">
       {metrics.length === 0 ? (
         <p className="text-sm text-muted-foreground py-3">{emptyMessage}</p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm">
-          <div className="flex items-center gap-2 border-b bg-muted/35 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-3">
+        <div>
+          <div className="mb-1.5 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             <BarChart3 className="h-3.5 w-3.5 text-primary" />
             Dettaglio volumi del PDV
           </div>
-          <div className="sm:grid sm:grid-cols-2">
-          {metrics.map((metric) => (
-            (() => {
-              const normalizedKey = metric.key.split(":").pop() || metric.key;
-              const styleKey = metric.key.startsWith("telefono:")
-                ? "telefono"
-                : metric.key.includes("accessori") || metric.key.includes("accEuro")
-                  ? "accessori"
-                  : metric.key.includes("servizi") || metric.key.includes("srvEuro")
-                    ? "servizi"
-                    : normalizedKey;
-              const style = METRIC_STYLE[styleKey] || METRIC_STYLE.default;
-              const Icon = style.icon;
-              return (
-                <div
-                  key={metric.key}
-                  className="flex min-h-10 min-w-0 items-center justify-between gap-2 border-b border-border/60 px-2.5 py-1.5 hover:bg-muted/20 sm:px-3 sm:[&:nth-last-child(-n+2)]:border-b-0"
-                  data-testid={`pdv-metric-${metric.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`}
-                >
-                  <span className={`flex min-w-0 items-center gap-2 text-[13px] font-medium ${metric.value === 0 ? "text-muted-foreground" : ""}`}>
-                    <span className={`grid h-5 w-5 shrink-0 place-items-center rounded text-white ${style.iconClass} ${metric.value === 0 ? "opacity-55" : ""}`}>
-                      <Icon className="h-3 w-3" />
-                    </span>
-                    <span className="truncate">{metric.label}</span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1.5">
-                    {!!metric.iva && (
-                      <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-300">
-                        di cui {metric.iva} IVA
-                      </span>
-                    )}
-                    <Badge
-                      variant="outline"
-                      className={`min-w-9 justify-center px-2 py-0.5 text-[13px] font-bold tabular-nums ${style.badgeClass} ${metric.value === 0 ? "opacity-60" : ""}`}
-                    >
-                      {metric.unit === "euro" ? formatMoney(metric.value) : metric.value}
-                    </Badge>
-                  </span>
-                </div>
-              );
-            })()
-          ))}
+          <div className="grid gap-2 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            {renderGroup("Canvass", canvassMetrics, "pdv-drilldown-canvass")}
+            {renderGroup("Telefoni", phoneMetrics, "pdv-drilldown-telefoni", true)}
+            {renderGroup("Accessori e servizi", serviceMetrics, "pdv-drilldown-servizi")}
           </div>
         </div>
       )}

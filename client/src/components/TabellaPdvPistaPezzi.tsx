@@ -510,8 +510,8 @@ function RsGroup({
                   <PdvSalesDrilldown
                     sales={pdv.vendite}
                     columns={[
-                      ...piste.map((pista) => ({ key: pista, label: pistaLabels[pista], unit: "pezzi" as const })),
-                      ...extraCols.map((col) => ({ key: col.key, label: col.label.replace(/^€\s*/, ""), unit: col.euro ? "euro" as const : "pezzi" as const })),
+                      ...piste.map((pista) => ({ key: pista, label: pistaLabels[pista], unit: "pezzi" as const, value: pdv.perPista.get(pista) || 0 })),
+                      ...extraCols.map((col) => ({ key: col.key, label: col.label.replace(/^€\s*/, ""), unit: col.euro ? "euro" as const : "pezzi" as const, value: pdv.extra[col.key] || 0 })),
                     ]}
                   />
                 </td>

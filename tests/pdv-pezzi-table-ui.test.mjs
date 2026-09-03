@@ -267,6 +267,16 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     const zeroBadgeBox = await zeroEnergia.locator(':scope > span').last().boundingBox();
     assert.ok(zeroBadgeBox && zeroBadgeBox.x + zeroBadgeBox.width <= 440.5, `badge zero visibile a destra: ${JSON.stringify(zeroBadgeBox)}`);
     await page.setViewportSize({ width: 1280, height: 900 });
+    const desktopGroups = await Promise.all([
+      saleDrilldown.getByTestId('pdv-drilldown-canvass').boundingBox(),
+      saleDrilldown.getByTestId('pdv-drilldown-telefoni').boundingBox(),
+      saleDrilldown.getByTestId('pdv-drilldown-servizi').boundingBox(),
+    ]);
+    assert.ok(desktopGroups.every(Boolean), `tre riquadri desktop presenti: ${JSON.stringify(desktopGroups)}`);
+    assert.ok(Math.max(...desktopGroups.map((box) => box.y)) - Math.min(...desktopGroups.map((box) => box.y)) < 2, 'i tre riquadri desktop sono sulla stessa riga');
+    const groupsWidth = desktopGroups.reduce((sum, box) => sum + box.width, 0);
+    const desktopPanelBox = await saleDrilldown.boundingBox();
+    assert.ok(desktopPanelBox && groupsWidth >= desktopPanelBox.width * 0.9, 'i tre riquadri sfruttano la larghezza desktop');
 
     // Il dettaglio del PDV Beta espone l'IVA accanto alla pista corretta,
     // senza trasformare CB/accessori/servizi in righe IVA.
@@ -276,6 +286,8 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     const betaDrilldownText = await betaDrilldown.innerText();
     assert.match(betaDrilldownText, /Mobile[\s\S]*di cui 1 IVA/i);
     assert.doesNotMatch(betaDrilldownText, /IVA CB|IVA Accessori|IVA Servizi/i);
+    assert.match(await betaDrilldown.getByTestId('pdv-drilldown-telefoni').innerText(), /Telefoni[\s\S]*1/i, 'il riquadro Telefoni mostra il totale della colonna PDV');
+    assert.match(await betaDrilldown.getByTestId('pdv-drilldown-servizi').innerText(), /Accessori[\s\S]*100,00[\s\S]*Servizi[\s\S]*50,00/i);
 
     // ── Riga totale complessivo: totali di colonna + totale generale ──
     await page.getByTestId('row-table-pezzi-totale').waitFor({ timeout: 5000 });
