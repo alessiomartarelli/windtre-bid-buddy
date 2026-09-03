@@ -622,6 +622,76 @@ test('plafond ricariche per RS', async (t) => {
       }
     });
 
+    await t.test('UI: "Modifica saldo" e "Soglia avviso" salvano davvero (Task #552)', async () => {
+      // Wiring click→mutation: apre i dialog, conferma e verifica che il
+      // nuovo saldo/la nuova soglia compaiano a video e nello storico.
+      const browser = await launchBrowser();
+      try {
+        const ctx = await newAuthedContext(browser, admin);
+        const page = await ctx.newPage();
+        await page.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector(`[data-testid="text-plafond-saldo-${idA}"]`, { timeout: 30000 });
+        const saldoPrima = await page.textContent(`[data-testid="text-plafond-saldo-${idA}"]`);
+        assert.ok(saldoPrima.replace(/[\s\u00a0]/g, '').includes('125'), `saldo iniziale inatteso: ${saldoPrima}`);
+
+        // --- Modifica saldo: 125 → 300 ---
+        await page.click(`[data-testid="button-plafond-imposta-${idA}"]`);
+        await page.waitForSelector('[data-testid="input-plafond-importo"]', { timeout: 15000 });
+        await page.fill('[data-testid="input-plafond-importo"]', '300');
+        await page.click('[data-testid="button-plafond-confirm"]');
+        // Il dialog si chiude solo su successo della mutation…
+        await page.waitForSelector('[data-testid="input-plafond-importo"]', { state: 'detached', timeout: 15000 });
+        // …e il refetch mostra il nuovo saldo a video.
+        await page.waitForFunction(
+          (sel) => document.querySelector(sel)?.textContent?.replace(/[\s\u00a0]/g, '').includes('300'),
+          `[data-testid="text-plafond-saldo-${idA}"]`,
+          { timeout: 15000 },
+        );
+
+        // --- Soglia avviso: 50 → 400 (sopra il saldo ⇒ badge sotto-soglia) ---
+        await page.click(`[data-testid="button-plafond-soglia-${idA}"]`);
+        await page.waitForSelector('[data-testid="input-plafond-importo"]', { timeout: 15000 });
+        await page.fill('[data-testid="input-plafond-importo"]', '400');
+        await page.click('[data-testid="button-plafond-confirm"]');
+        await page.waitForSelector('[data-testid="input-plafond-importo"]', { state: 'detached', timeout: 15000 });
+        await page.waitForSelector(`[data-testid="badge-plafond-allerta-${idA}"]`, { timeout: 15000 });
+        const badgeText = await page.textContent(`[data-testid="badge-plafond-allerta-${idA}"]`);
+        assert.ok(badgeText.includes('Sotto soglia'), `badge sotto-soglia atteso: ${badgeText}`);
+        const rowText = (await page.textContent(`[data-testid="row-plafond-${idA}"]`)).replace(/[\s\u00a0]/g, '');
+        assert.ok(rowText.includes('Sogliaavviso:400,00€'), `soglia aggiornata attesa nella riga: ${rowText}`);
+        assert.ok(!rowText.includes('(default)'), 'la soglia deve risultare custom, non default');
+
+        // --- Entrambe le operazioni compaiono nello storico ---
+        await page.click('[data-testid="button-plafond-storico"]');
+        await page.waitForSelector('[data-testid="list-plafond-storico"]', { timeout: 15000 });
+        const storicoText = (await page.textContent('[data-testid="list-plafond-storico"]')).replace(/[\s\u00a0]/g, '');
+        assert.ok(storicoText.includes('saldo125,00€→300,00€'),
+          `op "Imposta saldo" 125→300 attesa nello storico UI: ${storicoText.slice(0, 400)}`);
+        assert.ok(storicoText.includes('⚑400,00€(sogliadiavviso,saldoinvariato)'),
+          `op "Soglia avviso" 400 attesa nello storico UI: ${storicoText.slice(0, 400)}`);
+
+        // Riscontro server-side: le due op in testa allo storico API.
+        const st = await get('/api/ricariche-plafond/storico');
+        const [opSoglia, opImposta] = st.body.storico;
+        assert.equal(opSoglia.tipo, 'soglia');
+        assert.equal(opSoglia.importo, 400);
+        assert.equal(opImposta.tipo, 'imposta');
+        assert.equal(opImposta.importo, 300);
+        assert.equal(opImposta.saldoPrima, 125);
+        assert.equal(opImposta.saldoDopo, 300);
+        const r = await get('/api/ricariche-plafond');
+        const row = r.body.saldi.find((s) => s.ragioneSociale === RS_A);
+        assert.equal(row.saldo, 300);
+        assert.equal(row.soglia, 400);
+        assert.equal(row.sogliaCustom, true);
+        assert.equal(row.inAllerta, true);
+
+        await ctx.close();
+      } finally {
+        await browser.close();
+      }
+    });
+
     await t.test('UI: card vuota admin senza "Operazione per RS" (Task #551)', async () => {
       // Org NUOVA: zero saldi. La card resta visibile per l'admin con l'empty
       // state, ma il punto d'ingresso "Operazione per RS" è stato rimosso
