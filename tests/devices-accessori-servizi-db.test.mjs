@@ -90,12 +90,12 @@ function pdvByPos(agg) {
 }
 
 // Domande di finanziamento/rate riconosciute dal modulo.
-const Q_COMPASS_SI = [{ domanda: 'TELEFONO INCLUSO COMPASS', risposta: 'SI' }];
+const Q_COMPASS_SI = [{ domandaTesto: 'TELEFONO INCLUSO COMPASS', risposta: 'SÌ' }];
 const Q_FINDOMESTIC_SI = [{ domanda: 'TELEFONO INCLUSO FINDOMESTIC', risposta: 'SI' }];
 const Q_MULTIFIN_SI = [{ domanda: 'TELEFONO INCLUSO MULTI FINANZIAMENTO', risposta: 'SI' }];
-const Q_MIA_FIN = [{ domanda: 'MIA TELEFONO FINANZIAMENTO', risposta: '36' }];
+const Q_MIA_FIN = [{ domandaTesto: 'MIA TELEFONO FINANZIAMENTO &gt 0', risposta: 'SI' }];
 const Q_VAR_SI = [{ domanda: 'TELEFONO INCLUSO VAR', risposta: 'SI' }];
-const Q_MIA_VAR = [{ domanda: 'MIA TELEFONO VAR', risposta: '24' }];
+const Q_MIA_VAR = [{ domandaTesto: 'MIA TELEFONO VAR &gt 0', risposta: 'SI' }];
 
 // ===========================================================================
 // SCENARIO 1: split device per modalità (finanziato / rate / altro) sulle tre

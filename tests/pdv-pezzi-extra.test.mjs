@@ -60,20 +60,21 @@ test('drill-down: telefoni separati tra finanziato/VAR e GA/CB', () => {
     articoli: [
       {
         categoria: { nome: 'TIED CF' },
-        dettaglio: { domandeRisposte: [{ domanda: 'TELEFONO INCLUSO COMPASS', risposta: 'SI' }] },
+        dettaglio: { domandeRisposte: [{ domandaTesto: 'TELEFONO INCLUSO COMPASS', risposta: 'SÌ' }] },
       },
       {
         categoria: { nome: 'TIED IVA' },
-        dettaglio: { domandeRisposte: [{ domanda: 'TELEFONO INCLUSO VAR', risposta: 'SI' }] },
+        dettaglio: { domandeRisposte: [{ domandaTesto: 'TELEFONO INCLUSO VAR - CODICE FISCALE', risposta: 'SI' }] },
       },
       {
         categoria: { nome: 'MIA TIED' },
-        dettaglio: { domandeRisposte: [{ domanda: 'MIA TELEFONO FINANZIAMENTO', risposta: '0' }] },
+        dettaglio: { domandeRisposte: [{ domandaTesto: 'MIA TELEFONO FINANZIAMENTO &gt 0', risposta: 'SI' }] },
       },
       {
         categoria: { nome: 'MIA UNTIED' },
-        dettaglio: { domandeRisposte: [{ domanda: 'MIA TELEFONO VAR', risposta: '24' }] },
+        dettaglio: { domandeRisposte: [{ domandaTesto: 'MIA TELEFONO VAR &gt 0', risposta: 'SI' }] },
       },
+      ...Array.from({ length: 4 }, () => ({ categoria: { nome: 'TELEFONIA' } })),
     ],
   });
   assert.deepEqual(result.telefoni, {
@@ -90,7 +91,7 @@ test('drill-down: domanda sul prodotto TELEFONIA eredita il solo canale della ve
       { categoria: { nome: 'TIED CF' } },
       {
         categoria: { nome: 'TELEFONIA' },
-        dettaglio: { domandeRisposte: [{ domanda: 'TELEFONO INCLUSO FINDOMESTIC', risposta: 'SI' }] },
+        dettaglio: { domandeRisposte: [{ domandaTesto: 'TELEFONO INCLUSO FINDOMESTIC', risposta: 'SI' }] },
       },
     ],
   });
@@ -111,10 +112,11 @@ test('drill-down: domande standard nel Fisso W3 sono GA, domande MIA sono CB', (
       {
         categoria: { nome: 'MIA TIED' },
         dettaglio: { domandeRisposte: [
-          { domanda: 'MIA TELEFONO FINANZIAMENTO', risposta: '12' },
-          { domanda: 'MIA TELEFONO VAR', risposta: '0' },
+          { domandaTesto: 'MIA TELEFONO FINANZIAMENTO &gt 0', risposta: 'SI' },
+          { domandaTesto: 'MIA TELEFONO VAR &gt 0', risposta: 'SI' },
         ] },
       },
+      ...Array.from({ length: 4 }, () => ({ categoria: { nome: 'TELEFONIA' } })),
     ],
   });
   assert.deepEqual(result.telefoni, {
@@ -123,6 +125,18 @@ test('drill-down: domande standard nel Fisso W3 sono GA, domande MIA sono CB', (
     'telefono:var-ga': 1,
     'telefono:var-cb': 1,
   });
+});
+
+test('drill-down: usa tipologia vendita del telefono quando le domande non sono disponibili', () => {
+  const result = derivePdvDrilldownMetrics({
+    articoli: [
+      { categoria: { nome: 'TIED CF' } },
+      { categoria: { nome: 'TELEFONIA' }, dettaglio: { tipologiaVendita: 'FINANZIAMENTO', finanziatore: 'COMPASS' } },
+      { categoria: { nome: 'TELEFONIA' }, dettaglio: { tipologiaVendita: 'VENDITA A RATE CON CREDITI' } },
+    ],
+  });
+  assert.equal(result.telefoni['telefono:finanziato-ga'], 1);
+  assert.equal(result.telefoni['telefono:var-ga'], 1);
 });
 
 test('CB: conta solo le categorie cambio piano (MIA TIED/UNTIED + RIVINCOLO)', () => {

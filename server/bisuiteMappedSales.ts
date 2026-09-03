@@ -18,6 +18,7 @@ import {
   type PdvViewDirectory,
 } from "../shared/pdvView";
 import { normalizeRsName } from "../shared/ragioneSociale";
+import { derivePhoneSaleModality } from "../shared/pdvDrilldownMetrics";
 
 // Aggregazione lato server delle vendite BiSuite mappate, estratta dalla route
 // GET /api/admin/bisuite-mapped-sales così da essere richiamabile e testabile
@@ -251,26 +252,7 @@ export function aggregateMappedSales(
 
     const articoli = raw.articoli || [];
 
-    const matchDomanda = (testo: string, predicate: (risp: string) => boolean): boolean => {
-      for (const art of articoli) {
-        const dr = art.dettaglio?.domandeRisposte || [];
-        for (const qr of dr) {
-          const dom = String(qr.domanda || '').toUpperCase();
-          if (dom.includes(testo)) {
-            const risp = String(qr.risposta || '').toUpperCase();
-            if (predicate(risp)) return true;
-          }
-        }
-      }
-      return false;
-    };
-    const isFinanziato = matchDomanda('TELEFONO INCLUSO COMPASS', (r) => r.includes('SI'))
-      || matchDomanda('TELEFONO INCLUSO FINDOMESTIC', (r) => r.includes('SI'))
-      || matchDomanda('TELEFONO INCLUSO MULTI FINANZIAMENTO', (r) => r.includes('SI'))
-      || matchDomanda('MIA TELEFONO FINANZIAMENTO', (r) => /\d/.test(r));
-    const isRate = matchDomanda('TELEFONO INCLUSO VAR', (r) => r.includes('SI'))
-      || matchDomanda('MIA TELEFONO VAR', (r) => /\d/.test(r));
-    const saleModality: 'finanziato' | 'rate' | 'altro' = isFinanziato ? 'finanziato' : (isRate ? 'rate' : 'altro');
+    const saleModality = derivePhoneSaleModality(raw);
     const tallyDevice = (kind: 'smartphone' | 'smartDevice' | 'internetDevice', desc: string) => {
       const bucket = byPdv[codicePos].devices[kind][saleModality];
       bucket.pezzi += 1;

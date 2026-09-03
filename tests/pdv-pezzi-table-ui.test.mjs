@@ -88,7 +88,7 @@ const artTelefono = {
   dettaglio: {
     prezzo: '500',
     modalitaAcquisto: 'FINANZIATO',
-    domandeRisposte: [{ domanda: 'TELEFONO INCLUSO COMPASS', risposta: 'SI' }],
+    domandeRisposte: [{ domandaTesto: 'TELEFONO INCLUSO COMPASS', risposta: 'SÌ' }],
   },
 }; // → colonna Telefoni
 const artAccessorio = {
@@ -270,7 +270,7 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     assert.match(await zeroEnergia.innerText(), /Energia[\s\S]*0/i, 'mostra anche la colonna Energia a zero');
     const zeroBadgeBox = await zeroEnergia.locator(':scope > span').last().boundingBox();
     assert.ok(zeroBadgeBox && zeroBadgeBox.x + zeroBadgeBox.width <= 440.5, `badge zero visibile a destra: ${JSON.stringify(zeroBadgeBox)}`);
-    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setViewportSize({ width: 1024, height: 900 });
     const desktopGroups = await Promise.all([
       saleDrilldown.getByTestId('pdv-drilldown-canvass').boundingBox(),
       saleDrilldown.getByTestId('pdv-drilldown-telefoni').boundingBox(),
@@ -281,6 +281,8 @@ test('Dashboard Gara Reale: vista Pezzi della Tabella PDV × Pista con totali ri
     const groupsWidth = desktopGroups.reduce((sum, box) => sum + box.width, 0);
     const desktopPanelBox = await saleDrilldown.boundingBox();
     assert.ok(desktopPanelBox && groupsWidth >= desktopPanelBox.width * 0.9, 'i tre riquadri sfruttano la larghezza desktop');
+    assert.ok(desktopPanelBox && desktopPanelBox.x + desktopPanelBox.width <= 1024.5, `pannello desktop senza scorrimento laterale: ${JSON.stringify(desktopPanelBox)}`);
+    assert.ok(desktopGroups[2].x + desktopGroups[2].width <= 1024.5, `terzo riquadro visibile nel desktop: ${JSON.stringify(desktopGroups[2])}`);
 
     // Il dettaglio del PDV Beta espone l'IVA accanto alla pista corretta,
     // senza trasformare CB/accessori/servizi in righe IVA.

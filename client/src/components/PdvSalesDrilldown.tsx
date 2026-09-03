@@ -284,7 +284,7 @@ export function PdvSalesDrilldown({ sales, columns = [], emptyMessage = "Nessuna
   );
 
   return (
-    <div className="sticky left-0 w-[calc(100vw-2rem)] bg-muted/10 px-2 py-1.5 sm:w-[calc(100vw-3rem)] sm:px-3" data-testid="pdv-sales-drilldown">
+    <div className="sticky left-0 w-[calc(100vw-2rem)] bg-muted/10 px-2 py-1.5 sm:w-[calc(100vw-3rem)] sm:px-3 lg:w-[calc(100vw-18rem)]" data-testid="pdv-sales-drilldown">
       {metrics.length === 0 ? (
         <p className="text-sm text-muted-foreground py-3">{emptyMessage}</p>
       ) : (
