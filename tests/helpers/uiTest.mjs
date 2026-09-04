@@ -263,12 +263,14 @@ export async function setCjTriggerDate(pool, orgId, date) {
 // addetto?, pdv?}]; addetto/pdv di default presi dai parametri della journey.
 // `openedAt` (opzionale, ISO date string o Date) imposta la data di attivazione
 // SIM (T0); default `now()`. Ritorna l'id (uuid) della journey.
-export async function seedJourney(pool, orgId, { customerKey, nome, addetto = null, pdv = null, openedAt = null, dataInserimento = null, items = [] }) {
+// `triggerSaleId` (opzionale) = vendita BiSuite che ha aperto la journey:
+// gli item con lo stesso `bisuiteSaleId` formano lo scontrino trigger.
+export async function seedJourney(pool, orgId, { customerKey, nome, addetto = null, pdv = null, openedAt = null, dataInserimento = null, triggerSaleId = null, items = [] }) {
   const cj = await pool.query(
-    `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, status, opened_at)
-       VALUES ($1, $2, 'privato', $3, 'aperta', COALESCE($4::timestamptz, now()))
+    `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, status, opened_at, trigger_sale_id)
+       VALUES ($1, $2, 'privato', $3, 'aperta', COALESCE($4::timestamptz, now()), $5)
      RETURNING id`,
-    [orgId, customerKey, nome, openedAt],
+    [orgId, customerKey, nome, openedAt, triggerSaleId],
   );
   const journeyId = cj.rows[0].id;
   for (const it of items) {
@@ -294,13 +296,19 @@ export async function seedValenze(pool, orgId, { month, year, sectionId, rows, f
 }
 
 // Aggiunge un singolo item a una journey esistente.
-export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, importo = null, state = 'inserito', dataInserimento = null }) {
-  await pool.query(
+// `bisuiteSaleId`/`categoria`/`descrizione` opzionali: servono per simulare
+// una vendita BiSuite multi-articolo (stesso scontrino) con categorie reali.
+// Ritorna l'id dell'item creato.
+export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, importo = null, state = 'inserito', dataInserimento = null, bisuiteSaleId = null, categoria = null, descrizione = null }) {
+  const r = await pool.query(
     `INSERT INTO customer_journey_items
-       (journey_id, organization_id, driver, addetto, state, data_inserimento, pdv_destinazione, importo)
-     VALUES ($1, $2, $3, $4, $5, COALESCE($8::timestamptz, now()), $6, $7)`,
-    [journeyId, orgId, driver, addetto, state, pdv, importo, dataInserimento],
+       (journey_id, organization_id, driver, addetto, state, data_inserimento, pdv_destinazione, importo,
+        bisuite_sale_id, categoria, descrizione)
+     VALUES ($1, $2, $3, $4, $5, COALESCE($8::timestamptz, now()), $6, $7, $9, $10, $11)
+     RETURNING id`,
+    [journeyId, orgId, driver, addetto, state, pdv, importo, dataInserimento, bisuiteSaleId, categoria, descrizione],
   );
+  return r.rows[0].id;
 }
 
 // Rimuove TUTTI i dati di test creati per una sessione (ogni tabella
