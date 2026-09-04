@@ -98,3 +98,108 @@ test('scheda cliente: T0 sulla riga Mobile di una vendita trigger multi-articolo
     await pool.end().catch(() => {});
   }
 });
+
+// Scenario "dati sporchi": la vendita trigger NON contiene nessuna SIM mobile
+// (solo fisso + smartphone) e la SIM arriva con una vendita SUCCESSIVA.
+// Regola (client/src/lib/customerJourneyTimeline.ts, t0ItemId): il T0 resta
+// dentro la vendita trigger (primo articolo: con l'ordinamento server per
+// data_inserimento DESC è il fisso, seminato più tardi del telefono) e NON
+// salta sulla SIM successiva. Di conseguenza:
+//   - la SIM è classificata "Non conta" (non_pista), non "Attivante";
+//   - la card driver Mobile NON dice "Attivo · attivante";
+//   - fisso e telefono contano comunque come piste.
+// Il trigger viene agganciato sia via triggerSaleId sia via triggerBisuiteId.
+async function runDirtyTriggerScenario({ via }) {
+  const pool = await newPool();
+  const session = await signup({ prefix: `cj_t0d_${via}`, fullName: 'CJ T0 Dirty UI Test', organizationName: uniq('CJT0D') });
+  const browser = await launchBrowser();
+  try {
+    await setCjTriggerDate(pool, session.orgId, '2026-01-01');
+
+    const triggerSaleId = uniq('SALE');
+    const triggerBisuiteId = 900000 + Math.floor(Math.random() * 90000);
+    const laterSaleId = uniq('SALE2');
+    const laterBisuiteId = triggerBisuiteId + 1;
+    const journeyId = await seedJourney(pool, session.orgId, {
+      customerKey: uniq('CFT0D').toUpperCase(),
+      nome: `Cliente T0 Sporco ${via}`,
+      pdv: 'PDV Trigger Test',
+      openedAt: '2026-03-10T10:00:00Z',
+      triggerSaleId: via === 'saleId' ? triggerSaleId : null,
+      triggerBisuiteId: via === 'bisuiteId' ? triggerBisuiteId : null,
+    });
+    const trigger = via === 'saleId'
+      ? { bisuiteSaleId: triggerSaleId }
+      : { bisuiteId: triggerBisuiteId };
+    const later = via === 'saleId'
+      ? { bisuiteSaleId: laterSaleId }
+      : { bisuiteId: laterBisuiteId };
+    const pdv = 'PDV Trigger Test';
+    // Telefono seminato PRIMA del fisso nello stesso scontrino: con l'ordine
+    // server (DESC) il "primo articolo" della vendita trigger è il fisso.
+    const telefonoId = await addJourneyItem(pool, session.orgId, journeyId, {
+      pdv, ...trigger, dataInserimento: '2026-03-10T09:00:00Z',
+      driver: 'telefono', state: 'attivato', categoria: 'TELEFONI', descrizione: 'Smartphone X', importo: '499',
+    });
+    const fissoId = await addJourneyItem(pool, session.orgId, journeyId, {
+      pdv, ...trigger, dataInserimento: '2026-03-10T10:00:00Z',
+      driver: 'fisso', state: 'attivato', categoria: 'ADSL/FIBRA/FWA CF', descrizione: 'Super Fibra',
+    });
+    // SIM di una vendita successiva (categoria attivante!): NON deve rubare il T0.
+    const mobileId = await addJourneyItem(pool, session.orgId, journeyId, {
+      pdv, ...later, dataInserimento: '2026-04-05T10:00:00Z',
+      driver: 'mobile', state: 'attivato', categoria: 'TIED CF', descrizione: 'SIM Unlimited',
+    });
+
+    const context = await newAuthedContext(browser, session);
+    const page = await context.newPage();
+    await page.goto(`${BASE}/customer-journey`, { waitUntil: 'networkidle' });
+    await page.getByTestId(`card-journey-${journeyId}`).waitFor({ state: 'visible', timeout: 20000 });
+    await page.getByTestId(`card-journey-${journeyId}`).click();
+    await page.getByTestId('card-timeline').waitFor({ state: 'visible', timeout: 20000 });
+
+    for (const id of [fissoId, telefonoId, mobileId]) {
+      await page.getByTestId(`timeline-row-${id}`).waitFor({ state: 'visible', timeout: 10000 });
+    }
+
+    // Un solo badge T0, sul primo articolo della vendita trigger (fisso), mai sulla SIM.
+    const t0Rows = page.locator('[data-testid^="timeline-row-"]', { has: page.locator('span', { hasText: /^T0$/ }) });
+    assert.equal(await t0Rows.count(), 1, `[${via}] exactly one timeline row must carry the T0 badge`);
+    assert.equal(await t0Rows.first().getAttribute('data-testid'), `timeline-row-${fissoId}`, `[${via}] T0 must stay on the trigger sale (fisso), not jump to the later SIM`);
+    assert.equal(
+      await page.getByTestId(`timeline-row-${mobileId}`).locator('span', { hasText: /^T0$/ }).count(),
+      0, `[${via}] the later SIM row must not show T0`,
+    );
+
+    // La SIM successiva è una SIM aggiuntiva ("Non conta"), non l'attivante.
+    const simValidity = page.getByTestId(`timeline-validity-${mobileId}`);
+    await simValidity.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal((await simValidity.innerText()).trim(), 'Non conta', `[${via}] later SIM must be classified "Non conta"`);
+    assert.equal(await page.locator('[data-testid^="timeline-validity-"]', { hasText: /^Attivante$/ }).count(), 0, `[${via}] no row may be "Attivante"`);
+
+    // Card driver: Mobile attivo ma NON "attivante"; fisso e telefono contano.
+    const mobileCard = page.getByTestId('driver-mobile');
+    await mobileCard.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(await mobileCard.getAttribute('data-status'), 'attivo', `[${via}] mobile driver card status must be "attivo"`);
+    const mobileText = await mobileCard.innerText();
+    assert.doesNotMatch(mobileText, /attivante/i, `[${via}] mobile driver card must NOT read "Attivo · attivante"`);
+    assert.match(mobileText, /Attivo · non conta/, `[${via}] mobile driver card must read "Attivo · non conta"`);
+    assert.equal(await page.getByTestId('driver-fisso').getAttribute('data-status'), 'valido', `[${via}] fisso must count as cross-sell`);
+    assert.equal(await page.getByTestId('driver-telefono').getAttribute('data-status'), 'valido', `[${via}] telefono must count as cross-sell`);
+
+    await page.close();
+    await context.close();
+  } finally {
+    await browser.close().catch(() => {});
+    await cleanupOrg(pool, session);
+    await pool.end().catch(() => {});
+  }
+}
+
+test('scheda cliente: vendita trigger senza SIM (triggerSaleId) → T0 resta sul trigger, SIM successiva "Non conta"', async () => {
+  await runDirtyTriggerScenario({ via: 'saleId' });
+});
+
+test('scheda cliente: vendita trigger senza SIM (triggerBisuiteId) → T0 resta sul trigger, SIM successiva "Non conta"', async () => {
+  await runDirtyTriggerScenario({ via: 'bisuiteId' });
+});

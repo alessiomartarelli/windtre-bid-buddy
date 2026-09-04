@@ -265,12 +265,14 @@ export async function setCjTriggerDate(pool, orgId, date) {
 // SIM (T0); default `now()`. Ritorna l'id (uuid) della journey.
 // `triggerSaleId` (opzionale) = vendita BiSuite che ha aperto la journey:
 // gli item con lo stesso `bisuiteSaleId` formano lo scontrino trigger.
-export async function seedJourney(pool, orgId, { customerKey, nome, addetto = null, pdv = null, openedAt = null, dataInserimento = null, triggerSaleId = null, items = [] }) {
+// `triggerBisuiteId` (opzionale) = id numerico BiSuite della vendita trigger:
+// alternativa a `triggerSaleId`, abbinata al `bisuiteId` degli item.
+export async function seedJourney(pool, orgId, { customerKey, nome, addetto = null, pdv = null, openedAt = null, dataInserimento = null, triggerSaleId = null, triggerBisuiteId = null, items = [] }) {
   const cj = await pool.query(
-    `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, status, opened_at, trigger_sale_id)
-       VALUES ($1, $2, 'privato', $3, 'aperta', COALESCE($4::timestamptz, now()), $5)
+    `INSERT INTO customer_journeys (organization_id, customer_key, customer_type, nome, status, opened_at, trigger_sale_id, trigger_bisuite_id)
+       VALUES ($1, $2, 'privato', $3, 'aperta', COALESCE($4::timestamptz, now()), $5, $6)
      RETURNING id`,
-    [orgId, customerKey, nome, openedAt, triggerSaleId],
+    [orgId, customerKey, nome, openedAt, triggerSaleId, triggerBisuiteId],
   );
   const journeyId = cj.rows[0].id;
   for (const it of items) {
@@ -299,14 +301,16 @@ export async function seedValenze(pool, orgId, { month, year, sectionId, rows, f
 // `bisuiteSaleId`/`categoria`/`descrizione` opzionali: servono per simulare
 // una vendita BiSuite multi-articolo (stesso scontrino) con categorie reali.
 // Ritorna l'id dell'item creato.
-export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, importo = null, state = 'inserito', dataInserimento = null, bisuiteSaleId = null, categoria = null, descrizione = null }) {
+// `bisuiteId` (opzionale) = id numerico BiSuite della vendita (per il match
+// con `triggerBisuiteId` della journey).
+export async function addJourneyItem(pool, orgId, journeyId, { driver, addetto = null, pdv = null, importo = null, state = 'inserito', dataInserimento = null, bisuiteSaleId = null, bisuiteId = null, categoria = null, descrizione = null }) {
   const r = await pool.query(
     `INSERT INTO customer_journey_items
        (journey_id, organization_id, driver, addetto, state, data_inserimento, pdv_destinazione, importo,
-        bisuite_sale_id, categoria, descrizione)
-     VALUES ($1, $2, $3, $4, $5, COALESCE($8::timestamptz, now()), $6, $7, $9, $10, $11)
+        bisuite_sale_id, bisuite_id, categoria, descrizione)
+     VALUES ($1, $2, $3, $4, $5, COALESCE($8::timestamptz, now()), $6, $7, $9, $10, $11, $12)
      RETURNING id`,
-    [journeyId, orgId, driver, addetto, state, pdv, importo, dataInserimento, bisuiteSaleId, categoria, descrizione],
+    [journeyId, orgId, driver, addetto, state, pdv, importo, dataInserimento, bisuiteSaleId, bisuiteId, categoria, descrizione],
   );
   return r.rows[0].id;
 }

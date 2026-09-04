@@ -2463,6 +2463,11 @@ function JourneyDetailViewImpl({
     if (driverItemValidity.get(it.id)?.counts) validDrivers.add(it.driver);
   }
   const driverValidiCount = CJ_DRIVER_ORDER.filter((d) => validDrivers.has(d)).length;
+  // La card Mobile dice "attivante" SOLO se la timeline ha davvero marcato una
+  // SIM come trigger (T0 su un mobile). Con dati sporchi (vendita trigger senza
+  // SIM) il T0 cade su un altro articolo e la SIM successiva è una semplice
+  // "non pista": la label deve seguire la stessa classificazione della timeline.
+  const hasAttivante = Array.from(driverItemValidity.values()).some((v) => v.kind === "attivante");
   // "Attivi" nel conteggio/legenda = driver ATTIVI ma NON validi (il sottoinsieme
   // amber delle card), così l'header non si sovrappone ai "validi".
   const driverAttiviCount = CJ_DRIVER_ORDER.filter(
@@ -2689,7 +2694,7 @@ function JourneyDetailViewImpl({
               status === "valido"
                 ? "Valido · conta"
                 : status === "attivo"
-                  ? driver === "mobile"
+                  ? driver === "mobile" && hasAttivante
                     ? "Attivo · attivante"
                     : "Attivo · non conta"
                   : "Attivabile";
