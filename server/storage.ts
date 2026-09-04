@@ -1371,7 +1371,10 @@ export class DatabaseStorage implements IStorage {
   async getCustomerJourneyItems(journeyId: string): Promise<CustomerJourneyItem[]> {
     return await db.select().from(customerJourneyItems)
       .where(eq(customerJourneyItems.journeyId, journeyId))
-      .orderBy(desc(customerJourneyItems.dataInserimento));
+      // Tie-break stabile sull'id: a parità di data_inserimento (es. vendita
+      // multi-articolo) Postgres non garantisce l'ordine e ogni consumer
+      // (timeline, export, report) potrebbe vedere sequenze diverse.
+      .orderBy(desc(customerJourneyItems.dataInserimento), asc(customerJourneyItems.id));
   }
 
   // Riepilogo driver per-journey per la lista (schede cliente): recupera in
