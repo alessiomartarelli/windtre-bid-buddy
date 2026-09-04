@@ -20,6 +20,19 @@ confirm su conflitto).
   Reload set, CB attivazione per Mobile/Fisso non-PR, infine mapping base
   TIPO_FONIA.
 
+- Campi di esito: dal Task "stato economico da DRMS" `classifyAndNormalize`
+  conserva su ogni riga anche `FISCAL_CODE`, `P_IVA_CLIENTE`, `POD_PDR`,
+  `CAUSALE_STORNO`, `DATA_EVENTO`, `TIPO_TRANSAZIONE`, `DT_ATTIVAZIONE` (non
+  concorrono ai capitoli: servono al motore di esito Customer Journey,
+  `shared/customerJourneyDrms.ts`). Gli upload salvati PRIMA sono "legacy":
+  le righe non hanno quelle chiavi e non sono ricostruibili dal DB. La lista
+  `GET /api/drms` espone `hasOutcomeFields` (calcolato in SQL sul jsonb:
+  almeno una riga con una delle chiavi, upload vuoto = ok); la landing mostra
+  un banner ambra con i file/periodi da ricaricare e un badge "senza esito"
+  sulla riga. Ricaricare lo stesso file (merge per SEQ_ID) aggiorna le righe e
+  ricalcola l'esito. Ogni `POST /api/drms` risponde anche con `cjOutcomes`
+  (riepilogo esito CJ, incl. `legacyUploads`) e il client lo riporta nel toast.
+
 ## UI
 4 tab dashboard:
 - **Overview**: KPI + ripartizione
@@ -30,7 +43,7 @@ confirm su conflitto).
   contrattuali in periodo.
 
 ## API
-- `GET /api/drms` (list)
+- `GET /api/drms` (list, con `hasOutcomeFields`)
 - `GET /api/drms/by-period?month&year`
 - `GET /api/drms/:id`
 - `POST /api/drms` (409 + `existingId` su conflitto, accetta `overwrite=true`)

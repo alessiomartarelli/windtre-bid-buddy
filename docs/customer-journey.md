@@ -101,7 +101,24 @@ economico viene azzerato solo se era stato scritto dal DRMS (quello BiSuite
 `annullato` resta). Trigger: automatico su `POST /api/drms` (anche merge) e
 `DELETE /api/drms/:id`, e manuale via pulsante **"Esita da DRMS"** (admin)
 nella pagina CJ (`POST /api/customer-journeys/esita-drms`, riepilogo:
-`matched`, `notFound`, `ambiguous`, `byState`, `updated`, `mismatches`).
+`matched`, `notFound`, `notFoundByDriver`, `ambiguous`, `byState`, `updated`,
+`mismatches`, `legacyUploads`, `legacyRows`).
+
+**Upload DRMS "legacy"**: gli upload salvati prima che il parser client
+conservasse i campi di esito hanno righe SENZA le chiavi `FISCAL_CODE` /
+`POD_PDR` / `CAUSALE_STORNO` (né `P_IVA_CLIENTE`, `DATA_EVENTO`,
+`TIPO_TRANSAZIONE`): il motore non può agganciarle per POD/CF né riconoscere
+gli annullamenti, e le colonne mancanti NON sono ricostruibili dal DB (servono
+i file originali). `detectLegacyDrmsUploads` (shared) individua gli upload in
+cui nessuna riga porta quelle chiavi (assenza della chiave, non valore vuoto) e
+`applyDrmsOutcomes` li riporta in `legacyUploads` (id, file, periodo, righe)
+con un `console.warn`: MAI conteggiati in silenzio fra i "non trovati". Il
+client li mostra in un toast rosso dopo "Esita da DRMS" e dopo ogni upload
+DRMS, nel banner della pagina DRMS Commissioning (lista `hasOutcomeFields`)
+e nel popover "Nessun esito DRMS" della scheda (`GET
+/api/customer-journeys/drms-status`), che distingue: nessun DRMS caricato /
+tutti gli upload legacy / nessuna riga (ENERGIA) con quel POD/PDR o CF nella
+finestra, con avviso se esistono upload legacy che potrebbero contenerla.
 
 ## Gettone
 
@@ -195,6 +212,7 @@ pulsante "Rigenera da BiSuite" (admin) resta come forzatura manuale.
 | GET | `/api/customer-journeys/report` | reportistica (Task #187/#192): righe item-level `CjReportRow` (journey + cliente + pdv/addetto/stato/driver/valore + `openedAt` data attivazione SIM) aggregabili lato client per negozio/addetto/cliente **e** per l'analisi gettoni cross-sell; **stessa regola di isolamento operatore** della lista (deve precedere `/:id`) |
 | GET | `/api/customer-journeys/:id` | dettaglio: `{ journey, items, drivers }` |
 | POST | `/api/customer-journeys/reconcile` | rigenera dalle vendite (solo admin) |
+| GET | `/api/customer-journeys/drms-status` | `{ uploads, legacyUploads[] }`: quanti upload DRMS ha l'org e quali sono privi dei campi di esito (da ricaricare); precede `/:id` |
 | POST | `/api/customer-journeys/esita-drms` | rielabora tutti i DRMS caricati → stati economici (solo admin), risponde col riepilogo `CjDrmsApplySummary` |
 | PATCH | `/api/customer-journey-items/:id/state` | `{ state }` stato operativo (inserito/in_lavorazione/attivato/ko) |
 | PATCH | `/api/customer-journey-items/:id/economic-state` | `{ economicState }` manuale (pagato/annullato/stornato/riaccreditato) o `null` = automatico; stessa ownership operatore della PATCH stato |

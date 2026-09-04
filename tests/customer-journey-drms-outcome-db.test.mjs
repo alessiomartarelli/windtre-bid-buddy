@@ -23,7 +23,9 @@ import {
 //      tornare ad "automatico" (null) riallinea allo stato DRMS;
 //   4. "Esita da DRMS" (POST /api/customer-journeys/esita-drms, admin)
 //      rielabora tutti gli upload e restituisce il riepilogo;
-//   5. l'eliminazione dell'upload azzera gli esiti derivati dal DRMS.
+//   5. l'eliminazione dell'upload azzera gli esiti derivati dal DRMS;
+//   6. gli upload "legacy" (righe senza chiavi di esito) sono segnalati nel
+//      riepilogo, nella lista DRMS (hasOutcomeFields) e in drms-status.
 //
 // Richiede dev server su :5000 e DATABASE_URL (vedi scripts/run-customer-
 // journey-drms-outcome-db-tests.sh). Gli item CJ sono inseriti direttamente
@@ -238,6 +240,53 @@ test('DRMS → esito economico: upload, stato manuale, esita-drms, delete', asyn
   assert.ok(lj, 'journey in lista');
   assert.ok(lj.states.includes('inserito') && lj.states.includes('pagato') && lj.states.includes('annullato') === false,
     `facet stati: ${JSON.stringify(lj.states)}`);
+
+  // 4b) Upload "legacy" (righe salvate dal vecchio parser, SENZA chiavi di
+  // esito): il riepilogo lo elenca con file/periodo, la lista DRMS lo marca
+  // e lo stato DRMS lato CJ lo espone; gli esiti degli altri item non cambiano.
+  const legacyRows = drmsRows().map((r) => {
+    const { FISCAL_CODE, P_IVA_CLIENTE, POD_PDR, CAUSALE_STORNO, DATA_EVENTO, TIPO_TRANSAZIONE, ...rest } = r;
+    return { ...rest, SEQ_ID: `L${rest.SEQ_ID}`, COMPETENZA: '2026-01' };
+  });
+  assert.ok(!('POD_PDR' in legacyRows[0]));
+  const upLegacy = await jsonReq(`${BASE}/api/drms`, {
+    method: 'POST',
+    headers: { Cookie: cookieHeader },
+    body: JSON.stringify({
+      fileName: 'drms_gen_26_legacy.xlsx', month: 1, year: 2026, period: 'GEN-26',
+      totaleImporto: 10, righeCount: legacyRows.length, rows: legacyRows,
+    }),
+  });
+  assert.equal(upLegacy.status, 200, JSON.stringify(upLegacy.body));
+  const legacyId = upLegacy.body.id;
+  assert.equal(upLegacy.body.cjOutcomes.uploads, 2);
+  assert.equal(upLegacy.body.cjOutcomes.matched, 3, 'gli esiti degli upload nuovi restano');
+  assert.equal(upLegacy.body.cjOutcomes.legacyRows, legacyRows.length);
+  assert.deepEqual(upLegacy.body.cjOutcomes.legacyUploads, [{
+    uploadId: legacyId, fileName: 'drms_gen_26_legacy.xlsx', period: 'GEN-26', month: 1, year: 2026, rows: legacyRows.length,
+  }]);
+  assert.deepEqual(upLegacy.body.cjOutcomes.notFoundByDriver, { telefono: 1 });
+
+  const lst = await jsonReq(`${BASE}/api/drms`, { headers: { Cookie: cookieHeader } });
+  assert.equal(lst.status, 200);
+  const flags = new Map(lst.body.map((u) => [u.id, u.hasOutcomeFields]));
+  assert.equal(flags.get(uploadId), true);
+  assert.equal(flags.get(legacyId), false);
+
+  const st = await jsonReq(`${BASE}/api/customer-journeys/drms-status`, { headers: { Cookie: cookieHeader } });
+  assert.equal(st.status, 200, JSON.stringify(st.body));
+  assert.equal(st.body.uploads, 2);
+  assert.deepEqual(st.body.legacyUploads.map((l) => l.uploadId), [legacyId]);
+  assert.equal(st.body.legacyUploads[0].period, 'GEN-26');
+
+  const esita2 = await jsonReq(`${BASE}/api/customer-journeys/esita-drms`, { method: 'POST', headers: { Cookie: cookieHeader } });
+  assert.equal(esita2.status, 200);
+  assert.equal(esita2.body.legacyUploads.length, 1, 'anche "Esita da DRMS" segnala gli upload legacy');
+
+  const delLegacy = await jsonReq(`${BASE}/api/drms/${legacyId}`, { method: 'DELETE', headers: { Cookie: cookieHeader } });
+  assert.equal(delLegacy.status, 200);
+  const st2 = await jsonReq(`${BASE}/api/customer-journeys/drms-status`, { headers: { Cookie: cookieHeader } });
+  assert.deepEqual(st2.body, { uploads: 1, legacyUploads: [] });
 
   // 5) Delete upload ⇒ esiti DRMS azzerati; il manuale (fisso) resta, senza mismatch.
   const del = await jsonReq(`${BASE}/api/drms/${uploadId}`, { method: 'DELETE', headers: { Cookie: cookieHeader } });

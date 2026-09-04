@@ -13,13 +13,14 @@ import assert from 'node:assert/strict';
 // COMPETENZA 'YYYY-MM', DATA_EVENTO 'YYYY-MM-DD', CODICE_CONTRATTO,
 // FISCAL_CODE, P_IVA_CLIENTE, POD_PDR. Valori anagrafici anonimizzati.
 
+const drmsMod = await import('../shared/customerJourneyDrms.ts');
 const {
   computeDrmsOutcomes,
   classifyDrmsRow,
   normalizeCompetenza,
   applyOutcomeToState,
   DRMS_WINDOW_MONTHS,
-} = await import('../shared/customerJourneyDrms.ts');
+} = drmsMod;
 const { isCjItemActive } = await import('../shared/customerJourney.ts');
 
 let seq = 62572570000000;
@@ -304,4 +305,42 @@ test('isCjItemActive: KO operativo o annullato/stornato economico ⇒ non attivo
   // valori legacy nel campo state (righe non migrate / fixture)
   assert.equal(isCjItemActive({ state: 'stornato' }), false);
   assert.equal(isCjItemActive({ state: 'pagato' }), true);
+});
+
+// ===========================================================================
+// Upload "legacy" senza campi di esito
+// ===========================================================================
+test('upload legacy: righe senza chiavi FISCAL_CODE/POD_PDR/CAUSALE_STORNO ⇒ elencati nel riepilogo, mai conteggiati in silenzio', () => {
+  const { detectLegacyDrmsUploads, drmsRowHasOutcomeFields } = drmsMod;
+  // Riga come la salvava il vecchio parser (~20 colonne, niente chiavi di esito).
+  const legacyRow = (over = {}) => {
+    const r = row({ __UPLOAD_ID: 'up-old', TIPO_FONIA: 'ENERGIA', CODICE_CONTRATTO: 'DRMS-EN-OLD', ...over });
+    delete r.FISCAL_CODE; delete r.P_IVA_CLIENTE; delete r.POD_PDR; delete r.CAUSALE_STORNO; delete r.DATA_EVENTO; delete r.TIPO_TRANSAZIONE;
+    return r;
+  };
+  assert.equal(drmsRowHasOutcomeFields(legacyRow()), false);
+  assert.equal(drmsRowHasOutcomeFields(row({ FISCAL_CODE: '' })), true, 'chiave presente ma vuota = parser nuovo');
+
+  const rows = [
+    legacyRow(), legacyRow(), legacyRow({ NATURA: 'GARE' }),
+    row({ __UPLOAD_ID: 'up-new', TIPO_FONIA: 'ENERGIA', CODICE_CONTRATTO: 'DRMS-EN-1', POD_PDR: 'IT001E00000001', FISCAL_CODE: '' }),
+    row({ __UPLOAD_ID: 'up-new', CODICE_CONTRATTO: 'C-MOB-1' }),
+  ];
+  assert.deepEqual(detectLegacyDrmsUploads(rows), [{ uploadId: 'up-old', rows: 3 }]);
+  assert.deepEqual(detectLegacyDrmsUploads([]), []);
+
+  const energia = item({ id: 'en', driver: 'energia', codiceContratto: 'WT-0001210742', pod: 'IT001E00000001' });
+  const energiaOld = item({ id: 'en-old', driver: 'energia', cf: 'CNNFRZ70H24H501L', codiceContratto: 'WT-0001210743', pod: 'IT002E5386834A' });
+  const r = computeDrmsOutcomes(rows, [item(), energia, energiaOld]);
+  assert.equal(r.summary.matched, 2);
+  assert.equal(r.outcomes.get('en')?.matchBy, 'pod_pdr');
+  assert.equal(r.outcomes.get('en-old'), null, 'il POD è solo nell\'upload legacy: nessun aggancio possibile');
+  assert.deepEqual(r.summary.legacyUploads, [{ uploadId: 'up-old', rows: 3 }]);
+  assert.equal(r.summary.legacyRows, 3);
+  assert.deepEqual(r.summary.notFoundByDriver, { energia: 1 });
+  // Senza upload legacy il riepilogo è pulito.
+  const clean = computeDrmsOutcomes(rows.slice(3), [item()]);
+  assert.deepEqual(clean.summary.legacyUploads, []);
+  assert.equal(clean.summary.legacyRows, 0);
+  assert.deepEqual(clean.summary.notFoundByDriver, {});
 });

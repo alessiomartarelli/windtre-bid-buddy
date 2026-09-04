@@ -60,6 +60,10 @@ interface DrmsListItem {
   totaleImporto: string | null;
   righeCount: number;
   uploadedAt: string | null;
+  // false = upload "legacy": righe salvate prima che il parser conservasse i
+  // campi di esito (FISCAL_CODE/POD_PDR/CAUSALE_STORNO). Inutilizzabile per
+  // l'esito economico Customer Journey: va ricaricato dal file originale.
+  hasOutcomeFields?: boolean;
 }
 
 interface DrmsUploadFull {
@@ -169,6 +173,7 @@ function UploadCard({
     onLoadMultiple(Array.from(selectedIds));
     setSelectedIds(new Set());
   };
+  const legacyList = savedList.filter((s) => s.hasOutcomeFields === false);
   return (
     <div className="space-y-6">
       <div className="relative group">
@@ -223,6 +228,35 @@ function UploadCard({
           </div>
         </label>
       </div>
+
+      {legacyList.length > 0 && (
+        <div
+          className="flex items-start gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-950 border border-amber-300 dark:border-amber-800 rounded text-sm text-amber-900 dark:text-amber-100"
+          data-testid="banner-drms-legacy-uploads"
+        >
+          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <div className="font-semibold">
+              {legacyList.length === 1
+                ? "1 upload senza campi di esito: ricarica il file"
+                : `${legacyList.length} upload senza campi di esito: ricarica i file`}
+            </div>
+            <div className="text-xs mt-0.5">
+              {legacyList.length === 1 ? "Questo DRMS è stato salvato" : "Questi DRMS sono stati salvati"} prima che venissero conservati
+              CF, POD/PDR e causale di storno: {legacyList.length === 1 ? "non può" : "non possono"} determinare l'esito economico
+              (pagato/annullato/stornato) dei contratti Customer Journey. Ricarica {legacyList.length === 1 ? "lo stesso file" : "gli stessi file"} dal
+              DRMS originale: le righe verranno aggiornate per SEQ_ID e l'esito ricalcolato.
+            </div>
+            <ul className="mt-1.5 space-y-0.5 font-mono text-xs">
+              {legacyList.map((s) => (
+                <li key={s.id} data-testid={`text-drms-legacy-${s.id}`}>
+                  {s.period} · {MONTH_LABELS[s.month - 1]} {s.year} · {s.fileName} · {fmtInt(s.righeCount)} righe
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {savedList.length > 0 && (
         <div className="bg-white dark:bg-slate-900 border border-neutral-200 dark:border-slate-700">
@@ -279,6 +313,15 @@ function UploadCard({
                       <div className="flex items-center gap-2 text-sm font-medium text-neutral-900 dark:text-slate-100">
                         <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <span className="truncate">{s.fileName}</span>
+                        {s.hasOutcomeFields === false && (
+                          <span
+                            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-mono bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700"
+                            title="Righe senza campi di esito (CF/POD/causale): ricarica il file per l'esito Customer Journey"
+                            data-testid={`badge-drms-legacy-${s.id}`}
+                          >
+                            <AlertCircle size={10} /> senza esito
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-neutral-500 dark:text-slate-400 mt-0.5 font-mono">
                         {s.period} · {MONTH_LABELS[s.month - 1]} {s.year} · {fmtInt(s.righeCount)} righe · {fmtEur(parseFloat(s.totaleImporto || '0'))}
@@ -1646,9 +1689,25 @@ export default function DrmsCommissioning() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: { id?: string; cjOutcomes?: { matched?: number; items?: number; legacyUploads?: Array<{ period: string; fileName: string }> } | null; [k: string]: unknown }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/drms"] });
-      toast({ title: "DRMS salvato", description: "L'upload è stato salvato con successo." });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/drms-status"] });
+      const cj = data?.cjOutcomes;
+      toast({
+        title: "DRMS salvato",
+        description: cj
+          ? `L'upload è stato salvato; esito Customer Journey ricalcolato (${cj.matched ?? 0}/${cj.items ?? 0} contratti esitati).`
+          : "L'upload è stato salvato con successo.",
+      });
+      const legacy = cj?.legacyUploads ?? [];
+      if (legacy.length > 0) {
+        toast({
+          title: `${legacy.length} upload senza campi di esito`,
+          description: `Ricarica ${legacy.length === 1 ? "il file" : "i file"} ${legacy.map((l) => `${l.period} (${l.fileName})`).join(", ")}: le righe salvate non hanno CF/POD/causale e non possono esitare i contratti Customer Journey.`,
+          variant: "destructive",
+          duration: 15_000,
+        });
+      }
     },
   });
 
@@ -1770,7 +1829,7 @@ export default function DrmsCommissioning() {
         totaleImporto: totale, righeCount, rows: mergedRows,
         overwrite: p.hasConflict, // sostituiamo il record con il set unito
       });
-      const id: string = saved?.id || saved?.upload?.id || `tmp-${Date.now()}`;
+      const id: string = saved?.id || `tmp-${Date.now()}`;
       const tagged: DrmsRow[] = mergedRows.map(r => ({ ...r, __PERIOD: p.period, __UPLOAD_ID: id }));
       setParsedData(tagged);
       setSources([{

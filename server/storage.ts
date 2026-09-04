@@ -2,7 +2,7 @@ import { db } from "./db";
 import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjEconomicState, type CjDriver, CJ_ECONOMIC_STATES } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
-import { computeDrmsOutcomes, applyOutcomeToState, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
+import { computeDrmsOutcomes, applyOutcomeToState, DRMS_OUTCOME_FIELD_KEYS, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
 
 // Esecutore DB: `db` oppure la transazione corrente (`db.transaction(tx => ...)`).
 type DbExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -32,11 +32,30 @@ function parseCjTriggerDate(raw: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-export type CjDrmsApplySummary = DrmsOutcomeSummary & {
+// Upload DRMS "legacy" (senza campi di esito) arricchito con i metadati
+// utili all'utente per capire QUALE file ricaricare.
+export type CjDrmsLegacyUploadInfo = {
+  uploadId: string;
+  fileName: string;
+  period: string;
+  month: number;
+  year: number;
+  rows: number;
+};
+
+export type CjDrmsApplySummary = Omit<DrmsOutcomeSummary, "legacyUploads"> & {
   updated: number;
   mismatches: number;
   uploads: number;
   drmsRows: number;
+  legacyUploads: CjDrmsLegacyUploadInfo[];
+};
+
+// Stato degli upload DRMS dell'org dal punto di vista dell'esito CJ
+// (mostrato nella pagina Customer Journey senza caricare le righe).
+export type CjDrmsStatus = {
+  uploads: number;
+  legacyUploads: CjDrmsLegacyUploadInfo[];
 };
 
 // Campi di dettaglio compilabili a mano su un item della customer journey
@@ -128,7 +147,8 @@ export interface IStorage {
   listGaraConfigHistory(orgId: string): Promise<{ month: number; year: number; updatedAt: Date | null }[]>;
 
   // DRMS Uploads
-  listDrmsUploads(orgId: string): Promise<Array<{ id: string; month: number; year: number; period: string; fileName: string; totaleImporto: string | null; righeCount: number; uploadedBy: string | null; uploadedAt: Date | null }>>;
+  listDrmsUploads(orgId: string): Promise<Array<{ id: string; month: number; year: number; period: string; fileName: string; totaleImporto: string | null; righeCount: number; uploadedBy: string | null; uploadedAt: Date | null; hasOutcomeFields: boolean }>>;
+  getCjDrmsStatus(orgId: string): Promise<CjDrmsStatus>;
   getDrmsUpload(id: string): Promise<DrmsUpload | undefined>;
   getDrmsUploadByPeriod(orgId: string, month: number, year: number): Promise<DrmsUpload | undefined>;
   createDrmsUpload(upload: InsertDrmsUpload): Promise<DrmsUpload>;
@@ -892,6 +912,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // DRMS Uploads
+  // `hasOutcomeFields`: true se almeno una riga porta le chiavi di esito
+  // (stessa regola di `drmsRowHasOutcomeFields` in shared/customerJourneyDrms.ts,
+  // valutata in SQL sul jsonb così da non scaricare le righe per la lista).
+  // Un upload senza righe non è "legacy" (nulla da ricaricare).
+  private static readonly HAS_OUTCOME_FIELDS_SQL = sql<boolean>`(EXISTS (
+    SELECT 1 FROM jsonb_array_elements(${drmsUploads.rows}) AS r
+    WHERE r ?| ARRAY[${sql.join(DRMS_OUTCOME_FIELD_KEYS.map((k) => sql`${k}`), sql`, `)}]::text[]
+  ) OR jsonb_array_length(${drmsUploads.rows}) = 0)`;
+
   async listDrmsUploads(orgId: string) {
     return await db.select({
       id: drmsUploads.id,
@@ -903,9 +932,30 @@ export class DatabaseStorage implements IStorage {
       righeCount: drmsUploads.righeCount,
       uploadedBy: drmsUploads.uploadedBy,
       uploadedAt: drmsUploads.uploadedAt,
+      hasOutcomeFields: DatabaseStorage.HAS_OUTCOME_FIELDS_SQL,
     }).from(drmsUploads)
       .where(eq(drmsUploads.organizationId, orgId))
       .orderBy(desc(drmsUploads.year), desc(drmsUploads.month), desc(drmsUploads.uploadedAt));
+  }
+
+  async getCjDrmsStatus(orgId: string): Promise<CjDrmsStatus> {
+    const list = await db.select({
+      id: drmsUploads.id,
+      month: drmsUploads.month,
+      year: drmsUploads.year,
+      period: drmsUploads.period,
+      fileName: drmsUploads.fileName,
+      righeCount: drmsUploads.righeCount,
+      hasOutcomeFields: DatabaseStorage.HAS_OUTCOME_FIELDS_SQL,
+    }).from(drmsUploads)
+      .where(eq(drmsUploads.organizationId, orgId))
+      .orderBy(asc(drmsUploads.year), asc(drmsUploads.month));
+    return {
+      uploads: list.length,
+      legacyUploads: list.filter((u) => !u.hasOutcomeFields).map((u) => ({
+        uploadId: u.id, fileName: u.fileName, period: u.period, month: u.month, year: u.year, rows: u.righeCount,
+      })),
+    };
   }
 
   async getDrmsUpload(id: string): Promise<DrmsUpload | undefined> {
@@ -2197,8 +2247,10 @@ export class DatabaseStorage implements IStorage {
   // se non manuale; `drmsMismatch` quando manuale ≠ DRMS. Lo stato operativo
   // NON viene toccato.
   async applyDrmsOutcomes(orgId: string): Promise<CjDrmsApplySummary> {
-    const uploads = await db.select({ id: drmsUploads.id, rows: drmsUploads.rows })
-      .from(drmsUploads).where(eq(drmsUploads.organizationId, orgId));
+    const uploads = await db.select({
+      id: drmsUploads.id, rows: drmsUploads.rows,
+      fileName: drmsUploads.fileName, period: drmsUploads.period, month: drmsUploads.month, year: drmsUploads.year,
+    }).from(drmsUploads).where(eq(drmsUploads.organizationId, orgId));
     const rows: DrmsOutcomeRow[] = [];
     for (const u of uploads) {
       const list = Array.isArray(u.rows) ? (u.rows as DrmsOutcomeRow[]) : [];
@@ -2276,7 +2328,18 @@ export class DatabaseStorage implements IStorage {
         .where(eq(customerJourneyItems.id, it.id));
       updated += 1;
     }
-    return { ...summary, updated, mismatches, uploads: uploads.length, drmsRows: rows.length };
+    const byId = new Map(uploads.map((u) => [u.id, u]));
+    const legacyUploads: CjDrmsLegacyUploadInfo[] = summary.legacyUploads.map((l) => {
+      const u = byId.get(l.uploadId);
+      return {
+        uploadId: l.uploadId, rows: l.rows,
+        fileName: u?.fileName ?? "", period: u?.period ?? "", month: u?.month ?? 0, year: u?.year ?? 0,
+      };
+    }).sort((a, b) => a.year - b.year || a.month - b.month);
+    if (legacyUploads.length > 0) {
+      console.warn(`[cj] applyDrmsOutcomes org=${orgId}: ${legacyUploads.length} upload DRMS senza campi di esito (${summary.legacyRows} righe ignorate per POD/CF): ${legacyUploads.map((l) => `${l.period} ${l.fileName}`).join("; ")}`);
+    }
+    return { ...summary, legacyUploads, updated, mismatches, uploads: uploads.length, drmsRows: rows.length };
   }
 
   // Migrazione one-shot (idempotente) dei valori economici legacy del campo

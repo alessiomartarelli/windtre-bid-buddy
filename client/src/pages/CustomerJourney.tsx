@@ -109,6 +109,55 @@ interface CjConfig {
   defaultTriggerDate: string;
 }
 
+// Upload DRMS "legacy": salvato prima che il parser conservasse i campi di
+// esito (CF/POD/causale). Le sue righe non possono esitare nulla per POD/CF:
+// va ricaricato dal file originale. Forma di `CjDrmsLegacyUploadInfo` server.
+interface CjDrmsLegacyUpload {
+  uploadId: string;
+  fileName: string;
+  period: string;
+  month: number;
+  year: number;
+  rows: number;
+}
+
+interface CjDrmsStatus {
+  uploads: number;
+  legacyUploads: CjDrmsLegacyUpload[];
+}
+
+interface CjDrmsApplySummary {
+  items?: number; matched?: number; notFound?: number; ambiguous?: number;
+  mismatches?: number; uploads?: number;
+  byState?: Record<string, number>;
+  notFoundByDriver?: Record<string, number>;
+  legacyUploads?: CjDrmsLegacyUpload[];
+  legacyRows?: number;
+}
+
+const EMPTY_LEGACY_UPLOADS: CjDrmsLegacyUpload[] = [];
+
+// Stato degli upload DRMS dell'org (quanti, quali legacy). Cache condivisa
+// TanStack: usato sia dalla pagina (avviso post "Esita da DRMS") sia dalle
+// celle stato economico (motivo del "nessun esito").
+function useCjDrmsStatus(enabled = true) {
+  return useQuery<CjDrmsStatus>({
+    queryKey: ["/api/customer-journeys/drms-status"],
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+function legacyUploadsLabel(list: CjDrmsLegacyUpload[]): string {
+  return list.map((l) => `${l.period}${l.fileName ? ` (${l.fileName})` : ""}`).join(", ");
+}
+
+// Testo dell'avviso "upload senza campi di esito" (toast e popover).
+function legacyUploadsWarning(list: CjDrmsLegacyUpload[]): string {
+  const n = list.length;
+  return `${n} upload DRMS ${n === 1 ? "è privo" : "sono privi"} dei campi di esito (CF/POD/causale) e non ${n === 1 ? "può" : "possono"} esitare nulla per POD/PDR o CF: ricarica ${n === 1 ? "il file" : "i file"} ${legacyUploadsLabel(list)} dalla pagina DRMS Commissioning.`;
+}
+
 const STATE_VARIANTS: Record<string, string> = {
   inserito: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30",
   in_lavorazione: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
@@ -573,21 +622,30 @@ export default function CustomerJourneyPage() {
       const res = await apiRequest("POST", "/api/customer-journeys/esita-drms");
       return res.json();
     },
-    onSuccess: (data: {
-      items?: number; matched?: number; notFound?: number; ambiguous?: number;
-      mismatches?: number; uploads?: number;
-      byState?: Record<string, number>;
-    }) => {
+    onSuccess: (data: CjDrmsApplySummary) => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/drms-status"] });
       const bs = data?.byState ?? {};
       const parts = CJ_ECONOMIC_STATES
         .map((st) => `${bs[st] ?? 0} ${CJ_ECONOMIC_STATE_LABELS[st].toLowerCase()}`)
         .join(", ");
+      const nfd = data?.notFoundByDriver ?? {};
+      const nfParts = CJ_DRIVER_ORDER.filter((d) => (nfd[d] ?? 0) > 0)
+        .map((d) => `${nfd[d]} ${CJ_DRIVER_LABELS[d].toLowerCase()}`).join(", ");
+      const legacy = data?.legacyUploads ?? [];
       toast({
         title: (data?.uploads ?? 0) === 0 ? "Nessun DRMS caricato" : "Esito da DRMS completato",
-        description: `${data?.matched ?? 0}/${data?.items ?? 0} contratti esitati (${parts}); ${data?.notFound ?? 0} non trovati, ${data?.ambiguous ?? 0} ambigui, ${data?.mismatches ?? 0} incongruenze con stato manuale.`,
+        description: `${data?.matched ?? 0}/${data?.items ?? 0} contratti esitati (${parts}); ${data?.notFound ?? 0} non trovati${nfParts ? ` (${nfParts})` : ""}, ${data?.ambiguous ?? 0} ambigui, ${data?.mismatches ?? 0} incongruenze con stato manuale.`,
       });
+      if (legacy.length > 0) {
+        toast({
+          title: `${legacy.length} upload DRMS senza campi di esito`,
+          description: legacyUploadsWarning(legacy),
+          variant: "destructive",
+          duration: 15_000,
+        });
+      }
     },
     onError: (err: unknown) => {
       toast({
@@ -2991,6 +3049,25 @@ function EconomicStateCell({
   const value = it.economicState ?? ECONOMIC_AUTO_VALUE;
   const hasDrms = !!it.drmsOutcomeState;
   const mismatch = !!it.drmsMismatch;
+  // Senza esito: spieghiamo PERCHÉ (upload legacy senza campi di esito vs
+  // nessuna riga agganciabile), così l'utente non pensa che il match sia rotto.
+  const drmsStatus = useCjDrmsStatus(!hasDrms);
+  const legacy = drmsStatus.data?.legacyUploads ?? EMPTY_LEGACY_UPLOADS;
+  const uploadsCount = drmsStatus.data?.uploads ?? 0;
+  const noOutcomeReason = (() => {
+    if (uploadsCount === 0) return { kind: "no_uploads" as const, text: "Nessun DRMS caricato." };
+    const isEnergia = it.driver === "energia";
+    const chiavi = isEnergia
+      ? `POD/PDR (${[it.pod, it.pdr].filter(Boolean).join(", ") || "—"}) o CF/P.IVA (${it.cf || it.piva || "—"}) con TIPO_FONIA=ENERGIA`
+      : `codice contratto (${it.codiceContratto || "—"}) o CF/P.IVA (${it.cf || it.piva || "—"}) + tipo`;
+    if (legacy.length > 0 && legacy.length === uploadsCount) {
+      return { kind: "legacy_all" as const, text: `Tutti gli upload DRMS (${legacyUploadsLabel(legacy)}) sono privi dei campi di esito (CF/POD/causale): nessun aggancio possibile finché non vengono ricaricati.` };
+    }
+    if (legacy.length > 0) {
+      return { kind: "legacy_some" as const, text: `Nessuna riga ${isEnergia ? "ENERGIA " : ""}CONTRATTUALE con ${chiavi} nella finestra T0..T+5 negli upload con campi di esito. Attenzione: ${legacy.length} upload (${legacyUploadsLabel(legacy)}) ${legacy.length === 1 ? "è privo" : "sono privi"} dei campi di esito e potrebbe contenerla: ricaricalo.` };
+    }
+    return { kind: "no_rows" as const, text: `Nessuna riga ${isEnergia ? "ENERGIA " : ""}CONTRATTUALE con ${chiavi} nella finestra T0..T+5 (${uploadsCount} upload analizzati).` };
+  })();
   return (
     <div className="flex items-center gap-1.5">
       <div className="flex flex-col gap-0.5">
@@ -3023,6 +3100,29 @@ function EconomicStateCell({
           </span>
         )}
       </div>
+      {!hasDrms && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={`h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors ${
+                noOutcomeReason.kind.startsWith("legacy")
+                  ? "border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                  : "border-transparent text-muted-foreground hover:bg-muted"
+              }`}
+              title="Perché non c'è un esito DRMS"
+              data-testid={`button-drms-no-outcome-${it.id}`}
+              data-reason={noOutcomeReason.kind}
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 text-xs space-y-1.5" align="end" data-testid={`popover-drms-no-outcome-${it.id}`}>
+            <div className="font-semibold text-sm">Nessun esito DRMS</div>
+            <p data-testid={`text-drms-no-outcome-reason-${it.id}`}>{noOutcomeReason.text}</p>
+          </PopoverContent>
+        </Popover>
+      )}
       {hasDrms && (
         <Popover>
           <PopoverTrigger asChild>

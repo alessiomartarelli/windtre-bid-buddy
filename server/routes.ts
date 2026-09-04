@@ -4100,6 +4100,20 @@ export async function registerRoutes(
   // negozio / addetto / ragione sociale. Stessa regola di isolamento della
   // lista: l'operatore vede SOLO gli item dei propri nominativi addetto.
   // DEVE precedere la route `/:id` per non essere intercettata da essa.
+  // Stato degli upload DRMS ai fini dell'esito CJ: quanti sono e quali sono
+  // "legacy" (senza campi di esito → da ricaricare). Serve alla pagina CJ per
+  // spiegare perché una scheda non ha esito senza dover aprire il modulo DRMS. Precede `/:id`.
+  app.get("/api/customer-journeys/drms-status", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      res.json(await storage.getCjDrmsStatus(profile.organizationId));
+    } catch (error) {
+      console.error("Customer journey drms-status error:", error);
+      res.status(500).json({ error: "Errore nel recupero dello stato DRMS" });
+    }
+  });
+
   app.get("/api/customer-journeys/report", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
     try {
       const profile = await storage.getProfile(req.session.userId);

@@ -86,17 +86,62 @@ export interface DrmsOutcome {
   history: { competenza: string; state: CjEconomicState; importo: number; causale: string }[];
 }
 
+// Upload "legacy": salvato PRIMA che il parser client conservasse i campi di
+// esito (FISCAL_CODE / POD_PDR / CAUSALE_STORNO / …). Le sue righe non possono
+// agganciare nulla per POD/CF né distinguere gli annullamenti: vanno
+// ricaricate dai file originali.
+export interface DrmsLegacyUpload {
+  uploadId: string;
+  rows: number;
+}
+
 export interface DrmsOutcomeSummary {
   items: number;
   matched: number;
   notFound: number;
   ambiguous: number;
   byState: Record<CjEconomicState, number>;
+  // Item non esitati: quanti per driver.
+  notFoundByDriver: Record<string, number>;
+  // Upload privi dei campi di esito (righe ignorate dal motore per il
+  // fallback POD/CF): elencati esplicitamente, MAI conteggiati in silenzio.
+  legacyUploads: DrmsLegacyUpload[];
+  // Righe complessive appartenenti a upload legacy.
+  legacyRows: number;
 }
 
 export interface DrmsOutcomeResult {
   outcomes: Map<string, DrmsOutcome | null>;
   summary: DrmsOutcomeSummary;
+}
+
+// Chiavi che il parser DRMS "nuovo" conserva su OGNI riga (anche vuote): la
+// loro assenza dall'oggetto JSON (non il valore vuoto) identifica un upload
+// legacy.
+export const DRMS_OUTCOME_FIELD_KEYS = ["FISCAL_CODE", "POD_PDR", "CAUSALE_STORNO"] as const;
+
+export function drmsRowHasOutcomeFields(row: DrmsOutcomeRow): boolean {
+  return DRMS_OUTCOME_FIELD_KEYS.some((k) => Object.prototype.hasOwnProperty.call(row, k));
+}
+
+/**
+ * Individua gli upload (per `__UPLOAD_ID`) in cui NESSUNA riga porta i campi
+ * di esito. Righe senza `__UPLOAD_ID` sono raggruppate sotto la chiave "".
+ */
+export function detectLegacyDrmsUploads(rows: DrmsOutcomeRow[]): DrmsLegacyUpload[] {
+  const perUpload = new Map<string, { rows: number; withFields: boolean }>();
+  for (const row of rows) {
+    const id = str(row.__UPLOAD_ID);
+    let e = perUpload.get(id);
+    if (!e) { e = { rows: 0, withFields: false }; perUpload.set(id, e); }
+    e.rows += 1;
+    if (!e.withFields && drmsRowHasOutcomeFields(row)) e.withFields = true;
+  }
+  const out: DrmsLegacyUpload[] = [];
+  perUpload.forEach((e, uploadId) => {
+    if (!e.withFields && e.rows > 0) out.push({ uploadId, rows: e.rows });
+  });
+  return out.sort((a, b) => a.uploadId.localeCompare(b.uploadId));
 }
 
 // Causali che, con importo 0, indicano un contratto MAI pagato (annullato).
@@ -406,14 +451,22 @@ export function resolveItemOutcome(idx: DrmsIndex, item: DrmsOutcomeItem): DrmsO
 export function computeDrmsOutcomes(rows: DrmsOutcomeRow[], items: DrmsOutcomeItem[]): DrmsOutcomeResult {
   const idx = buildDrmsIndex(rows);
   const outcomes = new Map<string, DrmsOutcome | null>();
+  const legacyUploads = detectLegacyDrmsUploads(rows);
   const summary: DrmsOutcomeSummary = {
     items: items.length, matched: 0, notFound: 0, ambiguous: 0,
     byState: { pagato: 0, annullato: 0, stornato: 0, riaccreditato: 0 },
+    notFoundByDriver: {},
+    legacyUploads,
+    legacyRows: legacyUploads.reduce((s, u) => s + u.rows, 0),
   };
   for (const it of items) {
     const out = resolveItemOutcome(idx, it);
     outcomes.set(it.id, out);
-    if (!out) { summary.notFound += 1; continue; }
+    if (!out) {
+      summary.notFound += 1;
+      summary.notFoundByDriver[it.driver] = (summary.notFoundByDriver[it.driver] ?? 0) + 1;
+      continue;
+    }
     summary.matched += 1;
     summary.byState[out.state] += 1;
     if (out.ambiguous) summary.ambiguous += 1;
