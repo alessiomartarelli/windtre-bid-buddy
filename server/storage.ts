@@ -1,10 +1,11 @@
 import { db } from "./db";
+import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjEconomicState, type CjDriver, CJ_ECONOMIC_STATES } from "@shared/schema";
+import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
+import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
+import { computeDrmsOutcomes, applyOutcomeToState, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
 
 // Esecutore DB: `db` oppure la transazione corrente (`db.transaction(tx => ...)`).
 type DbExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
-import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
-import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
-import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
 
 // Data trigger di default della customer journey: una CJ si apre solo per
 // nuove attivazioni di pista mobile a partire da questa data (Task #158).
@@ -30,6 +31,13 @@ function parseCjTriggerDate(raw: unknown): Date | null {
   const d = new Date(v.length === 10 ? `${v}T00:00:00.000Z` : v);
   return Number.isNaN(d.getTime()) ? null : d;
 }
+
+export type CjDrmsApplySummary = DrmsOutcomeSummary & {
+  updated: number;
+  mismatches: number;
+  uploads: number;
+  drmsRows: number;
+};
 
 // Campi di dettaglio compilabili a mano su un item della customer journey
 // (BiSuite non li fornisce in modo affidabile, Task #161). `dataAttivazione`
@@ -170,6 +178,9 @@ export interface IStorage {
   getCustomerJourneyReportRows(orgId: string, addettiFilter?: string[] | null): Promise<CjReportRow[]>;
   getCustomerJourneyItem(id: string, orgId: string): Promise<CustomerJourneyItem | undefined>;
   updateCustomerJourneyItemState(id: string, orgId: string, state: CjItemState, userId: string | null): Promise<CustomerJourneyItem>;
+  updateCustomerJourneyItemEconomicState(id: string, orgId: string, state: CjEconomicState | null, userId: string | null): Promise<CustomerJourneyItem>;
+  applyDrmsOutcomes(orgId: string): Promise<CjDrmsApplySummary>;
+  migrateLegacyCustomerJourneyStates(): Promise<number>;
   setCustomerJourneyItemGettone(id: string, orgId: string, confirmed: boolean, userId: string | null): Promise<CustomerJourneyItem>;
   updateCustomerJourneyItemDetails(id: string, orgId: string, details: CjItemDetailsUpdate, userId: string | null): Promise<CustomerJourneyItem>;
   updateCustomerJourneyRagioneSociale(id: string, orgId: string, ragioneSociale: string | null): Promise<CustomerJourney | undefined>;
@@ -479,6 +490,7 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return result;
   }
+
   // Storico struttura RS/PDV (Task #339)
   async listOrgConfigHistory(orgId: string): Promise<OrganizationConfigHistory[]> {
     return await db.select().from(organizationConfigHistory)
@@ -1330,12 +1342,13 @@ export class DatabaseStorage implements IStorage {
       journeyId: customerJourneyItems.journeyId,
       driver: customerJourneyItems.driver,
       state: customerJourneyItems.state,
+      economicState: customerJourneyItems.economicState,
       dataAttivazione: customerJourneyItems.dataAttivazione,
       dataInserimento: customerJourneyItems.dataInserimento,
       addetto: customerJourneyItems.addetto,
     }).from(customerJourneyItems)
       .where(inArray(customerJourneyItems.journeyId, journeyIds));
-    type PhaseItem = { driver: CjDriver; state: CjItemState; eventDate: string | null; addetto: string | null };
+    type PhaseItem = { driver: CjDriver; state: CjItemState; economicState: string | null; eventDate: string | null; addetto: string | null };
     const byJourney = new Map<string, PhaseItem[]>();
     for (const r of rows) {
       const list = byJourney.get(r.journeyId) ?? [];
@@ -1343,6 +1356,7 @@ export class DatabaseStorage implements IStorage {
       list.push({
         driver: r.driver as CjDriver,
         state: r.state as CjItemState,
+        economicState: r.economicState ?? null,
         eventDate: evt ? evt.toISOString() : null,
         addetto: r.addetto ?? null,
       });
@@ -1408,6 +1422,7 @@ export class DatabaseStorage implements IStorage {
       pdvOrigine: customerJourneyItems.pdvOrigine,
       addetto: customerJourneyItems.addetto,
       state: customerJourneyItems.state,
+      economicState: customerJourneyItems.economicState,
     }).from(customerJourneyItems)
       .where(whereClause);
     const tmp = new Map<string, { pdvs: Set<string>; addetti: Set<string>; states: Set<string> }>();
@@ -1421,7 +1436,10 @@ export class DatabaseStorage implements IStorage {
       if (pdv) e.pdvs.add(pdv);
       const addetto = (r.addetto || "").trim();
       if (addetto) e.addetti.add(addetto);
+      // Il filtro "stato" della lista copre sia gli stati operativi sia quelli
+      // economici: entrambi entrano nelle facet.
       if (r.state) e.states.add(r.state);
+      if (r.economicState) e.states.add(r.economicState);
     }
     for (const id of journeyIds) {
       const e = tmp.get(id);
@@ -1467,6 +1485,7 @@ export class DatabaseStorage implements IStorage {
       pdvOrigine: customerJourneyItems.pdvOrigine,
       addetto: customerJourneyItems.addetto,
       state: customerJourneyItems.state,
+      economicState: customerJourneyItems.economicState,
       driver: customerJourneyItems.driver,
       importo: customerJourneyItems.importo,
       dataAttivazione: customerJourneyItems.dataAttivazione,
@@ -1489,6 +1508,7 @@ export class DatabaseStorage implements IStorage {
         pdv: (r.pdvDestinazione || r.pdvOrigine || "").trim(),
         addetto: (r.addetto || "").trim(),
         state: r.state as CjItemState,
+        economicState: (r.economicState as CjEconomicState | null) ?? null,
         driver: r.driver as CjDriver,
         valore: Number.isFinite(v) ? v : 0,
         openedAt: r.openedAt ? r.openedAt.toISOString() : null,
@@ -1737,7 +1757,13 @@ export class DatabaseStorage implements IStorage {
       // (in_lavorazione/attivato/pagato/...) è gestito a mano dall'operatore.
       // Le vendite annullate vengono esitate come "annullato" (NON "stornato":
       // lo storno è un'informazione separata che arriverà da DRMS).
-      const autoState: CjItemState = stato.includes("ANNULL") ? "annullato" : "inserito";
+      // Lo stato OPERATIVO parte sempre da "inserito"; una vendita annullata
+      // in BiSuite alimenta lo stato ECONOMICO "annullato" (solo se l'item
+      // non ha già un esito: il reconcile non azzera né sovrascrive mai lo
+      // stato economico, che è di competenza del DRMS/manuale).
+      const isAnnullata = stato.includes("ANNULL");
+      const autoState: CjItemState = "inserito";
+      const autoEconomicState: CjEconomicState | null = isAnnullata ? "annullato" : null;
 
       const articoli: any[] = Array.isArray(raw.articoli) ? raw.articoli : [];
       for (const art of articoli) {
@@ -1748,7 +1774,7 @@ export class DatabaseStorage implements IStorage {
 
         // Trigger journey: nuova attivazione mobile dalla data configurata.
         if (driver === "mobile" && isMobileActivationCategory(categoria)
-            && autoState !== "annullato" && saleDate && saleDate >= triggerDate) {
+            && !isAnnullata && saleDate && saleDate >= triggerDate) {
           // Tie-break deterministico a parità di data (l'ordine di lettura
           // delle vendite non è garantito): vince il bisuiteId più basso.
           const candBid = sale.bisuiteId ?? Number.MAX_SAFE_INTEGER;
@@ -1810,6 +1836,7 @@ export class DatabaseStorage implements IStorage {
           rata: null,
           modVendita,
           state: autoState,
+          economicState: autoEconomicState,
         });
       }
     }
@@ -1943,6 +1970,9 @@ export class DatabaseStorage implements IStorage {
             // Preserva lo stato impostato manualmente; altrimenti aggiorna
             // con lo stato auto derivato dal connettore.
             state: sql`CASE WHEN ${customerJourneyItems.stateManual} THEN ${customerJourneyItems.state} ELSE excluded.state END`,
+            // Stato economico: mai azzerato dal reconcile. L'"annullato" da
+            // BiSuite riempie solo un item senza esito e non manuale.
+            economicState: sql`CASE WHEN ${customerJourneyItems.economicStateManual} THEN ${customerJourneyItems.economicState} ELSE COALESCE(${customerJourneyItems.economicState}, excluded.economic_state) END`,
             updatedAt: new Date(),
           },
         });
@@ -2135,6 +2165,137 @@ export class DatabaseStorage implements IStorage {
       ))
       .returning({ id: bisuiteSyncNotifications.id });
     return { deleted: result.length };
+  }
+
+  // Stato ECONOMICO manuale. `state = null` rimuove l'impostazione manuale e
+  // torna all'esito DRMS calcolato (se presente).
+  async updateCustomerJourneyItemEconomicState(id: string, orgId: string, state: CjEconomicState | null, userId: string | null): Promise<CustomerJourneyItem> {
+    const [cur] = await db.select({
+      drmsOutcomeState: customerJourneyItems.drmsOutcomeState,
+    }).from(customerJourneyItems)
+      .where(and(eq(customerJourneyItems.id, id), eq(customerJourneyItems.organizationId, orgId)));
+    const drmsState = cur?.drmsOutcomeState ?? null;
+    const manual = state != null;
+    const [row] = await db.update(customerJourneyItems)
+      .set({
+        economicState: manual ? state : drmsState,
+        economicStateManual: manual,
+        economicStateUpdatedAt: new Date(),
+        economicStateUpdatedBy: userId,
+        drmsMismatch: manual && drmsState != null && drmsState !== state,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(customerJourneyItems.id, id), eq(customerJourneyItems.organizationId, orgId)))
+      .returning();
+    return row;
+  }
+
+  // Motore di esito DRMS → stato economico (docs/customer-journey.md). Legge
+  // TUTTI gli upload DRMS dell'org e tutti gli item CJ, calcola l'esito con la
+  // logica pura di shared/customerJourneyDrms.ts e aggiorna gli item: l'esito
+  // calcolato e la competenza vengono scritti sempre; lo stato economico solo
+  // se non manuale; `drmsMismatch` quando manuale ≠ DRMS. Lo stato operativo
+  // NON viene toccato.
+  async applyDrmsOutcomes(orgId: string): Promise<CjDrmsApplySummary> {
+    const uploads = await db.select({ id: drmsUploads.id, rows: drmsUploads.rows })
+      .from(drmsUploads).where(eq(drmsUploads.organizationId, orgId));
+    const rows: DrmsOutcomeRow[] = [];
+    for (const u of uploads) {
+      const list = Array.isArray(u.rows) ? (u.rows as DrmsOutcomeRow[]) : [];
+      for (const r of list) rows.push({ ...r, __UPLOAD_ID: u.id });
+    }
+    const items = await db.select({
+      id: customerJourneyItems.id,
+      driver: customerJourneyItems.driver,
+      codiceContratto: customerJourneyItems.codiceContratto,
+      cf: customerJourneyItems.cf,
+      piva: customerJourneyItems.piva,
+      pod: customerJourneyItems.pod,
+      pdr: customerJourneyItems.pdr,
+      dataInserimento: customerJourneyItems.dataInserimento,
+      economicState: customerJourneyItems.economicState,
+      economicStateManual: customerJourneyItems.economicStateManual,
+      drmsOutcomeState: customerJourneyItems.drmsOutcomeState,
+      drmsOutcomeSeqId: customerJourneyItems.drmsOutcomeSeqId,
+      drmsOutcomeUploadId: customerJourneyItems.drmsOutcomeUploadId,
+      drmsCompetenza: customerJourneyItems.drmsCompetenza,
+      drmsMismatch: customerJourneyItems.drmsMismatch,
+    }).from(customerJourneyItems).where(eq(customerJourneyItems.organizationId, orgId));
+    const inputs: DrmsOutcomeItem[] = items.map((it) => ({
+      id: it.id,
+      driver: it.driver,
+      codiceContratto: it.codiceContratto,
+      cf: it.cf,
+      piva: it.piva,
+      pod: it.pod,
+      pdr: it.pdr,
+      dataInserimento: it.dataInserimento ? it.dataInserimento.toISOString() : null,
+    }));
+    const { outcomes, summary } = computeDrmsOutcomes(rows, inputs);
+    let updated = 0;
+    let mismatches = 0;
+    const now = new Date();
+    for (const it of items) {
+      const out = outcomes.get(it.id) ?? null;
+      const next = applyOutcomeToState(
+        { economicState: it.economicState, economicStateManual: it.economicStateManual, drmsOutcomeState: it.drmsOutcomeState },
+        out,
+      );
+      if (next.mismatch) mismatches += 1;
+      const outState = out?.state ?? null;
+      const outSeq = out?.seqId ?? null;
+      const outUpload = out?.uploadId ?? null;
+      const outCompetenza = out?.competenza ?? null;
+      const unchanged =
+        it.economicState === next.economicState &&
+        it.drmsMismatch === next.mismatch &&
+        it.drmsOutcomeState === outState &&
+        it.drmsOutcomeSeqId === outSeq &&
+        it.drmsOutcomeUploadId === outUpload &&
+        it.drmsCompetenza === outCompetenza;
+      if (unchanged) continue;
+      await db.update(customerJourneyItems)
+        .set({
+          economicState: next.economicState,
+          // Stato scritto dal DRMS (non manuale): tracciamo l'istante.
+          ...(!it.economicStateManual && it.economicState !== next.economicState
+            ? { economicStateUpdatedAt: now, economicStateUpdatedBy: null }
+            : {}),
+          drmsCompetenza: outCompetenza,
+          drmsOutcomeState: outState,
+          drmsOutcomeCompetenza: out?.outcomeCompetenza ?? null,
+          drmsOutcomeCausale: out?.causale ?? null,
+          drmsOutcomeImporto: out ? String(out.importo) : null,
+          drmsOutcomeSeqId: outSeq,
+          drmsOutcomeUploadId: outUpload,
+          drmsOutcomeMatch: out?.matchBy ?? null,
+          drmsOutcomeAt: out ? now : null,
+          drmsMismatch: next.mismatch,
+          updatedAt: now,
+        })
+        .where(eq(customerJourneyItems.id, it.id));
+      updated += 1;
+    }
+    return { ...summary, updated, mismatches, uploads: uploads.length, drmsRows: rows.length };
+  }
+
+  // Migrazione one-shot (idempotente) dei valori economici legacy del campo
+  // `state` (pagato/annullato/stornato/riaccreditato) nel nuovo campo
+  // `economic_state`: operativo = attivato per pagato/riaccreditato, inserito
+  // per annullato/stornato; il flag manuale segue quello dello stato.
+  async migrateLegacyCustomerJourneyStates(): Promise<number> {
+    const legacy = [...CJ_ECONOMIC_STATES];
+    const res = await db.execute(sql`
+      UPDATE customer_journey_items
+      SET economic_state = state,
+          economic_state_manual = state_manual,
+          economic_state_updated_at = state_updated_at,
+          economic_state_updated_by = state_updated_by,
+          state = CASE WHEN state IN ('pagato', 'riaccreditato') THEN 'attivato' ELSE 'inserito' END,
+          updated_at = now()
+      WHERE state IN (${sql.join(legacy.map((v) => sql`${v}`), sql`, `)})
+    `);
+    return Number((res as unknown as { rowCount?: number }).rowCount ?? 0);
   }
 }
 

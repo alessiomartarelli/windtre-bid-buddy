@@ -222,16 +222,16 @@ test('driverTableBody: Excel mette l\'emoji in col 0', () => {
 // ===========================================================================
 // DETTAGLIO — tabella Contratti: intestazione + mapping campi.
 // ===========================================================================
-test('contractsHead: 12 colonne nell\'ordine atteso', () => {
+test('contractsHead: 13 colonne nell\'ordine atteso (Stato operativo + Esito economico)', () => {
   assert.deepEqual(contractsHead(), [
     '', 'Driver', 'Descrizione', 'Contratto', 'Addetto', 'PDV',
-    'IMEI', 'RATA/CANONE', 'Inserito', 'Attivato', 'Stato', 'Gettone',
+    'IMEI', 'RATA/CANONE', 'Inserito', 'Attivato', 'Stato', 'Esito', 'Gettone',
   ]);
 });
 
 test('contractsBody: mappa i campi, PDV destinazione→origine, gettone Sì/No', () => {
   const rows = contractsBody([
-    item({ driver: 'mobile', rata: '10', gettoneConfirmed: true }),
+    item({ driver: 'mobile', rata: '10', gettoneConfirmed: true, economicState: 'pagato' }),
     item({ driver: 'fisso', pdvDestinazione: null, pdvOrigine: 'PDV Roma', rata: null, canone: '25', imei: null, gettoneConfirmed: false }),
   ], false);
   assert.equal(rows.length, 2);
@@ -245,12 +245,14 @@ test('contractsBody: mappa i campi, PDV destinazione→origine, gettone Sì/No',
   assert.equal(rows[0][6], '123456789012345');
   assert.equal(rows[0][7], '€ 10');
   assert.equal(rows[0][10], 'Attivato');
-  assert.equal(rows[0][11], 'Sì');
+  assert.equal(rows[0][11], 'Pagato');
+  assert.equal(rows[0][12], 'Sì');
   // riga 2: fallback PDV su origine, IMEI mancante "—", canone mostrato, gettone No
   assert.equal(rows[1][5], 'PDV Roma');
   assert.equal(rows[1][6], '—');
   assert.equal(rows[1][7], '€ 25');
-  assert.equal(rows[1][11], 'No');
+  assert.equal(rows[1][11], '—'); // nessun esito economico
+  assert.equal(rows[1][12], 'No');
 });
 
 test('contractsBody: Excel mette l\'emoji del driver in col 0', () => {

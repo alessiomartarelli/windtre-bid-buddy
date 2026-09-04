@@ -26,21 +26,82 @@ quelli ancora attivabili, e traccia ogni contratto attraverso i suoi stati.
   La classificazione categoria→driver è in `shared/customerJourney.ts`
   (`driverFromCategory`) e rispecchia `bisuiteClassification.ts`. CB / MIA /
   rivincoli sono esclusi (non sono nuove attivazioni).
-- Un driver risulta **attivato** se ha almeno un item in stato attivo
-  (`inserito`, `in_lavorazione`, `attivato`, `pagato`, `riaccreditato`);
-  altrimenti è **attivabile**.
+- Un driver risulta **attivato** se ha almeno un item attivo secondo
+  `isCjItemActive({ state, economicState })`: stato operativo ≠ `ko` **e**
+  stato economico ≠ `annullato`/`stornato` (inserito senza esito conta,
+  come prima); altrimenti è **attivabile**.
 
-## Stati item (`CJ_ITEM_STATES`)
+## Stati item: operativo + economico (Task #558)
 
-`inserito` · `in_lavorazione` · `attivato` · `ko` · `pagato` · `stornato` ·
-`riaccreditato`.
+Ogni contratto ha **due stati distinti**:
 
-- Lo stato iniziale è derivato dalla vendita BiSuite durante il reconcile:
-  vendita `ANNULLATA` → `stornato`; `FINALIZZATA` → `attivato`; altrimenti
-  `inserito`.
-- Lo stato può essere modificato manualmente dall'UI. Una volta impostato a
-  mano (`stateManual = true`), il reconcile **non lo sovrascrive più**
-  (preservato via SQL CASE nell'upsert).
+- **Operativo** `state` (`CJ_ITEM_STATES`): `inserito` · `in_lavorazione` ·
+  `attivato` · `ko`. Alimentato dal reconcile BiSuite (sempre `inserito` in
+  automatico) e modificabile a mano; una volta impostato a mano
+  (`stateManual = true`) il reconcile **non lo sovrascrive più** (SQL CASE
+  nell'upsert). Il DRMS **non** lo tocca mai.
+- **Economico** `economicState` (`CJ_ECONOMIC_STATES`): `null` (—) ·
+  `pagato` · `annullato` · `stornato` · `riaccreditato`. Alimentato dal
+  motore di esito DRMS (sotto); il reconcile BiSuite lo imposta a
+  `annullato` per le vendite `ANNULLATA` solo se vuoto e non manuale
+  (`COALESCE`) e **non lo azzera mai**. Modificabile a mano
+  (`economicStateManual = true`, PATCH `/economic-state`; `null` = torna
+  automatico e riapplica l'ultimo esito DRMS).
+
+Un item è **attivo** (`isCjItemActive`) se non è `ko` e non è
+`annullato`/`stornato`: è la regola unica usata da riepiloghi driver, badge
+validità, gettone, report, export e timeline (fade). I valori legacy
+economici nel campo `state` sono tollerati in lettura e migrati al boot
+(`migrateLegacyCustomerJourneyStates`, idempotente: pagato/riaccreditato →
+economico + `attivato`; annullato/stornato → economico + `inserito`).
+
+### Esito economico da DRMS (`shared/customerJourneyDrms.ts`)
+
+Il DRMS caricato in "DRMS Commissioning" viene salvato con i campi
+`CODICE_CONTRATTO`, `FISCAL_CODE`, `P_IVA_CLIENTE`, `POD_PDR`, `NATURA`,
+`CAUSALE_STORNO`, `DATA_EVENTO`, `TIPO_TRANSAZIONE`, `TIPO_FONIA`,
+`COMPETENZA`, `DT_ATTIVAZIONE` (il calcolo capitoli è invariato). Il motore
+`computeDrmsOutcomes(rows, items)` è logica pura:
+
+- **Unità** = `CODICE_CONTRATTO`; contano SOLO le righe `NATURA =
+  CONTRATTUALE` più gli `Adjustment Manuali` "Storno Compensi" (storno
+  riferito al contratto o, senza codice, al CF+TIPO_FONIA). Le righe GARE
+  sono ignorate: un contratto senza riga CONTRATTUALE non ha esito.
+- Per ogni contratto le righe sono raggruppate per `COMPETENZA` (normalizzata
+  `YYYY-MM`) e percorse in ordine temporale (poi `DATA_EVENTO`), sul **saldo
+  netto** del mese: netto > 0 ⇒ `pagato` (⇒ `riaccreditato` se il contratto
+  era già `stornato` in una competenza precedente); netto < 0 ⇒ `stornato`
+  (DISDETTA RECESSO, CLIENTE IRREGOLARE, PDA, storno manuale…); netto = 0 con
+  causale `DRMS_ANNULLATO_CAUSALI` (DINIEGO, POPI, POPI ESTESA,
+  DISCONOSCIMENTO, KO_REITERO, NP INTERNA) ⇒ `annullato` solo se non c'è
+  ancora uno stato. Lo stato finale è l'evento più recente; la `history` è
+  ricostruita in ordine.
+- **Match CJ ↔ DRMS**: driver mobile/fisso/assicurazioni/telefono/protetti per
+  `codiceContratto` (case/space-insensitive), fallback CF o P.IVA +
+  `TIPO_FONIA` (`DRIVER_TIPO_FONIA`; telefono senza fallback). **Energia**:
+  per `POD_PDR` contro `pod`/`pdr` dell'item (il codice DRMS ≠ BiSuite),
+  fallback CF + ENERGIA; le righe non-energia non alimentano l'indice POD.
+  Più contratti agganciati allo stesso item: basta UN `pagato`
+  (preferenza pagato > riaccreditato > stornato > annullato), `ambiguous`
+  se gli esiti differiscono.
+- **Finestra**: con `dataInserimento` nota contano solo competenze in
+  `[mese inserimento, +DRMS_WINDOW_MONTHS=5]` (SIM di luglio → DRMS fino a
+  dicembre). Non tocca la regola gettone.
+- Output per item: `state`, `competenza` (prima competenza CONTRATTUALE,
+  salvata in `drmsCompetenza`), riga determinante
+  (`outcomeCompetenza`/`causale`/`importo`/`seqId`/`uploadId`), `matchBy`.
+
+`storage.applyDrmsOutcomes(orgId)` legge TUTTI gli upload DRMS dell'org,
+esegue il motore e aggiorna solo gli item cambiati: scrive sempre le colonne
+`drms_outcome_*` + `drms_competenza`; `economic_state` segue il DRMS solo se
+non manuale (`applyOutcomeToState`); se manuale ≠ DRMS alza
+`drms_mismatch` (l'"occhietto" nella scheda, con popover stato/competenza/
+causale/importo). Se l'esito DRMS sparisce (upload eliminato) lo stato
+economico viene azzerato solo se era stato scritto dal DRMS (quello BiSuite
+`annullato` resta). Trigger: automatico su `POST /api/drms` (anche merge) e
+`DELETE /api/drms/:id`, e manuale via pulsante **"Esita da DRMS"** (admin)
+nella pagina CJ (`POST /api/customer-journeys/esita-drms`, riepilogo:
+`matched`, `notFound`, `ambiguous`, `byState`, `updated`, `mismatches`).
 
 ## Gettone
 
@@ -65,9 +126,8 @@ attive oltre alla SIM che ha aperto la journey. La tabella a scaglioni
 - Le 5 piste cross-sell sono `fisso`, `energia`, `assicurazioni`, `telefono`,
   `protetti` (`CJ_NON_MOBILE_DRIVERS`). L'`energia` (gas/luce) conta come una
   sola pista.
-- Una pista è "attiva" se ha ≥1 item in uno stato attivo (`CJ_ACTIVE_STATES`:
-  inserito/in_lavorazione/attivato/pagato/riaccreditato; ko/annullato/stornato
-  esclusi).
+- Una pista è "attiva" se ha ≥1 item attivo (`isCjItemActive`: operativo
+  ≠ ko e economico ≠ annullato/stornato).
 - **Cohort** = solo i clienti con **SIM mobile attiva** la cui attivazione cade
   nel periodo: le journey con mobile non attivo (ko/stornato/annullato) o senza
   mobile sono escluse (`buildGettoneJourneys` filtra `simAttive ≥ 1`).
@@ -132,7 +192,9 @@ pulsante "Rigenera da BiSuite" (admin) resta come forzatura manuale.
 | GET | `/api/customer-journeys/report` | reportistica (Task #187/#192): righe item-level `CjReportRow` (journey + cliente + pdv/addetto/stato/driver/valore + `openedAt` data attivazione SIM) aggregabili lato client per negozio/addetto/cliente **e** per l'analisi gettoni cross-sell; **stessa regola di isolamento operatore** della lista (deve precedere `/:id`) |
 | GET | `/api/customer-journeys/:id` | dettaglio: `{ journey, items, drivers }` |
 | POST | `/api/customer-journeys/reconcile` | rigenera dalle vendite (solo admin) |
-| PATCH | `/api/customer-journey-items/:id/state` | `{ state }` |
+| POST | `/api/customer-journeys/esita-drms` | rielabora tutti i DRMS caricati → stati economici (solo admin), risponde col riepilogo `CjDrmsApplySummary` |
+| PATCH | `/api/customer-journey-items/:id/state` | `{ state }` stato operativo (inserito/in_lavorazione/attivato/ko) |
+| PATCH | `/api/customer-journey-items/:id/economic-state` | `{ economicState }` manuale (pagato/annullato/stornato/riaccreditato) o `null` = automatico; stessa ownership operatore della PATCH stato |
 | PATCH | `/api/customer-journey-items/:id/gettone` | `{ confirmed: boolean }` |
 | POST | `/api/admin/profile-addetti` | `{ user_id, addetti: string[] }` |
 

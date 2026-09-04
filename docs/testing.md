@@ -390,8 +390,8 @@ loader `tsx`. La pagina Customer Journey ha due viste ("Schede clienti" e
 "Reportistica") che condividono gli stessi filtri (tipo cliente,
 negozio/PDV, addetto, stato, ricerca); la logica era inline in
 `CustomerJourney.tsx` ed è stata estratta in shared per essere testabile e
-usata da entrambe le viste. Coprono: (1) `CJ_ACTIVE_STATES` (gli stati che
-contano come "attivati"); (2) `aggregateReport` per dimensione
+usata da entrambe le viste. Coprono: (1) `isCjItemActive` (la coppia
+stato operativo + economico che conta come "attivato"); (2) `aggregateReport` per dimensione
 negozio/addetto/cliente — `clienti` = journey distinte (Set su journeyId,
 non item), `contratti` = numero item, `attivati` = item in stato attivo
 (ko/annullato/stornato esclusi), `valore` = somma importi; ordinamento per
@@ -420,6 +420,41 @@ saturazione, ordinati per saturazione↓). L'analisi gettoni aggrega solo
 per **negozio** o **addetto** (la dimensione "ragione sociale/cliente" è
 stata rimossa). Step di validation `cj-report-tests`
 (`bash scripts/run-customer-journey-report-tests.sh`). Run ~1s.
+
+## Customer Journey esito economico DRMS — motore puro (`tests/customer-journey-drms-outcome.test.mjs`)
+
+Suite pura (Task #558) su `shared/customerJourneyDrms.ts` +
+`isCjItemActive`, caricata via `node --import tsx --test`: righe di fixture
+modellate sull'estratto conto del DRMS di esempio (`attached_assets/
+gruppo_cms_drms_feb_26_*.xlsx`, anagrafiche anonimizzate). Copre: (1)
+`classifyDrmsRow` (solo CONTRATTUALE + adjustment "Storno Compensi";
+GARE / importo 0 senza causale ignorati); (2) `normalizeCompetenza`; (3)
+regole pagato / annullato (tutte le causali) / stornato (causali + storno
+manuale per CF) / riaccreditato con precedenza temporale per COMPETENZA
+indipendente dall'ordine delle righe e saldo netto nello stesso mese; (4)
+contratto senza riga CONTRATTUALE ⇒ nessun esito; (5) match per codice
+contratto, fallback CF/P.IVA + TIPO_FONIA, telefono senza fallback, energia
+per POD/PDR con fallback CF+ENERGIA; (6) CF ripetuto su più contratti: basta
+un pagato + flag `ambiguous`; (7) finestra T0..T+5; (8)
+`applyOutcomeToState` (manuale vince + mismatch, azzeramento solo se
+l'esito veniva dal DRMS). Workflow `cj-drms-outcome-tests`
+(`bash scripts/run-customer-journey-drms-outcome-tests.sh`), nel cancello
+1a di `deploy-prod.sh`. Run ~1s.
+
+## Customer Journey esito economico DRMS — DB-backed (`tests/customer-journey-drms-outcome-db.test.mjs`)
+
+Scenario end-to-end via API con org usa-e-getta: journey + 4 item inseriti
+direttamente nel DB (mobile per codice, energia per POD, fisso con stato
+economico MANUALE, telefono assente dal DRMS); `POST /api/drms` con righe
+CONTRATTUALE ⇒ stati economici, `drms_competenza`, `drms_outcome_*`
+(SEQ_ID, upload id, match) scritti, stato operativo intatto, `cjOutcomes` in
+risposta; manuale non sovrascritto + `drms_mismatch`; PATCH
+`/economic-state` rifiuta stati operativi, alza il mismatch e `null` torna
+all'esito DRMS; `POST /api/customer-journeys/esita-drms` riepilogo; facet
+`states` della lista; `DELETE /api/drms/:id` azzera solo gli esiti derivati
+dal DRMS. Workflow `cj-drms-outcome-db-tests`
+(`bash scripts/run-customer-journey-drms-outcome-db-tests.sh`); richiede
+dev server + `DATABASE_URL`; incluso nell'orchestrator integration-tests.
 
 ## Telegram report tests (`tests/telegram-report.test.mjs`)
 
@@ -593,7 +628,7 @@ Step di validation `integration-tests`
 (`bash scripts/run-deploy-integration-tests.sh`) + step **1b** del
 cancello di qualità pre-deploy. Esegue in un colpo solo tutte le suite che
 richiedono il dev server e/o `DATABASE_URL` — `cj-authz`, `admin-authz`,
-`canvass-authz`, `cj-reconcile`, `cj-trigger-date`, `inc-dashboard-authz`,
+`canvass-authz`, `cj-reconcile`, `cj-drms-outcome-db`, `cj-trigger-date`, `inc-dashboard-authz`,
 `incentivazione-accservizi`, `finplan`, `inc-sort-ui`, `cj-gettone-ui`,
 `gara-weights-ui`, `sos-caring-import-ui`, `home-landing-ui` — che prima andavano lanciate a
 mano. Richiede `DATABASE_URL` (riusa il DB di dev: ogni suite

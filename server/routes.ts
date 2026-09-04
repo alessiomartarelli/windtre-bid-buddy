@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
 import { getEffectiveRulesForEditor, getDefaultRulesHash, patchSavedRulesWithDefaultExclusions, retargetCaringSavedRules } from "../shared/bisuiteMapping";
 import { isModuleEnabled, isModuleAllowedForBrands, isModuleGrantedToUser, sanitizeGrantableModules, WINDTRE_GATED_MODULES, MODULE_KEYS } from "../shared/modules";
-import { type BisuiteSale, CJ_ITEM_STATES, type CjItemState, type CjDriver, insertBrandSchema } from "@shared/schema";
+import { type BisuiteSale, CJ_ITEM_STATES, CJ_ECONOMIC_STATES, type CjItemState, type CjEconomicState, type CjDriver, insertBrandSchema } from "@shared/schema";
 import { driverFromCategory, CJ_DRIVER_ORDER, summarizeDrivers } from "@shared/customerJourney";
 import { ACCENT_PRESET_IDS, DASHBOARD_STYLE_IDS, SALES_STYLE_IDS, SCHEME_IDS, THEME_IDS } from "@shared/uiPrefs";
 import { AVATAR_MAX_BYTES } from "@shared/avatar";
@@ -216,6 +216,19 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   setupSession(app);
+
+  // One-shot migration (Customer Journey, esito economico): sposta i valori
+  // economici legacy del campo `state` (pagato/annullato/stornato/
+  // riaccreditato) nel nuovo `economic_state`. Idempotente: dopo il primo
+  // passaggio nessuna riga ha più quei valori nello stato operativo.
+  void (async () => {
+    try {
+      const n = await storage.migrateLegacyCustomerJourneyStates();
+      if (n > 0) console.log(`[cj] migrati ${n} item con stato economico legacy`);
+    } catch (e) {
+      console.error("[cj] migrazione stati legacy fallita:", e);
+    }
+  })();
 
   // One-shot migration (Task #82): backfill any new `descrizioneEscludi`
   // tokens added to default mapping rules into the saved system_config so
@@ -1487,7 +1500,16 @@ export async function registerRoutes(
         rows,
         uploadedBy: profile.id,
       });
-      res.json({ id: result.id, month: result.month, year: result.year, period: result.period, righeCount: result.righeCount });
+      // Esito economico Customer Journey: ogni caricamento/conferma DRMS
+      // rielabora gli esiti dell'organizzazione. Un errore qui non deve
+      // invalidare l'upload già salvato.
+      let cjOutcomes: Awaited<ReturnType<typeof storage.applyDrmsOutcomes>> | null = null;
+      try {
+        cjOutcomes = await storage.applyDrmsOutcomes(profile.organizationId!);
+      } catch (e) {
+        console.error("[cj] applyDrmsOutcomes dopo upload DRMS fallito:", e);
+      }
+      res.json({ id: result.id, month: result.month, year: result.year, period: result.period, righeCount: result.righeCount, cjOutcomes });
     } catch (e) {
       console.error("Error saving DRMS upload:", e);
       res.status(500).json({ message: "Errore nel salvataggio dell'upload DRMS" });
@@ -1503,6 +1525,11 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Upload DRMS non trovato" });
       }
       await storage.deleteDrmsUpload(req.params.id);
+      try {
+        await storage.applyDrmsOutcomes(profile.organizationId!);
+      } catch (e) {
+        console.error("[cj] applyDrmsOutcomes dopo delete DRMS fallito:", e);
+      }
       res.json({ ok: true });
     } catch (e) {
       console.error("Error deleting DRMS upload:", e);
@@ -4106,7 +4133,7 @@ export async function registerRoutes(
       // Un driver è "attivato" se ha almeno un item in stato non KO e non
       // stornato. L'energia distingue gas/luce ma per il riepilogo conta come
       // singolo driver attivabile.
-      const drivers = summarizeDrivers(items.map((it) => ({ driver: it.driver as CjDriver, state: it.state as CjItemState })));
+      const drivers = summarizeDrivers(items.map((it) => ({ driver: it.driver as CjDriver, state: it.state as CjItemState, economicState: it.economicState })));
 
       res.json({ journey, items, drivers });
     } catch (error) {
@@ -4201,6 +4228,50 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Customer journey item state error:", error);
       res.status(500).json({ error: "Errore nell'aggiornamento dello stato" });
+    }
+  });
+
+  // Stato ECONOMICO manuale (pagato/annullato/stornato/riaccreditato) o
+  // `null` per tornare all'esito DRMS. Stessi controlli di ownership
+  // operatore della PATCH dello stato operativo.
+  app.patch("/api/customer-journey-items/:id/economic-state", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await storage.getProfile(req.session.userId);
+      if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const { economicState } = req.body as { economicState?: string | null };
+      if (economicState != null && !CJ_ECONOMIC_STATES.includes(economicState as CjEconomicState)) {
+        return res.status(400).json({ error: "Stato economico non valido" });
+      }
+      const item = await storage.getCustomerJourneyItem(req.params.id, profile.organizationId);
+      if (!item) return res.status(404).json({ error: "Item non trovato" });
+      if (profile.role === "operatore") {
+        const mine = (profile.bisuiteAddetti ?? []).map((a) => a.toLowerCase().trim()).filter(Boolean);
+        if (!mine.includes(String(item.addetto || "").toLowerCase().trim())) {
+          return res.status(403).json({ error: "Accesso non autorizzato" });
+        }
+      }
+      const updated = await storage.updateCustomerJourneyItemEconomicState(
+        req.params.id, profile.organizationId, (economicState ?? null) as CjEconomicState | null, profile.id,
+      );
+      res.json(updated);
+    } catch (error) {
+      console.error("Customer journey item economic state error:", error);
+      res.status(500).json({ error: "Errore nell'aggiornamento dello stato economico" });
+    }
+  });
+
+  // "Esita da DRMS" (admin): rielabora retroattivamente TUTTI i DRMS caricati
+  // dell'organizzazione e aggiorna lo stato economico dei contratti CJ.
+  app.post("/api/customer-journeys/esita-drms", isAuthenticated, requireModule("customer_journey"), async (req: any, res) => {
+    try {
+      const profile = await requireAdminRole(req, res);
+      if (!profile) return;
+      if (!profile.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
+      const summary = await storage.applyDrmsOutcomes(profile.organizationId);
+      res.json(summary);
+    } catch (error) {
+      console.error("Customer journey esita-drms error:", error);
+      res.status(500).json({ error: "Errore nell'esito da DRMS" });
     }
   });
 

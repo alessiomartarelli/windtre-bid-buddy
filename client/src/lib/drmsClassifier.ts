@@ -68,6 +68,15 @@ export interface DrmsRow {
   FLAG_SOGLIA_MOBILE: string;
   FLAG_SOGLIA_FISSA: string;
   IMPORTO_NUM: number;
+  // Campi di ESITO economico conservati per il motore Customer Journey ← DRMS
+  // (shared/customerJourneyDrms.ts). Non concorrono al calcolo capitoli.
+  FISCAL_CODE: string;
+  P_IVA_CLIENTE: string;
+  POD_PDR: string;
+  CAUSALE_STORNO: string;
+  DATA_EVENTO: string;
+  TIPO_TRANSAZIONE: string;
+  DT_ATTIVAZIONE: string;
   /** PERIOD del file DRMS di provenienza (assegnato dopo classificazione, in caso di consolidato multi-file) */
   __PERIOD?: string;
   /** ID dell'upload DRMS di provenienza (debug / source tracking) */
@@ -188,6 +197,13 @@ export function classifyAndNormalize(rawRows: RawRow[], period: string): DrmsRow
       FLAG_SOGLIA_MOBILE: str(r.FLAG_SOGLIA_MOBILE),
       FLAG_SOGLIA_FISSA: str(r.FLAG_SOGLIA_FISSA),
       IMPORTO_NUM: toNum(r.IMPORTO),
+      FISCAL_CODE: str(r.FISCAL_CODE).trim().toUpperCase(),
+      P_IVA_CLIENTE: str(r.P_IVA_CLIENTE).trim(),
+      POD_PDR: str(r.POD_PDR).trim(),
+      CAUSALE_STORNO: str(r.CAUSALE_STORNO).trim(),
+      DATA_EVENTO: str(r.DATA_EVENTO).trim(),
+      TIPO_TRANSAZIONE: str(r.TIPO_TRANSAZIONE).trim(),
+      DT_ATTIVAZIONE: str(r.DT_ATTIVAZIONE).trim(),
     });
   }
   return out;

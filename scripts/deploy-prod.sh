@@ -67,6 +67,7 @@ else
     "run-incentivazione-tests.sh"
     "run-brand-gating-tests.sh"
     "run-customer-journey-report-tests.sh"
+    "run-customer-journey-drms-outcome-tests.sh"
     "run-telegram-report-tests.sh"
     "run-sos-caring-tests.sh"
   )

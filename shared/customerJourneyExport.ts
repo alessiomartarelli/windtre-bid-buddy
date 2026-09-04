@@ -1,5 +1,5 @@
 import {
-  CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS,
+  CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, economicStateLabel,
 } from "./customerJourney";
 import type { CustomerJourney, CustomerJourneyItem, CjDriver } from "./schema";
 
@@ -138,7 +138,7 @@ export function driverTableBody(
 export function contractsHead(): string[] {
   return [
     "", "Driver", "Descrizione", "Contratto", "Addetto", "PDV",
-    "IMEI", "RATA/CANONE", "Inserito", "Attivato", "Stato", "Gettone",
+    "IMEI", "RATA/CANONE", "Inserito", "Attivato", "Stato", "Esito", "Gettone",
   ];
 }
 
@@ -159,6 +159,7 @@ export function contractsBody(
     fmtDate(it.dataInserimento),
     fmtDate(it.dataAttivazione),
     itemStateLabel(it.state),
+    economicStateLabel(it.economicState),
     it.gettoneConfirmed ? "Sì" : "No",
   ]);
 }

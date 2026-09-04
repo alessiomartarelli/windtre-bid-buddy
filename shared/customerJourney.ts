@@ -1,4 +1,4 @@
-import type { CjDriver, CjItemState } from "./schema";
+import type { CjDriver, CjItemState, CjEconomicState } from "./schema";
 
 // === Customer Journey driver classification (Task #158) ===
 // Mappa categoria BiSuite → driver CJ. Rispecchia la classificazione canvass
@@ -23,7 +23,9 @@ export const CJ_DRIVER_ORDER: CjDriver[] = [
   "mobile", "fisso", "energia", "assicurazioni", "telefono", "protetti",
 ];
 
-export const CJ_ITEM_STATE_LABELS: Record<CjItemState, string> = {
+// Etichette dello stato OPERATIVO (avanzamento). Include anche i valori
+// economici legacy per tollerare righe non ancora migrate / vecchi export.
+export const CJ_ITEM_STATE_LABELS: Record<CjItemState | CjEconomicState, string> = {
   inserito: "Inserito",
   in_lavorazione: "In lavorazione",
   attivato: "Attivato",
@@ -34,18 +36,12 @@ export const CJ_ITEM_STATE_LABELS: Record<CjItemState, string> = {
   riaccreditato: "Riaccreditato",
 };
 
-// Un driver è "attivato" se ha almeno un item in uno di questi stati (cioè
-// non KO e non stornato). Centralizzato qui per essere riusato sia dal
-// dettaglio journey sia dal riepilogo per-scheda nella lista.
-export const CJ_ACTIVE_STATES = new Set<CjItemState>([
-  "inserito", "in_lavorazione", "attivato", "pagato", "riaccreditato",
-]);
-
-// Fase di attivazione di un driver, per evidenziare nelle schede clienti COME è
-// stato attivato: `periodo` = attivato nel periodo della journey dall'operatore
-// (o da chiunque, per admin) → verde; `altrui` = attivato da un altro
-// utente/addetto (solo per l'operatore che guarda) → viola; `precedente` =
-// contratto pre-esistente, attivato in un mese anteriore a T0 → giallo.
+export const CJ_ECONOMIC_STATE_LABELS: Record<CjEconomicState, string> = {
+  pagato: "Pagato",
+  annullato: "Annullato",
+  stornato: "Stornato",
+  riaccreditato: "Riaccreditato",
+};
 export type CjDriverPhase = "periodo" | "altrui" | "precedente";
 
 export interface CjDriverSummary {
@@ -68,6 +64,9 @@ export interface CjReportRow {
   pdv: string;
   addetto: string;
   state: CjItemState;
+  // Stato economico (esito DRMS/manuale) o null. Concorre con `state` a
+  // stabilire se il contratto è attivo (`isCjItemActive`).
+  economicState?: CjEconomicState | null;
   driver: CjDriver;
   valore: number;
   // Data di attivazione della SIM mobile che ha aperto la journey
@@ -158,7 +157,7 @@ export interface CjReportGroup {
  * Aggrega le righe item-level della reportistica lungo una dimensione scelta
  * dal chiamante (`keyFn`). `clienti` = journey distinte (Set su journeyId),
  * `contratti` = numero di item, `attivati` = item in uno stato attivo
- * (`CJ_ACTIVE_STATES`), `valore` = somma degli importi. Ordina per valore
+ * (`isCjItemActive`), `valore` = somma degli importi. Ordina per valore
  * decrescente, poi contratti, poi label (it).
  */
 export function aggregateReport(
@@ -178,7 +177,7 @@ export function aggregateReport(
     e.journeys.add(r.journeyId);
     e.contratti += 1;
     e.valore += r.valore;
-    if (CJ_ACTIVE_STATES.has(r.state)) e.attivati += 1;
+    if (isCjItemActive(r)) e.attivati += 1;
   }
   return Array.from(map.entries())
     .map(([key, e]) => ({
@@ -345,7 +344,7 @@ export interface CjGettoneJourney {
 /**
  * Costruisce una `CjGettoneJourney` per ogni journey distinta a partire dalle
  * righe item-level della reportistica. La COHORT include solo i clienti con
- * almeno una SIM mobile in stato attivo (`CJ_ACTIVE_STATES`): le journey con
+ * almeno una SIM mobile in stato attivo (`isCjItemActive`): le journey con
  * mobile non attivo (ko/stornato/annullato) o senza mobile sono escluse.
  * Le piste attive contano i driver NON-mobile distinti con almeno un item in
  * uno stato attivo. L'energia (gas/luce) conta come una sola pista perché la
@@ -392,7 +391,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     if (r.driver === "mobile") {
       e.mobilePdv = minNonEmpty(e.mobilePdv, r.pdv);
       e.mobileAddetto = minNonEmpty(e.mobileAddetto, r.addetto);
-      if (CJ_ACTIVE_STATES.has(r.state)) {
+      if (isCjItemActive(r)) {
         e.simAttive += 1;
         if (eventMonth != null) e.mobileMonths.push(eventMonth);
         // Coorte per data inserimento: teniamo la SIM mobile attiva più
@@ -409,7 +408,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
       }
     }
     if (!e.openedAt && r.openedAt) e.openedAt = r.openedAt;
-    if (r.driver !== "mobile" && CJ_ACTIVE_STATES.has(r.state)) {
+    if (r.driver !== "mobile" && isCjItemActive(r)) {
       e.candidates.push({ driver: r.driver, eventDate: r.eventDate ?? null });
     }
   }
@@ -674,11 +673,11 @@ export function gettoneDetailByKey(
  * il riepilogo conta come singolo driver. L'ordine segue `CJ_DRIVER_ORDER`.
  */
 export function summarizeDrivers(
-  items: { driver: CjDriver; state: CjItemState }[],
+  items: ({ driver: CjDriver } & CjStatePair)[],
 ): CjDriverSummary[] {
   return CJ_DRIVER_ORDER.map((driver) => {
     const driverItems = items.filter((it) => it.driver === driver);
-    const activated = driverItems.some((it) => CJ_ACTIVE_STATES.has(it.state));
+    const activated = driverItems.some((it) => isCjItemActive(it));
     return { driver, activated, count: driverItems.length };
   });
 }
@@ -697,10 +696,10 @@ export function summarizeDrivers(
  * Ritorna null se nessun item è attivo.
  */
 export function classifyDriverPhase(
-  items: { state: CjItemState; eventDate: string | null; addetto: string | null }[],
+  items: (CjStatePair & { eventDate: string | null; addetto: string | null })[],
   opts: { t0Month: number | null; myAddetti: string[] | null },
 ): CjDriverPhase | null {
-  const active = items.filter((it) => CJ_ACTIVE_STATES.has(it.state));
+  const active = items.filter((it) => isCjItemActive(it));
   if (active.length === 0) return null;
   const mine =
     opts.myAddetti == null
@@ -729,12 +728,12 @@ export function classifyDriverPhase(
  * pastiglie driver per fase di attivazione.
  */
 export function summarizeDriversWithPhase(
-  items: { driver: CjDriver; state: CjItemState; eventDate: string | null; addetto: string | null }[],
+  items: ({ driver: CjDriver } & CjStatePair & { eventDate: string | null; addetto: string | null })[],
   opts: { t0Month: number | null; myAddetti: string[] | null },
 ): CjDriverSummary[] {
   return CJ_DRIVER_ORDER.map((driver) => {
     const driverItems = items.filter((it) => it.driver === driver);
-    const activated = driverItems.some((it) => CJ_ACTIVE_STATES.has(it.state));
+    const activated = driverItems.some((it) => isCjItemActive(it));
     const phase = activated ? classifyDriverPhase(driverItems, opts) : null;
     return { driver, activated, count: driverItems.length, phase };
   });
@@ -850,4 +849,33 @@ export function suggestRagioneSocialeFromEmail(
   if (!key || GENERIC_EMAIL_LOCAL_PARTS.has(key)) return null;
   if (!/[a-zA-Z]/.test(base)) return null;
   return base.toUpperCase();
+}
+
+export const CJ_ECONOMIC_STATE_EMPTY_LABEL = "—";
+
+export const CJ_INACTIVE_OPERATIVE_STATES = new Set<string>(["ko"]);
+
+export const CJ_INACTIVE_ECONOMIC_STATES = new Set<string>(["annullato", "stornato"]);
+
+export interface CjStatePair {
+  state: string;
+  economicState?: string | null;
+}
+
+export function economicStateLabel(state: string | null | undefined): string {
+  if (!state) return CJ_ECONOMIC_STATE_EMPTY_LABEL;
+  return CJ_ECONOMIC_STATE_LABELS[state as CjEconomicState] || state;
+}
+
+/**
+ * Un contratto è "attivo" (conta per driver attivati, piste, gettone, report)
+ * se lo stato OPERATIVO non è KO e lo stato ECONOMICO non è annullato/stornato.
+ * Centralizzato qui per essere riusato da dettaglio journey, lista schede,
+ * report, timeline ed export.
+ */
+export function isCjItemActive(it: CjStatePair): boolean {
+  if (CJ_INACTIVE_OPERATIVE_STATES.has(it.state)) return false;
+  if (CJ_INACTIVE_ECONOMIC_STATES.has(it.state)) return false;
+  if (it.economicState && CJ_INACTIVE_ECONOMIC_STATES.has(it.economicState)) return false;
+  return true;
 }

@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 //   - `aggregateReport`: aggregazione item-level lungo una dimensione
 //     (negozio / addetto / cliente). clienti = journey distinte (Set su
 //     journeyId), contratti = numero item, attivati = item in stato attivo
-//     (CJ_ACTIVE_STATES), valore = somma importi, ordinamento per valore↓.
+//     (isCjItemActive), valore = somma importi, ordinamento per valore↓.
 //   - `matchesCjFilters` + `cjSearchMatches`: il filtraggio condiviso fra
 //     "Schede clienti" e "Reportistica". Lo stesso predicato deve agire in
 //     modo identico su una journey (array di facet PDV/addetti/stati) e su una
@@ -19,7 +19,7 @@ const {
   aggregateReport,
   matchesCjFilters,
   cjSearchMatches,
-  CJ_ACTIVE_STATES,
+  isCjItemActive,
   CJ_GETTONE_TABLE,
   CJ_MAX_PISTE,
   gettoneForPiste,
@@ -58,16 +58,22 @@ const byAddetto = (r) => ({ key: r.addetto || '—', label: r.addetto || 'Senza 
 const byCliente = (r) => ({ key: r.journeyId, label: r.cliente || r.customerKey });
 
 // ===========================================================================
-// CJ_ACTIVE_STATES: contratto degli stati "attivi" su cui si basa il conteggio
-// `attivati`. Blocca regressioni se qualcuno tocca l'insieme.
+// isCjItemActive: contratto degli stati "attivi" (coppia operativo +
+// economico) su cui si basa il conteggio `attivati`. Blocca regressioni se
+// qualcuno tocca la regola.
 // ===========================================================================
-test('CJ_ACTIVE_STATES: solo gli stati non-KO/annullato/stornato', () => {
-  for (const s of ['inserito', 'in_lavorazione', 'attivato', 'pagato', 'riaccreditato']) {
-    assert.equal(CJ_ACTIVE_STATES.has(s), true, `${s} deve contare come attivo`);
+test('isCjItemActive: KO operativo e annullato/stornato economico NON attivi, il resto sì', () => {
+  for (const s of ['inserito', 'in_lavorazione', 'attivato']) {
+    assert.equal(isCjItemActive({ state: s, economicState: null }), true, `${s} deve contare come attivo`);
+    assert.equal(isCjItemActive({ state: s, economicState: 'pagato' }), true, `${s}+pagato attivo`);
+    assert.equal(isCjItemActive({ state: s, economicState: 'riaccreditato' }), true, `${s}+riaccreditato attivo`);
+    assert.equal(isCjItemActive({ state: s, economicState: 'annullato' }), false, `${s}+annullato NON attivo`);
+    assert.equal(isCjItemActive({ state: s, economicState: 'stornato' }), false, `${s}+stornato NON attivo`);
   }
-  for (const s of ['ko', 'annullato', 'stornato']) {
-    assert.equal(CJ_ACTIVE_STATES.has(s), false, `${s} NON deve contare come attivo`);
-  }
+  assert.equal(isCjItemActive({ state: 'ko', economicState: 'pagato' }), false, 'ko NON deve contare come attivo');
+  // Retro-compatibilità: valori economici legacy nel campo `state`.
+  for (const s of ['pagato', 'riaccreditato']) assert.equal(isCjItemActive({ state: s }), true);
+  for (const s of ['annullato', 'stornato']) assert.equal(isCjItemActive({ state: s }), false);
 });
 
 // ===========================================================================

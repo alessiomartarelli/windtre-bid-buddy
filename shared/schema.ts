@@ -253,13 +253,41 @@ export const customerJourneyItems = pgTable("customer_journey_items", {
   importo: varchar("importo"),
   rata: varchar("rata"),
   modVendita: varchar("mod_vendita"),
-  // Stato: 'inserito' | 'in_lavorazione' | 'attivato' | 'ko' | 'pagato' | 'annullato' | 'stornato' | 'riaccreditato'
+  // Stato OPERATIVO (avanzamento del contratto, manuale/BiSuite):
+  // 'inserito' | 'in_lavorazione' | 'attivato' | 'ko'. I valori legacy
+  // pagato/annullato/stornato/riaccreditato sono migrati al boot nel campo
+  // economico (vedi `migrateLegacyCustomerJourneyStates`).
   state: varchar("state").notNull().default("inserito"),
   // true se lo stato è stato impostato manualmente: il reconcile automatico
   // non lo sovrascrive più (preserva le conferme manuali del gettone, ecc.).
   stateManual: boolean("state_manual").notNull().default(false),
   stateUpdatedAt: timestamp("state_updated_at"),
   stateUpdatedBy: varchar("state_updated_by"),
+  // Stato ECONOMICO (esito del compenso, alimentato dal DRMS):
+  // NULL | 'pagato' | 'annullato' | 'stornato' | 'riaccreditato'.
+  economicState: varchar("economic_state"),
+  // true se lo stato economico è stato impostato a mano: il motore DRMS non lo
+  // sovrascrive (segnala solo l'incongruenza con `drmsMismatch`).
+  economicStateManual: boolean("economic_state_manual").notNull().default(false),
+  economicStateUpdatedAt: timestamp("economic_state_updated_at"),
+  economicStateUpdatedBy: varchar("economic_state_updated_by"),
+  // Mese di competenza DRMS del contratto ('YYYY-MM', dalla prima riga
+  // CONTRATTUALE che lo cita).
+  drmsCompetenza: varchar("drms_competenza"),
+  // Ultimo esito calcolato dal motore DRMS (scritto SEMPRE, anche quando lo
+  // stato economico è manuale) con il riferimento alla riga che l'ha
+  // determinato: stato, competenza, causale, importo, SEQ_ID, upload e
+  // criterio di match (contratto / pod_pdr / cf).
+  drmsOutcomeState: varchar("drms_outcome_state"),
+  drmsOutcomeCompetenza: varchar("drms_outcome_competenza"),
+  drmsOutcomeCausale: varchar("drms_outcome_causale"),
+  drmsOutcomeImporto: varchar("drms_outcome_importo"),
+  drmsOutcomeSeqId: varchar("drms_outcome_seq_id"),
+  drmsOutcomeUploadId: varchar("drms_outcome_upload_id"),
+  drmsOutcomeMatch: varchar("drms_outcome_match"),
+  drmsOutcomeAt: timestamp("drms_outcome_at"),
+  // true quando lo stato economico manuale differisce dall'esito DRMS.
+  drmsMismatch: boolean("drms_mismatch").notNull().default(false),
   // Conferma manuale del gettone (formula non cablata in Fase 1).
   gettoneConfirmed: boolean("gettone_confirmed").notNull().default(false),
   gettoneConfirmedAt: timestamp("gettone_confirmed_at"),
@@ -707,10 +735,18 @@ export const insertCustomerJourneyItemSchema = createInsertSchema(customerJourne
   id: true, createdAt: true, updatedAt: true,
 });
 
+// Stati OPERATIVI di un contratto CJ (avanzamento, manuale/BiSuite).
 export const CJ_ITEM_STATES = [
-  "inserito", "in_lavorazione", "attivato", "ko", "pagato", "annullato", "stornato", "riaccreditato",
+  "inserito", "in_lavorazione", "attivato", "ko",
 ] as const;
 export type CjItemState = (typeof CJ_ITEM_STATES)[number];
+
+// Stati ECONOMICI di un contratto CJ (esito del compenso, dal DRMS o manuale).
+// NULL = nessun esito.
+export const CJ_ECONOMIC_STATES = [
+  "pagato", "annullato", "stornato", "riaccreditato",
+] as const;
+export type CjEconomicState = (typeof CJ_ECONOMIC_STATES)[number];
 
 export const CJ_DRIVERS = [
   "mobile", "fisso", "energia", "assicurazioni", "telefono", "protetti",

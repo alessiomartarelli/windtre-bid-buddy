@@ -27,18 +27,20 @@ import {
   Search, User, Building2, Loader2, Coins, Pencil,
   FileText, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
   LayoutGrid, BarChart3, Store, Users, TrendingUp, Wallet, Calendar,
-  ChevronRight, ChevronDown,
+  ChevronRight, ChevronDown, Eye, Receipt,
 } from "lucide-react";
 import {
-  CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ACTIVE_STATES,
+  CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ECONOMIC_STATE_LABELS,
+  isCjItemActive, economicStateLabel,
   aggregateReport, matchesCjFilters,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
   buildGettoneJourneys, filterGettoneByDate, filterGettoneByInsertDate,
   aggregateGettone, gettoneTotals,
   crossSellPercentuali, gettoneDetailByKey,
 } from "@shared/customerJourney";
-import { CJ_ITEM_STATES } from "@shared/schema";
-import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjDriver } from "@shared/schema";
+import { CJ_ITEM_STATES, CJ_ECONOMIC_STATES } from "@shared/schema";
+import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjEconomicState, CjDriver } from "@shared/schema";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type {
   CjReportRow, CjReportGroup, CjListFilters,
   CjGettoneGroup, CjGettoneTotals, CjGettoneJourney, CjGettoneDetailRow,
@@ -564,6 +566,38 @@ export default function CustomerJourneyPage() {
     },
   });
 
+  // "Esita da DRMS": rielabora tutti i DRMS caricati e aggiorna lo stato
+  // economico dei contratti (admin).
+  const esitaDrmsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/customer-journeys/esita-drms");
+      return res.json();
+    },
+    onSuccess: (data: {
+      items?: number; matched?: number; notFound?: number; ambiguous?: number;
+      mismatches?: number; uploads?: number;
+      byState?: Record<string, number>;
+    }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      const bs = data?.byState ?? {};
+      const parts = CJ_ECONOMIC_STATES
+        .map((st) => `${bs[st] ?? 0} ${CJ_ECONOMIC_STATE_LABELS[st].toLowerCase()}`)
+        .join(", ");
+      toast({
+        title: (data?.uploads ?? 0) === 0 ? "Nessun DRMS caricato" : "Esito da DRMS completato",
+        description: `${data?.matched ?? 0}/${data?.items ?? 0} contratti esitati (${parts}); ${data?.notFound ?? 0} non trovati, ${data?.ambiguous ?? 0} ambigui, ${data?.mismatches ?? 0} incongruenze con stato manuale.`,
+      });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: "Errore",
+        description: err instanceof Error ? err.message : "Esito da DRMS fallito",
+        variant: "destructive",
+      });
+    },
+  });
+
   const configMutation = useMutation({
     mutationFn: async (triggerDate: string) => {
       const res = await apiRequest("PUT", "/api/customer-journey-config", { triggerDate });
@@ -599,6 +633,25 @@ export default function CustomerJourneyPage() {
       toast({
         title: "Errore",
         description: err instanceof Error ? err.message : "Aggiornamento stato fallito",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const economicStateMutation = useMutation({
+    mutationFn: async ({ id, economicState }: { id: string; economicState: CjEconomicState | null }) => {
+      const res = await apiRequest("PATCH", `/api/customer-journey-items/${id}/economic-state`, { economicState });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys", selectedId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+    },
+    onError: (err: unknown) => {
+      toast({
+        title: "Errore",
+        description: err instanceof Error ? err.message : "Aggiornamento stato economico fallito",
         variant: "destructive",
       });
     },
@@ -693,8 +746,11 @@ export default function CustomerJourneyPage() {
   const stateOptions = useMemo(() => {
     const s = new Set<string>();
     for (const j of journeys) for (const st of j.states ?? []) if (st) s.add(st);
-    for (const r of reportRows) if (r.state) s.add(r.state);
-    return CJ_ITEM_STATES.filter((st) => s.has(st));
+    for (const r of reportRows) {
+      if (r.state) s.add(r.state);
+      if (r.economicState) s.add(r.economicState);
+    }
+    return [...CJ_ITEM_STATES, ...CJ_ECONOMIC_STATES].filter((st) => s.has(st));
   }, [journeys, reportRows]);
 
   const activeFilters: CjListFilters = useMemo(() => ({
@@ -760,7 +816,7 @@ export default function CustomerJourneyPage() {
     customerType: r.customerType,
     pdvs: r.pdv ? [r.pdv] : [],
     addetti: r.addetto ? [r.addetto] : [],
-    states: r.state ? [r.state] : [],
+    states: [r.state, r.economicState].filter((x): x is CjItemState | CjEconomicState => !!x),
     searchHay: [r.cliente, r.customerKey, r.addetto, r.pdv].filter(Boolean).join(" "),
   }, activeFilters)), [reportRows, activeFilters]);
 
@@ -779,7 +835,7 @@ export default function CustomerJourneyPage() {
       acc.contratti += 1;
       acc.valore += r.valore;
       acc.journeys.add(r.journeyId);
-      if (CJ_ACTIVE_STATES.has(r.state)) acc.attivati += 1;
+      if (isCjItemActive(r)) acc.attivati += 1;
       return acc;
     },
     { contratti: 0, valore: 0, attivati: 0, journeys: new Set<string>() },
@@ -961,6 +1017,10 @@ export default function CustomerJourneyPage() {
     (id: string, state: CjItemState) => stateMutation.mutate({ id, state }),
     [stateMutation],
   );
+  const handleSetEconomicState = useCallback(
+    (id: string, economicState: CjEconomicState | null) => economicStateMutation.mutate({ id, economicState }),
+    [economicStateMutation],
+  );
   const handleSetGettone = useCallback(
     (id: string, confirmed: boolean) => gettoneMutation.mutate({ id, confirmed }),
     [gettoneMutation],
@@ -993,18 +1053,34 @@ export default function CustomerJourneyPage() {
                 </p>
               </div>
               {isAdmin && (
-                <Button
-                  onClick={() => reconcileMutation.mutate()}
-                  disabled={reconcileMutation.isPending}
-                  data-testid="button-reconcile"
-                >
-                  {reconcileMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                  )}
-                  Rigenera da BiSuite
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => esitaDrmsMutation.mutate()}
+                    disabled={esitaDrmsMutation.isPending}
+                    data-testid="button-esita-drms"
+                    title="Rielabora tutti i DRMS caricati e aggiorna lo stato economico dei contratti"
+                  >
+                    {esitaDrmsMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Receipt className="h-4 w-4 mr-2" />
+                    )}
+                    Esita da DRMS
+                  </Button>
+                  <Button
+                    onClick={() => reconcileMutation.mutate()}
+                    disabled={reconcileMutation.isPending}
+                    data-testid="button-reconcile"
+                  >
+                    {reconcileMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Rigenera da BiSuite
+                  </Button>
+                </div>
               )}
             </div>
 
@@ -1424,10 +1500,11 @@ export default function CustomerJourneyPage() {
               <JourneyDetailView
                 detail={detailQuery.data}
                 onSetState={handleSetState}
+                onSetEconomicState={handleSetEconomicState}
                 onSetGettone={handleSetGettone}
                 onSaveDetails={handleSaveDetails}
                 onSaveRagioneSociale={handleSaveRagioneSociale}
-                statePending={stateMutation.isPending}
+                statePending={stateMutation.isPending || economicStateMutation.isPending}
                 gettonePending={gettoneMutation.isPending}
                 detailsPending={detailsMutation.isPending}
                 ragioneSocialePending={ragioneSocialeMutation.isPending}
@@ -2060,7 +2137,7 @@ function CustomerJourneyTimeline({
             <tbody>
               {rows.map(({ it, date }) => {
                 const color = cjDriverColor(it.driver, CJ_DRIVER_COLORS);
-                const faded = isFadedState(it.state);
+                const faded = isFadedState(it.state, it.economicState);
                 const isT0 = it.id === t0ItemId;
                 const eventMi = monthIndex(date);
                 const stateLabel = CJ_ITEM_STATE_LABELS[it.state as CjItemState] || it.state;
@@ -2073,6 +2150,7 @@ function CustomerJourneyTimeline({
                   it.addetto ? `Addetto: ${it.addetto}` : null,
                   `Data: ${fmtDate(date)}`,
                   `Stato: ${stateLabel}`,
+                  it.economicState ? `Esito: ${economicStateLabel(it.economicState)}` : null,
                 ]
                   .filter(Boolean)
                   .join("\n");
@@ -2185,7 +2263,7 @@ function JourneyBreakdown({
   const validity = computeItemValidity(model, journey);
   const drvValidiLabel = (negItems: CustomerJourneyItem[]): string => {
     const simCount = negItems.filter(
-      (it) => it.driver === "mobile" && CJ_ACTIVE_STATES.has(it.state as CjItemState),
+      (it) => it.driver === "mobile" && isCjItemActive(it),
     ).length;
     const validPiste = negItems.filter(
       (it) => validity.get(it.id)?.counts,
@@ -2344,11 +2422,13 @@ function JourneyBreakdown({
   );
 }
 
+const ECONOMIC_AUTO_VALUE = "__auto";
 function JourneyDetailViewImpl({
-  detail, onSetState, onSetGettone, onSaveDetails, onSaveRagioneSociale, statePending, gettonePending, detailsPending, ragioneSocialePending,
+  detail, onSetState, onSetEconomicState, onSetGettone, onSaveDetails, onSaveRagioneSociale, statePending, gettonePending, detailsPending, ragioneSocialePending,
 }: {
   detail: JourneyDetail;
   onSetState: (id: string, state: CjItemState) => void;
+  onSetEconomicState: (id: string, economicState: CjEconomicState | null) => void;
   onSetGettone: (id: string, confirmed: boolean) => void;
   onSaveDetails: (id: string, details: ItemDetailsPayload) => void;
   onSaveRagioneSociale: (id: string, ragioneSociale: string | null) => void;
@@ -2666,6 +2746,7 @@ function JourneyDetailViewImpl({
                     <TableHead>Inserito</TableHead>
                     <TableHead>Attivato</TableHead>
                     <TableHead>Stato</TableHead>
+                    <TableHead>Esito</TableHead>
                     <TableHead className="text-center">Gettone</TableHead>
                     <TableHead className="text-center">Modifica</TableHead>
                   </TableRow>
@@ -2724,6 +2805,13 @@ function JourneyDetailViewImpl({
                             ))}
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        <EconomicStateCell
+                          item={it}
+                          pending={statePending}
+                          onChange={(v) => onSetEconomicState(it.id, v)}
+                        />
                       </TableCell>
                       <TableCell className="text-center">
                         <Button
@@ -2873,5 +2961,99 @@ function ItemDetailsDialog({
         </DialogFooter>
       </ResponsiveDialogContent>
     </Dialog>
+  );
+}
+
+function EconomicStateCell({
+  item: it, pending, onChange,
+}: {
+  item: CustomerJourneyItem;
+  pending: boolean;
+  onChange: (v: CjEconomicState | null) => void;
+}) {
+  const value = it.economicState ?? ECONOMIC_AUTO_VALUE;
+  const hasDrms = !!it.drmsOutcomeState;
+  const mismatch = !!it.drmsMismatch;
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="flex flex-col gap-0.5">
+        <Select
+          value={value}
+          onValueChange={(v) => onChange(v === ECONOMIC_AUTO_VALUE ? null : (v as CjEconomicState))}
+          disabled={pending}
+        >
+          <SelectTrigger
+            className={`h-8 w-[150px] text-xs border ${it.economicState ? STATE_VARIANTS[it.economicState] || "" : ""}`}
+            data-testid={`select-economic-state-${it.id}`}
+            title={it.economicStateManual ? "Stato economico impostato a mano" : hasDrms ? "Stato economico da DRMS" : "Nessun esito economico"}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ECONOMIC_AUTO_VALUE} className="text-xs">
+              {hasDrms ? "Automatico (DRMS)" : "—"}
+            </SelectItem>
+            {CJ_ECONOMIC_STATES.map((s) => (
+              <SelectItem key={s} value={s} className="text-xs">
+                {CJ_ECONOMIC_STATE_LABELS[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {it.drmsCompetenza && (
+          <span className="text-[10px] text-muted-foreground" data-testid={`text-drms-competenza-${it.id}`}>
+            Competenza DRMS {it.drmsCompetenza}
+          </span>
+        )}
+      </div>
+      {hasDrms && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={`h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors ${
+                mismatch
+                  ? "border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-2 ring-amber-400/50 animate-pulse"
+                  : "border-transparent text-muted-foreground hover:bg-muted"
+              }`}
+              title={mismatch ? "Esito DRMS diverso dallo stato impostato a mano" : "Dettagli esito DRMS"}
+              data-testid={`button-drms-outcome-${it.id}`}
+              data-mismatch={mismatch ? "true" : "false"}
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 text-xs space-y-1.5" align="end" data-testid={`popover-drms-outcome-${it.id}`}>
+            <div className="font-semibold text-sm flex items-center gap-2">
+              Esito DRMS
+              <Badge variant="outline" className={`text-[10px] ${STATE_VARIANTS[it.drmsOutcomeState || ""] || ""}`}>
+                {economicStateLabel(it.drmsOutcomeState)}
+              </Badge>
+            </div>
+            {mismatch && (
+              <p className="text-amber-700 dark:text-amber-300" data-testid={`text-drms-mismatch-${it.id}`}>
+                Diverso dallo stato impostato a mano ({economicStateLabel(it.economicState)}).
+              </p>
+            )}
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+              <dt className="text-muted-foreground">Competenza</dt>
+              <dd>{it.drmsOutcomeCompetenza || "—"}</dd>
+              <dt className="text-muted-foreground">Causale</dt>
+              <dd>{it.drmsOutcomeCausale || "—"}</dd>
+              <dt className="text-muted-foreground">Importo</dt>
+              <dd>{it.drmsOutcomeImporto != null ? `€ ${Number(it.drmsOutcomeImporto).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</dd>
+              <dt className="text-muted-foreground">Match</dt>
+              <dd>{it.drmsOutcomeMatch === "pod_pdr" ? "POD/PDR" : it.drmsOutcomeMatch === "cf" ? "CF/P.IVA + tipo" : "Codice contratto"}</dd>
+              {it.drmsOutcomeSeqId && (
+                <>
+                  <dt className="text-muted-foreground">SEQ_ID</dt>
+                  <dd className="font-mono">{it.drmsOutcomeSeqId}</dd>
+                </>
+              )}
+            </dl>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
   );
 }

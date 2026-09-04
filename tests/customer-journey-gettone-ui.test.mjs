@@ -582,7 +582,7 @@ test('scenario 5: the SIM-insertion date range filter narrows the gettone cohort
 // ===========================================================================
 // SCENARIO 6 (Task #198): contratti ANNULLATI/KO esclusi da attivi/saturazione/
 // fatturato. I report e l'Analisi gettoni escludono per design gli item in stato
-// ko/stornato/annullato (CJ_ACTIVE_STATES in shared/customerJourney.ts). Una
+// ko/stornato/annullato (isCjItemActive in shared/customerJourney.ts). Una
 // regressione che li contasse di nuovo nella sotto-tabella gettone o nella riga
 // Dettaglio NON sarebbe rilevata dagli scenari 1-3 (che seminano solo item
 // attivi). Qui seminiamo una journey con una pista cross-sell ATTIVA (energia)

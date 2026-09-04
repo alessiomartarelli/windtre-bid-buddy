@@ -1,16 +1,17 @@
 import type { CustomerJourney, CustomerJourneyItem } from "@shared/schema";
-import { CJ_ACTIVE_STATES, isMobileActivationCategory, monthOfIso, pisteInWindow } from "../../../shared/customerJourney";
+import { isCjItemActive, isMobileActivationCategory, monthOfIso, pisteInWindow } from "../../../shared/customerJourney";
 
 // === Logica pura del tracciamento temporale Customer Journey (Task #185) ===
 // Estratta dal componente React (`CustomerJourney.tsx`) per poterla testare a
 // unità senza renderizzare la UI (Task #186). Gli unici import a runtime sono
-// helper puri di `shared/customerJourney` (`CJ_ACTIVE_STATES`, `monthOfIso`,
+// helper puri di `shared/customerJourney` (`isCjItemActive`, `monthOfIso`,
 // `pisteInWindow`) — nessuna dipendenza React/UI — importati per via relativa
 // così il loader `tsx` li risolve nei test senza configurare gli alias. Riusare
 // questi helper garantisce che la validità mostrata nella scheda usi ESATTAMENTE
 // la stessa regola (e gli stessi mesi UTC) del conteggio gettone condiviso.
 
-// Stati di un item "non più validi": vengono mostrati attenuati nella timeline.
+// Stati di un item "non più validi": vengono mostrati attenuati nella timeline
+// (operativo KO, economico stornato/annullato).
 export const CJ_FADED_STATES: Set<string> = new Set([
   "ko",
   "stornato",
@@ -60,9 +61,9 @@ export function cjDriverColor(
   return colorMap[driver] ?? CJ_DEFAULT_DRIVER_COLOR;
 }
 
-// Stato attenuato (ko/stornato/annullato)?
-export function isFadedState(state: string): boolean {
-  return CJ_FADED_STATES.has(state);
+// Stato attenuato (operativo ko / economico stornato o annullato)?
+export function isFadedState(state: string, economicState?: string | null): boolean {
+  return CJ_FADED_STATES.has(state) || (!!economicState && CJ_FADED_STATES.has(economicState));
 }
 
 export interface TimelineRow {
@@ -220,7 +221,7 @@ export function computeItemValidity(
     const m = monthOfIso(isoOf(date));
     if (m == null) continue;
     allMonths.push(m);
-    if (it.driver === "mobile" && CJ_ACTIVE_STATES.has(it.state as never)) {
+    if (it.driver === "mobile" && isCjItemActive(it)) {
       mobileMonths.push(m);
     }
   }
@@ -247,7 +248,7 @@ export function computeItemValidity(
       out.set(it.id, { kind: "non_pista", counts: false });
       continue;
     }
-    if (!CJ_ACTIVE_STATES.has(it.state as never)) {
+    if (!isCjItemActive(it)) {
       out.set(it.id, { kind: "stato_non_valido", counts: false });
       continue;
     }
