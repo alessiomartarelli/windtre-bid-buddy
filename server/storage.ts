@@ -1749,7 +1749,15 @@ export class DatabaseStorage implements IStorage {
         // Trigger journey: nuova attivazione mobile dalla data configurata.
         if (driver === "mobile" && isMobileActivationCategory(categoria)
             && autoState !== "annullato" && saleDate && saleDate >= triggerDate) {
-          if (!cand.hasTrigger || (cand.openedAt && saleDate < cand.openedAt)) {
+          // Tie-break deterministico a parità di data (l'ordine di lettura
+          // delle vendite non è garantito): vince il bisuiteId più basso.
+          const candBid = sale.bisuiteId ?? Number.MAX_SAFE_INTEGER;
+          const curBid = cand.triggerBisuiteId ?? Number.MAX_SAFE_INTEGER;
+          const earlier = !!cand.openedAt && (
+            saleDate.getTime() < cand.openedAt.getTime() ||
+            (saleDate.getTime() === cand.openedAt.getTime() && candBid < curBid)
+          );
+          if (!cand.hasTrigger || earlier) {
             cand.hasTrigger = true;
             cand.triggerSaleId = sale.id;
             cand.triggerBisuiteId = sale.bisuiteId ?? null;
@@ -1821,6 +1829,26 @@ export class DatabaseStorage implements IStorage {
     // 1) Journey: una sola query per chunk. `.returning()` ritorna gli id anche
     // per le righe in conflitto (DO UPDATE), così possiamo collegare gli item.
     const keyToJourneyId = new Map<string, string>();
+    // T0 delle journey già esistenti, PRIMA dell'upsert: serve a contare quante
+    // journey cambiano data di apertura in questo giro (il T0 è ricalcolato
+    // integralmente dalle vendite: se compare una SIM valida più vecchia, o
+    // la data trigger è cambiata, la journey NON deve restare bloccata sul
+    // trigger con cui era nata).
+    const existingT0 = await tx.select({
+      customerKey: customerJourneys.customerKey,
+      openedAt: customerJourneys.openedAt,
+    }).from(customerJourneys).where(eq(customerJourneys.organizationId, orgId));
+    const existingT0ByKey = new Map(existingT0.map((r) => [r.customerKey, r.openedAt]));
+    let t0MovedBack = 0;
+    let t0MovedForward = 0;
+    for (const cand of candidates) {
+      if (!existingT0ByKey.has(cand.anag.customerKey)) continue;
+      const prev = existingT0ByKey.get(cand.anag.customerKey) ?? null;
+      const next = cand.openedAt;
+      if (!prev || !next) continue;
+      if (next.getTime() < prev.getTime()) t0MovedBack += 1;
+      else if (next.getTime() > prev.getTime()) t0MovedForward += 1;
+    }
     for (const part of chunk(candidates, 500)) {
       const rows = await tx.insert(customerJourneys)
         .values(part.map((cand) => ({
@@ -1850,6 +1878,13 @@ export class DatabaseStorage implements IStorage {
             nominativo: sql`excluded.nominativo`,
             telefono: sql`excluded.telefono`,
             codiceCliente: sql`excluded.codice_cliente`,
+            // T0 e vendita trigger seguono SEMPRE la prima attivazione mobile
+            // valida (>= data trigger) trovata ora nelle vendite: una journey
+            // nata quando quella SIM non era ancora scaricata (o con un'altra
+            // data trigger) non deve restare congelata sulla SIM più tarda.
+            triggerSaleId: sql`excluded.trigger_sale_id`,
+            triggerBisuiteId: sql`excluded.trigger_bisuite_id`,
+            openedAt: sql`excluded.opened_at`,
             updatedAt: new Date(),
           },
         })
@@ -1954,6 +1989,8 @@ export class DatabaseStorage implements IStorage {
       skippedNoIdentityWithDriver,
       removedJourneys: pruned.journeys,
       removedItems: pruned.items,
+      t0MovedBack,
+      t0MovedForward,
     };
   }
 

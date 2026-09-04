@@ -207,6 +207,11 @@ export type CjReconcileResult = {
   // in avanti della data trigger o cancellazioni lato BiSuite).
   removedJourneys: number;
   removedItems: number;
+  // Journey già esistenti la cui data di apertura (T0) è stata ricalcolata:
+  // spostata indietro (trovata una SIM valida più vecchia) o in avanti (la
+  // SIM precedente non qualifica più, es. annullata o trigger spostato).
+  t0MovedBack: number;
+  t0MovedForward: number;
 };
 
 // === Analisi gettoni e fatturato cross-sell (Task #192) ===

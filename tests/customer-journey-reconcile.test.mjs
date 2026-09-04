@@ -803,3 +803,93 @@ test('scenario 9: a trigger change racing an in-flight reconcile still ends in t
     await pool.end().catch(() => {});
   }
 });
+
+// ===========================================================================
+// SCENARIO 10 (Task #561): il T0 NON resta congelato sulla SIM con cui la
+// journey è nata. Se in un giro successivo compare (perché scaricata dopo, o
+// perché la data trigger è stata anticipata) una SIM valida PIÙ VECCHIA dello
+// stesso cliente, il reconcile sposta indietro opened_at e la vendita trigger,
+// e i contratti cross-sell di quel mese tornano "in finestra". Il risultato
+// del reconcile riporta quante journey hanno cambiato T0.
+// ===========================================================================
+test('scenario 10: an older valid SIM discovered later moves T0 back (and the July fisso counts)', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  const cf = uniq('T0BACK').toUpperCase();
+  const addetto = 'MARIO ROSSI';
+  const phones = {
+    manual: { imei: '111111111111111', importoFinanziato: '800' },
+    auto: { imei: '222222222222222', importoFinanziato: '600' },
+  };
+  try {
+    // (1) La journey nasce su una SIM di AGOSTO: T0 = agosto.
+    const augSaleId = await insertLaterSale(
+      pool, session.orgId, cf, addetto, '2026-08-05T10:00:00.000Z', buildRawData(cf, addetto, phones),
+    );
+    const r1 = await reconcile(session);
+    assert.equal(r1.t0MovedBack, 0);
+    assert.equal(r1.t0MovedForward, 0);
+    let [j] = await pool.query(
+      `SELECT id, opened_at, trigger_sale_id FROM customer_journeys WHERE organization_id = $1`, [session.orgId],
+    ).then((r) => r.rows);
+    assert.ok(j, 'journey opened');
+    const journeyId = j.id;
+    assert.equal(new Date(j.opened_at).toISOString().slice(0, 7), '2026-08', 'T0 is August at first');
+    assert.equal(j.trigger_sale_id, augSaleId);
+    // Gettone iniziale: la vendita di agosto porta anche 2 telefoni (pista
+    // "telefono" già in finestra).
+    const g0 = buildGettoneJourneys(await reportRows(session)).find((x) => x.journeyId === journeyId);
+    assert.ok(g0);
+    const pisteBefore = g0.pisteAttive;
+
+    // (2) Arrivano (fetch successivo) una SIM di LUGLIO e un FISSO di luglio
+    //     dello stesso cliente: la SIM di luglio è la prima attivazione valida
+    //     (>= trigger 2026-07-01) e deve diventare il T0.
+    const julyRaw = {
+      ...buildRawDataCliente({ codiceFiscale: cf, clienteTipo: 'FISICA', nome: 'Mario', cognome: 'Rossi', codiceEsterno: 'CLI123' }, addetto),
+    };
+    julyRaw.articoli = [{ ...julyRaw.articoli[0], id: 3001, categoria: { nome: 'TIED CF' }, descrizione: 'FAMILY unlimited 5G' }];
+    const julySimId = await insertLaterSale(pool, session.orgId, cf, addetto, '2026-07-26T10:00:00.000Z', julyRaw);
+    await insertLaterSale(pool, session.orgId, cf, addetto, '2026-07-26T11:00:00.000Z', buildRawDataFisso(cf, addetto));
+
+    // (3) reconcile: T0 spostato a luglio, e lo spostamento è conteggiato.
+    const rMove = await reconcile(session);
+    assert.equal(rMove.t0MovedBack, 1, 'one journey had its T0 moved back');
+    assert.equal(rMove.t0MovedForward, 0);
+    const list = await listJourneys(session);
+    assert.equal(list.length, 1, 'still ONE journey for the customer');
+    assert.equal(list[0].id, journeyId, 'same journey row (manual data preserved), not a new one');
+    assert.equal(list[0].openedAt.slice(0, 10), '2026-07-26', 'T0 moved back to the July SIM');
+    assert.equal(list[0].triggerSaleId, julySimId, 'trigger sale is now the July SIM');
+    const fisso = list[0].drivers.find((d) => d.driver === 'fisso');
+    assert.equal(fisso?.activated, true);
+    assert.equal(fisso?.phase, 'periodo', 'the July fisso is now inside the window (>= T0 month)');
+
+    // Il gettone segue: il fisso di luglio conta come pista cross-sell.
+    const g = buildGettoneJourneys(await reportRows(session)).find((x) => x.journeyId === journeyId);
+    assert.ok(g);
+    assert.equal(g.pisteAttive, pisteBefore + 1, 'July fisso counts as a pista once T0 is July');
+    assert.ok(g.fatturato > g0.fatturato, `maturato must grow (${g0.fatturato} -> ${g.fatturato})`);
+
+    // (4) Un reconcile manuale a dati invariati non sposta nulla (idempotente),
+    //     e il conteggio degli spostamenti si vede nel risultato quando avviene.
+    const r2 = await reconcile(session);
+    assert.equal(r2.t0MovedBack, 0);
+    assert.equal(r2.t0MovedForward, 0);
+
+    // (5) La SIM di luglio viene annullata lato BiSuite: il T0 torna in avanti
+    //     sulla SIM di agosto (la prima ancora valida) e viene conteggiato.
+    await pool.query(`UPDATE bisuite_sales SET stato = 'ANNULLATA', last_seen_at = now() + interval '2 second' WHERE id = $1`, [julySimId]);
+    const r3 = await reconcile(session);
+    assert.equal(r3.t0MovedForward, 1, 'one journey had its T0 moved forward');
+    assert.equal(r3.t0MovedBack, 0);
+    [j] = await pool.query(
+      `SELECT opened_at, trigger_sale_id FROM customer_journeys WHERE id = $1`, [journeyId],
+    ).then((r) => r.rows);
+    assert.equal(new Date(j.opened_at).toISOString().slice(0, 7), '2026-08');
+    assert.equal(j.trigger_sale_id, augSaleId);
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});

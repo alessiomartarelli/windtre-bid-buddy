@@ -4128,7 +4128,8 @@ export async function registerRoutes(
         `[customer-journey] org=${profile.organizationId} reconcile manuale: ` +
           `journeys=${result.journeys} items=${result.items} ` +
           `scartate-senza-identita=${result.skippedNoIdentity} (con pista tracciata=${result.skippedNoIdentityWithDriver}) ` +
-          `rimosse=${result.removedJourneys} journey / ${result.removedItems} item`,
+          `rimosse=${result.removedJourneys} journey / ${result.removedItems} item ` +
+          `T0-ricalcolati=${result.t0MovedBack} indietro / ${result.t0MovedForward} avanti`,
       );
       res.json(result);
     } catch (error) {

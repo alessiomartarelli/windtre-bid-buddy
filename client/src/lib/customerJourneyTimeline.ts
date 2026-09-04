@@ -1,5 +1,5 @@
 import type { CustomerJourney, CustomerJourneyItem } from "@shared/schema";
-import { CJ_ACTIVE_STATES, monthOfIso, pisteInWindow } from "../../../shared/customerJourney";
+import { CJ_ACTIVE_STATES, isMobileActivationCategory, monthOfIso, pisteInWindow } from "../../../shared/customerJourney";
 
 // === Logica pura del tracciamento temporale Customer Journey (Task #185) ===
 // Estratta dal componente React (`CustomerJourney.tsx`) per poterla testare a
@@ -125,24 +125,35 @@ export function computeTimeline(
   const months: number[] = [];
   for (let mi = startMi; mi <= endMi; mi++) months.push(mi);
 
-  // Item che ha aperto la journey (T0): match sui riferimenti BiSuite del
-  // trigger, fallback alla prima attivazione mobile per data, poi al primo
-  // evento in assoluto.
+  // Item che ha aperto la journey (T0). La vendita trigger può contenere più
+  // articoli (SIM + fisso + smartphone nello stesso scontrino BiSuite): il T0
+  // va sulla SIM mobile attivante di quella vendita, MAI sul fisso/telefono.
+  // Precedenza (stessa regola del server, che apre la journey solo su una
+  // categoria mobile attivante): attivante della vendita trigger → qualsiasi
+  // mobile della vendita trigger → altro articolo della vendita trigger →
+  // prima attivazione mobile per data → primo mobile per data → primo evento
+  // in assoluto.
   const t0ItemId = (() => {
-    const byTrigger = items.find(
-      (it) =>
-        (journey.triggerSaleId && it.bisuiteSaleId === journey.triggerSaleId) ||
-        (journey.triggerBisuiteId != null && it.bisuiteId === journey.triggerBisuiteId),
-    );
+    const inTriggerSale = (it: CustomerJourneyItem): boolean =>
+      (!!journey.triggerSaleId && it.bisuiteSaleId === journey.triggerSaleId) ||
+      (journey.triggerBisuiteId != null && it.bisuiteId === journey.triggerBisuiteId);
+    const isActivatingMobile = (it: CustomerJourneyItem): boolean =>
+      it.driver === "mobile" && isMobileActivationCategory(it.categoria);
+    const triggerItems = items.filter(inTriggerSale);
+    // Ultimo fallback dentro la vendita trigger: qualsiasi articolo (dati
+    // sporchi: trigger salvato su una vendita senza mobile). Non è escluso
+    // perché computeItemValidity lo classifica comunque come pista normale.
+    const byTrigger =
+      triggerItems.find(isActivatingMobile) ??
+      triggerItems.find((it) => it.driver === "mobile") ??
+      triggerItems[0];
     if (byTrigger) return byTrigger.id;
-    const firstMobile = withDate
-      .filter((d) => d.it.driver === "mobile")
-      .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
+    const byDate = [...withDate].sort((a, b) => a.date.getTime() - b.date.getTime());
+    const firstActivating = byDate.find((d) => isActivatingMobile(d.it));
+    if (firstActivating) return firstActivating.it.id;
+    const firstMobile = byDate.find((d) => d.it.driver === "mobile");
     if (firstMobile) return firstMobile.it.id;
-    const firstEvent = [...withDate].sort(
-      (a, b) => a.date.getTime() - b.date.getTime(),
-    )[0];
-    return firstEvent?.it.id;
+    return byDate[0]?.it.id;
   })();
 
   // Una riga per contratto, ordinata per data evento.

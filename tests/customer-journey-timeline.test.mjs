@@ -587,3 +587,40 @@ test('cjOpenedFromTriggerDate: journey senza openedAt passa sempre', () => {
   assert.equal(cjOpenedFromTriggerDate(null, '2026-07-01'), true);
   assert.equal(cjOpenedFromTriggerDate(undefined, '2026-07-01'), true);
 });
+
+// ===========================================================================
+// Task #561: la vendita trigger contiene più articoli (SIM + fisso +
+// smartphone nello stesso scontrino BiSuite). Il T0 va sulla SIM mobile
+// attivante di quella vendita, MAI sul fisso/telefono, qualunque sia l'ordine
+// degli item. Di conseguenza il badge "attivante" e il marker T0 coincidono.
+// ===========================================================================
+test('Task #561: multi-article trigger sale => T0 on the activating SIM, not on fisso/telefono', () => {
+  const sale = 'sale-multi';
+  const items = [
+    item({ id: 'fisso', driver: 'fisso', categoria: 'ADSL/FIBRA/FWA CF', dataInserimento: '2026-08-07T00:00:00.000Z', state: 'inserito', bisuiteSaleId: sale, bisuiteId: 1243178 }),
+    item({ id: 'phone', driver: 'telefono', categoria: 'TELEFONIA', dataInserimento: '2026-08-07T00:00:00.000Z', state: 'inserito', bisuiteSaleId: sale, bisuiteId: 1243178 }),
+    item({ id: 'sim', driver: 'mobile', categoria: 'TIED CF', dataInserimento: '2026-08-07T00:00:00.000Z', state: 'inserito', bisuiteSaleId: sale, bisuiteId: 1243178 }),
+    item({ id: 'energia', driver: 'energia', categoria: 'ENERGIA W3', dataInserimento: '2026-08-07T00:00:00.000Z', state: 'inserito', bisuiteSaleId: 'other', bisuiteId: 1243336 }),
+  ];
+  const j = journey({ openedAt: '2026-08-07T00:00:00.000Z', triggerSaleId: sale, triggerBisuiteId: 1243178 });
+  const model = computeTimeline(j, items);
+  assert.equal(model.t0ItemId, 'sim', 'T0 marker must be on the SIM of the trigger sale');
+  const validity = computeItemValidity(model, j);
+  assert.equal(validity.get('sim').kind, 'attivante');
+  assert.equal(validity.get('fisso').kind, 'valida', 'fisso of the same sale is a counting pista, not T0');
+  assert.equal(validity.get('energia').kind, 'valida');
+
+  // Match per solo bisuiteId (triggerSaleId assente): stessa scelta.
+  const model2 = computeTimeline(journey({ triggerBisuiteId: 1243178 }), items);
+  assert.equal(model2.t0ItemId, 'sim');
+});
+
+test('Task #561: no trigger refs => T0 falls back to the earliest activating SIM by date', () => {
+  const items = [
+    item({ id: 'fisso-early', driver: 'fisso', categoria: 'ADSL/FIBRA/FWA CF', dataInserimento: '2026-07-01T00:00:00.000Z' }),
+    item({ id: 'sim-late', driver: 'mobile', categoria: 'TIED IVA', dataInserimento: '2026-08-05T00:00:00.000Z' }),
+    item({ id: 'sim-early', driver: 'mobile', categoria: 'TIED CF', dataInserimento: '2026-07-26T00:00:00.000Z' }),
+  ];
+  const model = computeTimeline(journey(), items);
+  assert.equal(model.t0ItemId, 'sim-early');
+});
