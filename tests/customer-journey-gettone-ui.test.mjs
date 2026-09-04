@@ -165,7 +165,7 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
     );
     // Verifica le intestazioni della sotto-tabella.
     const detailText = await detail.innerText();
-    for (const h of ['Cliente', 'SIM attive', 'Piste attive', '% saturazione', 'Fatturato']) {
+    for (const h of ['Cliente', 'SIM attive', 'Piste attive', '% saturazione', 'Stimato', 'Maturato']) {
       assert.ok(detailText.includes(h), `detail table must include header "${h}"`);
     }
     assert.ok(detailText.includes('2/5'), 'detail row shows 2/5 piste attive');
@@ -219,7 +219,7 @@ test('scenario 1: admin can expand a gettone row and see the saturation detail',
       '40%', 'negozio detail row shows 40% saturation (2/5 piste)',
     );
     const milanoDetailText = await milanoDetail.innerText();
-    for (const h of ['Cliente', 'SIM attive', 'Piste attive', '% saturazione', 'Fatturato']) {
+    for (const h of ['Cliente', 'SIM attive', 'Piste attive', '% saturazione', 'Stimato', 'Maturato']) {
       assert.ok(milanoDetailText.includes(h), `negozio detail table must include header "${h}"`);
     }
     assert.ok(milanoDetailText.includes('2/5'), 'negozio detail row shows 2/5 piste attive');

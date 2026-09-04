@@ -732,7 +732,7 @@ test('crossSellPercentuali: percentuali con/senza prodotti e cohort vuota', () =
 test('analisi gettoni: input vuoto => zero', () => {
   assert.deepEqual(aggregateGettone([], (j) => ({ key: j.pdv, label: j.pdv }), 100), []);
   const t = gettoneTotals([], 100);
-  assert.deepEqual(t, { simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, potenziale: 0, pisteAttive: 0 });
+  assert.deepEqual(t, { simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, fatturatoMaturato: 0, potenziale: 0, pisteAttive: 0 });
 });
 
 // --- simSaturationPct: percentuale di saturazione cross-sell per SIM ---
@@ -873,4 +873,46 @@ test('classifyDriverPhase: operatore + addetto vuoto/mancante => altrui', () => 
     classifyDriverPhase([{ state: 'attivato', eventDate: '2026-07-15', addetto: null }], { t0Month: t0, myAddetti: ['anna'] }),
     'altrui',
   );
+});
+
+// --- Fatturato stimato vs maturato: il maturato conta SOLO le piste con esito
+// economico DRMS "pagato" (in finestra), lo stimato tutte le piste attive. ---
+test('buildGettoneJourneys: fatturatoMaturato conta solo le piste con economicState pagato', () => {
+  const T0 = '2026-07-05T00:00:00.000Z';
+  const rows = [
+    row({ journeyId: 'j1', driver: 'mobile', state: 'inserito', economicState: 'pagato', openedAt: T0, eventDate: T0 }),
+    // fisso pagato => matura
+    row({ journeyId: 'j1', driver: 'fisso', state: 'inserito', economicState: 'pagato', openedAt: T0, eventDate: '2026-07-10T00:00:00.000Z' }),
+    // energia senza esito => stimata ma non maturata
+    row({ journeyId: 'j1', driver: 'energia', state: 'inserito', economicState: null, openedAt: T0, eventDate: '2026-07-11T00:00:00.000Z' }),
+    // assicurazioni pagata ma PRIMA di T0 => fuori finestra: né stimata né maturata
+    row({ journeyId: 'j1', driver: 'assicurazioni', state: 'inserito', economicState: 'pagato', openedAt: T0, eventDate: '2026-06-20T00:00:00.000Z' }),
+    // telefono stornato => inattivo, non conta da nessuna parte
+    row({ journeyId: 'j1', driver: 'telefono', state: 'inserito', economicState: 'stornato', openedAt: T0, eventDate: '2026-07-12T00:00:00.000Z' }),
+  ];
+  const js = buildGettoneJourneys(rows);
+  assert.equal(js.length, 1);
+  assert.equal(js[0].pisteAttive, 2, 'fisso + energia');
+  assert.equal(js[0].fatturato, 30, 'stimato: 2 piste => 30€');
+  assert.equal(js[0].pisteConfermate, 1, 'solo il fisso è pagato');
+  assert.equal(js[0].fatturatoMaturato, 20, 'maturato: 1 pista => 20€');
+
+  const tot = gettoneTotals(js, 100);
+  assert.equal(tot.fatturato, 30);
+  assert.equal(tot.fatturatoMaturato, 20);
+  const [g] = aggregateGettone(js, (j) => ({ key: 'k', label: 'K' }), 100);
+  assert.equal(g.fatturato, 30);
+  assert.equal(g.fatturatoMaturato, 20);
+});
+
+test('buildGettoneJourneys: senza alcun esito DRMS il maturato è 0 e lo stimato invariato', () => {
+  const T0 = '2026-07-05T00:00:00.000Z';
+  const rows = [
+    row({ journeyId: 'j2', driver: 'mobile', state: 'inserito', openedAt: T0, eventDate: T0 }),
+    row({ journeyId: 'j2', driver: 'fisso', state: 'inserito', openedAt: T0, eventDate: '2026-07-10T00:00:00.000Z' }),
+  ];
+  const [j] = buildGettoneJourneys(rows);
+  assert.equal(j.fatturato, 20);
+  assert.equal(j.fatturatoMaturato, 0);
+  assert.equal(j.potenzialePieno, 100, 'il potenziale resta calcolato sullo stimato');
 });

@@ -135,7 +135,10 @@ attive oltre alla SIM che ha aperto la journey. La tabella a scaglioni
   SIM mobile attive (`simAttivate`), distinto da **N. clienti con SIM attiva** =
   journey distinte (`clienti`); **% clienti con +prodotti** (≥1 pista cross-sell
   attiva) vs **% senza +prodotti** (`crossSellPercentuali`).
-- **Fatturato maturato** = somma dei gettoni as-is. **Potenziale non espresso**
+- **Fatturato stimato** = somma dei gettoni sulle piste attive as-is;
+  **Fatturato maturato** (stesso riquadro, colonna "Maturato" nelle tabelle) =
+  gettone calcolato sulle sole piste con esito economico DRMS `pagato`
+  (`pisteConfermate`/`fatturatoMaturato`). **Potenziale non espresso**
   = `(gettone pieno a 5 piste − gettone attuale)` per journey, scalato per una
   **percentuale di saturazione attesa** (25/50/75/100%) scelta dall'utente.
 - L'analisi è guidata da un filtro **da–a sulla data di attivazione SIM**

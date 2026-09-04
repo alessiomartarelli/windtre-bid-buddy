@@ -1888,10 +1888,14 @@ function AnalisiViewImpl({
         <Card data-testid="card-gettone-fatturato">
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Wallet className="h-3.5 w-3.5" /> Fatturato maturato
+              <Wallet className="h-3.5 w-3.5" /> Fatturato stimato
             </p>
             <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-gettone-fatturato">
               {fmtEuro(totals.fatturato)}
+            </p>
+            <p className="text-xs text-muted-foreground" title="Gettone sulle sole piste con esito DRMS “pagato”" data-testid="text-gettone-fatturato-maturato">
+              Fatturato maturato{" "}
+              <span className="font-semibold tabular-nums text-foreground">{fmtEuro(totals.fatturatoMaturato)}</span>
             </p>
           </CardContent>
         </Card>
@@ -1941,7 +1945,8 @@ function AnalisiViewImpl({
                   <TableHead className="text-right">SIM</TableHead>
                   <TableHead className="text-right">Clienti</TableHead>
                   <TableHead className="text-right">+prodotti</TableHead>
-                  <TableHead className="text-right">Fatturato</TableHead>
+                  <TableHead className="text-right">Stimato</TableHead>
+                  <TableHead className="text-right">Maturato</TableHead>
                   <TableHead className="text-right">Potenziale</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1974,13 +1979,16 @@ function AnalisiViewImpl({
                       <TableCell className="text-right tabular-nums font-semibold text-emerald-600 dark:text-emerald-400" data-testid={`text-gettone-fatturato-${g.key}`}>
                         {fmtEuro(g.fatturato)}
                       </TableCell>
+                      <TableCell className="text-right tabular-nums" data-testid={`text-gettone-maturato-${g.key}`}>
+                        {fmtEuro(g.fatturatoMaturato)}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums text-amber-600 dark:text-amber-400" data-testid={`text-gettone-potenziale-${g.key}`}>
                         {fmtEuro(g.potenziale)}
                       </TableCell>
                     </TableRow>
                     {isOpen && (
                       <TableRow data-testid={`row-gettone-detail-${g.key}`}>
-                        <TableCell colSpan={7} className="bg-muted/40 p-0">
+                        <TableCell colSpan={8} className="bg-muted/40 p-0">
                           <div className="px-4 py-3">
                             <p className="text-xs font-medium text-muted-foreground mb-2">
                               {g.clienti} {g.clienti === 1 ? "cliente attivo" : "clienti attivi"} nella CJ ·
@@ -1993,7 +2001,8 @@ function AnalisiViewImpl({
                                   <TableHead className="text-right">SIM attive</TableHead>
                                   <TableHead className="text-right">Piste attive</TableHead>
                                   <TableHead className="text-right">% saturazione</TableHead>
-                                  <TableHead className="text-right">Fatturato</TableHead>
+                                  <TableHead className="text-right">Stimato</TableHead>
+                                  <TableHead className="text-right">Maturato</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -2022,6 +2031,9 @@ function AnalisiViewImpl({
                                     </TableCell>
                                     <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
                                       {fmtEuro(r.fatturato)}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                      {fmtEuro(r.fatturatoMaturato)}
                                     </TableCell>
                                   </TableRow>
                                 ))}

@@ -334,8 +334,16 @@ export interface CjGettoneJourney {
   simAttive: number;
   // Piste NON-mobile distinte attive (0..CJ_MAX_PISTE).
   pisteAttive: number;
-  // Gettone maturato (fatturato as-is) = gettoneForPiste(pisteAttive).
+  // Fatturato STIMATO (€) = gettoneForPiste(pisteAttive): gettone che il
+  // cliente vale con le piste attive oggi (esito economico non ancora
+  // necessariamente confermato).
   fatturato: number;
+  // Piste NON-mobile distinte con esito economico CONFERMATO "pagato" dal
+  // DRMS (sottoinsieme di pisteAttive).
+  pisteConfermate: number;
+  // Fatturato MATURATO (€) = gettoneForPiste(pisteConfermate): quota del
+  // gettone già confermata da esito DRMS come pagata.
+  fatturatoMaturato: number;
   // Potenziale "pieno": gettone aggiuntivo se la journey arrivasse a
   // saturazione completa (tutte le piste attive). Sempre >= 0.
   potenzialePieno: number;
@@ -363,7 +371,7 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     simAttive: number;
     // Candidati pista: driver non-mobile attivi con la loro data evento.
     // Il conteggio distinto in-finestra avviene dopo aver fissato T0.
-    candidates: { driver: CjDriver; eventDate: string | null }[];
+    candidates: { driver: CjDriver; eventDate: string | null; pagato: boolean }[];
     // Mesi degli item (mobile attivi e tutti) per il fallback di T0 quando
     // `openedAt` è assente.
     mobileMonths: number[];
@@ -409,7 +417,11 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
     }
     if (!e.openedAt && r.openedAt) e.openedAt = r.openedAt;
     if (r.driver !== "mobile" && isCjItemActive(r)) {
-      e.candidates.push({ driver: r.driver, eventDate: r.eventDate ?? null });
+      e.candidates.push({
+        driver: r.driver,
+        eventDate: r.eventDate ?? null,
+        pagato: r.economicState === "pagato",
+      });
     }
   }
   return Array.from(map.entries())
@@ -424,11 +436,16 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
         (e.mobileMonths.length ? Math.min(...e.mobileMonths) : null) ??
         (e.allMonths.length ? Math.min(...e.allMonths) : null);
       const activeDrivers = new Set<CjDriver>();
+      const paidDrivers = new Set<CjDriver>();
       for (const c of e.candidates) {
-        if (pisteInWindow(c.eventDate, t0Month)) activeDrivers.add(c.driver);
+        if (!pisteInWindow(c.eventDate, t0Month)) continue;
+        activeDrivers.add(c.driver);
+        if (c.pagato) paidDrivers.add(c.driver);
       }
       const pisteAttive = activeDrivers.size;
+      const pisteConfermate = paidDrivers.size;
       const fatturato = gettoneForPiste(pisteAttive);
+      const fatturatoMaturato = gettoneForPiste(pisteConfermate);
       return {
         journeyId,
         cliente: e.cliente,
@@ -440,6 +457,8 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
         simAttive: e.simAttive,
         pisteAttive,
         fatturato,
+        pisteConfermate,
+        fatturatoMaturato,
         potenzialePieno: Math.max(0, gettoneForPiste(CJ_MAX_PISTE) - fatturato),
       };
     });
@@ -509,8 +528,10 @@ export interface CjGettoneGroup {
   clienti: number;
   // Clienti con almeno una pista cross-sell attiva ("+prodotti").
   conProdotti: number;
-  // Fatturato maturato (€) = somma dei gettoni as-is.
+  // Fatturato stimato (€) = somma dei gettoni as-is.
   fatturato: number;
+  // Fatturato maturato (€) = somma dei gettoni sulle sole piste pagate (DRMS).
+  fatturatoMaturato: number;
   // Potenziale non espresso (€) alla saturazione scelta.
   potenziale: number;
 }
@@ -521,7 +542,10 @@ export interface CjGettoneTotals {
   // N. clienti distinti con SIM attiva.
   clienti: number;
   conProdotti: number;
+  // Fatturato stimato (€) sulle piste attive.
   fatturato: number;
+  // Fatturato maturato (€) confermato da esito DRMS "pagato".
+  fatturatoMaturato: number;
   potenziale: number;
   // Totale piste cross-sell attive (per eventuale media).
   pisteAttive: number;
@@ -545,19 +569,20 @@ export function aggregateGettone(
   const s = clampSaturation(saturationPct) / 100;
   const map = new Map<string, {
     label: string; simAttivate: number; clienti: number; conProdotti: number;
-    fatturato: number; incremento: number;
+    fatturato: number; fatturatoMaturato: number; incremento: number;
   }>();
   for (const j of journeys) {
     const { key, label } = keyFn(j);
     let e = map.get(key);
     if (!e) {
-      e = { label, simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, incremento: 0 };
+      e = { label, simAttivate: 0, clienti: 0, conProdotti: 0, fatturato: 0, fatturatoMaturato: 0, incremento: 0 };
       map.set(key, e);
     }
     e.simAttivate += j.simAttive;
     e.clienti += 1;
     if (j.pisteAttive >= 1) e.conProdotti += 1;
     e.fatturato += j.fatturato;
+    e.fatturatoMaturato += j.fatturatoMaturato;
     e.incremento += gettoneIncremento(j.pisteAttive, j.fatturato, addProducts);
   }
   return Array.from(map.entries())
@@ -568,6 +593,7 @@ export function aggregateGettone(
       clienti: e.clienti,
       conProdotti: e.conProdotti,
       fatturato: e.fatturato,
+      fatturatoMaturato: e.fatturatoMaturato,
       potenziale: e.incremento * s,
     }))
     .sort((a, b) => b.fatturato - a.fatturato || b.clienti - a.clienti || a.label.localeCompare(b.label, "it"));
@@ -586,16 +612,17 @@ export function gettoneTotals(
   addProducts: number = CJ_MAX_PISTE,
 ): CjGettoneTotals {
   const s = clampSaturation(saturationPct) / 100;
-  let simAttivate = 0, clienti = 0, conProdotti = 0, fatturato = 0, incremento = 0, pisteAttive = 0;
+  let simAttivate = 0, clienti = 0, conProdotti = 0, fatturato = 0, fatturatoMaturato = 0, incremento = 0, pisteAttive = 0;
   for (const j of journeys) {
     simAttivate += j.simAttive;
     clienti += 1;
     if (j.pisteAttive >= 1) conProdotti += 1;
     fatturato += j.fatturato;
+    fatturatoMaturato += j.fatturatoMaturato;
     incremento += gettoneIncremento(j.pisteAttive, j.fatturato, addProducts);
     pisteAttive += j.pisteAttive;
   }
-  return { simAttivate, clienti, conProdotti, fatturato, potenziale: incremento * s, pisteAttive };
+  return { simAttivate, clienti, conProdotti, fatturato, fatturatoMaturato, potenziale: incremento * s, pisteAttive };
 }
 
 /**
@@ -634,8 +661,10 @@ export interface CjGettoneDetailRow {
   pisteAttive: number;
   // % saturazione cross-sell della singola SIM/cliente (0..100).
   saturazionePct: number;
-  // Gettone maturato (€).
+  // Fatturato stimato (€).
   fatturato: number;
+  // Fatturato maturato (€), confermato da DRMS "pagato".
+  fatturatoMaturato: number;
 }
 
 /**
@@ -659,6 +688,7 @@ export function gettoneDetailByKey(
       pisteAttive: j.pisteAttive,
       saturazionePct: simSaturationPct(j.pisteAttive),
       fatturato: j.fatturato,
+      fatturatoMaturato: j.fatturatoMaturato,
     });
   }
   for (const list of Array.from(map.values())) {
