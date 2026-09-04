@@ -145,6 +145,40 @@ test('scenario 3a-bis: T0 detected via BiSuite trigger (bisuiteId)', () => {
   assert.equal(model.t0ItemId, 'a', 'T0 must be the item matching the trigger bisuiteId');
 });
 
+// ---------------------------------------------------------------------------
+// Vendita trigger SENZA SIM mobile (dati sporchi): il fallback "altro articolo
+// della vendita trigger" deve scegliere il PRIMO per data evento, qualunque
+// sia l'ordine con cui il server restituisce gli item (data_inserimento DESC,
+// ordine indefinito a parità di data).
+// ---------------------------------------------------------------------------
+test('scenario 3a-ter: trigger sale senza mobile => T0 sul primo articolo per data evento', () => {
+  const fisso = item({ id: 'fisso', driver: 'fisso', categoria: 'FISSO', dataAttivazione: '2026-08-03T00:00:00.000Z', bisuiteSaleId: 'S1' });
+  const energia = item({ id: 'energia', driver: 'energia', categoria: 'ENERGIA', dataAttivazione: '2026-08-01T00:00:00.000Z', bisuiteSaleId: 'S1' });
+  const altro = item({ id: 'altro', driver: 'mobile', categoria: 'SIM', dataAttivazione: '2026-07-01T00:00:00.000Z', bisuiteSaleId: 'S9' });
+  const j = journey({ triggerSaleId: 'S1' });
+  // Ordine server "DESC" e ordine inverso: stesso risultato.
+  assert.equal(computeTimeline(j, [fisso, energia, altro]).t0ItemId, 'energia');
+  assert.equal(computeTimeline(j, [altro, energia, fisso]).t0ItemId, 'energia');
+  assert.equal(computeTimeline(j, [energia, fisso, altro]).t0ItemId, 'energia');
+});
+
+test('scenario 3a-quater: parità di data nella vendita trigger => tie-break stabile per id', () => {
+  const b = item({ id: 'b', driver: 'fisso', categoria: 'FISSO', dataInserimento: '2026-08-01T00:00:00.000Z', bisuiteSaleId: 'S1' });
+  const a = item({ id: 'a', driver: 'energia', categoria: 'ENERGIA', dataInserimento: '2026-08-01T00:00:00.000Z', bisuiteSaleId: 'S1' });
+  const j = journey({ triggerSaleId: 'S1' });
+  assert.equal(computeTimeline(j, [b, a]).t0ItemId, 'a');
+  assert.equal(computeTimeline(j, [a, b]).t0ItemId, 'a');
+});
+
+test('scenario 3a-quinquies: la precedenza mobile nella vendita trigger resta prioritaria sulla data', () => {
+  // Fisso più vecchio della SIM nello stesso scontrino: il T0 va comunque sulla SIM.
+  const fisso = item({ id: 'fisso', driver: 'fisso', categoria: 'FISSO', dataAttivazione: '2026-08-01T00:00:00.000Z', bisuiteSaleId: 'S1' });
+  const sim = item({ id: 'sim', driver: 'mobile', categoria: 'SIM', dataAttivazione: '2026-08-05T00:00:00.000Z', bisuiteSaleId: 'S1' });
+  const j = journey({ triggerSaleId: 'S1' });
+  assert.equal(computeTimeline(j, [fisso, sim]).t0ItemId, 'sim');
+  assert.equal(computeTimeline(j, [sim, fisso]).t0ItemId, 'sim');
+});
+
 test('scenario 3b: T0 falls back to the earliest mobile activation', () => {
   // Nessun trigger sulla journey: T0 = prima attivazione mobile per data,
   // anche se un fisso è cronologicamente precedente.

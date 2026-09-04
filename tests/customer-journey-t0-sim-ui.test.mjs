@@ -102,9 +102,10 @@ test('scheda cliente: T0 sulla riga Mobile di una vendita trigger multi-articolo
 // Scenario "dati sporchi": la vendita trigger NON contiene nessuna SIM mobile
 // (solo fisso + smartphone) e la SIM arriva con una vendita SUCCESSIVA.
 // Regola (client/src/lib/customerJourneyTimeline.ts, t0ItemId): il T0 resta
-// dentro la vendita trigger (primo articolo: con l'ordinamento server per
-// data_inserimento DESC è il fisso, seminato più tardi del telefono) e NON
-// salta sulla SIM successiva. Di conseguenza:
+// dentro la vendita trigger sul PRIMO articolo per data evento (ASC, regola
+// deterministica indipendente dall'ordine di risposta del server: qui il
+// telefono, seminato un'ora prima del fisso) e NON salta sulla SIM
+// successiva. Di conseguenza:
 //   - la SIM è classificata "Non conta" (non_pista), non "Attivante";
 //   - la card driver Mobile NON dice "Attivo · attivante";
 //   - fisso e telefono contano comunque come piste.
@@ -135,8 +136,9 @@ async function runDirtyTriggerScenario({ via }) {
       ? { bisuiteSaleId: laterSaleId }
       : { bisuiteId: laterBisuiteId };
     const pdv = 'PDV Trigger Test';
-    // Telefono seminato PRIMA del fisso nello stesso scontrino: con l'ordine
-    // server (DESC) il "primo articolo" della vendita trigger è il fisso.
+    // Telefono seminato PRIMA del fisso nello stesso scontrino (date diverse
+    // per evitare il tie-break): il "primo articolo per data" della vendita
+    // trigger è il telefono, anche se il server lo restituisce per ultimo.
     const telefonoId = await addJourneyItem(pool, session.orgId, journeyId, {
       pdv, ...trigger, dataInserimento: '2026-03-10T09:00:00Z',
       driver: 'telefono', state: 'attivato', categoria: 'TELEFONI', descrizione: 'Smartphone X', importo: '499',
@@ -162,10 +164,10 @@ async function runDirtyTriggerScenario({ via }) {
       await page.getByTestId(`timeline-row-${id}`).waitFor({ state: 'visible', timeout: 10000 });
     }
 
-    // Un solo badge T0, sul primo articolo della vendita trigger (fisso), mai sulla SIM.
+    // Un solo badge T0, sul primo articolo per data della vendita trigger (telefono), mai sulla SIM.
     const t0Rows = page.locator('[data-testid^="timeline-row-"]', { has: page.locator('span', { hasText: /^T0$/ }) });
     assert.equal(await t0Rows.count(), 1, `[${via}] exactly one timeline row must carry the T0 badge`);
-    assert.equal(await t0Rows.first().getAttribute('data-testid'), `timeline-row-${fissoId}`, `[${via}] T0 must stay on the trigger sale (fisso), not jump to the later SIM`);
+    assert.equal(await t0Rows.first().getAttribute('data-testid'), `timeline-row-${telefonoId}`, `[${via}] T0 must stay on the earliest trigger-sale item (telefono), not jump to the later SIM`);
     assert.equal(
       await page.getByTestId(`timeline-row-${mobileId}`).locator('span', { hasText: /^T0$/ }).count(),
       0, `[${via}] the later SIM row must not show T0`,

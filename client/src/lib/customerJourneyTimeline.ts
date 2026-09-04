@@ -140,10 +140,19 @@ export function computeTimeline(
       (journey.triggerBisuiteId != null && it.bisuiteId === journey.triggerBisuiteId);
     const isActivatingMobile = (it: CustomerJourneyItem): boolean =>
       it.driver === "mobile" && isMobileActivationCategory(it.categoria);
-    const triggerItems = items.filter(inTriggerSale);
+    // Ordine deterministico (data evento ASC, poi id): il server restituisce
+    // gli item per data_inserimento DESC e a parità di data l'ordine è
+    // indefinito, quindi non ci si può affidare a items[0]. Gli item senza
+    // data finiscono in fondo.
+    const triggerItems = items
+      .filter(inTriggerSale)
+      .map((it, idx) => ({ it, idx, t: itemEventDate(it)?.getTime() ?? Number.POSITIVE_INFINITY }))
+      .sort((a, b) => a.t - b.t || String(a.it.id).localeCompare(String(b.it.id)) || a.idx - b.idx)
+      .map((d) => d.it);
     // Ultimo fallback dentro la vendita trigger: qualsiasi articolo (dati
     // sporchi: trigger salvato su una vendita senza mobile). Non è escluso
     // perché computeItemValidity lo classifica comunque come pista normale.
+    // Grazie all'ordinamento sopra è il PRIMO per data evento, non items[0].
     const byTrigger =
       triggerItems.find(isActivatingMobile) ??
       triggerItems.find((it) => it.driver === "mobile") ??
