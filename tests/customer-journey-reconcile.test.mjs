@@ -893,3 +893,47 @@ test('scenario 10: an older valid SIM discovered later moves T0 back (and the Ju
     await pool.end().catch(() => {});
   }
 });
+
+// Task #565: soglia dell'avviso "T0 spostati in massa" nel reconcile
+// automatico post-fetch. Logica pura in shared/customerJourney.ts; qui
+// verifichiamo che 0 spostamenti non generino mai un avviso, che le org
+// piccole non facciano rumore per 1–2 spostamenti e che le org grandi
+// scattino comunque a 10 spostamenti anche se sotto il 5%.
+test('scenario 11: T0 mass-shift alert threshold (pure logic)', async () => {
+  const { evaluateCjT0Shift, cjT0ShiftThreshold, formatCjT0ShiftMessage } =
+    await import('../shared/customerJourney.ts');
+
+  // Caso normale: nessuno spostamento => nessuna notifica, qualunque sia la size.
+  assert.equal(evaluateCjT0Shift({ journeys: 0, t0MovedBack: 0, t0MovedForward: 0 }), null);
+  assert.equal(evaluateCjT0Shift({ journeys: 500, t0MovedBack: 0, t0MovedForward: 0 }), null);
+
+  // Soglia: max(3, min(10, ceil(5%)))
+  assert.equal(cjT0ShiftThreshold(0), 3);
+  assert.equal(cjT0ShiftThreshold(20), 3);
+  assert.equal(cjT0ShiftThreshold(100), 5);
+  assert.equal(cjT0ShiftThreshold(200), 10);
+  assert.equal(cjT0ShiftThreshold(10_000), 10);
+
+  // Org piccola: 2 spostamenti su 20 journey sono fisiologici.
+  assert.equal(evaluateCjT0Shift({ journeys: 20, t0MovedBack: 1, t0MovedForward: 1 }), null);
+  // ...3 invece superano la soglia minima.
+  const small = evaluateCjT0Shift({ journeys: 20, t0MovedBack: 2, t0MovedForward: 1 });
+  assert.ok(small);
+  assert.equal(small.moved, 3);
+  assert.equal(small.threshold, 3);
+
+  // Org media: 4 su 100 (<5%) no; 5 su 100 sì.
+  assert.equal(evaluateCjT0Shift({ journeys: 100, t0MovedBack: 4, t0MovedForward: 0 }), null);
+  assert.ok(evaluateCjT0Shift({ journeys: 100, t0MovedBack: 0, t0MovedForward: 5 }));
+
+  // Org grande: 10 spostamenti scattano anche se ben sotto il 5%.
+  assert.equal(evaluateCjT0Shift({ journeys: 5000, t0MovedBack: 9, t0MovedForward: 0 }), null);
+  const big = evaluateCjT0Shift({ journeys: 5000, t0MovedBack: 7, t0MovedForward: 3 });
+  assert.ok(big);
+  assert.equal(big.movedBack, 7);
+  assert.equal(big.movedForward, 3);
+
+  const msg = formatCjT0ShiftMessage(big);
+  assert.match(msg, /10 journey su 5000/);
+  assert.match(msg, /7 indietro, 3 avanti/);
+});

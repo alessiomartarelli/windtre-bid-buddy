@@ -67,4 +67,5 @@
 - [Drill-down vendite riconciliato](sales-drilldown-reconciliation.md) — dettagli PDV e totali devono partire dallo stesso perimetro autorizzativo e dalla stessa pipeline contributiva.
 - [CJ later purchases diagnosis](cj-later-purchases-diagnosis.md) — prod linka già gli acquisti successivi; percezione = cross-sell raro + categorie non tracciate; controlla skippedNoIdentityWithDriver prima di cambiare il reconcile; il reconcile PRUNA le journey fuori perimetro (no seed manuali + sales stessa org).
 - [CJ T0 recompute](cj-t0-recompute.md) — il reconcile ricalcola sempre opened_at/trigger dalla prima SIM valida; marker T0 sulla SIM della vendita multi-articolo, non sul fisso.
+- [BiSuite sync notifications = generic admin alerts](bisuite-sync-notifications-generic.md) — la tabella/campanella accetta status arbitrari (es. cj_t0_shift): nuovo avviso = status + ramo nel Bell client, messaggio in errorMessage.
 - [CJ dual state & DRMS outcome](cj-dual-state-drms.md) — stato operativo vs economico: attivo solo via isCjItemActive; reconcile mai azzera l'economico; POD indicizzati solo per ENERGIA; manuale vince + flag mismatch persistito.

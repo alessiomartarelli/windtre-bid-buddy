@@ -3,6 +3,11 @@ import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { decryptSecret, encryptSecret, getSecretKey, isEncrypted } from "./cryptoSecret";
 import { isModuleEnabled } from "../shared/modules";
+import {
+  CJ_T0_SHIFT_NOTIFICATION_STATUS,
+  evaluateCjT0Shift,
+  formatCjT0ShiftMessage,
+} from "../shared/customerJourney";
 
 /**
  * Risolve le credenziali BiSuite per una org leggendole da
@@ -531,6 +536,28 @@ export async function runBisuiteFetchForOrg(
           `rimosse=${cj.removedJourneys} journey / ${cj.removedItems} item ` +
           `T0-ricalcolati=${cj.t0MovedBack} indietro / ${cj.t0MovedForward} avanti`,
       );
+      // Task #565: se il ricalcolo ha spostato il T0 di molte journey in una
+      // volta (segnale di fetch incompleto o data di partenza cambiata) lo
+      // rendiamo visibile agli admin con una notifica BiSuite sync, invece
+      // di lasciarlo solo nei log. Nessuna notifica nel caso normale.
+      const shift = evaluateCjT0Shift(cj);
+      if (shift) {
+        console.warn(
+          `[customer-journey] org=${orgId} T0 spostati in massa: ${shift.moved}/${shift.journeys} ` +
+            `(soglia ${shift.threshold}) — creo notifica ${CJ_T0_SHIFT_NOTIFICATION_STATUS}`,
+        );
+        try {
+          await storage.createBisuiteSyncNotification({
+            organizationId: orgId,
+            status: CJ_T0_SHIFT_NOTIFICATION_STATUS,
+            failedMonths: [],
+            errorMessage: formatCjT0ShiftMessage(shift),
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error(`[customer-journey] impossibile creare notifica T0-shift org=${orgId}: ${msg}`);
+        }
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

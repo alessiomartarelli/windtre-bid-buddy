@@ -213,19 +213,7 @@ export type CjReconcileResult = {
   t0MovedForward: number;
 };
 
-// === Analisi gettoni e fatturato cross-sell (Task #192) ===
-// Il "gettone" di un cliente dipende da QUANTE piste NON-mobile sono attive
-// nella sua journey (oltre alla SIM mobile che l'ha aperta). La tabella
-// premiante è a scaglioni: più piste cross-sell = gettone più alto.
-//
-//   0 piste (solo mobile) =>   0 €
-//   1 pista               =>  20 €
-//   2 piste               =>  30 €
-//   3 piste               =>  40 €
-//   4 piste               => 100 €
-//   5 piste               => 120 €
-//
-// L'indice dell'array è il numero di piste non-mobile attive.
+export const CJ_T0_SHIFT_NOTIFICATION_STATUS = "cj_t0_shift" as const;
 export const CJ_GETTONE_TABLE: number[] = [0, 20, 30, 40, 100, 120];
 
 // I 5 driver NON-mobile che concorrono al gettone (la mobile è il trigger,
@@ -909,3 +897,43 @@ export function isCjItemActive(it: CjStatePair): boolean {
   if (it.economicState && CJ_INACTIVE_ECONOMIC_STATES.has(it.economicState)) return false;
   return true;
 }
+
+export const CJ_T0_SHIFT_MAX_ABS = 10;
+
+export function cjT0ShiftThreshold(journeys: number): number {
+  const pct = Math.ceil(Math.max(0, journeys) * CJ_T0_SHIFT_PCT);
+  return Math.max(CJ_T0_SHIFT_MIN_ABS, Math.min(CJ_T0_SHIFT_MAX_ABS, pct));
+}
+
+/** Ritorna i dati per la notifica se gli spostamenti di T0 superano la soglia, altrimenti null. */
+export function evaluateCjT0Shift(
+  result: Pick<CjReconcileResult, "journeys" | "t0MovedBack" | "t0MovedForward">,
+): CjT0ShiftAlert | null {
+  const movedBack = Math.max(0, result.t0MovedBack | 0);
+  const movedForward = Math.max(0, result.t0MovedForward | 0);
+  const moved = movedBack + movedForward;
+  if (moved === 0) return null;
+  const threshold = cjT0ShiftThreshold(result.journeys);
+  if (moved < threshold) return null;
+  return { moved, movedBack, movedForward, journeys: result.journeys, threshold };
+}
+
+export type CjT0ShiftAlert = {
+  moved: number;
+  movedBack: number;
+  movedForward: number;
+  journeys: number;
+  threshold: number;
+};
+
+export const CJ_T0_SHIFT_MIN_ABS = 3;
+
+export function formatCjT0ShiftMessage(a: CjT0ShiftAlert): string {
+  return (
+    `Il ricalcolo automatico ha spostato la data di apertura (T0) di ${a.moved} journey su ${a.journeys} ` +
+    `(${a.movedBack} indietro, ${a.movedForward} avanti; soglia ${a.threshold}). ` +
+    `Possibile fetch BiSuite incompleto o data di partenza modificata: verifica le vendite importate.`
+  );
+}
+
+export const CJ_T0_SHIFT_PCT = 0.05;
