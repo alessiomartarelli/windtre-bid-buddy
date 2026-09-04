@@ -26,7 +26,7 @@ import {
   Route as RouteIcon, RefreshCw, ArrowLeft, ArrowRight, CheckCircle2, Circle, CircleDot,
   Search, User, Building2, Loader2, Coins, Pencil,
   FileText, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
-  LayoutGrid, BarChart3, Store, Users, TrendingUp, Wallet, Calendar,
+  LayoutGrid, BarChart3, Store, Users, TrendingUp, Wallet, BadgeCheck, Calendar,
   ChevronRight, ChevronDown, Eye, Receipt,
 } from "lucide-react";
 import {
@@ -1909,7 +1909,7 @@ function AnalisiViewImpl({
       </Card>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Card data-testid="card-gettone-sim">
           <CardContent className="py-4">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -1951,9 +1951,21 @@ function AnalisiViewImpl({
             <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-gettone-fatturato">
               {fmtEuro(totals.fatturato)}
             </p>
-            <p className="text-xs text-muted-foreground" title="Gettone sulle sole piste con esito DRMS “pagato”" data-testid="text-gettone-fatturato-maturato">
-              Fatturato maturato{" "}
-              <span className="font-semibold tabular-nums text-foreground">{fmtEuro(totals.fatturatoMaturato)}</span>
+            <p className="text-xs text-muted-foreground">gettone su tutte le piste attive</p>
+          </CardContent>
+        </Card>
+        <Card data-testid="card-gettone-fatturato-maturato" title="Gettone sulle sole piste con esito DRMS “pagato”">
+          <CardContent className="py-4">
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <BadgeCheck className="h-3.5 w-3.5" /> Fatturato maturato
+            </p>
+            <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="text-gettone-fatturato-maturato">
+              {fmtEuro(totals.fatturatoMaturato)}
+            </p>
+            <p className="text-xs text-muted-foreground" data-testid="text-gettone-fatturato-maturato-pct">
+              {totals.fatturato > 0
+                ? `${fmtPct((totals.fatturatoMaturato / totals.fatturato) * 100)} dello stimato · esito DRMS pagato`
+                : "esito DRMS pagato"}
             </p>
           </CardContent>
         </Card>
