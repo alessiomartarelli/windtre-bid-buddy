@@ -66,3 +66,4 @@
 - [Plafond per codice dealer](plafond-dealer-model.md) — chiave contabile = dealer, non RS; senza-dealer segnalato mai attribuito; assegnazioni legacy solo intra-RS, append-only.
 - [Drill-down vendite riconciliato](sales-drilldown-reconciliation.md) — dettagli PDV e totali devono partire dallo stesso perimetro autorizzativo e dalla stessa pipeline contributiva.
 - [CJ later purchases diagnosis](cj-later-purchases-diagnosis.md) — prod linka già gli acquisti successivi; percezione = cross-sell raro + categorie non tracciate; controlla skippedNoIdentityWithDriver prima di cambiare il reconcile; il reconcile PRUNA le journey fuori perimetro (no seed manuali + sales stessa org).
+- [CJ T0 recompute](cj-t0-recompute.md) — il reconcile ricalcola sempre opened_at/trigger dalla prima SIM valida; marker T0 sulla SIM della vendita multi-articolo, non sul fisso.
