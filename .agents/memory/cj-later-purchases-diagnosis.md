@@ -16,9 +16,9 @@ Le vendite senza CF/P.IVA in prod sono clienti anonimi (codiceEsterno "0", quasi
 - Query rapida: July journeys con `customer_key` presente in vendite >= ago vs quelle con item >= ago.
 - Il reconcile riporta `skippedNoIdentity` / `skippedNoIdentityWithDriver` (log post-fetch + toast
   "Rigenera"): se il secondo cresce, c'è davvero perdita di contratti.
-- Il reconcile è upsert-only: journey aperte con una trigger date precedente restano nel DB
-  (prod: ~1200 journey di giugno con trigger 2026-07-01); la UI le esclude col floor gettone,
-  ma la lista schede le mostra. Non è un bug del linkage.
+- Il reconcile è la fonte di verità derivata dalle vendite locali: journey/item non derivabili
+  vengono potati (per org, sotto lock). Lezione per i test: NON seminare journey a mano in un'org
+  che ha anche bisuite_sales, oppure marca il watermark come allineato prima di caricare la lista.
 - Il watermark va catturato PRIMA della SELECT delle vendite (race con fetch concorrente).
 - Verifica rapida post-deploy senza aspettare il fetch delle 22:00: `scripts/verify-cj-later-purchases-prod.mts`
   via tunnel (stesso reconcile dello scheduler + SELECT luglio→acquisti successivi). Baseline 4 set 2026:

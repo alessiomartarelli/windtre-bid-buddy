@@ -203,6 +203,10 @@ export type CjReconcileResult = {
   items: number;
   skippedNoIdentity: number;
   skippedNoIdentityWithDriver: number;
+  // Journey/item rimossi perché non più qualificati (es. dopo lo spostamento
+  // in avanti della data trigger o cancellazioni lato BiSuite).
+  removedJourneys: number;
+  removedItems: number;
 };
 
 // === Analisi gettoni e fatturato cross-sell (Task #192) ===

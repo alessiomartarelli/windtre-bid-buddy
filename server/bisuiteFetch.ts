@@ -527,7 +527,8 @@ export async function runBisuiteFetchForOrg(
       console.log(
         `[customer-journey] org=${orgId} reconcile post-fetch: ` +
           `journeys=${cj.journeys} items=${cj.items} ` +
-          `scartate-senza-identita=${cj.skippedNoIdentity} (con pista tracciata=${cj.skippedNoIdentityWithDriver})`,
+          `scartate-senza-identita=${cj.skippedNoIdentity} (con pista tracciata=${cj.skippedNoIdentityWithDriver}) ` +
+          `rimosse=${cj.removedJourneys} journey / ${cj.removedItems} item`,
       );
     }
   } catch (err) {

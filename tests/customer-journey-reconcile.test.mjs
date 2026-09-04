@@ -8,6 +8,7 @@ import {
   signup,
   cleanupOrg,
   newPool,
+  setCjTriggerDate,
 } from './helpers/uiTest.mjs';
 
 // Test suite Customer Journey reconcile / preservazione campi manuali (Task #164).
@@ -632,6 +633,171 @@ test('scenario 7: reconcile reports sales skipped for missing customer identity'
     assert.equal(result.journeys, 1);
     assert.equal(result.skippedNoIdentity, 2, 'both anonymous sales are counted as skipped');
     assert.equal(result.skippedNoIdentityWithDriver, 1, 'only the one with a tracked pista is a lost contract');
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 8 (Task #557): spostare in avanti la data trigger deve RIMUOVERE le
+// journey aperte con il trigger precedente (e i loro item), lasciando intatte
+// quelle ancora qualificate — compresi i loro campi manuali. La lista Schede
+// deve così coincidere col perimetro temporale dell'Analisi gettoni.
+// ===========================================================================
+test('scenario 8: moving the trigger date forward prunes journeys opened under the old trigger', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  const cfJune = uniq('JUNE').toUpperCase();
+  const cfJuly = uniq('JULY').toUpperCase();
+  const phones = {
+    manual: { imei: 'AAA111', importoFinanziato: 50 },
+    auto: { imei: 'BBB222', importoFinanziato: 60 },
+  };
+  try {
+    // Trigger anticipato a giugno: si aprono sia la journey di giugno sia quella di luglio.
+    await setCjTriggerDate(pool, session.orgId, '2026-06-01');
+    await insertLaterSale(pool, session.orgId, cfJune, 'ADD J', '2026-06-10T10:00:00.000Z', buildRawData(cfJune, 'ADD J', phones));
+    await insertSale(pool, session.orgId, cfJuly, 'ADD L', phones); // SALE_DATE = 2026-07-15
+
+    let result = await reconcile(session);
+    assert.equal(result.journeys, 2, 'both June and July journeys open with a June trigger');
+    assert.equal(result.removedJourneys, 0);
+    let journeys = await journeyOf(pool, session.orgId);
+    assert.deepEqual(journeys.map((j) => j.customer_key).sort(), [cfJuly, cfJune].sort());
+
+    // Modifica manuale su un item della journey di LUGLIO (deve sopravvivere).
+    let items = await itemsByArticle(pool, session.orgId);
+    const julyItems = await pool.query(
+      `SELECT i.id FROM customer_journey_items i JOIN customer_journeys j ON j.id = i.journey_id
+        WHERE i.organization_id = $1 AND j.customer_key = $2 AND i.bisuite_article_id = $3`,
+      [session.orgId, cfJuly, ART_MANUAL],
+    );
+    const patch = await jsonReq(`${BASE}/api/customer-journey-items/${julyItems.rows[0].id}/details`, {
+      method: 'PATCH',
+      headers: { Cookie: session.cookieHeader },
+      body: JSON.stringify({ imei: 'IMEI_MANUALE', rata: '999' }),
+    });
+    assert.equal(patch.status, 200, `details PATCH failed: ${JSON.stringify(patch.body)}`);
+
+    // Journey/item "estranei" in un'ALTRA org: la pulizia non deve toccarli.
+    const other = await signupAndLogin();
+    try {
+      await setCjTriggerDate(pool, other.orgId, '2026-06-01');
+      await insertLaterSale(pool, other.orgId, cfJune, 'ADD O', '2026-06-10T10:00:00.000Z', buildRawData(cfJune, 'ADD O', phones));
+      await reconcile(other);
+      assert.equal((await journeyOf(pool, other.orgId)).length, 1);
+
+      // Sposta il trigger a luglio via API (come farebbe un admin) e ricarica
+      // la lista: il cambio trigger deve invalidare il watermark e far
+      // ripartire il reconcile anche senza nuove vendite.
+      const put = await jsonReq(`${BASE}/api/customer-journey-config`, {
+        method: 'PUT',
+        headers: { Cookie: session.cookieHeader },
+        body: JSON.stringify({ triggerDate: '2026-07-01' }),
+      });
+      assert.equal(put.status, 200, `config PUT failed: ${JSON.stringify(put.body)}`);
+      assert.equal(await reconciledWatermark(pool, session.orgId), null, 'trigger change must reset the reconcile watermark');
+
+      const list = await jsonReq(`${BASE}/api/customer-journeys`, { headers: { Cookie: session.cookieHeader } });
+      assert.equal(list.status, 200);
+      assert.deepEqual(
+        list.body.map((j) => j.customerKey),
+        [cfJuly],
+        'the Schede list must only show the July journey after moving the trigger to July',
+      );
+
+      journeys = await journeyOf(pool, session.orgId);
+      assert.deepEqual(journeys.map((j) => j.customer_key), [cfJuly], 'June journey must be deleted from the DB');
+      const orphanItems = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM customer_journey_items WHERE organization_id = $1 AND cf = $2`,
+        [session.orgId, cfJune],
+      );
+      assert.equal(orphanItems.rows[0].n, 0, 'items of the pruned June journey must be gone');
+
+      // La journey di luglio conserva i campi manuali.
+      items = await itemsByArticle(pool, session.orgId);
+      const kept = items.get(ART_MANUAL);
+      assert.equal(kept.details_manual, true);
+      assert.equal(kept.imei, 'IMEI_MANUALE');
+      assert.equal(kept.rata, '999');
+
+      // Un reconcile esplicito riporta il conteggio dei rimossi = 0 (già puliti) e
+      // l'altra org è rimasta intatta.
+      result = await reconcile(session);
+      assert.equal(result.journeys, 1);
+      assert.equal(result.removedJourneys, 0);
+      assert.equal(result.removedItems, 0);
+      assert.equal((await journeyOf(pool, other.orgId)).length, 1, 'other org journeys must not be pruned');
+
+      // Il conteggio dei rimossi include gli item caduti per cascade della
+      // journey: sull'altra org (1 journey di giugno con 3 item) spostiamo il
+      // trigger e rigeneriamo esplicitamente.
+      await setCjTriggerDate(pool, other.orgId, '2026-07-01');
+      const otherResult = await reconcile(other);
+      assert.equal(otherResult.journeys, 0);
+      assert.equal(otherResult.removedJourneys, 1);
+      assert.equal(otherResult.removedItems, 3, 'items removed by journey cascade must be counted');
+      assert.equal((await journeyOf(pool, other.orgId)).length, 0);
+    } finally {
+      await cleanupSession(pool, other);
+    }
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 9 (Task #557): un cambio di data trigger che arriva MENTRE un
+// reconcile è in corso non deve essere "annullato" dal reconcile (che
+// riscriverebbe un watermark fresco col perimetro vecchio). Reconcile e
+// salvataggio trigger sono serializzati da un advisory lock per org, quindi
+// lanciandoli in parallelo il risultato finale deve comunque essere coerente
+// con il trigger salvato: journey di giugno assente, watermark valido.
+// ===========================================================================
+test('scenario 9: a trigger change racing an in-flight reconcile still ends in the new perimeter', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  const cfJune = uniq('RJUNE').toUpperCase();
+  const cfJuly = uniq('RJULY').toUpperCase();
+  const phones = {
+    manual: { imei: 'AAA111', importoFinanziato: 50 },
+    auto: { imei: 'BBB222', importoFinanziato: 60 },
+  };
+  try {
+    await setCjTriggerDate(pool, session.orgId, '2026-06-01');
+    await insertLaterSale(pool, session.orgId, cfJune, 'ADD J', '2026-06-10T10:00:00.000Z', buildRawData(cfJune, 'ADD J', phones));
+    await insertSale(pool, session.orgId, cfJuly, 'ADD L', phones);
+    await reconcile(session);
+    assert.equal((await journeyOf(pool, session.orgId)).length, 2);
+
+    for (let round = 0; round < 5; round++) {
+      // Ripristina il trigger di giugno (riapre la journey di giugno)...
+      await setCjTriggerDate(pool, session.orgId, '2026-06-01');
+      await reconcile(session);
+      assert.equal((await journeyOf(pool, session.orgId)).length, 2, `round ${round}: June journey reopened`);
+
+      // ...poi reconcile e PUT trigger→luglio in parallelo, in entrambi gli ordini.
+      const ops = [
+        () => reconcile(session),
+        () => jsonReq(`${BASE}/api/customer-journey-config`, {
+          method: 'PUT',
+          headers: { Cookie: session.cookieHeader },
+          body: JSON.stringify({ triggerDate: '2026-07-01' }),
+        }),
+      ];
+      if (round % 2 === 1) ops.reverse();
+      const results = await Promise.all(ops.map((op) => op()));
+      for (const r of results) if (r?.status != null) assert.equal(r.status, 200);
+
+      // Stato finale osservabile dalla lista (che riconcilia se il watermark è
+      // stato azzerato dal PUT): solo luglio.
+      const list = await jsonReq(`${BASE}/api/customer-journeys`, { headers: { Cookie: session.cookieHeader } });
+      assert.equal(list.status, 200);
+      assert.deepEqual(list.body.map((j) => j.customerKey), [cfJuly], `round ${round}: only July after the race`);
+      assert.deepEqual((await journeyOf(pool, session.orgId)).map((j) => j.customer_key), [cfJuly], `round ${round}: DB only July`);
+    }
   } finally {
     await cleanupSession(pool, session);
     await pool.end().catch(() => {});

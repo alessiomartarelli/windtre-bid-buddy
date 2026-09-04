@@ -1,4 +1,7 @@
 import { db } from "./db";
+
+// Esecutore DB: `db` oppure la transazione corrente (`db.transaction(tx => ...)`).
+type DbExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
 import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
@@ -1586,26 +1589,67 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setCustomerJourneyTriggerDate(orgId: string, date: string | null): Promise<Date> {
-    const cfg = await this.getOrgConfig(orgId);
-    const config: Record<string, unknown> = { ...((cfg?.config as Record<string, unknown> | null) || {}) };
-    if (date && parseCjTriggerDate(date)) {
-      config.customerJourneyTriggerDate = formatCjTriggerDate(parseCjTriggerDate(date)!);
-    } else {
-      delete config.customerJourneyTriggerDate;
-    }
-    await this.upsertOrgConfig(orgId, config, cfg?.configVersion || "2.0");
+    const parsed = date ? parseCjTriggerDate(date) : null;
+    const formatted = parsed ? formatCjTriggerDate(parsed) : null;
+    // Serializzato col reconcile (stesso advisory lock per org): un reconcile
+    // partito con il trigger precedente non può terminare DOPO questo save e
+    // riscrivere un watermark "fresco" (o potare con il perimetro vecchio).
+    // Un cambio di data trigger cambia il perimetro delle journey (quali si
+    // aprono e quali vanno rimosse) senza che le vendite locali siano
+    // cambiate: azzeriamo il watermark così il prossimo caricamento della
+    // lista rilancia il reconcile invece di considerarsi "già allineato".
+    // Aggiornamento jsonb atomico (niente read-modify-write dell'intera config).
+    await db.transaction(async (tx) => {
+      await this.lockCustomerJourneyOrg(tx, orgId);
+      const patch = formatted
+        ? sql`jsonb_build_object('customerJourneyTriggerDate', ${formatted}::text)`
+        : sql`'{}'::jsonb`;
+      await tx.execute(sql`
+        INSERT INTO organization_config (organization_id, config, config_version)
+        VALUES (${orgId}, ${patch}, '2.0')
+        ON CONFLICT (organization_id) DO UPDATE
+          SET config = ((COALESCE(organization_config.config, '{}'::jsonb)
+                          - 'customerJourneyReconciledAt' - 'customerJourneyTriggerDate') || ${patch}),
+              updated_at = now()`);
+    });
     return this.getCustomerJourneyTriggerDate(orgId);
   }
 
+  // Advisory lock transazionale per org: serializza fra loro i reconcile
+  // (manuali, post-fetch, stale-check al load pagina) e i cambi di trigger
+  // date. Il reconcile ora ELIMINA righe, quindi due snapshot concorrenti non
+  // devono mai potare/riscrivere con perimetri diversi.
+  private async lockCustomerJourneyOrg(tx: DbExecutor, orgId: string): Promise<void> {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`customer-journey:${orgId}`}))`);
+  }
+
   async reconcileCustomerJourneys(orgId: string): Promise<CjReconcileResult> {
-    const triggerDate = await this.getCustomerJourneyTriggerDate(orgId);
+    // Tutto il reconcile (lettura trigger + vendite, upsert, pulizia,
+    // watermark) gira in UNA transazione sotto advisory lock per org: la data
+    // trigger letta qui è garantita corrente per tutta la durata, e un
+    // cambio trigger concorrente attende la fine (e poi azzera il watermark).
+    return db.transaction(async (tx) => {
+      await this.lockCustomerJourneyOrg(tx, orgId);
+      return this.reconcileCustomerJourneysLocked(tx, orgId);
+    });
+  }
+
+  private async reconcileCustomerJourneysLocked(tx: DbExecutor, orgId: string): Promise<CjReconcileResult> {
+    const [cfgRow] = await tx.select({ config: organizationConfig.config }).from(organizationConfig)
+      .where(eq(organizationConfig.organizationId, orgId));
+    const triggerDate = parseCjTriggerDate((cfgRow?.config as Record<string, unknown> | null | undefined)?.customerJourneyTriggerDate)
+      ?? CJ_DEFAULT_TRIGGER_DATE;
     // Il watermark va catturato PRIMA di leggere le vendite: se un fetch
     // BiSuite atterra mentre il reconcile è in corso, le vendite arrivate dopo
     // questa lettura hanno un last_seen_at più recente del watermark e
     // verranno riprese dal prossimo stale-check, invece di restare invisibili
     // fino al fetch successivo.
-    const salesSnapshotAt = await this.getLastBisuiteSync(orgId);
-    const sales = await db.select().from(bisuiteSales)
+    const [syncRow] = await tx
+      .select({ last: sql<Date | null>`max(${bisuiteSales.lastSeenAt})` })
+      .from(bisuiteSales)
+      .where(eq(bisuiteSales.organizationId, orgId));
+    const salesSnapshotAt = syncRow?.last ? new Date(syncRow.last) : null;
+    const sales = await tx.select().from(bisuiteSales)
       .where(eq(bisuiteSales.organizationId, orgId));
     // Scarti visibili: vendite senza CF/P.IVA non possono essere agganciate a
     // nessun cliente. Contiamo separatamente quelle che contengono almeno un
@@ -1778,7 +1822,7 @@ export class DatabaseStorage implements IStorage {
     // per le righe in conflitto (DO UPDATE), così possiamo collegare gli item.
     const keyToJourneyId = new Map<string, string>();
     for (const part of chunk(candidates, 500)) {
-      const rows = await db.insert(customerJourneys)
+      const rows = await tx.insert(customerJourneys)
         .values(part.map((cand) => ({
           organizationId: orgId,
           customerKey: cand.anag.customerKey,
@@ -1829,7 +1873,7 @@ export class DatabaseStorage implements IStorage {
     }
     const allItems = Array.from(itemByKey.values());
     for (const part of chunk(allItems, 500)) {
-      await db.insert(customerJourneyItems)
+      await tx.insert(customerJourneyItems)
         .values(part)
         .onConflictDoUpdate({
           target: [customerJourneyItems.organizationId, customerJourneyItems.bisuiteSaleId, customerJourneyItems.bisuiteArticleId],
@@ -1870,14 +1914,92 @@ export class DatabaseStorage implements IStorage {
     }
     const itemCount = allItems.length;
 
+    // 3) Pulizia delle journey/item NON più qualificati. Il reconcile è
+    // derivato integralmente dalla copia locale delle vendite BiSuite (che
+    // propaga anche le cancellazioni), quindi tutto ciò che non è stato
+    // toccato in questo giro non ha più diritto di esistere: tipicamente
+    // journey aperte con una data trigger precedente (es. schede di giugno
+    // dopo lo spostamento del trigger a luglio) o item di vendite rimosse
+    // lato BiSuite. Senza questa pulizia la lista Schede continuava a
+    // mostrare journey che l'Analisi gettoni escludeva già col floor.
+    // I dati manuali (stato, IMEI/RATA, ragione sociale) restano intatti
+    // sulle journey ancora qualificate: qui si toccano SOLO righe fuori
+    // perimetro. Tutto rigorosamente scoped su organization_id.
+    const pruned = await this.pruneStaleCustomerJourneys(
+      tx,
+      orgId,
+      Array.from(keyToJourneyId.values()),
+      allItems.map((it) => `${it.bisuiteSaleId}::${it.bisuiteArticleId}`),
+    );
+
     // Salva il "watermark" dell'ultima riconciliazione = istante dell'ultima
     // vendita vista (max last_seen_at). Serve a `reconcileCustomerJourneysIfStale`
     // per capire se le vendite locali sono cambiate dall'ultimo reconcile e
     // ricostruire le journey automaticamente, senza che l'utente debba premere
     // "Rigenera da BiSuite".
-    await this.setCustomerJourneyReconciledAt(orgId, salesSnapshotAt);
+    // Scritto nella stessa transazione (jsonb atomico): se il commit non
+    // avviene, nemmeno il watermark avanza.
+    await tx.execute(sql`
+      INSERT INTO organization_config (organization_id, config, config_version)
+      VALUES (${orgId}, ${salesSnapshotAt ? sql`jsonb_build_object('customerJourneyReconciledAt', ${salesSnapshotAt.toISOString()}::text)` : sql`'{}'::jsonb`}, '2.0')
+      ON CONFLICT (organization_id) DO UPDATE
+        SET config = ((COALESCE(organization_config.config, '{}'::jsonb) - 'customerJourneyReconciledAt')
+                      || ${salesSnapshotAt ? sql`jsonb_build_object('customerJourneyReconciledAt', ${salesSnapshotAt.toISOString()}::text)` : sql`'{}'::jsonb`}),
+            updated_at = now()`);
 
-    return { journeys: journeyCount, items: itemCount, skippedNoIdentity, skippedNoIdentityWithDriver };
+    return {
+      journeys: journeyCount,
+      items: itemCount,
+      skippedNoIdentity,
+      skippedNoIdentityWithDriver,
+      removedJourneys: pruned.journeys,
+      removedItems: pruned.items,
+    };
+  }
+
+  /**
+   * Elimina, per la sola org indicata, le journey il cui id NON è fra quelle
+   * appena riconciliate e gli item (delle journey sopravvissute) la cui
+   * chiave (sale::article) non è fra quelle appena riconciliate. Gli item
+   * delle journey eliminate cadono per FK ON DELETE CASCADE (conteggiati).
+   */
+  private async pruneStaleCustomerJourneys(
+    tx: DbExecutor,
+    orgId: string,
+    keepJourneyIds: string[],
+    keepItemKeys: string[],
+  ): Promise<{ journeys: number; items: number }> {
+    // Le liste da conservare viaggiano come UN solo parametro JSON: su org
+    // grandi sono migliaia di chiavi e un placeholder per valore sfonderebbe
+    // il limite di parametri di Postgres.
+    const keepJourneys = JSON.stringify(keepJourneyIds);
+    // Gli item delle journey eliminate cadono per FK cascade: contali PRIMA,
+    // altrimenti il conteggio `removedItems` li ometterebbe.
+    const [cascade] = await tx.select({ n: sql<number>`count(*)::int` }).from(customerJourneyItems)
+      .where(and(
+        eq(customerJourneyItems.organizationId, orgId),
+        sql`${customerJourneyItems.journeyId} IN (
+          SELECT ${customerJourneys.id} FROM ${customerJourneys}
+           WHERE ${customerJourneys.organizationId} = ${orgId}
+             AND ${customerJourneys.id} NOT IN (SELECT jsonb_array_elements_text(${keepJourneys}::jsonb)))`,
+      ));
+    const cascadedItems = Number(cascade?.n ?? 0);
+    const removedJourneys = await tx.delete(customerJourneys)
+      .where(and(
+        eq(customerJourneys.organizationId, orgId),
+        sql`${customerJourneys.id} NOT IN (SELECT jsonb_array_elements_text(${keepJourneys}::jsonb))`,
+      ))
+      .returning({ id: customerJourneys.id });
+
+    const keepItems = JSON.stringify(keepItemKeys);
+    const removedItems = await tx.delete(customerJourneyItems)
+      .where(and(
+        eq(customerJourneyItems.organizationId, orgId),
+        sql`(COALESCE(${customerJourneyItems.bisuiteSaleId}, '') || '::' || COALESCE(${customerJourneyItems.bisuiteArticleId}::text, '')) NOT IN (SELECT jsonb_array_elements_text(${keepItems}::jsonb))`,
+      ))
+      .returning({ id: customerJourneyItems.id });
+
+    return { journeys: removedJourneys.length, items: cascadedItems + removedItems.length };
   }
 
   // Watermark dell'ultimo reconcile (ISO string in org config). null se mai.
