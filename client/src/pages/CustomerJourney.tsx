@@ -536,12 +536,18 @@ export default function CustomerJourneyPage() {
       const res = await apiRequest("POST", "/api/customer-journeys/reconcile");
       return res.json();
     },
-    onSuccess: (data: { journeys?: number; items?: number }) => {
+    onSuccess: (data: { journeys?: number; items?: number; skippedNoIdentity?: number; skippedNoIdentityWithDriver?: number }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      // Gli scarti per identità cliente mancante non devono sparire in
+      // silenzio: li mostriamo quando riguardano articoli di piste tracciate.
+      const skipped = data?.skippedNoIdentityWithDriver ?? 0;
+      const skippedNote = skipped > 0
+        ? ` ${skipped} vendite con pista tracciata non agganciate (cliente senza CF/P.IVA).`
+        : "";
       toast({
         title: "Rigenerazione completata",
-        description: `${data?.journeys ?? 0} journey, ${data?.items ?? 0} contratti elaborati.`,
+        description: `${data?.journeys ?? 0} journey, ${data?.items ?? 0} contratti elaborati.${skippedNote}`,
       });
     },
     onError: (err: unknown) => {

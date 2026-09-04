@@ -4124,6 +4124,11 @@ export async function registerRoutes(
         return res.status(403).json({ error: "Solo gli amministratori possono rigenerare le customer journey" });
       }
       const result = await storage.reconcileCustomerJourneys(profile.organizationId);
+      console.log(
+        `[customer-journey] org=${profile.organizationId} reconcile manuale: ` +
+          `journeys=${result.journeys} items=${result.items} ` +
+          `scartate-senza-identita=${result.skippedNoIdentity} (con pista tracciata=${result.skippedNoIdentityWithDriver})`,
+      );
       res.json(result);
     } catch (error) {
       console.error("Customer journey reconcile error:", error);

@@ -487,3 +487,153 @@ test('scenario 5: sales already in DB appear on list via auto-reconcile (no manu
     await pool.end().catch(() => {});
   }
 });
+
+// ===========================================================================
+// SCENARIO 6 (Task #555): gli acquisti dei mesi SUCCESSIVI alla SIM vengono
+// agganciati alla stessa journey e fanno crescere il maturato.
+//   1) vendita SIM mobile a luglio => journey aperta (T0 = luglio), nessuna
+//      pista cross-sell => gettone 0 €.
+//   2) arriva (fetch notturno / altra pagina) una vendita FISSO a settembre
+//      per lo stesso CF, con last_seen_at più recente del watermark.
+//   3) il load della lista riconcilia automaticamente: la scheda contiene
+//      ENTRAMBI i contratti (luglio + settembre), la journey resta una sola e
+//      il report/gettone del cliente passa a 1 pista => 20 €.
+// ===========================================================================
+const { buildGettoneJourneys } = await import('../shared/customerJourney.ts');
+
+function buildRawDataFisso(cf, addetto) {
+  return {
+    cliente: { codiceFiscale: cf, clienteTipo: 'FISICA', nome: 'Mario', cognome: 'Rossi', codiceEsterno: 'CLI123' },
+    addetto: { nominativo: addetto },
+    attivita: { nominativo: 'PDV ORIGINE' },
+    importoScontrino: 29.9,
+    articoli: [
+      {
+        id: 2001,
+        categoria: { nome: 'ADSL/FIBRA/FWA CF' },
+        tipologia: { nome: 'FIBRA' },
+        descrizione: 'Super Fibra',
+        dettaglio: { prezzo: '29.9', venditaInfo1: 'CODICE CONTRATTO: 1680001' },
+      },
+    ],
+  };
+}
+
+async function insertLaterSale(pool, orgId, cf, addetto, dataVendita, raw) {
+  const bisuiteId = Math.floor(Math.random() * 2_000_000_000);
+  // last_seen_at esplicitamente nel futuro rispetto al reconcile precedente:
+  // è quello che fa il fetch BiSuite quando scarica il mese corrente.
+  const res = await pool.query(
+    `INSERT INTO bisuite_sales
+       (organization_id, bisuite_id, data_vendita, nome_addetto, stato, raw_data, last_seen_at)
+     VALUES ($1, $2, $3, $4, 'FINALIZZATA IN CASSA', $5::jsonb, now() + interval '1 second')
+     RETURNING id`,
+    [orgId, bisuiteId, dataVendita, addetto, JSON.stringify(raw)],
+  );
+  return res.rows[0].id;
+}
+
+async function reportRows(session) {
+  const r = await jsonReq(`${BASE}/api/customer-journeys/report`, {
+    headers: { Cookie: session.cookieHeader },
+  });
+  assert.equal(r.status, 200, `report failed: ${JSON.stringify(r.body)}`);
+  return r.body;
+}
+
+test('scenario 6: a September purchase is linked to the July SIM journey and raises the maturato', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  const cf = uniq('LATERS').toUpperCase();
+  const addetto = 'MARIO ROSSI';
+  const phones = {
+    manual: { imei: '111111111111111', importoFinanziato: '800' },
+    auto: { imei: '222222222222222', importoFinanziato: '600' },
+  };
+  try {
+    // (1) SIM a luglio (SALE_DATE = 2026-07-15) => journey con solo mobile+telefono.
+    const julySaleId = await insertSale(pool, session.orgId, cf, addetto, phones);
+    const list1 = await listJourneys(session);
+    assert.equal(list1.length, 1, 'July SIM opens exactly one journey');
+    const journeyId = list1[0].id;
+    assert.equal(list1[0].openedAt.slice(0, 7), '2026-07', 'T0 is July');
+    const gettone1 = buildGettoneJourneys(await reportRows(session)).find((g) => g.journeyId === journeyId);
+    assert.ok(gettone1, 'journey is in the gettone cohort (active mobile SIM)');
+    const pisteBefore = gettone1.pisteAttive;
+    const fatturatoBefore = gettone1.fatturato;
+    assert.equal(gettone1.simAttive, 1);
+
+    // (2) acquisto FISSO a settembre, stesso CF, visto da un fetch successivo.
+    const sepSaleId = await insertLaterSale(
+      pool, session.orgId, cf, addetto, '2026-09-02T10:00:00.000Z', buildRawDataFisso(cf, addetto),
+    );
+
+    // (3) il load successivo riconcilia (watermark superato) e aggancia la vendita.
+    const list2 = await listJourneys(session);
+    assert.equal(list2.length, 1, 'still ONE journey: the later purchase must not open a new one');
+    assert.equal(list2[0].id, journeyId);
+    assert.equal(list2[0].openedAt.slice(0, 7), '2026-07', 'T0 stays July (later sale is not a trigger)');
+    const fissoDriver = list2[0].drivers.find((d) => d.driver === 'fisso');
+    assert.equal(fissoDriver?.activated, true, 'FISSO driver activated on the card');
+    assert.equal(fissoDriver?.phase, 'periodo', 'September is inside the journey window (>= T0 month)');
+
+    const detail = await jsonReq(`${BASE}/api/customer-journeys/${journeyId}`, {
+      headers: { Cookie: session.cookieHeader },
+    });
+    assert.equal(detail.status, 200);
+    const saleIds = new Set(detail.body.items.map((it) => it.bisuiteSaleId));
+    assert.ok(saleIds.has(julySaleId), 'detail/timeline contains the July SIM contract');
+    assert.ok(saleIds.has(sepSaleId), 'detail/timeline contains the September FISSO contract');
+    const sepItem = detail.body.items.find((it) => it.bisuiteSaleId === sepSaleId);
+    assert.equal(sepItem.driver, 'fisso');
+    assert.equal(sepItem.dataInserimento.slice(0, 7), '2026-09', 'event date of the later contract is September');
+    assert.equal(sepItem.codiceContratto, '1680001');
+
+    // Il maturato del cliente cresce: +1 pista cross-sell rispetto a prima.
+    const gettone2 = buildGettoneJourneys(await reportRows(session)).find((g) => g.journeyId === journeyId);
+    assert.ok(gettone2);
+    assert.equal(gettone2.pisteAttive, pisteBefore + 1, 'one more cross-sell pista after the September purchase');
+    assert.ok(gettone2.fatturato > fatturatoBefore, `maturato must grow (${fatturatoBefore} -> ${gettone2.fatturato})`);
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});
+
+// ===========================================================================
+// SCENARIO 7 (Task #555): le vendite senza CF/P.IVA non spariscono in
+// silenzio: il reconcile manuale riporta quante ne ha scartate, distinguendo
+// quelle che contenevano una pista tracciata (contratto perso) dalle altre
+// (ricariche/accessori di clienti anonimi).
+// ===========================================================================
+test('scenario 7: reconcile reports sales skipped for missing customer identity', async () => {
+  const pool = await newPool();
+  const session = await signupAndLogin();
+  const cf = uniq('SKIPID').toUpperCase();
+  const phones = {
+    manual: { imei: '111111111111111', importoFinanziato: '800' },
+    auto: { imei: '222222222222222', importoFinanziato: '600' },
+  };
+  try {
+    await insertSale(pool, session.orgId, cf, 'ADD X', phones);
+    // Anonimo con pista tracciata (FISSO): contratto perso.
+    await insertLaterSale(pool, session.orgId, '', 'ADD X', '2026-09-02T10:00:00.000Z', {
+      ...buildRawDataFisso('', 'ADD X'),
+      cliente: { codiceFiscale: '', piva: '', clienteTipo: 'FISICA', codiceEsterno: '0' },
+    });
+    // Anonimo con sola ricarica: scartato ma senza pista tracciata.
+    await insertLaterSale(pool, session.orgId, '', 'ADD X', '2026-09-03T10:00:00.000Z', {
+      cliente: { codiceEsterno: '0' },
+      addetto: { nominativo: 'ADD X' },
+      articoli: [{ id: 3001, categoria: { nome: 'RICARICHE' }, tipologia: { nome: 'RICARICA VIRTUALE STD' }, dettaglio: { prezzo: 10 } }],
+    });
+
+    const result = await reconcile(session);
+    assert.equal(result.journeys, 1);
+    assert.equal(result.skippedNoIdentity, 2, 'both anonymous sales are counted as skipped');
+    assert.equal(result.skippedNoIdentityWithDriver, 1, 'only the one with a tracked pista is a lost contract');
+  } finally {
+    await cleanupSession(pool, session);
+    await pool.end().catch(() => {});
+  }
+});

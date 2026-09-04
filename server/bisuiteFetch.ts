@@ -526,7 +526,8 @@ export async function runBisuiteFetchForOrg(
       const cj = await storage.reconcileCustomerJourneys(orgId);
       console.log(
         `[customer-journey] org=${orgId} reconcile post-fetch: ` +
-          `journeys=${cj.journeys} items=${cj.items}`,
+          `journeys=${cj.journeys} items=${cj.items} ` +
+          `scartate-senza-identita=${cj.skippedNoIdentity} (con pista tracciata=${cj.skippedNoIdentityWithDriver})`,
       );
     }
   } catch (err) {

@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjDriver } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
-import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets } from "@shared/customerJourney";
+import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
 
 // Data trigger di default della customer journey: una CJ si apre solo per
 // nuove attivazioni di pista mobile a partire da questa data (Task #158).
@@ -172,7 +172,7 @@ export interface IStorage {
   updateCustomerJourneyRagioneSociale(id: string, orgId: string, ragioneSociale: string | null): Promise<CustomerJourney | undefined>;
   getCustomerJourneyTriggerDate(orgId: string): Promise<Date>;
   setCustomerJourneyTriggerDate(orgId: string, date: string | null): Promise<Date>;
-  reconcileCustomerJourneys(orgId: string): Promise<{ journeys: number; items: number }>;
+  reconcileCustomerJourneys(orgId: string): Promise<CjReconcileResult>;
   reconcileCustomerJourneysIfStale(orgId: string): Promise<{ reconciled: boolean }>;
   getCustomerJourneyReconciledAt(orgId: string): Promise<Date | null>;
   setCustomerJourneyReconciledAt(orgId: string, at: Date | null): Promise<void>;
@@ -1597,10 +1597,23 @@ export class DatabaseStorage implements IStorage {
     return this.getCustomerJourneyTriggerDate(orgId);
   }
 
-  async reconcileCustomerJourneys(orgId: string): Promise<{ journeys: number; items: number }> {
+  async reconcileCustomerJourneys(orgId: string): Promise<CjReconcileResult> {
     const triggerDate = await this.getCustomerJourneyTriggerDate(orgId);
+    // Il watermark va catturato PRIMA di leggere le vendite: se un fetch
+    // BiSuite atterra mentre il reconcile è in corso, le vendite arrivate dopo
+    // questa lettura hanno un last_seen_at più recente del watermark e
+    // verranno riprese dal prossimo stale-check, invece di restare invisibili
+    // fino al fetch successivo.
+    const salesSnapshotAt = await this.getLastBisuiteSync(orgId);
     const sales = await db.select().from(bisuiteSales)
       .where(eq(bisuiteSales.organizationId, orgId));
+    // Scarti visibili: vendite senza CF/P.IVA non possono essere agganciate a
+    // nessun cliente. Contiamo separatamente quelle che contengono almeno un
+    // articolo di una pista tracciata (le uniche che avrebbero prodotto un
+    // contratto in journey), così il numero non viene gonfiato da ricariche,
+    // assistenza e accessori dei clienti anonimi.
+    let skippedNoIdentity = 0;
+    let skippedNoIdentityWithDriver = 0;
 
     type Anag = {
       customerKey: string; customerType: string;
@@ -1627,7 +1640,15 @@ export class DatabaseStorage implements IStorage {
       if (isAzienda && piva) { customerKey = piva; customerType = "azienda"; }
       else if (cf) { customerKey = cf; customerType = "privato"; }
       else if (piva) { customerKey = piva; customerType = "azienda"; }
-      else continue; // cliente non identificabile: impossibile collegare
+      else {
+        // cliente non identificabile: impossibile collegare
+        skippedNoIdentity += 1;
+        const arts: any[] = Array.isArray(raw.articoli) ? raw.articoli : [];
+        if (arts.some((a) => driverFromCategory(a?.categoria?.nome ?? null) != null)) {
+          skippedNoIdentityWithDriver += 1;
+        }
+        continue;
+      }
 
       // BiSuite non fornisce la ragione sociale del cliente in modo
       // strutturato (i campi cliente.ragioneSociale/denominazione sono vuoti
@@ -1854,9 +1875,9 @@ export class DatabaseStorage implements IStorage {
     // per capire se le vendite locali sono cambiate dall'ultimo reconcile e
     // ricostruire le journey automaticamente, senza che l'utente debba premere
     // "Rigenera da BiSuite".
-    await this.setCustomerJourneyReconciledAt(orgId, await this.getLastBisuiteSync(orgId));
+    await this.setCustomerJourneyReconciledAt(orgId, salesSnapshotAt);
 
-    return { journeys: journeyCount, items: itemCount };
+    return { journeys: journeyCount, items: itemCount, skippedNoIdentity, skippedNoIdentityWithDriver };
   }
 
   // Watermark dell'ultimo reconcile (ISO string in org config). null se mai.

@@ -192,6 +192,19 @@ export function aggregateReport(
     .sort((a, b) => b.valore - a.valore || b.contratti - a.contratti || a.label.localeCompare(b.label, "it"));
 }
 
+// Esito del reconcile journey ⇐ vendite BiSuite. Oltre ai conteggi di journey
+// e contratti elaborati espone gli SCARTI: vendite senza CF/P.IVA che non
+// possono essere agganciate a nessun cliente. `skippedNoIdentityWithDriver`
+// è il sottoinsieme che conteneva almeno un articolo di una pista tracciata
+// (le sole che avrebbero prodotto un contratto in journey): è il numero da
+// guardare per capire se stiamo perdendo acquisti reali.
+export type CjReconcileResult = {
+  journeys: number;
+  items: number;
+  skippedNoIdentity: number;
+  skippedNoIdentityWithDriver: number;
+};
+
 // === Analisi gettoni e fatturato cross-sell (Task #192) ===
 // Il "gettone" di un cliente dipende da QUANTE piste NON-mobile sono attive
 // nella sua journey (oltre alla SIM mobile che l'ha aperta). La tabella
