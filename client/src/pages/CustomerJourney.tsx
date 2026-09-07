@@ -1101,9 +1101,13 @@ export default function CustomerJourneyPage() {
     if (typeFilter === "privato") parts.push("Solo privati");
     else if (typeFilter === "azienda") parts.push("Solo business");
     if (search.trim()) parts.push(`Ricerca: "${search.trim()}"`);
+    const con = CJ_NON_MOBILE_DRIVERS.filter((d) => driverFilter[d] === "con").map((d) => CJ_DRIVER_LABELS[d]);
+    const senza = CJ_NON_MOBILE_DRIVERS.filter((d) => driverFilter[d] === "senza").map((d) => CJ_DRIVER_LABELS[d]);
+    if (con.length) parts.push(`Con: ${con.join(", ")}`);
+    if (senza.length) parts.push(`Senza: ${senza.join(", ")}`);
     parts.push(`Ordine: ${SORT_LABELS[sortKey]} ${sortDir === "asc" ? "↑" : "↓"}`);
     return parts.join(" · ");
-  }, [typeFilter, search, sortKey, sortDir]);
+  }, [typeFilter, search, driverFilter, sortKey, sortDir]);
 
   const handleExportListPdf = useCallback(async () => {
     setListPdfPending(true);
@@ -1444,6 +1448,7 @@ export default function CustomerJourneyPage() {
                       type="button"
                       onClick={() => cycleDriverFilter(d)}
                       title={title}
+                      aria-label={`${CJ_DRIVER_LABELS[d]}: ${mode === "con" ? "solo acquistato" : mode === "senza" ? "solo non acquistato" : "tutti"}`}
                       aria-pressed={mode !== "any"}
                       data-mode={mode}
                       data-testid={`button-driver-filter-${d}`}

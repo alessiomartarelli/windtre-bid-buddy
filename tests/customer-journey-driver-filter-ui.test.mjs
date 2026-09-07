@@ -71,6 +71,7 @@ test('schede clienti: filtro con/senza per driver acquistati', async () => {
     await fisso.click();
     assert.equal(await fisso.getAttribute('data-mode'), 'con');
     await page.getByTestId(`card-journey-${ids.SoloMobile}`).waitFor({ state: 'hidden', timeout: 10000 });
+    assert.equal(await fisso.getAttribute('aria-label'), 'Fisso: solo acquistato', 'lo stato deve essere leggibile da screen reader');
     assert.deepEqual(await visible(), { SoloMobile: false, ConFisso: true, FissoEnergia: true });
     assert.equal(await countTutti(), '2', 'il chip Tutti segue il filtro driver');
 
@@ -79,6 +80,7 @@ test('schede clienti: filtro con/senza per driver acquistati', async () => {
     assert.equal(await energia.getAttribute('data-mode'), 'con');
     await energia.click();
     assert.equal(await energia.getAttribute('data-mode'), 'senza');
+    assert.equal(await energia.getAttribute('aria-label'), 'Energia: solo non acquistato');
     await page.getByTestId(`card-journey-${ids.FissoEnergia}`).waitFor({ state: 'hidden', timeout: 10000 });
     assert.deepEqual(await visible(), { SoloMobile: false, ConFisso: true, FissoEnergia: false });
     assert.equal(await countTutti(), '1');
