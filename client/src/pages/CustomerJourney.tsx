@@ -1425,18 +1425,18 @@ export default function CustomerJourneyPage() {
             {/* Filtro per driver acquistati: ogni pista cicla
                 tutti → con (già acquistata) → senza (non acquistata). */}
             {view === "schede" && (
-              <div className="flex flex-wrap items-center gap-2" data-testid="filter-drivers">
-                <span className="text-xs text-muted-foreground flex items-center gap-1 mr-1">
-                  <Filter className="h-3.5 w-3.5" /> Prodotti acquistati:
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5" data-testid="filter-drivers">
+                <span className="text-sm font-semibold text-foreground flex items-center gap-1.5 mr-2">
+                  <Filter className="h-4 w-4" /> Prodotti acquistati
                 </span>
                 {CJ_NON_MOBILE_DRIVERS.map((d) => {
                   const mode: CjDriverFilterMode = driverFilter[d] ?? "any";
                   const Icon = CJ_DRIVER_ICONS[d];
                   const cls = mode === "con"
-                    ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    ? "border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 shadow-sm"
                     : mode === "senza"
-                      ? "border-rose-500/60 bg-rose-500/10 text-rose-700 dark:text-rose-300 line-through decoration-rose-500/70"
-                      : "border-border bg-background text-muted-foreground hover:text-foreground";
+                      ? "border-rose-500 bg-rose-500/15 text-rose-700 dark:text-rose-300 line-through decoration-rose-500/70 shadow-sm"
+                      : "border-border bg-background text-foreground/80 hover:border-foreground/40 hover:text-foreground";
                   const title = mode === "con"
                     ? `${CJ_DRIVER_LABELS[d]}: solo chi l'ha già acquistato (clic: solo chi NON l'ha acquistato)`
                     : mode === "senza"
@@ -1452,12 +1452,12 @@ export default function CustomerJourneyPage() {
                       aria-pressed={mode !== "any"}
                       data-mode={mode}
                       data-testid={`button-driver-filter-${d}`}
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${cls}`}
+                      className={`inline-flex items-center gap-1.5 rounded-full border-2 px-3.5 py-1.5 text-sm font-medium transition-colors ${cls}`}
                     >
-                      <Icon className="h-3.5 w-3.5" />
+                      <Icon className="h-4 w-4" />
                       {CJ_DRIVER_LABELS[d]}
-                      {mode === "con" && <Check className="h-3.5 w-3.5" />}
-                      {mode === "senza" && <X className="h-3.5 w-3.5" />}
+                      {mode === "con" && <Check className="h-4 w-4" strokeWidth={3} />}
+                      {mode === "senza" && <X className="h-4 w-4" strokeWidth={3} />}
                     </button>
                   );
                 })}
@@ -1467,6 +1467,7 @@ export default function CustomerJourneyPage() {
                     size="sm"
                     onClick={() => setDriverFilter(EMPTY_DRIVER_FILTER)}
                     data-testid="button-driver-filter-reset"
+                    className="ml-auto"
                   >
                     Tutti i prodotti
                   </Button>
