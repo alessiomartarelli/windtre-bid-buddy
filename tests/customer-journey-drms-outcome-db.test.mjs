@@ -96,7 +96,8 @@ async function itemsById(pool, orgId) {
   const r = await pool.query(
     `SELECT id, state, economic_state, economic_state_manual, drms_competenza, drms_outcome_state,
             drms_outcome_competenza, drms_outcome_causale, drms_outcome_importo, drms_outcome_seq_id,
-            drms_outcome_upload_id, drms_outcome_match, drms_mismatch
+            drms_outcome_upload_id, drms_outcome_match, drms_mismatch,
+            economic_state_updated_at, economic_state_updated_by, drms_outcome_at
        FROM customer_journey_items WHERE organization_id = $1`,
     [orgId],
   );
@@ -165,6 +166,10 @@ test('DRMS → esito economico: upload, stato manuale, esita-drms, delete', asyn
   assert.equal(mob.drms_outcome_upload_id, uploadId);
   assert.equal(mob.drms_outcome_match, 'contratto');
   assert.equal(mob.drms_mismatch, false);
+  // Stato non manuale cambiato dal DRMS ⇒ timestamp valorizzato, autore null.
+  assert.ok(mob.economic_state_updated_at, 'economic_state_updated_at scritto dal DRMS');
+  assert.equal(mob.economic_state_updated_by, null);
+  assert.ok(mob.drms_outcome_at, 'drms_outcome_at valorizzato quando c\'è un esito');
 
   const en = m.get(ids.energiaId);
   assert.equal(en.economic_state, 'pagato');
@@ -176,11 +181,17 @@ test('DRMS → esito economico: upload, stato manuale, esita-drms, delete', asyn
   assert.equal(fis.drms_outcome_state, 'annullato');
   assert.equal(fis.drms_outcome_causale, 'DINIEGO');
   assert.equal(fis.drms_mismatch, true, 'manuale ≠ DRMS ⇒ incongruenza');
+  // Stato manuale: timestamp/autore della modifica manuale NON vengono toccati dal batch DRMS.
+  assert.equal(new Date(fis.economic_state_updated_at).toISOString(), manual.body.economicStateUpdatedAt);
+  assert.equal(fis.economic_state_updated_by, manual.body.economicStateUpdatedBy);
+  assert.ok(fis.economic_state_updated_by, 'autore manuale conservato');
 
   const tel = m.get(ids.telefonoId);
   assert.equal(tel.economic_state, null);
   assert.equal(tel.drms_outcome_state, null);
   assert.equal(tel.drms_mismatch, false);
+  assert.equal(tel.drms_outcome_at, null);
+  assert.equal(tel.economic_state_updated_at, null, 'nessun esito ⇒ nessun timestamp');
 
   // Il dettaglio journey espone i nuovi campi e il riepilogo driver considera
   // il fisso "pagato" (manuale) attivo, il telefono senza esito attivo.

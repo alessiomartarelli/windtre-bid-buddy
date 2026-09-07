@@ -28,4 +28,4 @@ colonne del motore (presenza chiavi legacy via `?|`) + runner asincrono per
 org (coalescing, 10s inline poi 202 + notifica `cj_drms_outcome`). Se aggiungi
 un campo al motore, aggiungilo ANCHE alla proiezione SQL in storage o verrà
 letto sempre null. Leggi i tempi per fase dal log `[cj] applyDrmsOutcomes`
-prima di ottimizzare altro (l'update per item è il prossimo sospetto via tunnel).
+prima di ottimizzare altro. La fase update è ora un UPDATE batch via jsonb_to_recordset (chunk 2000): i parametri Date in `db.execute` arrivano come text ⇒ castare `::timestamp` (ISO string) o PG 42804; il `touch_ts` per riga preserva at/by dei manuali.

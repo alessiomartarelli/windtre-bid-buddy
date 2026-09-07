@@ -2345,6 +2345,26 @@ export class DatabaseStorage implements IStorage {
     let updated = 0;
     let mismatches = 0;
     const now = new Date();
+    // Update batch: un solo UPDATE ... FROM jsonb_to_recordset per blocco di
+    // item cambiati (in prod via tunnel il round-trip per riga dominava la
+    // fase "update"). `touch_ts` replica la semantica precedente: timestamp/autore
+    // dello stato economico aggiornati SOLO quando lo stato non manuale cambia.
+    type DrmsBatchRow = {
+      id: string;
+      economic_state: string | null;
+      touch_ts: boolean;
+      drms_competenza: string | null;
+      drms_outcome_state: string | null;
+      drms_outcome_competenza: string | null;
+      drms_outcome_causale: string | null;
+      drms_outcome_importo: string | null;
+      drms_outcome_seq_id: string | null;
+      drms_outcome_upload_id: string | null;
+      drms_outcome_match: string | null;
+      has_outcome: boolean;
+      drms_mismatch: boolean;
+    };
+    const pending: DrmsBatchRow[] = [];
     for (const it of items) {
       const out = outcomes.get(it.id) ?? null;
       const next = applyOutcomeToState(
@@ -2364,27 +2384,52 @@ export class DatabaseStorage implements IStorage {
         it.drmsOutcomeUploadId === outUpload &&
         it.drmsCompetenza === outCompetenza;
       if (unchanged) continue;
-      await db.update(customerJourneyItems)
-        .set({
-          economicState: next.economicState,
-          // Stato scritto dal DRMS (non manuale): tracciamo l'istante.
-          ...(!it.economicStateManual && it.economicState !== next.economicState
-            ? { economicStateUpdatedAt: now, economicStateUpdatedBy: null }
-            : {}),
-          drmsCompetenza: outCompetenza,
-          drmsOutcomeState: outState,
-          drmsOutcomeCompetenza: out?.outcomeCompetenza ?? null,
-          drmsOutcomeCausale: out?.causale ?? null,
-          drmsOutcomeImporto: out ? String(out.importo) : null,
-          drmsOutcomeSeqId: outSeq,
-          drmsOutcomeUploadId: outUpload,
-          drmsOutcomeMatch: out?.matchBy ?? null,
-          drmsOutcomeAt: out ? now : null,
-          drmsMismatch: next.mismatch,
-          updatedAt: now,
-        })
-        .where(eq(customerJourneyItems.id, it.id));
-      updated += 1;
+      pending.push({
+        id: it.id,
+        economic_state: next.economicState,
+        // Stato scritto dal DRMS (non manuale): tracciamo l'istante.
+        touch_ts: !it.economicStateManual && it.economicState !== next.economicState,
+        drms_competenza: outCompetenza,
+        drms_outcome_state: outState,
+        drms_outcome_competenza: out?.outcomeCompetenza ?? null,
+        drms_outcome_causale: out?.causale ?? null,
+        drms_outcome_importo: out ? String(out.importo) : null,
+        drms_outcome_seq_id: outSeq,
+        drms_outcome_upload_id: outUpload,
+        drms_outcome_match: out?.matchBy ?? null,
+        has_outcome: out != null,
+        drms_mismatch: next.mismatch,
+      });
+    }
+    const BATCH = 2000;
+    for (let i = 0; i < pending.length; i += BATCH) {
+      const chunk = pending.slice(i, i + BATCH);
+      const res = await db.execute(sql`
+        UPDATE customer_journey_items AS c
+        SET economic_state = v.economic_state,
+            economic_state_updated_at = CASE WHEN v.touch_ts THEN ${now.toISOString()}::timestamp ELSE c.economic_state_updated_at END,
+            economic_state_updated_by = CASE WHEN v.touch_ts THEN NULL ELSE c.economic_state_updated_by END,
+            drms_competenza = v.drms_competenza,
+            drms_outcome_state = v.drms_outcome_state,
+            drms_outcome_competenza = v.drms_outcome_competenza,
+            drms_outcome_causale = v.drms_outcome_causale,
+            drms_outcome_importo = v.drms_outcome_importo,
+            drms_outcome_seq_id = v.drms_outcome_seq_id,
+            drms_outcome_upload_id = v.drms_outcome_upload_id,
+            drms_outcome_match = v.drms_outcome_match,
+            drms_outcome_at = CASE WHEN v.has_outcome THEN ${now.toISOString()}::timestamp ELSE NULL END,
+            drms_mismatch = v.drms_mismatch,
+            updated_at = ${now.toISOString()}::timestamp
+        FROM jsonb_to_recordset(${JSON.stringify(chunk)}::jsonb) AS v(
+          id text, economic_state text, touch_ts boolean,
+          drms_competenza text, drms_outcome_state text, drms_outcome_competenza text,
+          drms_outcome_causale text, drms_outcome_importo text, drms_outcome_seq_id text,
+          drms_outcome_upload_id text, drms_outcome_match text, has_outcome boolean,
+          drms_mismatch boolean
+        )
+        WHERE c.id = v.id AND c.organization_id = ${orgId}
+      `);
+      updated += Number(res.rowCount ?? chunk.length);
     }
     const byId = new Map(uploads.map((u) => [u.id, u]));
     const legacyUploads: CjDrmsLegacyUploadInfo[] = summary.legacyUploads.map((l) => {
