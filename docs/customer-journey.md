@@ -173,8 +173,13 @@ attive oltre alla SIM che ha aperto la journey. La tabella a scaglioni
   attiva) vs **% senza +prodotti** (`crossSellPercentuali`).
 - **Fatturato stimato** = somma dei gettoni sulle piste attive as-is;
   **Fatturato maturato** (stesso riquadro, colonna "Maturato" nelle tabelle) =
-  gettone calcolato sulle sole piste con esito economico DRMS `pagato`
-  (`pisteConfermate`/`fatturatoMaturato`). **Potenziale non espresso**
+  gettone calcolato sulle sole piste con esito economico `pagato`
+  (`pisteConfermate`/`fatturatoMaturato`), dove "pagato" è lo stato EFFETTIVO
+  (`effectiveEconomicState`): DRMS o manuale se presente, altrimenti
+  **liquidato presunto** per i driver senza processo di liquidazione
+  automatico (`CJ_PRESUMED_PAID_DRIVERS` = smartphone/`telefono`). In UI lo
+  smartphone senza esito appare in arancione "Liquidato · da verificare"
+  (select + icona ⚠ con nota); uno stato scelto a mano (es. Annullato) vince. **Potenziale non espresso**
   = `(gettone pieno a 5 piste − gettone attuale)` per journey, scalato per una
   **percentuale di saturazione attesa** (25/50/75/100%) scelta dall'utente.
 - L'analisi è guidata da un filtro **da–a sulla data di attivazione SIM**

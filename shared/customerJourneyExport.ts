@@ -1,5 +1,5 @@
 import {
-  CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, economicStateLabel,
+  CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, economicStateDisplayLabel,
 } from "./customerJourney";
 import type { CustomerJourney, CustomerJourneyItem, CjDriver } from "./schema";
 
@@ -159,7 +159,7 @@ export function contractsBody(
     fmtDate(it.dataInserimento),
     fmtDate(it.dataAttivazione),
     itemStateLabel(it.state),
-    economicStateLabel(it.economicState),
+    economicStateDisplayLabel(it),
     it.gettoneConfirmed ? "Sì" : "No",
   ]);
 }

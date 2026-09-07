@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ECONOMIC_STATE_LABELS,
-  isCjItemActive, economicStateLabel,
+  isCjItemActive, economicStateLabel, isCjEconomicPresumedPaid, CJ_PRESUMED_PAID_LABEL, CJ_PRESUMED_PAID_NOTE,
   aggregateReport, matchesCjFilters,
   CJ_NON_MOBILE_DRIVERS, matchesCjDriverFilter, nextCjDriverFilterMode, isCjDriverFilterActive,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
@@ -177,6 +177,8 @@ const STATE_VARIANTS: Record<string, string> = {
   stornato: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-300 border-zinc-500/30",
   riaccreditato: "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30",
 };
+// Liquidato presunto (smartphone, nessun processo automatico): arancione "da verificare".
+const PRESUMED_PAID_VARIANT = "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/40";
 
 // Referente / persona fisica del cliente (Nome Cognome, fallback nominativo).
 function journeyReferente(j: CustomerJourney): string {
@@ -2088,8 +2090,8 @@ function AnalisiViewImpl({
             </p>
             <p className="text-xs text-muted-foreground" data-testid="text-gettone-fatturato-maturato-pct">
               {totals.fatturato > 0
-                ? `${fmtPct((totals.fatturatoMaturato / totals.fatturato) * 100)} dello stimato · esito DRMS pagato`
-                : "esito DRMS pagato"}
+                ? `${fmtPct((totals.fatturatoMaturato / totals.fatturato) * 100)} dello stimato · DRMS pagato + smartphone presunti`
+                : "DRMS pagato + smartphone presunti"}
             </p>
           </CardContent>
         </Card>
@@ -2356,7 +2358,7 @@ function CustomerJourneyTimeline({
                   it.addetto ? `Addetto: ${it.addetto}` : null,
                   `Data: ${fmtDate(date)}`,
                   `Stato: ${stateLabel}`,
-                  it.economicState ? `Esito: ${economicStateLabel(it.economicState)}` : null,
+                  it.economicState ? `Esito: ${economicStateLabel(it.economicState)}` : isCjEconomicPresumedPaid(it) ? `Esito: ${CJ_PRESUMED_PAID_LABEL}` : null,
                 ]
                   .filter(Boolean)
                   .join("\n");
@@ -3185,6 +3187,7 @@ function EconomicStateCell({
   const value = it.economicState ?? ECONOMIC_AUTO_VALUE;
   const hasDrms = !!it.drmsOutcomeState;
   const mismatch = !!it.drmsMismatch;
+  const presumedPaid = isCjEconomicPresumedPaid(it);
   // Senza esito: spieghiamo PERCHÉ (upload legacy senza campi di esito vs
   // nessuna riga agganciabile), così l'utente non pensa che il match sia rotto.
   const drmsStatus = useCjDrmsStatus(!hasDrms);
@@ -3217,15 +3220,16 @@ function EconomicStateCell({
           disabled={pending}
         >
           <SelectTrigger
-            className={`h-8 w-[150px] text-xs border ${it.economicState ? STATE_VARIANTS[it.economicState] || "" : ""}`}
+            className={`h-8 w-[150px] text-xs border ${it.economicState ? STATE_VARIANTS[it.economicState] || "" : presumedPaid ? PRESUMED_PAID_VARIANT : ""}`}
             data-testid={`select-economic-state-${it.id}`}
-            title={it.economicStateManual ? "Stato economico impostato a mano" : hasDrms ? "Stato economico da DRMS" : "Nessun esito economico"}
+            data-presumed-paid={presumedPaid ? "true" : undefined}
+            title={it.economicStateManual ? "Stato economico impostato a mano" : hasDrms ? "Stato economico da DRMS" : presumedPaid ? CJ_PRESUMED_PAID_NOTE : "Nessun esito economico"}
           >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ECONOMIC_AUTO_VALUE} className="text-xs">
-              {hasDrms ? "Automatico (DRMS)" : "—"}
+              {hasDrms ? "Automatico (DRMS)" : presumedPaid ? CJ_PRESUMED_PAID_LABEL : "—"}
             </SelectItem>
             {CJ_ECONOMIC_STATES.map((s) => (
               <SelectItem key={s} value={s} className="text-xs">
@@ -3240,7 +3244,26 @@ function EconomicStateCell({
           </span>
         )}
       </div>
-      {!hasDrms && (
+      {!hasDrms && presumedPaid && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="h-7 w-7 inline-flex items-center justify-center rounded-md border border-orange-500/60 bg-orange-500/15 text-orange-700 dark:text-orange-300 transition-colors"
+              title={CJ_PRESUMED_PAID_LABEL}
+              data-testid={`button-presumed-paid-${it.id}`}
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 text-xs space-y-1.5" align="end" data-testid={`popover-presumed-paid-${it.id}`}>
+            <div className="font-semibold text-sm">{CJ_PRESUMED_PAID_LABEL}</div>
+            <p>{CJ_PRESUMED_PAID_NOTE}</p>
+            <p className="text-muted-foreground">Per correggerlo scegli uno stato economico dal menu (es. Annullato).</p>
+          </PopoverContent>
+        </Popover>
+      )}
+      {!hasDrms && !presumedPaid && (
         <Popover>
           <PopoverTrigger asChild>
             <button

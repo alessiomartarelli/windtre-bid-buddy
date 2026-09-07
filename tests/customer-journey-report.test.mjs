@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 const {
   aggregateReport,
   matchesCjFilters,
-  matchesCjDriverFilter,
+  matchesCjDriverFilter, isCjEconomicPresumedPaid, economicStateDisplayLabel, CJ_PRESUMED_PAID_LABEL,
   nextCjDriverFilterMode,
   isCjDriverFilterActive,
   cjSearchMatches,
@@ -918,6 +918,31 @@ test('buildGettoneJourneys: senza alcun esito DRMS il maturato è 0 e lo stimato
   assert.equal(j.fatturato, 20);
   assert.equal(j.fatturatoMaturato, 0);
   assert.equal(j.potenzialePieno, 100, 'il potenziale resta calcolato sullo stimato');
+});
+
+test('buildGettoneJourneys: smartphone senza esito = liquidato presunto, conta nel maturato; con esito reale vince quello', () => {
+  const T0 = '2026-07-05T00:00:00.000Z';
+  const rows = [
+    row({ journeyId: 'j3', driver: 'mobile', state: 'inserito', openedAt: T0, eventDate: T0 }),
+    // telefono senza esito (nessun processo DRMS) => presunto pagato
+    row({ journeyId: 'j3', driver: 'telefono', state: 'inserito', economicState: null, openedAt: T0, eventDate: '2026-07-10T00:00:00.000Z' }),
+    // fisso senza esito => stimato ma NON maturato (il presunto vale solo per smartphone)
+    row({ journeyId: 'j3', driver: 'fisso', state: 'inserito', economicState: null, openedAt: T0, eventDate: '2026-07-11T00:00:00.000Z' }),
+  ];
+  const [j] = buildGettoneJourneys(rows);
+  assert.equal(j.pisteAttive, 2);
+  assert.equal(j.pisteConfermate, 1, 'solo lo smartphone presunto');
+  assert.equal(j.fatturatoMaturato, 20);
+  assert.equal(isCjEconomicPresumedPaid({ driver: 'telefono', economicState: null }), true);
+  assert.equal(isCjEconomicPresumedPaid({ driver: 'telefono', economicState: 'annullato' }), false);
+  assert.equal(isCjEconomicPresumedPaid({ driver: 'fisso', economicState: null }), false);
+  assert.equal(economicStateDisplayLabel({ driver: 'telefono', economicState: null }), CJ_PRESUMED_PAID_LABEL);
+  assert.equal(economicStateDisplayLabel({ driver: 'telefono', economicState: 'pagato' }), 'Pagato');
+  // stato manuale "annullato" sullo smartphone: inattivo, sparisce da stimato e maturato
+  const rows2 = rows.map((r) => (r.driver === 'telefono' ? { ...r, economicState: 'annullato' } : r));
+  const [j2] = buildGettoneJourneys(rows2);
+  assert.equal(j2.pisteAttive, 1);
+  assert.equal(j2.pisteConfermate, 0);
 });
 
 // matchesCjDriverFilter — filtro "con/senza" per driver acquistati (schede).

@@ -366,7 +366,8 @@ export interface CjGettoneJourney {
   // cliente vale con le piste attive oggi (esito economico non ancora
   // necessariamente confermato).
   fatturato: number;
-  // Piste NON-mobile distinte con esito economico CONFERMATO "pagato" dal
+  // Piste NON-mobile distinte con esito economico "pagato" (DRMS/manuale, o
+  // presunto per i driver in CJ_PRESUMED_PAID_DRIVERS, es. smartphone) dal
   // DRMS (sottoinsieme di pisteAttive).
   pisteConfermate: number;
   // Fatturato MATURATO (€) = gettoneForPiste(pisteConfermate): quota del
@@ -448,7 +449,8 @@ export function buildGettoneJourneys(rows: CjReportRow[]): CjGettoneJourney[] {
       e.candidates.push({
         driver: r.driver,
         eventDate: r.eventDate ?? null,
-        pagato: r.economicState === "pagato",
+        // smartphone: liquidato presunto (nessun processo automatico).
+        pagato: effectiveEconomicState(r) === "pagato",
       });
     }
   }
@@ -923,6 +925,40 @@ export interface CjStatePair {
 export function economicStateLabel(state: string | null | undefined): string {
   if (!state) return CJ_ECONOMIC_STATE_EMPTY_LABEL;
   return CJ_ECONOMIC_STATE_LABELS[state as CjEconomicState] || state;
+}
+
+// Driver la cui liquidazione NON passa (ancora) da un processo automatico
+// (nessuna riga DRMS): in assenza di uno stato economico (DRMS o manuale) li
+// consideriamo liquidati "presunti", da verificare a mano. Oggi: smartphone.
+export const CJ_PRESUMED_PAID_DRIVERS = new Set<string>(["telefono"]);
+export const CJ_PRESUMED_PAID_LABEL = "Liquidato · da verificare";
+export const CJ_PRESUMED_PAID_NOTE =
+  "Liquidazione smartphone non ancora gestita in automatico: considerato liquidato per default, da verificare a mano. Conta nel fatturato maturato.";
+
+export interface CjEconomicView {
+  driver: string;
+  economicState?: string | null;
+}
+
+/** True se l'item è senza esito economico ma di un driver "presunto liquidato". */
+export function isCjEconomicPresumedPaid(it: CjEconomicView): boolean {
+  return !it.economicState && CJ_PRESUMED_PAID_DRIVERS.has(it.driver);
+}
+
+/**
+ * Stato economico EFFETTIVO usato per il maturato: quello reale (DRMS o
+ * manuale) se presente, altrimenti "pagato" presunto per i driver senza
+ * processo di liquidazione automatico.
+ */
+export function effectiveEconomicState(it: CjEconomicView): string | null {
+  if (it.economicState) return it.economicState;
+  return isCjEconomicPresumedPaid(it) ? "pagato" : null;
+}
+
+/** Etichetta esito per UI/export: distingue il presunto dal confermato. */
+export function economicStateDisplayLabel(it: CjEconomicView): string {
+  if (isCjEconomicPresumedPaid(it)) return CJ_PRESUMED_PAID_LABEL;
+  return economicStateLabel(it.economicState);
 }
 
 /**
