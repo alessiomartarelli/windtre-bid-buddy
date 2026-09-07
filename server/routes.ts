@@ -241,6 +241,14 @@ const drmsOutcomeRunner = createDrmsOutcomeRunner({
     return storage.applyDrmsOutcomes(orgId);
   },
   notify: (n) => storage.createBisuiteSyncNotification(n),
+  // Task #581: marker "in corso" persistito (cj_drms_outcome_runs) così che un
+  // riavvio pm2/deploy a metà run non perda l'esito in silenzio: al boot
+  // (vedi registerRoutes) i marker orfani vengono notificati e ripresi.
+  persist: {
+    start: (orgId, reason) => storage.markCjDrmsOutcomeRunStarted(orgId, reason),
+    end: (orgId) => storage.clearCjDrmsOutcomeRun(orgId),
+    list: () => storage.listCjDrmsOutcomeRuns(),
+  },
 });
 
 export async function registerRoutes(
@@ -248,6 +256,18 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   setupSession(app);
+
+  // Task #581: ripresa degli "Esita da DRMS" interrotti da un riavvio del
+  // processo (marker persistiti in cj_drms_outcome_runs). Avvisa gli admin e
+  // rilancia il ricalcolo; l'esito arriva in notifica cj_drms_outcome.
+  void (async () => {
+    try {
+      const resumed = await drmsOutcomeRunner.recoverInterrupted();
+      if (resumed.length > 0) console.log(`[cj] ripresi ${resumed.length} esiti DRMS interrotti da riavvio (org: ${resumed.join(", ")})`);
+    } catch (e) {
+      console.error("[cj] ripresa esiti DRMS interrotti fallita:", e);
+    }
+  })();
 
   // One-shot migration (Customer Journey, esito economico): sposta i valori
   // economici legacy del campo `state` (pagato/annullato/stornato/
@@ -4150,7 +4170,10 @@ export async function registerRoutes(
       // `outcomeRunning`: un "Esita da DRMS" (manuale o post upload/delete) è
       // ancora in corso per l'org → il client disabilita il pulsante e
       // attende la notifica cj_drms_outcome invece di accodare un altro clic.
-      res.json({ ...status, outcomeRunning: drmsOutcomeRunner.isRunning(profile.organizationId) });
+      // Include il marker persistito (Task #581): resta true anche se il
+      // processo è stato riavviato a metà run, finché la ripresa non conclude.
+      const outcomeRunning = await drmsOutcomeRunner.isRunningOrPersisted(profile.organizationId);
+      res.json({ ...status, outcomeRunning });
     } catch (error) {
       console.error("Customer journey drms-status error:", error);
       res.status(500).json({ error: "Errore nel recupero dello stato DRMS" });

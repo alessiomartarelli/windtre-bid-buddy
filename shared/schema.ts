@@ -649,6 +649,20 @@ export const bisuiteSyncNotifications = pgTable("bisuite_sync_notifications", {
 export type BisuiteSyncNotification = typeof bisuiteSyncNotifications.$inferSelect;
 export type InsertBisuiteSyncNotification = typeof bisuiteSyncNotifications.$inferInsert;
 
+// Marker persistito di un "Esita da DRMS" in corso (Customer Journey): una
+// riga per org finché il run (o la sua coda coalizzata) non termina. Se il
+// processo viene riavviato a metà run (pm2/deploy) la riga sopravvive: al
+// boot il server avvisa gli admin e rilancia il ricalcolo, e nel frattempo
+// GET /api/customer-journeys/drms-status continua a rispondere
+// outcomeRunning=true (lo stato in memoria del runner sarebbe vuoto).
+export const cjDrmsOutcomeRuns = pgTable("cj_drms_outcome_runs", {
+  organizationId: varchar("organization_id").primaryKey().references(() => organizations.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+});
+
+export type CjDrmsOutcomeRun = typeof cjDrmsOutcomeRuns.$inferSelect;
+
 // FinPlan Studio data (per-organization snapshot of the embedded
 // HTML tool: una riga per org, blob JSONB opaco lato server).
 export const finplanData = pgTable("finplan_data", {

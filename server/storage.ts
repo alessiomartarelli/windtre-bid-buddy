@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjEconomicState, type CjDriver, CJ_ECONOMIC_STATES } from "@shared/schema";
+import { profiles, organizations, brands, organizationBrands, type Brand, type InsertBrand, preventivi, organizationConfig, organizationConfigHistory, type OrganizationConfigHistory, passwordResetTokens, pdvConfigurations, systemConfig, bisuiteSales, garaConfig, garaConfigHistory, type GaraConfigHistory, telegramReportSends, drmsUploads, dtsLeads, incentivazioneConfig, incentivazioneValenze, bisuiteSyncNotifications, cjDrmsOutcomeRuns, type CjDrmsOutcomeRun, finplanData, customerJourneys, customerJourneyItems, plafondRicaricheOps, type PlafondRicaricheOp, type InsertPlafondRicaricheOp, type Profile, type Organization, type Preventivo, type OrganizationConfig, type PasswordResetToken, type PdvConfiguration, type InsertPdvConfiguration, type InsertProfile, type InsertOrganization, type InsertPreventivo, type SystemConfig, type BisuiteSale, type InsertBisuiteSale, type GaraConfig, type DrmsUpload, type InsertDrmsUpload, type DtsLeadRow, type InsertDtsLeadRow, type IncentivazioneConfigRow, type IncentivazioneValenze, type InsertIncentivazioneValenze, type BisuiteSyncNotification, type InsertBisuiteSyncNotification, type FinplanData, type CustomerJourney, type CustomerJourneyItem, type InsertCustomerJourneyItem, type CjItemState, type CjEconomicState, type CjDriver, CJ_ECONOMIC_STATES } from "@shared/schema";
 import { eq, desc, asc, and, isNull, isNotNull, lt, gte, lte, inArray, sql } from "drizzle-orm";
 import { driverFromCategory, isMobileActivationCategory, energiaSubtype, parseVenditaInfo, summarizeDrivers, summarizeDriversWithPhase, monthOfIso, suggestRagioneSocialeFromEmail, type CjDriverSummary, type CjReportRow, type CjJourneyFacets, type CjReconcileResult } from "@shared/customerJourney";
 import { computeDrmsOutcomes, applyOutcomeToState, DRMS_OUTCOME_FIELD_KEYS, type DrmsOutcomeRow, type DrmsOutcomeItem, type DrmsOutcomeSummary } from "@shared/customerJourneyDrms";
@@ -210,6 +210,12 @@ export interface IStorage {
   reconcileCustomerJourneysIfStale(orgId: string): Promise<{ reconciled: boolean }>;
   getCustomerJourneyReconciledAt(orgId: string): Promise<Date | null>;
   setCustomerJourneyReconciledAt(orgId: string, at: Date | null): Promise<void>;
+
+  // Customer Journey: marker persistito "Esita da DRMS in corso" (una riga per org)
+  markCjDrmsOutcomeRunStarted(orgId: string, reason: string): Promise<void>;
+  clearCjDrmsOutcomeRun(orgId: string): Promise<void>;
+  hasCjDrmsOutcomeRun(orgId: string): Promise<boolean>;
+  listCjDrmsOutcomeRuns(): Promise<CjDrmsOutcomeRun[]>;
 
   // BiSuite Sync Notifications
   createBisuiteSyncNotification(notif: InsertBisuiteSyncNotification): Promise<BisuiteSyncNotification>;
@@ -2152,6 +2158,27 @@ export class DatabaseStorage implements IStorage {
     }
     await this.reconcileCustomerJourneys(orgId);
     return { reconciled: true };
+  }
+
+  // Customer Journey: marker persistito "Esita da DRMS in corso"
+  async markCjDrmsOutcomeRunStarted(orgId: string, reason: string): Promise<void> {
+    await db.insert(cjDrmsOutcomeRuns)
+      .values({ organizationId: orgId, reason, startedAt: new Date() })
+      .onConflictDoUpdate({ target: cjDrmsOutcomeRuns.organizationId, set: { reason, startedAt: new Date() } });
+  }
+
+  async clearCjDrmsOutcomeRun(orgId: string): Promise<void> {
+    await db.delete(cjDrmsOutcomeRuns).where(eq(cjDrmsOutcomeRuns.organizationId, orgId));
+  }
+
+  async hasCjDrmsOutcomeRun(orgId: string): Promise<boolean> {
+    const [row] = await db.select({ organizationId: cjDrmsOutcomeRuns.organizationId })
+      .from(cjDrmsOutcomeRuns).where(eq(cjDrmsOutcomeRuns.organizationId, orgId)).limit(1);
+    return !!row;
+  }
+
+  async listCjDrmsOutcomeRuns(): Promise<CjDrmsOutcomeRun[]> {
+    return await db.select().from(cjDrmsOutcomeRuns).orderBy(asc(cjDrmsOutcomeRuns.startedAt));
   }
 
   // BiSuite Sync Notifications
