@@ -289,6 +289,7 @@ test('DRMS → esito economico: upload, stato manuale, esita-drms, delete', asyn
   assert.equal(st.body.uploads, 2);
   assert.deepEqual(st.body.legacyUploads.map((l) => l.uploadId), [legacyId]);
   assert.equal(st.body.legacyUploads[0].period, 'GEN-26');
+  assert.equal(st.body.outcomeRunning, false, 'a riposo drms-status espone outcomeRunning=false');
 
   const esita2 = await jsonReq(`${BASE}/api/customer-journeys/esita-drms`, { method: 'POST', headers: { Cookie: cookieHeader } });
   assert.equal(esita2.status, 200);
@@ -297,7 +298,7 @@ test('DRMS → esito economico: upload, stato manuale, esita-drms, delete', asyn
   const delLegacy = await jsonReq(`${BASE}/api/drms/${legacyId}`, { method: 'DELETE', headers: { Cookie: cookieHeader } });
   assert.equal(delLegacy.status, 200);
   const st2 = await jsonReq(`${BASE}/api/customer-journeys/drms-status`, { headers: { Cookie: cookieHeader } });
-  assert.deepEqual(st2.body, { uploads: 1, legacyUploads: [] });
+  assert.deepEqual(st2.body, { uploads: 1, legacyUploads: [], outcomeRunning: false });
 
   // 5) Delete upload ⇒ esiti DRMS azzerati; il manuale (fisso) resta, senza mismatch.
   const del = await jsonReq(`${BASE}/api/drms/${uploadId}`, { method: 'DELETE', headers: { Cookie: cookieHeader } });

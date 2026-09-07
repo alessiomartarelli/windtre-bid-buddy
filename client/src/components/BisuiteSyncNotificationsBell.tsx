@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Bell, AlertTriangle, XCircle, ExternalLink, CheckCheck, CalendarClock, ClipboardCheck } from 'lucide-react';
@@ -48,6 +48,27 @@ export function BisuiteSyncNotificationsBell() {
 
   const items = data?.items ?? [];
   const unread = data?.unread ?? 0;
+
+  // All'arrivo di una NUOVA notifica cj_drms_outcome (fine di un "Esita da
+  // DRMS" in background) ricarica i dati Customer Journey e lo stato DRMS,
+  // così schede, report e pulsante si aggiornano senza refresh manuale.
+  // Il primo caricamento inizializza soltanto l'insieme dei già visti.
+  const seenDrmsOutcomeIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const ids = data.items.filter((n) => n.status === 'cj_drms_outcome').map((n) => n.id);
+    const seen = seenDrmsOutcomeIdsRef.current;
+    if (seen === null) {
+      seenDrmsOutcomeIdsRef.current = new Set(ids);
+      return;
+    }
+    const fresh = ids.filter((id) => !seen.has(id));
+    if (fresh.length === 0) return;
+    fresh.forEach((id) => seen.add(id));
+    queryClient.invalidateQueries({ queryKey: ['/api/customer-journeys'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/customer-journeys/report'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/customer-journeys/drms-status'] });
+  }, [data]);
 
   const markRead = useMutation({
     mutationFn: async (id: string) => {

@@ -4123,7 +4123,11 @@ export async function registerRoutes(
     try {
       const profile = await storage.getProfile(req.session.userId);
       if (!profile?.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
-      res.json(await storage.getCjDrmsStatus(profile.organizationId));
+      const status = await storage.getCjDrmsStatus(profile.organizationId);
+      // `outcomeRunning`: un "Esita da DRMS" (manuale o post upload/delete) è
+      // ancora in corso per l'org → il client disabilita il pulsante e
+      // attende la notifica cj_drms_outcome invece di accodare un altro clic.
+      res.json({ ...status, outcomeRunning: drmsOutcomeRunner.isRunning(profile.organizationId) });
     } catch (error) {
       console.error("Customer journey drms-status error:", error);
       res.status(500).json({ error: "Errore nel recupero dello stato DRMS" });

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { KpiCardsSkeleton, DataTableSkeleton } from "@/components/skeletons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -1648,6 +1648,34 @@ export default function DrmsCommissioning() {
     enabled: isAuthorized,
   });
 
+  // Stato del ricalcolo "Esita da DRMS" (Customer Journey) lato server: dopo
+  // un salvataggio/eliminazione può restare in corso per minuti. Finché
+  // `outcomeRunning` è true si mostra un avviso e si interroga lo stato a
+  // intervalli brevi; al termine si ricaricano i dati CJ. La route è gated
+  // dal modulo Customer Journey: se non abilitato la query fallisce e basta.
+  const { data: cjDrmsStatus } = useQuery<{ outcomeRunning?: boolean }>({
+    queryKey: ["/api/customer-journeys/drms-status"],
+    enabled: isAuthorized,
+    retry: false,
+    staleTime: 60_000,
+    refetchInterval: (q) => (q.state.data?.outcomeRunning ? 3_000 : false),
+  });
+  const cjOutcomeRunning = !!cjDrmsStatus?.outcomeRunning;
+  const prevCjOutcomeRunning = useRef(false);
+  useEffect(() => {
+    if (prevCjOutcomeRunning.current && !cjOutcomeRunning) {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bisuite-notifications"] });
+      toast({
+        title: "Esito Customer Journey terminato",
+        description: "Il ricalcolo in background è concluso: il riepilogo è nelle notifiche.",
+        duration: 8_000,
+      });
+    }
+    prevCjOutcomeRunning.current = cjOutcomeRunning;
+  }, [cjOutcomeRunning, queryClient, toast]);
+
   useEffect(() => {
     setHasPersistedSelection(readPersistedIds().length > 0);
   }, [readPersistedIds, sources, savedList]);
@@ -1691,6 +1719,10 @@ export default function DrmsCommissioning() {
     },
     onSuccess: (data: { id?: string; cjOutcomes?: { matched?: number; items?: number; legacyUploads?: Array<{ period: string; fileName: string }> } | null; cjOutcomesPending?: boolean; [k: string]: unknown }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/drms"] });
+      if (data?.cjOutcomesPending) {
+        queryClient.setQueryData<{ outcomeRunning?: boolean }>(["/api/customer-journeys/drms-status"], (old) => ({ ...(old ?? {}), outcomeRunning: true }));
+        prevCjOutcomeRunning.current = true;
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/drms-status"] });
       const cj = data?.cjOutcomes;
       toast({
@@ -1717,10 +1749,21 @@ export default function DrmsCommissioning() {
     mutationFn: async (id: string) => {
       const res = await fetch(apiUrl(`/api/drms/${id}`), { method: "DELETE", credentials: "include" });
       if (!res.ok) throw new Error("Errore eliminazione");
+      return (await res.json().catch(() => ({}))) as { cjOutcomesPending?: boolean };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/drms"] });
-      toast({ title: "DRMS eliminato" });
+      if (data?.cjOutcomesPending) {
+        queryClient.setQueryData<{ outcomeRunning?: boolean }>(["/api/customer-journeys/drms-status"], (old) => ({ ...(old ?? {}), outcomeRunning: true }));
+        prevCjOutcomeRunning.current = true;
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/drms-status"] });
+      toast({
+        title: "DRMS eliminato",
+        description: data?.cjOutcomesPending
+          ? "L'esito Customer Journey viene ricalcolato in background: il riepilogo arriverà nelle notifiche."
+          : undefined,
+      });
     },
   });
 
@@ -2053,6 +2096,18 @@ export default function DrmsCommissioning() {
                 Verifica i dati nell'anteprima prima di salvarli sul database (per organizzazione e mese).
               </p>
             </div>
+            {cjOutcomeRunning && (
+              <div
+                className="mb-6 flex items-center gap-3 rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700/50 px-4 py-3 text-sm text-amber-900 dark:text-amber-200"
+                data-testid="banner-cj-drms-running"
+              >
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                <span>
+                  Esito Customer Journey in elaborazione sui DRMS caricati: nuovi salvataggi o eliminazioni
+                  verranno accodati al ricalcolo in corso. Il riepilogo arriverà nelle notifiche.
+                </span>
+              </div>
+            )}
             {pendingPreview ? (
               <PreviewCard
                 preview={pendingPreview}

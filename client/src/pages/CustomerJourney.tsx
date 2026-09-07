@@ -124,7 +124,12 @@ interface CjDrmsLegacyUpload {
 interface CjDrmsStatus {
   uploads: number;
   legacyUploads: CjDrmsLegacyUpload[];
+  // true finché un "Esita da DRMS" è in corso lato server per l'org.
+  outcomeRunning?: boolean;
 }
+
+// Polling dello stato DRMS mentre un ricalcolo è in corso (ms).
+const DRMS_RUNNING_POLL_MS = 3_000;
 
 interface CjDrmsApplySummary {
   items?: number; matched?: number; notFound?: number; ambiguous?: number;
@@ -145,6 +150,9 @@ function useCjDrmsStatus(enabled = true) {
     queryKey: ["/api/customer-journeys/drms-status"],
     enabled,
     staleTime: 60_000,
+    // Finché il ricalcolo è in corso interroga lo stato a intervalli brevi:
+    // al termine il pulsante si riabilita e i dati CJ vengono ricaricati.
+    refetchInterval: (q) => (q.state.data?.outcomeRunning ? DRMS_RUNNING_POLL_MS : false),
   });
 }
 
@@ -615,6 +623,27 @@ export default function CustomerJourneyPage() {
     },
   });
 
+  // Stato del ricalcolo "Esita da DRMS" lato server: finché `outcomeRunning`
+  // è true il pulsante resta disabilitato con spinner (un altro clic verrebbe
+  // solo coalizzato nel run in corso). Al passaggio running → fermo i dati CJ
+  // vengono ricaricati, senza aspettare il refetch periodico della campanella.
+  const drmsStatusQuery = useCjDrmsStatus(isAdmin);
+  const drmsOutcomeRunning = !!drmsStatusQuery.data?.outcomeRunning;
+  const prevDrmsRunningRef = useRef(false);
+  useEffect(() => {
+    if (prevDrmsRunningRef.current && !drmsOutcomeRunning) {
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/bisuite-notifications"] });
+      toast({
+        title: "Esito da DRMS terminato",
+        description: "Il ricalcolo in background è concluso: il riepilogo è nelle notifiche e le schede sono state aggiornate.",
+        duration: 8_000,
+      });
+    }
+    prevDrmsRunningRef.current = drmsOutcomeRunning;
+  }, [drmsOutcomeRunning, toast]);
+
   // "Esita da DRMS": rielabora tutti i DRMS caricati e aggiorna lo stato
   // economico dei contratti (admin).
   const esitaDrmsMutation = useMutation({
@@ -625,8 +654,13 @@ export default function CustomerJourneyPage() {
     onSuccess: (raw: CjDrmsApplySummary | { pending: true; message?: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/drms-status"] });
       if ("pending" in raw && raw.pending) {
+        // Segna subito il run come in corso (il polling lo confermerà) così
+        // il pulsante si disabilita senza attendere il prossimo refetch.
+        queryClient.setQueryData<CjDrmsStatus>(["/api/customer-journeys/drms-status"], (old) =>
+          old ? { ...old, outcomeRunning: true } : { uploads: 0, legacyUploads: [], outcomeRunning: true });
+        prevDrmsRunningRef.current = true;
+        queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/drms-status"] });
         // Ricalcolo lungo: il server ha risposto 202 e il riepilogo arriverà
         // come notifica nella campanella.
         toast({
@@ -636,6 +670,7 @@ export default function CustomerJourneyPage() {
         });
         return;
       }
+      queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/drms-status"] });
       const data = raw as CjDrmsApplySummary;
       const bs = data?.byState ?? {};
       const parts = CJ_ECONOMIC_STATES
@@ -1126,16 +1161,19 @@ export default function CustomerJourneyPage() {
                   <Button
                     variant="outline"
                     onClick={() => esitaDrmsMutation.mutate()}
-                    disabled={esitaDrmsMutation.isPending}
+                    disabled={esitaDrmsMutation.isPending || drmsOutcomeRunning}
                     data-testid="button-esita-drms"
-                    title="Rielabora tutti i DRMS caricati e aggiorna lo stato economico dei contratti"
+                    data-drms-running={drmsOutcomeRunning ? "true" : "false"}
+                    title={drmsOutcomeRunning
+                      ? "Un esito da DRMS è già in corso per la tua azienda: attendi la notifica di fine elaborazione"
+                      : "Rielabora tutti i DRMS caricati e aggiorna lo stato economico dei contratti"}
                   >
-                    {esitaDrmsMutation.isPending ? (
+                    {esitaDrmsMutation.isPending || drmsOutcomeRunning ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : (
                       <Receipt className="h-4 w-4 mr-2" />
                     )}
-                    Esita da DRMS
+                    {drmsOutcomeRunning && !esitaDrmsMutation.isPending ? "Esito DRMS in corso…" : "Esita da DRMS"}
                   </Button>
                   <Button
                     onClick={() => reconcileMutation.mutate()}
