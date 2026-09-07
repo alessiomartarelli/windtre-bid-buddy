@@ -10,3 +10,5 @@ Per verificare end-to-end il ramo d'errore di una route che scrive in transazion
 **Why:** il test esercita esattamente il catch di produzione (risposta 5xx chiara, 0 righe scritte, file rimosso) senza mock; in produzione l'header è inerte.
 
 **How to apply:** suite HTTP con signup/cookie da tests/helpers/uiTest.mjs; verifica file orfani leggendo la dir upload dell'org (`uploads/cdg/<orgId>`); aggiungi sempre la controprova senza header (richiesta identica → 201).
+
+**Variante "run lungo":** per simulare un job in background lento (es. runner "Esita da DRMS") usa un header non-prod che arma un ritardo per il PROSSIMO run dell'org (`x-test-cj-drms-delay-ms`, cap 60s); nel test Playwright iniettalo dal browser con `page.route(...).continue({ headers })` così il click reale attraversa il ramo 202 → polling → riabilitazione. Il polling del client parte solo se lo stato letto è già "running": carica/clicca prima, non dopo.

@@ -215,8 +215,31 @@ function requireModule(moduleKey: string | string[]): RequestHandler {
 // Runner unico (per processo) di "Esita da DRMS": serializza e coalizza i
 // ricalcoli per org e consegna in notifica gli esiti che superano l'attesa
 // inline (vedi server/cjDrmsOutcomeRunner.ts).
+// Hook di test (solo non-prod): ritardo artificiale (ms) applicato al PROSSIMO
+// run dell'org, armato dall'header `x-test-cj-drms-delay-ms` sulla POST
+// "Esita da DRMS". Serve alle UI test per simulare un ricalcolo lungo (202 +
+// pulsante disabilitato) senza dover caricare decine di migliaia di righe.
+const TEST_DRMS_DELAY_HEADER = "x-test-cj-drms-delay-ms";
+const TEST_DRMS_DELAY_MAX_MS = 60_000;
+const testDrmsDelayByOrg = new Map<string, number>();
+function armTestDrmsDelay(req: { get(name: string): string | undefined }, orgId: string) {
+  if (process.env.NODE_ENV === "production") return;
+  const raw = req.get(TEST_DRMS_DELAY_HEADER);
+  if (!raw) return;
+  const ms = Number.parseInt(raw, 10);
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  testDrmsDelayByOrg.set(orgId, Math.min(ms, TEST_DRMS_DELAY_MAX_MS));
+}
+
 const drmsOutcomeRunner = createDrmsOutcomeRunner({
-  run: (orgId) => storage.applyDrmsOutcomes(orgId),
+  run: async (orgId) => {
+    const delayMs = testDrmsDelayByOrg.get(orgId);
+    if (delayMs) {
+      testDrmsDelayByOrg.delete(orgId);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    return storage.applyDrmsOutcomes(orgId);
+  },
   notify: (n) => storage.createBisuiteSyncNotification(n),
 });
 
@@ -4303,6 +4326,7 @@ export async function registerRoutes(
       if (!profile.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
       // Ricalcolo in background serializzato per org: se non termina entro
       // l'attesa inline risponde 202 e il riepilogo arriva in notifica.
+      armTestDrmsDelay(req, profile.organizationId);
       const r = await drmsOutcomeRunner.apply(profile.organizationId, { reason: "Esita da DRMS" });
       if (r.pending) {
         return res.status(202).json({ pending: true, message: "Esito da DRMS in elaborazione: il riepilogo arriverà nelle notifiche." });

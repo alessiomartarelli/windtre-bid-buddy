@@ -232,6 +232,10 @@ args = "cj-t0-sim-ui-tests"
 task = "workflow.run"
 args = "cj-items-order-db-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "cj-drms-running-ui-tests"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -764,6 +768,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/run-dark-contrast-accents-ui-tests.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "cj-drms-running-ui-tests"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/run-customer-journey-drms-running-ui-tests.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
