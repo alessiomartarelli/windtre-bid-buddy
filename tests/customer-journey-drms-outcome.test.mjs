@@ -213,15 +213,38 @@ test('match per codice contratto è case/space-insensitive; fallback CF + TIPO_F
   assert.equal(byCf.matchBy, 'cf');
   // stesso CF ma TIPO_FONIA FISSO: non aggancia un item mobile
   assert.equal(outcomeOf([row({ CODICE_CONTRATTO: 'ALTRO', TIPO_FONIA: 'FISSO' })], item()), null);
-  // fisso aggancia FISSO; assicurazioni e protetti agganciano ASSICURAZIONI
+  // fisso aggancia FISSO; assicurazioni aggancia ASSICURAZIONI (protetti NO: è PROTECTA)
   assert.equal(outcomeOf([row({ CODICE_CONTRATTO: 'ALTRO', TIPO_FONIA: 'FISSO' })], item({ driver: 'fisso', codiceContratto: null }))?.state, 'pagato');
   assert.equal(outcomeOf([row({ CODICE_CONTRATTO: 'ALTRO', TIPO_FONIA: 'ASSICURAZIONI' })], item({ driver: 'assicurazioni', codiceContratto: null }))?.state, 'pagato');
-  assert.equal(outcomeOf([row({ CODICE_CONTRATTO: 'ALTRO', TIPO_FONIA: 'ASSICURAZIONI' })], item({ driver: 'protetti', codiceContratto: null }))?.state, 'pagato');
+  assert.equal(outcomeOf([row({ CODICE_CONTRATTO: 'ALTRO', TIPO_FONIA: 'ASSICURAZIONI' })], item({ driver: 'protetti', codiceContratto: null })), null);
   // telefono: solo per codice contratto, niente fallback CF
   assert.equal(outcomeOf([row({ CODICE_CONTRATTO: 'ALTRO' })], item({ driver: 'telefono', codiceContratto: 'TEL-1' })), null);
   // P.IVA come chiave alternativa (clienti azienda)
   const byPiva = outcomeOf([row({ CODICE_CONTRATTO: 'ALTRO', FISCAL_CODE: '', P_IVA_CLIENTE: '01234567890' })], item({ cf: null, piva: '01234567890' }));
   assert.equal(byPiva?.state, 'pagato');
+});
+
+test('protetti (Protecta): righe GARE PROTECTA valgono come contrattuali; match codice contratto, poi CF/P.IVA', () => {
+  // Riga reale DRMS: TIPO_FONIA PROTECTA, NATURA GARE, nessuna CONTRATTUALE.
+  const pr = (over) => row({ NATURA: 'GARE', TIPO_FONIA: 'PROTECTA', TIPO_TRANSAZIONE: 'Protecta', DESCRIZIONE_EVENTO: 'Gara Protecta', CODICE_CONTRATTO: 'OW202603796', FISCAL_CODE: 'LVNPLA59D23A123H', IMPORTO_NUM: 110, ...over });
+  // 1) codice contratto
+  const byCode = outcomeOf([pr({ FISCAL_CODE: 'ALTROCF' })], item({ driver: 'protetti', codiceContratto: 'ow202603796', cf: 'LVNPLA59D23A123H' }));
+  assert.equal(byCode?.state, 'pagato');
+  assert.equal(byCode.matchBy, 'contratto');
+  // 2) fallback CF (la vendita BiSuite Protecta non ha codice contratto)
+  const byCf = outcomeOf([pr()], item({ driver: 'protetti', codiceContratto: null, cf: 'LVNPLA59D23A123H', piva: null }));
+  assert.equal(byCf?.state, 'pagato');
+  assert.equal(byCf.matchBy, 'cf');
+  assert.equal(byCf.importo, 110);
+  // 3) fallback P.IVA
+  const byPiva = outcomeOf([pr({ FISCAL_CODE: '18528961008', P_IVA_CLIENTE: '18528961008' })], item({ driver: 'protetti', codiceContratto: null, cf: null, piva: '18528961008' }));
+  assert.equal(byPiva?.state, 'pagato');
+  assert.equal(byPiva.matchBy, 'cf');
+  // Le righe GARE degli altri TIPO_FONIA restano ignorate
+  assert.equal(outcomeOf([row({ NATURA: 'GARE' })], item()), null);
+  assert.equal(outcomeOf([row({ NATURA: 'GARE', TIPO_FONIA: 'ASSICURAZIONI' })], item({ driver: 'assicurazioni', codiceContratto: null })), null);
+  // Una riga PROTECTA non aggancia un item assicurazioni con lo stesso CF
+  assert.equal(outcomeOf([pr()], item({ driver: 'assicurazioni', codiceContratto: null, cf: 'LVNPLA59D23A123H' })), null);
 });
 
 test('energia: match per POD/PDR (codice contratto DRMS ≠ BiSuite), fallback CF + ENERGIA', () => {

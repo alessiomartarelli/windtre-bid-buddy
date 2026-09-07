@@ -3193,16 +3193,20 @@ function EconomicStateCell({
   const noOutcomeReason = (() => {
     if (uploadsCount === 0) return { kind: "no_uploads" as const, text: "Nessun DRMS caricato." };
     const isEnergia = it.driver === "energia";
+    const isProtetti = it.driver === "protetti";
     const chiavi = isEnergia
       ? `POD/PDR (${[it.pod, it.pdr].filter(Boolean).join(", ") || "—"}) o CF/P.IVA (${it.cf || it.piva || "—"}) con TIPO_FONIA=ENERGIA`
-      : `codice contratto (${it.codiceContratto || "—"}) o CF/P.IVA (${it.cf || it.piva || "—"}) + tipo`;
+      : isProtetti
+        ? `codice contratto (${it.codiceContratto || "—"}) o CF/P.IVA (${it.cf || it.piva || "—"}) con TIPO_FONIA=PROTECTA`
+        : `codice contratto (${it.codiceContratto || "—"}) o CF/P.IVA (${it.cf || it.piva || "—"}) + tipo`;
+    const rigaTipo = isEnergia ? "ENERGIA CONTRATTUALE" : isProtetti ? "PROTECTA (GARE)" : "CONTRATTUALE";
     if (legacy.length > 0 && legacy.length === uploadsCount) {
       return { kind: "legacy_all" as const, text: `Tutti gli upload DRMS (${legacyUploadsLabel(legacy)}) sono privi dei campi di esito (CF/POD/causale): nessun aggancio possibile finché non vengono ricaricati.` };
     }
     if (legacy.length > 0) {
-      return { kind: "legacy_some" as const, text: `Nessuna riga ${isEnergia ? "ENERGIA " : ""}CONTRATTUALE con ${chiavi} nella finestra T0..T+5 negli upload con campi di esito. Attenzione: ${legacy.length} upload (${legacyUploadsLabel(legacy)}) ${legacy.length === 1 ? "è privo" : "sono privi"} dei campi di esito e potrebbe contenerla: ricaricalo.` };
+      return { kind: "legacy_some" as const, text: `Nessuna riga ${rigaTipo} con ${chiavi} nella finestra T0..T+5 negli upload con campi di esito. Attenzione: ${legacy.length} upload (${legacyUploadsLabel(legacy)}) ${legacy.length === 1 ? "è privo" : "sono privi"} dei campi di esito e potrebbe contenerla: ricaricalo.` };
     }
-    return { kind: "no_rows" as const, text: `Nessuna riga ${isEnergia ? "ENERGIA " : ""}CONTRATTUALE con ${chiavi} nella finestra T0..T+5 (${uploadsCount} upload analizzati).` };
+    return { kind: "no_rows" as const, text: `Nessuna riga ${rigaTipo} con ${chiavi} nella finestra T0..T+5 (${uploadsCount} upload analizzati).` };
   })();
   return (
     <div className="flex items-center gap-1.5">

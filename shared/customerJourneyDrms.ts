@@ -25,6 +25,10 @@ import { monthOfIso } from "./customerJourney";
 //  - match: codice contratto (mobile/fisso/assicurazioni/telefono/protetti)
 //    con fallback CF/P.IVA + TIPO_FONIA; energia per POD/PDR con fallback
 //    CF/P.IVA + ENERGIA. Con più contratti agganciati basta un pagato;
+//  - WindTre Protetti (Protecta): nei DRMS compare SOLO con TIPO_FONIA =
+//    PROTECTA e NATURA = GARE (nessuna riga CONTRATTUALE): per quel TIPO_FONIA
+//    le righe GARE concorrono all'esito. Match per CODICE_CONTRATTO, con
+//    fallback CF (FISCAL_CODE) / P.IVA (P_IVA_CLIENTE) + PROTECTA;
 //  - finestra: competenze dal mese di inserimento dell'item fino a T+5.
 
 // Riga DRMS "lasca": è il JSON salvato in `drms_uploads.rows` (normalizzato dal
@@ -160,7 +164,7 @@ export const DRIVER_TIPO_FONIA: Record<string, string | null> = {
   fisso: "FISSO",
   energia: "ENERGIA",
   assicurazioni: "ASSICURAZIONI",
-  protetti: "ASSICURAZIONI",
+  protetti: "PROTECTA",
   telefono: null,
 };
 
@@ -229,8 +233,14 @@ interface DrmsEvent {
   fonia: string;
 }
 
+// TIPO_FONIA per cui il compenso viaggia solo su righe GARE (nessuna
+// CONTRATTUALE): oggi solo Protecta / WindTre Protetti.
+export const DRMS_GARE_AS_CONTRATTUALE_FONIE = new Set(["PROTECTA"]);
+
 function isContrattuale(row: DrmsOutcomeRow): boolean {
-  return up(row.NATURA) === "CONTRATTUALE";
+  const natura = up(row.NATURA);
+  if (natura === "CONTRATTUALE") return true;
+  return natura === "GARE" && DRMS_GARE_AS_CONTRATTUALE_FONIE.has(up(row.TIPO_FONIA));
 }
 
 function isStornoCompensi(row: DrmsOutcomeRow): boolean {

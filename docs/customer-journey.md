@@ -81,6 +81,12 @@ Il DRMS caricato in "DRMS Commissioning" viene salvato con i campi
   `TIPO_FONIA` (`DRIVER_TIPO_FONIA`; telefono senza fallback). **Energia**:
   per `POD_PDR` contro `pod`/`pdr` dell'item (il codice DRMS ≠ BiSuite),
   fallback CF + ENERGIA; le righe non-energia non alimentano l'indice POD.
+  **WindTre Protetti (Protecta)**: nei DRMS esiste solo con `TIPO_FONIA =
+  PROTECTA` e `NATURA = GARE` (nessuna riga CONTRATTUALE), quindi per quel
+  TIPO_FONIA le righe GARE concorrono all'esito
+  (`DRMS_GARE_AS_CONTRATTUALE_FONIE`). Match per `CODICE_CONTRATTO`, fallback
+  CF (`FISCAL_CODE`) o P.IVA (`P_IVA_CLIENTE`) + PROTECTA; in pratica la
+  vendita BiSuite Protecta non porta il codice contratto, quindi conta il CF.
   Più contratti agganciati allo stesso item: basta UN `pagato`
   (preferenza pagato > riaccreditato > stornato > annullato), `ambiguous`
   se gli esiti differiscono.
