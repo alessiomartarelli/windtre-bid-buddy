@@ -18,6 +18,9 @@ import assert from 'node:assert/strict';
 const {
   aggregateReport,
   matchesCjFilters,
+  matchesCjDriverFilter,
+  nextCjDriverFilterMode,
+  isCjDriverFilterActive,
   cjSearchMatches,
   isCjItemActive,
   CJ_GETTONE_TABLE,
@@ -915,4 +918,35 @@ test('buildGettoneJourneys: senza alcun esito DRMS il maturato è 0 e lo stimato
   assert.equal(j.fatturato, 20);
   assert.equal(j.fatturatoMaturato, 0);
   assert.equal(j.potenzialePieno, 100, 'il potenziale resta calcolato sullo stimato');
+});
+
+// matchesCjDriverFilter — filtro "con/senza" per driver acquistati (schede).
+test('matchesCjDriverFilter: default (tutto any) lascia passare ogni scheda', () => {
+  assert.equal(matchesCjDriverFilter(['mobile', 'fisso'], {}), true);
+  assert.equal(matchesCjDriverFilter([], { fisso: 'any', energia: 'any' }), true);
+  assert.equal(isCjDriverFilterActive({ fisso: 'any' }), false);
+  assert.equal(isCjDriverFilterActive({ fisso: 'con' }), true);
+});
+
+test('matchesCjDriverFilter: "con" richiede il driver, "senza" lo esclude, condizioni in AND', () => {
+  const conFisso = ['mobile', 'fisso'];
+  const conFissoEnergia = ['mobile', 'fisso', 'energia'];
+  const soloMobile = ['mobile'];
+  assert.equal(matchesCjDriverFilter(conFisso, { fisso: 'con' }), true);
+  assert.equal(matchesCjDriverFilter(soloMobile, { fisso: 'con' }), false);
+  assert.equal(matchesCjDriverFilter(conFisso, { energia: 'senza' }), true);
+  assert.equal(matchesCjDriverFilter(conFissoEnergia, { energia: 'senza' }), false);
+  // con fisso + senza energia: clienti con fisso a cui manca l'energia.
+  assert.equal(matchesCjDriverFilter(conFisso, { fisso: 'con', energia: 'senza' }), true);
+  assert.equal(matchesCjDriverFilter(conFissoEnergia, { fisso: 'con', energia: 'senza' }), false);
+  assert.equal(matchesCjDriverFilter(soloMobile, { fisso: 'con', energia: 'senza' }), false);
+  // il mobile non è una pista: un vincolo su "mobile" viene ignorato.
+  assert.equal(matchesCjDriverFilter(soloMobile, { mobile: 'senza' }), true);
+});
+
+test('nextCjDriverFilterMode: cicla any → con → senza → any', () => {
+  assert.equal(nextCjDriverFilterMode(undefined), 'con');
+  assert.equal(nextCjDriverFilterMode('any'), 'con');
+  assert.equal(nextCjDriverFilterMode('con'), 'senza');
+  assert.equal(nextCjDriverFilterMode('senza'), 'any');
 });

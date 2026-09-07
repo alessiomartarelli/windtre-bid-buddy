@@ -311,6 +311,19 @@ preservati). Permessi: gli operatori possono editare solo i propri item
 con body `{ dataAttivazione?, pdvDestinazione?, imei?, rata? }` (valori `null`
 o stringa vuota azzerano il campo).
 
+## Filtro "Prodotti acquistati" (schede)
+
+Sopra le schede clienti una riga di chip, una per ciascuna delle 5 piste
+cross-sell (mobile escluso), cicla al clic **tutti → con → senza**: "con" mostra
+solo i clienti che hanno GIÀ acquistato quella pista (driver con almeno un item
+attivo, stessa semantica di `summarizeDrivers().activated`), "senza" solo chi
+NON l'ha acquistata. Le condizioni sui vari driver sono in AND (es. con Fisso +
+senza Energia = clienti fisso a cui manca l'energia). Default: nessun vincolo.
+Logica pura in `matchesCjDriverFilter` (`shared/customerJourney.ts`); i
+contatori Tutti/Privati/Business e "Azzera filtri" tengono conto del filtro; la
+Reportistica NON lo applica. Test: `tests/customer-journey-report.test.mjs`
+(pura) e `tests/customer-journey-driver-filter-ui.test.mjs` (browser).
+
 ## Ordinamento lista
 
 La lista delle schede cliente ha un selettore di ordinamento con 4 chiavi —

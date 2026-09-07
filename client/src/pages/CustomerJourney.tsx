@@ -27,12 +27,13 @@ import {
   Search, User, Building2, Loader2, Coins, Pencil,
   FileText, FileSpreadsheet, ArrowUpDown, ArrowUp, ArrowDown,
   LayoutGrid, BarChart3, Store, Users, TrendingUp, Wallet, BadgeCheck, Calendar,
-  ChevronRight, ChevronDown, Eye, Receipt,
+  ChevronRight, ChevronDown, Eye, Receipt, Check, X, Filter,
 } from "lucide-react";
 import {
   CJ_DRIVER_LABELS, CJ_DRIVER_ORDER, CJ_ITEM_STATE_LABELS, CJ_ECONOMIC_STATE_LABELS,
   isCjItemActive, economicStateLabel,
   aggregateReport, matchesCjFilters,
+  CJ_NON_MOBILE_DRIVERS, matchesCjDriverFilter, nextCjDriverFilterMode, isCjDriverFilterActive,
   CJ_GETTONE_TABLE, CJ_MAX_PISTE,
   buildGettoneJourneys, filterGettoneByDate, filterGettoneByInsertDate,
   aggregateGettone, gettoneTotals,
@@ -42,7 +43,7 @@ import { CJ_ITEM_STATES, CJ_ECONOMIC_STATES } from "@shared/schema";
 import type { CustomerJourney, CustomerJourneyItem, CjItemState, CjEconomicState, CjDriver } from "@shared/schema";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type {
-  CjReportRow, CjReportGroup, CjListFilters,
+  CjReportRow, CjReportGroup, CjListFilters, CjDriverFilter, CjDriverFilterMode,
   CjGettoneGroup, CjGettoneTotals, CjGettoneJourney, CjGettoneDetailRow,
   CjDriverPhase,
 } from "@shared/customerJourney";
@@ -253,6 +254,7 @@ const REPORT_DIM_LABEL: Record<ReportDim, string> = {
 // generare un nuovo array a ogni render quando la query non ha ancora dati,
 // così i useMemo a valle non si invalidano inutilmente.
 const EMPTY_JOURNEYS: JourneyListItem[] = [];
+const EMPTY_DRIVER_FILTER: CjDriverFilter = {};
 const EMPTY_REPORT_ROWS: CjReportRow[] = [];
 
 // Sotto-viste memoizzate: si ri-renderizzano solo quando cambiano le loro
@@ -539,6 +541,8 @@ export default function CustomerJourneyPage() {
   const [pdvFilter, setPdvFilter] = useState<string[]>([]);
   const [addettoFilter, setAddettoFilter] = useState<string>("tutti");
   const [stateFilter, setStateFilter] = useState<string>("tutti");
+  // Filtro per driver acquistati (solo schede): per pista "any" | "con" | "senza".
+  const [driverFilter, setDriverFilter] = useState<CjDriverFilter>(EMPTY_DRIVER_FILTER);
   const [reportDim, setReportDim] = useState<ReportDim>("negozio");
   const [reportTab, setReportTab] = useState<ReportTab>("analisi");
   const [gettoneDim, setGettoneDim] = useState<GettoneDim>("negozio");
@@ -875,7 +879,11 @@ export default function CustomerJourneyPage() {
     searchHay: [
       journeyTitle(j), j.customerKey, j.telefono, j.codiceCliente,
     ].filter(Boolean).join(" "),
-  }, { ...activeFilters, typeFilter: "tutti" })), [journeys, activeFilters]);
+  }, { ...activeFilters, typeFilter: "tutti" })
+    && matchesCjDriverFilter(
+      (j.drivers ?? []).filter((d) => d.activated).map((d) => d.driver),
+      driverFilter,
+    )), [journeys, activeFilters, driverFilter]);
 
   // Filtro schede per data di INSERIMENTO SIM: riusa la stessa derivazione
   // dell'Analisi gettoni (`buildGettoneJourneys` => `insertedAt` per journey)
@@ -995,7 +1003,7 @@ export default function CustomerJourneyPage() {
   const hasActiveFilters =
     typeFilter !== "tutti" || pdvFilter.length > 0 ||
     addettoFilter !== "tutti" || stateFilter !== "tutti" || !!search.trim() ||
-    !!dateFrom || !!dateTo;
+    !!dateFrom || !!dateTo || isCjDriverFilterActive(driverFilter);
 
   const resetFilters = useCallback(() => {
     setTypeFilter("tutti");
@@ -1005,6 +1013,16 @@ export default function CustomerJourneyPage() {
     setSearch("");
     setDateFrom("");
     setDateTo("");
+    setDriverFilter(EMPTY_DRIVER_FILTER);
+  }, []);
+
+  const cycleDriverFilter = useCallback((d: CjDriver) => {
+    setDriverFilter((prev) => {
+      const next = nextCjDriverFilterMode(prev[d]);
+      const out: CjDriverFilter = { ...prev, [d]: next };
+      if (next === "any") delete out[d];
+      return Object.keys(out).length === 0 ? EMPTY_DRIVER_FILTER : out;
+    });
   }, []);
 
   const sorted = useMemo(() => [...simInsertFiltered].sort((a, b) => {
@@ -1396,6 +1414,57 @@ export default function CustomerJourneyPage() {
                       Azzera date
                     </Button>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* Filtro per driver acquistati: ogni pista cicla
+                tutti → con (già acquistata) → senza (non acquistata). */}
+            {view === "schede" && (
+              <div className="flex flex-wrap items-center gap-2" data-testid="filter-drivers">
+                <span className="text-xs text-muted-foreground flex items-center gap-1 mr-1">
+                  <Filter className="h-3.5 w-3.5" /> Prodotti acquistati:
+                </span>
+                {CJ_NON_MOBILE_DRIVERS.map((d) => {
+                  const mode: CjDriverFilterMode = driverFilter[d] ?? "any";
+                  const Icon = CJ_DRIVER_ICONS[d];
+                  const cls = mode === "con"
+                    ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    : mode === "senza"
+                      ? "border-rose-500/60 bg-rose-500/10 text-rose-700 dark:text-rose-300 line-through decoration-rose-500/70"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground";
+                  const title = mode === "con"
+                    ? `${CJ_DRIVER_LABELS[d]}: solo chi l'ha già acquistato (clic: solo chi NON l'ha acquistato)`
+                    : mode === "senza"
+                      ? `${CJ_DRIVER_LABELS[d]}: solo chi NON l'ha acquistato (clic: tutti)`
+                      : `${CJ_DRIVER_LABELS[d]}: tutti (clic: solo chi l'ha già acquistato)`;
+                  return (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => cycleDriverFilter(d)}
+                      title={title}
+                      aria-pressed={mode !== "any"}
+                      data-mode={mode}
+                      data-testid={`button-driver-filter-${d}`}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${cls}`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {CJ_DRIVER_LABELS[d]}
+                      {mode === "con" && <Check className="h-3.5 w-3.5" />}
+                      {mode === "senza" && <X className="h-3.5 w-3.5" />}
+                    </button>
+                  );
+                })}
+                {isCjDriverFilterActive(driverFilter) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDriverFilter(EMPTY_DRIVER_FILTER)}
+                    data-testid="button-driver-filter-reset"
+                  >
+                    Tutti i prodotti
+                  </Button>
                 )}
               </div>
             )}

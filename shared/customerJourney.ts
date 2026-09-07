@@ -142,6 +142,46 @@ export function matchesCjFilters(v: CjFilterable, f: CjListFilters): boolean {
   return cjSearchMatches(v.searchHay, f.search);
 }
 
+// === Filtro per driver acquistati (schede clienti) ===
+// Per ciascuna pista cross-sell (driver non-mobile) l'utente può chiedere solo
+// le schede che l'hanno GIÀ acquistata ("con"), solo quelle che NON l'hanno
+// ancora acquistata ("senza") o ignorarla ("any", default). Le condizioni sui
+// diversi driver sono in AND: "con fisso + senza energia" = clienti con fisso
+// attivo a cui manca l'energia. "Acquistato" = driver con almeno un item attivo
+// (stessa semantica di `summarizeDrivers().activated`).
+export type CjDriverFilterMode = "any" | "con" | "senza";
+export type CjDriverFilter = Partial<Record<CjDriver, CjDriverFilterMode>>;
+
+export const CJ_DRIVER_FILTER_CYCLE: readonly CjDriverFilterMode[] = ["any", "con", "senza"];
+
+/** Prossimo stato nel ciclo any → con → senza → any. */
+export function nextCjDriverFilterMode(m: CjDriverFilterMode | undefined): CjDriverFilterMode {
+  const i = CJ_DRIVER_FILTER_CYCLE.indexOf(m ?? "any");
+  return CJ_DRIVER_FILTER_CYCLE[(i + 1) % CJ_DRIVER_FILTER_CYCLE.length];
+}
+
+export function isCjDriverFilterActive(f: CjDriverFilter): boolean {
+  return Object.values(f).some((m) => m && m !== "any");
+}
+
+/**
+ * true se la scheda supera il filtro driver. `activatedDrivers` = driver con
+ * almeno un item attivo nella journey.
+ */
+export function matchesCjDriverFilter(
+  activatedDrivers: readonly string[],
+  f: CjDriverFilter,
+): boolean {
+  for (const d of CJ_NON_MOBILE_DRIVERS) {
+    const mode = f[d] ?? "any";
+    if (mode === "any") continue;
+    const has = activatedDrivers.includes(d);
+    if (mode === "con" && !has) return false;
+    if (mode === "senza" && has) return false;
+  }
+  return true;
+}
+
 // === Aggregazione reportistica (Task #189) ===
 // Gruppo di report lungo una dimensione (negozio / addetto / cliente).
 export interface CjReportGroup {
