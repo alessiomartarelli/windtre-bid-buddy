@@ -20,3 +20,12 @@ con tunnel al DB prod (`scripts/_tmp-*.mts` che importa server/storage), ma
 ShellExec run_in_background + log su file (un `&`/setsid dentro la call muore
 con la call). `timeout 900`. Dopo il deploy del motore la migrazione legacy ha
 loggato `[cj] migrati 51 item`.
+
+**Perf (set 2026):** il costo di applyDrmsOutcomes NON era il motore ma il
+trasferimento/parsing del jsonb intero (55k righe ⇒ +70MB heap). Regola: le
+route non leggono mai `drms_uploads.rows` intero; proiezione SQL delle sole
+colonne del motore (presenza chiavi legacy via `?|`) + runner asincrono per
+org (coalescing, 10s inline poi 202 + notifica `cj_drms_outcome`). Se aggiungi
+un campo al motore, aggiungilo ANCHE alla proiezione SQL in storage o verrà
+letto sempre null. Leggi i tempi per fase dal log `[cj] applyDrmsOutcomes`
+prima di ottimizzare altro (l'update per item è il prossimo sospetto via tunnel).

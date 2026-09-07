@@ -622,10 +622,21 @@ export default function CustomerJourneyPage() {
       const res = await apiRequest("POST", "/api/customer-journeys/esita-drms");
       return res.json();
     },
-    onSuccess: (data: CjDrmsApplySummary) => {
+    onSuccess: (raw: CjDrmsApplySummary | { pending: true; message?: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/report"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/drms-status"] });
+      if ("pending" in raw && raw.pending) {
+        // Ricalcolo lungo: il server ha risposto 202 e il riepilogo arriverà
+        // come notifica nella campanella.
+        toast({
+          title: "Esito da DRMS in elaborazione",
+          description: raw.message ?? "Il ricalcolo continua in background: il riepilogo arriverà nelle notifiche.",
+          duration: 10_000,
+        });
+        return;
+      }
+      const data = raw as CjDrmsApplySummary;
       const bs = data?.byState ?? {};
       const parts = CJ_ECONOMIC_STATES
         .map((st) => `${bs[st] ?? 0} ${CJ_ECONOMIC_STATE_LABELS[st].toLowerCase()}`)

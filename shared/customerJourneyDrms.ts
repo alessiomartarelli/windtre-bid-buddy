@@ -499,3 +499,49 @@ export function applyOutcomeToState(
   }
   return { economicState: current.economicState, mismatch: false };
 }
+
+// ---------------------------------------------------------------------------
+// Esecuzione asincrona di "Esita da DRMS"
+// ---------------------------------------------------------------------------
+// Su decine di migliaia di righe il ricalcolo può durare a lungo: le route
+// attendono l'esito al massimo `CJ_DRMS_APPLY_INLINE_WAIT_MS`; se non è
+// pronto rispondono 202 `{ pending: true }` e il risultato viene consegnato
+// come notifica (campanella) con questo status in bisuite_sync_notifications.
+export const CJ_DRMS_OUTCOME_NOTIFICATION_STATUS = "cj_drms_outcome" as const;
+export const CJ_DRMS_APPLY_INLINE_WAIT_MS = 10_000;
+
+export type DrmsApplySummaryLike = {
+  items: number;
+  matched: number;
+  notFound: number;
+  ambiguous: number;
+  byState: Record<CjEconomicState, number>;
+  notFoundByDriver: Record<string, number>;
+  legacyUploads: { period?: string; fileName?: string }[];
+  updated: number;
+  mismatches: number;
+  uploads: number;
+  drmsRows: number;
+};
+
+/** Testo discorsivo del riepilogo esiti (notifica campanella / log). */
+export function formatDrmsApplySummary(s: DrmsApplySummaryLike, opts?: { durationMs?: number }): string {
+  const states = (["pagato", "annullato", "stornato", "riaccreditato"] as CjEconomicState[])
+    .map((st) => `${s.byState?.[st] ?? 0} ${st}`)
+    .join(", ");
+  const nf = Object.entries(s.notFoundByDriver ?? {})
+    .filter(([, n]) => n > 0)
+    .map(([d, n]) => `${n} ${d}`)
+    .join(", ");
+  const parts = [
+    s.uploads === 0
+      ? "Nessun DRMS caricato: esiti azzerati."
+      : `${s.matched}/${s.items} contratti esitati (${states}) su ${s.drmsRows} righe DRMS di ${s.uploads} upload.`,
+    `${s.notFound} non trovati${nf ? ` (${nf})` : ""}, ${s.ambiguous} ambigui, ${s.mismatches} incongruenze con stato manuale, ${s.updated} contratti aggiornati.`,
+  ];
+  if (s.legacyUploads.length > 0) {
+    parts.push(`${s.legacyUploads.length} upload senza campi di esito da ricaricare: ${s.legacyUploads.map((l) => `${l.period ?? ""} ${l.fileName ?? ""}`.trim()).join("; ")}.`);
+  }
+  if (opts?.durationMs != null) parts.push(`Durata ${(opts.durationMs / 1000).toFixed(1)}s.`);
+  return parts.join(" ");
+}

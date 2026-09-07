@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Bell, AlertTriangle, XCircle, ExternalLink, CheckCheck, CalendarClock } from 'lucide-react';
+import { Bell, AlertTriangle, XCircle, ExternalLink, CheckCheck, CalendarClock, ClipboardCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 interface BisuiteSyncNotification {
   id: string;
   organizationId: string;
-  status: 'partial' | 'failed' | 'cj_t0_shift' | string;
+  status: 'partial' | 'failed' | 'cj_t0_shift' | 'cj_drms_outcome' | string;
   failedMonths: string[] | null;
   errorMessage: string | null;
   createdAt: string;
@@ -80,7 +80,7 @@ export function BisuiteSyncNotificationsBell() {
       markRead.mutate(notif.id);
     }
     setOpen(false);
-    setLocation(notif.status === 'cj_t0_shift' ? '/customer-journey' : '/vendite-bisuite');
+    setLocation(notif.status === 'cj_t0_shift' || notif.status === 'cj_drms_outcome' ? '/customer-journey' : '/vendite-bisuite');
   };
 
   return (
@@ -137,8 +137,10 @@ export function BisuiteSyncNotificationsBell() {
               {items.map((n) => {
                 const isFailed = n.status === 'failed';
                 const isT0Shift = n.status === 'cj_t0_shift';
-                const Icon = isFailed ? XCircle : isT0Shift ? CalendarClock : AlertTriangle;
-                const tone = isFailed ? 'text-red-600' : 'text-amber-600';
+                const isDrmsOutcome = n.status === 'cj_drms_outcome';
+                const drmsFailed = isDrmsOutcome && /fallito/i.test(n.errorMessage || '');
+                const Icon = isFailed ? XCircle : isT0Shift ? CalendarClock : isDrmsOutcome ? (drmsFailed ? XCircle : ClipboardCheck) : AlertTriangle;
+                const tone = isFailed || drmsFailed ? 'text-red-600' : isDrmsOutcome ? 'text-emerald-600' : 'text-amber-600';
                 const months = Array.isArray(n.failedMonths) ? n.failedMonths : [];
                 return (
                   <li
@@ -151,13 +153,13 @@ export function BisuiteSyncNotificationsBell() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-medium">
-                            {isFailed ? 'Sync fallita' : isT0Shift ? 'Customer Journey: T0 ricalcolati in massa' : 'Sync parziale'}
+                            {isFailed ? 'Sync fallita' : isT0Shift ? 'Customer Journey: T0 ricalcolati in massa' : isDrmsOutcome ? (drmsFailed ? 'Customer Journey: esito da DRMS fallito' : 'Customer Journey: esito da DRMS completato') : 'Sync parziale'}
                           </p>
                           <span className="text-[11px] text-muted-foreground shrink-0">
                             {formatTs(n.createdAt)}
                           </span>
                         </div>
-                        {isFailed || isT0Shift ? (
+                        {isFailed || isT0Shift || isDrmsOutcome ? (
                           <p className="text-xs text-muted-foreground mt-0.5 break-words">
                             {n.errorMessage || 'Errore sconosciuto'}
                           </p>

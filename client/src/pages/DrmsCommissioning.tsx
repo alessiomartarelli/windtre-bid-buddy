@@ -1689,7 +1689,7 @@ export default function DrmsCommissioning() {
       }
       return res.json();
     },
-    onSuccess: (data: { id?: string; cjOutcomes?: { matched?: number; items?: number; legacyUploads?: Array<{ period: string; fileName: string }> } | null; [k: string]: unknown }) => {
+    onSuccess: (data: { id?: string; cjOutcomes?: { matched?: number; items?: number; legacyUploads?: Array<{ period: string; fileName: string }> } | null; cjOutcomesPending?: boolean; [k: string]: unknown }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/drms"] });
       queryClient.invalidateQueries({ queryKey: ["/api/customer-journeys/drms-status"] });
       const cj = data?.cjOutcomes;
@@ -1697,7 +1697,9 @@ export default function DrmsCommissioning() {
         title: "DRMS salvato",
         description: cj
           ? `L'upload è stato salvato; esito Customer Journey ricalcolato (${cj.matched ?? 0}/${cj.items ?? 0} contratti esitati).`
-          : "L'upload è stato salvato con successo.",
+          : data?.cjOutcomesPending
+            ? "L'upload è stato salvato; l'esito Customer Journey è in elaborazione in background: il riepilogo arriverà nelle notifiche."
+            : "L'upload è stato salvato con successo.",
       });
       const legacy = cj?.legacyUploads ?? [];
       if (legacy.length > 0) {

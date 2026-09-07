@@ -69,4 +69,4 @@
 - [CJ T0 recompute](cj-t0-recompute.md) — il reconcile ricalcola sempre opened_at/trigger dalla prima SIM valida; marker T0 sulla SIM della vendita multi-articolo, non sul fisso.
 - [BiSuite sync notifications = generic admin alerts](bisuite-sync-notifications-generic.md) — la tabella/campanella accetta status arbitrari (es. cj_t0_shift): nuovo avviso = status + ramo nel Bell client, messaggio in errorMessage.
 - [CJ dual state & DRMS outcome](cj-dual-state-drms.md) — stato operativo vs economico: attivo solo via isCjItemActive; reconcile mai azzera l'economico; POD indicizzati solo per ENERGIA; manuale vince + flag mismatch persistito.
-- [DRMS legacy uploads](drms-legacy-uploads.md) — upload senza CHIAVI CF/POD/causale = da ricaricare (non ricostruibili); applyDrmsOutcomes su prod via tunnel dura >4 min: run_in_background.
+- [DRMS legacy uploads & esito perf](drms-legacy-uploads.md) — upload senza CHIAVI CF/POD/causale = da ricaricare; mai leggere rows jsonb intero: proiezione SQL + runner async (nuovo campo motore ⇒ anche nella proiezione).

@@ -1,6 +1,7 @@
 import type { Express, RequestHandler } from "express";
 import { type Server } from "http";
 import { storage, type CjItemDetailsUpdate, CJ_DEFAULT_TRIGGER_DATE, formatCjTriggerDate } from "./storage";
+import { createDrmsOutcomeRunner } from "./cjDrmsOutcomeRunner";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
@@ -210,6 +211,14 @@ function requireModule(moduleKey: string | string[]): RequestHandler {
     }
   };
 }
+
+// Runner unico (per processo) di "Esita da DRMS": serializza e coalizza i
+// ricalcoli per org e consegna in notifica gli esiti che superano l'attesa
+// inline (vedi server/cjDrmsOutcomeRunner.ts).
+const drmsOutcomeRunner = createDrmsOutcomeRunner({
+  run: (orgId) => storage.applyDrmsOutcomes(orgId),
+  notify: (n) => storage.createBisuiteSyncNotification(n),
+});
 
 export async function registerRoutes(
   httpServer: Server,
@@ -1501,15 +1510,20 @@ export async function registerRoutes(
         uploadedBy: profile.id,
       });
       // Esito economico Customer Journey: ogni caricamento/conferma DRMS
-      // rielabora gli esiti dell'organizzazione. Un errore qui non deve
-      // invalidare l'upload già salvato.
+      // rielabora gli esiti dell'organizzazione (in background, serializzato
+      // per org). Un errore qui non deve invalidare l'upload già salvato; se
+      // il ricalcolo non termina entro l'attesa inline, il riepilogo arriva
+      // come notifica e `cjOutcomesPending` lo segnala al client.
       let cjOutcomes: Awaited<ReturnType<typeof storage.applyDrmsOutcomes>> | null = null;
+      let cjOutcomesPending = false;
       try {
-        cjOutcomes = await storage.applyDrmsOutcomes(profile.organizationId!);
+        const r = await drmsOutcomeRunner.apply(profile.organizationId!, { reason: `upload DRMS ${period}` });
+        if (r.pending) cjOutcomesPending = true;
+        else cjOutcomes = r.summary;
       } catch (e) {
         console.error("[cj] applyDrmsOutcomes dopo upload DRMS fallito:", e);
       }
-      res.json({ id: result.id, month: result.month, year: result.year, period: result.period, righeCount: result.righeCount, cjOutcomes });
+      res.json({ id: result.id, month: result.month, year: result.year, period: result.period, righeCount: result.righeCount, cjOutcomes, cjOutcomesPending });
     } catch (e) {
       console.error("Error saving DRMS upload:", e);
       res.status(500).json({ message: "Errore nel salvataggio dell'upload DRMS" });
@@ -1525,12 +1539,14 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Upload DRMS non trovato" });
       }
       await storage.deleteDrmsUpload(req.params.id);
+      let cjOutcomesPending = false;
       try {
-        await storage.applyDrmsOutcomes(profile.organizationId!);
+        const r = await drmsOutcomeRunner.apply(profile.organizationId!, { reason: `eliminazione DRMS ${upload.period}` });
+        cjOutcomesPending = r.pending;
       } catch (e) {
         console.error("[cj] applyDrmsOutcomes dopo delete DRMS fallito:", e);
       }
-      res.json({ ok: true });
+      res.json({ ok: true, cjOutcomesPending });
     } catch (e) {
       console.error("Error deleting DRMS upload:", e);
       res.status(500).json({ message: "Errore nell'eliminazione dell'upload DRMS" });
@@ -4281,8 +4297,13 @@ export async function registerRoutes(
       const profile = await requireAdminRole(req, res);
       if (!profile) return;
       if (!profile.organizationId) return res.status(403).json({ error: "Accesso non autorizzato" });
-      const summary = await storage.applyDrmsOutcomes(profile.organizationId);
-      res.json(summary);
+      // Ricalcolo in background serializzato per org: se non termina entro
+      // l'attesa inline risponde 202 e il riepilogo arriva in notifica.
+      const r = await drmsOutcomeRunner.apply(profile.organizationId, { reason: "Esita da DRMS" });
+      if (r.pending) {
+        return res.status(202).json({ pending: true, message: "Esito da DRMS in elaborazione: il riepilogo arriverà nelle notifiche." });
+      }
+      res.json(r.summary);
     } catch (error) {
       console.error("Customer journey esita-drms error:", error);
       res.status(500).json({ error: "Errore nell'esito da DRMS" });

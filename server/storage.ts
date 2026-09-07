@@ -2249,16 +2249,70 @@ export class DatabaseStorage implements IStorage {
   // calcolato e la competenza vengono scritti sempre; lo stato economico solo
   // se non manuale; `drmsMismatch` quando manuale ≠ DRMS. Lo stato operativo
   // NON viene toccato.
+  //
+  // Performance: NON carica il jsonb `rows` intero (in prod ~50k righe per
+  // decine di MB): proietta in SQL solo le colonne usate dal motore
+  // (jsonb_array_elements + ->>), così Postgres fa il parsing in C e in Node
+  // arrivano solo stringhe corte. La presenza delle CHIAVI di esito (non il
+  // valore) è preservata via `?|` per la rilevazione degli upload legacy.
   async applyDrmsOutcomes(orgId: string): Promise<CjDrmsApplySummary> {
+    const t0 = Date.now();
     const uploads = await db.select({
-      id: drmsUploads.id, rows: drmsUploads.rows,
+      id: drmsUploads.id,
       fileName: drmsUploads.fileName, period: drmsUploads.period, month: drmsUploads.month, year: drmsUploads.year,
     }).from(drmsUploads).where(eq(drmsUploads.organizationId, orgId));
     const rows: DrmsOutcomeRow[] = [];
-    for (const u of uploads) {
-      const list = Array.isArray(u.rows) ? (u.rows as DrmsOutcomeRow[]) : [];
-      for (const r of list) rows.push({ ...r, __UPLOAD_ID: u.id });
+    if (uploads.length > 0) {
+      const outcomeKeys = sql.join([...DRMS_OUTCOME_FIELD_KEYS].map((k) => sql`${k}`), sql`, `);
+      const projected = await db.execute(sql`
+        SELECT u.id AS upload_id,
+               e.value ->> 'SEQ_ID' AS seq_id,
+               e.value ->> 'NATURA' AS natura,
+               e.value ->> 'TIPO_FONIA' AS tipo_fonia,
+               e.value ->> 'COMPETENZA' AS competenza,
+               e.value ->> 'CODICE_CONTRATTO' AS codice_contratto,
+               e.value ->> 'FISCAL_CODE' AS fiscal_code,
+               e.value ->> 'P_IVA_CLIENTE' AS p_iva_cliente,
+               e.value ->> 'POD_PDR' AS pod_pdr,
+               e.value ->> 'CAUSALE_STORNO' AS causale_storno,
+               e.value ->> 'IMPORTO_NUM' AS importo_num,
+               e.value ->> 'IMPORTO' AS importo,
+               e.value ->> 'DATA_EVENTO' AS data_evento,
+               e.value ->> 'TIPO_TRANSAZIONE' AS tipo_transazione,
+               e.value ->> 'DESCRIZIONE_EVENTO' AS descrizione_evento,
+               (jsonb_typeof(e.value) = 'object' AND e.value ?| ARRAY[${outcomeKeys}]::text[]) AS has_outcome_fields
+        FROM drms_uploads u
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE WHEN jsonb_typeof(u.rows) = 'array' THEN u.rows ELSE '[]'::jsonb END
+        ) AS e(value)
+        WHERE u.organization_id = ${orgId}
+      `);
+      type ProjectedRow = {
+        upload_id: string; seq_id: string | null; natura: string | null; tipo_fonia: string | null;
+        competenza: string | null; codice_contratto: string | null; fiscal_code: string | null;
+        p_iva_cliente: string | null; pod_pdr: string | null; causale_storno: string | null;
+        importo_num: string | null; importo: string | null; data_evento: string | null;
+        tipo_transazione: string | null; descrizione_evento: string | null; has_outcome_fields: boolean | null;
+      };
+      for (const p of projected.rows as ProjectedRow[]) {
+        const row: DrmsOutcomeRow = {
+          SEQ_ID: p.seq_id, NATURA: p.natura, TIPO_FONIA: p.tipo_fonia, COMPETENZA: p.competenza,
+          CODICE_CONTRATTO: p.codice_contratto, P_IVA_CLIENTE: p.p_iva_cliente,
+          IMPORTO_NUM: p.importo_num, IMPORTO: p.importo, DATA_EVENTO: p.data_evento,
+          TIPO_TRANSAZIONE: p.tipo_transazione, DESCRIZIONE_EVENTO: p.descrizione_evento,
+          __UPLOAD_ID: p.upload_id,
+        };
+        // Le chiavi di esito vengono materializzate SOLO se la riga originale
+        // le aveva: `drmsRowHasOutcomeFields` ragiona su hasOwnProperty.
+        if (p.has_outcome_fields) {
+          row.FISCAL_CODE = p.fiscal_code;
+          row.POD_PDR = p.pod_pdr;
+          row.CAUSALE_STORNO = p.causale_storno;
+        }
+        rows.push(row);
+      }
     }
+    const tLoad = Date.now();
     const items = await db.select({
       id: customerJourneyItems.id,
       driver: customerJourneyItems.driver,
@@ -2287,6 +2341,7 @@ export class DatabaseStorage implements IStorage {
       dataInserimento: it.dataInserimento ? it.dataInserimento.toISOString() : null,
     }));
     const { outcomes, summary } = computeDrmsOutcomes(rows, inputs);
+    const tCompute = Date.now();
     let updated = 0;
     let mismatches = 0;
     const now = new Date();
@@ -2342,6 +2397,11 @@ export class DatabaseStorage implements IStorage {
     if (legacyUploads.length > 0) {
       console.warn(`[cj] applyDrmsOutcomes org=${orgId}: ${legacyUploads.length} upload DRMS senza campi di esito (${summary.legacyRows} righe ignorate per POD/CF): ${legacyUploads.map((l) => `${l.period} ${l.fileName}`).join("; ")}`);
     }
+    const tEnd = Date.now();
+    console.log(
+      `[cj] applyDrmsOutcomes org=${orgId}: uploads=${uploads.length} righe=${rows.length} item=${items.length} ` +
+      `esitati=${summary.matched} aggiornati=${updated} — load=${tLoad - t0}ms compute=${tCompute - tLoad}ms update=${tEnd - tCompute}ms totale=${tEnd - t0}ms`,
+    );
     return { ...summary, legacyUploads, updated, mismatches, uploads: uploads.length, drmsRows: rows.length };
   }
 

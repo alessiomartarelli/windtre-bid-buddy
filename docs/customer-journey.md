@@ -104,6 +104,19 @@ nella pagina CJ (`POST /api/customer-journeys/esita-drms`, riepilogo:
 `matched`, `notFound`, `notFoundByDriver`, `ambiguous`, `byState`, `updated`,
 `mismatches`, `legacyUploads`, `legacyRows`).
 
+**Prestazioni / esecuzione asincrona**: il motore NON carica il jsonb `rows`
+intero (in prod ~50k righe, decine di MB): `applyDrmsOutcomes` proietta in
+SQL solo le colonne usate (`jsonb_array_elements` + `->>`, presenza delle
+chiavi di esito via `?|` per il rilevamento legacy) e logga i tempi per fase
+(`[cj] applyDrmsOutcomes org=…: … load=…ms compute=…ms update=…ms`). Le tre
+route passano da `server/cjDrmsOutcomeRunner.ts`: un solo run per org alla
+volta, richieste concorrenti coalizzate in un unico run successivo, attesa
+inline max `CJ_DRMS_APPLY_INLINE_WAIT_MS` (10s). Se il run non finisce in
+tempo la route risponde subito (`esita-drms` → 202 `{ pending: true }`,
+`POST /api/drms` / `DELETE` → `cjOutcomesPending: true`) e il riepilogo
+(o l'errore) arriva come notifica campanella `cj_drms_outcome` in
+`bisuite_sync_notifications`. Test: `scripts/run-customer-journey-drms-runner-tests.sh`.
+
 **Upload DRMS "legacy"**: gli upload salvati prima che il parser client
 conservasse i campi di esito hanno righe SENZA le chiavi `FISCAL_CODE` /
 `POD_PDR` / `CAUSALE_STORNO` (né `P_IVA_CLIENTE`, `DATA_EVENTO`,
