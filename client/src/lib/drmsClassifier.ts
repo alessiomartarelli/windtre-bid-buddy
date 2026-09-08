@@ -83,6 +83,49 @@ export interface DrmsRow {
   __UPLOAD_ID?: string;
 }
 
+export type DrmsThresholdKind = "MOBILE" | "FISSO";
+
+/**
+ * Restituisce la soglia del mese di competenza più recente tra quelli
+ * selezionati. Un estratto DRMS mensile può contenere conguagli di mesi
+ * precedenti: usare il massimo dell'intero file attribuirebbe al mese corrente
+ * una vecchia soglia più alta.
+ */
+export function getDrmsThresholdForLatestCompetence(
+  rows: DrmsRow[],
+  pdv: string,
+  kind: DrmsThresholdKind,
+  selectedCompetences: Iterable<string>,
+): { value: number; competence: string | null } {
+  const selected = new Set(selectedCompetences);
+  let latestCompetence: string | null = null;
+  let latestKey = 0;
+  for (const competence of selected) {
+    const parsed = parsePeriodToMonthYear(competence);
+    const key = parsed ? parsed.year * 12 + parsed.month : 0;
+    if (key > latestKey) {
+      latestKey = key;
+      latestCompetence = competence;
+    }
+  }
+  if (!latestCompetence) return { value: 0, competence: null };
+
+  const event = kind === "MOBILE" ? "Gara Attivazioni Mobile" : "Gara Attivazioni Fisso";
+  const flag = kind === "MOBILE" ? "FLAG_SOGLIA_MOBILE" : "FLAG_SOGLIA_FISSA";
+  let value = 0;
+  for (const row of rows) {
+    if (
+      row.CODICE_NEGOZIO_COSY !== pdv ||
+      row.TIPO_FONIA !== kind ||
+      row.DESCRIZIONE_EVENTO !== event ||
+      row.COMPETENZA !== latestCompetence
+    ) continue;
+    const parsed = Number.parseFloat(row[flag]);
+    if (Number.isFinite(parsed) && parsed > value) value = parsed;
+  }
+  return { value, competence: latestCompetence };
+}
+
 type RawRow = Record<string, unknown>;
 
 const str = (v: unknown): string => (v === null || v === undefined ? "" : String(v));

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   CAPITOLI_CONFIG, classifyAndNormalize, detectPeriod, parsePeriodToMonthYear,
+  getDrmsThresholdForLatestCompetence,
   type CapitoloKey, type DrmsRow,
 } from "@/lib/drmsClassifier";
 import { Button } from "@/components/ui/button";
@@ -1453,10 +1454,8 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
       const nPagati = dedup.filter(r => (r.IMPORTO_NUM || 0) > 0).length;
       const nStornati = dedup.filter(r => (r.IMPORTO_NUM || 0) < 0).length;
       const nNonAtt = dedup.filter(r => (r.IMPORTO_NUM || 0) === 0).length;
-      const sogliaRighe = data.filter(r => r.CODICE_NEGOZIO_COSY === selectedPV && r.TIPO_FONIA === 'MOBILE' && r.DESCRIZIONE_EVENTO === 'Gara Attivazioni Mobile');
-      let maxSoglia = 0;
-      for (const r of sogliaRighe) { const s = parseFloat(r.FLAG_SOGLIA_MOBILE); if (!Number.isNaN(s) && s > maxSoglia) maxSoglia = s; }
-      metricheMobile = { nTot: dedup.length, nTied, nUntied, nMnp, nMib, nPagati, nStornati, nNonAtt, soglia: maxSoglia };
+      const soglia = getDrmsThresholdForLatestCompetence(data, selectedPV, 'MOBILE', selectedComp).value;
+      metricheMobile = { nTot: dedup.length, nTied, nUntied, nMnp, nMib, nPagati, nStornati, nNonAtt, soglia };
     }
 
     let metricheFisso: { nTot: number; nFtth: number; nFwa: number; nLna: number; nLa: number; nMib: number; nConv: number; soglia: number } | null = null;
@@ -1471,10 +1470,8 @@ function PvTab({ listaPV, searchPV, setSearchPV, selectedPV, setSelectedPV, data
       const nLa = dedup.filter(r => r.TIPO_LINEA === 'LA').length;
       const nMib = dedup.filter(r => r.SEGMENTO_CLIENT === 'MIB').length;
       const nConv = dedup.filter(r => r.FLAG_CONVERGENZA === 'Y').length;
-      const sogliaRighe = data.filter(r => r.CODICE_NEGOZIO_COSY === selectedPV && r.TIPO_FONIA === 'FISSO' && r.DESCRIZIONE_EVENTO === 'Gara Attivazioni Fisso');
-      let maxSoglia = 0;
-      for (const r of sogliaRighe) { const s = parseFloat(r.FLAG_SOGLIA_FISSA); if (!Number.isNaN(s) && s > maxSoglia) maxSoglia = s; }
-      metricheFisso = { nTot: dedup.length, nFtth, nFwa, nLna, nLa, nMib, nConv, soglia: maxSoglia };
+      const soglia = getDrmsThresholdForLatestCompetence(data, selectedPV, 'FISSO', selectedComp).value;
+      metricheFisso = { nTot: dedup.length, nFtth, nFwa, nLna, nLa, nMib, nConv, soglia };
     }
 
     return { rows, byCap, tot, metricheMobile, metricheFisso };
