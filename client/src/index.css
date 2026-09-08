@@ -730,6 +730,10 @@ html:not(.dark):not([data-skin="prisma-light"]):not([data-skin="midnight-violet"
 @media (min-width: 1024px) {
   body.desktop-sidebar-layout {
     padding-left: 16rem;
+    transition: padding-left 200ms ease;
+  }
+  body.desktop-sidebar-layout.desktop-sidebar-collapsed {
+    padding-left: 0;
   }
 }
 

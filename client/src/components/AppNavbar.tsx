@@ -1,5 +1,5 @@
 import { useLocation } from 'wouter';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEnabledModules } from '@/hooks/useEnabledModules';
 import { BASE_PATH } from '@/lib/basePath';
@@ -17,12 +17,15 @@ import {
   LogOut, User, Building2, Settings, Shield,
   LayoutDashboard, Table2, ShoppingCart, MapPin, FileText, Menu, Trophy,
   BookOpen, BarChart3, Route, Medal, Sun, Moon, Monitor, CalendarClock, Sparkles, Waves,
+  PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { BisuiteSyncNotificationsBell } from '@/components/BisuiteSyncNotificationsBell';
 import { BrandGlyph } from '@/components/BrandLogo';
 import { useTheme, type Theme } from '@/hooks/useTheme';
 import { clearAppearanceAuthSession } from '@/lib/uiPrefsStorage';
+
+const SIDEBAR_COLLAPSED_KEY = 'msd:sidebar-collapsed';
 
 type AppearanceMode = Theme | 'prisma-light' | 'midnight-violet';
 
@@ -192,10 +195,21 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
     ].includes(item.path))
     .slice(0, 3);
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0'); } catch { /* storage non disponibile */ }
+  }, [sidebarCollapsed]);
+
   useEffect(() => {
     document.body.classList.add('desktop-sidebar-layout');
     return () => document.body.classList.remove('desktop-sidebar-layout');
   }, []);
+  useEffect(() => {
+    document.body.classList.toggle('desktop-sidebar-collapsed', sidebarCollapsed);
+    return () => document.body.classList.remove('desktop-sidebar-collapsed');
+  }, [sidebarCollapsed]);
 
   const sidebarItemClass = (active: boolean) =>
     `w-full justify-start h-9 px-3 text-sm rounded-lg transition-all ${
@@ -207,14 +221,18 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
   return (
     <>
     <aside
-      className="hidden lg:flex fixed inset-y-0 left-0 z-50 w-64 flex-col border-r border-border/70 bg-background/95 backdrop-blur-xl"
+      className={`hidden lg:flex fixed inset-y-0 left-0 z-50 w-64 flex-col border-r border-border/70 bg-background/95 backdrop-blur-xl transition-transform duration-200 ${
+        sidebarCollapsed ? '-translate-x-full pointer-events-none' : 'translate-x-0'
+      }`}
       data-testid="desktop-sidebar"
+      data-collapsed={sidebarCollapsed ? 'true' : 'false'}
+      aria-hidden={sidebarCollapsed}
       aria-label="Navigazione principale"
     >
-      <div className="flex h-[61px] shrink-0 items-center border-b border-border/70 px-5">
+      <div className="flex h-[61px] shrink-0 items-center gap-1 border-b border-border/70 pl-5 pr-3">
         <button
           type="button"
-          className="flex min-w-0 items-center gap-2 text-left group"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left group"
           onClick={() => setLocation('/')}
           data-testid="desktop-sidebar-title"
         >
@@ -223,6 +241,18 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
           </span>
           <span className="truncate text-base font-bold tracking-tight text-foreground">{title}</span>
         </button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground"
+          onClick={() => setSidebarCollapsed(true)}
+          title="Chiudi menu"
+          aria-label="Chiudi menu"
+          tabIndex={sidebarCollapsed ? -1 : 0}
+          data-testid="button-sidebar-collapse"
+        >
+          <PanelLeftClose className="h-4 w-4" />
+        </Button>
       </div>
 
       <nav className="sidebar-nav-scrollbar flex-1 space-y-5 overflow-y-auto px-3 py-4">
@@ -325,6 +355,19 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
       style={{ borderBottom: '1px solid hsl(var(--glass-border))', paddingTop: 'env(safe-area-inset-top)' }}
     >
       <div className="container mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2">
+        {sidebarCollapsed && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="hidden lg:inline-flex h-9 w-9 shrink-0 rounded-lg text-muted-foreground"
+            onClick={() => setSidebarCollapsed(false)}
+            title="Apri menu"
+            aria-label="Apri menu"
+            data-testid="button-sidebar-expand"
+          >
+            <PanelLeftOpen className="h-5 w-5" />
+          </Button>
+        )}
         <div className="flex items-center gap-3 sm:gap-4 min-w-0 lg:hidden">
           <div
             className="flex items-center gap-2 cursor-pointer group"
