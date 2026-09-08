@@ -72,3 +72,4 @@
 - [DRMS legacy uploads & esito perf](drms-legacy-uploads.md) — upload senza CHIAVI CF/POD/causale = da ricaricare; mai leggere rows jsonb intero: proiezione SQL + runner async (nuovo campo motore ⇒ anche nella proiezione).
 - [DRMS outcome run marker](drms-outcome-run-marker.md) — "esito DRMS in corso" persistito in cj_drms_outcome_runs (nuova tabella ⇒ schema sync in prod); al boot marker orfani = avviso + rerun automatico.
 - [DRMS Protecta GARE rows](drms-protecta-gare-rows.md) — Protetti nei DRMS = TIPO_FONIA PROTECTA + NATURA GARE (mai CONTRATTUALE): mappa protetti→PROTECTA, GARE ammesse solo per quel fonia; match reale via CF/P.IVA.
+- [DRMS file vs competenza](drms-file-vs-competenza.md) — un file mensile contiene conguagli storici: soglie da separare per competenza, non dal massimo dell'intero file.
