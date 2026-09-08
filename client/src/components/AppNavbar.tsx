@@ -1,5 +1,5 @@
 import { useLocation } from 'wouter';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEnabledModules } from '@/hooks/useEnabledModules';
 import { BASE_PATH } from '@/lib/basePath';
@@ -26,6 +26,7 @@ import { useTheme, type Theme } from '@/hooks/useTheme';
 import { clearAppearanceAuthSession } from '@/lib/uiPrefsStorage';
 
 const SIDEBAR_COLLAPSED_KEY = 'msd:sidebar-collapsed';
+const SIDEBAR_HOVER_OPEN_MS = 800;
 
 type AppearanceMode = Theme | 'prisma-light' | 'midnight-violet';
 
@@ -211,8 +212,25 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
     return () => document.body.classList.remove('desktop-sidebar-collapsed');
   }, [sidebarCollapsed]);
 
+  // Da chiuso resta una barra di sole icone: fermandosi sopra col cursore la
+  // tenda si riapre in overlay (senza spostare la pagina) e si richiude uscendo.
+  const [railHovered, setRailHovered] = useState(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearHoverTimer = () => {
+    if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null; }
+  };
+  useEffect(() => clearHoverTimer, []);
+  useEffect(() => { if (!sidebarCollapsed) { clearHoverTimer(); setRailHovered(false); } }, [sidebarCollapsed]);
+  const onRailEnter = () => {
+    if (!sidebarCollapsed) return;
+    clearHoverTimer();
+    hoverTimer.current = setTimeout(() => setRailHovered(true), SIDEBAR_HOVER_OPEN_MS);
+  };
+  const onRailLeave = () => { clearHoverTimer(); setRailHovered(false); };
+  const isRail = sidebarCollapsed && !railHovered;
+
   const sidebarItemClass = (active: boolean) =>
-    `w-full justify-start h-9 px-3 text-sm rounded-lg transition-all ${
+    `w-full h-9 text-sm rounded-lg transition-all ${isRail ? 'justify-center px-0' : 'justify-start px-3'} ${
       active
         ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground'
         : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
@@ -221,44 +239,61 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
   return (
     <>
     <aside
-      className={`hidden lg:flex fixed inset-y-0 left-0 z-50 w-64 flex-col border-r border-border/70 bg-background/95 backdrop-blur-xl transition-transform duration-200 ${
-        sidebarCollapsed ? '-translate-x-full pointer-events-none' : 'translate-x-0'
-      }`}
+      className={`hidden lg:flex fixed inset-y-0 left-0 z-50 flex-col border-r border-border/70 bg-background/95 backdrop-blur-xl transition-[width,box-shadow] duration-200 ${
+        isRail ? 'w-14' : 'w-64'
+      } ${railHovered ? 'shadow-2xl' : ''}`}
       data-testid="desktop-sidebar"
       data-collapsed={sidebarCollapsed ? 'true' : 'false'}
-      aria-hidden={sidebarCollapsed}
+      data-rail={isRail ? 'true' : 'false'}
       aria-label="Navigazione principale"
+      onMouseEnter={onRailEnter}
+      onMouseLeave={onRailLeave}
     >
-      <div className="flex h-[61px] shrink-0 items-center gap-1 border-b border-border/70 pl-5 pr-3">
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-left group"
-          onClick={() => setLocation('/')}
-          data-testid="desktop-sidebar-title"
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/90 to-primary shadow-sm transition-shadow group-hover:shadow-md">
-            <BrandGlyph className="h-4 w-4 text-white" />
-          </span>
-          <span className="truncate text-base font-bold tracking-tight text-foreground">{title}</span>
-        </button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground"
-          onClick={() => setSidebarCollapsed(true)}
-          title="Chiudi menu"
-          aria-label="Chiudi menu"
-          tabIndex={sidebarCollapsed ? -1 : 0}
-          data-testid="button-sidebar-collapse"
-        >
-          <PanelLeftClose className="h-4 w-4" />
-        </Button>
+      <div className={`flex h-[61px] shrink-0 items-center gap-1 border-b border-border/70 ${isRail ? 'justify-center px-2' : 'pl-5 pr-3'}`}>
+        {!isRail && (
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-2 text-left group"
+            onClick={() => setLocation('/')}
+            data-testid="desktop-sidebar-title"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/90 to-primary shadow-sm transition-shadow group-hover:shadow-md">
+              <BrandGlyph className="h-4 w-4 text-white" />
+            </span>
+            <span className="truncate text-base font-bold tracking-tight text-foreground">{title}</span>
+          </button>
+        )}
+        {sidebarCollapsed ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground"
+            onClick={() => setSidebarCollapsed(false)}
+            title="Apri menu"
+            aria-label="Apri menu"
+            data-testid="button-sidebar-expand"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground"
+            onClick={() => setSidebarCollapsed(true)}
+            title="Chiudi menu"
+            aria-label="Chiudi menu"
+            data-testid="button-sidebar-collapse"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
-      <nav className="sidebar-nav-scrollbar flex-1 space-y-5 overflow-y-auto px-3 py-4">
+      <nav className={`sidebar-nav-scrollbar flex-1 overflow-y-auto py-4 ${isRail ? 'space-y-3 px-2' : 'space-y-5 px-3'}`}>
         {adminItems.length > 0 && (
           <section>
-            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" data-testid="nav-admin-menu">
+            <p className={`mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${isRail ? 'sr-only' : ''}`} data-testid="nav-admin-menu">
               Amministrazione
             </p>
             <div className="space-y-1">
@@ -269,10 +304,11 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
                   size="sm"
                   onClick={() => setLocation(item.path)}
                   className={sidebarItemClass(location === item.path)}
+                  title={isRail ? item.label : undefined}
                   data-testid={`nav-${item.path.replace(/\//g, '')}`}
                 >
-                  <item.icon className="mr-2 h-4 w-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
+                  <item.icon className={`h-4 w-4 shrink-0 ${isRail ? '' : 'mr-2'}`} />
+                  {!isRail && <span className="truncate">{item.label}</span>}
                 </Button>
               ))}
             </div>
@@ -281,7 +317,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
 
         {isAdminOrSuper && (
           <section>
-            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <p className={`mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${isRail ? 'sr-only' : ''}`}>
               Organizzazione
             </p>
             <Button
@@ -289,17 +325,18 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
               size="sm"
               onClick={() => setLocation('/admin')}
               className={sidebarItemClass(location === '/admin')}
+              title={isRail ? 'Gestione organizzazione' : undefined}
               data-testid="nav-gestione-organizzazione"
             >
-              <Building2 className="mr-2 h-4 w-4 shrink-0" />
-              <span className="truncate">Gestione organizzazione</span>
+              <Building2 className={`h-4 w-4 shrink-0 ${isRail ? '' : 'mr-2'}`} />
+              {!isRail && <span className="truncate">Gestione organizzazione</span>}
             </Button>
           </section>
         )}
 
         {garaItems.length > 0 && (
           <section>
-            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" data-testid="nav-gara-menu">
+            <p className={`mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${isRail ? 'sr-only' : ''}`} data-testid="nav-gara-menu">
               Performance
             </p>
             <div className="space-y-1">
@@ -310,10 +347,11 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
                   size="sm"
                   onClick={() => setLocation(item.path)}
                   className={sidebarItemClass(location === item.path)}
+                  title={isRail ? item.label : undefined}
                   data-testid={`nav-gara-${item.path.replace(/\//g, '')}`}
                 >
-                  <item.icon className="mr-2 h-4 w-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
+                  <item.icon className={`h-4 w-4 shrink-0 ${isRail ? '' : 'mr-2'}`} />
+                  {!isRail && <span className="truncate">{item.label}</span>}
                 </Button>
               ))}
             </div>
@@ -322,7 +360,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
 
         {simulatoreItems.length > 0 && (
           <section>
-            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground" data-testid="nav-simulatore-menu">
+            <p className={`mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${isRail ? 'sr-only' : ''}`} data-testid="nav-simulatore-menu">
               Simulatore
             </p>
             <div className="space-y-1">
@@ -333,10 +371,11 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
                   size="sm"
                   onClick={() => setLocation(item.path)}
                   className={sidebarItemClass(location === item.path)}
+                  title={isRail ? item.label : undefined}
                   data-testid={`nav-sim-${item.path.replace(/\//g, '')}`}
                 >
-                  <item.icon className="mr-2 h-4 w-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
+                  <item.icon className={`h-4 w-4 shrink-0 ${isRail ? '' : 'mr-2'}`} />
+                  {!isRail && <span className="truncate">{item.label}</span>}
                 </Button>
               ))}
             </div>
@@ -344,7 +383,7 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
         )}
       </nav>
 
-      <div className="flex shrink-0 items-center gap-1 border-t border-border/70 px-4 py-3">
+      <div className={`flex shrink-0 items-center gap-1 border-t border-border/70 py-3 ${isRail ? 'flex-col px-2' : 'px-4'}`}>
         <ThemeToggle />
         {isAdminOrSuper && <BisuiteSyncNotificationsBell />}
       </div>
@@ -355,19 +394,6 @@ export function AppNavbar({ title = "MyStoreDesk", children }: AppNavbarProps) {
       style={{ borderBottom: '1px solid hsl(var(--glass-border))', paddingTop: 'env(safe-area-inset-top)' }}
     >
       <div className="container mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2">
-        {sidebarCollapsed && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden lg:inline-flex h-9 w-9 shrink-0 rounded-lg text-muted-foreground"
-            onClick={() => setSidebarCollapsed(false)}
-            title="Apri menu"
-            aria-label="Apri menu"
-            data-testid="button-sidebar-expand"
-          >
-            <PanelLeftOpen className="h-5 w-5" />
-          </Button>
-        )}
         <div className="flex items-center gap-3 sm:gap-4 min-w-0 lg:hidden">
           <div
             className="flex items-center gap-2 cursor-pointer group"
