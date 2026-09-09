@@ -15,6 +15,7 @@ import {
   calcolaPremioPistaFissoPerPos,
   getFissoAppliedMultipliersWithAddons,
 } from '../client/src/lib/calcoloPistaFisso.ts';
+import { calcolaExtraGaraIva } from '../client/src/lib/calcoloExtraGaraIva.ts';
 import { calcolaPuntiComponentePista } from '../client/src/lib/provenienzaPunti.ts';
 
 // Task #489 — pannello "Provenienza punti" sulle card pista della Dashboard
@@ -294,6 +295,64 @@ test('Provenienza punti: ogni pista calcola i punti delle componenti col proprio
   assert.equal(calcolaPuntiComponentePista('extra_gara_iva', 'worldStaff', 2, context), 4);
   assert.equal(calcolaPuntiComponentePista('extra_gara_iva', 'fullPlus', 3), 3);
   assert.equal(calcolaPuntiComponentePista('fisso', 'CATEGORIA_SCONOSCIUTA', 99, context), 0);
+});
+
+test('Extra Gara IVA: prima e seconda linea valgono 1 punto, FRITZ aggiunge 0,5 per linea', () => {
+  const pdvId = 'EXTRA-IVA-FISSO';
+  const baseParams = {
+    puntiVendita: [{
+      id: pdvId,
+      codicePos: pdvId,
+      nome: 'Negozio Extra IVA',
+      ragioneSociale: 'Extra IVA Srl',
+      clusterPIva: 'business_promoter',
+    }],
+    attivatoMobileByPos: {},
+    attivatoEnergiaByPos: {},
+    attivatoAssicurazioniByPos: {},
+    attivatoProtectaByPos: {},
+  };
+  const calcola = (attivatoFisso, puntiAttivazione) =>
+    calcolaExtraGaraIva({
+      ...baseParams,
+      attivatoFissoByPos: { [pdvId]: attivatoFisso },
+      configOverrides: puntiAttivazione ? { puntiAttivazione } : undefined,
+    })[0].pdvResults[0];
+
+  const primaLinea = calcola([{ categoria: 'FISSO_PIVA_1A_LINEA', pezzi: 1 }]);
+  assert.equal(primaLinea.puntiFissoPIva, 1);
+  assert.equal(primaLinea.puntiTotali, 1);
+
+  const secondaLinea = calcola([{ categoria: 'FISSO_PIVA_2A_LINEA', pezzi: 1 }]);
+  assert.equal(secondaLinea.puntiFissoPIva, 1);
+  assert.equal(secondaLinea.puntiTotali, 1);
+
+  const entrambeConFritz = calcola([
+    { categoria: 'FISSO_PIVA_1A_LINEA', pezzi: 1 },
+    { categoria: 'FISSO_PIVA_2A_LINEA', pezzi: 1 },
+    { categoria: 'FRITZ_BOX', pezzi: 2 },
+  ]);
+  assert.equal(entrambeConFritz.pezziFissoPIva, 2);
+  assert.equal(entrambeConFritz.puntiFissoPIva, 2);
+  assert.equal(entrambeConFritz.pezziFritzBox, 2);
+  assert.equal(entrambeConFritz.puntiFritzBox, 1);
+  assert.equal(entrambeConFritz.puntiTotali, 3);
+
+  const fritzSenzaLineaAggiuntiva = calcola([
+    { categoria: 'FISSO_PIVA_1A_LINEA', pezzi: 1 },
+    { categoria: 'FRITZ_BOX', pezzi: 3 },
+  ]);
+  assert.equal(fritzSenzaLineaAggiuntiva.pezziFritzBox, 1,
+    'un solo Fisso P.IVA può ricevere un solo bonus FRITZ');
+  assert.equal(fritzSenzaLineaAggiuntiva.puntiTotali, 1.5);
+
+  const override = calcola([
+    { categoria: 'FISSO_PIVA_2A_LINEA', pezzi: 1 },
+    { categoria: 'FRITZ_BOX', pezzi: 1 },
+  ], { fissoPIva: 2, fritzBox: 0.25 });
+  assert.equal(override.puntiFissoPIva, 2);
+  assert.equal(override.puntiFritzBox, 0.25);
+  assert.equal(override.puntiTotali, 2.25);
 });
 
 test('Provenienza punti: il Fisso espone solo i moltiplicatori realmente applicati', () => {

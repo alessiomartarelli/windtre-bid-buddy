@@ -102,18 +102,21 @@ const FISSO_CATEGORIE_EXTRA_IVA: FissoCategoriaType[] = [
 // Estrae i pezzi da Fisso per le categorie Extra IVA
 const estraiPezziFisso = (righe: AttivatoFissoRiga[]) => {
   let fissoPIva = 0;
-  let fritzBox = 0;
+  let fritzBoxRilevati = 0;
 
   for (const riga of righe) {
     const pezzi = riga.pezzi || 0;
     
     if (riga.categoria === "FRITZ_BOX") {
-      fritzBox += pezzi;
+      fritzBoxRilevati += pezzi;
     } else if (FISSO_CATEGORIE_EXTRA_IVA.includes(riga.categoria)) {
       fissoPIva += pezzi;
     }
   }
 
+  // Il bonus FRITZ è additivo alla linea P.IVA, non una categoria autonoma:
+  // ogni linea può ricevere al massimo un bonus da 0,5 punti.
+  const fritzBox = Math.min(fritzBoxRilevati, fissoPIva);
   return { fissoPIva, fritzBox };
 };
 
