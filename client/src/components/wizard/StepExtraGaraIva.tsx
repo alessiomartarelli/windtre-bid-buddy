@@ -284,14 +284,23 @@ const StepExtraGaraIva: React.FC<StepExtraGaraIvaProps> = ({
                   <h4 className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Fisso</h4>
                   <div className="space-y-1.5">
                     <div className="grid grid-cols-[1fr,auto] gap-2 items-baseline">
-                      <span className="text-muted-foreground text-xs">Fisso P.IVA (1a+2a Linea)</span>
+                      <span className="text-muted-foreground text-xs">Fisso P.IVA 1ª Linea</span>
                       <span className="text-right font-semibold whitespace-nowrap">
-                        {formatNumber(rs.pdvResults.reduce((s, p) => s + p.puntiFissoPIva, 0))} pt
+                        {formatNumber(rs.pdvResults.reduce((s, p) => s + p.pezziFissoPIvaPrimaLinea, 0))} pz ·{" "}
+                        {formatNumber(rs.pdvResults.reduce((s, p) => s + p.puntiFissoPIvaPrimaLinea, 0))} pt
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[1fr,auto] gap-2 items-baseline">
+                      <span className="text-muted-foreground text-xs">Fisso P.IVA 2ª Linea</span>
+                      <span className="text-right font-semibold whitespace-nowrap">
+                        {formatNumber(rs.pdvResults.reduce((s, p) => s + p.pezziFissoPIvaSecondaLinea, 0))} pz ·{" "}
+                        {formatNumber(rs.pdvResults.reduce((s, p) => s + p.puntiFissoPIvaSecondaLinea, 0))} pt
                       </span>
                     </div>
                     <div className="grid grid-cols-[1fr,auto] gap-2 items-baseline">
                       <span className="text-muted-foreground text-xs">FRITZ!Box</span>
                       <span className="text-right font-semibold whitespace-nowrap">
+                        {formatNumber(rs.pdvResults.reduce((s, p) => s + p.pezziFritzBox, 0))} pz ·{" "}
                         {formatNumber(rs.pdvResults.reduce((s, p) => s + p.puntiFritzBox, 0))} pt
                       </span>
                     </div>
