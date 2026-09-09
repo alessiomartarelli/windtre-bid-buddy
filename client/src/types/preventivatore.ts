@@ -189,10 +189,10 @@ export const MOBILE_CATEGORIES_CONFIG_DEFAULT: MobileCategoryConfig[] = [
   { type: MobileActivationType.PROFESSIONAL_WORLD, punti: 0.75, contaSuCanoneMedio: true },
   { type: MobileActivationType.ALTRE_SIM_IVA, punti: 0.75, contaSuCanoneMedio: true },
   { type: MobileActivationType.PHASE_IN_TIED, punti: 0.5, contaSuCanoneMedio: true },
-  { type: MobileActivationType.WINBACK, punti: 1.2, contaSuCanoneMedio: true },
+  { type: MobileActivationType.WINBACK, punti: 0, contaSuCanoneMedio: true },
   {
     type: MobileActivationType.CONVERGENTE_SUPERFIBRA_MULTISERVICE,
-    punti: 1.5,
+    punti: 0,
     contaSuCanoneMedio: true,
   },
   { type: MobileActivationType.TIED, punti: 0.75, contaSuCanoneMedio: true },
@@ -200,7 +200,7 @@ export const MOBILE_CATEGORIES_CONFIG_DEFAULT: MobileCategoryConfig[] = [
   { type: MobileActivationType.TOURIST_FULL, punti: 1, contaSuCanoneMedio: true },
   { type: MobileActivationType.TOURIST_PASS, punti: 1, contaSuCanoneMedio: true },
   { type: MobileActivationType.TOURIST_XXL, punti: 1, contaSuCanoneMedio: true },
-  { type: MobileActivationType.MNP, punti: 1.2, contaSuCanoneMedio: true },
+  { type: MobileActivationType.MNP, punti: 0, contaSuCanoneMedio: true },
   { type: MobileActivationType.MNP_MVNO, punti: 1, contaSuCanoneMedio: true },
   {
     type: MobileActivationType.PIU_SICURI_MOBILE,

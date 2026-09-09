@@ -54,7 +54,7 @@ const artMobileTiedConStepETelefono = {
       { domandaTesto: 'TELEFONO INCLUSO COMPASS', risposta: 'SI' },
     ],
   },
-}; // TIED 0,75 + step MNP 1,20 + device finanziato 1,25
+}; // TIED 0,75 + step MNP 0 + device finanziato 1,25
 
 const artMobileUntied = {
   categoria: { nome: 'UNTIED' },
@@ -443,8 +443,9 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
       })],
     );
 
-    // PDV A: 2 TIED + uno step MNP + un device finanziato = 3,95 pt.
-    // PDV B: 2 TIED + 2 UNTIED = 3,00 pt. Totale = 6,95 pt.
+    // PDV A: 2 TIED + uno step MNP senza punti aggiuntivi + un device
+    // finanziato = 2,75 pt. PDV B: 2 TIED + 2 UNTIED = 3,00 pt.
+    // Totale = 5,75 pt.
     for (let i = 0; i < 2; i++) {
       await insertSale(pool, session.orgId, {
         codicePos: POS_A, nomeNegozio: 'Negozio Prov A', ragioneSociale: RS,
@@ -509,9 +510,9 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     assert.equal(await page.getByTestId('card-pista-mobile').locator('[data-testid="provenienza-panel-mobile"]').count(), 0,
       'la vecchia card bianca non deve contenere la provenienza punti');
 
-    // Totale del pannello = totale card = 6,95 pt.
+    // Totale del pannello = totale card = 5,75 pt.
     const totale = provNum(await page.getByTestId('prov-totale-mobile').innerText());
-    assert.equal(totale, 6.95, `totale pannello = 6,95 pt (letto ${totale})`);
+    assert.equal(totale, 5.75, `totale pannello = 5,75 pt (letto ${totale})`);
 
     // Con "Tutti i PDV" il dettaglio è aggregato per RS: una sola riga,
     // con pezzi e punti totali, senza elenco dei singoli negozi.
@@ -519,13 +520,13 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
     const rsPieces = page.locator('[data-testid^="prov-pezzi-rs-mobile-"]');
     assert.equal(await rsPoints.count(), 1, 'una sola riga totale per la RS filtrata/scoped');
     assert.equal(await rsPieces.count(), 1, 'la riga RS espone anche il totale pezzi');
-    assert.equal(provNum(await rsPoints.first().innerText()), 6.95, 'totale RS = 6,95 pt');
+    assert.equal(provNum(await rsPoints.first().innerText()), 5.75, 'totale RS = 5,75 pt');
     assert.equal(provNum(await rsPieces.first().innerText()), 7, 'totale RS = 7 pezzi');
     assert.equal(await page.locator('[data-testid^="prov-row-pdv-mobile-"]').count(), 0,
       'con Tutti i PDV non deve comparire il dettaglio dei singoli negozi');
 
     const sommaTxt = await page.getByTestId('prov-somma-mobile').innerText();
-    assert.match(sommaTxt, /6,95|6\.95/, 'riga somma mostra 6,95 pt');
+    assert.match(sommaTxt, /5,75|5\.75/, 'riga somma mostra 5,75 pt');
     assert.match(sommaTxt, /= totale card/, 'riconciliazione esplicita col totale card');
 
     // Fonti aggregate per RS: i pezzi del PDV senza modello restano visibili,
@@ -535,8 +536,8 @@ test('Dashboard Gara Reale: pannello Provenienza punti riconciliabile col totale
       `TIED aggregato RS = 5 pz / 3,00 pt (${rsCategoryText.join(' | ')})`);
     assert.ok(rsCategoryText.some((text) => /Untied/i.test(text) && /2\s*pz/.test(text) && /1,50\s*pt|1\.50\s*pt/.test(text)),
       `UNTIED aggregato RS = 2 pz / 1,50 pt (${rsCategoryText.join(' | ')})`);
-    assert.ok(rsCategoryText.some((text) => /^MNP\b/i.test(text) && /1\s*pz/.test(text) && /1,20\s*pt|1\.20\s*pt/.test(text)),
-      `step vendita MNP = 1 pz / 1,20 pt (${rsCategoryText.join(' | ')})`);
+    assert.ok(rsCategoryText.some((text) => /^MNP\b/i.test(text) && /1\s*pz/.test(text) && /0,00\s*pt|0\.00\s*pt/.test(text)),
+      `step vendita MNP = 1 pz / 0,00 pt (${rsCategoryText.join(' | ')})`);
     assert.ok(rsCategoryText.some((text) => /Device finanziato/i.test(text) && /1\s*pz/.test(text) && /1,25\s*pt|1\.25\s*pt/.test(text)),
       `telefono finanziato = 1 pz / 1,25 pt (${rsCategoryText.join(' | ')})`);
     assert.equal(

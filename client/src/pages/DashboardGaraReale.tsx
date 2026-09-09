@@ -1038,22 +1038,33 @@ function calcAssicurazioniForAllPdv(
     attivatoByPos[pdv.codicePos] = riga;
   }
 
-  const pdvs = puntiVendita.map((p) => ({
-    id: p.id,
-    codicePos: p.codicePos,
-    nome: p.nome,
-    ragioneSociale: p.ragioneSociale,
-    calendar: p.calendar,
-    tipoPosizione: "strada" as PuntoVendita["tipoPosizione"],
-    canale: "franchising" as PuntoVendita["canale"],
-    clusterMobile: (p.clusterMobile || "") as PuntoVendita["clusterMobile"],
-    clusterFisso: (p.clusterFisso || "") as PuntoVendita["clusterFisso"],
-    clusterCB: (p.clusterCB || "") as PuntoVendita["clusterCB"],
-    clusterPIva: "" as PuntoVendita["clusterPIva"],
-    ruoloBusiness: "none" as PuntoVendita["ruoloBusiness"],
-    abilitaEnergia: p.abilitaEnergia ?? false,
-    abilitaAssicurazioni: p.abilitaAssicurazioni ?? false,
-  })) as PuntoVendita[];
+  const configuredByPos = new Map(puntiVendita.map((pdv) => [pdv.codicePos, pdv]));
+  const pdvCodes = new Set([
+    ...puntiVendita.map((pdv) => pdv.codicePos),
+    ...mappedData.pdvList
+      .filter((pdv) => attivatoByPos[pdv.codicePos])
+      .map((pdv) => pdv.codicePos),
+  ]);
+  const pdvs = Array.from(pdvCodes).map((codicePos) => {
+    const configured = configuredByPos.get(codicePos);
+    const mapped = mappedData.pdvList.find((pdv) => pdv.codicePos === codicePos);
+    return {
+      id: configured?.id ?? `mapped-${codicePos}`,
+      codicePos,
+      nome: configured?.nome ?? mapped?.nomeNegozio ?? codicePos,
+      ragioneSociale: configured?.ragioneSociale ?? mapped?.ragioneSociale ?? "",
+      calendar: configured?.calendar,
+      tipoPosizione: "strada" as PuntoVendita["tipoPosizione"],
+      canale: "franchising" as PuntoVendita["canale"],
+      clusterMobile: (configured?.clusterMobile || "") as PuntoVendita["clusterMobile"],
+      clusterFisso: (configured?.clusterFisso || "") as PuntoVendita["clusterFisso"],
+      clusterCB: (configured?.clusterCB || "") as PuntoVendita["clusterCB"],
+      clusterPIva: "" as PuntoVendita["clusterPIva"],
+      ruoloBusiness: "none" as PuntoVendita["ruoloBusiness"],
+      abilitaEnergia: configured?.abilitaEnergia ?? false,
+      abilitaAssicurazioni: configured?.abilitaAssicurazioni ?? false,
+    };
+  }) as PuntoVendita[];
 
   const results = calcoloAssicurazioniPerPos(pdvs, assicConfig, pdvInGara, attivatoByPos, puntiOverride, premiOverride);
   for (const r of results) {
@@ -4605,11 +4616,9 @@ export default function DashboardGaraReale() {
             label: a.targetLabel,
             pezzi: a.occorrenze,
             canone: a.canone || 0,
-            // Fisso usa gli add-on solo nel premio economico: non entrano nei
-            // punti. Mobile, CB e Assicurazioni li passano al calcolatore.
-            punti: pista === "fisso"
-              ? 0
-              : componentPointsFor(pista, a.targetCategory, a.occorrenze),
+            // Gli add-on configurati con un coefficiente punti concorrono sia
+            // al calcolo sia alla provenienza mostrata in Dashboard.
+            punti: componentPointsFor(pista, a.targetCategory, a.occorrenze),
           }));
           const pointCategories = [
             ...pdvItems.map((i) => ({

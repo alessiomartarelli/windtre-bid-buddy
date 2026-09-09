@@ -370,6 +370,7 @@ test('Dashboard Gara: il solo addon Pagamento Annuale mostra 0,5 punti e raggiun
   try {
     await setRole(pool, session.profileId, 'admin');
     const POS = uniq('POS');
+    const POS_BISUITE_ONLY = uniq('POS_BIS');
 
     await insertGaraConfig(pool, session.orgId, {
       pdvList: [{
@@ -388,7 +389,10 @@ test('Dashboard Gara: il solo addon Pagamento Annuale mostra 0,5 punti e raggiun
       },
     });
     await insertSale(pool, session.orgId, {
-      codicePos: POS,
+      // Una vendita BiSuite può arrivare con un codice POS non ancora
+      // censito nella struttura: i punti prodotto devono comunque concorrere
+      // al totale, mentre il POS resta escluso dai soli bonus per-PDV.
+      codicePos: POS_BISUITE_ONLY,
       articoli: [artPagamentoAnnualeSolo],
       cliente: clientePrivato,
     });
