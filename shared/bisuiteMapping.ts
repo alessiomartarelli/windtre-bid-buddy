@@ -37,6 +37,32 @@ export interface BiSuiteMappingConfig {
   version: string;
 }
 
+export interface FissoIvaLineLink {
+  lineRef: string;
+  categoria: 'FISSO_PIVA_1A_LINEA' | 'FISSO_PIVA_2A_LINEA';
+  hasFritzBox: boolean;
+}
+
+export function getFissoIvaLineLink(
+  mapped: MappedArticle[],
+  lineRef: string,
+): FissoIvaLineLink | null {
+  const linea = mapped.find(
+    (item) =>
+      item.pista === 'fisso'
+      && item.ruleType === 'base'
+      && (item.targetCategory === 'FISSO_PIVA_1A_LINEA' || item.targetCategory === 'FISSO_PIVA_2A_LINEA'),
+  );
+  if (!linea) return null;
+  return {
+    lineRef,
+    categoria: linea.targetCategory as FissoIvaLineLink['categoria'],
+    hasFritzBox: mapped.some(
+      (item) => item.pista === 'fisso' && item.targetCategory === 'FRITZ_BOX',
+    ),
+  };
+}
+
 export const MOBILE_TARGETS = [
   { value: 'TIED', label: 'Tied' },
   { value: 'UNTIED', label: 'Untied' },

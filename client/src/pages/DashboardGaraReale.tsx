@@ -215,6 +215,11 @@ interface PdvData {
   ragioneSociale: string;
   items: AggregatedItem[];
   addons?: AddonItem[];
+  fissoIvaLines?: Array<{
+    lineRef: string;
+    categoria: "FISSO_PIVA_1A_LINEA" | "FISSO_PIVA_2A_LINEA";
+    hasFritzBox: boolean;
+  }>;
   accessori?: ExtraTally;
   servizi?: ExtraTally;
   devices?: DeviceTally;
@@ -4095,15 +4100,31 @@ export default function DashboardGaraReale() {
 
         const fissoItems = pdv.items.filter(i => i.pista === "fisso");
         const fissoAddons = (pdv.addons || []).filter(a => a.pista === "fisso");
-        if (fissoItems.length > 0 || fissoAddons.length > 0) {
+        const fissoIvaLines = pdv.fissoIvaLines || [];
+        if (fissoItems.length > 0 || fissoAddons.length > 0 || fissoIvaLines.length > 0) {
+          const hasLinkedLines = fissoIvaLines.length > 0;
           attivatoFissoByPos[pdv.codicePos] = [
-            ...fissoItems.map(it => ({
+            ...fissoItems
+              .filter(it => !hasLinkedLines || (
+                it.targetCategory !== "FISSO_PIVA_1A_LINEA"
+                && it.targetCategory !== "FISSO_PIVA_2A_LINEA"
+                && it.targetCategory !== "FRITZ_BOX"
+              ))
+              .map(it => ({
               categoria: it.targetCategory as FissoCategoriaType,
               pezzi: it.pezzi,
             })),
-            ...fissoAddons.map(a => ({
+            ...fissoAddons
+              .filter(a => !hasLinkedLines || a.targetCategory !== "FRITZ_BOX")
+              .map(a => ({
               categoria: a.targetCategory as FissoCategoriaType,
               pezzi: a.occorrenze,
+            })),
+            ...fissoIvaLines.map(line => ({
+              categoria: line.categoria as FissoCategoriaType,
+              pezzi: 1,
+              lineRef: line.lineRef,
+              fritzBoxAssociati: line.hasFritzBox ? 1 : 0,
             })),
           ];
         }

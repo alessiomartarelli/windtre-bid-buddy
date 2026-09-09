@@ -16,6 +16,7 @@ import {
   getFissoAppliedMultipliersWithAddons,
 } from '../client/src/lib/calcoloPistaFisso.ts';
 import { calcolaExtraGaraIva } from '../client/src/lib/calcoloExtraGaraIva.ts';
+import { aggregateMappedSales } from '../server/bisuiteMappedSales.ts';
 import { calcolaPuntiComponentePista } from '../client/src/lib/provenienzaPunti.ts';
 
 // Task #489 — pannello "Provenienza punti" sulle card pista della Dashboard
@@ -354,6 +355,35 @@ test('Extra Gara IVA: prima e seconda linea valgono 1 punto, FRITZ aggiunge 0,5 
     'un solo Fisso P.IVA può ricevere un solo bonus FRITZ');
   assert.equal(fritzSenzaLineaAggiuntiva.puntiTotali, 1.5);
 
+  const consumerFritzNonAttribuito = calcola([
+    {
+      categoria: 'FISSO_PIVA_1A_LINEA',
+      pezzi: 1,
+      lineRef: 'vendita-piva:0',
+      fritzBoxAssociati: 0,
+    },
+    { categoria: 'FRITZ_BOX', pezzi: 1 },
+  ]);
+  assert.equal(consumerFritzNonAttribuito.pezziFritzBox, 0,
+    'un FRITZ consumer aggregato non viene attribuito a una linea P.IVA diversa');
+
+  const fritzCollegatoAllaSecondaLinea = calcola([
+    {
+      categoria: 'FISSO_PIVA_1A_LINEA',
+      pezzi: 1,
+      lineRef: 'vendita-piva:0',
+      fritzBoxAssociati: 0,
+    },
+    {
+      categoria: 'FISSO_PIVA_2A_LINEA',
+      pezzi: 1,
+      lineRef: 'vendita-piva:1',
+      fritzBoxAssociati: 1,
+    },
+  ]);
+  assert.equal(fritzCollegatoAllaSecondaLinea.pezziFritzBox, 1);
+  assert.equal(fritzCollegatoAllaSecondaLinea.puntiTotali, 2.5);
+
   const override = calcola([
     { categoria: 'FISSO_PIVA_2A_LINEA', pezzi: 1 },
     { categoria: 'FRITZ_BOX', pezzi: 1 },
@@ -361,6 +391,73 @@ test('Extra Gara IVA: prima e seconda linea valgono 1 punto, FRITZ aggiunge 0,5 
   assert.equal(override.puntiFissoPIva, 2);
   assert.equal(override.puntiFritzBox, 0.25);
   assert.equal(override.puntiTotali, 2.25);
+});
+
+test('Extra Gara IVA: il server conserva il legame FRITZ con la specifica linea P.IVA', () => {
+  const rules = [
+    {
+      id: 'linea-piva',
+      pista: 'fisso',
+      targetCategory: 'FISSO_PIVA_1A_LINEA',
+      targetLabel: 'Fisso P.IVA 1ª Linea',
+      conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA IVA' },
+      priority: 10,
+      enabled: true,
+      ruleType: 'base',
+    },
+    {
+      id: 'linea-consumer',
+      pista: 'fisso',
+      targetCategory: 'FISSO_FTTH',
+      targetLabel: 'Fisso FTTH',
+      conditions: { categoriaBiSuite: 'ADSL/FIBRA/FWA CF' },
+      priority: 10,
+      enabled: true,
+      ruleType: 'base',
+    },
+    {
+      id: 'fritz',
+      pista: 'fisso',
+      targetCategory: 'FRITZ_BOX',
+      targetLabel: 'FRITZ!Box',
+      conditions: { domandaTesto: 'FRITZ', rispostaContiene: 'SI' },
+      priority: 20,
+      enabled: true,
+      ruleType: 'additional',
+    },
+  ];
+  const articolo = (categoria, fritz) => ({
+    categoria: { nome: categoria },
+    tipologia: { nome: 'FIBRA FTTH' },
+    descrizione: 'Linea fibra',
+    dettaglio: {
+      domandeRisposte: [{ domandaTesto: 'FRITZ', risposta: fritz ? 'SI' : 'NO' }],
+    },
+  });
+  const agg = aggregateMappedSales([
+    {
+      bisuiteId: 101,
+      codicePos: 'POS-FRITZ',
+      rawData: { articoli: [articolo('ADSL/FIBRA/FWA IVA', false)] },
+    },
+    {
+      bisuiteId: 102,
+      codicePos: 'POS-FRITZ',
+      rawData: { articoli: [articolo('ADSL/FIBRA/FWA CF', true)] },
+    },
+    {
+      bisuiteId: 103,
+      codicePos: 'POS-FRITZ',
+      rawData: { articoli: [articolo('ADSL/FIBRA/FWA IVA', true)] },
+    },
+  ], rules);
+
+  assert.deepEqual(agg.byPdv['POS-FRITZ'].fissoIvaLines, [
+    { lineRef: '101:0', categoria: 'FISSO_PIVA_1A_LINEA', hasFritzBox: false },
+    { lineRef: '103:0', categoria: 'FISSO_PIVA_1A_LINEA', hasFritzBox: true },
+  ]);
+  assert.equal(agg.byPdv['POS-FRITZ'].addons.find((a) => a.targetCategory === 'FRITZ_BOX').occorrenze, 2,
+    'gli aggregati Fisso restano invariati anche se solo un FRITZ è collegato a P.IVA');
 });
 
 test('Provenienza punti: il Fisso espone solo i moltiplicatori realmente applicati', () => {

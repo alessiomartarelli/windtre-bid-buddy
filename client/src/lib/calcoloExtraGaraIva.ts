@@ -98,23 +98,36 @@ const estraiPezziFisso = (righe: AttivatoFissoRiga[]) => {
   let fissoPIvaPrimaLinea = 0;
   let fissoPIvaSecondaLinea = 0;
   let fritzBoxRilevati = 0;
+  let fritzBoxAssociati = 0;
+  let hasLineLinks = false;
 
   for (const riga of righe) {
     const pezzi = riga.pezzi || 0;
     
     if (riga.categoria === "FRITZ_BOX") {
       fritzBoxRilevati += pezzi;
-    } else if (riga.categoria === "FISSO_PIVA_1A_LINEA") {
-      fissoPIvaPrimaLinea += pezzi;
-    } else if (riga.categoria === "FISSO_PIVA_2A_LINEA") {
-      fissoPIvaSecondaLinea += pezzi;
+    } else if (
+      riga.categoria === "FISSO_PIVA_1A_LINEA"
+      || riga.categoria === "FISSO_PIVA_2A_LINEA"
+    ) {
+      if (riga.categoria === "FISSO_PIVA_1A_LINEA") {
+        fissoPIvaPrimaLinea += pezzi;
+      } else {
+        fissoPIvaSecondaLinea += pezzi;
+      }
+      if (riga.lineRef) {
+        hasLineLinks = true;
+        fritzBoxAssociati += Math.min(pezzi, Math.max(0, riga.fritzBoxAssociati || 0));
+      }
     }
   }
 
-  const fissoPIva = fissoPIvaPrimaLinea + fissoPIvaSecondaLinea;
   // Il bonus FRITZ è additivo alla linea P.IVA, non una categoria autonoma:
   // ogni linea può ricevere al massimo un bonus da 0,5 punti.
-  const fritzBox = Math.min(fritzBoxRilevati, fissoPIva);
+  const fissoPIva = fissoPIvaPrimaLinea + fissoPIvaSecondaLinea;
+  const fritzBox = hasLineLinks
+    ? fritzBoxAssociati
+    : Math.min(fritzBoxRilevati, fissoPIva);
   return { fissoPIvaPrimaLinea, fissoPIvaSecondaLinea, fissoPIva, fritzBox };
 };
 

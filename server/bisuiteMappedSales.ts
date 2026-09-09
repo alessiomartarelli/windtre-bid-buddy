@@ -1,5 +1,5 @@
-import type { BiSuiteMappingRule } from "../shared/bisuiteMapping";
-import { mapBiSuiteArticle } from "../shared/bisuiteMapping";
+import type { BiSuiteMappingRule, FissoIvaLineLink } from "../shared/bisuiteMapping";
+import { getFissoIvaLineLink, mapBiSuiteArticle } from "../shared/bisuiteMapping";
 import {
   classifyArticle,
   classifyCategory,
@@ -58,6 +58,7 @@ export type PdvAggregate = {
   ragioneSociale: string;
   items: AggregatedItem[];
   addons: AddonItem[];
+  fissoIvaLines: FissoIvaLineLink[];
   accessori: { pezzi: number; importo: number };
   servizi: { pezzi: number; importo: number };
   devices: DeviceTally;
@@ -108,6 +109,7 @@ export type MappedSalesAggregation = {
 
 // Forma minima di una riga bisuite_sales necessaria all'aggregazione.
 export type MappableSale = {
+  bisuiteId?: number | string | null;
   dataVendita?: Date | string | null;
   totale?: string | number | null;
   rawData?: unknown;
@@ -202,7 +204,7 @@ export function aggregateMappedSales(
   // usata dal report Telegram): conteggio vendite + fatturato lordo.
   const byDay = new Map<string, { day: string; vendite: number; importo: number }>();
 
-  for (const sale of sales) {
+  for (const [saleIndex, sale] of sales.entries()) {
     const importoSale = parseFloat(String(sale.totale ?? "")) || 0;
     totalImporto += importoSale;
     if (sale.dataVendita) {
@@ -239,6 +241,7 @@ export function aggregateMappedSales(
         ragioneSociale: effettivaRs,
         items: [],
         addons: [],
+        fissoIvaLines: [],
         accessori: { pezzi: 0, importo: 0 },
         servizi: { pezzi: 0, importo: 0 },
         devices: newDeviceTally(),
@@ -272,7 +275,7 @@ export function aggregateMappedSales(
 
     let canvassCount = 0;
     let mappedCount = 0;
-    for (const art of articoli) {
+    for (const [articleIndex, art] of articoli.entries()) {
       const catNome = (art.categoria?.nome || '').toUpperCase().trim();
       const tipNome = String(art.tipologia?.nome || '').trim();
       const coupon = isCouponCaring(catNome, tipNome);
@@ -326,6 +329,9 @@ export function aggregateMappedSales(
       }
       const mappedResults = mapBiSuiteArticle(art, clienteTipo, rules);
       if (mappedResults.length === 0) continue;
+      const lineRef = `${sale.bisuiteId ?? saleIndex}:${articleIndex}`;
+      const fissoIvaLine = getFissoIvaLineLink(mappedResults, lineRef);
+      if (fissoIvaLine) byPdv[codicePos].fissoIvaLines.push(fissoIvaLine);
       mappedCount++;
       const artCanone = parseFloat(art.dettaglio?.canone || '0') || 0;
       for (const m of mappedResults) {

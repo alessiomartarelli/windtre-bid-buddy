@@ -226,6 +226,10 @@ export const FISSO_CATEGORIE_DEFAULT: FissoCategoriaConfig[] = [
 export interface AttivatoFissoRiga {
   categoria: FissoCategoriaType;
   pezzi: number;
+  /** Presente sulle linee P.IVA derivate da vendite BiSuite non aggregate. */
+  lineRef?: string;
+  /** Numero di FRITZ collegati alla specifica linea (massimo uno conteggiato). */
+  fritzBoxAssociati?: number;
 }
 
 export interface WorkdayInfo {
