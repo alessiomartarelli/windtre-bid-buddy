@@ -1,5 +1,5 @@
 import { PuntoVendita, MobileActivationType, AttivatoMobileDettaglio, ClusterPIvaCode } from "@/types/preventivatore";
-import { AttivatoFissoRiga, FissoCategoriaType } from "@/lib/calcoloPistaFisso";
+import { AttivatoFissoRiga } from "@/lib/calcoloPistaFisso";
 import { EnergiaAttivatoRiga } from "@/types/energia";
 import { AssicurazioniAttivatoRiga } from "@/types/assicurazioni";
 import { ProtectaAttivatoRiga } from "@/types/protecta";
@@ -93,15 +93,10 @@ const estraiPezziMobile = (righe: AttivatoMobileDettaglio[]) => {
   return { worldStaff, fullPlus, flexSpecial };
 };
 
-// Categorie Fisso che contano per Extra IVA (solo linee P.IVA)
-const FISSO_CATEGORIE_EXTRA_IVA: FissoCategoriaType[] = [
-  "FISSO_PIVA_1A_LINEA",
-  "FISSO_PIVA_2A_LINEA",
-];
-
 // Estrae i pezzi da Fisso per le categorie Extra IVA
 const estraiPezziFisso = (righe: AttivatoFissoRiga[]) => {
-  let fissoPIva = 0;
+  let fissoPIvaPrimaLinea = 0;
+  let fissoPIvaSecondaLinea = 0;
   let fritzBoxRilevati = 0;
 
   for (const riga of righe) {
@@ -109,15 +104,18 @@ const estraiPezziFisso = (righe: AttivatoFissoRiga[]) => {
     
     if (riga.categoria === "FRITZ_BOX") {
       fritzBoxRilevati += pezzi;
-    } else if (FISSO_CATEGORIE_EXTRA_IVA.includes(riga.categoria)) {
-      fissoPIva += pezzi;
+    } else if (riga.categoria === "FISSO_PIVA_1A_LINEA") {
+      fissoPIvaPrimaLinea += pezzi;
+    } else if (riga.categoria === "FISSO_PIVA_2A_LINEA") {
+      fissoPIvaSecondaLinea += pezzi;
     }
   }
 
+  const fissoPIva = fissoPIvaPrimaLinea + fissoPIvaSecondaLinea;
   // Il bonus FRITZ è additivo alla linea P.IVA, non una categoria autonoma:
   // ogni linea può ricevere al massimo un bonus da 0,5 punti.
   const fritzBox = Math.min(fritzBoxRilevati, fissoPIva);
-  return { fissoPIva, fritzBox };
+  return { fissoPIvaPrimaLinea, fissoPIvaSecondaLinea, fissoPIva, fritzBox };
 };
 
 // Estrae i pezzi Energia solo Business (P.IVA)
@@ -261,7 +259,7 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
       const protectaAttivato = attivatoProtectaByPos[pdv.id];
 
       const { worldStaff, fullPlus, flexSpecial } = estraiPezziMobile(mobileRighe);
-      const { fissoPIva, fritzBox } = estraiPezziFisso(fissoRighe);
+      const { fissoPIvaPrimaLinea, fissoPIvaSecondaLinea, fissoPIva, fritzBox } = estraiPezziFisso(fissoRighe);
       const luceGas = estraiPezziEnergia(energiaRighe);
       const protezionePro = estraiPezziProtezionePro(assicurazioniAttivato);
       const negozioProtetti = estraiPezziNegozioProtetti(protectaAttivato);
@@ -269,6 +267,8 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
       const puntiWorldStaff = worldStaff * effectivePunti.worldStaff;
       const puntiFullPlus = fullPlus * effectivePunti.fullPlusData60_100;
       const puntiFlexSpecial = flexSpecial * effectivePunti.flexSpecialData10;
+      const puntiFissoPIvaPrimaLinea = fissoPIvaPrimaLinea * effectivePunti.fissoPIva;
+      const puntiFissoPIvaSecondaLinea = fissoPIvaSecondaLinea * effectivePunti.fissoPIva;
       const puntiFissoPIva = fissoPIva * effectivePunti.fissoPIva;
       const puntiFritzBox = fritzBox * effectivePunti.fritzBox;
       const puntiLuceGas = luceGas * effectivePunti.luceGas;
@@ -300,6 +300,10 @@ export const calcolaExtraGaraIva = (params: CalcolaExtraGaraIvaParams): ExtraGar
         puntiFullPlus,
         pezziFlexSpecial: flexSpecial,
         puntiFlexSpecial,
+        pezziFissoPIvaPrimaLinea: fissoPIvaPrimaLinea,
+        puntiFissoPIvaPrimaLinea,
+        pezziFissoPIvaSecondaLinea: fissoPIvaSecondaLinea,
+        puntiFissoPIvaSecondaLinea,
         pezziFissoPIva: fissoPIva,
         puntiFissoPIva,
         pezziFritzBox: fritzBox,

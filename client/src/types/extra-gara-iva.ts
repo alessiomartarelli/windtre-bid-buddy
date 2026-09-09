@@ -13,6 +13,10 @@ export interface ExtraGaraIvaPdvResult {
   puntiFullPlus: number;
   pezziFlexSpecial: number;
   puntiFlexSpecial: number;
+  pezziFissoPIvaPrimaLinea: number;
+  puntiFissoPIvaPrimaLinea: number;
+  pezziFissoPIvaSecondaLinea: number;
+  puntiFissoPIvaSecondaLinea: number;
   pezziFissoPIva: number;
   puntiFissoPIva: number;
   pezziFritzBox: number;

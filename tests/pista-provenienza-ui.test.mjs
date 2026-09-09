@@ -320,10 +320,16 @@ test('Extra Gara IVA: prima e seconda linea valgono 1 punto, FRITZ aggiunge 0,5 
     })[0].pdvResults[0];
 
   const primaLinea = calcola([{ categoria: 'FISSO_PIVA_1A_LINEA', pezzi: 1 }]);
+  assert.equal(primaLinea.pezziFissoPIvaPrimaLinea, 1);
+  assert.equal(primaLinea.puntiFissoPIvaPrimaLinea, 1);
+  assert.equal(primaLinea.pezziFissoPIvaSecondaLinea, 0);
   assert.equal(primaLinea.puntiFissoPIva, 1);
   assert.equal(primaLinea.puntiTotali, 1);
 
   const secondaLinea = calcola([{ categoria: 'FISSO_PIVA_2A_LINEA', pezzi: 1 }]);
+  assert.equal(secondaLinea.pezziFissoPIvaPrimaLinea, 0);
+  assert.equal(secondaLinea.pezziFissoPIvaSecondaLinea, 1);
+  assert.equal(secondaLinea.puntiFissoPIvaSecondaLinea, 1);
   assert.equal(secondaLinea.puntiFissoPIva, 1);
   assert.equal(secondaLinea.puntiTotali, 1);
 
@@ -334,6 +340,8 @@ test('Extra Gara IVA: prima e seconda linea valgono 1 punto, FRITZ aggiunge 0,5 
   ]);
   assert.equal(entrambeConFritz.pezziFissoPIva, 2);
   assert.equal(entrambeConFritz.puntiFissoPIva, 2);
+  assert.equal(entrambeConFritz.puntiFissoPIvaPrimaLinea, 1);
+  assert.equal(entrambeConFritz.puntiFissoPIvaSecondaLinea, 1);
   assert.equal(entrambeConFritz.pezziFritzBox, 2);
   assert.equal(entrambeConFritz.puntiFritzBox, 1);
   assert.equal(entrambeConFritz.puntiTotali, 3);

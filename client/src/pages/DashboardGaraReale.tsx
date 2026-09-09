@@ -4245,7 +4245,8 @@ export default function DashboardGaraReale() {
             addCat("worldStaff", "worldStaff", "World/Staff", pdvR.pezziWorldStaff);
             addCat("fullPlus", "fullPlusData60_100", "Full Plus/Data 60-100", pdvR.pezziFullPlus);
             addCat("flexSpecial", "flexSpecialData10", "Flex/Special/Data 10", pdvR.pezziFlexSpecial);
-            addCat("fissoPIva", "fissoPIva", "Fisso P.IVA", pdvR.pezziFissoPIva);
+            addCat("fissoPIvaPrimaLinea", "fissoPIva", "Fisso P.IVA — Prima linea", pdvR.pezziFissoPIvaPrimaLinea);
+            addCat("fissoPIvaSecondaLinea", "fissoPIva", "Fisso P.IVA — Seconda linea", pdvR.pezziFissoPIvaSecondaLinea);
             addCat("fritzBox", "fritzBox", "FRITZ!Box", pdvR.pezziFritzBox);
             addCat("luceGas", "luceGas", "Luce/Gas Business", pdvR.pezziLuceGas);
             addCat("protezionePro", "protezionePro", "Protezione Pro", pdvR.pezziProtezionePro);
@@ -4280,7 +4281,8 @@ export default function DashboardGaraReale() {
                 { category: "worldStaff", label: "World/Staff", pezzi: pdvR.pezziWorldStaff, canone: 0, punti: pdvR.puntiWorldStaff },
                 { category: "fullPlus", label: "Full Plus/Data 60-100", pezzi: pdvR.pezziFullPlus, canone: 0, punti: pdvR.puntiFullPlus },
                 { category: "flexSpecial", label: "Flex/Special/Data 10", pezzi: pdvR.pezziFlexSpecial, canone: 0, punti: pdvR.puntiFlexSpecial },
-                { category: "fissoPIva", label: "Fisso P.IVA", pezzi: pdvR.pezziFissoPIva, canone: 0, punti: pdvR.puntiFissoPIva },
+                { category: "fissoPIvaPrimaLinea", label: "Fisso P.IVA — Prima linea", pezzi: pdvR.pezziFissoPIvaPrimaLinea, canone: 0, punti: pdvR.puntiFissoPIvaPrimaLinea },
+                { category: "fissoPIvaSecondaLinea", label: "Fisso P.IVA — Seconda linea", pezzi: pdvR.pezziFissoPIvaSecondaLinea, canone: 0, punti: pdvR.puntiFissoPIvaSecondaLinea },
                 { category: "fritzBox", label: "FRITZ!Box", pezzi: pdvR.pezziFritzBox, canone: 0, punti: pdvR.puntiFritzBox },
                 { category: "luceGas", label: "Luce/Gas Business", pezzi: pdvR.pezziLuceGas, canone: 0, punti: pdvR.puntiLuceGas },
                 { category: "protezionePro", label: "Protezione Pro", pezzi: pdvR.pezziProtezionePro, canone: 0, punti: pdvR.puntiProtezionePro },
