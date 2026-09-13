@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, type ReactNode } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
@@ -354,6 +354,8 @@ function getDefaultDates() {
   };
 }
 
+const TODAY_AUTO_REFRESH_MS = 5 * 60 * 1000;
+
 export default function VenditeBiSuite() {
   const { profile } = useAuth();
   const { scheme, resolvedTheme } = useTheme();
@@ -415,35 +417,73 @@ export default function VenditeBiSuite() {
   });
 
   const fetchMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (options?: { automatic?: boolean }) => {
       const res = await fetch(apiUrl("/api/bisuite-fetch"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ start_date: fromDate, end_date: toDate }),
+        body: JSON.stringify({
+          start_date: fromDate,
+          end_date: toDate,
+          automatic: options?.automatic === true,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Errore durante l'importazione");
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, options) => {
       const partial = !!data.partial;
-      setFetchResult({
-        success: true,
-        partial,
-        source: "fetch",
-        message: data.message || `Importate ${data.count} vendite`,
-        failedMonths: Array.isArray(data.failedMonths) ? data.failedMonths : [],
-      });
+      if (!options?.automatic) {
+        setFetchResult({
+          success: true,
+          partial,
+          source: "fetch",
+          message: data.message || `Importate ${data.count} vendite`,
+          failedMonths: Array.isArray(data.failedMonths) ? data.failedMonths : [],
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/bisuite-sales"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ricariche-plafond"] });
-      setTimeout(() => setFetchResult(null), partial ? 12000 : 5000);
+      if (!options?.automatic) {
+        setTimeout(() => setFetchResult(null), partial ? 12000 : 5000);
+      }
     },
-    onError: (error: Error) => {
+    onError: (error: Error, options) => {
+      if (options?.automatic) return;
       setFetchResult({ success: false, source: "fetch", message: error.message });
       setTimeout(() => setFetchResult(null), 8000);
     },
   });
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  const isTodayView = fromDate === today && toDate === today;
+  const autoRefreshPendingRef = useRef(false);
+  const lastAutoRefreshAttemptRef = useRef(0);
+
+  useEffect(() => {
+    autoRefreshPendingRef.current = fetchMutation.isPending;
+  }, [fetchMutation.isPending]);
+
+  useEffect(() => {
+    if (!orgId || !credStatus?.configured || !isTodayView) return;
+
+    const refreshToday = () => {
+      if (document.visibilityState !== "visible" || autoRefreshPendingRef.current) return;
+      const now = Date.now();
+      if (now - lastAutoRefreshAttemptRef.current < TODAY_AUTO_REFRESH_MS) return;
+      lastAutoRefreshAttemptRef.current = now;
+      fetchMutation.mutate({ automatic: true });
+    };
+
+    refreshToday();
+    const intervalId = window.setInterval(refreshToday, TODAY_AUTO_REFRESH_MS);
+    document.addEventListener("visibilitychange", refreshToday);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", refreshToday);
+    };
+  }, [orgId, credStatus?.configured, isTodayView]);
 
   const { data, isLoading } = useQuery<{ sales: BisuiteSale[]; count: number; pdvDirectory?: PdvViewDirectory }>({
     queryKey: ["/api/bisuite-sales", orgId, fromDate, toDate, "includeAnnullate", pdvView],
@@ -1333,7 +1373,7 @@ export default function VenditeBiSuite() {
                 className="h-7 border-amber-300 text-amber-800 hover:bg-amber-100"
                 onClick={() => {
                   setFetchResult(null);
-                  fetchMutation.mutate();
+                  fetchMutation.mutate({});
                 }}
                 disabled={fetchMutation.isPending}
                 data-testid="button-retry-fetch"
@@ -1372,7 +1412,6 @@ export default function VenditeBiSuite() {
                 size="sm"
                 className="h-8"
                 onClick={() => {
-                  const today = format(new Date(), "yyyy-MM-dd");
                   setFromDate(today);
                   setToDate(today);
                 }}
@@ -1383,19 +1422,20 @@ export default function VenditeBiSuite() {
               </Button>
               {credStatus?.configured ? (
                 <>
-                {lastSyncLabel && (
+                {(lastSyncLabel || isTodayView) && (
                   <span
-                    className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap"
+                    className="text-xs text-muted-foreground whitespace-nowrap"
                     data-testid="text-last-bisuite-sync"
                   >
-                    Ultimo aggiornamento: {lastSyncLabel}
+                    {isTodayView && <span className="hidden sm:inline">Auto ogni 5 min · </span>}
+                    {lastSyncLabel ? `Ultimo aggiornamento: ${lastSyncLabel}` : "Aggiornamento automatico attivo"}
                   </span>
                 )}
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-8"
-                  onClick={() => fetchMutation.mutate()}
+                  onClick={() => fetchMutation.mutate({})}
                   disabled={fetchMutation.isPending}
                   data-testid="button-fetch-bisuite"
                 >

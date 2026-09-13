@@ -52,6 +52,15 @@ function toItalianYMD(input: string | undefined): string | undefined | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(datePart) ? datePart : null;
 }
 
+const BISUITE_AUTO_FETCH_COOLDOWN_MS = 5 * 60 * 1000;
+type BisuiteFetchResult = Awaited<ReturnType<typeof runBisuiteFetchForOrg>>;
+const bisuiteFetchInFlight = new Map<string, {
+  startDate: string | undefined;
+  endDate: string | undefined;
+  promise: Promise<BisuiteFetchResult>;
+}>();
+const bisuiteLastAutoFetchAt = new Map<string, number>();
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
@@ -3605,7 +3614,18 @@ export async function registerRoutes(
       }
 
       const orgId = profile.organizationId;
-      const { start_date, end_date } = req.body;
+      const { start_date, end_date, automatic } = req.body;
+      const isAutomatic = automatic === true;
+      const italianNow = toItalianWallTime(new Date());
+      const today = italianNow
+        ? `${italianNow.getUTCFullYear()}-${String(italianNow.getUTCMonth() + 1).padStart(2, "0")}-${String(italianNow.getUTCDate()).padStart(2, "0")}`
+        : "";
+      const isTodayRange = start_date === today && end_date === today;
+      if (isAutomatic) {
+        if (!isTodayRange) {
+          return res.status(400).json({ error: "L'aggiornamento automatico è disponibile solo per oggi" });
+        }
+      }
 
       const orgConfig = await storage.getOrgConfig(orgId);
       const cfg = orgConfig?.config as Record<string, any> | undefined;
@@ -3614,10 +3634,63 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Credenziali BiSuite non configurate per la tua organizzazione. Contatta il super admin." });
       }
 
-      const r = await runBisuiteFetchForOrg(orgId, {
-        startDate: start_date,
-        endDate: end_date,
-      });
+      const lastAutoFetchAt = bisuiteLastAutoFetchAt.get(orgId) ?? 0;
+      const skippedByCooldown = isAutomatic
+        && !bisuiteFetchInFlight.has(orgId)
+        && Date.now() - lastAutoFetchAt < BISUITE_AUTO_FETCH_COOLDOWN_MS;
+
+      if (skippedByCooldown) {
+        return res.json({
+          success: true,
+          skipped: true,
+          status: "fresh",
+          message: "Vendite già aggiornate di recente",
+          count: 0,
+        });
+      }
+
+      let activeFetch = bisuiteFetchInFlight.get(orgId);
+      const sameRange = activeFetch?.startDate === start_date && activeFetch?.endDate === end_date;
+      if (isAutomatic && activeFetch && !sameRange) {
+        return res.json({
+          success: true,
+          skipped: true,
+          status: "busy",
+          message: "Sincronizzazione BiSuite già in corso",
+          count: 0,
+        });
+      }
+      if (activeFetch && !sameRange) {
+        try {
+          await activeFetch.promise;
+        } catch {
+          // La richiesta manuale deve poter partire anche se la sync precedente fallisce.
+        }
+        activeFetch = undefined;
+      }
+
+      let fetchPromise = activeFetch?.promise;
+      if (!fetchPromise) {
+        fetchPromise = runBisuiteFetchForOrg(orgId, {
+          startDate: start_date,
+          endDate: end_date,
+        });
+        bisuiteFetchInFlight.set(orgId, {
+          startDate: start_date,
+          endDate: end_date,
+          promise: fetchPromise,
+        });
+      }
+
+      let r;
+      try {
+        r = await fetchPromise;
+        if (isTodayRange) bisuiteLastAutoFetchAt.set(orgId, Date.now());
+      } finally {
+        if (bisuiteFetchInFlight.get(orgId)?.promise === fetchPromise) {
+          bisuiteFetchInFlight.delete(orgId);
+        }
+      }
 
       const partial = r.failedChunks.length > 0;
       const failedMonths = partial ? formatFailedMonths(r.failedChunks) : [];
