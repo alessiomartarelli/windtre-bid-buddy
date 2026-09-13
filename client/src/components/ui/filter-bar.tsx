@@ -10,6 +10,7 @@ interface FilterBarProps {
   children: React.ReactNode;
   className?: string;
   title?: string;
+  showTitle?: boolean;
   activeCount?: number;
   onReset?: () => void;
   resetLabel?: string;
@@ -20,6 +21,7 @@ export function FilterBar({
   children,
   className,
   title = "Filtri",
+  showTitle = true,
   activeCount,
   onReset,
   resetLabel = "Azzera",
@@ -41,10 +43,14 @@ export function FilterBar({
         {showHeader && (
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-md bg-primary/10 text-primary">
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-              </div>
-              <span className="text-sm font-medium text-foreground/90">{title}</span>
+              {showTitle && (
+                <>
+                  <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                  </div>
+                  <span className="text-sm font-medium text-foreground/90">{title}</span>
+                </>
+              )}
               {activeCount !== undefined && activeCount > 0 && (
                 <Badge variant="secondary" className="h-5 px-1.5 text-[10px]" data-testid="badge-filter-count">
                   {activeCount} attiv{activeCount === 1 ? "o" : "i"}

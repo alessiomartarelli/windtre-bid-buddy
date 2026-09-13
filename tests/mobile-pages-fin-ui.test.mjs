@@ -61,14 +61,18 @@ test('mobile: pagine finanziarie usabili su smartphone', async () => {
       'VenditeBiSuite: toggle must expand filters');
     await assertNoHorizontalOverflow(page, 'VenditeBiSuite');
 
-    // Dialog "Allinea con BiSuite" full-screen su mobile.
-    const openReconcile = page.getByTestId('button-open-reconcile');
-    if (await openReconcile.isVisible().catch(() => false)) {
-      await openReconcile.click();
-      await assertFullScreenDialog(page, 'VenditeBiSuite reconcile dialog');
-      await page.keyboard.press('Escape');
-      await page.locator('[role="dialog"]').waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
-    }
+    // Azione rapida "Oggi": imposta entrambe le estremità dell'intervallo.
+    const todayButton = page.getByTestId('button-sales-today');
+    await todayButton.waitFor({ state: 'visible', timeout: 10000 });
+    await todayButton.click();
+    const today = await page.evaluate(() => {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    });
+    await toggle.click();
+    assert.equal(await page.getByTestId('input-from-date').inputValue(), today);
+    assert.equal(await page.getByTestId('input-to-date').inputValue(), today);
 
     // ── Amministrazione: tab visibili e cambio tab funzionante ──
     await page.goto(`${BASE}/amministrazione`, { waitUntil: 'networkidle' });

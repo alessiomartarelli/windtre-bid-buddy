@@ -398,10 +398,7 @@ export default function VenditeBiSuite() {
   const orgId = profile?.organizationId || "";
   const isAdmin = profile?.role === "admin" || profile?.role === "super_admin";
   const queryClient = useQueryClient();
-  const [fetchResult, setFetchResult] = useState<{ success: boolean; partial?: boolean; message: string; failedMonths?: string[]; source?: "fetch" | "reconcile" } | null>(null);
-  const [reconcileOpen, setReconcileOpen] = useState(false);
-  const [reconcileFrom, setReconcileFrom] = useState(defaults.from);
-  const [reconcileTo, setReconcileTo] = useState(defaults.to);
+  const [fetchResult, setFetchResult] = useState<{ success: boolean; partial?: boolean; message: string; failedMonths?: string[]; source?: "fetch" } | null>(null);
 
   // Task #537 — saldi plafond ricariche + timestamp dell'ultima sync BiSuite
   // riuscita (mostrato vicino ai comandi di sincronizzazione, ora italiana).
@@ -444,41 +441,6 @@ export default function VenditeBiSuite() {
     },
     onError: (error: Error) => {
       setFetchResult({ success: false, source: "fetch", message: error.message });
-      setTimeout(() => setFetchResult(null), 8000);
-    },
-  });
-
-  const reconcileMutation = useMutation({
-    mutationFn: async ({ from, to }: { from: string; to: string }) => {
-      const res = await fetch(apiUrl("/api/admin/bisuite-reconcile"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ organization_id: orgId, from, to }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.details || "Errore durante l'allineamento");
-      return data;
-    },
-    onSuccess: (data) => {
-      const reconciled = data.reconciled;
-      const partial = !reconciled;
-      setReconcileOpen(false);
-      setFetchResult({
-        success: true,
-        partial,
-        source: "reconcile",
-        message: data.message ||
-          (reconciled
-            ? `Allineamento BiSuite: ${data.totalFromApi} vendite sincronizzate, ${reconciled.deleted} obsolete eliminate`
-            : `Allineamento BiSuite parziale: ${data.totalFromApi} vendite scaricate ma reconcile saltato per chunk falliti`),
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/bisuite-sales"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/ricariche-plafond"] });
-      setTimeout(() => setFetchResult(null), partial ? 12000 : 6000);
-    },
-    onError: (error: Error) => {
-      setFetchResult({ success: false, source: "reconcile", message: `Allineamento BiSuite fallito: ${error.message}` });
       setTimeout(() => setFetchResult(null), 8000);
     },
   });
@@ -1364,7 +1326,7 @@ export default function VenditeBiSuite() {
                 </div>
               )}
             </div>
-            {fetchResult.partial && fetchResult.source !== "reconcile" && (
+            {fetchResult.partial && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1384,6 +1346,7 @@ export default function VenditeBiSuite() {
         )}
 
         <FilterBar
+          showTitle={false}
           activeCount={
             (searchTerm.trim() ? 1 : 0) +
             (filterType !== "all" ? 1 : 0) +
@@ -1403,8 +1366,23 @@ export default function VenditeBiSuite() {
             setPdvView("origine");
           }}
           actions={
-            credStatus?.configured ? (
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                onClick={() => {
+                  const today = format(new Date(), "yyyy-MM-dd");
+                  setFromDate(today);
+                  setToDate(today);
+                }}
+                data-testid="button-sales-today"
+              >
+                <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                Oggi
+              </Button>
+              {credStatus?.configured ? (
+                <>
                 {lastSyncLabel && (
                   <span
                     className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap"
@@ -1428,27 +1406,9 @@ export default function VenditeBiSuite() {
                   )}
                   {fetchMutation.isPending ? "Importazione..." : "Aggiorna Vendite"}
                 </Button>
-                {isAdmin && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8"
-                    onClick={() => {
-                      const d = getDefaultDates();
-                      setReconcileFrom(d.from);
-                      setReconcileTo(d.to);
-                      setReconcileOpen(true);
-                    }}
-                    disabled={reconcileMutation.isPending}
-                    data-testid="button-open-reconcile"
-                  >
-                    <Route className="h-3.5 w-3.5 mr-1.5" />
-                    Allinea con BiSuite
-                  </Button>
-                )}
-              </div>
-            ) : credStatus && !credStatus.configured ? (
-              <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                </>
+              ) : credStatus && !credStatus.configured ? (
+                <div className="flex items-center gap-1.5 text-xs text-amber-600">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 <span>Credenziali BiSuite non configurate</span>
                 {lastSyncLabel && (
@@ -1459,15 +1419,16 @@ export default function VenditeBiSuite() {
                     · Ultimo aggiornamento: {lastSyncLabel}
                   </span>
                 )}
-              </div>
-            ) : lastSyncLabel ? (
-              <span
-                className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap"
-                data-testid="text-last-bisuite-sync"
-              >
-                Ultimo aggiornamento: {lastSyncLabel}
-              </span>
-            ) : null
+                </div>
+              ) : lastSyncLabel ? (
+                <span
+                  className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap"
+                  data-testid="text-last-bisuite-sync"
+                >
+                  Ultimo aggiornamento: {lastSyncLabel}
+                </span>
+              ) : null}
+            </div>
           }
         >
           <FilterField label="Da" icon={CalendarRange}>
@@ -2519,100 +2480,6 @@ export default function VenditeBiSuite() {
         onClose={() => setSelectedSale(null)}
       />
 
-      <Dialog open={reconcileOpen} onOpenChange={(o) => !reconcileMutation.isPending && setReconcileOpen(o)}>
-        <ResponsiveDialogContent className="max-w-md" data-testid="dialog-reconcile">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Route className="h-4 w-4" />
-              Allinea con BiSuite
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Riscarica le vendite del periodo selezionato e <strong>elimina in locale</strong> le vendite che su BiSuite sono state cancellate o accorpate.
-              Le vendite ANNULLATA vengono comunque mantenute.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="reconcile-from">Da</Label>
-                <Input
-                  id="reconcile-from"
-                  type="date"
-                  value={reconcileFrom}
-                  onChange={(e) => setReconcileFrom(e.target.value)}
-                  data-testid="input-reconcile-from"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="reconcile-to">A</Label>
-                <Input
-                  id="reconcile-to"
-                  type="date"
-                  value={reconcileTo}
-                  onChange={(e) => setReconcileTo(e.target.value)}
-                  data-testid="input-reconcile-to"
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-2 pt-2 flex-wrap">
-              <div className="flex gap-1.5 flex-wrap">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    const d = getDefaultDates();
-                    setReconcileFrom(d.from);
-                    setReconcileTo(d.to);
-                  }}
-                  disabled={reconcileMutation.isPending}
-                  data-testid="button-reconcile-current-month"
-                >
-                  Mese corrente
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    const now = new Date();
-                    const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                    const to = new Date(now.getFullYear(), now.getMonth(), 0);
-                    setReconcileFrom(format(from, "yyyy-MM-dd"));
-                    setReconcileTo(format(to, "yyyy-MM-dd"));
-                  }}
-                  disabled={reconcileMutation.isPending}
-                  data-testid="button-reconcile-previous-month"
-                >
-                  Mese precedente
-                </Button>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setReconcileOpen(false)}
-                  disabled={reconcileMutation.isPending}
-                  data-testid="button-reconcile-cancel"
-                >
-                  Annulla
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => reconcileMutation.mutate({ from: reconcileFrom, to: reconcileTo })}
-                  disabled={reconcileMutation.isPending || !reconcileFrom || !reconcileTo || reconcileFrom > reconcileTo}
-                  data-testid="button-reconcile-confirm"
-                >
-                  {reconcileMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                  ) : (
-                    <Route className="h-3.5 w-3.5 mr-1.5" />
-                  )}
-                  {reconcileMutation.isPending ? "Allineamento..." : "Allinea"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </ResponsiveDialogContent>
-      </Dialog>
     </div>
   );
 }
