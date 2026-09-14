@@ -642,11 +642,12 @@ function FissoSubTab({ config, baseDefaults, isArrayOverridden, updateArrayValue
           <p className="text-xs text-muted-foreground">Punti totali = pezzi × punti/pezzo. I pezzi restano conteggiati separatamente.</p>
         </CardHeader>
         <CardContent><ScrollableTable>
-          <table className="w-full text-sm min-w-[520px]" data-testid="table-gara-fisso-punti-euro">
+          <table className="w-full text-sm min-w-[600px]" data-testid="table-gara-fisso-punti-euro">
             <thead>
               <tr className="bg-primary text-primary-foreground">
                 <th className="p-2 text-left font-medium rounded-tl-md sticky left-0 bg-primary z-20">Categoria</th>
-                <th className="p-2 text-center font-medium w-32">Punti/pezzo</th>
+                <th className="p-2 text-center font-medium w-24">Pezzi</th>
+                <th className="p-2 text-center font-medium w-32">Punti</th>
                 <th className="p-2 text-center font-medium rounded-tr-md w-32">{'\u20AC'}/pezzo</th>
               </tr>
             </thead>
@@ -661,6 +662,12 @@ function FissoSubTab({ config, baseDefaults, isArrayOverridden, updateArrayValue
                 return (
                   <tr key={cat.type} className="even:bg-muted/30">
                     <td className="p-2 font-medium border border-border sticky left-0 z-10 bg-card [tr:nth-child(even)>&]:bg-[color-mix(in_srgb,hsl(var(--muted))_30%,hsl(var(--card)))]">{cat.label}</td>
+                    <td
+                      className="p-2 text-center border border-border tabular-nums"
+                      data-testid={`value-gara-fisso-pezzi-${cat.type}`}
+                    >
+                      1
+                    </td>
                     <EditableCell value={puntiVal} defaultValue={puntiDef} isOverridden={isOverridden(puntiPath)} onChange={v => updateValue(puntiPath, v)} onReset={() => resetValue(puntiPath)} testId={`input-gara-fisso-punti-${cat.type}`} step="0.25" />
                     <EditableCell value={euroVal} defaultValue={euroDef} isOverridden={isOverridden(euroPath)} onChange={v => updateValue(euroPath, v)} onReset={() => resetValue(euroPath)} testId={`input-gara-fisso-euro-${cat.type}`} />
                   </tr>
