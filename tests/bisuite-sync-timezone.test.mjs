@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { formatBisuiteSyncTime } from "../client/src/lib/bisuiteTime.ts";
 
-test("BiSuite lastSync conserva l'ora locale già registrata nel timestamp legacy", () => {
+test("BiSuite lastSync formatta l'istante nel fuso Europe/Rome", () => {
   assert.match(
     formatBisuiteSyncTime("2026-01-15T11:00:00.000Z"),
-    /^15\/01\/2026,? 11:00$/,
+    /^15\/01\/2026,? 12:00$/,
   );
 });
 

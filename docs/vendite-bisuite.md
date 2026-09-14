@@ -43,10 +43,9 @@ automatica al massimo ogni ora (solo quando la scheda è visibile). Il
 coordinatore server-side applica lo stesso limite per organizzazione e
 condivide le richieste concorrenti tra schede aperte.
 
-I campi legacy `fetchedAt` e `lastSync` derivano da colonne PostgreSQL
-`timestamp without time zone`: la serializzazione aggiunge `Z`, ma le cifre
-contengono già l'ora locale registrata. La UI le mantiene invariate usando
-`timeZone: "UTC"` nel formatter, evitando una seconda aggiunta dell'offset.
+I campi `fetchedAt` e `lastSync` sono serializzati come istanti ISO con `Z`.
+La UI li converte con `timeZone: "Europe/Rome"`, così l’orario visualizzato
+segue correttamente l’ora italiana e il passaggio CET/CEST.
 
 L'API BiSuite ha **due limiti accertati** (verificati 13/05/2026):
 1. **Cap di 5000 record per risposta**. I parametri `page`, `offset`,
