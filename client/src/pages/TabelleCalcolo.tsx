@@ -931,7 +931,11 @@ function FissoTab({ config, systemConfig, isArrayOverridden, updateArrayValue, r
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Punti ed Euro/Pezzo per Categoria Fisso</CardTitle>
+          <CardTitle className="text-base">Valore di ogni pezzo per Categoria Fisso</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Pezzi e punti sono distinti: punti totali = pezzi × punti/pezzo. Un Fisso consumer vale 1 punto,
+            ogni linea P.IVA vale 1,5 punti e FRITZ!Box associato aggiunge 1 punto.
+          </p>
         </CardHeader>
         <CardContent><ScrollableTable>
           <table className="w-full text-sm min-w-[520px]" data-testid="table-fisso-punti-euro">

@@ -604,7 +604,8 @@ function FissoSubTab({ config, baseDefaults, isArrayOverridden, updateArrayValue
   return (
     <>
       <CalcInfoBox title="Come funziona il calcolo Fisso">
-        <p>Ogni attivazione Fisso genera <strong>punti</strong> (basati su €/pezzo per categoria) e <strong>gettoni contrattuali</strong>.</p>
+        <p><strong>Pezzi e punti sono valori distinti:</strong> i pezzi indicano quante attivazioni sono state effettuate; i punti si calcolano moltiplicando i pezzi per i punti/pezzo della categoria.</p>
+        <p>Un Fisso consumer vale 1 punto; ogni linea Fisso P.IVA vale 1,5 punti. Se alla linea P.IVA è associato FRITZ!Box, si aggiunge 1 punto.</p>
         <p>I punti vengono confrontati con le <strong>soglie</strong> (S1–S5) del cluster PDV. Il premio = gettoni contrattuali + bonus soglia × moltiplicatore.</p>
         <p>I <strong>gettoni contrattuali</strong> sono compensi fissi per ogni contratto attivato, indipendenti dalla soglia raggiunta.</p>
       </CalcInfoBox>
@@ -636,7 +637,10 @@ function FissoSubTab({ config, baseDefaults, isArrayOverridden, updateArrayValue
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Punti ed Euro/Pezzo per Categoria Fisso</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base">Valore di ogni pezzo per Categoria Fisso</CardTitle>
+          <p className="text-xs text-muted-foreground">Punti totali = pezzi × punti/pezzo. I pezzi restano conteggiati separatamente.</p>
+        </CardHeader>
         <CardContent><ScrollableTable>
           <table className="w-full text-sm min-w-[520px]" data-testid="table-gara-fisso-punti-euro">
             <thead>

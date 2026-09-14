@@ -75,3 +75,4 @@
 - [DRMS file vs competenza](drms-file-vs-competenza.md) — un file mensile contiene conguagli storici: soglie da separare per competenza, non dal massimo dell'intero file.
 - [Punti da POS non censiti](dashboard-unconfigured-pos-points.md) — i prodotti mappati contribuiscono anche da POS fuori struttura; bonus gara solo ai PDV configurati.
 - [Extra Gara IVA e FRITZ](extra-gara-iva-fritz.md) — ogni linea P.IVA vale 1 punto; FRITZ aggiunge 0,5 una sola volta per linea, mai come punteggio autonomo.
+- [Punteggio pista Fisso P.IVA](fisso-piva-punti.md) — nella pista Fisso: consumer 1 punto, ogni linea P.IVA 1,5; FRITZ associato aggiunge 1 punto.

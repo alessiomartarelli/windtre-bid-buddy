@@ -499,6 +499,43 @@ test('Provenienza punti: il Fisso espone solo i moltiplicatori realmente applica
   assert.equal(fissoConPuntiOverride.punti, 3,
     'il calcolatore Fisso usa l’override configurato dei punti/pezzo');
 
+  const fissoConsumer = calcolaPremioPistaFissoPerPos({
+    ...common,
+    attivato: [{ categoria: 'FISSO_FTTC', pezzi: 1 }],
+  });
+  assert.equal(fissoConsumer.punti, 1,
+    'un pezzo Fisso consumer vale 1 punto');
+
+  const fissoPIva = calcolaPremioPistaFissoPerPos({
+    ...common,
+    attivato: [
+      { categoria: 'FISSO_PIVA_1A_LINEA', pezzi: 1 },
+      { categoria: 'FISSO_PIVA_2A_LINEA', pezzi: 1 },
+    ],
+  });
+  assert.equal(fissoPIva.punti, 3,
+    'prima e seconda linea Fisso P.IVA valgono 1,5 punti ciascuna');
+
+  const fissoPIvaConFritz = calcolaPremioPistaFissoPerPos({
+    ...common,
+    attivato: [
+      { categoria: 'FISSO_PIVA_1A_LINEA', pezzi: 1 },
+      { categoria: 'FRITZ_BOX', pezzi: 1 },
+    ],
+  });
+  assert.equal(fissoPIvaConFritz.punti, 2.5,
+    'una linea Fisso P.IVA con FRITZ!Box vale 1,5 + 1 punto');
+
+  const fissoRigheDuplicate = calcolaPremioPistaFissoPerPos({
+    ...common,
+    attivato: [
+      { categoria: 'FISSO_PIVA_1A_LINEA', pezzi: 1 },
+      { categoria: 'FISSO_PIVA_1A_LINEA', pezzi: 1 },
+    ],
+  });
+  assert.equal(fissoRigheDuplicate.punti, 3,
+    'righe della stessa categoria sommano pezzi e punti senza sovrascriversi');
+
   const fissoSoloPremioFisso = calcolaPremioPistaFissoPerPos({
     ...common,
     attivato: [{ categoria: 'FRITZ_BOX', pezzi: 1 }],

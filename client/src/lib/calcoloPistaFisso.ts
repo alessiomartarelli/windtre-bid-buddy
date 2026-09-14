@@ -156,14 +156,14 @@ export const FISSO_CATEGORIE_DEFAULT: FissoCategoriaConfig[] = [
   {
     type: "FISSO_PIVA_1A_LINEA",
     label: "Fisso P.IVA 1ª Linea",
-    puntiPerPezzo: 0.5,
+    puntiPerPezzo: 1.5,
     euroPerPezzo: 22,
     extraCluster3Euro: 0,
   },
   {
     type: "FISSO_PIVA_2A_LINEA",
     label: "Fisso P.IVA 2ª Linea",
-    puntiPerPezzo: 0.5,
+    puntiPerPezzo: 1.5,
     euroPerPezzo: 10,
     extraCluster3Euro: 0,
   },
@@ -480,7 +480,7 @@ export function calcolaPremioPistaFissoPerPos(params: {
   const pezziMap = new Map<FissoCategoriaType, number>();
   for (const r of attivato) {
     if (r.categoria && r.pezzi) {
-      pezziMap.set(r.categoria, r.pezzi);
+      pezziMap.set(r.categoria, (pezziMap.get(r.categoria) || 0) + r.pezzi);
     }
   }
 
