@@ -38,6 +38,16 @@ Il trick `xmax = 0` di Postgres è usato in `RETURNING` per distinguere
 record inseriti vs aggiornati e popolare il riepilogo della risposta
 (`inserted`, `updated`, `chunks`, `failedChunks`).
 
+Nella vista **Oggi** la pagina mantiene i dati aggiornati con una sync
+automatica al massimo ogni ora (solo quando la scheda è visibile). Il
+coordinatore server-side applica lo stesso limite per organizzazione e
+condivide le richieste concorrenti tra schede aperte.
+
+I campi `fetchedAt` delle vendite e `lastSync` del plafond sono ISO instant
+serializzati con `Z`; la UI li formatta esclusivamente con
+`Intl.DateTimeFormat(..., { timeZone: "Europe/Rome" })`, senza aggiungere
+offset fissi (così anche il passaggio CET/CEST resta corretto).
+
 L'API BiSuite ha **due limiti accertati** (verificati 13/05/2026):
 1. **Cap di 5000 record per risposta**. I parametri `page`, `offset`,
    `limit` sono **ignorati** (rispondono sempre con i primi 5000).

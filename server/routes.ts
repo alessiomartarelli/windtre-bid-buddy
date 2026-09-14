@@ -3142,19 +3142,39 @@ export async function registerRoutes(
       if (isEnabled && (!encToken || !chatId)) {
         return res.status(400).json({ error: "Per abilitare il report servono bot token e chat ID" });
       }
-      // Orari di invio (Task #334): validati e normalizzati "HH:MM"; campi
-      // invalidi o uguali fra loro ⇒ 400 (mai salvare orari ambigui).
-      let sendTimes = undefined as ReturnType<typeof parseSendTimes> | undefined;
+      // Orari di invio: la nuova forma richiede quattro label distinte,
+      // mentre la forma storica { parziale, chiusura } resta accettata e
+      // continua a rappresentare due soli slot. Tutti i valori vengono
+      // normalizzati "HH:MM"; la fascia DST 02:00–02:59 è vietata.
+      let sendTimes: Record<string, unknown> | undefined;
       if (send_times !== undefined) {
-        const parziale = normalizeTimeLabel((send_times as Record<string, unknown>)?.parziale);
-        const chiusura = normalizeTimeLabel((send_times as Record<string, unknown>)?.chiusura);
-        if (!parziale || !chiusura || parziale === chiusura) {
+        if (!send_times || typeof send_times !== "object" || Array.isArray(send_times)) {
+          return res.status(400).json({ error: "send_times deve essere un oggetto con gli orari di invio" });
+        }
+        const requested = send_times as Record<string, unknown>;
+        const hasNewShape = ["parziale1", "parziale2", "parziale3"].some((key) =>
+          Object.prototype.hasOwnProperty.call(requested, key),
+        );
+        const keys = hasNewShape
+          ? ["parziale1", "parziale2", "parziale3", "chiusura"]
+          : ["parziale", "chiusura"];
+        const labels = keys.map((key) => normalizeTimeLabel(requested?.[key]));
+        if (labels.some((label) => !label) || new Set(labels).size !== labels.length) {
           return res.status(400).json({
             error:
-              "Orari di invio non validi: servono due orari HH:MM distinti (esclusa la fascia 02:00–02:59)",
+              hasNewShape
+                ? "Orari di invio non validi: servono quattro orari HH:MM distinti (esclusa la fascia 02:00–02:59)"
+                : "Orari di invio non validi: servono due orari HH:MM distinti (esclusa la fascia 02:00–02:59)",
           });
         }
-        sendTimes = { parziale, chiusura };
+        sendTimes = hasNewShape
+          ? {
+              parziale1: labels[0]!,
+              parziale2: labels[1]!,
+              parziale3: labels[2]!,
+              chiusura: labels[3]!,
+            }
+          : { parziale: labels[0]!, chiusura: labels[1]! };
       }
       // Il forecast/obiettivi vive ora nella Configurazione gara
       // (gara_config.config.venditeForecast), per-mese: qui restano solo

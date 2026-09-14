@@ -1,4 +1,5 @@
-export const BISUITE_AUTO_FETCH_COOLDOWN_MS = 5 * 60 * 1000;
+/** Automatic today syncs are deliberately limited to one request per hour. */
+export const BISUITE_AUTO_FETCH_COOLDOWN_MS = 60 * 60 * 1000;
 
 type ActiveFetch<T> = {
   startDate: string | undefined;
@@ -28,10 +29,11 @@ export class BisuiteFetchCoordinator<T> {
     fetch: () => Promise<T>;
   }): Promise<BisuiteFetchCoordinationResult<T>> {
     const { orgId, startDate, endDate, automatic, todayRange, fetch } = input;
-    const lastFetchAt = this.lastTodayFetchAt.get(orgId) ?? 0;
+    const lastFetchAt = this.lastTodayFetchAt.get(orgId);
     if (
       automatic
       && !this.inFlight.has(orgId)
+      && lastFetchAt !== undefined
       && this.now() - lastFetchAt < this.cooldownMs
     ) {
       return { kind: "skipped", status: "fresh" };

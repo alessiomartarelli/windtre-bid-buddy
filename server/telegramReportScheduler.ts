@@ -36,12 +36,13 @@ import {
   fasciaForLabel,
   minutesOfLabel,
   parseSendTimes,
+  sendTimeSlots,
   type SendTimes,
 } from "@shared/telegramSendTimes";
 
 /**
  * Scheduler del report vendite giornaliero su Telegram (Task #239).
- * Due invii al giorno (default 13:30 e 22:15 ora italiana, configurabili
+ * Quattro invii al giorno (default 13:30, 16:00, 19:00 e 22:15 ora italiana, configurabili
  * per organizzazione in telegramReport.send_times — Task #334), corretti
  * anche col cambio ora legale. Per ogni organizzazione con il bot
  * configurato e abilitato: sync BiSuite del giorno corrente e invio del
@@ -53,8 +54,7 @@ const ROME_TZ = "Europe/Rome";
 // Orari di invio di default (ora italiana), usati se un'org non ha
 // send_times configurati e come fallback se la lettura config fallisce.
 const SEND_TIMES: Array<{ label: string; minutes: number }> = [
-  { label: DEFAULT_SEND_TIMES.parziale, minutes: minutesOfLabel(DEFAULT_SEND_TIMES.parziale) },
-  { label: DEFAULT_SEND_TIMES.chiusura, minutes: minutesOfLabel(DEFAULT_SEND_TIMES.chiusura) },
+  ...sendTimeSlots(DEFAULT_SEND_TIMES).map(({ label, minutes }) => ({ label, minutes })),
 ];
 
 // Config Telegram per-organizzazione salvata in organization_config.config.
@@ -62,8 +62,9 @@ export interface TelegramReportConfig {
   enabled?: boolean;
   bot_token?: string; // cifrato at-rest (enc:v1:...)
   chat_id?: string;
-  // Orari di invio per-org (Task #334): { parziale, chiusura } "HH:MM".
-  send_times?: Partial<SendTimes>;
+  // Orari di invio per-org: { parziale1, parziale2, parziale3, chiusura }
+  // "HH:MM". La forma legacy { parziale, chiusura } resta accettata.
+  send_times?: Partial<SendTimes> & { parziale?: string };
   // Il forecast/obiettivi mensile vive ora in gara_config.config.venditeForecast
   // (per-mese), non più qui: questo blocco tiene solo il trasporto Telegram.
 }
@@ -456,7 +457,7 @@ export async function sendDailyReportForOrg(params: {
   // Commento "direttore vendite" (Task #266): forecast/obiettivi per-org e
   // PER MESE dalla Configurazione gara (gara_config.config.venditeForecast),
   // dallo stesso record già caricato per i pesi (Task #283)
-  // + fascia dedotta dall'orario (13:30 parziale / 22:30 chiusura).
+  // + fascia dedotta dallo slot configurato (i tre parziali / la chiusura).
   const forecast = parseForecastConfig(garaCfgObj?.venditeForecast);
   // Le soglie/premi VF del report aggregato sono quelli globali del mese.
   // Gli override per RS restano applicati nella Dashboard quando il
@@ -641,11 +642,9 @@ async function runScheduledSendInner(
 ): Promise<void> {
   const orgs = await storage.getOrganizations();
   const { ymd } = romeNowParts();
-  // Dedup (Task #332/#334): salta le org che hanno GIÀ ricevuto il report
-  // della stessa FASCIA logica (parziale/chiusura) oggi. Confronto per
-  // fascia e non per label: se un'org cambia orario a metà giornata, il
-  // label registrato (es. "13:30") non coincide più con lo slot nuovo
-  // (es. "12:00") ma la fascia sì — così niente doppioni né invii soppressi.
+  // Dedup: ogni slot è indipendente e viene confrontato con il time_label
+  // esatto (i tre parziali possono quindi essere inviati tutti nello stesso
+  // giorno). La fascia resta invece una proprietà del ruolo dello slot.
   let sentLabelsByOrg = new Map<string, Array<{ timeLabel: string; brandKey: string }>>();
   try {
     sentLabelsByOrg = await storage.getTelegramReportSendLabels(ymd);
@@ -665,12 +664,13 @@ async function runScheduledSendInner(
         skipped++;
         continue;
       }
-      // Orari per-org (Task #334): questa run riguarda solo le org il cui
-      // orario configurato coincide con lo slot scattato.
+      // Orari per-org: questa run riguarda solo le org il cui slot
+      // configurato coincide con quello scattato.
       const times = parseSendTimes(
         (cfg?.telegramReport as TelegramReportConfig | undefined)?.send_times,
       );
-      if (timeLabel !== times.parziale && timeLabel !== times.chiusura) {
+      const activeSlots = sendTimeSlots(times);
+      if (!activeSlots.some((slot) => slot.label === timeLabel)) {
         skipped++;
         continue;
       }
@@ -709,8 +709,11 @@ async function runScheduledSendInner(
       let orgSentAny = false;
       let orgFailedAny = false;
       for (const rep of reportsToSend) {
+        // Ogni slot ha dedup indipendente: la chiave è il time_label esatto,
+        // non la fascia. I primi tre slot condividono comunque il contenuto
+        // "parziale", mentre solo l'ultimo usa "chiusura".
         const alreadySent = sentLabels.some(
-          (l) => l.brandKey === rep.brandKey && fasciaForLabel(l.timeLabel, times) === fascia,
+          (l) => l.brandKey === rep.brandKey && l.timeLabel === timeLabel,
         );
         if (alreadySent) continue;
         const brandTag = rep.brand ? ` brand=${rep.brand.brandName}` : "";
@@ -772,8 +775,8 @@ let scheduleNextFn: (() => Promise<void>) | null = null;
 /**
  * Recovery bounded di uno slot già scattato (Task #332/#333): se "adesso"
  * cade entro la finestra (90 min, stesso giorno Roma) di uno degli orari
- * configurati, esegue la run per le sole org rimaste senza report di quella
- * fascia (il dedup per fascia logica evita ogni doppione). Usata al boot e
+ * configurati, esegue la run per le sole org rimaste senza report di quello
+ * slot (il dedup per time_label esatto evita ogni doppione). Usata al boot e
  * dopo un reschedule: così spostare uno slot NON ancora inviato su un orario
  * già passato di oggi non fa perdere l'invio.
  */
@@ -832,8 +835,7 @@ export async function collectSendTimes(): Promise<Array<{ label: string; minutes
       const tg = cfg?.telegramReport as TelegramReportConfig | undefined;
       if (!tg?.enabled) continue;
       const times = parseSendTimes(tg.send_times);
-      labels.add(times.parziale);
-      labels.add(times.chiusura);
+      for (const slot of sendTimeSlots(times)) labels.add(slot.label);
     }
     if (labels.size === 0) return SEND_TIMES;
     return Array.from(labels)

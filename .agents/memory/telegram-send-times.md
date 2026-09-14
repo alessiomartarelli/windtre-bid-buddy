@@ -1,12 +1,15 @@
 ---
 name: Telegram send times configurabili
-description: Orari di invio del report Telegram per-org, scheduling e dedup per fascia logica
+description: Quattro slot di invio Telegram per-org, compatibilità legacy, scheduling e dedup
 ---
 
-- Orari per-org in `organization_config.config.telegramReport.send_times = { parziale, chiusura }` ("HH:MM"); default 13:30/22:15. Parsing/validazione in `shared/telegramSendTimes.ts` (pura, testabile con tsx).
+- **Regola:** ogni tenant può configurare tre slot parziali e uno di chiusura; i default sono 13:30, 16:00, 19:00 e 22:15.
+  **Why:** servono più aggiornamenti intermedi, tutti gestibili dall'admin del tenant.
+  **How to apply:** nuovi salvataggi usano quattro orari distinti; le configurazioni storiche a due slot restano a due finché l'admin non salva il nuovo form.
 - **Regola**: la fascia 02:00–02:59 è vietata come orario di invio.
   **Why:** col cambio ora legale quell'ora può non esistere o esistere due volte; la conversione wall-time→epoch diventerebbe ambigua.
   **How to apply:** qualunque nuovo orario schedulato su Europe/Rome deve passare da `normalizeTimeLabel`.
-- **Regola**: il dedup degli invii (telegram_report_sends) confronta la FASCIA logica (parziale/chiusura via `fasciaForLabel`), non il label orario.
-  **Why:** se un'org cambia orario a metà giornata, il label registrato non coincide più con lo slot nuovo: dedup per label produce doppioni o sopprime la chiusura.
+- **Regola:** i tre invii parziali condividono il contenuto di fascia “parziale”, ma vengono deduplicati separatamente per orario.
+  **Why:** deduplicare soltanto per fascia sopprimerebbe il secondo e il terzo invio parziale dello stesso giorno.
+  **How to apply:** l'identità di invio resta distinta dal tipo di contenuto; spostare un orario crea un nuovo slot recuperabile entro la finestra prevista.
 - Lo scheduler pianifica sull'unione degli orari di tutte le org abilitate e rilegge la config a ogni giro; il POST della config chiama `rescheduleTelegramReports()` per ri-armare subito il timer (altrimenti un nuovo orario futuro di oggi verrebbe perso). Generation counter per invalidare i giri superati.

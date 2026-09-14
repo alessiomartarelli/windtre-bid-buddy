@@ -354,7 +354,8 @@ function getDefaultDates() {
   };
 }
 
-const TODAY_AUTO_REFRESH_MS = 5 * 60 * 1000;
+/** Keep the Oggi view current without polling BiSuite more than hourly. */
+const TODAY_AUTO_REFRESH_MS = 60 * 60 * 1000;
 
 export default function VenditeBiSuite() {
   const { profile } = useAuth();
@@ -565,6 +566,11 @@ export default function VenditeBiSuite() {
   // rawSales include anche le ANNULLATA (visibili nella tabella grezza con badge),
   // mentre `sales` viene usato per tutti i conteggi/aggregati e le esclude.
   const fetchedSales = data?.sales || [];
+  // `fetchedAt` is serialized by Express as an ISO instant (with `Z`), while
+  // the plafond endpoint exposes the authoritative `lastSync` in the same
+  // explicit form (`Date#toISOString()`). Prefer lastSync: unlike a timestamp
+  // copied from a sale payload, it cannot be mistaken for a local wall time
+  // and therefore must be rendered only through the Europe/Rome formatter.
   const latestSalesFetch = useMemo(() => {
     let latest: string | null = null;
     for (const sale of fetchedSales) {
@@ -574,7 +580,7 @@ export default function VenditeBiSuite() {
     }
     return latest;
   }, [fetchedSales]);
-  const lastSyncLabel = formatLastSync(latestSalesFetch ?? plafondData?.lastSync);
+  const lastSyncLabel = formatLastSync(plafondData?.lastSync ?? latestSalesFetch);
   const pdvDirectory = data?.pdvDirectory;
   // Task #462 — in vista Destinazione riscriviamo (solo in memoria) i campi
   // PDV della vendita con il PDV di destinazione risolto dal raw: tutti i
@@ -1427,7 +1433,7 @@ export default function VenditeBiSuite() {
                     className="text-xs text-muted-foreground whitespace-nowrap"
                     data-testid="text-last-bisuite-sync"
                   >
-                    {isTodayView && <span className="hidden sm:inline">Auto ogni 5 min · </span>}
+                    {isTodayView && <span className="hidden sm:inline">Auto ogni ora · </span>}
                     {lastSyncLabel ? `Ultimo aggiornamento: ${lastSyncLabel}` : "Aggiornamento automatico attivo"}
                   </span>
                 )}

@@ -23,7 +23,7 @@
 - [Prod SMTP_SECRET_KEY differs](prod-secret-key-differs.md) — segreti per il DB di prod vanno cifrati SUL VPS (chiave diversa da dev); plaintext via stdin, verifica round-trip.
 - [Static precompress sidecars](static-precompress-sidecars.md) — mai comprimere asset in sync al boot; sidecar .gz/.br generati al build + warm-up async di fallback; regole duplicate build↔server da tenere allineate.
 - [Telegram report recovery](telegram-report-recovery.md) — invii registrati in telegram_report_sends; recovery al boot entro 90 min stesso giorno Roma + dedup PER FASCIA (non per label); PM2 900M, cambio limite = delete+start+save.
-- [Telegram send times](telegram-send-times.md) — orari per-org in telegramReport.send_times (default 13:30/22:15); scheduler su unione orari, reschedule al save, fascia 02:00–02:59 vietata (DST).
+- [Telegram send times](telegram-send-times.md) — 4 slot per-org (3 parziali + chiusura); legacy resta a 2 fino al salvataggio, dedup per slot/orario e fascia 02:00 vietata (DST).
 - [Prod scheduled-path rehearsal](prod-scheduled-path-rehearsal.md) — per verificare un percorso schedulato di prod senza aspettare il timer: stesse funzioni via tsx da dev + tunnel SSH al DB prod.
 - [Telegram report IVA & annullate](telegram-report-iva-annullate.md) — accessori+servizi mostrati NETTO IVA (÷1.22 via transform post-aggregazione, anche history); i conteggi BiSuite UI includono le ANNULLATE, il report no.
 - [Telegram report message content](telegram-report-message-content.md) — testo = commento discorsivo "direttore vendite" (no elenco, forecast per-org, seed su data); il dettaglio vive SOLO nell'allegato HTML (chip pista: assic=descrizione, energia=CF/IVA da descrizione offerta).

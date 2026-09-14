@@ -605,6 +605,7 @@ export default function ConfigurazioneGara() {
   const now = new Date();
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [activeConfigTab, setActiveConfigTab] = useState('pdv');
   const pendingConfigSelectionRef = useRef<{ id: string; month: number; year: number } | null>(null);
   const configLoadGenerationRef = useRef(0);
   const [pdvList, setPdvList] = useState<GaraConfigPdv[]>([]);
@@ -1964,7 +1965,7 @@ export default function ConfigurazioneGara() {
         {loading && !initialLoaded ? (
           <WizardStepSkeleton className="py-6" />
         ) : (
-          <Tabs defaultValue="pdv" className="space-y-4">
+          <Tabs value={activeConfigTab} onValueChange={setActiveConfigTab} className="space-y-4">
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
             <TabsList className={`grid w-full ${incentivazioneEnabled ? 'grid-cols-5 min-w-[400px]' : 'grid-cols-4 min-w-[320px]'}`}>
               <TabsTrigger value="pdv" className="text-[11px] sm:text-sm px-2 sm:px-3" data-testid="tab-pdv">

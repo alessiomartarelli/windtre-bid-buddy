@@ -1030,10 +1030,10 @@ if (msUntilNextSend) {
     assert.ok(Math.abs(delayMs - expected) < 60_000, `delay ${delayMs} lontano da ${expected}`);
   });
 
-  await test("alle 14:00 Roma il prossimo invio è alle 22:15 (nuovo default)", () => {
+  await test("alle 14:00 Roma il prossimo invio è alle 16:00 (nuovo default)", () => {
     const { delayMs, label } = msUntilNextSend(romeDate(14, 0));
-    assert.equal(label, "22:15");
-    const expected = 8.25 * 3600 * 1000;
+    assert.equal(label, "16:00");
+    const expected = 2 * 3600 * 1000;
     assert.ok(Math.abs(delayMs - expected) < 60_000);
   });
 
@@ -1092,12 +1092,12 @@ if (msUntilNextSend) {
     );
   });
 
-  await test("DST: anche 13:30 → 22:15 nello STESSO giorno del cambio resta corretto", () => {
+  await test("DST: anche 14:00 → 16:00 nello STESSO giorno del cambio resta corretto", () => {
     // Domenica 29/03/2026 14:00 Roma = 12:00 UTC (CEST già attivo).
     const now = new Date(Date.UTC(2026, 2, 29, 12, 0, 0));
     const { delayMs, label } = msUntilNextSend(now);
-    assert.equal(label, "22:15");
-    const expected = 8.25 * 3600 * 1000; // 22:15 - 14:00, nessuna transizione in mezzo
+    assert.equal(label, "16:00");
+    const expected = 2 * 3600 * 1000; // nessuna transizione in mezzo
     assert.ok(Math.abs(delayMs - expected) < 60_000, `delay ${delayMs} lontano da ${expected}`);
   });
 
@@ -1111,7 +1111,7 @@ if (msUntilNextSend) {
   });
 
   // ── telegramSendTimes (Task #334): orari configurabili ──
-  const { parseSendTimes, normalizeTimeLabel, fasciaForLabel, DEFAULT_SEND_TIMES } =
+  const { parseSendTimes, normalizeTimeLabel, fasciaForLabel, sendTimeSlots, DEFAULT_SEND_TIMES } =
     await import("../shared/telegramSendTimes.ts");
 
   await test("normalizeTimeLabel: valida e normalizza HH:MM", () => {
@@ -1125,26 +1125,39 @@ if (msUntilNextSend) {
     assert.equal(normalizeTimeLabel(1330), null);
   });
 
-  await test("parseSendTimes: default, per-campo e orari uguali", () => {
+  await test("parseSendTimes: quattro slot, fallback per-campo e orari uguali", () => {
     assert.deepEqual(parseSendTimes(undefined), DEFAULT_SEND_TIMES);
-    assert.deepEqual(parseSendTimes({ parziale: "12:00", chiusura: "21:00" }),
-      { parziale: "12:00", chiusura: "21:00" });
+    assert.deepEqual(parseSendTimes({
+      parziale1: "09:00", parziale2: "12:00", parziale3: "17:30", chiusura: "21:00",
+    }), { parziale1: "09:00", parziale2: "12:00", parziale3: "17:30", chiusura: "21:00" });
     // Campo invalido ⇒ default solo per quel campo.
-    assert.deepEqual(parseSendTimes({ parziale: "x", chiusura: "21:00" }),
-      { parziale: "13:30", chiusura: "21:00" });
+    assert.deepEqual(parseSendTimes({ parziale1: "x", parziale2: "12:00", parziale3: "17:30", chiusura: "21:00" }),
+      { parziale1: "13:30", parziale2: "12:00", parziale3: "17:30", chiusura: "21:00" });
     // Orari coincidenti ⇒ default completi.
-    assert.deepEqual(parseSendTimes({ parziale: "21:00", chiusura: "21:00" }), DEFAULT_SEND_TIMES);
+    assert.deepEqual(parseSendTimes({ parziale1: "21:00", parziale2: "12:00", parziale3: "17:30", chiusura: "21:00" }), DEFAULT_SEND_TIMES);
   });
 
-  await test("fasciaForLabel: chiusura sul label configurato, fallback ≥18", () => {
-    const times = { parziale: "13:30", chiusura: "22:15" };
+  await test("parseSendTimes: forma legacy mantiene due slot senza migrazione", () => {
+    assert.deepEqual(parseSendTimes({ parziale: "12:00", chiusura: "21:00" }),
+      { parziale1: "12:00", parziale2: null, parziale3: null, chiusura: "21:00" });
+  });
+
+  await test("fasciaForLabel: i primi tre slot sono parziali, l'ultimo chiusura", () => {
+    const times = { parziale1: "13:30", parziale2: "16:00", parziale3: "19:00", chiusura: "22:15" };
     assert.equal(fasciaForLabel("22:15", times), "chiusura");
     assert.equal(fasciaForLabel("13:30", times), "parziale");
+    assert.equal(fasciaForLabel("19:00", times), "parziale");
     // Orario inatteso: fallback sull'ora.
-    assert.equal(fasciaForLabel("19:00", times), "chiusura");
+    assert.equal(fasciaForLabel("20:00", times), "chiusura");
     assert.equal(fasciaForLabel("11:00", times), "parziale");
     // Chiusura anticipata configurata prima delle 18 resta chiusura.
     assert.equal(fasciaForLabel("17:00", { parziale: "12:00", chiusura: "17:00" }), "chiusura");
+  });
+
+  await test("sendTimeSlots: quattro label distinte e fascia per ruolo", () => {
+    const slots = sendTimeSlots(DEFAULT_SEND_TIMES);
+    assert.deepEqual(slots.map((slot) => slot.label), ["13:30", "16:00", "19:00", "22:15"]);
+    assert.deepEqual(slots.map((slot) => slot.fascia), ["parziale", "parziale", "parziale", "chiusura"]);
   });
 
   // ── recoverableSlot (Task #332): recupero al boot della run interrotta ──
@@ -2234,7 +2247,7 @@ if (schedMod.runScheduledSend && storageMod.storage) {
     const config = mockConfigs.get(orgId);
     return config ? { organizationId: orgId, config } : undefined;
   });
-  // Il dedup è per org+fascia+brand (Task #519): il mock normalizza le
+  // Il dedup è per org+time_label+brand (Task #519): il mock normalizza le
   // stringhe legacy in { timeLabel, brandKey: '' } come farebbe il DB.
   const toSentEntry = (l) => (typeof l === "string" ? { timeLabel: l, brandKey: "" } : l);
   patch("getTelegramReportSendLabels", async () => {
@@ -2346,22 +2359,24 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       assert.equal(telegramCalls.length, 2); // messaggio + allegato HTML
     });
 
-    await test("cambio orario dopo il parziale già inviato ⇒ nessun doppio parziale, la chiusura parte regolarmente", async () => {
-      // Parziale inviato alle 13:30, poi l'orario cambia a 12:00: lo slot
-      // "12:00" (es. ri-armato da un reschedule o run di un'altra org) NON
-      // deve produrre un secondo parziale (dedup per fascia, non per label).
+    await test("dedup indipendente per time_label: i tre parziali possono partire tutti", async () => {
       setupScenario({
-        orgs: [{ id: "org-a", sendTimes: { parziale: "12:00", chiusura: "22:15" } }],
-        sent: { "org-a": ["13:30"] },
+        orgs: [{
+          id: "org-a",
+          sendTimes: { parziale1: "12:00", parziale2: "15:00", parziale3: "18:00", chiusura: "22:15" },
+        }],
+        sent: { "org-a": ["12:00"] },
       });
-      await runScheduledSend("12:00");
-      assert.equal(sendsFor("org-a").length, 0, "doppio parziale non atteso");
-      assert.equal(telegramCalls.length, 0);
+      await runScheduledSend("15:00");
+      assert.equal(sendsFor("org-a").length, 1, "secondo parziale indipendente");
+      assert.equal(sendsFor("org-a")[0].label, "15:00");
+      assert.equal(telegramCalls.length, 2);
+      await runScheduledSend("18:00");
+      assert.equal(sendsFor("org-a").length, 2, "terzo parziale indipendente");
       // La chiusura invece parte regolarmente.
       await runScheduledSend("22:15");
-      assert.equal(sendsFor("org-a").length, 1);
-      assert.equal(sendsFor("org-a")[0].label, "22:15");
-      assert.equal(telegramCalls.length, 2);
+      assert.equal(sendsFor("org-a").length, 3);
+      assert.equal(sendsFor("org-a")[2].label, "22:15");
     });
 
     await test("report separati per brand: un invio per brand con PDV, POS filtrati, dedup per brand (Task #519)", async () => {
@@ -2398,7 +2413,7 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       assert.equal(sends.length, 2, "un invio registrato per ciascun brand con PDV");
       assert.deepEqual(sends.map((s) => s.brandKey).sort(), ["b-vf", "b-w3"]);
       assert.equal(telegramCalls.length, 4, "2 report × (messaggio + allegato)");
-      // Rilancio stesso slot ⇒ dedup per org+fascia+brand: nessun doppione.
+      // Rilancio stesso slot ⇒ dedup per org+time_label+brand: nessun doppione.
       telegramCalls = [];
       await runScheduledSend("13:30");
       assert.equal(sendsFor("org-b").length, 2);
@@ -2743,10 +2758,11 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       assert.ok(!h.includes("premio 50,00 €"), "nessun premio VF per un brand diverso da Vodafone/Fastweb");
     });
 
-    await test("recovery al boot con orari cambiati rispetto agli invii registrati ⇒ nessun duplicato", async () => {
+    await test("recovery al boot con orario parziale cambiato ⇒ recupera il nuovo slot", async () => {
       // Ieri sera l'org aveva parziale=13:30 (inviato e registrato come
       // "13:30"); oggi l'orario è 14:00 e il processo riparte alle 14:30:
-      // recoverableSlot indica 14:00 ma la fascia parziale è già coperta.
+      // recoverableSlot indica 14:00: il nuovo slot è indipendente da quello
+      // inviato in precedenza alle 13:30.
       setupScenario({
         orgs: [{ id: "org-a", sendTimes: { parziale: "14:00", chiusura: "22:15" } }],
         sent: { "org-a": ["13:30"] },
@@ -2756,8 +2772,8 @@ if (schedMod.runScheduledSend && storageMod.storage) {
       const rec = recSlot(boot, 90, times);
       assert.deepEqual(rec, { ymd: "2026-07-02", label: "14:00" });
       await runScheduledSend(rec.label, { recovery: true });
-      assert.equal(sendsFor("org-a").length, 0, "recovery non deve duplicare il parziale");
-      assert.equal(telegramCalls.length, 0);
+      assert.equal(sendsFor("org-a").length, 1, "il nuovo orario è uno slot distinto");
+      assert.equal(telegramCalls.length, 2);
     });
 
     await test("recovery al boot recupera davvero le org rimaste senza report", async () => {
@@ -2782,7 +2798,7 @@ if (schedMod.runScheduledSend && storageMod.storage) {
         sent: { "org-a": ["13:30"] },
       });
       const times = await collectSendTimes();
-      assert.deepEqual(times.map((t) => t.label), ["13:30", "15:00", "22:15"]);
+      assert.deepEqual(times.map((t) => t.label), ["13:30", "15:00", "16:00", "19:00", "22:15"]);
       await runScheduledSend("15:00");
       assert.equal(sendsFor("org-a").length, 0);
       assert.equal(sendsFor("org-b").length, 1);
@@ -3058,14 +3074,14 @@ if (schedMod.runScheduledSend && storageMod.storage) {
           assert.equal(activeTimers().length, 1);
         });
 
-        await test("parziale GIÀ inviato spostato a un orario passato ⇒ il reschedule non re-invia", async () => {
+        await test("parziale GIÀ inviato e poi spostato ⇒ il nuovo orario viene recuperato", async () => {
           setupScenario({
             orgs: [{ id: "org-a", sendTimes: { parziale: pastLabel, chiusura: otherLabel } }],
             sent: { "org-a": ["13:30", "22:15"] },
           });
           schedMod.rescheduleTelegramReports();
           await flush(150);
-          assert.equal(sendsFor("org-a").length, 0, "fascia già coperta: nessun doppione dal reschedule");
+          assert.equal(sendsFor("org-a").length, 1, "il nuovo time_label identifica un nuovo slot");
           assert.equal(activeTimers().length, 1);
         });
       } else {

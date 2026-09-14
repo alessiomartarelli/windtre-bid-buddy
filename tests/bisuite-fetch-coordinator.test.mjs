@@ -30,7 +30,7 @@ test("concurrent automatic requests for one organization share one fetch", async
   assert.deepEqual(b, a);
 });
 
-test("a second automatic request within five minutes is skipped", async () => {
+test("a second automatic request within one hour is skipped", async () => {
   let now = 1_000_000;
   const coordinator = new BisuiteFetchCoordinator(
     BISUITE_AUTO_FETCH_COOLDOWN_MS,

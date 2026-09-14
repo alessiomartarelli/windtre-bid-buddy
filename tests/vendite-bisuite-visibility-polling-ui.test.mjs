@@ -54,17 +54,17 @@ test('Vendite BiSuite: il polling Oggi si ferma quando la pagina è nascosta', a
     await page.getByTestId('button-sales-today').click();
     await page.waitForFunction(() => {
       const label = document.querySelector('[data-testid="text-last-bisuite-sync"]');
-      return label?.textContent?.includes('Auto ogni 5 min');
+      return label?.textContent?.includes('Auto ogni ora');
     });
     await page.waitForTimeout(0);
     assert.equal(automaticSyncs.length, 1, 'selezionando Oggi deve partire subito una sincronizzazione automatica');
     assert.equal(automaticSyncs[0].start_date, automaticSyncs[0].end_date);
 
     await setVisibility(page, 'hidden');
-    await page.clock.fastForward(4 * 60 * 1000);
+    await page.clock.fastForward(59 * 60 * 1000);
     await setVisibility(page, 'visible');
     await page.waitForTimeout(0);
-    assert.equal(automaticSyncs.length, 1, 'tornare visibile prima dei 5 minuti non deve anticipare la sincronizzazione');
+    assert.equal(automaticSyncs.length, 1, 'tornare visibile prima dell’ora non deve anticipare la sincronizzazione');
 
     await setVisibility(page, 'hidden');
     await page.clock.fastForward(60 * 1000 + 1);
@@ -73,7 +73,7 @@ test('Vendite BiSuite: il polling Oggi si ferma quando la pagina è nascosta', a
 
     await setVisibility(page, 'visible');
     await page.waitForTimeout(0);
-    assert.equal(automaticSyncs.length, 2, 'tornando visibile dopo 5 minuti la sincronizzazione deve ripartire');
+    assert.equal(automaticSyncs.length, 2, 'tornando visibile dopo un’ora la sincronizzazione deve ripartire');
 
     await page.getByTestId('input-from-date').fill('2020-01-01');
     await page.getByTestId('input-to-date').fill('2020-01-31');
@@ -82,7 +82,7 @@ test('Vendite BiSuite: il polling Oggi si ferma quando la pagina è nascosta', a
       const to = document.querySelector('[data-testid="input-to-date"]');
       return from?.value === '2020-01-01' && to?.value === '2020-01-31';
     });
-    await page.clock.fastForward(10 * 60 * 1000);
+    await page.clock.fastForward(2 * 60 * 60 * 1000);
     await page.waitForTimeout(0);
     assert.equal(automaticSyncs.length, 2, 'gli intervalli storici non devono attivare polling');
 

@@ -14,6 +14,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiUrl } from "@/lib/basePath";
 import { useToast } from "@/hooks/use-toast";
+import { formatBisuiteSyncTime } from "@/lib/bisuiteTime";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,14 +58,7 @@ type StoricoRow = {
 const fmtEur = (n: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n);
 
-const fmtDateTime = (iso: string | null) =>
-  iso
-    ? new Intl.DateTimeFormat("it-IT", {
-        timeZone: "Europe/Rome",
-        day: "2-digit", month: "2-digit", year: "numeric",
-        hour: "2-digit", minute: "2-digit",
-      }).format(new Date(iso))
-    : "—";
+const fmtDateTime = (iso: string | null) => formatBisuiteSyncTime(iso) ?? "—";
 
 // Slug stabile per i data-testid (dealer/RS con spazi/punteggiatura).
 const slug = (s: string) => s.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
@@ -86,9 +80,7 @@ export function usePlafondRicariche(orgId: string) {
   });
 }
 
-export function formatLastSync(iso: string | null | undefined): string | null {
-  return iso ? fmtDateTime(iso) : null;
-}
+export const formatLastSync = formatBisuiteSyncTime;
 
 // Task #551 — le operazioni partono sempre da una riga esistente del
 // riepilogo: 'imposta' (Modifica saldo) o 'soglia' (Soglia avviso).

@@ -1,7 +1,8 @@
 # Report vendite giornaliero su Telegram (Task #239)
 
 Invio automatico del riepilogo vendite BiSuite del giorno corrente in un
-gruppo Telegram, due volte al giorno (default **13:30** e **22:15**,
+gruppo Telegram, quattro volte al giorno (default **13:30**, **16:00**,
+**19:00** e **22:15**,
 configurabili per organizzazione dalla card admin —
 `telegramReport.send_times` — Task #334) ora
 italiana (Europe/Rome, corretto anche col cambio ora legale).
@@ -213,7 +214,7 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
 - **`server/telegramReportScheduler.ts`** — scheduler con lo stesso
   pattern Intl/Europe/Rome di `bisuiteScheduler.ts`: `msUntilNextSend`
   calcola il prossimo orario fra l'unione degli orari configurati dalle org
-  (default 13:30/22:15; validazione in `shared/telegramSendTimes.ts`, la
+  (default 13:30/16:00/19:00/22:15; validazione in `shared/telegramSendTimes.ts`, la
   fascia 02:00–02:59 è vietata perché ambigua col cambio ora), setTimeout ricalcolato dopo
   ogni run (`.unref()`). Per ogni org con bot abilitato: sync BiSuite del
   giorno corrente (se le credenziali sono configurate; un errore di sync
@@ -231,6 +232,9 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
   senza report. Il dedup vale anche per le run normali (doppio scatto ⇒
   nessun duplicato). Un errore di lettura/scrittura del registro non blocca
   mai l'invio (warn nel log). Riduzione picco memoria: gli array derivati
+   Il dedup è indipendente per slot e confronta il `time_label` esatto:
+   i primi tre slot usano sempre la fascia contenuto `parziale`, l'ultimo
+   usa `chiusura`.
   (rows/trendRows) vengono azzerati appena calcolati gli aggregati. Dopo il messaggio di
   testo, `sendDailyReportForOrg` invia anche l'**allegato HTML**
   (Task #248): se l'allegato fallisce il report NON è considerato
@@ -248,9 +252,15 @@ italiana (Europe/Rome, corretto anche col cambio ora legale).
 ## Config per-organizzazione
 
 In `organization_config.config.telegramReport`:
-`{ enabled, bot_token, chat_id }`. Il token è cifrato at-rest con
+`{ enabled, bot_token, chat_id, send_times }`. Il token è cifrato at-rest con
 la stessa AES di SMTP/BiSuite (`server/cryptoSecret.ts`, chiave
 `SMTP_SECRET_KEY`); mai in chiaro nel DB.
+
+`send_times` nella nuova forma è `{ parziale1, parziale2, parziale3, chiusura }`,
+quattro orari `HH:MM` distinti. I config storici `{ parziale, chiusura }`
+sono letti senza migrazione e mantengono due soli slot fino al prossimo
+salvataggio dalla card admin; la UI scrive quindi automaticamente la nuova
+forma. La fascia `02:00–02:59` non è ammessa.
 
 Il **forecast/obiettivi** NON vive più qui: è per-mese in
 `gara_config.config.venditeForecast` (vedi
@@ -268,11 +278,11 @@ admin/super_admin; l'admin è vincolato alla propria org, il super_admin
 sceglie l'org.
 
 - `GET /api/admin/telegram-report?org_id=` — config per il form: `{enabled,
-  has_token, chat_id}`. Il token **non viene mai restituito in chiaro**
+  has_token, chat_id, send_times}`. Il token **non viene mai restituito in chiaro**
   (il logger API serializza i body delle risposte): la UI riceve solo il
   flag `has_token`.
 - `POST /api/admin/telegram-report` — salva `{organization_id, enabled,
-  bot_token, chat_id, clear_token?}` (solo trasporto: il forecast si salva
+  bot_token, chat_id, send_times, clear_token?}` (solo trasporto: il forecast si salva
   via `/api/gara-config`); token cifrato al salvataggio;
   **token vuoto nel payload = mantieni quello già salvato**;
   `clear_token: true` = rimozione esplicita del token (pulsante "Rimuovi
@@ -296,8 +306,9 @@ nei log runtime.
 
 `client/src/components/TelegramReportForm.tsx` — card "Report vendite su
 Telegram" (pattern BiSuiteConnectionForm) in AdminPanel (tab credenziali,
-org propria) e SuperAdminPanel (selettore org). Campi token (mascherato) e
-chat ID con istruzioni BotFather/getUpdates, switch invio automatico,
+org propria) e SuperAdminPanel (selettore org). Campi token (mascherato),
+chat ID, quattro orari (tre parziali + chiusura) con istruzioni
+BotFather/getUpdates, switch invio automatico,
 pulsanti "Invia report di prova" e "Salva configurazione". Solo trasporto:
 nessun campo forecast qui.
 
@@ -320,7 +331,7 @@ campo vuoto = default di sistema (`DEFAULT_PERFORMANCE_WEIGHTS`).
 
 ## Test
 
-`tests/telegram-report.test.mjs` (111 test puri, inclusi i test **pesi
+`tests/telegram-report.test.mjs` (test puri, inclusi i test **pesi
 configurabili** (Task #283: `parsePerformanceWeights` fallback per-campo/
 default, `performanceScore` e `aggregateDailyReport` con pesi custom che
 cambiano l'ordine delle classifiche, moltiplicatore P.IVA configurabile),
@@ -357,7 +368,7 @@ niente nav né script), helper trend
 prodotti/servizi ordinate per fatturato↓, righe `<details>` toccabili con
 pannello inline su tutte le pagine — giorno/storico/mese — riga senza
 articoli resta un `<div>` semplice, nessuno script richiesto), orari
-scheduler (`msUntilNextSend` a cavallo dei due orari
+scheduler (`msUntilNextSend` sui quattro slot
 e di mezzanotte) e `resolveTelegramConfig`. Lancio:
 `bash scripts/run-telegram-report-tests.sh`. La suite è inclusa nello
 step 1a del quality gate di `scripts/deploy-prod.sh`. (Niente workflow
