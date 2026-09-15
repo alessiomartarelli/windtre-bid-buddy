@@ -19,3 +19,13 @@ funzionare per altri brand; non dedurlo dal fatto che usino dati gara. Il
 gating va applicato sia server (requireModule) sia client
 (useEnabledModules), mai in un solo posto. Match WindTre tollerante. Riavvia
 il workflow prima dei test route.
+
+**Regola:** nelle pagine multi-brand, ogni tenant vede solo la tassonomia del
+proprio modello: WindTre non deve esporre piste VF (Luce, Gas, IVA Mobile,
+IVA Wireline, VAS), neppure come opzioni inattive nei filtri.
+
+**Why:** condividere un dizionario globale di etichette tra modelli mostrava
+elementi di altri operatori anche quando i dati del tenant erano WindTre.
+
+**How to apply:** costruire menu, riepiloghi ed export da allowlist per modello,
+non da `Object.keys` del dizionario globale.

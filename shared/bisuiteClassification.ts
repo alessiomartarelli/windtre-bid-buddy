@@ -63,6 +63,21 @@ export const VENDITE_PISTE_WINDTRE: readonly PistaCanvass[] = [
   'protecta',
 ] as const;
 
+/**
+ * Nel filtro Vendite WindTre restano disponibili anche CB e P.IVA, che sono
+ * elementi storici WindTre mostrati come KPI extra. Le piste VF dedicate
+ * (luce/gas/iva_mobile/iva_wireline/vas) non devono mai comparire.
+ */
+export const VENDITE_FILTER_PISTE_WINDTRE: readonly PistaCanvass[] = [
+  'mobile',
+  'fisso',
+  'cb',
+  'iva',
+  'assicurazioni',
+  'protecta',
+  'energia',
+] as const;
+
 /** Piste Vendite del modello Vodafone/Fastweb: NIENTE energia/assicurazioni/
  * protecta/iva generica — energia è divisa in luce+gas, la P.IVA in
  * iva_mobile/iva_wireline/vas, e CB è una pista di prima classe. */
@@ -80,6 +95,11 @@ export const VENDITE_PISTE_VF: readonly PistaCanvass[] = [
 /** Elenco piste della Tabella PDV × Pista (Pezzi) per il modello attivo. */
 export function venditePisteForModel(isVfOrg: boolean): readonly PistaCanvass[] {
   return isVfOrg ? VENDITE_PISTE_VF : VENDITE_PISTE_WINDTRE;
+}
+
+/** Piste ammesse nel selettore della pagina Vendite per il modello attivo. */
+export function venditeFilterPisteForModel(isVfOrg: boolean): readonly PistaCanvass[] {
+  return isVfOrg ? VENDITE_PISTE_VF : VENDITE_FILTER_PISTE_WINDTRE;
 }
 
 /** Serie pista del grafico "Andamento KPI nel periodo" (WindTre storico:

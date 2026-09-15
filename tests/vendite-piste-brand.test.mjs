@@ -10,8 +10,10 @@ import assert from 'node:assert/strict';
 
 import {
   VENDITE_PISTE_WINDTRE,
+  VENDITE_FILTER_PISTE_WINDTRE,
   VENDITE_PISTE_VF,
   venditePisteForModel,
+  venditeFilterPisteForModel,
   TREND_PISTE_WINDTRE,
   trendPisteForModel,
   TREND_EXTRA_WINDTRE,
@@ -35,9 +37,19 @@ test('WindTre: piste tabella e grafico invariate (comportamento storico)', () =>
   assert.equal(pezziExtraColKeysForModel(false), PEZZI_EXTRA_COL_KEYS_WINDTRE);
 });
 
+test('WindTre: il filtro non espone piste Vodafone/Fastweb', () => {
+  const expected = ['mobile', 'fisso', 'cb', 'iva', 'assicurazioni', 'protecta', 'energia'];
+  assert.deepEqual(venditeFilterPisteForModel(false), expected);
+  assert.equal(venditeFilterPisteForModel(false), VENDITE_FILTER_PISTE_WINDTRE);
+  for (const pistaVf of ['luce', 'gas', 'iva_mobile', 'iva_wireline', 'vas']) {
+    assert.ok(!venditeFilterPisteForModel(false).includes(pistaVf), `pista VF "${pistaVf}" visibile in WindTre`);
+  }
+});
+
 test('VF: 8 piste reali in ordine, tabella = grafico', () => {
   const expected = ['mobile', 'fisso', 'cb', 'luce', 'gas', 'iva_mobile', 'iva_wireline', 'vas'];
   assert.deepEqual(venditePisteForModel(true), expected);
+  assert.deepEqual(venditeFilterPisteForModel(true), expected);
   assert.deepEqual(trendPisteForModel(true), expected);
   assert.equal(venditePisteForModel(true), VENDITE_PISTE_VF);
 });

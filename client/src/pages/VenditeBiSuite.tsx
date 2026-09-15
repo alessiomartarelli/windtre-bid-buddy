@@ -104,6 +104,7 @@ import {
   getPistaCanvassLabels,
   PISTA_CANVASS_COLORS,
   venditePisteForModel,
+  venditeFilterPisteForModel,
   trendPisteForModel,
   trendExtraForModel,
   pezziExtraColKeysForModel,
@@ -545,22 +546,21 @@ export default function VenditeBiSuite() {
   // Tabella PDV × Pista (Pezzi) ed export: stesse piste, stesso ordine,
   // stessi totali in tutta la pagina.
   const venditePiste = useMemo(() => venditePisteForModel(isVfModel), [isVfModel]);
+  const venditePisteSet = useMemo(() => new Set<PistaCanvass>(venditePiste), [venditePiste]);
   const trendPiste = useMemo(() => trendPisteForModel(isVfModel), [isVfModel]);
   const trendExtras = useMemo(() => trendExtraForModel(isVfModel), [isVfModel]);
   const pezziExtraColKeys = useMemo(() => pezziExtraColKeysForModel(isVfModel), [isVfModel]);
   // Piste ammesse alla visualizzazione (filtro Pista, riepiloghi, badge):
-  // per VF SOLO le piste del modello (niente energia/assicurazioni/protecta/
-  // P.IVA generica); per WindTre comportamento storico (tutte le label).
-  const vfPisteSet = useMemo(() => new Set<PistaCanvass>(venditePiste), [venditePiste]);
-  const isPistaVisible = useCallback(
-    (p: PistaCanvass) => (isVfModel ? vfPisteSet.has(p) : true),
-    [isVfModel, vfPisteSet],
-  );
+  // ciascun modello vede soltanto la propria tassonomia. WindTre conserva
+  // anche i KPI storici CB/P.IVA, ma non espone mai piste VF.
   const visiblePistaKeys = useMemo(
-    () => (isVfModel
-      ? [...venditePiste]
-      : (Object.keys(pistaLabels) as PistaCanvass[])),
-    [isVfModel, venditePiste, pistaLabels],
+    () => [...venditeFilterPisteForModel(isVfModel)],
+    [isVfModel],
+  );
+  const visiblePisteSet = useMemo(() => new Set<PistaCanvass>(visiblePistaKeys), [visiblePistaKeys]);
+  const isPistaVisible = useCallback(
+    (p: PistaCanvass) => visiblePisteSet.has(p),
+    [visiblePisteSet],
   );
 
   // rawSales include anche le ANNULLATA (visibili nella tabella grezza con badge),
@@ -904,7 +904,7 @@ export default function VenditeBiSuite() {
           for (const [pista, volume] of Object.entries(classifiedArticlePistaCounts(art)) as [PistaCanvass, number][]) {
             if (filterPista !== "all" && pista !== filterPista) continue;
             entry.countByPista[pista] = (entry.countByPista[pista] || 0) + volume;
-            if (vfPisteSet.has(pista)) {
+            if (venditePisteSet.has(pista)) {
               addContribution({
                 key: `pista:${pista}`,
                 label: pistaLabels[pista],
@@ -979,7 +979,7 @@ export default function VenditeBiSuite() {
     return Object.values(map)
       .filter((p) => p.totaleVendite > 0 || p.vendite.length > 0)
       .sort((a, b) => b.totaleVendite - a.totaleVendite);
-  }, [aggregateSales, saleClassifications, articleMatchesFilter, componentFilterActive, filterPista, pezziExtraColKeys, pistaLabels, vfPisteSet]);
+  }, [aggregateSales, saleClassifications, articleMatchesFilter, componentFilterActive, filterPista, pezziExtraColKeys, pistaLabels, venditePisteSet]);
 
   // Andamento giornaliero dei KPI della Tabella PDV × Pista (Pezzi): stessi
   // conteggi classificati e stessi filtri attivi di pdvSummaries, ma
