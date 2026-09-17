@@ -52,8 +52,18 @@ interface AuthError {
 export const AUTH_PROFILE_EVENT = 'mystoredesk:auth-profile';
 export const AUTH_CLEARED_EVENT = 'mystoredesk:auth-cleared';
 
+// useAuth non è un context: più componenti possono montarne un'istanza e
+// completare contemporaneamente lo stesso GET /api/user. Senza deduplica ogni
+// risposta identica genera un nuovo evento globale; i listener ricreano array
+// e oggetti del profilo e possono riattivare effect che rimontano altri useAuth,
+// creando un ciclo (es. tab Incentivazione dentro Configurazione Gara).
+let lastEmittedAuthProfile: string | null = null;
+
 function emitAuthProfile(data: any) {
   try {
+    const signature = JSON.stringify(data);
+    if (signature === lastEmittedAuthProfile) return;
+    lastEmittedAuthProfile = signature;
     window.dispatchEvent(new CustomEvent(AUTH_PROFILE_EVENT, { detail: data }));
   } catch {
     // ambiente senza window/CustomEvent: nessun sync
@@ -62,6 +72,7 @@ function emitAuthProfile(data: any) {
 
 function emitAuthCleared() {
   try {
+    lastEmittedAuthProfile = null;
     window.dispatchEvent(new CustomEvent(AUTH_CLEARED_EVENT));
   } catch {
     // ambiente senza window/CustomEvent
