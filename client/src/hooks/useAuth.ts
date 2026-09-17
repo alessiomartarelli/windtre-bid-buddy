@@ -89,7 +89,10 @@ export function useAuth() {
   const fetchUser = useCallback(async () => {
     const requestSessionVersion = authSessionVersion();
     try {
-      const response = await fetch(apiUrl('/api/user'), { credentials: 'include' });
+      const response = await fetch(apiUrl('/api/user'), {
+        credentials: 'include',
+        cache: 'no-store',
+      });
       if (response.status === 401) {
         if (clearAppearanceAuthSession(requestSessionVersion)) emitAuthCleared();
         setUser(null);

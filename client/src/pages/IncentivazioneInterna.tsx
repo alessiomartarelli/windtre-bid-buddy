@@ -71,7 +71,7 @@ const STATUS_PILL: Record<Semaforo, { label: string; cls: string }> = {
 
 export default function IncentivazioneInterna() {
   const now = new Date();
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const isAdmin = ["super_admin", "admin"].includes(profile?.role || "");
   const { isEnabled } = useEnabledModules();
@@ -100,6 +100,7 @@ export default function IncentivazioneInterna() {
     queryKey: configId
       ? ["/api/incentivazione/dashboard", month, year, configId]
       : ["/api/incentivazione/dashboard", month, year],
+    enabled: !authLoading && !!profile,
   });
 
   const config: IncentivazioneConfig = useMemo(

@@ -425,6 +425,12 @@ export async function registerRoutes(
 
   // Get current user profile with organization
   app.get("/api/user", isAuthenticated, async (req: any, res) => {
+    // Il profilo di sessione non deve mai ricevere 304: più istanze di
+    // useAuth possono richiederlo insieme e Fetch tratta 304 come risposta
+    // senza body/non-ok, facendo lampeggiare componenti protetti.
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
     try {
       const userId = req.session.userId;
       const profile = await storage.getProfile(userId);

@@ -76,3 +76,4 @@
 - [Punti da POS non censiti](dashboard-unconfigured-pos-points.md) — i prodotti mappati contribuiscono anche da POS fuori struttura; bonus gara solo ai PDV configurati.
 - [Extra Gara IVA e FRITZ](extra-gara-iva-fritz.md) — ogni linea P.IVA vale 1 punto; FRITZ aggiunge 0,5 una sola volta per linea, mai come punteggio autonomo.
 - [Punteggio pista Fisso P.IVA](fisso-piva-punti.md) — nella pista Fisso: consumer 1 punto, ogni linea P.IVA 1,5; FRITZ associato aggiunge 1 punto.
+- [Auth profile must not return 304](auth-profile-no-304.md) — `/api/user` è consumata da istanze useAuth indipendenti: deve essere no-store/200, o un 304 senza body azzera profili locali e fa lampeggiare i guard.

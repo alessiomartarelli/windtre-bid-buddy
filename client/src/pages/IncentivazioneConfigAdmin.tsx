@@ -54,7 +54,7 @@ const MONTHS = [
 
 export function IncentivazioneConfigSection() {
   const now = new Date();
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const isAdmin = ["super_admin", "admin"].includes(profile?.role || "");
 
@@ -73,7 +73,7 @@ export function IncentivazioneConfigSection() {
 
   const { data: allConfigs, isLoading, isError } = useQuery<ConfigListItem[]>({
     queryKey: ["/api/incentivazione/configs"],
-    enabled: isAdmin,
+    enabled: !authLoading && isAdmin,
   });
 
   const periodConfigs = useMemo(
@@ -132,6 +132,16 @@ export function IncentivazioneConfigSection() {
   });
 
   const yearOptions = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
+
+  if (authLoading) {
+    return (
+      <Card className="p-6 space-y-3" data-testid="incentivazione-auth-loading">
+        <Skeleton className="h-6 w-72 max-w-full" />
+        <Skeleton className="h-4 w-full max-w-xl" />
+        <Skeleton className="h-24 w-full" />
+      </Card>
+    );
+  }
 
   if (!isAdmin) {
     return (
