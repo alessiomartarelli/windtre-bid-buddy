@@ -115,24 +115,26 @@ function assertVfExportRows(aoa, label) {
   // Colonne extra VF: Telefoni + € (niente IVA/CB come colonne extra).
   assert.deepEqual(
     header.slice(4 + expectedPisteHeaders.length),
-    ['Telefoni', '€ Accessori (netto IVA)', '€ Servizi (netto IVA)', 'Totale Volumi'],
-    `${label}: colonne extra VF (senza IVA/CB) + Totale`,
+    ['Telefoni', '€ Accessori (netto IVA)', '€ Servizi (netto IVA)'],
+    `${label}: colonne extra VF (senza IVA/CB e senza totale di riga)`,
   );
+  assert.equal(header.includes('Totale Volumi'), false, `${label}: colonna "Totale Volumi" assente`);
   for (const bad of ['Energia - Volumi', 'Assicurazioni - Volumi', 'Windtre Protetti - Volumi', 'P.IVA - Volumi', 'IVA', 'CB']) {
     assert.ok(!header.includes(bad), `${label}: colonna WindTre-only/extra "${bad}" assente (header: ${header.join(', ')})`);
   }
 
   const body = aoa.slice(1).filter((r) => r.some((v) => v !== ''));
-  // [mobile,fisso,cb,luce,gas,iva_mobile,iva_wireline,vas, tel,acc,srv, tot]
+  // [mobile,fisso,cb,luce,gas,iva_mobile,iva_wireline,vas, tel,acc,srv]
   const expected = [
-    ['RS', 'VF Uno Srl', '', '', 2, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0, 10],
-    ['PDV', 'VF Uno Srl', 'POSV1', 'Negozio VF 1', 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 5],
-    ['PDV', 'VF Uno Srl', 'POSV2', 'Negozio VF 2', 0, 0, 0, 0, 1, 1, 1, 2, 0, 0, 0, 5],
-    ['TOTALE', 'Totale complessivo', '', '', 2, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0, 10],
+    ['RS', 'VF Uno Srl', '', '', 2, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0],
+    ['PDV', 'VF Uno Srl', 'POSV1', 'Negozio VF 1', 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+    ['PDV', 'VF Uno Srl', 'POSV2', 'Negozio VF 2', 0, 0, 0, 0, 1, 1, 1, 2, 0, 0, 0],
+    ['TOTALE', 'Totale complessivo', '', '', 2, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0],
   ];
   assert.equal(body.length, expected.length, `${label}: ${expected.length} righe attese, trovate ${body.length}: ${JSON.stringify(body.map((r) => [r[0], r[1]]))}`);
   expected.forEach((exp, i) => {
     const row = body[i];
+    assert.equal(row.length, header.length, `${label}: riga ${i + 1} allineata all'header`);
     const got = [row[0], row[1], String(row[2]), String(row[3]), ...row.slice(4).map(Number)];
     assert.deepEqual(got, exp, `${label}: riga ${i + 1} (${exp[0]} ${exp[1]})`);
   });
@@ -229,7 +231,8 @@ test('Vendite BiSuite (org Vodafone/Fastweb): grafico, tabella, filtro Pista ed 
     for (const [p, v] of Object.entries(expectedTotals)) {
       assert.equal((await page.getByTestId(`cell-pezzi-tot-${p}`).innerText()).trim(), v, `totale colonna ${p}`);
     }
-    assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '10', 'totale generale');
+    assert.equal(await card.getByRole('columnheader', { name: 'Totale', exact: true }).count(), 0, 'colonna Totale assente');
+    assert.equal(await page.getByTestId('cell-pezzi-tot-generale').count(), 0, 'cella totale generale assente');
 
     // ── Grafico Andamento KPI: chip = 8 piste VF + Totale, niente piste
     // WindTre-only né P.IVA generica. ──
@@ -285,6 +288,7 @@ test('Vendite BiSuite (org Vodafone/Fastweb): grafico, tabella, filtro Pista ed 
     const pdfTokens = pdfTextTokens(bufP);
     assert.ok(pdfTokens.length > 0, 'PDF: testo estraibile');
     const pdfNoSpace = pdfTokens.join(' ').replace(/\s+/g, '');
+    assert.ok(!pdfNoSpace.includes('TotaleVolumi'), 'PDF: header "Totale Volumi" assente');
     // Header pista VF presenti (le celle autotable possono spezzare le label
     // anche a metà parola → confronto senza spazi).
     for (const p of VENDITE_PISTE_VF) {
@@ -294,17 +298,17 @@ test('Vendite BiSuite (org Vodafone/Fastweb): grafico, tabella, filtro Pista ed 
     for (const bad of ['Energia-Volumi', 'Assicurazioni-Volumi', 'WindtreProtetti', 'P.IVA-Volumi']) {
       assert.ok(!pdfNoSpace.includes(bad), `PDF: "${bad}" assente nel modello VF`);
     }
-    // Riga TOTALE: [8 piste] + [tel, acc, srv] + totale = 12 numeri.
+    // Riga TOTALE: [8 piste] + [tel, acc, srv] = 11 numeri.
     const idxTot = pdfTokens.indexOf('Totale complessivo');
     assert.ok(idxTot >= 0, 'PDF: riga "Totale complessivo" presente');
     const totNums = pdfTokens.slice(idxTot + 1, idxTot + 25)
       .filter((t) => /^-?\d+(\.\d+)?$/.test(t))
       .map(Number)
-      .slice(0, 12);
+      .slice(0, 11);
     assert.deepEqual(
       totNums,
-      [2, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0, 10],
-      `PDF: TOTALE [mob,fis,cb,luce,gas,ivaM,ivaW,vas,tel,acc,srv,tot] (trovato: ${totNums.join(',')})`,
+      [2, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0],
+      `PDF: TOTALE [mob,fis,cb,luce,gas,ivaM,ivaW,vas,tel,acc,srv] (trovato: ${totNums.join(',')})`,
     );
 
     await page.close();

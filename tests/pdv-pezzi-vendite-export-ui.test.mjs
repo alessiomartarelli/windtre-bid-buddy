@@ -91,7 +91,7 @@ function sheetAoa(ws) {
 }
 
 // Verifica header + righe RS/PDV/TOTALE contro i valori attesi.
-// expected: array di righe [Tipo, RS, CodicePDV, NomePDV, mobile, fisso, energia, assicurazioni, totale]
+// expected: righe senza totale finale; restano i valori delle singole piste.
 function assertExportRows(aoa, { gammaDisplay }, label) {
   const header = aoa[0];
   assert.equal(header[0], 'Tipo', `${label}: prima colonna header`);
@@ -108,19 +108,19 @@ function assertExportRows(aoa, { gammaDisplay }, label) {
   const cEne = col('Energia - Volumi');
   const cAss = col('Assicurazioni - Volumi');
   const cPro = col('Windtre Protetti - Volumi');
-  const cTot = col('Totale Volumi');
+  assert.equal(header.includes('Totale Volumi'), false, `${label}: colonna "Totale Volumi" assente`);
 
   const body = aoa.slice(1).filter((r) => r.some((v) => v !== ''));
 
   // Ordine: RS in ordine alfabetico, PDV di ogni RS subito dopo, TOTALE in fondo.
   const expected = [
-    ['RS', 'Delta Srl', '', '', 0, 1, 0, 1, 1, 3],
-    ['PDV', 'Delta Srl', 'POSD1', 'Negozio Delta', 0, 1, 0, 1, 1, 3],
-    ['RS', gammaDisplay, '', '', 4, 3, 4, 0, 0, 11],
-    ['PDV', gammaDisplay, 'POSG1', 'Negozio Gamma 1', 2, 1, 0, 0, 0, 3],
-    ['PDV', gammaDisplay, 'POSG2', 'Negozio Gamma 2', 1, 0, 3, 0, 0, 4],
-    ['PDV', gammaDisplay, 'POSG3', 'Negozio Gamma 3', 1, 2, 1, 0, 0, 4],
-    ['TOTALE', 'Totale complessivo', '', '', 4, 4, 4, 1, 1, 14],
+    ['RS', 'Delta Srl', '', '', 0, 1, 0, 1, 1],
+    ['PDV', 'Delta Srl', 'POSD1', 'Negozio Delta', 0, 1, 0, 1, 1],
+    ['RS', gammaDisplay, '', '', 4, 3, 4, 0, 0],
+    ['PDV', gammaDisplay, 'POSG1', 'Negozio Gamma 1', 2, 1, 0, 0, 0],
+    ['PDV', gammaDisplay, 'POSG2', 'Negozio Gamma 2', 1, 0, 3, 0, 0],
+    ['PDV', gammaDisplay, 'POSG3', 'Negozio Gamma 3', 1, 2, 1, 0, 0],
+    ['TOTALE', 'Totale complessivo', '', '', 4, 4, 4, 1, 1],
   ];
   assert.equal(
     body.length,
@@ -129,7 +129,8 @@ function assertExportRows(aoa, { gammaDisplay }, label) {
   );
   expected.forEach((exp, i) => {
     const row = body[i];
-    const got = [row[0], row[1], String(row[2]), String(row[3]), +row[cMob], +row[cFis], +row[cEne], +row[cAss], +row[cPro], +row[cTot]];
+    assert.equal(row.length, header.length, `${label}: riga ${i + 1} allineata all'header`);
+    const got = [row[0], row[1], String(row[2]), String(row[3]), +row[cMob], +row[cFis], +row[cEne], +row[cAss], +row[cPro]];
     assert.deepEqual(got, exp, `${label}: riga ${i + 1} (${exp[0]} ${exp[1]})`);
   });
 
@@ -217,7 +218,8 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     const rsCount = await page.locator('[data-testid^="row-pezzi-rs-"]').count();
     assert.equal(rsCount, 2, `a schermo: 2 righe RS (Gamma unificata + Delta), trovate ${rsCount}`);
     assert.equal((await page.getByTestId('cell-pezzi-tot-mobile').innerText()).trim(), '4');
-    assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '14');
+    assert.equal(await card.getByRole('columnheader', { name: 'Totale', exact: true }).count(), 0, 'a schermo: colonna Totale assente');
+    assert.equal(await page.getByTestId('cell-pezzi-tot-generale').count(), 0, 'a schermo: cella totale generale assente');
 
     // ── Task #443: righe RS espandibili anche da tastiera ──
     // Il toggle è un vero <button> con aria-expanded e aria-controls che
@@ -259,6 +261,8 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     await page.getByTestId('btn-pezzi-pdv-toggle-POSD1').click();
     const saleDrilldown = page.getByTestId('pdv-sales-drilldown');
     await saleDrilldown.waitFor({ state: 'visible', timeout: 5000 });
+    const detailCell = saleDrilldown.locator('xpath=ancestor::td');
+    assert.equal(await detailCell.getAttribute('colspan'), '11', 'dettaglio PDV occupa tutte le colonne rimaste');
     const drilldownText = await saleDrilldown.innerText();
     assert.match(drilldownText, /Dettaglio volumi del PDV/i);
     assert.match(drilldownText, /Fisso/i);
@@ -291,7 +295,7 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     assert.equal(await mobileHeader.getAttribute('aria-sort'), 'ascending', 'Mobile: primo click crescente');
     assert.deepEqual(await visibleGammaPdvCodes(), ['POSG2', 'POSG3', 'POSG1'], 'Mobile crescente: pareggio risolto per nome, poi valore più alto');
     assert.equal(await page.locator('[data-testid^="row-pezzi-rs-"]').count(), 2, 'ordinamento: gruppi RS invariati');
-    assert.equal((await page.getByTestId('cell-pezzi-tot-generale').innerText()).trim(), '14', 'ordinamento: totale invariato');
+    assert.equal((await page.getByTestId('cell-pezzi-tot-mobile').innerText()).trim(), '4', 'ordinamento: totale colonna invariato');
 
     await mobileSort.click();
     assert.equal(await mobileHeader.getAttribute('aria-sort'), 'descending', 'Mobile: secondo click decrescente');
@@ -348,23 +352,24 @@ test('Vendite BiSuite: export Excel/CSV/PDF della Tabella PDV × Pista (Pezzi) c
     // → confronto senza spazi.
     assert.ok(pdfJoined.replace(/\s+/g, '').includes('WindtreProtetti'), `PDF: header "Windtre Protetti" presente (testo: ${pdfJoined.slice(0, 400)})`);
     // Riga RS Delta: [mobile, fisso, energia, assicurazioni, protecta,
-    // iva, cb, telefoni, € acc, € srv, totale] = [0,1,0,1,1,0,0,0,0,0,3]
+    // iva, cb, telefoni, € acc, € srv] = [0,1,0,1,1,0,0,0,0,0]
     // — la protecta seminata (ALLARMI) conta 1 nella 5ª colonna pista.
     const idxDelta = pdfTokens.indexOf('Delta Srl');
     assert.ok(idxDelta >= 0, 'PDF: riga RS Delta presente');
     const deltaNums = pdfTokens.slice(idxDelta + 1, idxDelta + 20)
       .filter(t => /^-?\d+(\.\d+)?$/.test(t))
       .map(Number)
-      .slice(0, 11);
-    assert.deepEqual(deltaNums, [0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 3], `PDF: RS Delta [mob,fis,ene,ass,pro,iva,cb,tel,acc,srv,tot] (trovato: ${deltaNums.join(',')})`);
-    // Riga TOTALE: protecta = 1 e totale generale = 14.
+      .slice(0, 10);
+    assert.deepEqual(deltaNums, [0, 1, 0, 1, 1, 0, 0, 0, 0, 0], `PDF: RS Delta [mob,fis,ene,ass,pro,iva,cb,tel,acc,srv] (trovato: ${deltaNums.join(',')})`);
+    assert.ok(!pdfJoined.replace(/\s+/g, '').includes('TotaleVolumi'), 'PDF: header "Totale Volumi" assente');
+    // Riga TOTALE: restano i totali delle singole colonne.
     const idxTotPdf = pdfTokens.indexOf('Totale complessivo');
     assert.ok(idxTotPdf >= 0, 'PDF: riga "Totale complessivo" presente');
     const totNumsPdf = pdfTokens.slice(idxTotPdf + 1, idxTotPdf + 20)
       .filter(t => /^-?\d+(\.\d+)?$/.test(t))
       .map(Number)
-      .slice(0, 11);
-    assert.deepEqual(totNumsPdf, [4, 4, 4, 1, 1, 0, 0, 0, 0, 0, 14], `PDF: TOTALE [mob,fis,ene,ass,pro,iva,cb,tel,acc,srv,tot] (trovato: ${totNumsPdf.join(',')})`);
+      .slice(0, 10);
+    assert.deepEqual(totNumsPdf, [4, 4, 4, 1, 1, 0, 0, 0, 0, 0], `PDF: TOTALE [mob,fis,ene,ass,pro,iva,cb,tel,acc,srv] (trovato: ${totNumsPdf.join(',')})`);
 
     await page.close();
     await context.close();
