@@ -25,6 +25,7 @@ import {
   WINDTRE_ONLY_PISTAS,
   getPistaCanvassLabels,
 } from '../shared/bisuiteClassification.ts';
+import { buildPdvPezziColumns } from '../shared/pdvPezziColumns.ts';
 
 test('WindTre: piste tabella e grafico invariate (comportamento storico)', () => {
   assert.deepEqual(venditePisteForModel(false), ['mobile', 'fisso', 'energia', 'assicurazioni', 'protecta']);
@@ -83,4 +84,26 @@ test('ogni pista di entrambi i modelli ha una label', () => {
 test('la pista cb è Upselling solo per Vodafone/Fastweb', () => {
   assert.equal(getPistaCanvassLabels(true).cb, 'Upselling');
   assert.equal(getPistaCanvassLabels(false).cb, 'CB');
+});
+
+test('vista ed export condividono ordine e intestazioni per WindTre e VF', () => {
+  for (const isVf of [false, true]) {
+    const labels = getPistaCanvassLabels(isVf);
+    const columns = buildPdvPezziColumns(
+      venditePisteForModel(isVf),
+      labels,
+      pezziExtraColKeysForModel(isVf),
+      true,
+    );
+    assert.deepEqual(
+      columns.map((column) => column.key),
+      [...venditePisteForModel(isVf), ...pezziExtraColKeysForModel(isVf)],
+      `ordine colonne condiviso (vf=${isVf})`,
+    );
+    assert.deepEqual(
+      columns.filter((column) => column.kind === 'pista').map((column) => column.exportLabel),
+      venditePisteForModel(isVf).map((pista) => `${labels[pista]} - Volumi`),
+      `intestazioni export derivate dalle label della vista (vf=${isVf})`,
+    );
+  }
 });
