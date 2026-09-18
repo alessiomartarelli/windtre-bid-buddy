@@ -77,3 +77,4 @@
 - [Extra Gara IVA e FRITZ](extra-gara-iva-fritz.md) — ogni linea P.IVA vale 1 punto; FRITZ aggiunge 0,5 una sola volta per linea, mai come punteggio autonomo.
 - [Punteggio pista Fisso P.IVA](fisso-piva-punti.md) — nella pista Fisso: consumer 1 punto, ogni linea P.IVA 1,5; FRITZ associato aggiunge 1 punto.
 - [Auth profile propagation](auth-profile-no-304.md) — useAuth ha istanze indipendenti: profilo no-store/200 e deduplica eventi globali, o gli effect dipendenti da oggetti entrano in cicli di rimontaggio.
+- [Impianto OK è solo gettone](impianto-ok-gettone.md) — Impianto OK Luce/Gas va escluso da pezzi, premi e punti Assicurazioni e mostrato separatamente come gettone extra.

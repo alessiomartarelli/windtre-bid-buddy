@@ -191,6 +191,8 @@ export interface DailyReportAggregates {
    * categoria BiSuite (pezzi decrescenti).
    */
   couponCaring: { pezzi: number; importo: number; byCategoria: CategoriaImportoAggregate[] };
+  /** Gettoni extra Impianto OK, esclusi da Assicurazioni e dai punti. */
+  impiantoOk: { pezzi: number; importo: number; byCategoria: CategoriaImportoAggregate[] };
   /** Aggregato per punto vendita, ordinato per importo decrescente. */
   perPdv: PdvReportAggregate[];
   /**
@@ -306,6 +308,8 @@ export function aggregateDailyReport(
   const assicurazioniMap = new Map<string, CategoriaImportoAggregate>();
   const couponCaring = { pezzi: 0, importo: 0 };
   const couponCaringMap = new Map<string, CategoriaImportoAggregate>();
+  const impiantoOk = { pezzi: 0, importo: 0 };
+  const impiantoOkMap = new Map<string, CategoriaImportoAggregate>();
   // Accumulatore del drill-down per singolo PDV/addetto (Task #251).
   interface DrillAcc {
     countByPista: Partial<Record<PistaCanvass, number>>;
@@ -385,6 +389,15 @@ export function aggregateDailyReport(
         ccEntry.pezzi++;
         ccEntry.importo += article.prezzo;
         couponCaringMap.set(ccLabel, ccEntry);
+      }
+      if (article.impiantoOk && pistaVisible("assicurazioni")) {
+        impiantoOk.pezzi++;
+        impiantoOk.importo += article.prezzo;
+        const label = article.descrizione.trim() || "IMPIANTO OK";
+        const entry = impiantoOkMap.get(label) ?? { categoria: label, pezzi: 0, importo: 0 };
+        entry.pezzi++;
+        entry.importo += article.prezzo;
+        impiantoOkMap.set(label, entry);
       }
       for (const [pista, volume] of Object.entries(classifiedArticlePistaCounts(article)) as [PistaCanvass, number][]) {
         if (!pistaVisible(pista)) continue;
@@ -575,6 +588,12 @@ export function aggregateDailyReport(
     couponCaring: {
       ...couponCaring,
       byCategoria: Array.from(couponCaringMap.values()).sort(
+        (a, b) => b.pezzi - a.pezzi || b.importo - a.importo || a.categoria.localeCompare(b.categoria, "it"),
+      ),
+    },
+    impiantoOk: {
+      ...impiantoOk,
+      byCategoria: Array.from(impiantoOkMap.values()).sort(
         (a, b) => b.pezzi - a.pezzi || b.importo - a.importo || a.categoria.localeCompare(b.categoria, "it"),
       ),
     },

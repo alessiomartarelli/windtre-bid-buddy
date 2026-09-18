@@ -738,6 +738,7 @@ export default function VenditeBiSuite() {
     const ivaByPista: Partial<Record<PistaCanvass, number>> = {};
     const categorieByPista: CategorieByPista = {};
     const couponCaring = { pezzi: 0, importo: 0 };
+    const impiantoOk = { pezzi: 0, importo: 0 };
     let totalArticles = 0;
     let filteredArticles = 0;
     let filteredAmount = 0;
@@ -804,6 +805,10 @@ export default function VenditeBiSuite() {
           couponCaring.pezzi++;
           couponCaring.importo += art.prezzo;
         }
+        if (art.impiantoOk) {
+          impiantoOk.pezzi++;
+          impiantoOk.importo += art.prezzo;
+        }
         if (art.type === 'prodotti') {
           const key = (art.categoriaNome || 'SENZA CATEGORIA').toUpperCase();
           if (!prodottiByCategory[key]) prodottiByCategory[key] = { pezzi: 0, importo: 0 };
@@ -831,6 +836,7 @@ export default function VenditeBiSuite() {
       ivaByPista,
       categorieByPista,
       couponCaring,
+      impiantoOk,
       totalArticles,
       filteredArticles,
       filteredAmount,
@@ -1878,6 +1884,17 @@ export default function VenditeBiSuite() {
                             countClassName="bg-amber-500/10 text-amber-700 border-amber-500/20"
                           />
                         </div>
+                    )}
+                    {globalCounts.impiantoOk.pezzi > 0 && (
+                      <div className="mt-1 border-t border-dashed pt-1.5">
+                        <SummaryMetricRow
+                          testId="row-impianto-ok"
+                          label={<span className="flex min-w-0 items-center gap-1.5"><Tag className="h-3 w-3 shrink-0 text-emerald-600" /><span className="truncate">Impianto OK <span className="text-xs">(gettoni extra)</span></span></span>}
+                          amount={globalCounts.impiantoOk.importo > 0 ? <span className="font-semibold text-muted-foreground">{formatCurrency(globalCounts.impiantoOk.importo)}</span> : undefined}
+                          count={globalCounts.impiantoOk.pezzi}
+                          countClassName="bg-emerald-500/10 text-emerald-700 border-emerald-500/20"
+                        />
+                      </div>
                     )}
                   </div>
                   <ArticleIncassoRecap incasso={globalCounts.incassoByType.canvass} formatCurrency={formatCurrency} />

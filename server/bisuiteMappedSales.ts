@@ -4,6 +4,7 @@ import {
   classifyArticle,
   classifyCategory,
   classificationPistaCounts,
+  isAssicurazioneImpiantoOk,
   isCouponCaring,
   isPezzoIva,
   type PistaCanvass,
@@ -278,10 +279,12 @@ export function aggregateMappedSales(
     for (const [articleIndex, art] of articoli.entries()) {
       const catNome = (art.categoria?.nome || '').toUpperCase().trim();
       const tipNome = String(art.tipologia?.nome || '').trim();
+      const desc = String(art.descrizione || '').trim();
       const coupon = isCouponCaring(catNome, tipNome);
+      const impiantoOk = isAssicurazioneImpiantoOk(catNome, tipNome, desc);
       // Il conteggio VF deve vedere anche segnali Upselling agganciati a un
       // articolo prodotto/servizio, prima dei relativi `continue`.
-      if (canvassIndex && !coupon) {
+      if (canvassIndex && !coupon && !impiantoOk) {
         const vf = classifyArticle(art, canvassIndex, canvassKpiRules);
         if (vf) {
           for (const [pista, volume] of Object.entries(
@@ -319,13 +322,29 @@ export function aggregateMappedSales(
       // pezzi P.IVA e cambi piano CB, per categoria BiSuite (non per regola
       // di mapping: così i twin partnership delle regole CB non raddoppiano).
       {
-        const clsPista = coupon ? undefined : classifyCategory(catNome)?.pista;
+        const clsPista = coupon || impiantoOk ? undefined : classifyCategory(catNome)?.pista;
         if (clsPista && isPezzoIva({ pista: clsPista, categoriaNome: catNome, descrizione: String(art.descrizione || '') })) {
           byPdv[codicePos].pezziIva += 1;
         }
         if (clsPista === 'cb') {
           byPdv[codicePos].cbCambiPiano += 1;
         }
+      }
+      if (impiantoOk) {
+        const existing = byPdv[codicePos].items.find(
+          (i) => i.pista === 'assicurazioni' && i.targetCategory === 'impianto_ok',
+        );
+        if (existing) existing.pezzi++;
+        else byPdv[codicePos].items.push({
+          pista: 'assicurazioni',
+          targetCategory: 'impianto_ok',
+          targetLabel: 'Impianto OK',
+          pezzi: 1,
+          canone: 0,
+          ruleType: 'base',
+        });
+        mappedCount++;
+        continue;
       }
       const mappedResults = mapBiSuiteArticle(art, clienteTipo, rules);
       if (mappedResults.length === 0) continue;

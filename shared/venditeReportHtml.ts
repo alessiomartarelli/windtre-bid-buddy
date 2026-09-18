@@ -702,6 +702,24 @@ function couponCaringSection(a: DailyReportAggregates, scope: "giorno" | "mese")
     </div>`;
 }
 
+function impiantoOkSection(a: DailyReportAggregates, scope: "giorno" | "mese"): string {
+  const extra = a.impiantoOk;
+  if (!extra || extra.pezzi === 0) return "";
+  const when = scope === "giorno" ? "oggi" : "nel mese";
+  const maxPezzi = Math.max(...extra.byCategoria.map((c) => c.pezzi), 1);
+  const rows = extra.byCategoria.map((c) => {
+    const width = Math.max(6, Math.round((c.pezzi / maxPezzi) * 100));
+    return `<div class="prow">
+      <div class="prow-head"><span class="pname" style="color:#10b981">${escapeHtml(c.categoria)}</span><span class="pval">${c.pezzi} pz · ${escapeHtml(fmtEuro(c.importo))}</span></div>
+      <div class="pbar"><i style="width:${width}%;background:linear-gradient(90deg,#10b981,#10b98166)"></i></div>
+    </div>`;
+  }).join("\n        ");
+  return `<div class="card"><h2>🎟️ Gettoni Impianto OK</h2>
+      <div class="tk-row"><span class="tk-kpi">${extra.pezzi} pz ${when} · ${escapeHtml(fmtEuro(extra.importo))} — esclusi da Assicurazioni e punti gara</span></div>
+      ${rows}
+    </div>`;
+}
+
 /** Sezioni complete di una giornata (hero + card), riusate per ogni pagina. */
 function daySections(
   a: DailyReportAggregates,
@@ -723,6 +741,7 @@ function daySections(
     parts.push(trendSection(trendSlice));
     parts.push(pisteSection(a, trendSlice, content, labels, "La gara delle piste", vfPisteConfig));
     parts.push(couponCaringSection(a, "giorno"));
+    parts.push(impiantoOkSection(a, "giorno"));
     parts.push(tipiSection(a));
     parts.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
     parts.push(categorieSection("Servizi (netto IVA)", a.serviziByCategoria, TYPE_THEME.servizi));
@@ -826,6 +845,7 @@ function monthSections(
     parts.push(projectionSection(projection, content));
     parts.push(pisteSection(a, undefined, content, labels, "La gara delle piste · mese", vfPisteConfig));
     parts.push(couponCaringSection(a, "mese"));
+    parts.push(impiantoOkSection(a, "mese"));
     parts.push(tipiSection(a));
     parts.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
     parts.push(categorieSection("Servizi (netto IVA)", a.serviziByCategoria, TYPE_THEME.servizi));
@@ -874,6 +894,7 @@ export function buildVenditeReportHtml(p: VenditeReportHtmlParams): string {
       sections.push(trendSection(trend));
       sections.push(pisteSection(a, trend, content, pistaLabels, "La gara delle piste", p.vfPisteConfig));
       sections.push(couponCaringSection(a, "giorno"));
+      sections.push(impiantoOkSection(a, "giorno"));
       sections.push(tipiSection(a));
       sections.push(categorieSection("Prodotti per categoria (accessori netto IVA)", a.prodottiByCategoria, TYPE_THEME.prodotti));
       sections.push(categorieSection("Servizi (netto IVA)", a.serviziByCategoria, TYPE_THEME.servizi));

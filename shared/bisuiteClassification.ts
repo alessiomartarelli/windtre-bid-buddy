@@ -528,6 +528,9 @@ export interface ClassifiedArticle {
   /** Coupon Caring (MIA TIED/UNTIED + tipologia COUPON CARING …): escluso
    * dai pezzi CB, conteggiato nel report dedicato. */
   couponCaring?: boolean;
+  /** Assicurazione "Impianto OK" Luce/Gas: esclusa dalla pista Assicurazioni
+   * e dai punti gara; vale solo come gettone extra dedicato. */
+  impiantoOk?: boolean;
 }
 
 export interface SaleClassification {
@@ -540,6 +543,8 @@ export interface SaleClassification {
   primaryPista: PistaCanvass | null;
   /** Coupon Caring: pezzi e importo (esclusi dai pezzi/importi pista CB). */
   couponCaring: { pezzi: number; importo: number };
+  /** Impianto OK: gettoni extra esclusi dalla pista Assicurazioni. */
+  impiantoOk: { pezzi: number; importo: number };
 }
 
 export function classifiedArticlePistaCounts(
@@ -578,6 +583,21 @@ export function isCouponCaring(categoriaNome: string, tipologiaNome: string): bo
   const cat = categoriaNome.toUpperCase().trim();
   if (cat !== 'MIA TIED' && cat !== 'MIA UNTIED') return false;
   return tipologiaNome.toUpperCase().trim().startsWith('COUPON CARING');
+}
+
+/**
+ * Gettone extra "Impianto OK": BiSuite lo invia nella categoria
+ * ASSICURAZIONI / tipologia ASSICURAZIONI LUCE E GAS, distinguendo LUCE e GAS
+ * nella descrizione. Non è un pezzo Assicurazioni e non genera punti gara.
+ */
+export function isAssicurazioneImpiantoOk(
+  categoriaNome: string,
+  tipologiaNome: string,
+  descrizione: string,
+): boolean {
+  return categoriaNome.toUpperCase().trim() === 'ASSICURAZIONI'
+    && tipologiaNome.toUpperCase().trim() === 'ASSICURAZIONI LUCE E GAS'
+    && /^IMPIANTO OK(?:\s|$)/.test(descrizione.toUpperCase().trim());
 }
 
 /** Forma minima di articolo classificato per il conteggio "pezzi IVA". */
@@ -682,6 +702,7 @@ export function classifySaleArticles(
   const countByPista: Partial<Record<PistaCanvass, number>> = {};
   const amountByPista: Partial<Record<PistaCanvass, number>> = {};
   const couponCaring = { pezzi: 0, importo: 0 };
+  const impiantoOk = { pezzi: 0, importo: 0 };
 
   for (const art of articoli) {
     const catNome = (art.categoria?.nome || '').trim();
@@ -706,8 +727,10 @@ export function classifySaleArticles(
       // conteggiato a parte per il report dedicato (solo path WindTre:
       // la classificazione da listino VF non produce queste categorie).
       const coupon = classification.type === 'canvass' && isCouponCaring(catNome, tipNome);
-      const pista = coupon ? undefined : classification.pista;
-      const pistaCounts = coupon ? {} : classificationPistaCounts(art, classification, canvassIndex);
+      const impianto = classification.type === 'canvass' && isAssicurazioneImpiantoOk(catNome, tipNome, desc);
+      const excludedFromPista = coupon || impianto;
+      const pista = excludedFromPista ? undefined : classification.pista;
+      const pistaCounts = excludedFromPista ? {} : classificationPistaCounts(art, classification, canvassIndex);
       const classified: ClassifiedArticle = {
         categoriaNome: catNome,
         tipologiaNome: tipNome,
@@ -716,6 +739,7 @@ export function classifySaleArticles(
         pista,
         pistaCounts,
         couponCaring: coupon || undefined,
+        impiantoOk: impianto || undefined,
         prezzo,
         importoImponibile,
         importoScontrino,
@@ -729,6 +753,10 @@ export function classifySaleArticles(
       if (coupon) {
         couponCaring.pezzi++;
         couponCaring.importo += prezzo;
+      }
+      if (impianto) {
+        impiantoOk.pezzi++;
+        impiantoOk.importo += prezzo;
       }
       for (const [pistaKey, volume] of Object.entries(pistaCounts) as [PistaCanvass, number][]) {
         countByPista[pistaKey] = (countByPista[pistaKey] || 0) + volume;
@@ -772,5 +800,6 @@ export function classifySaleArticles(
     hasCanvass: countByType.canvass > 0,
     primaryPista,
     couponCaring,
+    impiantoOk,
   };
 }
