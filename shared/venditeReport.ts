@@ -6,6 +6,7 @@
 import {
   classifySaleArticles,
   classifiedArticlePistaCounts,
+  canvassDetailLabel,
   getPistaCanvassLabels,
   PISTA_CANVASS_LABELS,
   TYPE_LABELS,
@@ -405,12 +406,10 @@ export function aggregateDailyReport(
         // - energia ⇒ CF (Consumer) vs IVA (Business), riconosciuti dalla
         //   descrizione dell'offerta (vedi energiaClienteFromDescrizione).
         const catLabel = article.categoriaNome.trim() || "Altro";
-        let chipLabel = catLabel;
-        if (article.pista === "assicurazioni") {
-          chipLabel = article.descrizione.trim() || article.tipologiaNome.trim() || catLabel;
-        } else if (article.pista === "energia") {
-          chipLabel = energiaClienteFromDescrizione(article.descrizione) === "business" ? "IVA" : "CF";
-        }
+        const chipLabel = canvassDetailLabel(
+          article,
+          canvassIndex ? "vf" : "windtre-report",
+        );
         const map = catByPista[article.pista] ?? new Map<string, number>();
         map.set(chipLabel, (map.get(chipLabel) ?? 0) + 1);
         catByPista[article.pista] = map;

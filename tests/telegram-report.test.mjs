@@ -37,6 +37,9 @@ const {
   parsePerformanceWeights,
 } = await import("../shared/venditeReport.ts");
 const {
+  canvassDetailLabel,
+} = await import("../shared/bisuiteClassification.ts");
+const {
   buildVenditeReportHtml,
   reportHtmlFileName,
   escapeHtml,
@@ -98,6 +101,32 @@ function art(categoria, prezzo, opts = {}) {
 }
 
 console.log("\n— aggregateDailyReport —");
+
+await test("etichetta Canvass condivisa: Energia CF/IVA, descrizione Assicurazioni e offerta VF", () => {
+  assert.equal(canvassDetailLabel({
+    pista: "energia",
+    categoriaNome: "ENERGIA W3",
+    tipologiaNome: "ENERGIA",
+    descrizione: "Luce casa consumer",
+  }, "windtre-report"), "CF");
+  assert.equal(canvassDetailLabel({
+    pista: "energia",
+    categoriaNome: "ENERGIA W3",
+    descrizione: "Luce microbusiness",
+  }, "windtre-report"), "IVA");
+  assert.equal(canvassDetailLabel({
+    pista: "assicurazioni",
+    categoriaNome: "ASSICURAZIONI",
+    tipologiaNome: "CASA",
+    descrizione: "Casa elettrodomestici",
+  }, "windtre-report"), "CASA ELETTRODOMESTICI");
+  assert.equal(canvassDetailLabel({
+    pista: "luce",
+    categoriaNome: "OFFERTE ENERGIA VF",
+    tipologiaNome: "LUCE",
+    descrizione: "Vodafone Energia Fix",
+  }, "vf"), "VODAFONE ENERGIA FIX");
+});
 
 await test("input vuoto ⇒ tutto a zero", () => {
   const a = aggregateDailyReport([]);

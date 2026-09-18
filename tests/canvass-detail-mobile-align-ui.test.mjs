@@ -54,6 +54,18 @@ const artEnergiaConsumer = {
   descrizione: 'OFFERTA LUCE CASA',
   dettaglio: { prezzo: '0.00' },
 }; // energia, nessun pezzo IVA
+const artEnergiaBusiness = {
+  categoria: { nome: 'ENERGIA W3' },
+  tipologia: { nome: 'ENERGIA' },
+  descrizione: 'OFFERTA LUCE MICROBUSINESS',
+  dettaglio: { prezzo: '0.00' },
+}; // energia, etichetta condivisa IVA
+const artAssicurazioneCasa = {
+  categoria: { nome: 'ASSICURAZIONI' },
+  tipologia: { nome: 'ASSICURAZIONI CASA' },
+  descrizione: 'CASA ELETTRODOMESTICI',
+  dettaglio: { prezzo: '15.00' },
+}; // assicurazioni, etichetta condivisa dalla descrizione
 
 async function insertSale(pool, orgId, articoli) {
   await pool.query(
@@ -107,9 +119,14 @@ async function assertDetailAligned(page, prefix, label) {
   assert.ok(ivaTied && ivaFisso, `${label}: diciture IVA misurabili`);
   const ivaSpread = Math.abs((ivaTied.x + ivaTied.width) - (ivaFisso.x + ivaFisso.width));
   assert.ok(ivaSpread <= 1.5, `${label}: diciture IVA allineate (spread=${ivaSpread.toFixed(2)}px)`);
-  // Le righe senza IVA non espongono la dicitura (solo slot riservato).
+  // Le righe senza IVA non espongono la dicitura (solo slot riservato);
+  // Energia include il pezzo business aggiunto per verificare l'etichetta IVA.
   assert.equal(await page.getByTestId(`${prefix}-cat-iva-mobile-UNTIED`).count(), 0, `${label}: UNTIED senza dicitura IVA`);
-  assert.equal(await page.getByTestId(`${prefix}-cat-iva-energia-ENERGIA W3`).count(), 0, `${label}: ENERGIA W3 senza dicitura IVA`);
+  assert.equal(
+    (await page.getByTestId(`${prefix}-cat-iva-energia-ENERGIA W3`).innerText()).trim(),
+    '(1 IVA)',
+    `${label}: ENERGIA W3 include il pezzo business`,
+  );
 
   // ── Leggibilità e nessuna sovrapposizione/overflow ──
   const countFont = await page.getByTestId(`${prefix}-cat-count-mobile-TIED IVA`)
@@ -150,6 +167,7 @@ test('Vendite BiSuite mobile 375px: dettagli PDV e Addetto con colonna numerica 
     await insertSale(pool, session.orgId, [artTiedIva, ...Array(11).fill(artUntied)]);
     await insertSale(pool, session.orgId, [artFissoIva]);
     await insertSale(pool, session.orgId, [artEnergiaConsumer, artEnergiaConsumer]);
+    await insertSale(pool, session.orgId, [artEnergiaBusiness, artAssicurazioneCasa]);
 
     browser = await launchBrowser();
     const context = await newAuthedContext(browser, session);
@@ -165,10 +183,16 @@ test('Vendite BiSuite mobile 375px: dettagli PDV e Addetto con colonna numerica 
     await globalDialog.waitFor({ state: 'visible', timeout: 10000 });
     assert.equal((await page.getByTestId('global-pista-total-mobile').innerText()).trim(), '12', 'globale: totale Mobile');
     assert.equal((await page.getByTestId('global-pista-total-fisso').innerText()).trim(), '1', 'globale: totale Fisso');
-    assert.equal((await page.getByTestId('global-pista-total-energia').innerText()).trim(), '2', 'globale: totale Energia');
+    assert.equal((await page.getByTestId('global-pista-total-energia').innerText()).trim(), '3', 'globale: totale Energia');
     assert.equal((await page.getByTestId('global-cat-count-mobile-TIED IVA').innerText()).trim(), '1', 'globale: TIED IVA');
     assert.equal((await page.getByTestId('global-cat-count-mobile-UNTIED').innerText()).trim(), '11', 'globale: UNTIED');
     assert.equal((await page.getByTestId('global-cat-count-energia-CF').innerText()).trim(), '2', 'globale: energia usa etichetta report CF');
+    assert.equal((await page.getByTestId('global-cat-count-energia-IVA').innerText()).trim(), '1', 'globale: energia business usa etichetta report IVA');
+    assert.equal(
+      (await page.getByTestId('global-cat-count-assicurazioni-CASA ELETTRODOMESTICI').innerText()).trim(),
+      '1',
+      'globale: assicurazioni usa la descrizione prodotto',
+    );
     // Radix applica una breve animazione di ingresso: misurare dopo che il
     // transform è stabile evita di confondere il movimento con un overflow.
     await page.waitForTimeout(250);
@@ -188,7 +212,7 @@ test('Vendite BiSuite mobile 375px: dettagli PDV e Addetto con colonna numerica 
     await page.getByTestId('btn-open-canvass-detail').click();
     await globalDialog.waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(await page.getByTestId('global-pista-total-mobile').count(), 0, 'filtro Energia: Mobile assente');
-    assert.equal((await page.getByTestId('global-pista-total-energia').innerText()).trim(), '2', 'filtro Energia: totale coerente');
+    assert.equal((await page.getByTestId('global-pista-total-energia').innerText()).trim(), '3', 'filtro Energia: totale coerente');
     await page.keyboard.press('Escape');
     await page.getByTestId('select-pista').click();
     await page.getByRole('option', { name: 'Tutte le piste', exact: true }).click();

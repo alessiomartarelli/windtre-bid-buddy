@@ -587,6 +587,40 @@ export interface PezzoIvaInput {
   descrizione?: string;
 }
 
+export type CanvassDetailLabelMode = 'category' | 'windtre-report' | 'vf';
+
+export interface CanvassDetailLabelInput {
+  pista?: PistaCanvass;
+  categoriaNome?: string;
+  tipologiaNome?: string;
+  descrizione?: string;
+}
+
+/**
+ * Etichetta condivisa per il breakdown articoli Canvass in Vendite BiSuite e
+ * nel report Telegram. WindTre dettaglia Energia come CF/IVA e Assicurazioni
+ * con la descrizione prodotto; il modello VF mostra il nome dell'offerta.
+ */
+export function canvassDetailLabel(
+  article: CanvassDetailLabelInput,
+  mode: CanvassDetailLabelMode = 'category',
+): string {
+  const categoria = article.categoriaNome?.trim() ?? '';
+  const tipologia = article.tipologiaNome?.trim() ?? '';
+  const descrizione = article.descrizione?.trim() ?? '';
+
+  let label = categoria || tipologia || descrizione || 'N/D';
+  if (mode === 'vf') {
+    label = descrizione || tipologia || categoria || 'N/D';
+  } else if (mode === 'windtre-report' && article.pista === 'assicurazioni') {
+    label = descrizione || tipologia || categoria || 'N/D';
+  } else if (mode === 'windtre-report' && article.pista === 'energia') {
+    label = descrizione.toUpperCase().includes('BUSINESS') ? 'IVA' : 'CF';
+  }
+
+  return label.toUpperCase();
+}
+
 /**
  * Task #377 — "Pezzo IVA" (business) per pista canvass:
  *  - MOBILE: categoria "TIED IVA";

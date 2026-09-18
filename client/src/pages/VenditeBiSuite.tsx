@@ -99,6 +99,7 @@ import {
   classifySaleArticles,
   classifyArticle,
   classifiedArticlePistaCounts,
+  canvassDetailLabel,
   isPezzoIva,
   PISTA_CANVASS_LABELS,
   getPistaCanvassLabels,
@@ -3109,15 +3110,7 @@ function accumulaCategoriaCanvass(
   if (!art.pista) return;
   const iva = isPezzoIva(art);
   if (iva) ivaByPista[art.pista] = (ivaByPista[art.pista] || 0) + volume;
-  let rawNome = art.categoriaNome || art.tipologiaNome || art.descrizione || "N/D";
-  if (labelMode === "vf") {
-    rawNome = art.descrizione || art.tipologiaNome || art.categoriaNome || "N/D";
-  } else if (labelMode === "windtre-report" && art.pista === "assicurazioni") {
-    rawNome = art.descrizione || art.tipologiaNome || art.categoriaNome || "N/D";
-  } else if (labelMode === "windtre-report" && art.pista === "energia") {
-    rawNome = art.descrizione.toUpperCase().includes("BUSINESS") ? "IVA" : "CF";
-  }
-  const nome = rawNome.toUpperCase().trim() || "N/D";
+  const nome = canvassDetailLabel(art, labelMode);
   if (!target[art.pista]) target[art.pista] = {};
   const perPista = target[art.pista]!;
   if (!perPista[nome]) perPista[nome] = { pezzi: 0, iva: 0 };
