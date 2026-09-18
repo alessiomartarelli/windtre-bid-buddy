@@ -57,7 +57,7 @@ let minutesAgo = 5;
 
 // Una vendita FINALIZZATA di oggi con un articolo del listino canvass:
 // il match avviene per `codice` esatto (chiave primaria del classificatore).
-async function insertVfSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale, offer }) {
+async function insertVfSale(pool, orgId, { codicePos, nomeNegozio, ragioneSociale, offer, upselling = false }) {
   await pool.query(
     `INSERT INTO bisuite_sales
        (organization_id, bisuite_id, data_vendita, codice_pos, nome_negozio,
@@ -78,7 +78,12 @@ async function insertVfSale(pool, orgId, { codicePos, nomeNegozio, ragioneSocial
             categoria: { nome: offer.categoria },
             tipologia: { nome: offer.tipologia },
             descrizione: offer.nomeEtichetta,
-            dettaglio: { prezzo: '10.00' },
+            dettaglio: {
+              prezzo: '10.00',
+              domandeRisposte: upselling
+                ? [{ domandaTesto: 'RETE SICURA 2.0', risposta: 'SI' }]
+                : [],
+            },
           },
         ],
       }),
@@ -90,6 +95,7 @@ async function insertVfSale(pool, orgId, { codicePos, nomeNegozio, ragioneSocial
 // generica "iva", né le colonne extra iva/cb come colonne separate).
 const W3_ONLY = ['energia', 'assicurazioni', 'protecta', 'iva'];
 const W3_ONLY_LABELS = ['Energia', 'Assicurazioni', 'Windtre Protetti', 'P.IVA'];
+const VF_EXPECTED_TOTALS = { mobile: '2', fisso: '1', cb: '2', luce: '1', gas: '1', iva_mobile: '1', iva_wireline: '1', vas: '2' };
 
 // AOA (array di array) del foglio, celle vuote → ''.
 function sheetAoa(ws) {
@@ -126,10 +132,10 @@ function assertVfExportRows(aoa, label) {
   const body = aoa.slice(1).filter((r) => r.some((v) => v !== ''));
   // [mobile,fisso,cb,luce,gas,iva_mobile,iva_wireline,vas, tel,acc,srv]
   const expected = [
-    ['RS', 'VF Uno Srl', '', '', 2, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0],
-    ['PDV', 'VF Uno Srl', 'POSV1', 'Negozio VF 1', 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+    ['RS', 'VF Uno Srl', '', '', 2, 1, 2, 1, 1, 1, 1, 2, 0, 0, 0],
+    ['PDV', 'VF Uno Srl', 'POSV1', 'Negozio VF 1', 2, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0],
     ['PDV', 'VF Uno Srl', 'POSV2', 'Negozio VF 2', 0, 0, 0, 0, 1, 1, 1, 2, 0, 0, 0],
-    ['TOTALE', 'Totale complessivo', '', '', 2, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0],
+    ['TOTALE', 'Totale complessivo', '', '', 2, 1, 2, 1, 1, 1, 1, 2, 0, 0, 0],
   ];
   assert.equal(body.length, expected.length, `${label}: ${expected.length} righe attese, trovate ${body.length}: ${JSON.stringify(body.map((r) => [r[0], r[1]]))}`);
   expected.forEach((exp, i) => {
@@ -187,12 +193,16 @@ test('Vendite BiSuite (org Vodafone/Fastweb): grafico, tabella, filtro Pista ed 
       ['POSV2', 'iva_wireline'],
       ...Array(2).fill(['POSV2', 'vas']),
     ];
+    let seededSecondaryUpselling = false;
     for (const [codicePos, pista] of seeds) {
+      const upselling = pista === 'mobile' && !seededSecondaryUpselling;
+      if (upselling) seededSecondaryUpselling = true;
       await insertVfSale(pool, session.orgId, {
         codicePos,
         nomeNegozio: codicePos === 'POSV1' ? 'Negozio VF 1' : 'Negozio VF 2',
         ragioneSociale: 'VF Uno Srl',
         offer: offerFor[pista],
+        upselling,
       });
     }
 
@@ -203,6 +213,30 @@ test('Vendite BiSuite (org Vodafone/Fastweb): grafico, tabella, filtro Pista ed 
 
     const card = page.locator('[data-testid="card-tabella-pdv-pista-pezzi"]');
     await card.waitFor({ state: 'visible', timeout: 20000 });
+
+    // ── Dettaglio globale Canvass: tassonomia e offerte VF, senza piste W3. ──
+    await page.getByTestId('btn-open-canvass-detail').click();
+    const canvassDialog = page.getByTestId('dialog-canvass-detail');
+    await canvassDialog.waitFor({ state: 'visible', timeout: 10000 });
+    for (const p of VENDITE_PISTE_VF) {
+      assert.equal(await page.getByTestId(`global-pista-total-${p}`).count(), 1, `dettaglio: pista VF ${p} presente`);
+      assert.equal(
+        (await page.getByTestId(`global-pista-total-${p}`).innerText()).trim(),
+        VF_EXPECTED_TOTALS[p],
+        `dettaglio: totale ${p}`,
+      );
+      assert.ok((await canvassDialog.innerText()).includes(String(offerFor[p].nomeEtichetta).toUpperCase()), `dettaglio: offerta ${p} visibile`);
+    }
+    for (const p of W3_ONLY) {
+      assert.equal(await page.getByTestId(`global-pista-total-${p}`).count(), 0, `dettaglio: pista WindTre ${p} assente`);
+    }
+    assert.ok((await canvassDialog.innerText()).includes('Upselling'), 'dettaglio: label VF Upselling');
+    assert.equal(
+      (await page.getByTestId(`global-cat-count-cb-${String(offerFor.mobile.nomeEtichetta).toUpperCase()}`).innerText()).trim(),
+      '1',
+      'dettaglio: il volume Upselling secondario compare sotto CB con etichetta offerta',
+    );
+    await page.keyboard.press('Escape');
 
     // ── Tabella: intestazioni = 8 piste VF, ciascuna con controllo di
     // ordinamento (le colonne pista hanno il bottone sort, le extra no). ──
@@ -227,8 +261,7 @@ test('Vendite BiSuite (org Vodafone/Fastweb): grafico, tabella, filtro Pista ed 
     assert.equal(await page.locator('[data-testid="btn-pezzi-sort-telefoni"]').count(), 0, 'Telefoni: colonna extra, non pista');
 
     // ── Riga totale: pezzi per pista e totale generale coerenti col seed. ──
-    const expectedTotals = { mobile: '2', fisso: '1', cb: '1', luce: '1', gas: '1', iva_mobile: '1', iva_wireline: '1', vas: '2' };
-    for (const [p, v] of Object.entries(expectedTotals)) {
+    for (const [p, v] of Object.entries(VF_EXPECTED_TOTALS)) {
       assert.equal((await page.getByTestId(`cell-pezzi-tot-${p}`).innerText()).trim(), v, `totale colonna ${p}`);
     }
     assert.equal(await card.getByRole('columnheader', { name: 'Totale', exact: true }).count(), 0, 'colonna Totale assente');
@@ -307,7 +340,7 @@ test('Vendite BiSuite (org Vodafone/Fastweb): grafico, tabella, filtro Pista ed 
       .slice(0, 11);
     assert.deepEqual(
       totNums,
-      [2, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0],
+      [2, 1, 2, 1, 1, 1, 1, 2, 0, 0, 0],
       `PDF: TOTALE [mob,fis,cb,luce,gas,ivaM,ivaW,vas,tel,acc,srv] (trovato: ${totNums.join(',')})`,
     );
 

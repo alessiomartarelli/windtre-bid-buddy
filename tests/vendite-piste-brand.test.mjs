@@ -24,6 +24,7 @@ import {
   pezziExtraColKeysForModel,
   WINDTRE_ONLY_PISTAS,
   getPistaCanvassLabels,
+  classifiedArticlePistaCounts,
 } from '../shared/bisuiteClassification.ts';
 import { buildPdvPezziColumns } from '../shared/pdvPezziColumns.ts';
 
@@ -106,4 +107,17 @@ test('vista ed export condividono ordine e intestazioni per WindTre e VF', () =>
       `intestazioni export derivate dalle label della vista (vf=${isVf})`,
     );
   }
+});
+
+test('breakdown piste: usa i volumi autorevoli multi-pista e non inventa volumi esclusi', () => {
+  assert.deepEqual(
+    classifiedArticlePistaCounts({ pista: 'mobile', pistaCounts: { mobile: 1, cb: 2 } }),
+    { mobile: 1, cb: 2 },
+    'un’offerta VF può contribuire alla pista primaria e a Upselling',
+  );
+  assert.deepEqual(
+    classifiedArticlePistaCounts({ pista: 'mobile', pistaCounts: {} }),
+    {},
+    'un articolo escluso conserva eventualmente la pista primaria ma non produce volumi',
+  );
 });

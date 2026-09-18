@@ -157,6 +157,43 @@ test('Vendite BiSuite mobile 375px: dettagli PDV e Addetto con colonna numerica 
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(`${BASE}/vendite-bisuite`, { waitUntil: 'networkidle' });
 
+    // ── Dettaglio Canvass globale: apertura, contenuti e resa mobile ──
+    const openGlobal = page.getByTestId('btn-open-canvass-detail');
+    await openGlobal.waitFor({ state: 'visible', timeout: 20000 });
+    await openGlobal.click();
+    const globalDialog = page.getByTestId('dialog-canvass-detail');
+    await globalDialog.waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal((await page.getByTestId('global-pista-total-mobile').innerText()).trim(), '12', 'globale: totale Mobile');
+    assert.equal((await page.getByTestId('global-pista-total-fisso').innerText()).trim(), '1', 'globale: totale Fisso');
+    assert.equal((await page.getByTestId('global-pista-total-energia').innerText()).trim(), '2', 'globale: totale Energia');
+    assert.equal((await page.getByTestId('global-cat-count-mobile-TIED IVA').innerText()).trim(), '1', 'globale: TIED IVA');
+    assert.equal((await page.getByTestId('global-cat-count-mobile-UNTIED').innerText()).trim(), '11', 'globale: UNTIED');
+    assert.equal((await page.getByTestId('global-cat-count-energia-CF').innerText()).trim(), '2', 'globale: energia usa etichetta report CF');
+    // Radix applica una breve animazione di ingresso: misurare dopo che il
+    // transform è stabile evita di confondere il movimento con un overflow.
+    await page.waitForTimeout(250);
+    const dialogGeometry = await globalDialog.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, viewport: window.innerWidth };
+    });
+    assert.ok(dialogGeometry.left >= 0 && dialogGeometry.right <= dialogGeometry.viewport + 1, 'dialog globale dentro il viewport mobile');
+    await page.keyboard.press('Escape');
+    await globalDialog.waitFor({ state: 'hidden', timeout: 5000 });
+
+    // Il filtro Pista aggiorna il breakdown globale e la chiusura non altera
+    // gli altri filtri correnti.
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByTestId('select-pista').click();
+    await page.getByRole('option', { name: 'Energia', exact: true }).click();
+    await page.getByTestId('btn-open-canvass-detail').click();
+    await globalDialog.waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(await page.getByTestId('global-pista-total-mobile').count(), 0, 'filtro Energia: Mobile assente');
+    assert.equal((await page.getByTestId('global-pista-total-energia').innerText()).trim(), '2', 'filtro Energia: totale coerente');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('select-pista').click();
+    await page.getByRole('option', { name: 'Tutte le piste', exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+
     // ── Dettaglio per PDV ──
     await page.getByTestId('button-view-vendite').waitFor({ timeout: 20000 });
     await page.locator(`button:has-text("${NEGOZIO}")`).first().click();

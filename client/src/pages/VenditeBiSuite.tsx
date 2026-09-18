@@ -389,6 +389,7 @@ export default function VenditeBiSuite() {
   const [selectedSale, setSelectedSale] = useState<BisuiteSale | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
   const [summaryCategory, setSummaryCategory] = useState<SalesSummaryCategory>("canvass");
+  const [isCanvassDetailOpen, setIsCanvassDetailOpen] = useState(false);
   const [filterPista, setFilterPista] = useState<string>("all");
   const [filterStato, setFilterStato] = useState<string>("finalizzate");
   const [filterPagamento, setFilterPagamento] = useState<keyof IncassoTotals | null>(null);
@@ -734,6 +735,7 @@ export default function VenditeBiSuite() {
     const byPista: Partial<Record<PistaCanvass, number>> = {};
     const amtByPista: Partial<Record<PistaCanvass, number>> = {};
     const ivaByPista: Partial<Record<PistaCanvass, number>> = {};
+    const categorieByPista: CategorieByPista = {};
     const couponCaring = { pezzi: 0, importo: 0 };
     let totalArticles = 0;
     let filteredArticles = 0;
@@ -783,6 +785,19 @@ export default function VenditeBiSuite() {
             if (isPezzoIva(art)) ivaByPista[pista] = (ivaByPista[pista] || 0) + 1;
           }
         }
+        if (art.type === "canvass") {
+          for (const [pista, volume] of Object.entries(classifiedArticlePistaCounts(art)) as [PistaCanvass, number][]) {
+            if (volume <= 0 || !isPistaVisible(pista)) continue;
+            if (filterPista !== "all" && pista !== filterPista) continue;
+            accumulaCategoriaCanvass(
+              categorieByPista,
+              {},
+              { ...art, pista },
+              isVfModel ? "vf" : "windtre-report",
+              volume,
+            );
+          }
+        }
         // Coupon Caring: esclusi dai pezzi CB, contati in un riquadro dedicato.
         if (art.couponCaring) {
           couponCaring.pezzi++;
@@ -813,6 +828,7 @@ export default function VenditeBiSuite() {
       byPista,
       amtByPista,
       ivaByPista,
+      categorieByPista,
       couponCaring,
       totalArticles,
       filteredArticles,
@@ -827,7 +843,11 @@ export default function VenditeBiSuite() {
       /** Fatturato lordo Servizi, usato per calcolare IVA a display. */
       serviziLordo,
     };
-  }, [aggregateSales, saleClassifications, articleMatchesFilter]);
+  }, [aggregateSales, saleClassifications, articleMatchesFilter, isPistaVisible, isVfModel]);
+
+  useEffect(() => {
+    if (globalCounts.byType.canvass === 0) setIsCanvassDetailOpen(false);
+  }, [globalCounts.byType.canvass]);
 
   // KPI top: numero "vendite/articoli" e importo. Quando un filtro Tipo/Pista
   // è attivo i numeri riflettono i SOLI articoli di quel tipo; altrimenti
@@ -1860,6 +1880,18 @@ export default function VenditeBiSuite() {
                     )}
                   </div>
                   <ArticleIncassoRecap incasso={globalCounts.incassoByType.canvass} formatCurrency={formatCurrency} />
+                   {globalCounts.byType.canvass > 0 && (
+                     <Button
+                       type="button"
+                       variant="outline"
+                       className="mt-4 w-full sm:w-auto"
+                       onClick={() => setIsCanvassDetailOpen(true)}
+                       data-testid="btn-open-canvass-detail"
+                     >
+                       <Layers className="mr-2 h-4 w-4" />
+                       Apri il dettaglio
+                     </Button>
+                   )}
                 </CardContent>
               </Card>
               )}
@@ -2525,6 +2557,28 @@ export default function VenditeBiSuite() {
         pistaLabels={pistaLabels}
         onClose={() => setSelectedSale(null)}
       />
+      <Dialog open={isCanvassDetailOpen} onOpenChange={setIsCanvassDetailOpen}>
+        <ResponsiveDialogContent
+          className="p-0 sm:max-h-[92dvh] sm:w-full sm:max-w-4xl sm:overflow-hidden"
+          data-testid="dialog-canvass-detail"
+        >
+          <DialogHeader className="border-b px-4 py-4 sm:px-6">
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-5 w-5 text-primary" />
+              Dettaglio Canvass
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[calc(100dvh-5rem)] px-3 py-4 sm:h-auto sm:max-h-[calc(92dvh-5rem)] sm:px-6">
+            <CanvassCategorieDettaglio
+              categorieByPista={globalCounts.categorieByPista}
+              ivaByPista={globalCounts.ivaByPista}
+              pistaLabels={pistaLabels}
+              testIdPrefix="global"
+              showTotals
+            />
+          </ScrollArea>
+        </ResponsiveDialogContent>
+      </Dialog>
 
     </div>
   );
@@ -2540,11 +2594,13 @@ function CanvassCategorieDettaglio({
   ivaByPista,
   pistaLabels,
   testIdPrefix,
+  showTotals = false,
 }: {
   categorieByPista: CategorieByPista;
   ivaByPista: Partial<Record<PistaCanvass, number>>;
   pistaLabels: Record<PistaCanvass, string>;
   testIdPrefix: string;
+  showTotals?: boolean;
 }) {
   const piste = (Object.entries(categorieByPista) as [PistaCanvass, Record<string, { pezzi: number; iva: number }>][])
     .filter(([, cats]) => Object.keys(cats).length > 0)
@@ -2562,7 +2618,7 @@ function CanvassCategorieDettaglio({
   return (
     <div className="rounded-lg border bg-muted/20 p-2 sm:p-3" data-testid={`${testIdPrefix}-categorie-canvass`}>
        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-        Categorie canvass
+         {showTotals ? "Piste e categorie/offerte vendute" : "Categorie canvass"}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2">
         {piste.map(([pista, cats]) => {
@@ -2572,6 +2628,15 @@ function CanvassCategorieDettaglio({
                <div className="flex items-center gap-1.5 text-sm font-semibold mb-1">
                 {PISTA_ICONS[pista]}
                 <span>{pistaLabels[pista]}</span>
+                 {showTotals && (
+                   <Badge
+                     variant="outline"
+                     className={`ml-auto tabular-nums ${PISTA_CANVASS_COLORS[pista]}`}
+                     data-testid={`${testIdPrefix}-pista-total-${pista}`}
+                   >
+                     {Object.values(cats).reduce((sum, value) => sum + value.pezzi, 0)}
+                   </Badge>
+                 )}
                 {iva > 0 && (
                    <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
                     · {iva} IVA
@@ -3038,14 +3103,24 @@ function accumulaCategoriaCanvass(
   target: CategorieByPista,
   ivaByPista: Partial<Record<PistaCanvass, number>>,
   art: { pista?: PistaCanvass; categoriaNome: string; tipologiaNome: string; descrizione: string },
+  labelMode: "category" | "windtre-report" | "vf" = "category",
+  volume = 1,
 ) {
   if (!art.pista) return;
   const iva = isPezzoIva(art);
-  if (iva) ivaByPista[art.pista] = (ivaByPista[art.pista] || 0) + 1;
-  const nome = (art.categoriaNome || art.tipologiaNome || art.descrizione || "N/D").toUpperCase().trim() || "N/D";
+  if (iva) ivaByPista[art.pista] = (ivaByPista[art.pista] || 0) + volume;
+  let rawNome = art.categoriaNome || art.tipologiaNome || art.descrizione || "N/D";
+  if (labelMode === "vf") {
+    rawNome = art.descrizione || art.tipologiaNome || art.categoriaNome || "N/D";
+  } else if (labelMode === "windtre-report" && art.pista === "assicurazioni") {
+    rawNome = art.descrizione || art.tipologiaNome || art.categoriaNome || "N/D";
+  } else if (labelMode === "windtre-report" && art.pista === "energia") {
+    rawNome = art.descrizione.toUpperCase().includes("BUSINESS") ? "IVA" : "CF";
+  }
+  const nome = rawNome.toUpperCase().trim() || "N/D";
   if (!target[art.pista]) target[art.pista] = {};
   const perPista = target[art.pista]!;
   if (!perPista[nome]) perPista[nome] = { pezzi: 0, iva: 0 };
-  perPista[nome].pezzi++;
-  if (iva) perPista[nome].iva++;
+  perPista[nome].pezzi += volume;
+  if (iva) perPista[nome].iva += volume;
 }
