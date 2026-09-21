@@ -40,6 +40,12 @@ const {
   canvassDetailLabel,
 } = await import("../shared/bisuiteClassification.ts");
 const {
+  buildCanvassIndex,
+} = await import("../shared/canvassMapping.ts");
+const {
+  CANVASS_CATALOG,
+} = await import("../shared/canvassCatalog.ts");
+const {
   buildVenditeReportHtml,
   reportHtmlFileName,
   escapeHtml,
@@ -295,6 +301,44 @@ await test("report HTML: sezione dedicata Coupon Caring presente solo se > 0", (
     aggregates: senza,
   });
   assert.ok(!html2.includes("Coupon Caring"));
+});
+
+await test("report HTML VF: Upselling mostra il servizio reale, non l’offerta Mobile", () => {
+  const canvassIndex = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const mobileOffer = CANVASS_CATALOG.offers.find((offer) => offer.codice === "CANOHEWD2208");
+  assert.ok(mobileOffer, "offerta Mobile VF di test presente nel listino");
+
+  const aggregates = aggregateDailyReport([
+    sale({
+      totale: "10",
+      articoli: [{
+        codice: mobileOffer.codice,
+        categoria: { nome: mobileOffer.categoria },
+        tipologia: { nome: mobileOffer.tipologia },
+        descrizione: mobileOffer.nomeEtichetta,
+        dettaglio: {
+          prezzo: "10",
+          domandeRisposte: [{ domanda: "RETE SICURA 2.0", risposta: "SI" }],
+        },
+      }],
+    }),
+  ], undefined, undefined, canvassIndex);
+
+  assert.equal(aggregates.countByPista.mobile, 1);
+  assert.equal(aggregates.countByPista.cb, 1);
+  assert.deepEqual(aggregates.categorieByPista.cb, [
+    { categoria: "Rete Sicura 2.0", pezzi: 1 },
+  ]);
+
+  const html = buildVenditeReportHtml({
+    orgName: "Org Vodafone",
+    dateYMD: "2026-09-21",
+    aggregates,
+    isVfModel: true,
+  });
+  assert.ok(html.includes("Upselling"));
+  assert.ok(html.includes("Rete Sicura 2.0 ×1"));
+  assert.ok(!html.includes(`${mobileOffer.nomeEtichetta} ×1`));
 });
 
 await test("per-PDV: raggruppa per codicePos, ordina per importo↓, N/D per mancante", () => {
