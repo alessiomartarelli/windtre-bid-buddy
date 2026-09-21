@@ -250,6 +250,7 @@ const {
   classifyArticle,
   classifySaleArticles,
   countVfUpsellingVolumes,
+  getVfUpsellingSignals,
   pistaFromCanvassListino,
   PISTA_CANVASS_LABELS,
   PISTA_CANVASS_COLORS,
@@ -440,6 +441,11 @@ test('Upselling VF: più voci sulla stessa offerta contano separatamente, i dupl
     },
   };
   assert.equal(countVfUpsellingVolumes(article), 3);
+  assert.deepEqual(getVfUpsellingSignals(article), [
+    { key: 'kasko', label: 'Kasko' },
+    { key: 'trade-in', label: 'Trade In' },
+    { key: 'trade-in-digitale', label: 'Trade In Digitale' },
+  ]);
   assert.equal(
     countVfUpsellingVolumes(
       { dettaglio: { domandeRisposte: [{ domanda: 'trade in cb', risposta: 'SI' }] } },
@@ -466,6 +472,10 @@ test('Upselling VF: vendita base conserva la propria pista e aggiunge i volumi U
     }],
   }, index);
   assert.deepEqual(sc.countByPista, { mobile: 1, cb: 2 });
+  assert.deepEqual(sc.articles[0].upsellingSignals, [
+    { key: 'rete-sicura-mobile', label: 'Rete Sicura 2.0' },
+    { key: 'vodafone-club', label: 'Vodafone Club' },
+  ]);
 });
 
 test('Upselling VF: una regola KPI cb troppo ampia non aggira la allowlist', () => {

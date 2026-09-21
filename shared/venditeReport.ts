@@ -408,7 +408,18 @@ export function aggregateDailyReport(
           addAcc.businessCountByPista[pista] = (addAcc.businessCountByPista[pista] ?? 0) + volume;
         }
       }
-      if (article.pista && pistaVisible(article.pista)) {
+      if (article.upsellingSignals?.length && pistaVisible("cb")) {
+        const map = catByPista.cb ?? new Map<string, number>();
+        for (const signal of article.upsellingSignals) {
+          map.set(signal.label, (map.get(signal.label) ?? 0) + 1);
+        }
+        catByPista.cb = map;
+      }
+      if (
+        article.pista
+        && pistaVisible(article.pista)
+        && !(article.pista === "cb" && article.upsellingSignals?.length)
+      ) {
         // Etichetta dei chip nella card "La gara delle piste". Per la maggior
         // parte delle piste è la categoria BiSuite (es. mobile ⇒ TIED CF /
         // UNTIED). Per assicurazioni ed energia la categoria è un unico bucket

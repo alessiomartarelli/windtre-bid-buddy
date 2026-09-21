@@ -225,16 +225,28 @@ test('Vendite BiSuite (org Vodafone/Fastweb): grafico, tabella, filtro Pista ed 
         VF_EXPECTED_TOTALS[p],
         `dettaglio: totale ${p}`,
       );
-      assert.ok((await canvassDialog.innerText()).includes(String(offerFor[p].nomeEtichetta).toUpperCase()), `dettaglio: offerta ${p} visibile`);
+      if (p !== 'cb') {
+        assert.ok((await canvassDialog.innerText()).includes(String(offerFor[p].nomeEtichetta).toUpperCase()), `dettaglio: offerta ${p} visibile`);
+      }
     }
     for (const p of W3_ONLY) {
       assert.equal(await page.getByTestId(`global-pista-total-${p}`).count(), 0, `dettaglio: pista WindTre ${p} assente`);
     }
     assert.ok((await canvassDialog.innerText()).includes('Upselling'), 'dettaglio: label VF Upselling');
     assert.equal(
-      (await page.getByTestId(`global-cat-count-cb-${String(offerFor.mobile.nomeEtichetta).toUpperCase()}`).innerText()).trim(),
+      (await page.getByTestId('global-cat-count-cb-Rete Sicura 2.0').innerText()).trim(),
       '1',
-      'dettaglio: il volume Upselling secondario compare sotto CB con etichetta offerta',
+      'dettaglio: il volume Upselling secondario compare col nome del servizio',
+    );
+    assert.equal(
+      (await page.getByTestId('global-cat-count-cb-One Number').innerText()).trim(),
+      '1',
+      'dettaglio: l’offerta Upselling diretta compare col nome del servizio',
+    );
+    assert.equal(
+      await page.getByTestId(`global-cat-count-cb-${String(offerFor.mobile.nomeEtichetta).toUpperCase()}`).count(),
+      0,
+      'dettaglio: l’etichetta dell’offerta Mobile non compare sotto Upselling',
     );
     await page.keyboard.press('Escape');
 

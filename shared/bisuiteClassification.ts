@@ -340,6 +340,27 @@ const VF_UPSELLING_OFFER_KEYS: Readonly<Record<string, string>> = {
   'TRADE IN': 'trade-in',
 };
 
+const VF_UPSELLING_SIGNAL_LABELS: Readonly<Record<string, string>> = {
+  'rete-sicura-mobile': 'Rete Sicura 2.0',
+  'rete-sicura-family': 'Rete Sicura Family',
+  'fastweb-protect': 'Fastweb Protect',
+  'vodafone-club': 'Vodafone Club',
+  'fastweb-up-plus': 'Fastweb Up Plus',
+  'one-number': 'One Number',
+  'kasko': 'Kasko',
+  'vodafone-club-tnp': 'Vodafone Club abbinata a TNP',
+  'vodafone-club-plus': 'Vodafone Club Plus',
+  'trade-in-digitale': 'Trade In Digitale',
+  'wifi-extender': 'Wi-Fi Extender',
+  'seven-booster': 'Seven Booster Wi-Fi',
+  'trade-in': 'Trade In',
+};
+
+export interface VfUpsellingSignal {
+  key: string;
+  label: string;
+}
+
 function vfUpsellingOfferKey(label: string): string | undefined {
   const normalized = normalizeVfUpsellingText(label);
   return VF_UPSELLING_OFFER_KEYS[normalized];
@@ -375,13 +396,13 @@ function isVfTnpInCbArticle(
  * commerciale. Ogni risposta affermativa ammessa vale un volume; la stessa
  * voce presente sia nell'etichetta dell'offerta sia nelle domande è deduplicata.
  */
-export function countVfUpsellingVolumes(
+export function getVfUpsellingSignals(
   article: ClassifiableArticle,
   match?: CanvassMatchLike | null,
-): number {
+): VfUpsellingSignal[] {
   // I TNP venduti in CB sono prodotti, non Upselling. L'esclusione vale per
   // l'intero articolo, anche se contiene risposte normalmente ammesse.
-  if (isVfTnpInCbArticle(article, match)) return 0;
+  if (isVfTnpInCbArticle(article, match)) return [];
 
   const signals = new Set<string>();
   const offerKey = vfUpsellingOfferKey(match?.nomeEtichetta ?? '');
@@ -392,7 +413,17 @@ export function countVfUpsellingVolumes(
     const key = VF_UPSELLING_QUESTION_KEYS[question];
     if (key) signals.add(key);
   }
-  return signals.size;
+  return Array.from(signals, (key) => ({
+    key,
+    label: VF_UPSELLING_SIGNAL_LABELS[key] ?? key,
+  }));
+}
+
+export function countVfUpsellingVolumes(
+  article: ClassifiableArticle,
+  match?: CanvassMatchLike | null,
+): number {
+  return getVfUpsellingSignals(article, match).length;
 }
 
 /**
@@ -522,6 +553,9 @@ export interface ClassifiedArticle {
   /** Assicurazione "Impianto OK" Luce/Gas: esclusa dalla pista Assicurazioni
    * e dai punti gara; vale solo come gettone extra dedicato. */
   impiantoOk?: boolean;
+  /** Componenti commerciali che generano i volumi Upselling VF. Le etichette
+   * descrivono il servizio venduto, non l'offerta base Mobile/Fisso. */
+  upsellingSignals?: VfUpsellingSignal[];
 }
 
 export interface SaleClassification {
@@ -722,6 +756,9 @@ export function classifySaleArticles(
       const excludedFromPista = coupon || impianto;
       const pista = excludedFromPista ? undefined : classification.pista;
       const pistaCounts = excludedFromPista ? {} : classificationPistaCounts(art, classification, canvassIndex);
+      const upsellingSignals = !excludedFromPista && canvassIndex
+        ? getVfUpsellingSignals(art, categorizeCanvassArticle(art, canvassIndex))
+        : [];
       const classified: ClassifiedArticle = {
         categoriaNome: catNome,
         tipologiaNome: tipNome,
@@ -731,6 +768,7 @@ export function classifySaleArticles(
         pistaCounts,
         couponCaring: coupon || undefined,
         impiantoOk: impianto || undefined,
+        upsellingSignals: upsellingSignals.length > 0 ? upsellingSignals : undefined,
         prezzo,
         importoImponibile,
         importoScontrino,

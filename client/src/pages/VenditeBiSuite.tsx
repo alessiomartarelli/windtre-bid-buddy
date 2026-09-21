@@ -3120,11 +3120,26 @@ function InfoBlock({
 function accumulaCategoriaCanvass(
   target: CategorieByPista,
   ivaByPista: Partial<Record<PistaCanvass, number>>,
-  art: { pista?: PistaCanvass; categoriaNome: string; tipologiaNome: string; descrizione: string },
+  art: {
+    pista?: PistaCanvass;
+    categoriaNome: string;
+    tipologiaNome: string;
+    descrizione: string;
+    upsellingSignals?: Array<{ key: string; label: string }>;
+  },
   labelMode: "category" | "windtre-report" | "vf" = "category",
   volume = 1,
 ) {
   if (!art.pista) return;
+  if (art.pista === "cb" && art.upsellingSignals?.length) {
+    if (!target.cb) target.cb = {};
+    const perPista = target.cb;
+    for (const signal of art.upsellingSignals) {
+      if (!perPista[signal.label]) perPista[signal.label] = { pezzi: 0, iva: 0 };
+      perPista[signal.label].pezzi += 1;
+    }
+    return;
+  }
   const iva = isPezzoIva(art);
   if (iva) ivaByPista[art.pista] = (ivaByPista[art.pista] || 0) + volume;
   const nome = canvassDetailLabel(art, labelMode);
