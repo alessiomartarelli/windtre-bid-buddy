@@ -7,8 +7,10 @@ Nel modello Vodafone/Fastweb la pista tecnica `cb` è presentata come **Upsellin
 
 Gli articoli identificati come **TNP IN CB** o **SOLO TNP IN CB** sono sempre esclusi per intero da Upselling, anche quando contengono risposte positive che su altri articoli sarebbero ammesse.
 
+Le offerte **Vodafone Mobile * Special/Plus** e i **Change Order Fastweb in Upgrade** (Mobile Start, Mobile Pro, Power, Ultra) appartengono alla pista Mobile e non costituiscono da sole un volume Upselling.
+
 Ogni segnale positivo distinto vale un volume; più segnali sulla stessa offerta contano separatamente, mentre lo stesso segnale trovato sia nell'etichetta sia nelle risposte va deduplicato. Un articolo può contribuire contemporaneamente alla pista base e a Upselling. Un target KPI `escludi` sopprime ogni contributo.
 
-**Why:** nei dati Vodafone/Fastweb i componenti Upselling sono spesso risposte dentro un articolo base, non articoli separati; le categorie CB storiche includono voci che il business non vuole più conteggiare.
+**Why:** nei dati Vodafone/Fastweb i componenti Upselling sono spesso risposte dentro un articolo base, non articoli separati; le categorie CB storiche e alcune offerte Mobile includono voci che il business non vuole conteggiare come Upselling.
 
 **How to apply:** preservare la stessa semantica in UI, aggregazioni server, export e report Telegram/HTML. Per organizzazioni WindTre mantenere label `CB` e comportamento storico.

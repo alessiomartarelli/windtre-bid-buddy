@@ -381,7 +381,7 @@ test('Upselling VF: tutte e sole le famiglie di domande ammesse contano con risp
   );
 });
 
-test('Upselling VF: offerte MM4M, change order, booster e servizi ammessi sono fail-closed', () => {
+test('Upselling VF: booster e servizi ammessi sono fail-closed', () => {
   const allowedOffers = [
     'RETE SICURA 2.0 CB',
     'RETE SICURA FAMILY CB',
@@ -389,15 +389,6 @@ test('Upselling VF: offerte MM4M, change order, booster e servizi ammessi sono f
     'VODAFONE CLUB',
     'FASTWEB UP PLUS',
     'ONE NUMBER GA / CB',
-    'VODAFONE MOBILE START SPECIAL',
-    'VODAFONE MOBILE PRO SPECIAL',
-    'VODAFONE MOBILE POWER SPECIAL',
-    'VODAFONE MOBILE ULTRA SPECIAL',
-    'VODAFONE MOBILE ULTRA PLUS',
-    'CHANGE ORDER FASTWEB IN UPGRADE (MOBILE START)',
-    'CHANGE ORDER FASTWEB IN UPGRADE (MOBILE PRO)',
-    'CHANGE ORDER FASTWEB IN UPGRADE (POWER)',
-    'CHANGE ORDER FASTWEB IN UPGRADE (ULTRA)',
     'KASKO GA',
     'VODAFONE CLUB PLUS GA',
     'VODAFONE CLUB PLUS',
@@ -414,7 +405,21 @@ test('Upselling VF: offerte MM4M, change order, booster e servizi ammessi sono f
       `offerta ammessa non conteggiata: ${nomeEtichetta}`,
     );
   }
-  for (const nomeEtichetta of ['SMART TV cb O CONSOLE cb', 'ADD ON CHIAMATE CB', 'GIGA FAMILY IN CB', 'VODAFONE CARE']) {
+  for (const nomeEtichetta of [
+    'SMART TV cb O CONSOLE cb',
+    'ADD ON CHIAMATE CB',
+    'GIGA FAMILY IN CB',
+    'VODAFONE CARE',
+    'VODAFONE MOBILE START SPECIAL',
+    'VODAFONE MOBILE PRO SPECIAL',
+    'VODAFONE MOBILE POWER SPECIAL',
+    'VODAFONE MOBILE ULTRA SPECIAL',
+    'VODAFONE MOBILE ULTRA PLUS',
+    'CHANGE ORDER FASTWEB IN UPGRADE (MOBILE START)',
+    'CHANGE ORDER FASTWEB IN UPGRADE (MOBILE PRO)',
+    'CHANGE ORDER FASTWEB IN UPGRADE (POWER)',
+    'CHANGE ORDER FASTWEB IN UPGRADE (ULTRA)',
+  ]) {
     assert.equal(
       countVfUpsellingVolumes({}, { pista: 'PISTA CB', categoria: 'X', tipologia: 'Y', nomeEtichetta }),
       0,
@@ -498,9 +503,17 @@ test('Upselling VF: una regola KPI escludi sopprime anche segnali ammessi', () =
   assert.deepEqual(sc.countByPista, {});
 });
 
-test('Upselling VF: i change order accettano solo le etichette esatte', () => {
+test('Upselling VF: i change order Fastweb e le offerte Mobile Special sono esclusi', () => {
   const match = (nomeEtichetta) => ({ pista: 'PISTA CB', categoria: 'X', tipologia: 'Y', nomeEtichetta });
-  assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (MOBILE PRO)')), 1);
+  assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (MOBILE START)')), 0);
+  assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (MOBILE PRO)')), 0);
+  assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (POWER)')), 0);
+  assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (ULTRA)')), 0);
+  assert.equal(countVfUpsellingVolumes({}, match('VODAFONE MOBILE START SPECIAL')), 0);
+  assert.equal(countVfUpsellingVolumes({}, match('VODAFONE MOBILE PRO SPECIAL')), 0);
+  assert.equal(countVfUpsellingVolumes({}, match('VODAFONE MOBILE POWER SPECIAL')), 0);
+  assert.equal(countVfUpsellingVolumes({}, match('VODAFONE MOBILE ULTRA SPECIAL')), 0);
+  assert.equal(countVfUpsellingVolumes({}, match('VODAFONE MOBILE ULTRA PLUS')), 0);
   assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (MOBILE PRO EXTRA)')), 0);
   assert.equal(countVfUpsellingVolumes({}, match('CHANGE ORDER FASTWEB IN UPGRADE (MOBILE START TEST)')), 0);
 });
