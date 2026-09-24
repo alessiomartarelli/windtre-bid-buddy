@@ -190,7 +190,7 @@ const CATEGORY_MAP: Record<string, CategoryClassification> = {
   'COSTO ATTIVAZIONE': { type: 'prodotti' },
   'EPAY': { type: 'prodotti' },
   'OPZIONI': { type: 'prodotti' },
-  'GARANTEASY': { type: 'prodotti' },
+  'GARANTEASY': { type: 'servizi' },
   'DEMO TELEFONIA WIND3': { type: 'prodotti' },
   'TELEFONIA TRADE-IN': { type: 'prodotti' },
   'ALTRO': { type: 'prodotti' },
@@ -439,6 +439,11 @@ export function classifyArticle(
   canvassIndex?: CanvassIndex | null,
   kpiRules?: CanvassKpiRule[] | null,
 ): CategoryClassification | null {
+  // Garanteasy è un servizio anche per le organizzazioni con listino VF:
+  // il match canvass non deve trasformarlo in un pezzo di pista.
+  if (String(article.categoria?.nome ?? '').trim().toUpperCase() === 'GARANTEASY') {
+    return { type: 'servizi' };
+  }
   if (canvassIndex) {
     const match = categorizeCanvassArticle(article, canvassIndex);
     const upsellingVolumes = countVfUpsellingVolumes(article, match);

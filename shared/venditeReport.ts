@@ -464,7 +464,11 @@ export function aggregateDailyReport(
       // è ripartito sul mix di incasso dello scontrino, oppure in
       // `altro` se la vendita non espone alcun mix.
       if (article.type === "prodotti" || article.type === "servizi") {
-        const catLabel = article.categoriaNome.trim() || "Altro";
+        // Garanteasy comprende offerte differenti: riportarle per descrizione
+        // anziché collassarle tutte nella categoria "GARANTEASY".
+        const catLabel = article.type === "servizi" && article.categoriaNome.trim().toUpperCase() === "GARANTEASY"
+          ? article.descrizione.trim() || article.categoriaNome.trim()
+          : article.categoriaNome.trim() || "Altro";
         // Drill-down: categoria con pezzi e fatturato per PDV e addetto.
         for (const acc of [pdvAcc, addAcc]) {
           const drillMap = acc[article.type];

@@ -309,6 +309,21 @@ test('classifyArticle con indice: prodotti veri restano prodotti, categorie Wind
   assert.deepEqual(classifyArticle({ categoria: { nome: 'UNTIED' } }, index), { type: 'canvass', pista: 'mobile' });
 });
 
+test('Garanteasy è Servizi con e senza listino VF; le altre garanzie restano Prodotti', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  for (const idx of [undefined, index]) {
+    const sc = classifySaleArticles({ articoli: [
+      { categoria: { nome: 'GARANTEASY' }, descrizione: 'GARANTEASY-GARANZIA FACILE', dettaglio: { prezzo: '122' } },
+      { categoria: { nome: 'GARANZIE' }, descrizione: 'RELOAD PLUS', dettaglio: { prezzo: '50' } },
+    ] }, idx);
+    assert.equal(sc.articles[0].type, 'servizi');
+    assert.equal(sc.articles[1].type, 'prodotti');
+    assert.deepEqual(sc.countByType, { canvass: 0, prodotti: 1, servizi: 1 });
+    assert.equal(sc.amountByType.servizi, 122);
+    assert.equal(sc.countByPista.cb, undefined);
+  }
+});
+
 test('classifySaleArticles con indice VF: card Canvass e countByPista coerenti', () => {
   const index = buildCanvassIndex(CANVASS_CATALOG.offers);
   // Task #527 — offerta IVA VOCE: conta nella sottopista fine iva_mobile.

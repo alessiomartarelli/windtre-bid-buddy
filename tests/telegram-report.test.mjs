@@ -341,6 +341,36 @@ await test("report HTML VF: Upselling mostra il servizio reale, non l’offerta 
   assert.ok(!html.includes(`${mobileOffer.nomeEtichetta} ×1`));
 });
 
+await test("Garanteasy: Servizi nelle vendite e nel report Telegram, offerte distinte per descrizione", () => {
+  const rows = [
+    sale({ totale: "183", articoli: [
+      art("GARANTEASY", 122, { descrizione: "GARANTEASY-GARANZIA FACILE" }),
+      art("GARANTEASY", 61, { descrizione: "ARCHIVIA SCONTRINO" }),
+    ] }),
+  ];
+  const a = aggregateDailyReport(rows);
+  assert.equal(a.countByType.servizi, 2);
+  assert.equal(a.countByType.prodotti, 0);
+  assert.equal(a.amountByType.servizi, 183);
+  assert.deepEqual(a.serviziByCategoria.map(({ categoria, pezzi, importo }) => ({ categoria, pezzi, importo })), [
+    { categoria: "GARANTEASY-GARANZIA FACILE", pezzi: 1, importo: 122 },
+    { categoria: "ARCHIVIA SCONTRINO", pezzi: 1, importo: 61 },
+  ]);
+  assert.deepEqual(a.perPdv[0].dettaglio.serviziByCategoria, [
+    { categoria: "GARANTEASY-GARANZIA FACILE", pezzi: 1, importo: 122 },
+    { categoria: "ARCHIVIA SCONTRINO", pezzi: 1, importo: 61 },
+  ]);
+  const net = applyNettoIvaAccessoriServizi(a);
+  assert.ok(Math.abs(net.amountByType.servizi - 150) < 1e-9);
+  assert.ok(Math.abs(net.serviziByCategoria[0].importo - 100) < 1e-9);
+  assert.ok(Math.abs(net.serviziByCategoria[1].importo - 50) < 1e-9);
+  const html = buildVenditeReportHtml({ orgName: "Org", dateYMD: "2026-09-21", aggregates: net });
+  assert.ok(html.includes("Servizi (netto IVA)"));
+  assert.ok(html.includes("GARANTEASY-GARANZIA FACILE"));
+  assert.ok(html.includes("ARCHIVIA SCONTRINO"));
+  assert.ok(html.includes("150,00 €"));
+});
+
 await test("per-PDV: raggruppa per codicePos, ordina per importo↓, N/D per mancante", () => {
   const a = aggregateDailyReport([
     sale({ codicePos: "A", nomeNegozio: "Alfa", totale: "10" }),
