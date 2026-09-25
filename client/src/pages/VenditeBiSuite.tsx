@@ -99,6 +99,7 @@ import {
   classifySaleArticles,
   classifyArticle,
   classifiedArticlePistaCounts,
+  isFastwebMobileRecharge,
   canvassDetailLabel,
   isPezzoIva,
   PISTA_CANVASS_LABELS,
@@ -191,7 +192,7 @@ interface PdvSummary {
 }
 
 /** pista → (nome categoria → { pezzi, iva }) */
-type CategorieByPista = Partial<Record<PistaCanvass, Record<string, { pezzi: number; iva: number }>>>;
+type CategorieByPista = Partial<Record<PistaCanvass, Record<string, { pezzi: number; iva: number; ricaricheFastweb: number }>>>;
 type SalesSummaryCategory = "canvass" | "servizi" | "accessori" | "prodotti";
 const PISTA_ICONS: Record<PistaCanvass, React.ReactNode> = {
   mobile: <Smartphone className="h-3.5 w-3.5" />,
@@ -739,6 +740,7 @@ export default function VenditeBiSuite() {
     const categorieByPista: CategorieByPista = {};
     const couponCaring = { pezzi: 0, importo: 0 };
     const impiantoOk = { pezzi: 0, importo: 0 };
+    let ricaricheFastweb = 0;
     let totalArticles = 0;
     let filteredArticles = 0;
     let filteredAmount = 0;
@@ -776,6 +778,7 @@ export default function VenditeBiSuite() {
         // Per le card Canvass/Prodotti/Servizi mostriamo solo i pezzi
         // coerenti col filtro attivo (se è "all", tutti).
         if (!matches) continue;
+        if (art.fastwebRecharge) ricaricheFastweb++;
         byType[art.type]++;
         amtByType[art.type] += art.prezzo;
         addIncasso(incassoByType[art.type], art);
@@ -835,6 +838,7 @@ export default function VenditeBiSuite() {
       amtByPista,
       ivaByPista,
       categorieByPista,
+      ricaricheFastweb,
       couponCaring,
       impiantoOk,
       totalArticles,
@@ -1874,6 +1878,11 @@ export default function VenditeBiSuite() {
                            />
                         ));
                     })()}
+                     {isVfModel && globalCounts.ricaricheFastweb > 0 && (globalCounts.byPista.mobile || 0) > 0 && (
+                       <p className="pl-5 text-xs text-muted-foreground" data-testid="summary-fastweb-recharges">
+                         Di cui {globalCounts.ricaricheFastweb} ricariche Fastweb nel Canvass Mobile (non nuove SIM Gara)
+                       </p>
+                     )}
                     {globalCounts.couponCaring.pezzi > 0 && (
                         <div className="mt-1 border-t border-dashed pt-1.5">
                           <SummaryMetricRow
@@ -2620,10 +2629,10 @@ function CanvassCategorieDettaglio({
   testIdPrefix: string;
   showTotals?: boolean;
 }) {
-  const piste = (Object.entries(categorieByPista) as [PistaCanvass, Record<string, { pezzi: number; iva: number }>][])
+  const piste = (Object.entries(categorieByPista) as [PistaCanvass, Record<string, { pezzi: number; iva: number; ricaricheFastweb: number }>][])
     .filter(([, cats]) => Object.keys(cats).length > 0)
     .sort(([, a], [, b]) => {
-      const tot = (c: Record<string, { pezzi: number }>) => Object.values(c).reduce((s, x) => s + x.pezzi, 0);
+       const tot = (c: Record<string, { pezzi: number }>) => Object.values(c).reduce((s, x) => s + x.pezzi, 0);
       return tot(b) - tot(a);
     });
   if (piste.length === 0) return null;
@@ -2670,7 +2679,14 @@ function CanvassCategorieDettaglio({
                        className="flex items-center justify-between gap-2 text-sm min-h-7"
                        data-testid={`${testIdPrefix}-cat-row-${pista}-${nome}`}
                      >
-                      <span className="truncate text-muted-foreground">{nome}</span>
+                       <span className="min-w-0 text-muted-foreground">
+                         <span className="break-words">{nome}</span>
+                         {v.ricaricheFastweb > 0 && (
+                           <span className="ml-1 text-xs font-medium text-blue-700 dark:text-blue-300" data-testid={`${testIdPrefix}-fastweb-recharges-${pista}-${nome}`}>
+                             · {v.ricaricheFastweb} ricariche Fastweb (non nuove SIM)
+                           </span>
+                         )}
+                       </span>
                       <span className="flex shrink-0 items-center whitespace-nowrap font-semibold tabular-nums">
                         <span
                           className="min-w-8 text-right sm:min-w-0"
@@ -2903,6 +2919,7 @@ function SaleDetailDialog({
                   <TableBody>
                     {articoli.map((art: any, idx: number) => {
                       const cls = classifyArticle(art, canvassIndex, kpiRules);
+                      const fastwebRecharge = isFastwebMobileRecharge(art, canvassIndex, cls);
                       return (
                         <TableRow key={idx}>
                           <TableCell className="text-sm font-medium">
@@ -2913,6 +2930,11 @@ function SaleDetailDialog({
                                   ({art.marca})
                                 </span>
                               )}
+                               {fastwebRecharge && (
+                                 <Badge variant="outline" className="ml-1 text-[10px] text-blue-700 dark:text-blue-300" data-testid={`art-fastweb-recharge-${idx}`}>
+                                   Ricarica Fastweb · non nuova SIM
+                                 </Badge>
+                               )}
                             </div>
                             {(() => {
                               const impScont = parseFloat(art.dettaglio?.importoScontrino || "0") || 0;
@@ -3126,6 +3148,7 @@ function accumulaCategoriaCanvass(
     tipologiaNome: string;
     descrizione: string;
     upsellingSignals?: Array<{ key: string; label: string }>;
+    fastwebRecharge?: boolean;
   },
   labelMode: "category" | "windtre-report" | "vf" = "category",
   volume = 1,
@@ -3135,7 +3158,7 @@ function accumulaCategoriaCanvass(
     if (!target.cb) target.cb = {};
     const perPista = target.cb;
     for (const signal of art.upsellingSignals) {
-      if (!perPista[signal.label]) perPista[signal.label] = { pezzi: 0, iva: 0 };
+      if (!perPista[signal.label]) perPista[signal.label] = { pezzi: 0, iva: 0, ricaricheFastweb: 0 };
       perPista[signal.label].pezzi += 1;
     }
     return;
@@ -3145,7 +3168,8 @@ function accumulaCategoriaCanvass(
   const nome = canvassDetailLabel(art, labelMode);
   if (!target[art.pista]) target[art.pista] = {};
   const perPista = target[art.pista]!;
-  if (!perPista[nome]) perPista[nome] = { pezzi: 0, iva: 0 };
+  if (!perPista[nome]) perPista[nome] = { pezzi: 0, iva: 0, ricaricheFastweb: 0 };
   perPista[nome].pezzi += volume;
+  if (art.fastwebRecharge) perPista[nome].ricaricheFastweb += volume;
   if (iva) perPista[nome].iva += volume;
 }

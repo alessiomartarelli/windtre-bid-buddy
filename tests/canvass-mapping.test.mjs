@@ -249,12 +249,36 @@ test('validateCanvassHeaders: tollera spazi nelle intestazioni', () => {
 const {
   classifyArticle,
   classifySaleArticles,
+  isFastwebMobileRecharge,
   countVfUpsellingVolumes,
   getVfUpsellingSignals,
   pistaFromCanvassListino,
   PISTA_CANVASS_LABELS,
   PISTA_CANVASS_COLORS,
 } = await import('../shared/bisuiteClassification.ts');
+
+test('ricariche Fastweb restano nel Canvass Mobile ma sono distinte dalle nuove offerte voce', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const pura = CANVASS_CATALOG.offers.find(o => o.categoria === 'MOBILE FASTWEB' && o.tipologia === 'RICARICA PURA');
+  const automatica = CANVASS_CATALOG.offers.find(o => o.categoria === 'MOBILE FASTWEB' && o.tipologia === 'RICARICA AUTOMATICA');
+  const voce = CANVASS_CATALOG.offers.find(o => o.categoria === 'OFFERTE VOCE');
+  assert.ok(pura && automatica && voce);
+  const articles = [pura, automatica, voce].map(o => ({
+    codice: o.codice,
+    categoria: { nome: o.categoria },
+    tipologia: { nome: o.tipologia },
+    descrizione: o.nomeEtichetta,
+  }));
+  const sale = classifySaleArticles({ articoli: articles }, index);
+  assert.equal(sale.countByPista.mobile, 3);
+  assert.deepEqual(sale.articles.map(a => !!a.fastwebRecharge), [true, true, false]);
+  assert.equal(isFastwebMobileRecharge(articles[0], index, classifyArticle(articles[0], index)), true);
+  // Il match del listino vince sul testo libero; non etichettare false ricariche.
+  assert.equal(isFastwebMobileRecharge({ ...articles[2], descrizione: 'RICARICA PURA' }, index, classifyArticle(articles[2], index)), false);
+  assert.equal(isFastwebMobileRecharge(articles[0], index, { type: 'canvass', pista: 'fisso' }), false);
+  assert.equal(isFastwebMobileRecharge(articles[0], index, { type: 'canvass', pista: 'mobile', excludedFromPiste: true }), false);
+  assert.equal(classifySaleArticles({ articoli: articles }, null).articles.some(a => a.fastwebRecharge), false);
+});
 
 test('pistaFromCanvassListino: piste del listino VF → PistaCanvass', () => {
   assert.equal(pistaFromCanvassListino('PISTA IVA'), 'iva');

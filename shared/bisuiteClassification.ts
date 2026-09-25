@@ -470,6 +470,21 @@ export function classifyArticle(
   return classifyCategory(String(article.categoria?.nome ?? '').trim());
 }
 
+/** Sottotipo informativo del Canvass Mobile VF, non una nuova SIM Gara.
+ * Usa il match del listino (anche per codice), non la sola descrizione libera. */
+export function isFastwebMobileRecharge(
+  article: ClassifiableArticle,
+  canvassIndex?: CanvassIndex | null,
+  classification?: CategoryClassification | null,
+): boolean {
+  if (!canvassIndex || classification?.type !== 'canvass' || classification.pista !== 'mobile' || classification.excludedFromPiste) return false;
+  const match = categorizeCanvassArticle(article, canvassIndex);
+  return match?.brand === 'fastweb'
+    && pistaFromCanvassMatch(match) === 'mobile'
+    && match.categoria.trim().toUpperCase() === 'MOBILE FASTWEB'
+    && /^RICARICA (PURA|AUTOMATICA)$/.test(match.tipologia.trim().toUpperCase());
+}
+
 export const PISTA_CANVASS_LABELS: Record<PistaCanvass, string> = {
   mobile: 'Mobile',
   fisso: 'Fisso',
@@ -533,6 +548,8 @@ export interface ClassifiedArticle {
   descrizione: string;
   type: ArticleType;
   pista?: PistaCanvass;
+  /** Ricarica Fastweb inclusa nel Canvass Mobile, mai una nuova SIM. */
+  fastwebRecharge?: boolean;
   /** Contributi volumetrici per pista. Nel modello VF un'offerta base può
    * contribuire alla propria pista e a più voci Upselling selezionate. */
   pistaCounts?: Partial<Record<PistaCanvass, number>>;
@@ -770,6 +787,7 @@ export function classifySaleArticles(
         descrizione: desc,
         type: classification.type,
         pista,
+        fastwebRecharge: isFastwebMobileRecharge(art, canvassIndex, classification) || undefined,
         pistaCounts,
         couponCaring: coupon || undefined,
         impiantoOk: impianto || undefined,
