@@ -36,10 +36,11 @@ for i in $(seq 1 30); do
 done
 
 echo "[pdv-pezzi-table-ui-tests] running suites ..."
-exec node --import tsx --test \
+exec node --import tsx --test --test-concurrency=1 \
   tests/pdv-pezzi-extra.test.mjs \
   tests/pdv-pezzi-table-ui.test.mjs \
   tests/pdv-pezzi-vendite-export-ui.test.mjs \
   tests/dashboard-kpi-cards-ui.test.mjs \
   tests/premio-rs-pdf-ui.test.mjs \
-  tests/vendite-piste-vf-ui.test.mjs
+  tests/vendite-piste-vf-ui.test.mjs \
+  tests/dashboard-vf-mobile-ui.test.mjs
