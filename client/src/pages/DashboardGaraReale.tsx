@@ -463,9 +463,14 @@ function isGettoneExtraItem(pista: string, targetCategory: string): boolean {
   return isCaringItem(pista, targetCategory) || isImpiantoOkItem(pista, targetCategory);
 }
 
-function isCorePezziItem(pista: string, targetCategory: string): boolean {
+function isConsumerMobileCore(targetCategory: string, vfModel = false): boolean {
+  return SIM_CONSUMER_CORE.has(targetCategory) || (vfModel && targetCategory === "SIM_CNS");
+}
+
+function isCorePezziItem(pista: string, targetCategory: string, vfModel = false): boolean {
   if (isGettoneExtraItem(pista, targetCategory)) return false;
-  if (pista === "mobile") return SIM_CONSUMER_CORE.has(targetCategory) || SIM_PIVA_CORE.has(targetCategory);
+  if (pista === "mobile") return isConsumerMobileCore(targetCategory, vfModel) || SIM_PIVA_CORE.has(targetCategory)
+    || (vfModel && targetCategory === "VF_MOBILE_NON_ATTRIBUITA");
   if (pista === "fisso") return FISSO_CONSUMER_CORE.has(targetCategory) || FISSO_BUSINESS_CORE.has(targetCategory);
   return true;
 }
@@ -479,13 +484,17 @@ interface MobileGroupedCategory {
 }
 
 function groupMobileCategories(
-  categories: { category: string; label: string; pezzi: number; proiezione: number }[]
+  categories: { category: string; label: string; pezzi: number; proiezione: number }[],
+  vfModel = false,
 ): MobileGroupedCategory[] {
   const consumerChildren: typeof categories = [];
   const ivaChildren: typeof categories = [];
+  const unassignedChildren: typeof categories = [];
 
   for (const cat of categories) {
-    if (SIM_PIVA_CORE.has(cat.category)) {
+    if (vfModel && cat.category === "VF_MOBILE_NON_ATTRIBUITA") {
+      unassignedChildren.push(cat);
+    } else if (SIM_PIVA_CORE.has(cat.category)) {
       ivaChildren.push(cat);
     } else {
       consumerChildren.push(cat);
@@ -495,8 +504,8 @@ function groupMobileCategories(
   const groups: MobileGroupedCategory[] = [];
 
   if (consumerChildren.length > 0) {
-    const corePezzi = consumerChildren.filter(c => SIM_CONSUMER_CORE.has(c.category)).reduce((s, c) => s + c.pezzi, 0);
-    const coreProiezione = consumerChildren.filter(c => SIM_CONSUMER_CORE.has(c.category)).reduce((s, c) => s + c.proiezione, 0);
+    const corePezzi = consumerChildren.filter(c => isConsumerMobileCore(c.category, vfModel)).reduce((s, c) => s + c.pezzi, 0);
+    const coreProiezione = consumerChildren.filter(c => isConsumerMobileCore(c.category, vfModel)).reduce((s, c) => s + c.proiezione, 0);
     groups.push({
       groupLabel: "SIM Consumer",
       groupKey: "sim_consumer",
@@ -504,7 +513,7 @@ function groupMobileCategories(
       totalProiezione: coreProiezione,
       children: consumerChildren.sort((a, b) => {
         const rank = (cat: string) => {
-          if (SIM_CONSUMER_CORE.has(cat)) return 0;
+          if (isConsumerMobileCore(cat, vfModel)) return 0;
           if (cat.startsWith("PIU_SICURI_")) return 2;
           if (cat.startsWith("DEVICE_")) return 3;
           return 1;
@@ -526,6 +535,16 @@ function groupMobileCategories(
       totalPezzi: corePezzi,
       totalProiezione: coreProiezione,
       children: ivaChildren.sort((a, b) => b.pezzi - a.pezzi),
+    });
+  }
+
+  if (unassignedChildren.length > 0) {
+    groups.push({
+      groupLabel: "Tipo cliente da verificare",
+      groupKey: "vf_mobile_unassigned",
+      totalPezzi: unassignedChildren.reduce((s, c) => s + c.pezzi, 0),
+      totalProiezione: unassignedChildren.reduce((s, c) => s + c.proiezione, 0),
+      children: unassignedChildren,
     });
   }
 
@@ -4524,7 +4543,7 @@ export default function DashboardGaraReale() {
       const categories = [...baseCategories, ...addonCategories].sort((a, b) => b.pezzi - a.pezzi);
 
       const totalePezzi = pista === "mobile"
-        ? categories.filter(c => SIM_CONSUMER_CORE.has(c.category) || SIM_PIVA_CORE.has(c.category)).reduce((sum, c) => sum + c.pezzi, 0)
+        ? categories.filter(c => isCorePezziItem("mobile", c.category, garaModels.vf)).reduce((sum, c) => sum + c.pezzi, 0)
         : pista === "fisso"
           ? categories.filter(c => FISSO_CONSUMER_CORE.has(c.category) || FISSO_BUSINESS_CORE.has(c.category)).reduce((sum, c) => sum + c.pezzi, 0)
           : categories.reduce((sum, c) => sum + c.pezzi, 0);
@@ -4541,7 +4560,7 @@ export default function DashboardGaraReale() {
           const rimossoPerPista = posEsclusiRimossi.has(pdv.codicePos);
           const pdvItems = rimossoPerPista ? [] : pdv.items.filter((i) => i.pista === pista && !isGettoneExtraItem(i.pista, i.targetCategory));
           const pdvPezzi = pista === "mobile"
-            ? pdvItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
+            ? pdvItems.filter(i => isCorePezziItem("mobile", i.targetCategory, garaModels.vf)).reduce((s, i) => s + i.pezzi, 0)
             : pista === "fisso"
               ? pdvItems.filter(i => FISSO_CONSUMER_CORE.has(i.targetCategory) || FISSO_BUSINESS_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
               : pdvItems.reduce((s, i) => s + i.pezzi, 0);
@@ -4741,7 +4760,7 @@ export default function DashboardGaraReale() {
             const aggregatedRSAddons = Array.from(mergedAddons.values());
 
             const rsPezziAttuali = pista === "mobile"
-              ? aggregatedRSItems.filter(i => SIM_CONSUMER_CORE.has(i.targetCategory) || SIM_PIVA_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
+              ? aggregatedRSItems.filter(i => isCorePezziItem("mobile", i.targetCategory, garaModels.vf)).reduce((s, i) => s + i.pezzi, 0)
               : pista === "fisso"
                 ? aggregatedRSItems.filter(i => FISSO_CONSUMER_CORE.has(i.targetCategory) || FISSO_BUSINESS_CORE.has(i.targetCategory)).reduce((s, i) => s + i.pezzi, 0)
                 : aggregatedRSItems.reduce((s, i) => s + i.pezzi, 0);
@@ -6451,7 +6470,7 @@ export default function DashboardGaraReale() {
                         <>
                           <Separator />
                           <div className="space-y-3">
-                            {(pista.pista === "mobile" ? groupMobileCategories(pista.categories) : groupFissoCategories(pista.categories)).map((group) => {
+                            {(pista.pista === "mobile" ? groupMobileCategories(pista.categories, garaModels.vf) : groupFissoCategories(pista.categories)).map((group) => {
                               const expandedGroups = pista.pista === "mobile" ? expandedMobileGroups : expandedFissoGroups;
                               const setExpandedGroups = pista.pista === "mobile" ? setExpandedMobileGroups : setExpandedFissoGroups;
                               const groupExpanded = expandedGroups.has(group.groupKey);
@@ -6827,7 +6846,7 @@ export default function DashboardGaraReale() {
               const isRSMode = garaCalcConfig.tipologiaGara === 'gara_operatore_rs' && garaCalcConfig.modalitaInserimentoRS === 'per_rs';
 
               const pdvSummaries = pdvListWithRS.map(pdv => {
-                const corePezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+                const corePezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory, garaModels.vf)).reduce((s, i) => s + i.pezzi, 0);
                 const pdvRS = normalizeRS(pdv.configuredRS);
 
                 let pdvPremioTotale = 0;
@@ -6908,7 +6927,7 @@ export default function DashboardGaraReale() {
                   case 'punti_protecta': return punti.protecta || 0;
                   case 'pezzi_default':
                   default:
-                    return pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+                    return pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory, garaModels.vf)).reduce((s, i) => s + i.pezzi, 0);
                 }
               };
               const cmp = (a: typeof pdvListWithRS[number], b: typeof pdvListWithRS[number]) => {
@@ -6925,7 +6944,7 @@ export default function DashboardGaraReale() {
               }
               const groupByRS = pdvSortKey === 'pezzi_default';
               const sortedRSGroups = Array.from(rsGroups.entries())
-                .map(([rs, pdvs]) => ({ rs, pdvs, totalPezzi: pdvs.reduce((s, p) => s + p.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s2, i) => s2 + i.pezzi, 0), 0) }))
+                .map(([rs, pdvs]) => ({ rs, pdvs, totalPezzi: pdvs.reduce((s, p) => s + p.items.filter(i => isCorePezziItem(i.pista, i.targetCategory, garaModels.vf)).reduce((s2, i) => s2 + i.pezzi, 0), 0) }))
                 // Ordine RS deterministico (alfabetico), non per performance.
                 .sort((a, b) => a.rs.localeCompare(b.rs, 'it'));
               const sortedPdvList = groupByRS
@@ -7019,7 +7038,7 @@ export default function DashboardGaraReale() {
                           </div>
                         )}
                         {(() => {
-                          const totalPezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory)).reduce((s, i) => s + i.pezzi, 0);
+                          const totalPezzi = pdv.items.filter(i => isCorePezziItem(i.pista, i.targetCategory, garaModels.vf)).reduce((s, i) => s + i.pezzi, 0);
                           const proiezione = workdayInfo.elapsedWorkingDays > 0
                             ? Math.round((totalPezzi / workdayInfo.elapsedWorkingDays) * workdayInfo.totalWorkingDays)
                             : totalPezzi;
@@ -7033,7 +7052,7 @@ export default function DashboardGaraReale() {
                             if (isGettoneExtraItem(item.pista, item.targetCategory)) continue;
                             if (!byPista[item.pista]) byPista[item.pista] = { pezzi: 0, corePezzi: 0, items: [] };
                             byPista[item.pista].pezzi += item.pezzi;
-                            if (isCorePezziItem(item.pista, item.targetCategory)) {
+                            if (isCorePezziItem(item.pista, item.targetCategory, garaModels.vf)) {
                               byPista[item.pista].corePezzi += item.pezzi;
                             }
                             byPista[item.pista].items.push(item);

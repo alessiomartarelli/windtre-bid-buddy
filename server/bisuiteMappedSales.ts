@@ -9,7 +9,7 @@ import {
   isPezzoIva,
   type PistaCanvass,
 } from "../shared/bisuiteClassification";
-import type { CanvassIndex } from "../shared/canvassMapping";
+import { categorizeCanvassArticle, type CanvassIndex } from "../shared/canvassMapping";
 import type { CanvassKpiRule } from "../shared/canvassKpiRules";
 import { trendYmdOf } from "../shared/venditeReport";
 import {
@@ -78,6 +78,8 @@ export type PdvAggregate = {
    * iva_wireline, vas, …) via listino canvass + regole KPI. Presente solo
    * quando l'aggregazione riceve un canvassIndex (org con brand VF). */
   countByPistaCanvass?: Partial<Record<PistaCanvass, number>>;
+  /** Quota Mobile VF già presente negli item gara: non duplicarla nel drill-down. */
+  vfMobileCatalogPieces?: number;
   unmapped: number;
   totalArticoli: number;
 };
@@ -347,6 +349,43 @@ export function aggregateMappedSales(
         continue;
       }
       const mappedResults = mapBiSuiteArticle(art, clienteTipo, rules);
+      // La card Mobile usa gli item della mappatura gara, mentre Vendite usa
+      // il listino VF. Collega solo le offerte voce Vodafone con
+      // match strutturato e pista Mobile: MOBILE FASTWEB contiene ricariche
+      // (non nuove SIM); non riclassificare ricariche o codici
+      // ignoti, né duplicare una base Mobile già mappata dall'organizzazione.
+      if (canvassIndex && !coupon) {
+        const vf = classifyArticle(art, canvassIndex, canvassKpiRules);
+        const match = categorizeCanvassArticle(art, canvassIndex);
+        const offerCategory = catNome === 'OFFERTE VOCE'
+          && ['OFFERTE VOCE SMART PAY', 'OFFERTE VOCE WALLET PAY'].includes(tipNome.toUpperCase());
+        if (
+          offerCategory && vf?.pista === 'mobile' && !vf.excludedFromPiste
+          && match?.categoria.toUpperCase().trim() === catNome
+          && match?.tipologia.toUpperCase().trim() === tipNome.toUpperCase()
+          && match?.pista.toUpperCase().includes('MOBILE')
+          && !mappedResults.some(m => m.pista === 'mobile' && m.ruleType === 'base')
+        ) {
+          const kind = String(clienteTipo).toUpperCase().trim();
+          const targetCategory = kind === 'FISICA' || kind === 'PRIVATO'
+            ? 'SIM_CNS'
+            : kind === 'GIURIDICA' || kind === 'PROFESSIONISTA'
+              ? 'SIM_IVA'
+              : 'VF_MOBILE_NON_ATTRIBUITA';
+          mappedResults.push({
+            pista: 'mobile',
+            targetCategory,
+            targetLabel: targetCategory === 'SIM_CNS'
+              ? 'SIM Consumer Vodafone/Fastweb'
+              : targetCategory === 'SIM_IVA'
+                ? 'SIM IVA Vodafone/Fastweb'
+                : 'Offerte Mobile · tipo cliente da verificare (senza punti)',
+            ruleId: 'vf-mobile-catalog',
+            ruleType: 'base',
+          });
+          byPdv[codicePos].vfMobileCatalogPieces = (byPdv[codicePos].vfMobileCatalogPieces || 0) + 1;
+        }
+      }
       if (mappedResults.length === 0) continue;
       const lineRef = `${sale.bisuiteId ?? saleIndex}:${articleIndex}`;
       const fissoIvaLine = getFissoIvaLineLink(mappedResults, lineRef);

@@ -846,3 +846,61 @@ test('aggregateMappedSales: TNP in CB non entra nei totali Upselling dashboard',
   const agg = aggregateMappedSales([saleWith([tnp])], [], { canvassIndex: vfIndex });
   assert.deepEqual(agg.totaliPistaCanvass, {});
 });
+
+test('Mobile VF: offerte voce nelle SIM Gara; ricariche Fastweb restano solo nel canvass Vendite', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const voce = { codice: 'CANOHEWD2208', categoria: { nome: 'OFFERTE VOCE' }, tipologia: { nome: 'OFFERTE VOCE WALLET PAY' }, descrizione: 'CALL POWER', dettaglio: { canone: '8.99' } };
+  const fastweb = { codice: 'CANH0X4B0211', categoria: { nome: 'MOBILE FASTWEB' }, tipologia: { nome: 'RICARICA PURA' }, descrizione: 'Ricarica Fastweb', dettaglio: { canone: '0' } };
+  const nuovaEdizione = { ...voce, codice: 'CANOHEWD9999' };
+  const sconosciuta = { ...voce, codice: 'CANZZZZZ0000', tipologia: { nome: 'TIPO SCONOSCIUTO' } };
+  const sales = [
+    { ...saleWith([voce, nuovaEdizione, sconosciuta], 'POS1'), ragioneSociale: 'RS Uno' },
+    { ...saleWith([fastweb], 'POS2'), ragioneSociale: 'RS Due' },
+    { ...saleWith([voce], 'POS3'), ragioneSociale: 'RS Due', rawData: { articoli: [voce], cliente: { clienteTipo: 'GIURIDICA' } } },
+    { ...saleWith([voce], 'POS4'), ragioneSociale: 'RS Due', rawData: { articoli: [voce], cliente: { clienteTipo: 'ESTERO' } } },
+  ];
+  const classified = sales.map(s => classifySaleArticles(s.rawData, index));
+  assert.deepEqual(classified.map(c => c.countByPista.mobile), [2, 1, 1, 1]);
+  assert.equal(classified[0].articles[2].type, 'prodotti');
+  const agg = aggregateMappedSales(sales, [], { canvassIndex: index });
+  assert.equal(agg.totaliPistaCanvass.mobile, 5);
+  assert.equal(agg.totaliPerPista.mobile.SIM_CNS.pezzi, 2);
+  assert.equal(agg.totaliPerPista.mobile.SIM_IVA.pezzi, 1);
+  assert.equal(agg.totaliPerPista.mobile.VF_MOBILE_NON_ATTRIBUITA.pezzi, 1);
+  assert.deepEqual(agg.pdvList.map(p => ({
+    rs: p.ragioneSociale,
+    pieces: p.items.find(i => i.targetCategory === 'SIM_CNS')?.pezzi ?? 0,
+    canvass: p.countByPistaCanvass?.mobile ?? 0,
+    inDrilldownAlready: p.vfMobileCatalogPieces,
+  })), [
+    { rs: 'RS Uno', pieces: 2, canvass: 2, inDrilldownAlready: 2 },
+    { rs: 'RS Due', pieces: 0, canvass: 1, inDrilldownAlready: undefined },
+    { rs: 'RS Due', pieces: 0, canvass: 1, inDrilldownAlready: 1 },
+    { rs: 'RS Due', pieces: 0, canvass: 1, inDrilldownAlready: 1 },
+  ]);
+  assert.equal(agg.totalUnmapped, 2); // codice ignoto + ricarica (non attivazione)
+  assert.equal(aggregateMappedSales(sales, []).totaliPerPista.mobile, undefined);
+});
+
+test('Mobile VF: esclusioni, codici ambigui e mappatura base esistente non creano doppioni', () => {
+  const index = buildCanvassIndex(CANVASS_CATALOG.offers);
+  const voce = { codice: 'CANOHEWD2208', categoria: { nome: 'OFFERTE VOCE' }, tipologia: { nome: 'OFFERTE VOCE WALLET PAY' }, dettaglio: { canone: '8.99' } };
+  const rules = [{ id: 'custom-mobile', pista: 'mobile', targetCategory: 'TIED', targetLabel: 'Tied', conditions: { categoriaBiSuite: 'OFFERTE VOCE' }, priority: 10, enabled: true, ruleType: 'base' }];
+  const mapped = aggregateMappedSales([saleWith([voce])], rules, { canvassIndex: index });
+  assert.equal(mapped.totaliPerPista.mobile.TIED.pezzi, 1);
+  assert.equal(mapped.totaliPerPista.mobile.SIM_CNS, undefined);
+  assert.equal(mapped.totaliPistaCanvass.mobile, 1);
+  const excluded = aggregateMappedSales([saleWith([voce])], [], {
+    canvassIndex: index,
+    canvassKpiRules: [{ id: 'excluded', enabled: true, target: 'escludi', conditions: { categoria: 'OFFERTE VOCE' } }],
+  });
+  assert.equal(excluded.totaliPerPista.mobile, undefined);
+  assert.equal(excluded.totaliPistaCanvass.mobile, undefined);
+  const ambiguousIndex = buildCanvassIndex([
+    { codice: 'CANAAAAA0000', offerId: 'AAAAA', categoria: 'OFFERTE VOCE', tipologia: 'DUPLICATA', pista: 'PISTA MOBILE', brand: 'vodafone', canone: 0, nomeEtichetta: 'A' },
+    { codice: 'CANBBBBB0000', offerId: 'BBBBB', categoria: 'OFFERTE VOCE', tipologia: 'DUPLICATA', pista: 'PISTA CB', brand: 'vodafone', canone: 0, nomeEtichetta: 'B' },
+  ]);
+  const ambiguous = aggregateMappedSales([saleWith([{ ...voce, codice: 'CANZZZZZ0000', tipologia: { nome: 'DUPLICATA' } }])], [], { canvassIndex: ambiguousIndex });
+  assert.equal(ambiguous.totaliPerPista.mobile, undefined);
+  assert.equal(ambiguous.totaliPistaCanvass.mobile, undefined);
+});

@@ -4719,7 +4719,8 @@ export async function registerRoutes(
             }
             for (const [pista, value] of Object.entries(pdv.countByPistaCanvass ?? {})) {
               if (!value) continue;
-              contributions.push({ key: `vf:${pista}`, label: pista, value, unit: "pezzi" });
+              const uniqueValue = pista === "mobile" ? value - (pdv.vfMobileCatalogPieces ?? 0) : value;
+              if (uniqueValue > 0) contributions.push({ key: `vf:${pista}`, label: pista, value: uniqueValue, unit: "pezzi" });
             }
             const drilldownDerived = derivePdvDrilldownMetrics(sale.rawData);
             for (const detail of drilldownDerived.breakdowns) {
