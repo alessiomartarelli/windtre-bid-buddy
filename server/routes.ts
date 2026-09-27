@@ -621,7 +621,7 @@ export async function registerRoutes(
       // rispettivi endpoint admin dedicati. Il salvataggio generico della
       // configurazione gara sostituisce il JSON intero e non deve quindi
       // cancellarle né sovrascriverle quando riceve un payload parziale/stale.
-      for (const key of ["telegramReport", "bisuiteCredentials"] as const) {
+      for (const key of ["telegramReport", "bisuiteCredentials", "inactiveRagioniSociali", "inactiveCdgPdvIds"] as const) {
         if (Object.prototype.hasOwnProperty.call(curCfg, key)) {
           effectiveConfig[key] = curCfg[key];
         } else {
@@ -685,9 +685,17 @@ export async function registerRoutes(
             });
           }
           effectiveConfig.puntiVendita = (effectiveConfig.puntiVendita as Record<string, unknown>[]).map((p) => {
-            if (!p || typeof p !== "object" || !("brandIds" in p)) return p;
+            if (!p || typeof p !== "object") return p;
             const raw = Array.isArray(p.brandIds) ? p.brandIds.map((b) => String(b)) : [];
-            return { ...p, brandIds: Array.from(new Set(raw)) };
+            const currentPdv = Array.isArray(curCfg.puntiVendita)
+              ? (curCfg.puntiVendita as Record<string, unknown>[]).find(c =>
+                  String(c.codicePos ?? c.nome ?? "").trim().toLowerCase() === String(p.codicePos ?? p.nome ?? "").trim().toLowerCase())
+              : undefined;
+            return {
+              ...p,
+              ...("brandIds" in p ? { brandIds: Array.from(new Set(raw)) } : {}),
+              ...(currentPdv && "active" in currentPdv ? { active: currentPdv.active } : {}),
+            };
           });
         }
         if (wouldMassBlankPuntiVendita(curCfg.puntiVendita, effectiveConfig.puntiVendita)) {
@@ -5213,6 +5221,7 @@ export async function registerRoutes(
   // canonica = codicePos (univoca per organizzazione).
   type StructPdv = {
     id?: string; codicePos: string; nome: string; ragioneSociale: string;
+    active?: boolean;
     canale?: string; tipoPosizione?: string;
     clusterMobile?: string; clusterFisso?: string; clusterCB?: string;
     // Codice dealer "8 miliardi" (Task #544): chiave contabile del plafond
@@ -5485,25 +5494,54 @@ export async function registerRoutes(
     res.status(201).json({ success: true, nome });
   });
 
+  // Disattivazione reversibile, senza alterare vendite e spese storiche.
+  app.patch("/api/admin/struttura/pdv/status", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const parsed = z.object({ ragioneSociale: z.string().trim().min(1), codicePos: z.string().trim().min(1), active: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "RS, codice POS e stato obbligatori" });
+    const { ragioneSociale, codicePos, active } = parsed.data;
+    const orgId = profile.organizationId!;
+    const pv = await readPv(orgId);
+    if (!pv.some(p => normLow(p.ragioneSociale) === normLow(ragioneSociale) && normLow(p.codicePos || p.nome) === normLow(codicePos))) {
+      return res.status(404).json({ error: "PDV non trovato" });
+    }
+    await writePv(orgId, entries => entries.map(p =>
+      normLow(p.ragioneSociale) === normLow(ragioneSociale) && normLow(p.codicePos || p.nome) === normLow(codicePos)
+        ? { ...p, active } : p
+    ), profile.id);
+    res.json({ success: true });
+  });
+
+  app.patch("/api/admin/struttura/ragione-sociale/:nome/status", isAuthenticated, async (req: any, res) => {
+    const profile = await requireAdminRole(req, res);
+    if (!profile) return;
+    const parsed = z.object({ active: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Stato obbligatorio" });
+    const nome = decodeURIComponent(req.params.nome).trim();
+    const orgId = profile.organizationId!;
+    const pv = await readPv(orgId);
+    const rs = await readRsList(orgId);
+    if (!pv.some(p => normLow(p.ragioneSociale) === normLow(nome))
+      && !rs.some(r => normLow(r) === normLow(nome))
+      && !(await cdgStorage.getRsIdByName(orgId, nome))) {
+      return res.status(404).json({ error: "Ragione Sociale non trovata" });
+    }
+    await writeConfigKeys(orgId, c => {
+      const inactive = Array.isArray(c.inactiveRagioniSociali) ? c.inactiveRagioniSociali as string[] : [];
+      return { ...c, inactiveRagioniSociali: parsed.data.active
+        ? inactive.filter(r => normLow(r) !== normLow(nome))
+        : [...inactive.filter(r => normLow(r) !== normLow(nome)), nome] };
+    }, profile.id);
+    res.json({ success: true });
+  });
+
+  // Vecchie richieste distruttive: anche i client già aperti devono essere bloccati.
   // DELETE /api/admin/struttura/pdv?ragioneSociale=&codicePos=
   app.delete("/api/admin/struttura/pdv", isAuthenticated, async (req: any, res) => {
     const profile = await requireAdminRole(req, res);
     if (!profile) return;
-    const orgId = profile.organizationId!;
-    const ragioneSociale = norm(req.query.ragioneSociale);
-    const codicePos = norm(req.query.codicePos);
-    if (!ragioneSociale || !codicePos) return res.status(400).json({ error: "ragioneSociale e codicePos obbligatori" });
-    const cur = await readPv(orgId);
-    const exists = cur.some(p =>
-      normLow(p.ragioneSociale) === normLow(ragioneSociale) &&
-      normLow(p.codicePos || p.nome) === normLow(codicePos)
-    );
-    if (!exists) return res.status(404).json({ error: "PDV non trovato" });
-    await writePv(orgId, (pv) => pv.filter(p =>
-      !(normLow(p.ragioneSociale) === normLow(ragioneSociale) &&
-        normLow(p.codicePos || p.nome) === normLow(codicePos))
-    ), profile.id);
-    res.json({ success: true });
+    res.status(405).json({ error: "Eliminazione disabilitata: disattiva il PDV" });
   });
 
   // PUT /api/admin/struttura/ragione-sociale/:nome → rinomina RS
@@ -5532,7 +5570,9 @@ export async function registerRoutes(
       );
       const rs = (((c.ragioniSociali as string[] | undefined) || [])
         .map(r => normLow(r) === normLow(oldName) ? newName : r));
-      return { ...c, puntiVendita: pv, ragioniSociali: rs };
+      const inactive = (Array.isArray(c.inactiveRagioniSociali) ? c.inactiveRagioniSociali as string[] : [])
+        .map(r => normLow(r) === normLow(oldName) ? newName : r);
+      return { ...c, puntiVendita: pv, ragioniSociali: rs, inactiveRagioniSociali: inactive };
     }, profile.id);
     if (normLow(newName) !== normLow(oldName)) {
       try {
@@ -5545,34 +5585,11 @@ export async function registerRoutes(
     res.json({ success: true, nome: newName });
   });
 
-  // DELETE /api/admin/struttura/ragione-sociale/:nome → elimina RS + tutti i PDV
+  // DELETE legacy: non eliminare mai RS, PDV o le loro righe CdG.
   app.delete("/api/admin/struttura/ragione-sociale/:nome", isAuthenticated, async (req: any, res) => {
     const profile = await requireAdminRole(req, res);
     if (!profile) return;
-    const orgId = profile.organizationId!;
-    const nome = decodeURIComponent(req.params.nome).trim();
-    if (!nome) return res.status(400).json({ error: "Nome obbligatorio" });
-    await writeConfigKeys(orgId, (c) => {
-      const pv = ((c.puntiVendita as StructPdv[] | undefined) || []).filter(p => normLow(p.ragioneSociale) !== normLow(nome));
-      const rs = ((c.ragioniSociali as string[] | undefined) || []).filter(r => normLow(r) !== normLow(nome));
-      return { ...c, puntiVendita: pv, ragioniSociali: rs };
-    }, profile.id);
-    try {
-      // Task #345: cascade per ID via registro (fallback per nome se la RS
-      // non è mai stata referenziata e non ha anchor).
-      const rsId = await cdgStorage.getRsIdByName(orgId, nome);
-      if (rsId) {
-        await cdgStorage.deleteRagioneSociale(rsId, orgId);
-      } else {
-        await db.execute(sql`DELETE FROM cdg_spese WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
-        await db.execute(sql`DELETE FROM cdg_pdv_manuali WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
-        await db.execute(sql`UPDATE cdg_categorie SET ragioni_sociali = array_remove(ragioni_sociali, ${nome}) WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)`);
-        await db.execute(sql`DELETE FROM cdg_categorie WHERE organization_id = ${orgId} AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0 AND COALESCE(array_length(ragione_sociale_ids, 1), 0) = 0`);
-        await db.execute(sql`UPDATE cdg_fornitori SET ragioni_sociali = array_remove(ragioni_sociali, ${nome}) WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)`);
-        await db.execute(sql`DELETE FROM cdg_fornitori WHERE organization_id = ${orgId} AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0 AND COALESCE(array_length(ragione_sociale_ids, 1), 0) = 0`);
-      }
-    } catch (e) { console.error("[struttura] cascade delete RS failed", e); }
-    res.json({ success: true });
+    res.status(405).json({ error: "Eliminazione disabilitata: disattiva la ragione sociale" });
   });
 
   // === Storico struttura RS/PDV (Task #339) ===
@@ -5636,6 +5653,14 @@ export async function registerRoutes(
       if (!row) return res.status(404).json({ error: "Versione non trovata" });
       const cfg = await storage.getOrgConfig(orgId);
       const config = { ...((cfg?.config as Record<string, unknown> | null) || {}) };
+      const currentPv = Array.isArray(config.puntiVendita) ? config.puntiVendita as StructPdv[] : [];
+      const restoredPv = Array.isArray(row.puntiVendita) ? row.puntiVendita as StructPdv[] : [];
+      const currentRs = Array.isArray(config.ragioniSociali) ? config.ragioniSociali as string[] : [];
+      const restoredRs = Array.isArray(row.ragioniSociali) ? row.ragioniSociali as string[] : [];
+      if (currentPv.some(p => !restoredPv.some(r => normLow(r.codicePos || r.nome) === normLow(p.codicePos || p.nome))) ||
+          currentRs.some(r => !restoredRs.some(s => normLow(s) === normLow(r)))) {
+        return res.status(409).json({ error: "Questa versione eliminerebbe PDV o ragioni sociali: ripristino bloccato" });
+      }
       if (row.puntiVendita === null || row.puntiVendita === undefined) delete config.puntiVendita;
       else config.puntiVendita = row.puntiVendita;
       if (row.ragioniSociali === null || row.ragioniSociali === undefined) delete config.ragioniSociali;

@@ -85,15 +85,19 @@ test('struttura history: archivio automatico, retention, restore', async () => {
     assert.equal((await historyRows(pool, session.orgId)).length, 0,
       'non-structural change must not archive');
 
-    // 2) Modifica strutturale legittima => archivia la versione PRECEDENTE
-    //    con changed_by = utente.
+    // 2) Il PUT generico non può alterare la struttura: usare la route dedicata.
     const rinominata = [pdv(0), pdv(1, { nome: 'Negozio Rinominato' })];
     const legit = await putConfig(session, {
       puntiVendita: rinominata,
       ragioniSociali: ['Hist RS S.R.L'],
       altroSetting: 'y',
     });
-    assert.equal(legit.status, 200, JSON.stringify(legit.body));
+    assert.equal(legit.status, 409, JSON.stringify(legit.body));
+    const rename = await api(session, '/api/admin/struttura/pdv', {
+      method: 'PUT',
+      body: JSON.stringify({ oldRagioneSociale: 'Hist RS S.R.L', oldCodicePos: '9101001', nome: 'Negozio Rinominato' }),
+    });
+    assert.equal(rename.status, 200, JSON.stringify(rename.body));
     let rows = await historyRows(pool, session.orgId);
     assert.equal(rows.length, 1, 'structural change must archive previous version');
     assert.deepEqual(rows[0].punti_vendita, STRUTTURA, 'snapshot must be the PREVIOUS structure');
@@ -122,26 +126,24 @@ test('struttura history: archivio automatico, retention, restore', async () => {
     assert.equal(detail.status, 200);
     assert.deepEqual(detail.body.puntiVendita, STRUTTURA);
 
-    // 6) Restore: riporta la struttura originale e archivia quella corrente
-    //    (il restore stesso è annullabile).
+    // 6) Una versione senza il PDV aggiunto non può eliminare quel PDV.
     const restore = await api(session, `/api/admin/struttura/history/${oldest.id}/restore`, { method: 'POST' });
-    assert.equal(restore.status, 200, JSON.stringify(restore.body));
-    assert.equal(restore.body.puntiVenditaCount, 2);
+    assert.equal(restore.status, 409, JSON.stringify(restore.body));
     const cur = await pool.query(
       `SELECT config->'puntiVendita' AS pv, config->>'altroSetting' AS s
          FROM organization_config WHERE organization_id = $1`,
       [session.orgId],
     );
-    assert.deepEqual(cur.rows[0].pv, STRUTTURA, 'restore must reinstate the snapshot');
-    assert.equal(cur.rows[0].s, 'y', 'restore must not touch non-structural keys');
+    assert.equal(cur.rows[0].pv.length, 3, 'ripristino non può eliminare il nuovo PDV');
+    assert.equal(cur.rows[0].s, 'y', 'ripristino rifiutato non tocca gli altri dati');
     rows = await historyRows(pool, session.orgId);
-    assert.equal(rows.length, 3, 'restore must archive the pre-restore structure');
+    assert.equal(rows.length, 2, 'ripristino rifiutato non crea versioni');
 
     // 7) Retention: dopo molte modifiche strutturali restano al massimo 20 versioni.
     for (let i = 0; i < 22; i++) {
-      const r = await putConfig(session, {
-        puntiVendita: [pdv(0, { nome: `Negozio Iter ${i}` }), pdv(1)],
-        ragioniSociali: ['Hist RS S.R.L'],
+      const r = await api(session, '/api/admin/struttura/pdv', {
+        method: 'PUT',
+        body: JSON.stringify({ oldRagioneSociale: 'Hist RS S.R.L', oldCodicePos: '9101000', nome: `Negozio Iter ${i}` }),
       });
       assert.equal(r.status, 200, `iter ${i}: ${JSON.stringify(r.body)}`);
     }

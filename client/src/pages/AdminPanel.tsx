@@ -58,6 +58,7 @@ interface TeamMember {
 
 interface ConfigPdv {
   id?: string;
+  active?: boolean;
   codicePos: string;
   nome: string;
   ragioneSociale: string;
@@ -129,6 +130,7 @@ export default function AdminPanel() {
 
   const [puntiVendita, setPuntiVendita] = useState<ConfigPdv[]>([]);
   const [emptyRsList, setEmptyRsList] = useState<string[]>([]);
+  const [inactiveRsList, setInactiveRsList] = useState<string[]>([]);
   const [configLoading, setConfigLoading] = useState(false);
 
   const [expandedRS, setExpandedRS] = useState<Set<string>>(new Set());
@@ -330,14 +332,17 @@ export default function AdminPanel() {
     }
   };
 
-  const handleDeletePdv = async (pdv: ConfigPdv) => {
-    const url = apiUrl(`/api/admin/struttura/pdv?ragioneSociale=${encodeURIComponent(pdv.ragioneSociale)}&codicePos=${encodeURIComponent(pdv.codicePos)}`);
-    const res = await fetch(url, { method: 'DELETE', credentials: 'include' });
+  const handleTogglePdv = async (pdv: ConfigPdv) => {
+    const active = pdv.active === false;
+    const res = await fetch(apiUrl('/api/admin/struttura/pdv/status'), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ ragioneSociale: pdv.ragioneSociale, codicePos: pdv.codicePos, active }),
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast({ title: 'Errore', description: data?.error || 'Eliminazione fallita', variant: 'destructive' });
+      toast({ title: 'Errore', description: data?.error || 'Aggiornamento fallito', variant: 'destructive' });
     } else {
-      toast({ title: 'PDV eliminato' });
+      toast({ title: active ? 'PDV riattivato' : 'PDV disattivato' });
       await fetchOrgConfig();
     }
   };
@@ -386,15 +391,17 @@ export default function AdminPanel() {
     }
   };
 
-  const handleDeleteRs = async (rs: string) => {
-    const res = await fetch(apiUrl(`/api/admin/struttura/ragione-sociale/${encodeURIComponent(rs)}`), {
-      method: 'DELETE', credentials: 'include',
+  const handleToggleRs = async (rs: string) => {
+    const active = inactiveRsList.some(r => r.toLowerCase() === rs.toLowerCase());
+    const res = await fetch(apiUrl(`/api/admin/struttura/ragione-sociale/${encodeURIComponent(rs)}/status`), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ active }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast({ title: 'Errore', description: data?.error || 'Eliminazione fallita', variant: 'destructive' });
+      toast({ title: 'Errore', description: data?.error || 'Aggiornamento fallito', variant: 'destructive' });
     } else {
-      toast({ title: 'Ragione Sociale eliminata' });
+      toast({ title: active ? 'Ragione Sociale riattivata' : 'Ragione Sociale disattivata' });
       await fetchOrgConfig();
     }
   };
@@ -487,9 +494,11 @@ export default function AdminPanel() {
         const data = await res.json();
         const rsArr = Array.isArray(data?.config?.ragioniSociali) ? (data.config.ragioniSociali as string[]).map(r => String(r).trim()).filter(Boolean) : [];
         setEmptyRsList(rsArr);
+        setInactiveRsList(Array.isArray(data?.config?.inactiveRagioniSociali) ? data.config.inactiveRagioniSociali : []);
         if (data?.config?.puntiVendita) {
           setPuntiVendita(data.config.puntiVendita.map((p: Record<string, unknown>) => ({
             id: String(p.id || ''),
+            active: p.active !== false,
             codicePos: String(p.codicePos || ''),
             nome: String(p.nome || ''),
             ragioneSociale: String(p.ragioneSociale || ''),
@@ -1044,6 +1053,7 @@ export default function AdminPanel() {
                               <Badge variant="secondary" className="shrink-0">
                                 {pdvs.length} PDV
                               </Badge>
+                              {inactiveRsList.some(r => r.toLowerCase() === rs.toLowerCase()) && <Badge variant="outline">Disattivata</Badge>}
                             </button>
                           </CollapsibleTrigger>
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openCreatePdv(rs); }} data-testid={`button-add-pdv-rs-${rs}`} title="Aggiungi PDV in questa RS">
@@ -1052,27 +1062,9 @@ export default function AdminPanel() {
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openRenameRs(rs); }} data-testid={`button-rename-rs-${rs}`} title="Rinomina Ragione Sociale">
                             <Edit2 className="h-3.5 w-3.5" />
                           </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => e.stopPropagation()} data-testid={`button-delete-rs-${rs}`} title="Elimina Ragione Sociale">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Elimina "{rs}"?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Verranno rimossi <strong>{pdvs.length} PDV</strong> e tutte le voci collegate
-                                  (spese, PDV manuali, categorie/fornitori legati solo a questa RS) dal Controllo di Gestione.
-                                  L'operazione è irreversibile.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Annulla</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteRs(rs)} className="bg-destructive text-destructive-foreground" data-testid={`button-confirm-delete-rs-${rs}`}>Elimina</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); void handleToggleRs(rs); }} data-testid={`button-toggle-rs-${rs}`}>
+                            {inactiveRsList.some(r => r.toLowerCase() === rs.toLowerCase()) ? 'Riattiva' : 'Disattiva'}
+                          </Button>
                         </div>
                         <CollapsibleContent>
                           <div className="ml-4 mt-1 border-l-2 border-muted pl-4 space-y-0">
@@ -1105,26 +1097,9 @@ export default function AdminPanel() {
                                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditPdv(pdv)} data-testid={`button-edit-pdv-${pdv.codicePos}`} title="Modifica PDV">
                                             <Pencil className="h-3.5 w-3.5" />
                                           </Button>
-                                          <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" data-testid={`button-delete-pdv-${pdv.codicePos}`} title="Elimina PDV">
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                              </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                              <AlertDialogHeader>
-                                                <AlertDialogTitle>Elimina PDV "{pdv.nome}"?</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                  Codice POS <strong>{pdv.codicePos}</strong>. Le spese del Controllo di Gestione associate
-                                                  manterranno il codice ma resteranno orfane (non più collegate a un PDV ereditato).
-                                                </AlertDialogDescription>
-                                              </AlertDialogHeader>
-                                              <AlertDialogFooter>
-                                                <AlertDialogCancel>Annulla</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => handleDeletePdv(pdv)} className="bg-destructive text-destructive-foreground" data-testid={`button-confirm-delete-pdv-${pdv.codicePos}`}>Elimina</AlertDialogAction>
-                                              </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                          </AlertDialog>
+                                          <Button variant="outline" size="sm" onClick={() => void handleTogglePdv(pdv)} data-testid={`button-toggle-pdv-${pdv.codicePos}`}>
+                                            {pdv.active === false ? 'Riattiva' : 'Disattiva'}
+                                          </Button>
                                         </div>
                                       </TableCell>
                                     </TableRow>

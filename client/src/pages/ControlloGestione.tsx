@@ -2136,6 +2136,8 @@ function SpesaDialog({
 function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagioneSociale[] }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const statusConfig = useQuery<{ config?: { inactiveRagioniSociali?: string[] } }>({ queryKey: ["/api/organization-config"] });
+  const isInactive = (name: string) => statusConfig.data?.config?.inactiveRagioniSociali?.some(r => r.toLowerCase() === name.toLowerCase()) ?? false;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<UnifiedRagioneSociale | null>(null);
   const [nome, setNome] = useState("");
@@ -2195,20 +2197,12 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
     }
   };
 
-  const del = async (rs: UnifiedRagioneSociale) => {
+  const toggleStatus = async (rs: UnifiedRagioneSociale) => {
     try {
-      if (rs.origine === "pdv") {
-        await apiJson("DELETE", `/api/cdg/ragioni-sociali/inherited/${encodeURIComponent(rs.nome)}`);
-      } else if (rs.id) {
-        await apiJson("DELETE", `/api/cdg/ragioni-sociali/${rs.id}`);
-      } else { return; }
-      qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali"] });
-      qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali/unified"] });
-      qc.invalidateQueries({ queryKey: ["/api/cdg/categorie"] });
-      qc.invalidateQueries({ queryKey: ["/api/cdg/fornitori"] });
-      qc.invalidateQueries({ queryKey: ["/api/cdg/pdv-by-rs"] });
-      qc.invalidateQueries({ queryKey: ["/api/cdg/spese"] });
-      toast({ title: "Eliminata" });
+      const active = isInactive(rs.nome);
+      await apiJson("PATCH", `/api/admin/struttura/ragione-sociale/${encodeURIComponent(rs.nome)}/status`, { active });
+      await qc.invalidateQueries({ queryKey: ["/api/organization-config"] });
+      toast({ title: active ? "Ragione Sociale riattivata" : "Ragione Sociale disattivata" });
     } catch (e) {
       toast({ title: "Errore", description: (e as Error).message, variant: "destructive" });
     }
@@ -2239,35 +2233,16 @@ function RagioniSocialiCard({ ragioniSociali }: { ragioniSociali: UnifiedRagione
                       {fromPdv && (
                         <Badge variant="secondary" className="text-[10px]" data-testid={`badge-rs-pdv-${rs.nome}`}>da PDV</Badge>
                       )}
+                      {isInactive(rs.nome) && <Badge variant="outline">Disattivata</Badge>}
                     </div>
                   </TableCell>
                   <TableCell>{rs.partitaIva || "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-md truncate">{rs.note || ""}</TableCell>
                   <TableCell className="text-right">
                     <Button size="icon" variant="ghost" onClick={() => openEdit(rs)} data-testid={`button-edit-rs-${rowKey}`}><Pencil className="h-4 w-4" /></Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="icon" variant="ghost" data-testid={`button-delete-rs-${rowKey}`}><Trash2 className="h-4 w-4 text-red-600" /></Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Eliminare {rs.nome}?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {fromPdv ? (
-                              <>
-                                <strong>Attenzione:</strong> "{rs.nome}" è ereditata dalla Gestione Organizzazione. L'eliminazione rimuoverà <strong>tutti i Punti Vendita</strong> collegati a questa Ragione Sociale anche dalla Gestione Organizzazione, oltre alle spese, ai PDV manuali e all'associazione con categorie/fornitori per questa RS.
-                              </>
-                            ) : (
-                              <>Verranno eliminate tutte le spese collegate. Categorie e fornitori condivisi con altre Ragioni Sociali NON vengono cancellati: viene rimossa solo l'associazione a "{rs.nome}". Le voci associate solo a questa RS vengono eliminate.</>
-                            )}
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Annulla</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => del(rs)}>Elimina</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <Button size="sm" variant="outline" onClick={() => void toggleStatus(rs)} data-testid={`button-toggle-rs-${rowKey}`}>
+                      {isInactive(rs.nome) ? "Riattiva" : "Disattiva"}
+                    </Button>
                   </TableCell>
                 </TableRow>
                 );
@@ -2646,9 +2621,12 @@ function PdvCrudView({
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const statusConfig = useQuery<{ config?: { puntiVendita?: Array<{ codicePos: string; active?: boolean }>; inactiveCdgPdvIds?: string[] } }>({ queryKey: ["/api/organization-config"] });
+  const isInactive = (p: PdvFromConfig) => p.origine === "manuale"
+    ? (statusConfig.data?.config?.inactiveCdgPdvIds?.includes(p.id ?? "") ?? false)
+    : (statusConfig.data?.config?.puntiVendita?.some(v => v.codicePos === p.codice && v.active === false) ?? false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<PdvFromConfig | null>(null);
-  const [confirmDel, setConfirmDel] = useState<PdvFromConfig | null>(null);
 
   const grouped = useMemo(() => {
     const map = new Map<string, PdvFromConfig[]>();
@@ -2672,23 +2650,22 @@ function PdvCrudView({
     qc.invalidateQueries({ queryKey: ["/api/cdg/spese"] });
   };
 
-  const del = async (p: PdvFromConfig) => {
+  const toggleStatus = async (p: PdvFromConfig) => {
     try {
+      const active = isInactive(p);
       if (p.origine === "manuale" && p.id) {
-        await apiJson("DELETE", `/api/cdg/pdv-manuali/${p.id}`);
+        await apiJson("PATCH", `/api/cdg/pdv-manuali/${p.id}/status`, { active });
       } else if (p.origine === "config") {
-        const qs = `?rs=${encodeURIComponent(p.ragioneSociale)}&codice=${encodeURIComponent(p.codice)}`;
-        await apiJson("DELETE", `/api/cdg/pdv-inherited${qs}`);
+        await apiJson("PATCH", "/api/admin/struttura/pdv/status", { ragioneSociale: p.ragioneSociale, codicePos: p.codice, active });
       } else {
         return;
       }
-      toast({ title: "PDV eliminato" });
+      toast({ title: active ? "PDV riattivato" : "PDV disattivato" });
       onSaved();
-      qc.invalidateQueries({ queryKey: ["/api/cdg/ragioni-sociali/unified"] });
+      await qc.invalidateQueries({ queryKey: ["/api/organization-config"] });
     } catch (e) {
       toast({ title: "Errore", description: e instanceof Error ? e.message : "", variant: "destructive" });
     }
-    setConfirmDel(null);
   };
 
   return (
@@ -2735,7 +2712,7 @@ function PdvCrudView({
                     const isManual = p.origine === "manuale";
                     return (
                       <TableRow key={`${p.origine}-${p.codice}`} data-testid={`row-pdv-${p.codice}`}>
-                        <TableCell>{p.nome}</TableCell>
+                        <TableCell>{p.nome} {isInactive(p) && <Badge variant="outline">Disattivato</Badge>}</TableCell>
                         <TableCell className="font-mono text-xs">{p.codice}</TableCell>
                         <TableCell>
                           {isManual
@@ -2747,8 +2724,8 @@ function PdvCrudView({
                             <Button size="sm" variant="ghost" onClick={() => { setEditing(p); setDialogOpen(true); }} data-testid={`button-edit-pdv-${p.codice}`}>
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setConfirmDel(p)} data-testid={`button-delete-pdv-${p.codice}`}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
+                            <Button size="sm" variant="outline" onClick={() => void toggleStatus(p)} data-testid={`button-toggle-pdv-${p.codice}`}>
+                              {isInactive(p) ? "Riattiva" : "Disattiva"}
                             </Button>
                           </div>
                         </TableCell>
@@ -2771,26 +2748,6 @@ function PdvCrudView({
         onSaved={onSaved}
       />
 
-      <AlertDialog open={!!confirmDel} onOpenChange={(o) => !o && setConfirmDel(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Eliminare il PDV?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmDel?.origine === "config" ? (
-                <>
-                  <strong>Attenzione:</strong> stai eliminando il PDV ereditato <strong>{confirmDel?.nome}</strong> ({confirmDel?.codice}) anche dalla Gestione Organizzazione. Le spese collegate manterranno il codice salvato ma il PDV non sarà più selezionabile.
-                </>
-              ) : (
-                <>Stai per eliminare il PDV manuale <strong>{confirmDel?.nome}</strong> ({confirmDel?.codice}). Le spese che lo riferiscono manterranno il codice salvato ma il PDV non sarà più selezionabile.</>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete-pdv">Annulla</AlertDialogCancel>
-            <AlertDialogAction onClick={() => confirmDel && del(confirmDel)} data-testid="button-confirm-delete-pdv">Elimina</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

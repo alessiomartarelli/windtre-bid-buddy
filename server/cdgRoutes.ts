@@ -509,7 +509,22 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
   app.delete("/api/cdg/pdv-manuali/:id", ...gate, async (req: any, res) => {
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
-    await cdgStorage.deletePdvManuale(req.params.id, profile.organizationId!);
+    res.status(405).json({ error: "Eliminazione disabilitata: disattiva il PDV" });
+  });
+  app.patch("/api/cdg/pdv-manuali/:id/status", ...gate, async (req: any, res) => {
+    const profile = await requireOrgAdmin(req, res);
+    if (!profile) return;
+    const parsed = z.object({ active: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Stato obbligatorio" });
+    const orgId = profile.organizationId!;
+    if (!(await cdgStorage.getPdvManuale(req.params.id, orgId))) return res.status(404).json({ error: "PDV non trovato" });
+    const cfg = await storage.getOrgConfig(orgId);
+    const config = (cfg?.config as Record<string, unknown> | null) || {};
+    const inactive = Array.isArray(config.inactiveCdgPdvIds) ? config.inactiveCdgPdvIds as string[] : [];
+    const next = parsed.data.active
+      ? inactive.filter(id => id !== req.params.id)
+      : [...new Set([...inactive, req.params.id])];
+    await storage.upsertOrgConfig(orgId, { ...config, inactiveCdgPdvIds: next }, cfg?.configVersion || "2.0", profile.id);
     res.json({ success: true });
   });
 
@@ -661,13 +676,7 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
   app.delete("/api/cdg/ragioni-sociali/:id", ...gate, async (req: any, res) => {
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
-    const rs = await cdgStorage.getRagioneSociale(req.params.id, profile.organizationId!);
-    if (rs) {
-      const speseRs = await cdgStorage.listSpese(profile.organizationId!, { rs: rs.nome });
-      await Promise.all(speseRs.map(s => deleteAllegato(s.allegatoPath)));
-    }
-    await cdgStorage.deleteRagioneSociale(req.params.id, profile.organizationId!);
-    res.json({ success: true });
+    res.status(405).json({ error: "Eliminazione disabilitata: disattiva la ragione sociale dalla Struttura" });
   });
 
   // ===== Inherited (org_config.puntiVendita) write-through =====
@@ -769,58 +778,11 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     }
   });
 
-  // Elimina una RS ereditata: rimuove TUTTE le voci puntiVendita con quella RS,
-  // cascade su pdv manuali, spese (con allegati), categorie/fornitori (array
-  // remove + delete orfani), e RS manuale eventualmente omonima.
-  // ATTENZIONE: impatta anche la Gestione Organizzazione (puntiVendita).
+  // Richiesta legacy: impedire la cancellazione irreversibile di struttura e CdG.
   app.delete("/api/cdg/ragioni-sociali/inherited/:nome", ...gate, async (req: any, res) => {
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
-    const orgId = profile.organizationId!;
-    const nome = decodeURIComponent(req.params.nome).trim();
-    if (!nome) return res.status(400).json({ error: "Nome mancante" });
-    try {
-      // Cancella allegati spese
-      const speseRs = await cdgStorage.listSpese(orgId, { rs: nome });
-      await Promise.all(speseRs.map(s => deleteAllegato(s.allegatoPath)));
-      // Rimuove dalle puntiVendita
-      await mutateOrgPuntiVendita(orgId, (pv) => pv.filter(p =>
-        String(p?.ragioneSociale || "").trim() !== nome
-      ));
-      // Cascade per ID via registro (con fallback per nome per righe legacy):
-      // deleteRagioneSociale elimina spese/pdv collegati, rimuove la RS dagli
-      // array di categorie/fornitori (per id e nome) e cancella l'anchor.
-      const rsId = await cdgStorage.getRsIdByName(orgId, nome);
-      if (rsId) {
-        await cdgStorage.deleteRagioneSociale(rsId, orgId);
-      } else {
-        // Nessun anchor (RS mai referenziata): pulizia per nome come prima.
-        await db.execute(sql`DELETE FROM cdg_spese WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
-        await db.execute(sql`DELETE FROM cdg_pdv_manuali WHERE organization_id = ${orgId} AND ragione_sociale = ${nome}`);
-        await db.execute(sql`
-          UPDATE cdg_categorie SET ragioni_sociali = array_remove(ragioni_sociali, ${nome})
-           WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)
-        `);
-        await db.execute(sql`
-          DELETE FROM cdg_categorie WHERE organization_id = ${orgId}
-             AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
-             AND COALESCE(array_length(ragione_sociale_ids, 1), 0) = 0
-        `);
-        await db.execute(sql`
-          UPDATE cdg_fornitori SET ragioni_sociali = array_remove(ragioni_sociali, ${nome})
-           WHERE organization_id = ${orgId} AND ${nome} = ANY(ragioni_sociali)
-        `);
-        await db.execute(sql`
-          DELETE FROM cdg_fornitori WHERE organization_id = ${orgId}
-             AND COALESCE(array_length(ragioni_sociali, 1), 0) = 0
-             AND COALESCE(array_length(ragione_sociale_ids, 1), 0) = 0
-        `);
-      }
-      res.json({ success: true });
-    } catch (e) {
-      console.error("[cdg] delete inherited RS failed:", e);
-      res.status(500).json({ error: "Errore eliminazione RS ereditata" });
-    }
+    res.status(405).json({ error: "Eliminazione disabilitata: disattiva la ragione sociale dalla Struttura" });
   });
 
   // Modifica un PDV ereditato (in puntiVendita). Identifica per (rs, codice)
@@ -925,32 +887,11 @@ export function registerCdgRoutes(app: Express, isAuthenticated: RequestHandler,
     }
   });
 
-  // Elimina un PDV ereditato dalla puntiVendita (impatta Gestione Organizzazione).
-  // Le spese collegate restano (mantengono il codice salvato).
+  // Evita che CdG possa aggirare la disattivazione reversibile della Struttura.
   app.delete("/api/cdg/pdv-inherited", ...gate, async (req: any, res) => {
     const profile = await requireOrgAdmin(req, res);
     if (!profile) return;
-    const orgId = profile.organizationId!;
-    const rs = String(req.query.rs || "").trim();
-    const codice = String(req.query.codice || "").trim();
-    if (!rs || !codice) return res.status(400).json({ error: "Parametri rs e codice obbligatori" });
-    try {
-      let removed = false;
-      await mutateOrgPuntiVendita(orgId, (pv) => pv.filter(p => {
-        const rsName = String(p?.ragioneSociale || "").trim();
-        const codicePos = String(p?.codicePos || "").trim();
-        const nomePdv = String(p?.nome || "").trim();
-        const code = codicePos || nomePdv;
-        const match = rsName === rs && code === codice;
-        if (match) removed = true;
-        return !match;
-      }));
-      if (!removed) return res.status(404).json({ error: "PDV ereditato non trovato" });
-      res.json({ success: true });
-    } catch (e) {
-      console.error("[cdg] delete inherited PDV failed:", e);
-      res.status(500).json({ error: "Errore eliminazione PDV ereditato" });
-    }
+    res.status(405).json({ error: "Eliminazione disabilitata: disattiva il PDV dalla Struttura" });
   });
 
   // Validazione RS contro la lista unificata (manuali + PDV ereditate).

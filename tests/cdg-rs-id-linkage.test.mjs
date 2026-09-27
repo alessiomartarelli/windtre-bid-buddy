@@ -20,7 +20,7 @@ import {
 //   (b) rename: una sola PUT sul registro rinomina ovunque (per id);
 //   (c) ghost-proof: anche con la cache nomi corrotta a mano in DB, la
 //       lettura risolve il nome corrente e la rinomina successiva risana;
-//   (d) delete RS: cascade per id anche su righe con nome corrotto.
+//   (d) DELETE RS bloccato, disattivazione non cancella righe collegate.
 
 const api = (session, method, path, body) =>
   jsonReq(`${BASE}${path}`, {
@@ -29,7 +29,7 @@ const api = (session, method, path, body) =>
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 
-test('CdG: figli collegati alle RS per id, rename e delete senza fantasmi', async () => {
+test('CdG: figli collegati alle RS per id, rename e disattivazione senza perdite', async () => {
   const pool = await newPool();
   const session = await signup({ prefix: 'cdg_rs_id_test', fullName: 'Cdg RS Id Test' });
   try {
@@ -58,6 +58,12 @@ test('CdG: figli collegati alle RS per id, rename e delete senza fantasmi', asyn
     });
     assert.equal(createPdv.status, 201, JSON.stringify(createPdv.body));
     const pdvId = createPdv.body.id;
+    const oldDeletePdv = await api(session, 'DELETE', `/api/cdg/pdv-manuali/${pdvId}`);
+    assert.equal(oldDeletePdv.status, 405, 'vecchi client non possono eliminare PDV manuali');
+    const deactivatePdv = await api(session, 'PATCH', `/api/cdg/pdv-manuali/${pdvId}/status`, { active: false });
+    assert.equal(deactivatePdv.status, 200);
+    const reactivatePdv = await api(session, 'PATCH', `/api/cdg/pdv-manuali/${pdvId}/status`, { active: true });
+    assert.equal(reactivatePdv.status, 200);
 
     const createSpesa = await api(session, 'POST', '/api/cdg/spese', {
       ragioneSociale: rsA, categoriaId: catId, fornitoreId: fornId,
@@ -114,19 +120,22 @@ test('CdG: figli collegati alle RS per id, rename e delete senza fantasmi', asyn
     const spDb2 = await pool.query('SELECT ragione_sociale FROM cdg_spese WHERE id = $1', [spesaId]);
     assert.equal(spDb2.rows[0].ragione_sociale, rsC, 'cache risanata dal rename per id');
 
-    // (d) delete RS: cascade per id anche con cache nomi corrotta
+    // (d) La cancellazione RS non deve più distruggere spese/PDV,
+    // neppure quando la cache denormalizzata dei nomi è corrotta.
     await pool.query(
       `UPDATE cdg_pdv_manuali SET ragione_sociale = 'GHOST PDV' WHERE id = $1`, [pdvId]);
     const del = await api(session, 'DELETE', `/api/cdg/ragioni-sociali/${rsId}`);
-    assert.equal(del.status, 200, JSON.stringify(del.body));
+    assert.equal(del.status, 405, JSON.stringify(del.body));
+    const inactive = await api(session, 'PATCH', `/api/admin/struttura/ragione-sociale/${encodeURIComponent(rsC)}/status`, { active: false });
+    assert.equal(inactive.status, 200, JSON.stringify(inactive.body));
     const left = await pool.query(
       `SELECT (SELECT count(*)::int FROM cdg_spese WHERE organization_id = $1) AS spese,
               (SELECT count(*)::int FROM cdg_pdv_manuali WHERE organization_id = $1) AS pdv,
               (SELECT count(*)::int FROM cdg_categorie WHERE organization_id = $1) AS cat,
               (SELECT count(*)::int FROM cdg_fornitori WHERE organization_id = $1) AS forn`,
       [orgId]);
-    assert.deepEqual(left.rows[0], { spese: 0, pdv: 0, cat: 0, forn: 0 },
-      'delete RS rimuove i figli per id anche con nomi corrotti');
+    assert.deepEqual(left.rows[0], { spese: 1, pdv: 1, cat: 1, forn: 1 },
+      'disattivazione e vecchio DELETE preservano tutti i dati storici');
   } finally {
     await cleanupOrg(pool, session);
     await pool.end();
@@ -222,6 +231,16 @@ test('CdG: spostare un PDV ereditato su altra RS aggancia le spese per id anche 
     const spese = await api(session, 'GET', `/api/cdg/spese?rs=${encodeURIComponent(rsY)}`);
     assert.equal(spese.body.length, 1, 'spesa filtrabile sotto la RS destinazione');
     assert.equal(spese.body[0].pdvCodice, 'CX1');
+    const delInherited = await api(session, 'DELETE', `/api/cdg/pdv-inherited?rs=${encodeURIComponent(rsY)}&codice=CX1`);
+    assert.equal(delInherited.status, 405, 'CdG non può eliminare PDV ereditati');
+    const inactive = await api(session, 'PATCH', '/api/admin/struttura/pdv/status',
+      { ragioneSociale: rsY, codicePos: 'CX1', active: false });
+    assert.equal(inactive.status, 200, JSON.stringify(inactive.body));
+    const stillThere = await pool.query(
+      "SELECT config->'puntiVendita' AS pdv FROM organization_config WHERE organization_id=$1", [session.orgId]);
+    assert.equal(stillThere.rows[0].pdv.find(p => p.codicePos === 'CX1').active, false);
+    const delRs = await api(session, 'DELETE', `/api/admin/struttura/ragione-sociale/${encodeURIComponent(rsY)}`);
+    assert.equal(delRs.status, 405, 'Admin non può eliminare RS e spese');
   } finally {
     await cleanupOrg(pool, session);
     await pool.end();

@@ -35,6 +35,7 @@
 - [Telegram performance weights](telegram-performance-weights.md) — pesi punteggio in gara_config.config.performanceWeights riordinano standout(msg)+classifiche(HTML) insieme; preview script NON li applica; verify script DB-backed.
 - [New module vs Home empty-state test](new-module-empty-state-tests.md) — ogni nuovo modulo non gated è default-enabled: va disabilitato esplicitamente nel test home-landing "Nessun modulo attivo".
 - [Org-config struttura guard](org-config-struttura-guard.md) — il PUT generico org-config re-inietta/blocca (409) azzeramenti di massa dei PDV; l'autosave del Simulatore può spingere scheletri vuoti.
+- [Struttura: disattivare, non eliminare](struttura-soft-delete.md) — PDV/RS e loro storico CdG sono conservati anche da CdG e ripristino versioni; l'inattività non deve riscrivere vendite o spese passate.
 - [jsonb change detection](jsonb-change-detection.md) — mai confrontare jsonb letto dal DB con JSON.stringify naive: Postgres riordina le chiavi; usa un serializer stabile (chiavi ordinate).
 - [CdG RS registry by id](cdg-rs-registry.md) — RS CdG collegate per id via registro cdg_ragioni_sociali (anchor 'auto' per le ereditate); rinomine SOLO via registro, mai nuovi UPDATE per nome.
 - [Fault injection header](test-fault-injection-header.md) — per testare rollback+cleanup di una route transazionale: hook non-prod via header che forza il fallimento DB reale; mai replicare il cleanup nel test.
