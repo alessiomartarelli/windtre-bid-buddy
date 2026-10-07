@@ -1,7 +1,8 @@
 /**
  * Read-only VPS audit. Never imports storage or calls an application endpoint.
  * Prints aggregates only; snapshots contain opaque keys, not customer identity.
- * Usage: npx tsx scripts/verify-cj-eligibility-prod.ts before|after
+ * Usage: npx tsx scripts/verify-cj-eligibility-prod.ts before|after|audit
+ * audit prints current aggregates without reading or writing a baseline.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -11,7 +12,7 @@ import {
 } from "../shared/customerJourney";
 
 const phase = process.argv[2];
-if (phase !== "before" && phase !== "after") throw new Error("Expected before|after");
+if (phase !== "before" && phase !== "after" && phase !== "audit") throw new Error("Expected before|after|audit");
 const snapshotPath = "/tmp/cj-eligibility-prod-baseline.json";
 const remote = `
 const {Client}=require("/var/www/incentive-w3/node_modules/pg");
@@ -128,7 +129,7 @@ const snapshot = {
 };
 let preserved: Record<string, number> | undefined;
 if (phase === "before") writeFileSync(snapshotPath, JSON.stringify(snapshot), { mode: 0o600 });
-else {
+else if (phase === "after") {
   const before = JSON.parse(readFileSync(snapshotPath, "utf8"));
   const keptJourneyIds = new Set(data.journeys.map((j: any) => j.id));
   const afterItems = new Map(data.items.map((i: any) => [i.id, i]));

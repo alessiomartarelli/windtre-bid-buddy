@@ -107,3 +107,44 @@ Stampa esclusivamente aggregati.
 Il risultato distingue le rimozioni appartenenti a schede prive di trigger
 dai contratti mancanti su schede mantenute. Non pubblicare la fotografia
 tecnica: il resoconto contiene soltanto aggregati, senza chiavi o ID di clienti.
+
+## Ricontrollo SIM allarme — 7 ottobre 2026, 11:53 UTC
+
+Eseguito `npx tsx scripts/verify-cj-eligibility-prod.ts audit` contro il DB
+esterno del VPS, in una transazione `REPEATABLE READ READ ONLY` con timeout
+di 45 secondi per query. Questa modalità stampa solo gli aggregati attuali,
+non legge né scrive fotografie e non invoca il reconcile.
+La fotografia precedente in `/tmp` non era disponibile: non è stata
+ricreata e non è stato ripetuto il confronto di conservazione degli stati.
+
+| Misura | Esito |
+| --- | ---: |
+| Organizzazioni con schede CJ analizzate | 1 |
+| Vendite BiSuite | 45.935 |
+| Articoli nelle categorie mobile CJ | 13.673 |
+| Articoli SIM allarme rilevati nel perimetro mobile | 0 |
+| Segnali diagnostici sospetti negli articoli ammessi | 0 |
+| Articoli dati / Tourist esclusi | 926 / 641 |
+| Schede salvate / clienti con trigger ammesso atteso | 3.983 / 3.983 |
+| Schede senza trigger ammesso | 0 |
+| Schede con T0 o vendita trigger errati | 0 |
+| Articoli mobile esclusi conservati come storico | 229 |
+| Contribuzioni mobile escluse nei riepiloghi | 0 |
+| Difformità dei riepiloghi per driver | 0 |
+| Coorte attiva | 3.959 |
+| Contratti ammessi attivi dentro / fuori T0–T6 | 7.810 / 813 |
+
+**Esito: campione SIM allarme ancora assente.** Non è possibile confermare
+su un caso reale il confronto articolo BiSuite → trigger/T0 salvato →
+contribuzioni T0–T6. La copertura allarme resta quella dei test già esistenti,
+non una verifica empirica di produzione. Il conteggio riguarda le categorie
+mobile CJ delle organizzazioni con schede, non l'intero catalogo BiSuite;
+il controllo diagnostico non garantisce il riconoscimento di denominazioni
+future sconosciute.
+
+Nessun deploy, scrittura di produzione, importazione, reconcile forzato,
+chiamata a endpoint applicativi o modifica delle regole di eleggibilità.
+Nessun dato fittizio creato e nessuna informazione identificativa stampata.
+Ripetere la modalità `audit` dopo una normale importazione; se il campione
+diventa positivo, approfondire i casi in sola lettura e pubblicare solo
+esiti aggregati del confronto fra articoli, trigger/T0 e contribuzioni.
