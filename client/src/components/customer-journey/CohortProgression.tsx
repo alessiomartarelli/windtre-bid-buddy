@@ -85,7 +85,7 @@ export default function CohortProgression({ progression, cohortSelected, onOpenJ
     <div className="grid gap-4 xl:grid-cols-2">
       <DetailTable
         title={`SIM attualmente cadute · ${number(progression.dropped.length)}`}
-        caption="Stato corrente: ogni riga è una SIM mobile eleggibile non valida oggi. La data resta vuota quando non è ricostruibile."
+        caption="SIM eleggibili cadute per esito DRMS o stato CJ. Le SIM annullate nelle vendite sono escluse dalla CJ. La data resta vuota quando non è ricostruibile."
         empty="Nessuna SIM caduta nel perimetro selezionato."
         headers={["Cliente", "Negozio", "Addetto", "Mese / fonte", "Contratto SIM", "Prodotto", "Stato oggi", "Cliente in CJ", "Journey"]}
       >

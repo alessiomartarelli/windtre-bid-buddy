@@ -1372,6 +1372,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomerJourney(id: string, orgId: string): Promise<CustomerJourney | undefined> {
+    await this.reconcileCustomerJourneysIfStale(orgId);
     const [row] = await db.select().from(customerJourneys)
       .where(and(eq(customerJourneys.id, id), eq(customerJourneys.organizationId, orgId)));
     return row;
@@ -1527,6 +1528,7 @@ export class DatabaseStorage implements IStorage {
     orgId: string,
     addettiFilter?: string[] | null,
   ): Promise<CjReportRow[]> {
+    await this.reconcileCustomerJourneysIfStale(orgId);
     let cond;
     if (addettiFilter != null) {
       const lower = addettiFilter.map((a) => a.toLowerCase().trim()).filter(Boolean);
@@ -1904,12 +1906,9 @@ export class DatabaseStorage implements IStorage {
       // Un contratto semplicemente letto dalle vendite BiSuite parte da
       // "inserito", il primo stato del processo di tracking: l'avanzamento
       // (in_lavorazione/attivato/pagato/...) è gestito a mano dall'operatore.
-      // Le vendite annullate vengono esitate come "annullato" (NON "stornato":
-      // lo storno è un'informazione separata che arriverà da DRMS).
-      // Lo stato OPERATIVO parte sempre da "inserito"; una vendita annullata
-      // in BiSuite alimenta lo stato ECONOMICO "annullato" (solo se l'item
-      // non ha già un esito: il reconcile non azzera né sovrascrive mai lo
-      // stato economico, che è di competenza del DRMS/manuale).
+      // Le SIM annullate nelle vendite non appartengono alla CJ, neppure
+      // come cadute: sono diverse dalle perdite economiche DRMS/manuali.
+      // Per gli altri driver resta invariata la gestione dell'annullamento.
       const isAnnullata = stato.includes("ANNULL");
       const autoState: CjItemState = "inserito";
       const autoEconomicState: CjEconomicState | null = isAnnullata ? "annullato" : null;
@@ -1920,6 +1919,7 @@ export class DatabaseStorage implements IStorage {
         const tipologia = art?.tipologia?.nome ?? null;
         const driver = driverFromCategory(categoria);
         if (!driver) continue;
+        if (driver === "mobile" && isAnnullata) continue;
 
         // Trigger journey: nuova attivazione mobile dalla data configurata.
         if (driver === "mobile" && isCjMobileEligible({ categoria, tipologia, descrizione: art?.descrizione })
@@ -2161,7 +2161,7 @@ export class DatabaseStorage implements IStorage {
                       || ${salesSnapshotAt ? sql`jsonb_build_object('customerJourneyReconciledAt', ${salesSnapshotAt.toISOString()}::text)` : sql`'{}'::jsonb`}),
             updated_at = now()`);
     await tx.execute(sql`UPDATE organization_config
-      SET config = config || '{"customerJourneyEligibilityVersion":1}'::jsonb
+      SET config = config || '{"customerJourneyEligibilityVersion":2}'::jsonb
       WHERE organization_id = ${orgId}`);
 
     return {
@@ -2247,7 +2247,7 @@ export class DatabaseStorage implements IStorage {
     if (!lastSync) return { reconciled: false }; // nessuna vendita: niente da fare
     const watermark = await this.getCustomerJourneyReconciledAt(orgId);
     const cfg = await this.getOrgConfig(orgId);
-    const eligibilityCurrent = (cfg?.config as any)?.customerJourneyEligibilityVersion === 1;
+    const eligibilityCurrent = (cfg?.config as any)?.customerJourneyEligibilityVersion === 2;
     if (eligibilityCurrent && watermark && lastSync.getTime() <= watermark.getTime()) {
       return { reconciled: false }; // già allineato
     }

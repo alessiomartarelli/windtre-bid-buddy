@@ -34,3 +34,9 @@ La reportistica deve consentire di scegliere il mese di apertura delle CJ e un m
 **Why:** l'utente ha chiesto di sapere «quante SIM sono cadute e quali» e «quali clienti non sono più nella customer journey». Le due quantità non sono equivalenti e rimuovere gli usciti dal denominatore nasconde l'abbandono.
 
 **How to apply:** distinguere perdite correnti e perdite documentate poi recuperate. Non attribuire una caduta al mese di un aggiornamento tecnico. Esplicitare la copertura sulle sole schede conservate se precedenti riconciliazioni ne hanno eliminate altre.
+
+**SIM annullate nelle vendite:** non devono comparire nella CJ, nemmeno negli elenchi delle cadute o nel denominatore. La presenza di un'altra SIM valida non rende ammissibile quella annullata nelle vendite. Restano distinti gli esiti economici DRMS/manuali su vendite non annullate.
+
+**Why:** l'utente ha precisato «Le sim annullate dalle vendite non devono comparire proprio nella cj», correggendo l'inclusione delle annullate di origine BiSuite tra le SIM cadute.
+
+**How to apply:** verificare lo stato della vendita di origine, non dedurre l'esclusione dal solo stato economico `annullato`. Se manca ogni altra SIM eleggibile nelle vendite, il cliente non fa parte della coorte CJ.
